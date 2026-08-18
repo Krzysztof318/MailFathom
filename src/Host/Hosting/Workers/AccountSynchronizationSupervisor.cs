@@ -5,6 +5,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Emails.Chunking;
+using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
@@ -266,6 +267,7 @@ internal sealed partial class AccountSynchronizationSupervisor
 
             if (!schedulingToken.IsCancellationRequested)
             {
+                await this.DeliverOutstandingMailAsync(workUnitToken);
                 await this.EraseExpiredAuditEntriesAsync(runSettings, workUnitToken);
                 await this.ClassifyRequestedMailAsync(runSettings, workUnitToken);
                 await this.EvaluateMailRulesAsync(runSettings, workUnitToken);
@@ -350,6 +352,83 @@ internal sealed partial class AccountSynchronizationSupervisor
             this.LogMutationConvergenceFailed(exception, this.accountId.Value);
 
             return true;
+        }
+    }
+
+    /// <summary>Delivers whatever this account has been asked to send and has not seen leave.</summary>
+    /// <remarks>
+    /// <para>
+    /// This is what makes the outbox correct rather than merely quick. A message written down is signalled to the
+    /// delivery loop as soon as it is durable, but a signal is an in-process message: an instance that stopped between
+    /// the write and the pass, a queue that was full, or a loop that failed all leave a send nobody is coming back for.
+    /// The account already has a loop that comes back, so this is where it is picked up — the same pass, reached a
+    /// second way.
+    /// </para>
+    /// <para>
+    /// A failure never fails the run, and neither does a send that will be attempted again. The submission endpoint is
+    /// a different server from the one the folders are read over, so a provider that will not accept mail says nothing
+    /// about whether this account's mail can be fetched — and putting the account into backoff over it would answer an
+    /// unreachable SMTP server by reading IMAP less often. What paces the retry instead is the send's own backoff,
+    /// which is written onto its record.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A delivery pass that ended unexpectedly must not stop the account's synchronization: each send's own record already carries how far it got, and the next run claims again.")]
+    private async Task DeliverOutstandingMailAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = this.scopeFactory.CreateScope();
+
+            var pass = scope.ServiceProvider.GetRequiredService<MailOutboxPass>();
+            var report = await pass.RunAsync(this.accountId, cancellationToken);
+
+            scope.ServiceProvider.GetRequiredService<MailDeliveryTelemetry>().Report(this.accountId, report);
+
+            if (report.Results.Count > 0 || report.MarkedUnknownCount > 0)
+            {
+                this.LogOutboxDrained(
+                    this.accountId.Value,
+                    report.SentCount,
+                    report.RefusedCount,
+                    report.DeferredCount,
+                    report.UnknownOutcomeCount + report.MarkedUnknownCount);
+            }
+
+            this.ReportOutcomesNeedingAPerson(report);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            this.LogOutboxDrainFailed(exception, this.accountId.Value);
+        }
+    }
+
+    /// <summary>Says at error level what a pass produced that waits for somebody rather than for another attempt.</summary>
+    /// <remarks>
+    /// The summary line above is one line about a pass, and an operator alerts on a level rather than on a count inside
+    /// a sentence. This path settles a pass as often as the signalled worker does, so an ending that reaches a person
+    /// there has to reach them here too; anything else would make which of the two happened to claim the send decide
+    /// whether anybody hears about it.
+    /// </remarks>
+    private void ReportOutcomesNeedingAPerson(MailOutboxPassReport report)
+    {
+        var unknownCount = report.UnknownOutcomeCount + report.MarkedUnknownCount;
+        if (unknownCount > 0)
+        {
+            this.LogOutboxOutcomesUnknown(this.accountId.Value, unknownCount);
+        }
+
+        if (report.RefusedCount > 0)
+        {
+            this.LogOutboxSendsRefused(this.accountId.Value, report.RefusedCount);
+        }
+
+        if (report.NotRecordedCount > 0)
+        {
+            this.LogOutboxOutcomesNotRecorded(this.accountId.Value, report.NotRecordedCount);
         }
     }
 
@@ -1098,6 +1177,38 @@ internal sealed partial class AccountSynchronizationSupervisor
     private partial void LogFolderAliasAmbiguous(
         string accountId,
         string folderAlias);
+
+    /// <summary>Reports the ending that waits for a person; a recipient names a person and never reaches a log.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "{UnknownCount} message(s) queued for account {AccountId} went out with their submission server never answering, so whether the recipients received them is unknown. None is transmitted again, and each stays visible in the outbox until somebody decides what to do with it.")]
+    private partial void LogOutboxOutcomesUnknown(string accountId, int unknownCount);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "{RefusedCount} message(s) queued for account {AccountId} will not be offered again. What each recipient was told is on the send's own record.")]
+    private partial void LogOutboxSendsRefused(string accountId, int refusedCount);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "The outcome of {NotRecordedCount} message(s) queued for account {AccountId} could not be written down, so each record stands where the failed write left it and its lease is what frees it for another attempt.")]
+    private partial void LogOutboxOutcomesNotRecorded(string accountId, int notRecordedCount);
+
+    /// <summary>Reports what the account's own run found waiting in its outbox; a recipient names a person and never reaches a log.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The synchronization run for account {AccountId} drained its outbox: {SentCount} sent, {RefusedCount} refused, {DeferredCount} waiting for another attempt, {UnknownCount} with an outcome nobody can establish.")]
+    private partial void LogOutboxDrained(
+        string accountId,
+        int sentCount,
+        int refusedCount,
+        int deferredCount,
+        int unknownCount);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The outbox pass in the synchronization run for account {AccountId} failed; the account keeps synchronizing and the next run claims again.")]
+    private partial void LogOutboxDrainFailed(Exception exception, string accountId);
 
     /// <summary>Separates a convergence pass that ended unexpectedly from the ordinary case of one change failing, which the pass itself absorbs.</summary>
     [LoggerMessage(

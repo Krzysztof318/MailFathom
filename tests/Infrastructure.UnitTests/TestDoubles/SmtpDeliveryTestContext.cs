@@ -8,8 +8,8 @@ using MailFathom.Domain.Transport;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.MailKit.Delivery;
 using MailFathom.Infrastructure.Mail.OAuth;
+using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Secrets.Resolution;
-using MailKit.Net.Smtp;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -51,9 +51,9 @@ internal static class SmtpDeliveryTestContext
     /// <summary>Builds a scripted submission server that advertises the supplied SASL mechanisms.</summary>
     /// <param name="advertisedMechanisms">The mechanisms the server offers, as it would in its greeting.</param>
     /// <returns>The client, whose capabilities a test then sets to whatever the server declares.</returns>
-    internal static ISmtpClient CreateClient(params string[] advertisedMechanisms)
+    internal static ISubmissionClient CreateClient(params string[] advertisedMechanisms)
     {
-        var client = Substitute.For<ISmtpClient>();
+        var client = Substitute.For<ISubmissionClient>();
         client.AuthenticationMechanisms.Returns([.. advertisedMechanisms]);
 
         return client;
@@ -98,7 +98,7 @@ internal static class SmtpDeliveryTestContext
     /// </remarks>
     internal static MailKitSmtpDeliverySessionFactory CreateFactory(
         OutboundResilienceTestHost resilience,
-        ISmtpClient client,
+        ISubmissionClient client,
         ScriptedSubmissionTransport transport,
         ISmtpAccountSettingsProvider? settingsProvider = null,
         IMailAccessTokenSource? accessTokenSource = null,
@@ -112,6 +112,7 @@ internal static class SmtpDeliveryTestContext
             resilience.Executor,
             resilience.TransientFailureClassifier,
             timeouts ?? MailDeliveryTimeouts.Default,
+            new MailDeliveryTelemetry(resilience.TimeProvider),
             resilience.TimeProvider,
             resilience.Services.GetRequiredService<ILoggerFactory>().CreateLogger<MailKitSmtpConnection>());
 }

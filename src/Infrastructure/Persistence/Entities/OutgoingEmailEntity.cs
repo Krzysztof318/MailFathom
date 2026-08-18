@@ -42,6 +42,29 @@ internal sealed class OutgoingEmailEntity
 
     public DateTimeOffset StageChangedAt { get; set; }
 
+    /// <summary>Gets or sets the instant from which this send may be claimed, which a failed attempt pushes out.</summary>
+    /// <remarks>
+    /// It starts at the instant the record was written, so a new send is claimable at once. A backoff is written here
+    /// rather than derived from the attempt count at claim time, because the delay is drawn with jitter and a claim
+    /// that recomputed it would return every send that failed together to the same server in the same instant.
+    /// </remarks>
+    public DateTimeOffset AvailableAt { get; set; }
+
+    /// <summary>Gets or sets the attempt currently holding this send, and <see langword="null" /> while none does.</summary>
+    /// <remarks>
+    /// Every write an attempt makes is conditional on this value still matching it, which is what makes a late writer
+    /// whose lease was reclaimed write nothing at all.
+    /// </remarks>
+    public Guid? LeaseOwner { get; set; }
+
+    /// <summary>Gets or sets when the holding attempt's lease runs out, and <see langword="null" /> while none holds it.</summary>
+    /// <remarks>
+    /// An expired lease is what makes a send in flight when a process stopped claimable again, without anything having
+    /// to be told the process died. It reaches a record at <see cref="OutgoingEmailStage.Recorded" /> only: a send
+    /// whose transmission had begun is never handed to a second attempt by an expiry.
+    /// </remarks>
+    public DateTimeOffset? LeaseExpiresAt { get; set; }
+
     /// <summary>Gets or sets the code of the failure the last attempt ended in, and <see langword="null" /> while none has.</summary>
     /// <remarks>
     /// Only the code is kept. A failure message is text assembled at the failure site and may repeat what a remote

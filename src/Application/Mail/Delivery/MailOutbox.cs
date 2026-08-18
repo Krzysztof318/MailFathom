@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Delivery;
 
@@ -26,14 +27,22 @@ namespace MailFathom.Application.Mail.Delivery;
 /// Nothing is sent by this. The record it leaves is at <see cref="OutgoingEmailStage.Recorded" /> with every recipient
 /// unanswered, which is the state a delivery attempt reads and continues from.
 /// </para>
+/// <para>
+/// What it does do, once the record is durable, is say so. The signal is what turns an authored act into a send that
+/// leaves in seconds rather than at the account's next synchronization run, and it is deliberately the last thing that
+/// happens: a signal raised before the commit would point a delivery pass at a record that does not exist yet, and a
+/// signal that is refused or lost costs the send the wait until that run rather than the send itself.
+/// </para>
 /// </remarks>
 /// <param name="outgoingEmails">Holds the durable record and its idempotency identity.</param>
 /// <param name="contentStore">Holds the composed MIME the record points at.</param>
 /// <param name="retryPolicy">Commits both writes together and resolves a lost race for the same identity.</param>
+/// <param name="signal">Tells the delivery loop that this account has something to send.</param>
 public sealed class MailOutbox(
     IOutgoingEmailStore outgoingEmails,
     IEmailContentStore contentStore,
-    OptimisticConcurrencyRetryPolicy retryPolicy)
+    OptimisticConcurrencyRetryPolicy retryPolicy,
+    MailOutboxSignal signal)
 {
     /// <summary>Writes down a message to be sent, or answers with the record an identical request already left.</summary>
     /// <param name="request">The send that was asked for.</param>
@@ -48,7 +57,7 @@ public sealed class MailOutbox(
     /// ignored rather than written over the stored ones. That is what keeps a resumed send one message: a
     /// <c>Message-ID</c> that changed between attempts would thread as a second message in every recipient's client.
     /// </remarks>
-    public Task<OutgoingEmailRecord> EnqueueAsync(
+    public async Task<OutgoingEmailRecord> EnqueueAsync(
         OutgoingEmailRequest request,
         ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken)
@@ -62,10 +71,10 @@ public sealed class MailOutbox(
                 nameof(rawMime));
         }
 
-        return retryPolicy.CommitAsync(
+        var record = await retryPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
-                var record = await outgoingEmails.OpenAsync(
+                var opened = await outgoingEmails.OpenAsync(
                     session,
                     request,
                     rawMime.Length,
@@ -73,12 +82,19 @@ public sealed class MailOutbox(
 
                 await contentStore.SaveOutgoingContentAsync(
                     session,
-                    record.Id,
+                    opened.Id,
                     rawMime,
                     attemptCancellationToken);
 
-                return record;
+                return opened;
             },
             cancellationToken);
+
+        // A record already delivered by an earlier identical request is signalled all the same. The pass reads the
+        // outbox rather than this call, so an account with nothing outstanding costs it one claim that takes nothing —
+        // which is cheaper than working out here whether the record this call read back still needs sending.
+        signal.Signal(record.AccountId);
+
+        return record;
     }
 }

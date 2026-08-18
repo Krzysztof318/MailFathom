@@ -1,21 +1,22 @@
 # Mail delivery
 
-<!-- describes: src/Application/Mail/Delivery/**, src/Domain/Delivery/**, src/Infrastructure/Mail/MailKit/Delivery/**, src/Infrastructure/Mail/Mime/Composition/**, src/Infrastructure/Persistence/Delivery/**, src/Infrastructure/Mail/MailAccountDeliveryOptions.cs, src/Infrastructure/Mail/SmtpAccountSettings.cs, src/Host/Configuration/Mail/ConfiguredSmtpAccountSettingsProvider.cs, src/Host/Configuration/Mail/MailDeliveryOptions.cs, src/Host/Configuration/Mail/MailSynchronizationOptions.cs -->
+<!-- describes: src/Application/Mail/Delivery/**, src/Domain/Delivery/**, src/Infrastructure/Mail/MailKit/Delivery/**, src/Infrastructure/Mail/Mime/Composition/**, src/Infrastructure/Persistence/Delivery/**, src/Infrastructure/Mail/MailAccountDeliveryOptions.cs, src/Infrastructure/Mail/SmtpAccountSettings.cs, src/Host/Configuration/Mail/ConfiguredSmtpAccountSettingsProvider.cs, src/Host/Configuration/Mail/MailDeliveryOptions.cs, src/Host/Configuration/Mail/MailSynchronizationOptions.cs, src/Host/Hosting/Workers/OutboxDeliveryWorker.cs -->
 
-Reading a mailbox and submitting to one are two capabilities against two servers, and MailFathom holds them apart.
-What exists today is the submission half up to the point of transmission: an account may declare where its mail would be
-submitted, a **delivery session** can be opened against that server — connected, encrypted, authenticated, and asked what
-it will accept — an authored message can be **composed into MIME**, a **reply or a forward can be authored** from mail
-this deployment already holds, and the send can be written down durably before anything acts on it. Nothing transmits a
-message, so a deployment that configures a submission endpoint gains a validated endpoint, an openable session, a
-composer, an outbox holding a message ready to go, and no outbound mail.
+Reading a mailbox and submitting to one are two capabilities against two servers, and MailFathom holds them apart. The
+submission half is whole: an account declares where its mail is submitted, a **delivery session** is opened against that
+server — connected, encrypted, authenticated, and asked what it will accept — an authored message is **composed into
+MIME**, a **reply or a forward is authored** from mail this deployment already holds, the send is written down durably
+before anything acts on it, and it is then **claimed, transmitted, and settled** against the record it was written as. A
+deployment that configures a submission endpoint sends mail.
 
-That is deliberate rather than partial. Each of those is a piece every later step rests on: the session is the piece with
-a protocol, a credential, and a channel to get wrong; the composer is the piece that decides who a message says it is
-from and what an authored field may not smuggle into a header; and the record is the piece that decides whether a crash
-mid-send can deliver a message twice. Each is provable on its own — the session against a real server, over each mode
-that server speaks and against the reply codes it answers with; the composer against the bytes it produces; and the
-record against a real database, where a constraint rather than any code decides a race.
+Each of those is a piece the ones after it rest on, and each is provable on its own: the session is the piece with a
+protocol, a credential, and a channel to get wrong; the composer is the piece that decides who a message says it is from
+and what an authored field may not smuggle into a header; the record is the piece that decides whether a crash mid-send
+can deliver a message twice; and the delivery is the piece that has to hold that guarantee while an attempt fails,
+retries, is stopped by a shutdown, or loses the message to a second attempt. The session is proven against a real
+server, over each mode it speaks and against the reply codes it answers with; the composer against the bytes it
+produces; the record against a real database, where a constraint rather than any code decides a race; and the delivery
+against both, plus a scripted server that can be made to answer in ways no real one can be asked to.
 
 ## The session, and who may open one
 
@@ -111,10 +112,10 @@ command: `AUTH` is the only way to present a credential, so a server advertising
 leaves nothing to fall back to. The attempt ends there with `MailAuthenticationMechanismUnavailableException`, before
 any credential is presented.
 
-## Four stages, four budgets
+## Five stages, five budgets
 
-Reaching a submission server is four things that fail differently, so each is bounded on its own and reported as
-itself:
+Reaching a submission server and using one are five things that fail differently, so each is bounded on its own and
+reported as itself:
 
 | Stage | Default | What it bounds |
 | --- | --- | --- |
@@ -122,6 +123,11 @@ itself:
 | Greeting | 15 s | Encryption, the greeting, and the capability exchange. |
 | Authentication | 20 s | The server answering the account's credential. |
 | Command | 30 s | Any one command over the established session. |
+| Transmission | 5 min | Offering the envelope and transmitting the whole message, as one. |
+
+The transmission budget is generous beside the others deliberately: it covers a message of up to the whole size bound
+crossing a link this deployment does not choose, and cutting one short is what leaves a record nobody can settle. It is
+bounded again from outside by the attempt timeout, which is what stops a submission outliving the lease that holds it.
 
 A stage that runs out of budget raises a `TimeoutException` naming that stage and the account. That is what keeps it
 distinguishable from the two other reasons the same call would stop: **caller cancellation** and **host shutdown** both
@@ -130,9 +136,11 @@ server can therefore never be read as a process shutting down, and a shutdown ne
 
 The first three bound the stages of establishing the session and sit inside the attempt budget of the `EmailDelivery`
 resilience class, which is what a deployment configures. Their defaults total 50 s against that class's 60 s default
-attempt timeout, so a stage can expire on its own before the enclosing budget takes the attempt away from it. The
-command budget is not one of them and is not part of that total: it is set on the client itself and bounds a command
-over the session once it is established, which is outside the establishment attempt.
+attempt timeout, so a stage can expire on its own before the enclosing budget takes the attempt away from it. The other
+two are not part of that total: both bound work over a session that is already established, which is outside the
+establishment attempt. The command budget is set on the client itself; the transmission budget is applied around the
+submission and is enclosed instead by `MailDelivery:AttemptTimeout`, which is the outbox's own bound rather than the
+resilience class's.
 [Outbound resilience](../architecture/outbound-resilience.md) holds that class, why delivery has the smallest shipped
 budget of the six, and the single-layer rule the adapter follows.
 
@@ -294,9 +302,8 @@ subject, or a line of quoted text.
 
 ## The record a send is written down as, before anything is sent
 
-Nothing transmits a message yet. What exists beside the session and the composer is the durable state a transmission
-would be carried out against: an **outgoing record**, written before any SMTP command could be issued, and the message
-it points at.
+A transmission is carried out against durable state rather than against a caller's intent: an **outgoing record**,
+written before any SMTP command is issued, and the message it points at.
 
 The reason is that a send is not one act. The MIME is built, an intent is recorded, a connection is opened, each
 recipient is offered and accepted or refused, the body is transmitted, and the server answers — and a process can die
@@ -308,8 +315,8 @@ local copy, cannot be withdrawn from the mailbox it reached.
 The record is the answer, in the same shape [remote mailbox mutations](imap-synchronization.md) use for IMAP: write the
 intent down before acting on it, and advance it as the attempt proceeds. The window is narrowed rather than closed — the
 record moves to *the transmission has begun and its outcome is unknown* **before** the transmission starts, so a row
-found in that stage on restart is recognizable and is never blindly re-sent. What is then done with such a row is not
-part of this, and neither is any retry policy.
+found in that stage on restart is recognizable and is never blindly re-sent. What is then done with such a row is
+[below](#the-window-that-cannot-be-decided).
 
 `MailOutbox.EnqueueAsync` is the one way in. It takes what was asked for and the composed message, and writes both in one
 transaction: a record whose message was never stored has nothing to transmit, and a message stored under no record is
@@ -333,6 +340,145 @@ A recipient a server temporarily rejected stays outstanding with the reply that 
 
 [The stored email schema](../architecture/stored-email-schema.md#the-outgoing-messages-waiting-to-be-sent) holds the
 columns, the stages, and which of them each terminal stage may follow.
+
+## How a written-down send reaches a server
+
+Two things start a delivery pass over one account's outbox, and they answer different questions.
+
+**The account's own synchronization run drains it**, as the last thing it does after its folders. That is the guarantee:
+whatever is outstanding is claimed again on every run, so a signal that was never delivered, a process that was stopped
+mid-backlog, and a send whose backoff elapsed while nothing was watching all resolve without anything having to
+remember them. The drain never fails the run — SMTP is a different server from IMAP, and an outbound provider that is
+down must not back an account's mailbox synchronization off — so a pass that ends unexpectedly is logged and the run
+carries on.
+
+**A signal makes it prompt.** Writing a record signals its account through a bounded in-process queue, and a worker
+waiting on that queue takes a pass immediately. A message somebody authored, or a tool call that answered with a queued
+identifier, must not wait behind a mailbox scan. The queue holds accounts rather than messages and an account already
+waiting is not queued twice, so a hundred messages written at once produce one pass rather than a hundred and the depth
+cannot grow past the number of configured accounts. **The backpressure is explicit**: a signal that finds the queue full
+is refused and the caller is told so, which is a delay rather than a loss, because the run above is what picks the work
+up. A pass that filled its batch signals its own account again, so a backlog drains rather than trickling one signal at
+a time.
+
+One account at a time, in one loop. A pass already attempts its sends one after another because they share a submission
+server, and a second loop beside it would be an unstated second bound on how many connections this deployment opens to
+the providers it sends through. A pass that throws is confined to its account: the loop logs it and serves the next
+account, because a database briefly unavailable for one account says nothing about whether another has mail to send.
+
+One send is confined the same way inside a pass. An attempt records its own answer, so what is left to fail is the
+recording — a store that went away while an outcome was being committed, which the recovery write then meets as well —
+and such a send is reported as *not recorded* and the pass goes on to the one behind it. Raising instead would hold
+every send left in that batch until its lease expired, over a failure that says nothing about any of them; the record
+stands where the failed write left it, and its lease is what makes it claimable again.
+
+**A pass claims before it attempts.** One statement takes a batch of the account's due sends, oldest first, and stamps
+each with an owner, an expiry, and the attempt it is about to be given — so no instant exists in which a send is chosen
+but unheld, and two passes over one account take disjoint sets rather than queueing behind each other. Every write about
+that send afterwards carries the lease it was claimed under and is refused if the row no longer names that owner, which
+is what stops an attempt whose lease ran out from recording an outcome over the attempt that has since taken the
+message. The attempt itself is bounded below the lease, so that case stays rare rather than routine, and startup
+refuses a configuration stating otherwise. That budget opens before the first thing the attempt waits on rather than
+before the first thing it sends, so a content read that never answers is cancelled with everything else instead of
+holding the whole batch behind it.
+[The claim a delivery attempt holds](../architecture/stored-email-schema.md#the-claim-a-delivery-attempt-holds) has the
+predicate and the columns.
+
+One claim stamps a whole batch with one expiry while the sends under it are attempted one at a time, so a send far
+enough down a slow batch is reached after its own lease has already run out. It is reported as such and nothing is
+offered for it: every write it would make is refused anyway — which is what keeps a reclaimed send from being
+transmitted twice — so asking first buys the connection, the submission, and the wait that would otherwise be spent on
+a record this attempt no longer holds.
+
+## The window that cannot be decided
+
+A crash immediately after the body went out and immediately before the acknowledgement was read leaves a record nobody
+can settle: re-sending puts a second copy in somebody's mailbox and not re-sending loses the message. MailFathom does
+neither and says so instead.
+
+**The stage is written before the transmission and never rewound past what was transmitted.** An attempt that failed
+before any recipient had been accepted has provably offered no body — a server is only ever handed one after at least
+one `RCPT TO` was accepted — so its record goes back to *recorded* and is attempted again. An attempt that failed after
+an acceptance may have transmitted, so its record stays at *the transmission has begun*, is stamped with error code
+`28011`, and is claimed by nothing: the claim takes recorded rows alone, so no lease expiry and no restart reaches it.
+Which of the two applies is read from the replies the server actually gave during that attempt rather than from the
+exception that ended it.
+
+Such a send is **visible rather than silent**: it stays in the outbox an operator reads, it says *unknown* rather than
+*stuck*, whichever pass settled it logs it at error level — the signalled worker and the account's own run alike — and
+the delivery counter measures it under `outcome-unknown`. It moves only
+when somebody decides what happened; nothing automatic re-queues it.
+
+A pass stamps whatever it finds in that stage before it claims anything, so a send stranded by a process that stopped is
+marked on the next pass rather than at some later restart.
+
+## Failing, retrying, and the single layer of it
+
+A server that answered settles the outcome by itself, and only a non-answer consults what the attempt observed:
+
+- **A permanent refusal is terminal at the first answer.** No attempt is spent on a reply that will not change, and the
+  record carries the code the server answered with. A message every one of whose recipients was refused is terminal
+  even where the server did not refuse the message.
+- **A transient refusal defers.** The record goes back to being claimable at an instant in the future, and the delay
+  doubles per attempt from `RetryBaseDelay` up to `RetryMaxDelay`, drawn with jitter so a provider that refused every
+  account at once is not offered all of them back together. The same backoff the durable job queue uses, rather than a
+  second implementation of one.
+- **A send that spends `MaxAttempts` stops being attempted** and stands in the outbox with error code `28010`, rather
+  than being retried forever.
+- **Host shutdown is neither.** A send the host stopped before it transmitted anything gives its lease back together
+  with the attempt it had counted, so a restart is not a spent attempt; a send it stopped after an acceptance is the
+  undecidable case above.
+
+**There is exactly one retry layer, and this is it.** The submission is deliberately not run inside the retrying
+`EmailDelivery` resilience pipeline that establishes a session, because a retry there would re-transmit a body a server
+may already have taken. What that pipeline still covers is reaching the server at all; what happens to a message once
+it is being offered is the outbox's, once.
+[Outbound resilience](../architecture/outbound-resilience.md) holds the single-layer rule.
+
+The code the record carries says which of these ended it, and it is what an operator looks the send up by:
+
+| Code | What ended the send |
+| --- | --- |
+| `28001` | The account configures no address to send from, so nothing could be offered |
+| `28005` | The composed message exceeds what the submission server said it accepts |
+| `28009` | A server permanently refused the message, or refused every one of its recipients |
+| `28010` | Every attempt was spent, the last of them on a failure that could still have cleared |
+| `28011` | A transmission was begun and the server never answered it |
+| `28012` | The attempt ended in something none of the above describes |
+
+`28008` is the one code that is not a send's ending. It records an attempt that finished after its lease had already
+passed to another attempt, so nothing it observed was written down; what the send ends as is whatever the attempt
+holding it concludes.
+
+Caller cancellation, host shutdown, an expired stage budget, an authentication failure, and a transport failure remain
+distinguishable in what is recorded and what is logged, exactly as they are while a session is being established: a
+shutdown is never written down as a timeout, and a hung server is never written down as a process stopping.
+
+## What one recipient's refusal costs the others
+
+A message is offered address by address and answered address by address, and the delivery keeps that resolution rather
+than collapsing it into one verdict:
+
+- A recipient the server **accepted** is recorded as accepted, and a later attempt of the same message offers only the
+  recipients still outstanding. Nobody is sent the same message twice because somebody else's address was wrong.
+- A recipient the server **permanently refused** is recorded as refused and is never offered again. The message is still
+  delivered to everybody else, and the send ends as sent.
+- A recipient the server **temporarily refused** stays outstanding with the reply that deferred them recorded beside
+  them, and the send is deferred as a whole so those addresses are offered again.
+- A message **no recipient accepted** is terminal, because there is nobody left to offer it to.
+
+The per-address replies are read off the submission conversation as the server gives them, and matched back to the
+address this deployment offered rather than to whatever form the server echoed — a server that answers about an address
+in a different case is answering about the same person, and one that answers about an address nobody offered is
+answering about nothing and is dropped.
+
+## What an operator sees while mail is leaving
+
+Each attempt opens the `submit_outgoing_email` span over the exchange with the server, its duration is recorded, and
+its outcome counts under `mailfathom.mail.delivery.attempts` by account. `outcome-unknown` is the value worth alerting
+on at any rate above zero, because each measurement is a message nothing will attempt again until a person decides.
+[Telemetry § What delivering the outbox emits](../operations/telemetry.md#what-delivering-the-outbox-emits) holds the
+instruments, the tags, and what none of them carries.
 
 ## What never leaves the process
 
@@ -382,4 +528,40 @@ The outgoing record is split the same way. What the shape of the state guarantee
 recipients a later attempt still owes, and which terminal stage may follow which — is a unit test over the domain
 record. What only PostgreSQL can settle is in the integration suite: the index refusing an insert two transactions each
 reached without seeing the other, the second enqueue leaving the first message in place, a record left mid-transmission
-being found and read as such by a later scope, and the cascade erasing the message and the recipients with the record.
+being found and read as such by a later scope, a claim holding a record against the next claim, and the cascade erasing
+the message and the recipients with the record.
+
+Delivery is where the two halves meet, so it is proven from both ends.
+
+The unit suite carries the cases a real server cannot be asked for. A crash at each stage of an attempt, over the
+rewind and the refusal to rewind on either side of the first acceptance; a lease reassigned while an attempt was
+transmitting, which then writes nothing at all; a partial acceptance and the retry that offers only the addresses still
+outstanding; a permanent per-recipient refusal that still delivers the message; every recipient refused; the attempt
+bound being spent; host shutdown before and after an acceptance; a store that will not take one send's outcome, which
+ends that send and leaves the one behind it in the batch still delivered; and each of the settings validations,
+including the attempt timeout that reaches its lease. Beside them the loop's own claims — that a signal is what wakes it, that a full
+batch asks for its account again, and that neither a failed pass nor an account with nowhere to submit stops the account
+behind it — and the signal's own: that one account signalled a hundred times is one pass, that a full queue refuses and
+says so, and that a queue refilled as fast as it drains still ends when the host stops.
+
+The transmission itself is a unit test against a scripted submission client, because every reply class can be stated
+there and none can be provoked from a real server on demand: a message accepted, a message refused permanently and
+temporarily, no address accepted, a server that stops answering mid-transmission with the addresses it had already
+accepted kept, and the bytes a transmission offers — blind recipients absent from the transmitted headers, and the line
+endings a submission requires. The three hooks the submission client overrides are exercised on the real client rather
+than through the scripted one, because they are what keeps a refused address from stopping the addresses beside it and a
+substitute would prove the substitute instead.
+
+The claim is asserted as text, without a database. It is one statement and each clause in it fails silently if it is
+lost, so the stage filter, the locking clause, the bound, the two predicates that make a send due, and the stamp that
+counts the attempt are each read off what is composed. So is the shape of the whole: the column names are part of the
+text and only the values are parameters, which is the difference between a statement PostgreSQL runs and one that
+reaches it asking for a column named after a parameter marker.
+
+The integration suite settles what only a real server and a real database can. A queued send is delivered, recorded as
+sent, and then found in the mailbox it was addressed to — read back over a connection nothing under test owns, which is
+what makes the arrival an observation rather than the outbox agreeing with itself. The same authored send queued twice
+produces one message. A send left mid-transmission is marked and transmitted no further, and the mailbox holds no copy
+of it. What the orchestrated server cannot settle is a refusal: GreenMail accepts every recipient it is offered and
+creates the mailbox behind it, so both refusal shapes stay in the unit suite — the same division that already puts the
+size and eight-bit capabilities there.

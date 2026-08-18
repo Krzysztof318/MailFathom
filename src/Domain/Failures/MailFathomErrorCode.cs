@@ -201,6 +201,46 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode AnsweredEmailContentUnavailable { get; } = new(28007);
 
+    /// <summary>Gets subcategory 8, message composition: the queued send an attempt was writing to is held by a later attempt.</summary>
+    /// <remarks>
+    /// It reports a write that did not happen rather than a send that failed. An attempt whose lease expired while it
+    /// worked is no longer the one whose answer counts, so what it was about to record is dropped and the attempt
+    /// holding the record now settles it.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailLeaseLost { get; } = new(28008);
+
+    /// <summary>Gets subcategory 8, message composition: a submission server refused the message for good.</summary>
+    /// <remarks>
+    /// It covers a refused sender, a message the server would not take, and a send every one of whose recipients was
+    /// permanently refused. Nothing offers the message again, because the answer will not change; which of the three it
+    /// was reads from the reply codes on the record and its recipients.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailRefused { get; } = new(28009);
+
+    /// <summary>Gets subcategory 8, message composition: a send spent every attempt it was allowed on failures that could have cleared.</summary>
+    /// <remarks>
+    /// The last answer was one worth returning for and there is no return left, so the send stops being attempted and
+    /// stands where an operator can see it. It is separate from a permanent refusal because an operator acts on it
+    /// differently: this one is a provider that stayed unreachable rather than a message it will never take.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailAttemptsExhausted { get; } = new(28010);
+
+    /// <summary>Gets subcategory 8, message composition: a send's message went out and the server's answer to it never came back.</summary>
+    /// <remarks>
+    /// The message may or may not have been delivered, and nothing an outbox can read afterwards settles it. It is not
+    /// transmitted again, because a second transmission cannot be withdrawn from the mailbox it reaches, so the record
+    /// carries this code and waits for a person.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailOutcomeUnknown { get; } = new(28011);
+
+    /// <summary>Gets subcategory 8, message composition: a delivery attempt ended in a failure the outbox does not recognize.</summary>
+    /// <remarks>
+    /// It is the code a record carries when an attempt raised something neither the submission protocol nor the
+    /// resilience budget accounts for. The record keeps the stage the attempt actually reached, so what happens next is
+    /// decided by that stage rather than by this code.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailDeliveryFailedUnexpectedly { get; } = new(28012);
+
     #endregion
 
     #region Category 3 — Persistence
@@ -509,6 +549,11 @@ public readonly record struct MailFathomErrorCode
         OutgoingEmailBoundExceeded,
         AnsweredEmailNotFound,
         AnsweredEmailContentUnavailable,
+        OutgoingEmailLeaseLost,
+        OutgoingEmailRefused,
+        OutgoingEmailAttemptsExhausted,
+        OutgoingEmailOutcomeUnknown,
+        OutgoingEmailDeliveryFailedUnexpectedly,
         PersistenceConcurrencyConflict,
         DatabaseSchemaOutOfDate,
         DatabaseSchemaStateUnreadable,

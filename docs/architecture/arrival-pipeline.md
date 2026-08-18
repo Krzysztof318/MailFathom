@@ -123,6 +123,14 @@ drawn from the commit rather than from `ask` because the two are independent of 
 what it wrote: no gate consults it, and a failure in it would fail the folder rather than corrupt anything, which is why
 it is the last thing the message's own pass does.
 
+One step of the post-folder sequence belongs to no arrival at all, and is drawn nowhere above for that reason: before
+the passes below it, the run delivers whatever the account's outbox still holds. It is here because the account is the
+unit both halves are scheduled by, and it is deliberately the weakest link in the sequence — the drain never fails the
+run, however it ends. A submission server is a different server from the mailbox server, so an outbound provider that
+is down must not back an account's reading off, and a send that failed already carries how far it got on its own
+record. [Mail delivery](../features/mail-delivery.md#how-a-written-down-send-reaches-a-server) is where that half is
+described; nothing else on this page concerns it.
+
 Nothing else about the pipeline crosses a process boundary while a transaction is open. The two sidecar calls happen
 outside the commit that follows them, and the embedding provider is reached only by the worker, which consumes committed
 state.

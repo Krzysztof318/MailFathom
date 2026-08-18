@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Mail.Delivery;
+using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
@@ -19,6 +20,13 @@ namespace MailFathom.Infrastructure.Persistence.Delivery;
 /// <para>
 /// The write paths use the context enlisted in the caller's session, so a record is only ever written inside the
 /// transaction the caller opened; the read paths use the scoped context, because they join no transaction.
+/// </para>
+/// <para>
+/// <see cref="ClaimAsync" /> and <see cref="MarkUnknownOutcomesAsync" /> are the exception, and are given no session by
+/// the port for that reason. Each is one self-contained statement that decides and writes in the same breath and
+/// commits on its own — the claim because splitting it would open the window in which two workers take the same send,
+/// the sweep because it is a set-based stamp over rows nobody holds. Enlisting either in a caller's transaction would
+/// hold the rows it touched for as long as that caller ran, which is precisely what the statements are shaped to avoid.
 /// </para>
 /// <para>
 /// The idempotency identity is not checked and then written. The check exists — a request that already has a record
@@ -68,6 +76,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
             AttemptCount = 0,
             RecordedAt = recordedAt,
             StageChangedAt = recordedAt,
+            AvailableAt = recordedAt,
         };
 
         // Added through the navigation rather than through their own set, so the recipients are inserted with the
@@ -133,27 +142,134 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
     }
 
     /// <inheritdoc />
-    public async Task<int> CountAttemptAsync(
-        IPersistenceSession session,
-        OutgoingEmailId outgoingEmailId,
+    /// <remarks>
+    /// The statement stamps and the query that follows reads: the claim has already decided which rows are this
+    /// attempt's, so reading them back needs no lock and joins no transaction. The lease returned is the one the
+    /// statement wrote rather than one read back from the rows, because those are the same values and a second read
+    /// would be a second chance for them to disagree.
+    /// </remarks>
+    public async Task<IReadOnlyList<ClaimedOutgoingEmail>> ClaimAsync(
+        OutgoingEmailClaimRequest request,
         CancellationToken cancellationToken)
     {
-        var entity = await RequireEntityAsync(session, outgoingEmailId, cancellationToken);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var claimedAt = timeProvider.GetUtcNow();
+
+        var claimedIds = await readContext.Database
+            .SqlQuery<Guid>(OutgoingEmailClaimStatement.Compose(request, claimedAt))
+            .ToArrayAsync(cancellationToken);
+
+        if (claimedIds.Length == 0)
+        {
+            return [];
+        }
+
+        var claimed = await readContext.OutgoingEmails
+            .AsNoTracking()
+            .Include(message => message.Recipients)
+            .Where(message => claimedIds.Contains(message.Id))
+            .OrderBy(message => message.AvailableAt)
+            .ThenBy(message => message.Id)
+            .ToArrayAsync(cancellationToken);
+
+        var lease = new OutgoingEmailLease(request.Owner, claimedAt + request.LeaseDuration);
+
+        return [.. claimed.Select(entity => new ClaimedOutgoingEmail(OutgoingEmailRecordMapping.ToRecord(entity), lease))];
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// A set-based update rather than a read and a write, because it is a stamp on rows nobody is working on and the
+    /// answer is a count rather than the records themselves.
+    /// </para>
+    /// <para>
+    /// A record whose lease has not run out is deliberately left alone. An attempt at this stage is one transmitting
+    /// right now, and stamping its record would race the answer that attempt is about to write onto it; the attempt is
+    /// cancelled before its lease can expire, so a lease that has expired here belongs to nobody.
+    /// </para>
+    /// <para>
+    /// The code a record already carries is overwritten unless it is this one. A failure recorded here belongs to an
+    /// earlier attempt that ended and gave the record back, so leaving it would tell an operator that a message which
+    /// may have been delivered was merely deferred; skipping the records already marked is what keeps the pass
+    /// idempotent and its count honest.
+    /// </para>
+    /// </remarks>
+    public Task<int> MarkUnknownOutcomesAsync(MailAccountId accountId, CancellationToken cancellationToken)
+    {
+        var accountValue = accountId.Value;
+        var markedAt = timeProvider.GetUtcNow();
+        var unknownOutcome = MailFathomErrorCode.OutgoingEmailOutcomeUnknown.Value;
+
+        return readContext.OutgoingEmails
+            .Where(message => message.MailboxAccountId == accountValue
+                && message.Stage == OutgoingEmailStage.TransmissionBegun
+                && (message.LastFailureCode == null || message.LastFailureCode != unknownOutcome)
+                && (message.LeaseExpiresAt == null || message.LeaseExpiresAt <= markedAt))
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(
+                    message => message.LastFailureCode,
+                    MailFathomErrorCode.OutgoingEmailOutcomeUnknown.Value),
+                cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task DeferAsync(
+        IPersistenceSession session,
+        OutgoingEmailLease lease,
+        OutgoingEmailId outgoingEmailId,
+        DateTimeOffset availableAt,
+        MailFathomErrorCode? failure,
+        CancellationToken cancellationToken)
+    {
+        var entity = await RequireLeasedEntityAsync(session, lease, outgoingEmailId, cancellationToken);
 
         RequireNotTerminal(entity);
 
-        entity.AttemptCount++;
+        // The one place a stage moves backwards. The caller reached here having established that the message reached
+        // nobody it will be offered to again, which is what makes offering it again safe.
+        entity.Stage = OutgoingEmailStage.Recorded;
+        entity.StageChangedAt = timeProvider.GetUtcNow();
+        entity.AvailableAt = availableAt;
+        entity.LeaseOwner = null;
+        entity.LeaseExpiresAt = null;
 
-        return entity.AttemptCount;
+        if (failure is not null)
+        {
+            entity.LastFailureCode = failure.Value.Value;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task ReleaseAsync(
+        IPersistenceSession session,
+        OutgoingEmailLease lease,
+        OutgoingEmailId outgoingEmailId,
+        CancellationToken cancellationToken)
+    {
+        var entity = await RequireLeasedEntityAsync(session, lease, outgoingEmailId, cancellationToken);
+
+        RequireNotTerminal(entity);
+
+        entity.Stage = OutgoingEmailStage.Recorded;
+        entity.StageChangedAt = timeProvider.GetUtcNow();
+        entity.LeaseOwner = null;
+        entity.LeaseExpiresAt = null;
+
+        // The attempt the claim counted never reached a submission server, so it is given back with the record. A
+        // rolling restart would otherwise spend a send's whole budget on restarts rather than on failures.
+        entity.AttemptCount = Math.Max(0, entity.AttemptCount - 1);
     }
 
     /// <inheritdoc />
     public async Task RecordTransmissionBegunAsync(
         IPersistenceSession session,
+        OutgoingEmailLease lease,
         OutgoingEmailId outgoingEmailId,
         CancellationToken cancellationToken)
     {
-        var entity = await RequireEntityAsync(session, outgoingEmailId, cancellationToken);
+        var entity = await RequireLeasedEntityAsync(session, lease, outgoingEmailId, cancellationToken);
 
         if (entity.Stage != OutgoingEmailStage.Recorded)
         {
@@ -168,6 +284,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
     /// <inheritdoc />
     public async Task AdvanceAsync(
         IPersistenceSession session,
+        OutgoingEmailLease lease,
         OutgoingEmailId outgoingEmailId,
         OutgoingEmailStage stage,
         int? replyCode,
@@ -192,13 +309,18 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
                 "An SMTP reply code is a three-digit number.");
         }
 
-        var entity = await RequireEntityAsync(session, outgoingEmailId, cancellationToken);
+        var entity = await RequireLeasedEntityAsync(session, lease, outgoingEmailId, cancellationToken);
 
         RequireNotTerminal(entity);
         RequireReachable(entity, stage);
 
         entity.Stage = stage;
         entity.StageChangedAt = timeProvider.GetUtcNow();
+
+        // A finished send is claimed by nothing, so the lease it is released from is bookkeeping rather than safety —
+        // and a terminal row still holding one would read as a send an attempt is working on.
+        entity.LeaseOwner = null;
+        entity.LeaseExpiresAt = null;
 
         if (replyCode is not null)
         {
@@ -209,13 +331,14 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
     /// <inheritdoc />
     public async Task RecordRecipientOutcomesAsync(
         IPersistenceSession session,
+        OutgoingEmailLease lease,
         OutgoingEmailId outgoingEmailId,
         IReadOnlyList<OutgoingRecipientOutcome> outcomes,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(outcomes);
 
-        var entity = await RequireEntityAsync(session, outgoingEmailId, cancellationToken);
+        var entity = await RequireLeasedEntityAsync(session, lease, outgoingEmailId, cancellationToken);
 
         // A record that has finished is answered about by nobody: a late or repeated reply reaching one would settle a
         // recipient on a send that stopped, and on a cancelled record it would claim an answer to a transmission the
@@ -244,11 +367,12 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
     /// <inheritdoc />
     public async Task RecordFailureAsync(
         IPersistenceSession session,
+        OutgoingEmailLease lease,
         OutgoingEmailId outgoingEmailId,
         MailFathomErrorCode failure,
         CancellationToken cancellationToken)
     {
-        var entity = await RequireEntityAsync(session, outgoingEmailId, cancellationToken);
+        var entity = await RequireLeasedEntityAsync(session, lease, outgoingEmailId, cancellationToken);
 
         // The failure a finished record carries is the one that finished it, so a later caller does not get to
         // overwrite what an operator reads as the reason this send ended.
@@ -374,6 +498,31 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
                 && message.RequesterOrigin == origin
                 && message.RequesterIdentity == identity,
             cancellationToken);
+    }
+
+    /// <summary>Loads the record and refuses the write when it is no longer this attempt's.</summary>
+    /// <remarks>
+    /// It is the compare half of the compare-and-set a lease is. The other half is that an attempt runs under a timeout
+    /// strictly shorter than the lease it holds, so a live attempt is cancelled before its lease can expire; this is
+    /// what catches the case where it did anyway — a paused process, a clock that moved — and stops a late writer from
+    /// recording an outcome over the attempt that replaced it.
+    /// </remarks>
+    private static async Task<OutgoingEmailEntity> RequireLeasedEntityAsync(
+        IPersistenceSession session,
+        OutgoingEmailLease lease,
+        OutgoingEmailId outgoingEmailId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(lease);
+
+        var entity = await RequireEntityAsync(session, outgoingEmailId, cancellationToken);
+
+        if (entity.LeaseOwner != lease.Owner)
+        {
+            throw new OutgoingEmailLeaseLostException(outgoingEmailId, lease.Owner);
+        }
+
+        return entity;
     }
 
     private static async Task<OutgoingEmailEntity> RequireEntityAsync(

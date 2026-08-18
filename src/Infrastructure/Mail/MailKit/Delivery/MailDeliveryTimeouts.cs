@@ -9,6 +9,7 @@ namespace MailFathom.Infrastructure.Mail.MailKit.Delivery;
 /// <param name="Greeting">How long encryption, the greeting, and the capability exchange may take together.</param>
 /// <param name="Authentication">How long the server may take to answer the account's credential.</param>
 /// <param name="Command">How long any command over the established session may take, which the client enforces itself.</param>
+/// <param name="Transmission">How long offering the envelope and transmitting the whole message may take together.</param>
 /// <remarks>
 /// <para>
 /// The first three bound the stages of establishing a session, which run inside the attempt budget of the
@@ -23,19 +24,28 @@ namespace MailFathom.Infrastructure.Mail.MailKit.Delivery;
 /// the established session, which is outside the establishment attempt, so it is not part of the total above and adding
 /// it to one would describe a budget nothing enforces.
 /// </para>
+/// <para>
+/// <see cref="Transmission" /> bounds the submission as a whole, and is generous next to the others on purpose: it has
+/// to cover a message of the largest size this deployment composes crossing the network, where the client's own
+/// timeout bounds each read and write rather than the transfer. What it is for is a server that stops answering
+/// mid-submission, which would otherwise hold an attempt — and the lease under it — for as long as the socket stayed
+/// open.
+/// </para>
 /// </remarks>
 internal sealed record MailDeliveryTimeouts(
     TimeSpan Connection,
     TimeSpan Greeting,
     TimeSpan Authentication,
-    TimeSpan Command)
+    TimeSpan Command,
+    TimeSpan Transmission)
 {
     /// <summary>Gets the budgets every delivery session is opened under.</summary>
     internal static MailDeliveryTimeouts Default { get; } = new(
         Connection: TimeSpan.FromSeconds(15),
         Greeting: TimeSpan.FromSeconds(15),
         Authentication: TimeSpan.FromSeconds(20),
-        Command: TimeSpan.FromSeconds(30));
+        Command: TimeSpan.FromSeconds(30),
+        Transmission: TimeSpan.FromMinutes(5));
 
     /// <summary>Gets the budget one stage is given.</summary>
     /// <param name="phase">The stage about to run.</param>
@@ -47,6 +57,7 @@ internal sealed record MailDeliveryTimeouts(
         MailDeliveryPhase.Greeting => this.Greeting,
         MailDeliveryPhase.Authentication => this.Authentication,
         MailDeliveryPhase.Command => this.Command,
+        MailDeliveryPhase.Transmission => this.Transmission,
         _ => throw new ArgumentOutOfRangeException(nameof(phase), phase, "No delivery budget is defined for this phase."),
     };
 }

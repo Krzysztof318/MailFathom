@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Resilience;
 
 namespace MailFathom.Application.Jobs.Execution;
 
@@ -295,7 +296,7 @@ public sealed class JobExecutor
         JobFailureRecord failure,
         long startingTimestamp)
     {
-        var delay = JobRetryBackoff.DelayBeforeNextAttempt(
+        var delay = JitteredRetryBackoff.DelayBeforeNextAttempt(
             this.settings.RetryBaseDelay,
             this.settings.RetryMaxDelay,
             job.AttemptCount);

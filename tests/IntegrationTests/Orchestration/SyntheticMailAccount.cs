@@ -7,6 +7,7 @@ using MailFathom.AppHost;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
+using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Retrieval.AskMail.Audit;
@@ -58,7 +59,8 @@ internal sealed class SyntheticMailAccount(
     IMailFolderParticipationReader,
     IMailFolderMappingReader,
     IJunkMailFolderCatalog,
-    ITrustedAuthenticationAuthorityReader
+    ITrustedAuthenticationAuthorityReader,
+    IOutgoingSenderIdentityReader
 {
     /// <summary>Every folder alias this suite's configuration maps, which is every alias its tests bind one to.</summary>
     /// <remarks>
@@ -328,6 +330,23 @@ internal sealed class SyntheticMailAccount(
     /// separately.
     /// </remarks>
     public MailTransportSecurityPolicy? GetDeliveryPolicy(MailAccountId accountId) => this.GetPolicy(accountId);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The mailbox writes as itself, which is the one address the orchestrated server has a user for. A send addressed
+    /// from anywhere else would be a reverse path the container could not deliver a bounce to, and the domain is
+    /// reserved for testing so nothing addressed here leaves the container.
+    /// </remarks>
+    public OutgoingSenderIdentity? FindSenderIdentity(MailAccountId accountId)
+    {
+        if (accountId != AccountId
+            || !EmailAddress.TryCreate(displayName: null, OrchestrationContract.MailServerAccountEmailAddress, out var sender))
+        {
+            return null;
+        }
+
+        return OutgoingSenderIdentity.Create(AccountId, sender);
+    }
 
     /// <inheritdoc />
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the resolved material passes to the connection attempt that requested it, which disposes it when the attempt ends.")]
