@@ -2,15 +2,23 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Net;
+using System.Net.Sockets;
 using Xunit;
 
 namespace MailFathom.AppHost.UnitTests;
 
-/// <summary>Covers the two values the app model states rather than derives: the ephemeral resource name, and the development data-encryption key.</summary>
+/// <summary>Covers the values the app model resolves rather than states outright: the ephemeral resource name, a pinned port, and the development data-encryption key.</summary>
 /// <remarks>
 /// What the naming assertions establish is what the removal at the end of a run depends on. A prefix that did not start
 /// with the shared part would leave a run's resources outside every filter that finds them, and an identifier a
 /// container runtime refuses would fail the run at a point that says nothing about why.
+/// <para>
+/// What the port assertions establish is that the opt-in behaves the way the app model's default depends on. An unset
+/// key has to resolve to nothing, because that is what leaves Aspire to allocate and lets a second checkout run at the
+/// same time; a stated one has to reach the endpoint unchanged, because a developer pins a port to stop having to look
+/// it up.
+/// </para>
 /// <para>
 /// The key assertion establishes something the compiler cannot: the constant is written into a <c>plaintext:</c> secret
 /// reference, so a mistyped character or a change to the text behind it would first be reported by a developer's own
@@ -23,6 +31,9 @@ public sealed class OrchestrationContractTests
 
     /// <summary>The key length AES-256 takes, stated here because this project compiles one source file and reaches no shared constant.</summary>
     private const int DataEncryptionKeySizeInBytes = 32;
+
+    /// <summary>The configuration section every pinned port is stated under, restated here for the reason above.</summary>
+    private const string PinnedPortSection = "Ports:";
 
     /// <summary>A run that states no identifier still names its resources apart from every other run's.</summary>
     [Theory]
@@ -129,6 +140,124 @@ public sealed class OrchestrationContractTests
         // Assert — the accepted shape is an alphanumeric first character followed by up to 63 more of the same plus
         // `.`, `_`, and `-`. It is restated rather than shared because this project compiles one source file.
         Assert.Matches("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", OrchestrationContract.DataEncryptionKeyId);
+    }
+
+    /// <summary>Nothing stated leaves the port to the orchestration, which is what lets two checkouts run at once.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ResolvePinnedPort_NothingStated_LeavesThePortUnpinned(string? statedPort)
+    {
+        // Act
+        var port = OrchestrationContract.ResolvePinnedPort(OrchestrationContract.PinnedMcpEndpointPortKey, statedPort);
+
+        // Assert
+        Assert.Null(port);
+    }
+
+    /// <summary>A stated port reaches the endpoint as the number it states, which is the whole of what pinning buys.</summary>
+    [Theory]
+    [InlineData("8080", 8080)]
+    [InlineData("  8081  ", 8081)]
+    [InlineData("1", 1)]
+    [InlineData("65535", 65535)]
+    public void ResolvePinnedPort_PortStated_ReturnsThatNumber(string statedPort, int expectedPort)
+    {
+        // Act
+        var port = OrchestrationContract.ResolvePinnedPort(OrchestrationContract.PinnedMcpEndpointPortKey, statedPort);
+
+        // Assert
+        Assert.Equal(expectedPort, port);
+    }
+
+    /// <summary>A value that is not a port fails the run naming the key, rather than allocating one and saying nothing.</summary>
+    /// <remarks>
+    /// Falling back would answer a developer's request for one fixed address with a different address every run, and the
+    /// key they mistyped is the only thing that says where to look.
+    /// </remarks>
+    [Theory]
+    [InlineData("0")]
+    [InlineData("65536")]
+    [InlineData("-1")]
+    [InlineData("+8080")]
+    [InlineData("8080.0")]
+    [InlineData("8080 8081")]
+    [InlineData("eighty-eighty")]
+    [InlineData("0x1F90")]
+    public void ResolvePinnedPort_ValueIsNotAPort_FailsNamingTheKey(string statedPort)
+    {
+        // Act
+        var failure = Assert.Throws<InvalidOperationException>(
+            () => OrchestrationContract.ResolvePinnedPort(OrchestrationContract.PinnedPostgresPortKey, statedPort));
+
+        // Assert
+        Assert.Contains(OrchestrationContract.PinnedPostgresPortKey, failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Each socket is pinned under a key of its own, which is what lets one be pinned while the others stay allocated.</summary>
+    [Fact]
+    public void PinnedPortKeys_TheThreeSocketsTheOrdinaryTopologyPublishes_AreStatedSeparately()
+    {
+        // Act
+        string[] keys =
+        [
+            OrchestrationContract.PinnedMcpEndpointPortKey,
+            OrchestrationContract.PinnedHealthEndpointsPortKey,
+            OrchestrationContract.PinnedPostgresPortKey,
+        ];
+
+        // Assert
+        Assert.Equal(keys.Length, keys.Distinct(StringComparer.Ordinal).Count());
+        Assert.All(keys, key => Assert.StartsWith(PinnedPortSection, key, StringComparison.Ordinal));
+    }
+
+    /// <summary>A port nothing pinned is one the host can actually bind, which is the whole of what the run needs from it.</summary>
+    /// <remarks>
+    /// The orchestrator refuses an unproxied endpoint that states no port, so this is what stands in for its allocation.
+    /// A value the operating system reported free and immediately refuses to bind would be no allocation at all.
+    /// </remarks>
+    [Fact]
+    public void FindFreePorts_APortNothingPinned_IsOneAListenerCanBind()
+    {
+        // Act
+        var ports = OrchestrationContract.FindFreePorts(1);
+
+        // Assert
+        var port = Assert.Single(ports);
+
+        Assert.InRange(port, 1, 65535);
+
+        using var listener = new TcpListener(IPAddress.Any, port);
+
+        listener.Start();
+    }
+
+    /// <summary>The sockets one run serves get different ports, or the second listener would collide with the first.</summary>
+    /// <remarks>
+    /// The reason the count is a parameter rather than something the caller loops over: a port asked for on its own is
+    /// released before the next is chosen, so nothing would stop the operating system offering the same one twice.
+    /// </remarks>
+    [Fact]
+    public void FindFreePorts_TheSocketsOneRunServes_AreEachGivenADifferentPort()
+    {
+        // Act
+        var ports = OrchestrationContract.FindFreePorts(16);
+
+        // Assert
+        Assert.Equal(16, ports.Length);
+        Assert.Equal(ports.Length, ports.Distinct().Count());
+    }
+
+    /// <summary>A run pinning every socket it serves asks for nothing, which is a request rather than a mistake.</summary>
+    [Fact]
+    public void FindFreePorts_NoneNeeded_ReturnsNone()
+    {
+        // Act
+        var ports = OrchestrationContract.FindFreePorts(0);
+
+        // Assert
+        Assert.Empty(ports);
     }
 
     private static string IdentifierOf(string prefix) =>

@@ -153,14 +153,14 @@ Three resources come up, in dependency order. The `postgres` container starts fi
 `mailfathom-migrations` resource then applies every pending migration to it; and `mailfathom-host` waits for that run
 to complete before starting, which is why the schema gate that fails a fresh deployment on purpose never fires on a
 local run — the explicit schema step the deployments require is performed here by the orchestration, before the host
-looks. The host runs in the `Development` environment on ports the app model states rather than allocates, so the MCP endpoint
-answers at `http://localhost:8080` and the probes at `http://127.0.0.1:8081`. There is no local TLS listener: MailFathom
+looks. The host runs in the `Development` environment on two sockets, the MCP endpoint's on `localhost` and the probes'
+on `127.0.0.1`, each on a free port the run takes unless this checkout [pinned one](#pinning-a-port); the
+dashboard reports the numbers it took. There is no local TLS listener: MailFathom
 never serves one out of an ASP.NET Core development certificate, so a developer who wants TLS configures
-`McpEndpoint:Https` the way a deployment does, which is also the shape they will ship. An MCP client's configuration therefore names an address once instead of following whatever a
-launch profile or the orchestrator's port allocation produced that run. Neither is proxied either: the socket
-a client connects to is the socket Kestrel opened, which is what keeps a TLS handshake — and a client certificate — a
-conversation with the host itself. The probe listener is pinned to loopback deliberately, because the probes answer
-without a credential and nothing on a local network has any business asking them — which is also why it is a socket of
+`McpEndpoint:Https` the way a deployment does, which is also the shape they will ship. Neither socket is proxied: the
+socket a client connects to is the socket Kestrel opened, which is what keeps a TLS handshake — and a client
+certificate — a conversation with the host itself. The probe listener is pinned to loopback deliberately, because the
+probes answer without a credential and nothing on a local network has any business asking them — which is also why it is a socket of
 its own here rather than the MCP endpoint's. A shared socket is one socket, so the probes would answer wherever the MCP
 endpoint does. The integration topology shares one deliberately, and [what that couples](configuration-reference.md#which-settings-a-shared-socket-couples)
 is the same list a deployment reads.
@@ -172,17 +172,45 @@ and MailFathom refuses that variable outright, because each surface states where
 endpoint is published without ever reaching it. That is also why the resource carries no `WithHttpHealthCheck`, which
 derives its address from an HTTP endpoint this app model declares none of.
 
-`8080` and `8081` are the ports [the container image](container-image.md) publishes, so a local run and a deployed one
-answer on the same numbers. `8443` belongs to this topology alone: the image serves no TLS listener, and `443` is a
-privileged port a developer's process cannot bind without a capability nothing here should require.
+### Pinning a port
 
-A fixed port is one port, so two ordinary orchestrations cannot run at once on one machine — a second one fails to bind
-and says so. The integration-test topology is left on allocated ports for exactly that reason, which is what keeps a
-suite run and a developer's run able to coexist.
+Every port this topology publishes is taken free per run, which is what lets several checkouts of this repository run
+their orchestrations at the same time: a fixed port is one port, and the second run to ask for it fails to bind and
+exits. The integration-test topology has never used a fixed one, for that same reason.
 
-That TLS listener presents the ASP.NET Core development certificate, which Kestrel uses for an address no endpoint
-configuration claims. Create and trust it once per machine — without a certificate at all the host fails to start with
-nothing to present, and with an untrusted one it starts while every client refuses the handshake:
+A port taken per run moves between runs, and an address written once into an MCP client's configuration or a database
+tool should not have to. So each socket is pinned on its own, in the app host's own user secrets — where a decision
+about one machine belongs, out of every checkout:
+
+```bash
+dotnet user-secrets --project src/AppHost/AppHost.csproj set "Ports:McpEndpoint" "8080"
+dotnet user-secrets --project src/AppHost/AppHost.csproj set "Ports:HealthEndpoints" "8081"
+dotnet user-secrets --project src/AppHost/AppHost.csproj set "Ports:Postgres" "5432"
+```
+
+`8080` and `8081` are the ports [the container image](container-image.md) publishes and `5432` is PostgreSQL's own, so
+those three values are what makes a local run answer where a deployment does. Each key is read on its own, so pinning
+the MCP endpoint leaves the probes and the database on whatever the run takes. A value that is not a port number
+between `1` and `65535` fails the app host at startup naming the key, rather than being ignored and leaving the address
+to move anyway.
+
+That store is keyed by the `UserSecretsId` in `src/AppHost/AppHost.csproj`, which is one fixed identifier, so a port
+pinned there is pinned for **every checkout on the machine** — which is the collision above, taken deliberately for the
+address it buys. It is also loaded in the `Development` environment only, which is what the app host's only launch
+profile runs it in. The environment form of each key is what pins a port for one run: `Ports__McpEndpoint`,
+`Ports__HealthEndpoints`, and `Ports__Postgres` are read after the store and therefore win over it.
+
+```bash
+Ports__McpEndpoint=8080 dotnet run --project src/AppHost/AppHost.csproj
+```
+
+A port nothing pinned is read from the dashboard, which lists each resource's endpoints, and from the host's own
+startup log, which reports the socket every surface bound.
+
+The Aspire dashboard is served over TLS and presents the ASP.NET Core development certificate, which Kestrel uses for
+an address no endpoint configuration claims. Create and trust it once per machine — without a certificate at all the app
+host fails to start with nothing to present, and with an untrusted one it starts while the browser refuses the
+handshake:
 
 ```bash
 dotnet dev-certs https --trust
@@ -216,7 +244,7 @@ what it costs, and how to confirm the handshake is what failed. The AppHost pass
 sets one, so a checkout that exports nothing runs under the platform default; the integration-test topology receives it
 under no circumstances, because a suite whose handshakes depended on the machine that ran it would prove nothing.
 
-An MCP client then connects to `http://localhost:8080/mcp`, or to `https://localhost:8443/mcp`, with
+An MCP client then connects to `http://localhost:<the port the MCP endpoint took>/mcp` with
 `Authorization: Bearer dev-key`. Stopping the orchestration with `Ctrl+C` — or
 `aspire stop --apphost src/AppHost/AppHost.csproj --non-interactive` — leaves the synchronized mail in place, because
 the database volume outlives the container and the container outlives the run. The container is stopped rather than
@@ -252,12 +280,12 @@ rather than a PostgreSQL process and the port it holds. A shutdown that runs —
 termination — stops it; a process killed outright runs nothing and leaves the container up, which is then stopped with
 `docker stop` like any other.
 
-The server is reached on the conventional port with conventional credentials, so a database tool needs nothing this
-repository has to tell it:
+The server is reached with conventional credentials, so a database tool needs nothing this repository has to tell it
+beyond the port this run published:
 
 | | |
 | --- | --- |
-| Host and port | `localhost:5432` |
+| Host and port | `localhost` and the port the dashboard reports — `5432` where it is [pinned](#pinning-a-port) |
 | Database | `mailfathom` |
 | User and password | `postgres` / `postgres` |
 
@@ -268,13 +296,14 @@ that never changes cannot drift from itself. It authenticates one local developm
 publishes on the loopback address alone, and no deployment is reached this way: a deployed MailFathom takes its
 connection string from [secret provisioning](secret-provisioning.md), which this app model has no part in.
 
-The fixed port is a convenience with one consequence worth knowing: a PostgreSQL already listening on `5432`, whether a
-system service or another orchestration, takes the port first and the container then fails to start with an
-address-in-use error naming it.
+Pinning that port has one consequence worth knowing: a PostgreSQL already listening on the number pinned, whether a
+system service or another orchestration, takes it first and the container then fails to start with an address-in-use
+error naming it.
 
 `src/AppHost/AppHost.csproj` still declares a `UserSecretsId`, and `src/AppHost/Properties/launchSettings.json` still
 sets `DOTNET_ENVIRONMENT=Development`, because that is where Aspire persists what it generates for the app model
-itself — the dashboard and OTLP API keys — and user secrets are loaded in the `Development` environment only.
+itself — the dashboard and OTLP API keys — and where [a pinned port](#pinning-a-port) is stated; user secrets are loaded
+in the `Development` environment only.
 
 To discard the local database and start from an empty one, remove the container and its volume:
 

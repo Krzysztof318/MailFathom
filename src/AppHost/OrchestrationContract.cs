@@ -2,6 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 
 namespace MailFathom.AppHost;
@@ -419,6 +422,38 @@ public static class OrchestrationContract
     /// </remarks>
     public const string EphemeralRunIdentifierVariable = "MAILFATHOM_INTEGRATIONTESTS_RUN_ID";
 
+    /// <summary>The configuration key a developer states the MCP endpoint's port under to pin it.</summary>
+    /// <remarks>
+    /// <para>
+    /// The ordinary topology takes a free port for each socket it publishes, because a fixed port is one port and several checkouts
+    /// of this repository run their orchestrations at the same time: the second to start cannot bind what the first is
+    /// holding, and it exits rather than falling back. What a fixed port buys is an address written once into an MCP
+    /// client's configuration and never revisited, so it stays available as something a developer asks for — state the
+    /// number here and the run binds it.
+    /// </para>
+    /// <para>
+    /// Read from the app host's own configuration, which is what makes user secrets its natural home: pinning a port is
+    /// a decision about one machine and belongs in nobody's checkout. That store is keyed by the app host's fixed
+    /// <c>UserSecretsId</c>, so a value put in it holds for every checkout on the machine rather than for the one it was
+    /// set from; its environment form, <c>Ports__McpEndpoint</c>, is what pins a port for a single run.
+    /// </para>
+    /// </remarks>
+    public const string PinnedMcpEndpointPortKey = "Ports:McpEndpoint";
+
+    /// <summary>The configuration key a developer states the probe listener's port under to pin it.</summary>
+    /// <remarks>Read the way <see cref="PinnedMcpEndpointPortKey" /> is, and read on its own, so pinning one socket leaves the other free to move.</remarks>
+    public const string PinnedHealthEndpointsPortKey = "Ports:HealthEndpoints";
+
+    /// <summary>The configuration key a developer states the PostgreSQL server's host port under to pin it.</summary>
+    /// <remarks>Read the way <see cref="PinnedMcpEndpointPortKey" /> is. Pinning it is what a database tool configured once wants; leaving it unset is what lets a second checkout start a server of its own.</remarks>
+    public const string PinnedPostgresPortKey = "Ports:Postgres";
+
+    /// <summary>The lowest number a pinned port may state.</summary>
+    private const int MinimumPortNumber = 1;
+
+    /// <summary>The highest number a pinned port may state.</summary>
+    private const int MaximumPortNumber = 65535;
+
     /// <summary>How many characters a generated run identifier has.</summary>
     /// <remarks>Four bytes of randomness, which is short enough to read in a container listing and long enough that two runs starting in the same minute do not collide.</remarks>
     private const int GeneratedRunIdentifierLength = 8;
@@ -452,6 +487,85 @@ public static class OrchestrationContract
         }
 
         return $"{EphemeralResourceNamePrefix}-{statedIdentifier}";
+    }
+
+    /// <summary>Reads the port a developer pinned under <paramref name="configurationKey" />.</summary>
+    /// <param name="configurationKey">The key the value was read from, which is what a refusal names.</param>
+    /// <param name="statedPort">The value configuration holds under that key, or <see langword="null" /> when it holds none.</param>
+    /// <returns>The stated port, or <see langword="null" /> when nothing states one, which is what leaves the caller to take a free one.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when a stated value is not a TCP port number.</exception>
+    /// <remarks>
+    /// A stated value that is not a port is refused rather than ignored, for the reason an unusable run identifier is:
+    /// falling back to a free port would answer a request for one fixed address with a different address every run, and
+    /// nothing would say why.
+    /// </remarks>
+    public static int? ResolvePinnedPort(string configurationKey, string? statedPort)
+    {
+        if (string.IsNullOrWhiteSpace(statedPort))
+        {
+            return null;
+        }
+
+        var statedNumber = statedPort.Trim();
+
+        if (!int.TryParse(statedNumber, NumberStyles.None, CultureInfo.InvariantCulture, out var port)
+            || port is < MinimumPortNumber or > MaximumPortNumber)
+        {
+            throw new InvalidOperationException(
+                $"{configurationKey} is '{statedNumber}', which is not a TCP port number. State a number between {MinimumPortNumber} and {MaximumPortNumber}, or leave it unset to have a free one taken per run.");
+        }
+
+        return port;
+    }
+
+    /// <summary>Finds free TCP ports for the sockets the orchestration publishes without a proxy in front of them.</summary>
+    /// <param name="count">How many ports the caller needs, which is how many sockets it declares.</param>
+    /// <returns>That many ports, each free when it was asked for and none equal to another.</returns>
+    /// <remarks>
+    /// <para>
+    /// An unproxied endpoint has to state its number: the orchestrator allocates a port for the proxy it would put in
+    /// front of the resource, and there is no proxy here, so it refuses the endpoint rather than choosing for it. What
+    /// keeps a run off another run's port is therefore this — the operating system's own answer to which port is free,
+    /// which is the same answer it gives a proxy.
+    /// </para>
+    /// <para>
+    /// Every port is asked for before any is released, which is what makes them different from one another. Asking one
+    /// at a time would release each before the next was chosen, and two sockets handed the same number would leave the
+    /// host refusing to open the second listener over a collision within one run.
+    /// </para>
+    /// <para>
+    /// They are all released before the host binds them, so a process that asks in the same instant can take one first
+    /// and the host then fails to start on an address already in use. That is a race a few milliseconds wide against a
+    /// range of sixteen thousand ephemeral ports, and it fails loudly on the run that loses rather than silently on the
+    /// one that wins; holding the sockets open until the host binds them is not available, because the host is a
+    /// separate process.
+    /// </para>
+    /// </remarks>
+    public static int[] FindFreePorts(int count)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+
+        List<TcpListener> probes = [];
+
+        try
+        {
+            for (var index = 0; index < count; index++)
+            {
+                var probe = new TcpListener(IPAddress.Any, 0);
+
+                probes.Add(probe);
+                probe.Start();
+            }
+
+            return [.. probes.Select(static probe => ((IPEndPoint)probe.LocalEndpoint).Port)];
+        }
+        finally
+        {
+            foreach (var probe in probes)
+            {
+                probe.Dispose();
+            }
+        }
     }
 
     private static bool IsUsableInAContainerName(string identifier) =>

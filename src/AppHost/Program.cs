@@ -17,6 +17,13 @@ var builder = DistributedApplication.CreateBuilder(args);
 // ephemeral database and leave its volume under the prefix the test script deletes.
 var runsIntegrationTests = args.Contains(OrchestrationContract.IntegrationTestingArgument, StringComparer.Ordinal);
 
+// The port this checkout pinned for a socket, or null where it pinned none — which is what leaves the number to be
+// found per run and lets a second checkout start while the first is running. Read from the app host's own
+// configuration, so `dotnet user-secrets --project src/AppHost/AppHost.csproj` is where a developer states one; unlike
+// the topology switch above, an ambient value here can only move a port the run publishes, never select a topology.
+int? PinnedPort(string configurationKey) =>
+    OrchestrationContract.ResolvePinnedPort(configurationKey, builder.Configuration[configurationKey]);
+
 // One identifier per run, so two suites started on one machine name different containers and volumes instead of racing
 // for one name — and so the caller that started a run can remove exactly what it created. The ordinary topology names
 // nothing with it and leaves it empty.
@@ -82,9 +89,12 @@ else
     // below stops it during shutdown. What outlives the orchestration is then the container and its data rather than a
     // PostgreSQL process and the port it holds.
     //
-    // The host port is fixed for the same reason the host's own ports are: a connection string typed into a database
-    // tool once should keep working. PostgreSQL's own port is the convenient one, and Aspire publishes it on the
-    // loopback address, so the server a developer reaches is not one anything else on their network can.
+    // The host port is allocated for the same reason the host's own ports are: a fixed one is a single port, and a
+    // second checkout running its own orchestration cannot have it. A connection string typed into a database tool once
+    // should still be able to keep working, so a developer who wants that pins the conventional 5432 under
+    // OrchestrationContract.PinnedPostgresPortKey and gets it on every run that reads it. Whatever the number is,
+    // Aspire publishes it on the loopback address, so the server a developer reaches is not one anything else on their
+    // network can.
     //
     // The volume keeps the name WithDataVolume would have given it, which is what makes it still one volume per
     // checkout: the generated name carries a hash of the app host's path, so a clone and a worktree own different
@@ -92,7 +102,7 @@ else
     postgres
         .WithVolume(VolumeNameGenerator.Generate(postgres, "data"), postgresDataDirectory)
         .WithLifetime(ContainerLifetime.Persistent)
-        .WithHostPort(5432);
+        .WithHostPort(PinnedPort(OrchestrationContract.PinnedPostgresPortKey));
 
     // Registered last, which is what makes its shutdown run first: a hosted service stops in reverse registration
     // order, and the orchestrator that carries out the stop is registered while the builder is created.
@@ -349,7 +359,17 @@ if (runsIntegrationTests)
 }
 else
 {
-    // The two sockets a developer's run serves, each stated by the section that owns it.
+    // The two sockets a developer's run serves, each stated by the section that owns it, and each on a free port this
+    // run found unless this checkout pinned one. Found here rather than left to the orchestrator, which allocates a
+    // port for the proxy it would put in front of a resource and refuses an endpoint that declares none while asking
+    // for no proxy — and no proxy is what keeps the socket a client reaches the socket Kestrel opened.
+    //
+    // Both are found in one call whether or not either is pinned, because that is what makes them different from each
+    // other; a pinned value then replaces the one it was found for and the other stays where it was put.
+    var foundPorts = OrchestrationContract.FindFreePorts(2);
+    var mcpEndpointPort = PinnedPort(OrchestrationContract.PinnedMcpEndpointPortKey) ?? foundPorts[0];
+    var healthEndpointsPort = PinnedPort(OrchestrationContract.PinnedHealthEndpointsPortKey) ?? foundPorts[1];
+
     mailFathomHost
         // The MCP endpoint's own socket, stated to the app model and injected into the host's own configuration key, so
         // the number is written once rather than declared here and configured again beside it. Its scheme is tcp rather
@@ -358,15 +378,16 @@ else
         // section. A tcp endpoint is recorded and published without reaching it; what a client connects with is still
         // HTTP.
         //
-        // Fixed rather than allocated, and bound by the host itself rather than by a proxy in front of it. An MCP
-        // client's configuration names an address once, so a port that moved with a launch profile or with the
-        // orchestrator's own allocation would make that address a per-run detail; unproxied also means the socket a
-        // client connects to is the socket Kestrel opened, which is what keeps a TLS handshake and a client certificate
-        // a conversation with the host. 8080 and 8081 are the numbers the container image already publishes, so a local
-        // run and a deployed one answer on the same ports.
+        // Bound by the host itself rather than by a proxy in front of it: the socket a client connects to is then the
+        // socket Kestrel opened, which is what keeps a TLS handshake and a client certificate a conversation with the
+        // host.
         //
-        // Only the ordinary topology pins them. The integration suite starts this same app model, and a fixed port
-        // there would let one run refuse to bind because another still holds it.
+        // Its number is a free one this run found, unless this checkout stated the number it wants. An MCP client's
+        // configuration names an address once, which is what a fixed port was here for, but a fixed port is one port
+        // and several checkouts of this repository run their orchestrations at the same time — every run after the
+        // first then failed to bind and exited. So the stable address is what a developer asks for rather than what
+        // every run imposes on every other: 8080 and 8081 are the numbers the container image publishes, and pinning
+        // them is what makes a local run and a deployed one answer on the same ports.
         //
         // No HTTPS endpoint accompanies this one. Kestrel serves an https:// address it was handed with no endpoint
         // configuration out of the ASP.NET Core development certificate, and MailFathom never serves a listener out of
@@ -375,8 +396,8 @@ else
         .WithEndpoint(
             name: OrchestrationContract.HostHttpEndpointName,
             scheme: "tcp",
-            port: 8080,
-            targetPort: 8080,
+            port: mcpEndpointPort,
+            targetPort: mcpEndpointPort,
             isProxied: false,
             env: "McpEndpoint__Port")
         // The probe listener, on a socket of its own here rather than beside the MCP endpoint the way the integration
@@ -393,8 +414,8 @@ else
         .WithEndpoint(
             name: "health",
             scheme: "tcp",
-            port: 8081,
-            targetPort: 8081,
+            port: healthEndpointsPort,
+            targetPort: healthEndpointsPort,
             isProxied: false,
             env: "HealthEndpoints__Port");
 }
