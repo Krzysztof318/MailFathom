@@ -101,7 +101,7 @@ public sealed class SpamJunkFolderRulesTests
     private static SpamClassificationOptions Filing(string? junkFolder) => new()
     {
         Enabled = true,
-        Actions = new SpamActionOptions { FileInJunkFolder = true, JunkFolder = junkFolder },
+        Actions = new SpamActionOptions { MoveToJunkFolder = true, JunkFolder = junkFolder },
     };
 
     private static DeclaredMailAccount AccountMapping(

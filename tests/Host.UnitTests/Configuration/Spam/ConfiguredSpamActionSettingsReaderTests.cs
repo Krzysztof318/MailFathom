@@ -34,7 +34,7 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
             Enabled = true,
             Actions = new SpamActionOptions
             {
-                FileInJunkFolder = true,
+                MoveToJunkFolder = true,
                 MarkAsRead = true,
                 JunkFolder = "quarantine",
                 Threshold = 9,
@@ -59,7 +59,7 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
         var reader = ReaderFor(new SpamClassificationOptions
         {
             Enabled = false,
-            Actions = new SpamActionOptions { FileInJunkFolder = true, MarkAsRead = true },
+            Actions = new SpamActionOptions { MoveToJunkFolder = true, MarkAsRead = true },
         });
 
         // Act
@@ -82,7 +82,7 @@ public sealed class ConfiguredSpamActionSettingsReaderTests
         options.ReportReload(new SpamClassificationOptions
         {
             Enabled = true,
-            Actions = new SpamActionOptions { FileInJunkFolder = true },
+            Actions = new SpamActionOptions { MoveToJunkFolder = true },
         });
 
         var afterReload = reader.Actions;

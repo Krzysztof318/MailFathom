@@ -69,7 +69,7 @@ public sealed class SpamJunkFolderValidatorTests
     private static SpamClassificationOptions Filing() => new()
     {
         Enabled = true,
-        Actions = new SpamActionOptions { FileInJunkFolder = true },
+        Actions = new SpamActionOptions { MoveToJunkFolder = true },
     };
 
     private static IConfiguration Configuration(Dictionary<string, string?> keys) =>
