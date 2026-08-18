@@ -132,6 +132,36 @@ public sealed class StoredMailRederivationHandlerTests
     }
 
     /// <summary>
+    /// A run that ended between the walk stopping and the segment writing down what carries the rest reports the end of
+    /// the scope, because that is what happened: an overlapping attempt finished it. A segment that reported neither
+    /// signal would end its span the way one killed where nobody recorded why does, which is what an operator reads as
+    /// a deployment that stopped for no stated reason.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_ARunThatEndedBeforeTheRestCouldBeHandedOn_ReportsTheEndOfTheScope()
+    {
+        // Arrange
+        this.runs.Arrange(RunOf(segmentCount: 1));
+
+        using CancellationTokenSource attempt = new();
+        var store = new WalkStore(StoredMail(EmailsPerPass + 1), stopAfterBatches: 11, attempt);
+        var handler = this.CreateHandler(store, new RunEndingOnceStopped(this.runs, attempt, Now));
+
+        // Act
+        await handler.RunAsync(PayloadOf(WholeAccount), attempt.Token);
+
+        // Assert
+        var run = this.runs.Find(WholeAccount)!;
+
+        Assert.False(run.IsOutstanding);
+        Assert.Equal(1, run.SegmentCount);
+        Assert.Empty(this.EnqueuedRequests());
+        Assert.Equal((true, (bool?)null), (
+            this.telemetry.Runs.Single().ReachedEndOfScope,
+            this.telemetry.Runs.Single().HandedOnQueued));
+    }
+
+    /// <summary>
     /// A queue at its bound is the one way a run stalls with nothing failing: it stays outstanding, nothing carries it,
     /// and no dead letter records it. The segment reports that rather than discarding it, because an operator watching
     /// the deployment would otherwise have only a progress figure that stopped moving.
@@ -221,6 +251,40 @@ public sealed class StoredMailRederivationHandlerTests
     private static StoredMailScopeJobPayload PayloadOf(StoredMailScope scope) =>
         StoredMailScopeJobPayload.For(scope.Account, scope.Folder);
 
+    /// <summary>Ends the scope's run on the first reading taken after the attempt was stopped, and reads through otherwise.</summary>
+    /// <remarks>
+    /// The walk raises the cancellation from the batch that met it, so the next reading of the run is the one the
+    /// segment takes to write down what carries the rest of the scope. Ending it there is the race this covers: the
+    /// walk saw an outstanding run, and by the time the segment wrote, an overlapping attempt had finished the scope.
+    /// </remarks>
+    private sealed class RunEndingOnceStopped(
+        InMemoryStoredMailRederivationRunStore runs,
+        CancellationTokenSource attempt,
+        DateTimeOffset endedAt)
+        : IStoredMailRederivationRunStore
+    {
+        private bool ended;
+
+        public async Task<StoredMailRederivationRun?> FindAsync(
+            StoredMailScope scope,
+            CancellationToken cancellationToken)
+        {
+            if (attempt.IsCancellationRequested && !this.ended && runs.Find(scope) is { } outstanding)
+            {
+                this.ended = true;
+                runs.Arrange(outstanding with { EndedAt = endedAt });
+            }
+
+            return await runs.FindAsync(scope, cancellationToken);
+        }
+
+        public Task SaveAsync(
+            IPersistenceSession session,
+            StoredMailRederivationRun run,
+            CancellationToken cancellationToken) =>
+            runs.SaveAsync(session, run, cancellationToken);
+    }
+
     private static StoredMailRederivationRun RunOf(int segmentCount) => new()
     {
         RunId = StoredMailRederivationRunId.Create(Guid.Parse("0199a0c0-0000-7000-8000-00000000000b")),
@@ -248,7 +312,12 @@ public sealed class StoredMailRederivationHandlerTests
             .Select(call => (JobEnqueueRequest)call.GetArguments()[0]!),
     ];
 
-    private StoredMailRederivationHandler CreateHandler(WalkStore store)
+    /// <summary>Builds the handler over one walk, optionally reading the run through a double of its own.</summary>
+    /// <param name="store">The stored mail the walk finds.</param>
+    /// <param name="runStore">What the segment reads the run through, which is the walk's own record unless a test moves it.</param>
+    private StoredMailRederivationHandler CreateHandler(
+        WalkStore store,
+        IStoredMailRederivationRunStore? runStore = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
@@ -280,7 +349,7 @@ public sealed class StoredMailRederivationHandlerTests
                 commitPolicy,
                 this.timeProvider,
                 AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process)),
-            this.runs,
+            runStore ?? this.runs,
             this.jobs,
             commitPolicy,
             this.telemetry);

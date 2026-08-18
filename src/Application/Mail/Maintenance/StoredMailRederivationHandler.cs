@@ -165,6 +165,12 @@ public sealed class StoredMailRederivationHandler : IJobHandler
     /// next request repairs by enqueuing that same key — and an enqueue that arrives twice is answered with the job
     /// already there.
     /// </para>
+    /// <para>
+    /// A run that has ended or been replaced by the time this runs reports the segment as having reached the end of the
+    /// scope, exactly as the walk's own mid-loop check reports the same race. There is nothing to hand on and nothing
+    /// went wrong, and a segment whose span ended with neither signal would be indistinguishable from one that stopped
+    /// where nobody wrote down why.
+    /// </para>
     /// </remarks>
     private async Task HandOnAsync(
         StoredMailRederivationRunId runId,
@@ -191,6 +197,8 @@ public sealed class StoredMailRederivationHandler : IJobHandler
 
         if (next is null)
         {
+            runScope.ReachedEndOfScope();
+
             return;
         }
 
