@@ -68,7 +68,7 @@ access, deletion, and export constraints of the mail it was derived from.
   filesystem access, and certificates carry least privilege.
 - A security decision that fails open where the documentation says it fails closed, an
   authorization check reachable on only one of several paths, or a trust decision taken
-  on a key alone is a P1.
+  on a key alone is the most serious kind there is.
 - Options are validated at startup, so unsafe or misspelled configuration fails fast
   instead of binding a default.
 

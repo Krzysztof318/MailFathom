@@ -827,7 +827,7 @@ further seconds of jitter so several calls failing at once do not come back in
 step. The deadline is what makes the attempt budget a bound at all: `gh` sets none
 of its own, so a connection that stalls rather than drops — the same failure in
 its other shape — would otherwise hang with the budget never advancing, until the
-collecting job's ten minutes ran out. That recovers a request that was dropped
+collecting job's twelve minutes ran out. That recovers a request that was dropped
 and deliberately cannot wait out an outage: a call that exhausts its budget
 returns the failure rather than swallowing it, and says how many attempts it made,
 because the caller's own failure would otherwise say only that the call did not

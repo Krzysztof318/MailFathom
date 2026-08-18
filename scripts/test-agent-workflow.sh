@@ -6318,11 +6318,12 @@ a_comment_never_cancels_a_review_in_flight() {
   done
 }
 
-# The reviewer's subscription credential is named in four places: the workflow-level `env` that
-# carries the secret's *name* into the annotation reporting a missing one, the action input that
-# spends it, and the two leak checks that refuse to publish findings containing it. Declaring the
-# secret once would also hand it to every step that has no business holding it, so the four
-# spellings are separate by design and this is what keeps them agreeing.
+# The reviewer's subscription credential is named in five places: the workflow-level `env` that
+# carries the secret's *name* into the annotation reporting a missing one, the two action inputs
+# that spend it — a reader's and the judge's — and the two leak checks that refuse to publish
+# findings containing it. Declaring the secret once would also hand it to every step that has no
+# business holding it, so the five spellings are separate by design and this is what keeps them
+# agreeing.
 #
 # The failure they can otherwise produce is silent in the worst way. A leak check comparing a review
 # against the token the run never spent matches nothing, passes every review it is given, and is
@@ -6349,7 +6350,7 @@ the_reviewer_resolves_one_claude_credential_everywhere() {
   fi
 
   # Every other read of a Claude secret, whatever it is spelled as. A step reaching one without the
-  # selector is either the profile being ignored or a fourth holder of the credential, and both are
+  # selector is either the profile being ignored or a fifth holder of the credential, and both are
   # this contract's subject. A comment naming the secrets context is not: the file argues this
   # arrangement at length, and a contract that failed on the argument would be one nobody could
   # explain in the file it guards.
