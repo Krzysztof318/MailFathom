@@ -38,13 +38,22 @@ than of MailFathom, so there is nothing to default it to; [the mail
 configuration](../operations/configuration-mail.md#one-account--mailsynchronizationaccountsn) states where the setting
 lives. What to write in it is read off
 the mail the account already holds: open a message that arrived recently, read its topmost `Authentication-Results`
-header, and take the token before the first semicolon, which is the identifier that server stamps on everything it
-delivers to this mailbox.
+header, and take the first token after the colon, which is the identifier that server stamps on everything it
+delivers to this mailbox. RFC 8601 lets a server write a version number after that token, and the digit is not part of
+the identifier — a configured value carrying whitespace fails startup rather than matching a header.
 
 **An account naming no identifier believes no header at all**, and every message it holds carries the not-established
 verdict below. That is an ordinary state rather than a misconfiguration: it is also what a deployment whose provider
 publishes no results sees on every message. A value that is *present* and unusable — blank, longer than a domain name,
 or carrying whitespace — fails startup instead, because the two are indistinguishable afterwards.
+
+**A server that writes no header at all is the second of those two, and configuration does not answer it.** Nothing
+here verifies a sender, so a deployment whose receiving server neither evaluates SPF, DKIM, and DMARC nor records what
+it found has no route to any verdict but not established — and therefore no route to a trusted author either, since
+[the list below](#the-trusted-sender-list) is held against one. Switching those checks on at that server reaches mail
+delivered afterwards and cannot reach mail already delivered, because the header is part of the message. [Whether your
+server says who sent a message](../users/mailbox-providers.md#whether-your-server-says-who-sent-a-message) is how a
+reader tells the two cases apart against their own delivered mail.
 
 The `ARC-Authentication-Results` header of RFC 8617 is deliberately not read here. It preserves an upstream hop's
 findings across forwarding, which is a claim a relay signed rather than something this mailbox's own server observed.
