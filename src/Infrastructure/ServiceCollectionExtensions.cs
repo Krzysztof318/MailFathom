@@ -478,7 +478,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(provider => new DkimPublicKeyRecordCache(provider.GetRequiredService<TimeProvider>()));
         services.TryAddSingleton<IDkimPublicKeyRecordResolver>(provider => new DnsDkimPublicKeyRecordResolver(
             DnsDkimPublicKeyRecordResolver.CreateLookupClient(),
-            provider.GetRequiredService<DkimPublicKeyRecordCache>()));
+            provider.GetRequiredService<DkimPublicKeyRecordCache>(),
+            provider.GetRequiredService<TimeProvider>()));
         services.AddScoped(provider =>
         {
             // The local verification is handed to the parse only where this deployment verifies for itself, so a

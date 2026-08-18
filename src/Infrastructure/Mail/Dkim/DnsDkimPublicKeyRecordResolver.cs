@@ -53,29 +53,38 @@ internal sealed class DnsDkimPublicKeyRecordResolver : IDkimPublicKeyRecordResol
 
     private readonly IDnsQuery lookup;
     private readonly DkimPublicKeyRecordCache cache;
+    private readonly TimeProvider timeProvider;
     private readonly TimeSpan lookupDeadline;
 
     /// <summary>Initializes a resolver over one DNS client and the cache its answers are held in.</summary>
     /// <param name="lookup">Queries the resolver the operating system configured.</param>
     /// <param name="cache">Holds what was resolved for as long as it stays good.</param>
+    /// <param name="timeProvider">Measures the deadline one lookup is given.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    public DnsDkimPublicKeyRecordResolver(IDnsQuery lookup, DkimPublicKeyRecordCache cache)
-        : this(lookup, cache, LookupDeadline)
+    public DnsDkimPublicKeyRecordResolver(IDnsQuery lookup, DkimPublicKeyRecordCache cache, TimeProvider timeProvider)
+        : this(lookup, cache, timeProvider, LookupDeadline)
     {
     }
 
-    /// <summary>Initializes a resolver whose deadline is supplied, so a test need not wait the real one out.</summary>
+    /// <summary>Initializes a resolver whose deadline is supplied, so a test need not state the real one.</summary>
     /// <param name="lookup">Queries a resolver.</param>
     /// <param name="cache">Holds what was resolved for as long as it stays good.</param>
+    /// <param name="timeProvider">Measures the deadline one lookup is given.</param>
     /// <param name="lookupDeadline">How long one name is waited for.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    internal DnsDkimPublicKeyRecordResolver(IDnsQuery lookup, DkimPublicKeyRecordCache cache, TimeSpan lookupDeadline)
+    internal DnsDkimPublicKeyRecordResolver(
+        IDnsQuery lookup,
+        DkimPublicKeyRecordCache cache,
+        TimeProvider timeProvider,
+        TimeSpan lookupDeadline)
     {
         ArgumentNullException.ThrowIfNull(lookup);
         ArgumentNullException.ThrowIfNull(cache);
+        ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.lookup = lookup;
         this.cache = cache;
+        this.timeProvider = timeProvider;
         this.lookupDeadline = lookupDeadline;
     }
 
@@ -163,8 +172,8 @@ internal sealed class DnsDkimPublicKeyRecordResolver : IDkimPublicKeyRecordResol
         string keyRecordName,
         CancellationToken cancellationToken)
     {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        deadline.CancelAfter(this.lookupDeadline);
+        using var deadline = new CancellationTokenSource(this.lookupDeadline, this.timeProvider);
+        using var query = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
 
         try
         {
@@ -172,7 +181,7 @@ internal sealed class DnsDkimPublicKeyRecordResolver : IDkimPublicKeyRecordResol
                 keyRecordName,
                 QueryType.TXT,
                 QueryClass.IN,
-                deadline.Token);
+                query.Token);
 
             return response.HasError ? null : ReadKeyRecord(response);
         }

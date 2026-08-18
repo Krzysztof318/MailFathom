@@ -133,13 +133,20 @@ public sealed class DnsDkimPublicKeyRecordResolverTests
         lookup
             .QueryAsync(Arg.Any<string>(), Arg.Any<QueryType>(), Arg.Any<QueryClass>(), Arg.Any<CancellationToken>())
             .Returns(call => WaitForeverAsync(call.Arg<CancellationToken>()));
+
+        var timeProvider = new FakeTimeProvider();
         var resolver = new DnsDkimPublicKeyRecordResolver(
             lookup,
-            new DkimPublicKeyRecordCache(new FakeTimeProvider()),
-            TimeSpan.FromMilliseconds(20));
+            new DkimPublicKeyRecordCache(timeProvider),
+            timeProvider,
+            TimeSpan.FromSeconds(5));
 
-        // Act, Assert
-        Assert.Null(await resolver.ResolveAsync(Selector, SigningDomain, CancellationToken.None));
+        // Act
+        var resolution = resolver.ResolveAsync(Selector, SigningDomain, CancellationToken.None);
+        timeProvider.Advance(TimeSpan.FromSeconds(30));
+
+        // Assert
+        Assert.Null(await resolution);
     }
 
     /// <summary>The caller giving up is not a lookup failing, so its cancellation still travels.</summary>
@@ -192,8 +199,12 @@ public sealed class DnsDkimPublicKeyRecordResolverTests
         Assert.Null(await CreateResolver(lookup).ResolveAsync(Selector, SigningDomain, CancellationToken.None));
     }
 
-    private static DnsDkimPublicKeyRecordResolver CreateResolver(IDnsQuery lookup) =>
-        new(lookup, new DkimPublicKeyRecordCache(new FakeTimeProvider()));
+    private static DnsDkimPublicKeyRecordResolver CreateResolver(IDnsQuery lookup)
+    {
+        var timeProvider = new FakeTimeProvider();
+
+        return new DnsDkimPublicKeyRecordResolver(lookup, new DkimPublicKeyRecordCache(timeProvider), timeProvider);
+    }
 
     /// <summary>Answers every query with the records a test named, or with none at all.</summary>
     private static IDnsQuery LookupAnswering(params TxtRecord[] answers)
