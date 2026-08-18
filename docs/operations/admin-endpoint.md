@@ -198,7 +198,8 @@ what it was never granted is what the record exists to make visible.
 | `GET /api/admin/mailbox/synchronization` | `mailfathom.admin.read` | Reports what synchronization is doing, per account and per mapped folder. This is what [`mfctl mailbox status`](#reading-what-synchronization-is-doing) asks. |
 | `GET /api/admin/mailbox/rewind` | `mailfathom.admin.read` | Reports how much mail discarding an account's synchronization progress would have fetched again, discarding nothing. |
 | `POST /api/admin/mailbox/rewind` | `mailfathom.admin.operate` | Discards it, so the next runs read the scope's folders from the start of the account's window. **This is the one route that makes a deployment pull a mailbox over IMAP again.** |
-| `POST /api/admin/mailbox/rederivation` | `mailfathom.admin.operate` | Re-reads one bounded pass of the raw MIME already stored, into the properties a newer release records from it. Opens no mailbox session. |
+| `POST /api/admin/mailbox/rederivation` | `mailfathom.admin.operate` | Asks for the raw MIME already stored to be re-read into the properties a newer release records from it, and answers with the run already under way where there is one. It records the request and re-reads nothing inside it. |
+| `GET /api/admin/mailbox/rederivation` | `mailfathom.admin.read` | Reports where that run has got to, or how the last one ended. |
 | `GET /api/admin/mailbox/mutations/audit` | `mailfathom.admin.audit.read` | Reads one account's record of the changes MailFathom made to its mailbox, where that account [keeps one](../features/imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default). |
 | `GET /api/admin/answering/audit` | `mailfathom.admin.audit.read` | Reads one account's record of the questions answered from its mailbox, where that account [keeps one](../features/mail-answering.md#an-account-can-keep-a-record-of-what-a-question-read-and-none-does-by-default). |
 | `GET /api/admin/embeddings` | `mailfathom.admin.read` | Reports whether semantic search is working and how far behind it is. This is what [`mfctl embedding status`](#administering-the-embedding-profile) asks. |
@@ -717,17 +718,42 @@ it cannot set `\Seen`, and it rewrites no stored content:
 
 ```console
 $ mfctl mailbox rederive --account work
-500 stored emails re-read so far
-1,000 stored emails re-read so far
-1,043 stored emails re-read for every folder under work.
-2 stored emails carried MIME no reader could parse and kept what was already recorded for them.
+A re-derivation of every folder under work has been asked for.
+Requested:  2026-08-18 12:00:00Z
+Progress:   0 re-read, 0 unparseable, 0 no longer stored
+The deployment carries the run in the background. Watch it with 'mfctl mailbox rederive-status --account work'.
 ```
 
-One request is one bounded pass and the command repeats it until the deployment reports nothing left, printing a
-running total as it goes. Interrupting it is safe: what a batch committed stays committed, the deployment remembers
-where the walk got to, and running the same command again continues from there rather than starting the scope over. A
-walk that reaches the end forgets its position, so asking again after the next release re-reads the scope from the
-beginning — which is what the command exists for.
+**The request records the run and returns; the deployment carries it.** The walk is durable background work under the
+[job queue](#reading-the-background-work-that-stopped-and-deciding-what-becomes-of-it), enqueued against the account, so the operator's terminal is not what keeps
+it alive and closing one cancels nothing. One attempt of that work is several bounded passes with its lease renewed
+between them, and an attempt that ends early — a shutdown, an execution timeout — leaves what its passes committed and
+hands the rest of the scope to the next segment, which resumes past the stored position rather than starting the scope
+over.
+
+**Asking again while a run is outstanding is answered with that run**, because the idempotency key carries the scope
+and the run it is on. `started` says which of the two happened and `queued` says whether the work is actually waiting —
+a deployment whose queue was at its bound has recorded the run and is carrying nothing, and the same request is what
+puts it in motion once the queue has drained. That is the one outcome the command reports as a failure, since an
+operator watching a run nothing is walking would wait forever.
+
+**A second command reads it**, on the same path with `GET` and the scope in the query string:
+
+```console
+$ mfctl mailbox rederive-status --account work
+Scope:      every folder under work — under way
+Requested:  2026-08-18 12:00:00Z
+Progress:   1,043 re-read, 0 unparseable, 0 no longer stored
+Mail carrying MIME no reader could parse kept what was already recorded for it.
+If it stops moving, look for the work that stopped with 'mfctl jobs dead-letters'.
+```
+
+The two rejection counts stay apart because they ask different questions: mail nobody can parse keeps whatever an
+earlier release read from it, and mail whose raw MIME is no longer stored is reachable only by a rewind. A scope nobody
+has ever asked about answers with no run rather than `404`. A run that reaches the end of its scope forgets its
+position, so asking again after the next release re-reads the scope from the beginning — which is what the command
+exists for. A run that stops moving stopped as a job: `mfctl jobs dead-letters` is where a permanently failed segment
+is read, and `mfctl jobs retry` is what puts it back.
 
 **`mfctl mailbox rewind` is the expensive one, and the only answer for a property the mail server alone knows** — a
 flag, a keyword, the internal date. It discards the durable synchronization progress of the scope's folder bindings, so
@@ -758,11 +784,12 @@ already at that identity. A synchronization run already under way loses the race
 no longer exists, so its own advance is refused rather than written over the rewind — and the answer names the folders
 whose bindings held progress, which is what says the removal won.
 
-Both take `--account` and an optional `--folder`; without it they cover every folder the account holds mail in,
-including one whose mapping was withdrawn. Each write reads at most 4 KB of body — the assessment is a `GET` and names
-its scope in the query string — and every refusal is `400` naming what to
-change: an account this deployment does not configure, and text that is not a folder alias. A folder named blank is an
-omission rather than a refusal, because a caller writing a URL cannot express the difference.
+All three take `--account` and an optional `--folder`; without it they cover every folder the account holds mail in,
+including one whose mapping was withdrawn. Two scopes are two runs, so re-deriving one folder says nothing about the
+account's own walk. Each write reads at most 4 KB of body — both reads are a `GET` and name their scope in the query
+string — and every refusal is `400` naming what to change: an account this deployment does not configure, and text that
+is not a folder alias. A folder named blank is an omission rather than a refusal, because a caller writing a URL cannot
+express the difference.
 
 **Neither route touches embeddings, and neither re-runs classification for a verdict already recorded.** Chunks and
 vectors stay the [embedding profile's](embedding-profiles.md) business, so a refresh cannot quietly spend the provider
@@ -1420,11 +1447,12 @@ defect and quotes what the code was working on, and not the stack, which is fram
 one-record-per-line shape. The stack itself went to your terminal, so what the log adds is that the crash happened at
 all, when, under which command, and what kind it was.
 
-`folder erase` and `mailbox rederive` are the exception to the last row, and deliberately. Both work through a mailbox
-in passes, so an interruption leaves a partial result rather than nothing: each catches the interruption itself, tells
-you how much it got through and that running it again continues from there, and reports that as a failure. Their
-records read `Failed` with that sentence, which is the more useful of the two answers — `Cancelled` would say you
-stopped it and not what it had done by then.
+`folder erase` is the exception to the last row, and deliberately. It works through a mailbox in passes, so an
+interruption leaves a partial result rather than nothing: it catches the interruption itself, tells you how much it got
+through and that running it again continues from there, and reports that as a failure. Its records read `Failed` with
+that sentence, which is the more useful of the two answers — `Cancelled` would say you stopped it and not what it had
+done by then. No other command needs the exception, because a long operation the deployment carries is asked for in one
+request and watched from a second, and how far it got is read from the deployment rather than from this file.
 
 **No credential and no mail is in it.** A credential never reaches a failure message in the first place, because those
 are written to be shown on your terminal. Mail is out by the split the command already keeps: what you asked for goes

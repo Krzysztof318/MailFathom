@@ -46,9 +46,17 @@ public readonly record struct JobType
     /// </remarks>
     public static JobType RunScheduledMailRules { get; } = new("run-scheduled-mail-rules");
 
+    /// <summary>Gets the type whose work is carrying one segment of a re-derivation of a scope's stored mail.</summary>
+    /// <remarks>
+    /// Its payload contract is <see cref="StoredMailScopeJobPayload" />, which names the account and the one folder of
+    /// it and nothing inside any message. The work is long: an attempt runs bounded passes over local bytes for as long
+    /// as it is given, and hands whatever it did not reach to a job of its own rather than to the operator's terminal.
+    /// </remarks>
+    public static JobType RederiveStoredMail { get; } = new("rederive-stored-mail");
+
     /// <summary>Gets every declared job type.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
-    public static IReadOnlyList<JobType> All { get; } = [ClassifyEmailSpam, RunScheduledMailRules];
+    public static IReadOnlyList<JobType> All { get; } = [ClassifyEmailSpam, RunScheduledMailRules, RederiveStoredMail];
 
     /// <summary>Gets whether this value names a declared job type rather than the unusable struct default.</summary>
     public bool IsSpecified => this.name is not null;

@@ -228,7 +228,8 @@ and, through them, the vectors the replacement cascades away.
   sweep to be released either: the account's own next run asks the gate again and cuts it in the same run the verdict
   admits it.
 
-**A fourth path re-reads stored mail and produces none of that.** `mfctl mailbox rederive` walks stored messages and
+**A fourth path re-reads stored mail and produces none of that.** The re-derivation `mfctl mailbox rederive` asks for
+walks stored messages as background work and
 reads each one's raw MIME back through the same reader the run uses, so the parse, both judgements, and redaction reach
 it exactly as they reach an arriving message; what it writes is the row's own columns and the conversation the message
 belongs to. It cuts no passages, embeds nothing, opens no mailbox session, and never reaches the classification gate, so

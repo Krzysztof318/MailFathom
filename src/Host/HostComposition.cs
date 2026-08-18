@@ -23,6 +23,7 @@ using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Outbox;
+using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
@@ -718,6 +719,10 @@ internal static class HostComposition
         // whole of one message's work, which is what the per-message lease and backoff exist for.
         builder.Services.AddScoped<IJobHandler, ScheduledMailRuleRunHandler>();
         builder.Services.AddScoped<IJobHandler, EmailSpamClassificationHandler>();
+        // The re-derivation is the long one: an attempt runs bounded passes over stored mail for as long as the
+        // execution timeout allows, and hands what it did not reach to a segment of its own rather than holding a
+        // worker for as long as a mailbox takes.
+        builder.Services.AddScoped<IJobHandler, StoredMailRederivationHandler>();
         // A singleton rather than a scoped value: the bound is a deployment-wide privacy control, so every search in the
         // process applies the one an operator configured rather than whichever snapshot a scope happened to open under.
         builder.Services.AddSingleton(provider =>

@@ -6,7 +6,6 @@ using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Mail.Maintenance;
@@ -28,23 +27,24 @@ namespace MailFathom.Application.Mail.Maintenance;
 /// One invocation is one bounded pass, and it reports whether the scope still holds mail it has not reached. A batch
 /// commits its re-readings together with the position they reached, so an interrupted pass resumes at the next email
 /// rather than repeating or stepping over one, and re-running over an email this pass already reached simply writes the
-/// same reading of the same immutable bytes.
+/// same reading of the same immutable bytes. Repeating the pass until the scope is exhausted belongs to
+/// <see cref="StoredMailRederivationHandler" />, which is the durable work an operator's request enqueues.
 /// </para>
 /// </remarks>
 public sealed class StoredMailRederivation
 {
     /// <summary>How many stored emails one batch re-reads before it commits.</summary>
     /// <remarks>
-    /// A constant rather than a setting, because it bounds one request's memory and one interrupted batch's lost work
-    /// rather than describing a deployment. The pass runs because an operator asked for it and ends when the command
-    /// stops asking, so there is no interval, no queue depth, and no host health for a number here to be tuned against.
+    /// A constant rather than a setting, because it bounds one pass's memory and one interrupted batch's lost work
+    /// rather than describing a deployment. What decides how long the walk runs is the attempt carrying it, so there is
+    /// no interval and no host health for a number here to be tuned against.
     /// </remarks>
     private const int BatchSize = 50;
 
     /// <summary>How many batches one pass commits before it answers that mail remains.</summary>
     /// <remarks>
-    /// What keeps one request bounded, so an interrupted command loses at most a batch and the deployment answers often
-    /// enough for the command to report progress between passes.
+    /// What keeps one pass bounded, so an interrupted pass loses at most a batch and the attempt carrying the walk
+    /// records its progress and renews its lease often enough to hold the work it is doing.
     /// </remarks>
     private const int MaxBatchesPerPass = 10;
 
@@ -60,8 +60,9 @@ public sealed class StoredMailRederivation
     /// <remarks>
     /// The batch count bounds how many messages a pass reads and says nothing about how large they are, and the two are
     /// not related: a scope of one-kilobyte notifications and a scope of messages carrying a video attachment differ by
-    /// three orders of magnitude for the same five hundred rows. What the caller is waiting on is one HTTP request, so
-    /// the pass ends on whichever ceiling it reaches first and the messages it left behind are the next pass's. It is
+    /// three orders of magnitude for the same five hundred rows. What a pass owes is a committed position often enough
+    /// for the attempt to be stoppable, so it ends on whichever ceiling it reaches first and the messages it left behind
+    /// are the next pass's. It is
     /// read against what the pass has read so far rather than against one batch, and checked before each email rather
     /// than between batches, because a batch is fifty messages and a ceiling only a batch boundary enforces is one a
     /// batch of large messages passes fifty times over before anything looks.
@@ -110,16 +111,23 @@ public sealed class StoredMailRederivation
     /// Thrown when a competing writer wins a race that the bounded retries could not resolve. Batches already committed
     /// stay durable, and the next pass resumes from the committed position.
     /// </exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminOperate" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when anything but this deployment's own process reached the use case.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels. Committed batches stay durable.</exception>
-    /// <remarks>A pass is work the deployment performs on the operator's asking, which is the grant it asks for.</remarks>
+    /// <remarks>
+    /// It asks for no permission, deliberately, and requires the process itself instead. What reaches it is a job this
+    /// deployment enqueued when an operator asked for the run, so there is no caller to hold a grant, and requiring an
+    /// administrative one here would mean the walk ran under a credential nobody presented. The operator's grant is
+    /// asked for where the operator is — <see cref="StoredMailRederivationRequests" /> — and requiring the process
+    /// identity here is what makes a caller reaching this method from an entrypoint added later a refusal rather than a
+    /// mailbox-wide pass under no grant at all.
+    /// </remarks>
     public async Task<StoredMailRederivationPass> RunAsync(
         StoredMailScope scope,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        this.authorization.RequirePermission(MailFathomPermission.AdminOperate);
+        this.authorization.RequireProcessIdentity();
 
         var position = await this.rederivationStore.FindResumePositionAsync(scope, cancellationToken);
         var rederivedCount = 0;

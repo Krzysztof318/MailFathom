@@ -299,9 +299,14 @@ public sealed class StoredMailRederivationTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => rederivation.RunAsync(WholeAccount, cancellation.Token));
     }
 
-    /// <summary>The grant is the authority here rather than at the transport, so an entrypoint that passed no filter meets the same refusal.</summary>
+    /// <summary>The walk is this deployment's own work, so a caller reaching it is refused however broadly they were granted.</summary>
+    /// <remarks>
+    /// The operator's grant is asked for where the operator is, which is the request that enqueues the run. A caller
+    /// arriving here instead would be walking a whole mailbox under a credential the entrypoint never checked for that
+    /// act, so the refusal is about which principal reached the use case rather than about what it holds.
+    /// </remarks>
     [Fact]
-    public async Task RunAsync_ACallerGrantedOnlyTheAdministrativeRead_IsRefusedWithTheTransportAbsent()
+    public async Task RunAsync_ACallerRatherThanTheProcess_IsRefusedWhateverItWasGranted()
     {
         // Arrange
         var store = new FakeRederivationStore(StoredMail(1));
@@ -309,14 +314,14 @@ public sealed class StoredMailRederivationTests
             store,
             ContentStoreWithReadableMime(),
             ReaderThatReadsEverything(),
-            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate, MailFathomPermission.AdminRead));
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
             rederivation.RunAsync(WholeAccount, TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailFathomPermission.AdminOperate, refusal.RequiredPermission);
+        Assert.False(refusal.RequiredPermission.IsSpecified);
         Assert.Empty(store.Applied);
     }
 
@@ -337,7 +342,7 @@ public sealed class StoredMailRederivationTests
                 sessionFactory,
                 new PersistenceConcurrencyOptions { MaximumCommitAttempts = 2 },
                 new FakeTimeProvider(new DateTimeOffset(2026, 8, 16, 12, 0, 0, TimeSpan.Zero))),
-            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate));
+            authorization ?? AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
     }
 
     /// <summary>Builds stored mail whose identifiers increase in the order the walk visits it.</summary>

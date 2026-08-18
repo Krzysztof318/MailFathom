@@ -668,11 +668,35 @@ a constant, while this one is one per scope an operator names — keying it by t
 refreshed independently. There is no foreign key onto the account: the row is a cursor over rows that are already keyed
 to one, and requiring the account row would make the walk depend on a table it never reads.
 
-A row exists only while a walk is unfinished. An invocation that reaches the end of its scope removes it, so the same
+A row exists only while a walk is unfinished. The segment that reaches the end of its scope removes it, so the same
 scope asked for again after a later release starts at the beginning rather than behind where the last refresh stopped.
 
 Nothing in it is personal data. An account alias, a folder alias, a local identifier and an instant are MailFathom's own
 names for things.
+
+`mail_rederivation_runs` holds the operator's half of the same walk, and it is a second table because the two answer
+different questions and outlive each other differently. The position above is a cursor the walk consumes and deletes;
+this is what an operator asked for and what has come of it, and it stays after the walk has finished so that
+[`mfctl mailbox rederive-status`](../operations/admin-endpoint.md#bringing-stored-mail-up-to-a-later-release) can say
+how the last run ended rather than that there was none.
+
+| Column | What it records |
+|---|---|
+| `MailboxAccountId` | The account the run walks, and the first half of the primary key |
+| `FolderAlias` | The one folder it was narrowed to, and the second half of the key, under the same empty-string convention the positions table uses. Two scopes are two runs, so a folder being re-derived says nothing about the account's own run |
+| `RunId` | The run's own identity, a UUIDv7 generated from the instant it was asked for. It is in the job's idempotency key, which is what makes a run started after an earlier one finished a new piece of work rather than one the queue answers with a terminal row it already holds |
+| `RequestedAt` | When the run was asked for |
+| `SegmentCount` | How many attempts the walk has been handed to. It rises when an attempt hands the rest of the scope on, and it is in the idempotency key beside the run so the next segment is a job of its own rather than the one that just ended |
+| `RederivedEmailCount`, `UnreadableEmailCount`, `MissingContentEmailCount` | What the run's passes have committed so far. Every pass adds its own figures to what the row holds rather than writing a total, because two attempts of one run can overlap and a total computed outside the transaction would lose whichever committed first |
+| `EndedAt` | When the run reached the end of its scope, null while it has not. That is what "a run is outstanding" means, and it is what a second request for the same scope is answered with |
+| `ConcurrencyVersion` | The `xmin` token, for the same reason the position row carries one: the counts are read, added to, and written back, and without the token the slower of two passes would write its own reading over the faster one's |
+
+There is no foreign key onto the account, and none onto the position row either. The run is a record of something an
+operator asked for, and the position is a cursor the walk keeps: erasing the mail behind a run leaves counts describing
+work that was really done, and a run whose position row is gone is a finished run rather than a broken one.
+
+Nothing in it is personal data. An account alias, a folder alias, an identifier this deployment generated, counts, and
+two instants are MailFathom's own names for things and for its own work.
 
 ## The outgoing messages waiting to be sent
 
@@ -893,7 +917,7 @@ trace, or an error message.
 
 `job_schedules` holds no personal data either, for the reason `embedding_spend_periods` does not: an identity composed of MailFathom's own configured names, two instants, and the identifier of a job say when a recurring dispatch last acted and on which occasion, and none of them names a message. That is also why nothing cascades into it — erasing an account's mail says nothing about when its rules are due to run again.
 
-`mail_rederivation_positions` holds no personal data either, and for the same reason `job_schedules` does not: an account alias, a folder alias, the local identifier of the last message a batch read, and an instant say how far an operator's refresh has come, and none of them is anything a message supplied. Nothing cascades into it, which is deliberate rather than an omission — a walk's position is about work an operator started, and erasing the mail behind that position leaves a cursor that the next batch simply steps past.
+`mail_rederivation_positions` and `mail_rederivation_runs` hold no personal data either, and for the same reason `job_schedules` does not: an account alias, a folder alias, the local identifier of the last message a batch read, counts, and instants say how far an operator's refresh has come, and none of them is anything a message supplied. Nothing cascades into either, which is deliberate rather than an omission — a walk's position is about work an operator started, and erasing the mail behind that position leaves a cursor that the next batch simply steps past and counts that still describe work that was really done.
 
 `contacts` and `contact_addresses` are the most concentrated personal data on this page: a name, the addresses somebody uses, and a note about them are an assembled record about an identified third party rather than mail that arrived. An asserted row is derived from nothing at all; a collected one is derived from a message, and still nothing cascades into either, because what a collected row holds is a claim that the owner corresponds with somebody rather than a copy of the message that named them — erasing that message says nothing about whether they still do. That is also why neither has a retention window: a contact is held until somebody erases it, and erasing one removes the person and every address row through the cascade above rather than marking either. What the collected half adds is an erasure of its own, which takes every row of that origin and leaves what the owner asserted exactly where it was. Nothing in either table reaches a log, a metric, a trace, or an error message; the contact identifier is what a failure names, and it is the one column that is not personal data.
 

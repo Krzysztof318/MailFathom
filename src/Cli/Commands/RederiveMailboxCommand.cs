@@ -3,13 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.CommandLine;
-using System.Globalization;
 using MailFathom.Cli.Administration;
-using MailFathom.Cli.Administration.Mailboxes;
+using MailFathom.Cli.Output;
 
 namespace MailFathom.Cli.Commands;
 
-/// <summary>Re-reads the MIME a deployment already stores into the properties a newer release records from it.</summary>
+/// <summary>Asks a deployment to re-read the MIME it already stores into the properties a newer release records.</summary>
 /// <remarks>
 /// <para>
 /// The cheap way to fill in properties a newer release added, and the one to reach for first. Everything the stored
@@ -24,9 +23,9 @@ namespace MailFathom.Cli.Commands;
 /// does.
 /// </para>
 /// <para>
-/// One request is one bounded pass, and the command sends as many as the scope needs. Interrupting it stops it between
-/// batches rather than part way through one: what a batch committed stays committed and the deployment remembers where
-/// it got to, so running the command again continues rather than starting the scope over.
+/// It returns as soon as the deployment has written the request down, and never waits for the walk. The re-derivation
+/// is carried by the deployment's own durable background work, so this terminal is not what keeps it alive and closing
+/// it cannot cancel one; <c>mailbox rederive-status</c> is where the run is watched from.
 /// </para>
 /// </remarks>
 internal static class RederiveMailboxCommand
@@ -45,7 +44,7 @@ internal static class RederiveMailboxCommand
 
         Command command = new(
             "rederive",
-            "Re-read the MIME already stored into the properties a newer version records from it.")
+            "Ask the deployment to re-read the MIME already stored into the properties a newer version records from it.")
         {
             accountOption,
             folderOption,
@@ -62,6 +61,11 @@ internal static class RederiveMailboxCommand
         return command;
     }
 
+    /// <summary>Names the scope the way the operator wrote it.</summary>
+    internal static string Scope(string account, string? folder) => folder is { Length: > 0 } narrowed
+        ? $"{narrowed} under {account}"
+        : $"every folder under {account}";
+
     private static async Task<int> RunAsync(
         CliContext context,
         string account,
@@ -72,91 +76,40 @@ internal static class RederiveMailboxCommand
         var profile = await context.Deployment().ReachAsync(requestedDeployment, cancellationToken);
 
         using var transport = context.OpenTransport(profile.Endpoint, profile.Trust);
-        var deployment = new AdminApiClient(transport, context.Console);
+        var started = await new AdminApiClient(transport, context.Console)
+            .RederiveMailboxAsync(profile.Token, account, folder, cancellationToken);
 
-        var rederivedCount = 0;
-        var unreadableCount = 0;
-        var missingContentCount = 0;
-        MailboxRederivationPass? pass = null;
+        context.Console.WriteLine(started.Started
+            ? $"A re-derivation of {Scope(account, folder)} has been asked for."
+            : $"A re-derivation of {Scope(account, folder)} was already under way, so nothing new was started.");
 
-        try
+        if (started.Run is { } run)
         {
-            do
-            {
-                pass = await deployment.RederiveMailboxAsync(profile.Token, account, folder, cancellationToken);
+            CliDetails details = new();
+            details.Add("Requested", $"{run.RequestedAt:u}");
+            details.Add("Progress", run.DescribeProgress());
 
-                rederivedCount += pass.RederivedEmailCount;
-                unreadableCount += pass.UnreadableEmailCount;
-                missingContentCount += pass.MissingContentEmailCount;
-
-                // A pass that read nothing at all and reports more to come would repeat forever, because nothing about
-                // the next request would differ from this one. The deployment's own walk cannot answer that — a pass
-                // saying mail remains has filled its bound — so this is a deployment answering something else, and
-                // asking it again is the one thing that could not help.
-                if (pass is
-                    {
-                        RederivedEmailCount: 0,
-                        UnreadableEmailCount: 0,
-                        MissingContentEmailCount: 0,
-                        EmailsRemain: true,
-                    })
-                {
-                    throw new CliFailure(
-                        "The deployment reported that mail remains but read none of it, so asking again would not make progress. What earlier passes wrote is still there.");
-                }
-
-                if (pass.EmailsRemain)
-                {
-                    context.Console.WriteLine(Describe(rederivedCount, "re-read so far"));
-                }
-            }
-            while (pass.EmailsRemain);
+            context.Console.Write(details);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+
+        // The queue refusing the work is backpressure rather than a failure: the run is recorded and nothing was lost,
+        // and the same command is what puts it in motion once the deployment has drained what is in front of it.
+        if (!started.Queued)
         {
             context.Console.WriteError(
-                $"{Describe(rederivedCount, "re-read")} before the re-derivation was interrupted. What was written is still there; run the command again to continue from where it stopped.");
+                "The deployment's queue is full, so nothing is carrying the run yet. Run this command again once it has drained.");
 
             return CliExitCode.Failure;
         }
 
-        context.Console.WriteLine(rederivedCount == 0
-            ? $"The deployment had no stored MIME to re-read for {Scope(account, folder)}, so nothing was re-derived."
-            : $"{Describe(rederivedCount, "re-read")} for {Scope(account, folder)}.");
-
-        WriteSteppedOver(context, unreadableCount, missingContentCount);
+        context.Console.WriteLine(
+            $"The deployment carries the run in the background. Watch it with '{CliRootCommand.CommandName} mailbox rederive-status --account {account}{FolderArgument(folder)}'.");
 
         return CliExitCode.Success;
     }
 
-    /// <summary>States what the pass could not re-read, which is a fact about the mailbox rather than a failure.</summary>
-    /// <remarks>
-    /// The two counts stay apart because they ask the operator different questions: one is a message nobody can parse,
-    /// which keeps whatever an earlier release read from it, and the other a row whose raw MIME is no longer stored,
-    /// which only a fetch could bring back.
-    /// </remarks>
-    private static void WriteSteppedOver(CliContext context, int unreadableCount, int missingContentCount)
-    {
-        if (unreadableCount > 0)
-        {
-            context.Console.WriteLine(
-                $"{Describe(unreadableCount, "carried MIME no reader could parse")} and kept what was already recorded for them.");
-        }
-
-        if (missingContentCount > 0)
-        {
-            context.Console.WriteLine(
-                $"{Describe(missingContentCount, "no longer had stored MIME to read")}, so only 'mfctl mailbox rewind' would reach them.");
-        }
-    }
-
-    /// <summary>Names the scope the way the operator wrote it.</summary>
-    private static string Scope(string account, string? folder) => folder is { Length: > 0 } narrowed
-        ? $"{narrowed} under {account}"
-        : $"every folder under {account}";
-
-    /// <summary>Describes a count of stored mail, grouped invariantly for the reason every other figure this tool prints is.</summary>
-    private static string Describe(int count, string state) => string.Create(
-        CultureInfo.InvariantCulture,
-        $"{count:N0} stored {(count == 1 ? "email" : "emails")} {state}");
+    /// <summary>Repeats the folder the operator narrowed to, so the suggested command watches the run they started.</summary>
+    /// <remarks>Two scopes are two runs, so a suggestion that dropped the folder would point at a walk of the whole account that nobody asked for.</remarks>
+    private static string FolderArgument(string? folder) =>
+        folder is { Length: > 0 } narrowed ? $" --folder {narrowed}" : string.Empty;
 }

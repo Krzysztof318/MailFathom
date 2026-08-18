@@ -3,15 +3,11 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
-using MailFathom.Application.EmailContent.Storage;
-using MailFathom.Application.Emails.Extraction;
-using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Accounts;
-using MailFathom.Domain.Emails;
-using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
@@ -64,6 +60,22 @@ public sealed class MailboxMaintenanceEndpointsTests
             ["GET", "POST"],
             routes
                 .Where(route => route.RoutePattern.RawText == MailboxMaintenanceEndpoints.RewindRoute)
+                .SelectMany(route => route.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods)
+                .Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>The re-derivation is asked for and then watched, which is the same path answering two methods.</summary>
+    [Fact]
+    public void MapMailboxMaintenance_TheRederivationRoute_IsBothAskedForAndRead()
+    {
+        // Arrange, Act
+        var routes = MappedRoutes();
+
+        // Assert
+        Assert.Equal(
+            ["GET", "POST"],
+            routes
+                .Where(route => route.RoutePattern.RawText == MailboxMaintenanceEndpoints.RederivationRoute)
                 .SelectMany(route => route.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods)
                 .Order(StringComparer.Ordinal));
     }
@@ -148,27 +160,80 @@ public sealed class MailboxMaintenanceEndpointsTests
         Assert.Equal([(Account, (MailFolderAlias?)Archive)], checkpoints.Discards);
     }
 
-    /// <summary>One request is one bounded pass, and what it reports is what the deployment has already written.</summary>
+    /// <summary>The request records the run and hands the walk to the queue, rather than re-reading anything itself.</summary>
     [Fact]
-    public async Task RederiveAsync_AnAccountThisDeploymentServes_RunsOneBoundedPass()
+    public async Task RederiveAsync_AnAccountThisDeploymentServes_RecordsTheRunAndAnswersWithIt()
     {
         // Arrange
-        var store = new FakeRederivationStore(StoredMail(3));
+        var runs = new FakeRederivationRunStore();
 
         // Act
         var result = await MailboxMaintenanceEndpoints.RederiveAsync(
             new MailboxMaintenanceRequest("work", null),
             CatalogServing(Account),
-            RederivationOver(store),
+            RequestsOver(runs),
             TestContext.Current.CancellationToken);
 
         // Assert
-        var pass = Assert.IsType<Ok<MailboxRederivationResponse>>(result.Result);
-        Assert.Equal((3, 0, 0, false), (
-            pass.Value!.RederivedEmailCount,
-            pass.Value.UnreadableEmailCount,
-            pass.Value.MissingContentEmailCount,
-            pass.Value.EmailsRemain));
+        var started = Assert.IsType<Ok<MailboxRederivationStartResponse>>(result.Result);
+        Assert.Equal((true, true), (started.Value!.Started, started.Value.Queued));
+        Assert.Equal(("work", null, true), (
+            started.Value.Run.Account,
+            started.Value.Run.Folder,
+            started.Value.Run.IsOutstanding));
+    }
+
+    /// <summary>The run outlives the request that asked for it, so the same path answers how far it has come.</summary>
+    [Fact]
+    public async Task ReadRederivationAsync_AScopeWithARun_ReportsWhatItHasReRead()
+    {
+        // Arrange
+        var runs = new FakeRederivationRunStore();
+
+        runs.Arrange(new StoredMailRederivationRun
+        {
+            RunId = StoredMailRederivationRunId.Create(Guid.Parse("0199a0c0-0000-7000-8000-00000000000c")),
+            Scope = new StoredMailScope(Account, null),
+            RequestedAt = new DateTimeOffset(2026, 8, 18, 12, 0, 0, TimeSpan.Zero),
+            SegmentCount = 3,
+            RederivedEmailCount = 1_200,
+            UnreadableEmailCount = 2,
+            MissingContentEmailCount = 1,
+        });
+
+        // Act
+        var result = await MailboxMaintenanceEndpoints.ReadRederivationAsync(
+            "work",
+            folder: null,
+            CatalogServing(Account),
+            ReaderOver(runs),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var state = Assert.IsType<Ok<MailboxRederivationStateResponse>>(result.Result);
+        Assert.Equal((1_200, 2, 1, true), (
+            state.Value!.Run!.RederivedEmailCount,
+            state.Value.Run.UnreadableEmailCount,
+            state.Value.Run.MissingContentEmailCount,
+            state.Value.Run.IsOutstanding));
+    }
+
+    /// <summary>A scope nobody has ever asked about is an answer rather than a missing resource.</summary>
+    [Fact]
+    public async Task ReadRederivationAsync_AScopeWithNoRun_AnswersWithNoneRatherThanRefusing()
+    {
+        // Act
+        var result = await MailboxMaintenanceEndpoints.ReadRederivationAsync(
+            "work",
+            folder: null,
+            CatalogServing(Account),
+            ReaderOver(new FakeRederivationRunStore()),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var state = Assert.IsType<Ok<MailboxRederivationStateResponse>>(result.Result);
+        Assert.Equal("work", state.Value!.Account);
+        Assert.Null(state.Value.Run);
     }
 
     /// <summary>An account this deployment does not serve is a mistake in the request rather than a missing resource.</summary>
@@ -200,22 +265,22 @@ public sealed class MailboxMaintenanceEndpointsTests
     /// text that is not an alias.
     /// </summary>
     [Fact]
-    public async Task RederiveAsync_TextThatIsNotAnAlias_RefusesWithoutReachingThePass()
+    public async Task RederiveAsync_TextThatIsNotAnAlias_RefusesWithoutRecordingARun()
     {
         // Arrange
-        var store = new FakeRederivationStore(StoredMail(3));
+        var runs = new FakeRederivationRunStore();
 
         // Act
         var result = await MailboxMaintenanceEndpoints.RederiveAsync(
             new MailboxMaintenanceRequest("work", "arch\tive"),
             CatalogServing(Account),
-            RederivationOver(store),
+            RequestsOver(runs),
             TestContext.Current.CancellationToken);
 
         // Assert
         var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
         Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
-        Assert.Empty(store.Applied);
+        Assert.Empty(runs.Saved);
     }
 
     /// <summary>Blank text is an omission rather than a folder, because a caller writing a URL cannot express the difference.</summary>
@@ -225,19 +290,19 @@ public sealed class MailboxMaintenanceEndpointsTests
     public async Task RederiveAsync_BlankFolderText_IsReadAsTheWholeAccount(string folder)
     {
         // Arrange
-        var store = new FakeRederivationStore(StoredMail(2));
+        var runs = new FakeRederivationRunStore();
 
         // Act
         var result = await MailboxMaintenanceEndpoints.RederiveAsync(
             new MailboxMaintenanceRequest("work", folder),
             CatalogServing(Account),
-            RederivationOver(store),
+            RequestsOver(runs),
             TestContext.Current.CancellationToken);
 
         // Assert
-        var pass = Assert.IsType<Ok<MailboxRederivationResponse>>(result.Result);
-        Assert.Null(pass.Value!.Folder);
-        Assert.Equal(2, pass.Value.RederivedEmailCount);
+        var started = Assert.IsType<Ok<MailboxRederivationStartResponse>>(result.Result);
+        Assert.Null(started.Value!.Run.Folder);
+        Assert.Null(Assert.Single(runs.Saved).Scope.Folder);
     }
 
     private static IEnumerable<RouteEndpoint> MappedRoutes()
@@ -260,30 +325,24 @@ public sealed class MailboxMaintenanceEndpointsTests
         int storedEmailCount) =>
         new(checkpoints, new FixedCounter(storedEmailCount), RetryPolicy(), AdministrativeGrant.WholeSurface);
 
-    private static StoredMailRederivation RederivationOver(IStoredMailRederivationStore store)
+    /// <summary>Builds the intake the route asks for a run through, over a queue that accepts whatever it is handed.</summary>
+    private static StoredMailRederivationRequests RequestsOver(IStoredMailRederivationRunStore runs)
     {
-        var contentStore = Substitute.For<IEmailContentStore>();
-        contentStore
-            .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<StoredEmailContent?>(
-                new StoredEmailContent(new byte[] { 1, 2, 3 }, 3, new byte[32])));
+        var jobs = Substitute.For<IJobStore>();
+        jobs
+            .EnqueueAsync(Arg.Any<JobEnqueueRequest>(), Arg.Any<CancellationToken>())
+            .Returns(JobEnqueueResult.Created(JobId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000003"))));
 
-        var mimeReader = Substitute.For<IEmailMimeReader>();
-        mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<CancellationToken>())
-            .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(new ExtractedEmailMetadata(
-                call.Arg<RemoteEmailContent>()!.OccurrenceId,
-                Subject: "Subject",
-                SentAt: null,
-                ReceivedAt: null,
-                Participants: [],
-                EmailThreadReferences.None,
-                EmailAttachmentSummary.None,
-                ExtractedEmailText.FromPlainTextBody("Body", "Body"),
-                SenderAuthentication.NotEstablished()))));
-
-        return new StoredMailRederivation(store, contentStore, mimeReader, RetryPolicy(), AdministrativeGrant.WholeSurface);
+        return new StoredMailRederivationRequests(
+            runs,
+            jobs,
+            RetryPolicy(),
+            new FakeTimeProvider(),
+            AdministrativeGrant.WholeSurface);
     }
+
+    private static StoredMailRederivationRunReader ReaderOver(IStoredMailRederivationRunStore runs) =>
+        new(runs, AdministrativeGrant.WholeSurface);
 
     private static OptimisticConcurrencyRetryPolicy RetryPolicy()
     {
@@ -295,17 +354,6 @@ public sealed class MailboxMaintenanceEndpointsTests
             new PersistenceConcurrencyOptions(),
             new FakeTimeProvider());
     }
-
-    private static IReadOnlyList<StoredMailAwaitingRederivation> StoredMail(int count) =>
-    [
-        .. Enumerable.Range(1, count).Select(position => new StoredMailAwaitingRederivation(
-            StoredEmailId.Create(Guid.Parse($"00000000-0000-0000-0000-{position:D12}")),
-            EmailOccurrenceId.Create(
-                Account,
-                new MailFolderResolutionId(Archive, MailFolderResolutionGeneration.First),
-                ImapUidValidity.Create(5),
-                ImapUid.Create((uint)position)))),
-    ];
 
     private static IMailAccountCatalog CatalogServing(params MailAccountId[] accounts)
     {
@@ -366,66 +414,33 @@ public sealed class MailboxMaintenanceEndpointsTests
         }
     }
 
-    /// <summary>Stands in for the persisted walk state, offering the mail the test arranged once.</summary>
-    private sealed class FakeRederivationStore(IReadOnlyList<StoredMailAwaitingRederivation> mail)
-        : IStoredMailRederivationStore
+    /// <summary>Stands in for the one re-derivation run a scope may have, keyed by the scope exactly as the table is.</summary>
+    private sealed class FakeRederivationRunStore : IStoredMailRederivationRunStore
     {
-        private StoredEmailId? position;
+        private readonly Dictionary<string, StoredMailRederivationRun> runs = new(StringComparer.Ordinal);
 
-        public List<StoredEmailId> Applied { get; } = [];
+        public List<StoredMailRederivationRun> Saved { get; } = [];
 
-        public Task<StoredEmailId?> FindResumePositionAsync(
+        /// <summary>Puts a run in front of a scope without going through the request path.</summary>
+        public void Arrange(StoredMailRederivationRun run) => this.runs[KeyOf(run.Scope)] = run;
+
+        public Task<StoredMailRederivationRun?> FindAsync(
             StoredMailScope scope,
             CancellationToken cancellationToken) =>
-            Task.FromResult(this.position);
+            Task.FromResult(this.runs.GetValueOrDefault(KeyOf(scope)));
 
-        public Task<IReadOnlyList<StoredMailAwaitingRederivation>> GetEmailsToRederiveAsync(
-            StoredMailScope scope,
-            StoredEmailId? resumeAfter,
-            int batchSize,
-            CancellationToken cancellationToken)
-        {
-            IReadOnlyList<StoredMailAwaitingRederivation> batch =
-            [
-                .. mail
-                    .Where(email => resumeAfter is not { } reached || email.StoredEmailId.Value > reached.Value)
-                    .Take(batchSize),
-            ];
-
-            return Task.FromResult(batch);
-        }
-
-        public Task ApplyRederivedMetadataAsync(
+        public Task SaveAsync(
             IPersistenceSession session,
-            StoredEmailId storedEmailId,
-            ExtractedEmailMetadata metadata,
+            StoredMailRederivationRun run,
             CancellationToken cancellationToken)
         {
-            this.Applied.Add(storedEmailId);
+            this.runs[KeyOf(run.Scope)] = run;
+            this.Saved.Add(run);
 
             return Task.CompletedTask;
         }
 
-        public Task SaveResumePositionAsync(
-            IPersistenceSession session,
-            StoredMailScope scope,
-            StoredEmailId savedPosition,
-            CancellationToken cancellationToken)
-        {
-            this.position = savedPosition;
-
-            return Task.CompletedTask;
-        }
-
-        public Task ClearResumePositionAsync(
-            IPersistenceSession session,
-            StoredMailScope scope,
-            CancellationToken cancellationToken)
-        {
-            this.position = null;
-
-            return Task.CompletedTask;
-        }
+        private static string KeyOf(StoredMailScope scope) => $"{scope.Account.Value} {scope.Folder?.Value}";
     }
 
     private sealed class CommittingSession : IPersistenceSession

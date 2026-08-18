@@ -244,20 +244,19 @@ internal sealed class AdminApiClient
                 CliJsonContext.Default.MailboxMaintenanceRequest));
     }
 
-    /// <summary>Asks the deployment to re-read one bounded pass of the raw MIME it already stores.</summary>
+    /// <summary>Asks the deployment to re-read the raw MIME it already stores for one scope.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="account">The account whose stored mail is re-read, as the deployment's configuration names it.</param>
     /// <param name="folder">The one folder of it to re-read, or <see langword="null" /> for every folder the account holds mail in.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>What the pass re-read, and whether the scope still holds mail a further pass would reach.</returns>
+    /// <returns>The run the scope now has, whether this request started it, and whether the work is queued.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a pass.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a run.</exception>
     /// <remarks>
-    /// One pass per request, and the command sends as many as the scope needs. The work is local reads and a local
-    /// transaction rather than anything on a mail server, so the answer arrives when the pass has committed and what it
-    /// reports is what the deployment has already written.
+    /// It returns as soon as the deployment has written the request down. The walk is carried by the deployment's own
+    /// durable background work, so this command is never what keeps it alive and closing the terminal cannot stop one.
     /// </remarks>
-    internal Task<MailboxRederivationPass> RederiveMailboxAsync(
+    internal Task<MailboxRederivationStart> RederiveMailboxAsync(
         string token,
         string account,
         string? folder,
@@ -269,11 +268,42 @@ internal sealed class AdminApiClient
             HttpMethod.Post,
             AdminEndpointRoutes.MailboxRederivationPath,
             token,
-            CliJsonContext.Default.MailboxRederivationPass,
+            CliJsonContext.Default.MailboxRederivationStart,
             cancellationToken,
             JsonContent.Create(
                 new MailboxMaintenanceRequest(account, folder),
                 CliJsonContext.Default.MailboxMaintenanceRequest));
+    }
+
+    /// <summary>Asks the deployment where one scope's re-derivation has got to.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account whose run is read.</param>
+    /// <param name="folder">The one folder of it the run covers, or <see langword="null" /> for the account's own run.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The run, which is absent where the scope has never been asked for one.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a run.</exception>
+    internal Task<MailboxRederivationState> ReadMailboxRederivationAsync(
+        string token,
+        string account,
+        string? folder,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        var scope = $"account={Uri.EscapeDataString(account)}";
+
+        if (folder is { Length: > 0 } narrowed)
+        {
+            scope += $"&folder={Uri.EscapeDataString(narrowed)}";
+        }
+
+        return this.RequestAsync(
+            HttpMethod.Get,
+            $"{AdminEndpointRoutes.MailboxRederivationPath}?{scope}",
+            token,
+            CliJsonContext.Default.MailboxRederivationState,
+            cancellationToken);
     }
 
     /// <summary>Asks the deployment where its semantic search stands.</summary>

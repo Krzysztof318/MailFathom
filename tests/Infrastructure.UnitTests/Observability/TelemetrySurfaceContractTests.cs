@@ -15,6 +15,7 @@ using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Mail.Delivery.Outbox;
+using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Retrieval.AskMail;
@@ -120,6 +121,7 @@ public sealed class TelemetrySurfaceContractTests
     private static readonly SensitiveContentDerivationTelemetry Derivation = new();
     private static readonly SensitiveContentEgressTelemetry Egress = new();
     private static readonly StoredEmailContentTelemetry StoredContent = new(Clock);
+    private static readonly StoredMailRederivationTelemetry Rederivation = new(Clock);
 
     private static readonly BoundedEmailEmbeddingBacklog EmbeddingBacklog =
         new(new EmailEmbeddingBacklogOptions { Capacity = 4 });
@@ -150,6 +152,7 @@ public sealed class TelemetrySurfaceContractTests
         typeof(SensitiveContentDerivationTelemetry),
         typeof(SensitiveContentEgressTelemetry),
         typeof(StoredEmailContentTelemetry),
+        typeof(StoredMailRederivationTelemetry),
     ];
 
     /// <summary>The drive really emits the surface, and the poison really travels through it.</summary>
@@ -269,6 +272,7 @@ public sealed class TelemetrySurfaceContractTests
         DriveSynchronization();
         DriveContentStore();
         DriveSensitiveContent();
+        DriveStoredMailRederivation();
 
         PersistenceCommits.RecordCommitted();
         PersistenceCommits.RecordConcurrencyConflict();
@@ -277,6 +281,40 @@ public sealed class TelemetrySurfaceContractTests
         surface.ObserveGauges();
 
         return surface;
+    }
+
+    /// <summary>Drives a segment that ended its run and one that handed the rest on, over both shapes of scope.</summary>
+    /// <remarks>
+    /// A whole-account run reports the publisher's own word for "every folder" rather than an alias, so both are driven
+    /// here: the narrowed scope is what proves an alias reaches the dimension, and the wide one what proves the word
+    /// standing in for it is not read off anything.
+    /// </remarks>
+    private static void DriveStoredMailRederivation()
+    {
+        using (var run = Rederivation.BeginRun(Account, FolderAlias))
+        {
+            using (var pass = run.BeginPass())
+            {
+                pass.Completed(new StoredMailRederivationPass(
+                    RederivedEmailCount: 61_027,
+                    UnreadableEmailCount: 2,
+                    MissingContentEmailCount: 3,
+                    EmailsRemain: false));
+            }
+
+            run.ReachedEndOfScope();
+        }
+
+        using (var run = Rederivation.BeginRun(Account, folderAlias: null))
+        {
+            using var pass = run.BeginPass();
+
+            pass.Completed(new StoredMailRederivationPass(
+                RederivedEmailCount: 0,
+                UnreadableEmailCount: 0,
+                MissingContentEmailCount: 0,
+                EmailsRemain: true));
+        }
     }
 
     private static void DriveProviderHealth()

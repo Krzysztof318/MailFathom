@@ -376,16 +376,34 @@ folder, so a message it has already stored is never looked at again.
 | What you want | Command |
 | --- | --- |
 | Fill in what is already in the mail you stored | `mfctl mailbox rederive --account work` |
+| See how far that has got | `mfctl mailbox rederive-status --account work` |
 | Fill in what only your mail server knows | `mfctl mailbox rewind --account work` |
-| Either one, for a single folder | add `--folder archive` |
+| Any of them, for a single folder | add `--folder archive` |
 
 **Reach for `rederive` first, because it is nearly free.** Anything the message itself carries is in the raw mail
 already on your server's disk, so filling in the column means reading that back and parsing it. Nothing is fetched,
-your mail server is not contacted at all, and nothing is marked read:
+your mail server is not contacted at all, and nothing is marked read.
+
+**The command asks for the re-reading and returns; the deployment does it.** Your terminal is not what keeps it going,
+so closing it changes nothing and the run survives a restart of the deployment:
 
 ```console
 $ mfctl mailbox rederive --account work
-1,043 stored emails re-read for every folder under work.
+A re-derivation of every folder under work has been asked for.
+Requested:  2026-08-18 12:00:00Z
+Progress:   0 re-read, 0 unparseable, 0 no longer stored
+The deployment carries the run in the background. Watch it with 'mfctl mailbox rederive-status --account work'.
+```
+
+Asking again while one is going is answered with the run already under way rather than starting a second, so a command
+you are not sure landed is safe to repeat. How far it has come is a second command:
+
+```console
+$ mfctl mailbox rederive-status --account work
+Scope:      every folder under work — under way
+Requested:  2026-08-18 12:00:00Z
+Progress:   1,043 re-read, 0 unparseable, 0 no longer stored
+If it stops moving, look for the work that stopped with 'mfctl jobs dead-letters'.
 ```
 
 **`rewind` is the one to be careful with.** Some things are your mail server's answer rather than the message's — flags,
@@ -406,8 +424,10 @@ Say no and nothing changes. Add `--yes` if you are scripting it and there is nob
 from it stay where they are; mail fetched again lands on the message that is already there. Neither one re-embeds
 anything either, so no refresh can run up a bill with your AI provider.
 
-Both take a while on a large mailbox and print how far they have got. Stopping `rederive` is safe — it remembers where
-it stopped, and running it again continues from there. [Bringing stored mail up to a later
+Both take a while on a large mailbox. `rewind` prints how far it has got as it goes, because the command is what does
+it; `rederive` returns at once and `rederive-status` is where its progress is read. Neither loses what it has already
+done: a deployment restarted mid-re-derivation picks the run up where it stopped, and mail it had already re-read is not
+re-read again. [Bringing stored mail up to a later
 release](../operations/admin-endpoint.md#bringing-stored-mail-up-to-a-later-release) is the operator's reference for
 both.
 
