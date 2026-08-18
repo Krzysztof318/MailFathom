@@ -215,9 +215,11 @@ public interface IOutgoingEmailStore
     /// <see cref="OutgoingEmailStage.Sent" /> follows only <see cref="OutgoingEmailStage.TransmissionBegun" />, so
     /// no record claims a delivery it never recorded a transmission for; <see cref="OutgoingEmailStage.Cancelled" />
     /// follows only <see cref="OutgoingEmailStage.Recorded" />, so no record claims a withdrawal after bytes that may
-    /// already have reached somebody. A send stopped mid-transmission therefore ends at
-    /// <see cref="OutgoingEmailStage.Refused" />, which states that nothing more will be attempted and states nothing
-    /// about what was received.
+    /// already have reached somebody. A send stopped mid-transmission therefore reaches none of the three: it stays at
+    /// <see cref="OutgoingEmailStage.TransmissionBegun" />, stamped with
+    /// <see cref="MailFathomErrorCode.OutgoingEmailOutcomeUnknown" /> by the sweep this store runs before it claims, and
+    /// nothing claims it again. Every terminal stage states something about what was received, and that is the one thing
+    /// nobody can read there.
     /// </para>
     /// </remarks>
     Task AdvanceAsync(

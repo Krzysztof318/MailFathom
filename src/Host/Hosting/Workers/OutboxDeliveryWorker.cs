@@ -176,6 +176,11 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
 
                     break;
 
+                case MailOutboxDeliveryOutcome.NotRecorded:
+                    this.LogSendNotRecorded(accountId.Value, result.AttemptCount, FailureCodeOf(result));
+
+                    break;
+
                 default:
                     break;
             }
@@ -216,6 +221,12 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
         Level = LogLevel.Warning,
         Message = "A message queued for account {AccountId} had moved to another attempt by the time attempt {AttemptCount} finished, so nothing was recorded for it. The attempt that holds it now is the one whose outcome counts.")]
     private partial void LogSendLeaseLost(string accountId, int attemptCount);
+
+    /// <summary>Reports a send whose attempt ended with the store unable to take the answer.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "The outcome of attempt {AttemptCount} for a message queued for account {AccountId} could not be written down [failure {FailureCode}], so its record stands where the failed write left it and its lease is what frees it for another attempt.")]
+    private partial void LogSendNotRecorded(string accountId, int attemptCount, int? failureCode);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

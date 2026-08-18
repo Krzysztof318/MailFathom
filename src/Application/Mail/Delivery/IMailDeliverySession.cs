@@ -40,8 +40,8 @@ public interface IMailDeliverySession : IAsyncDisposable
     /// <param name="cancellationToken">Cancels the submission; the record the caller holds decides what a cancelled one means.</param>
     /// <returns>What the server answered about the message.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> or <paramref name="envelope" /> is <see langword="null" />.</exception>
-    /// <exception cref="MailDeliveryUnavailableException">Thrown when the submission server did not serve the operation within its configured resilience budget.</exception>
-    /// <exception cref="TimeoutException">Thrown when the server stopped answering within the command budget, which says nothing about what it received.</exception>
+    /// <exception cref="MailDeliveryUnavailableException">Thrown when the exchange failed with the server stating nothing — a protocol violation, a socket failure, or a transport error. No resilience pipeline stands behind this call, so it is the transport's own failure rather than an exhausted retry budget.</exception>
+    /// <exception cref="TimeoutException">Thrown when the submission outlived the budget its own stage is given, which says nothing about what the server received. That budget covers offering the envelope and transmitting the body together, and the attempt's own timeout bounds it from outside.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller stopped waiting, which likewise says nothing about what the server received.</exception>
     /// <remarks>
     /// <para>

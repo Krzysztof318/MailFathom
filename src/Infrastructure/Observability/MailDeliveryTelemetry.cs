@@ -61,7 +61,7 @@ public sealed class MailDeliveryTelemetry
     /// <summary>Begins reporting one submission, and returns the scope that finishes the report.</summary>
     /// <param name="accountId">The account whose message is being submitted.</param>
     /// <returns>The scope, which the caller must dispose; a scope disposed without <see cref="MailDeliveryScope.Completed" /> reports a failure.</returns>
-    public MailDeliveryScope BeginSubmission(MailAccountId accountId)
+    internal MailDeliveryScope BeginSubmission(MailAccountId accountId)
     {
         var activity = Telemetry.ActivitySource.StartActivity(SubmissionSpanName, ActivityKind.Client);
         activity?.SetTag(AccountTagName, accountId.Value);
@@ -111,6 +111,7 @@ public sealed class MailDeliveryTelemetry
         MailOutboxDeliveryOutcome.Deferred => "deferred",
         MailOutboxDeliveryOutcome.OutcomeUnknown => "outcome-unknown",
         MailOutboxDeliveryOutcome.ReleasedForShutdown => "released",
-        _ => "lease-lost",
+        MailOutboxDeliveryOutcome.LeaseLost => "lease-lost",
+        _ => "not-recorded",
     };
 }

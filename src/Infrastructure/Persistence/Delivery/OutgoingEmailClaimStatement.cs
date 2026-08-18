@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Runtime.CompilerServices;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Domain.Delivery;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -30,12 +31,41 @@ namespace MailFathom.Infrastructure.Persistence.Delivery;
 /// no SMTP command at all, which is safe to attempt again because it reached nobody.
 /// </para>
 /// <para>
-/// Every value is a parameter. The identifiers are quoted because EF Core names the columns after the properties, which
+/// Every value is a parameter and no identifier is. The text is a compile-time constant naming the columns, and the
+/// values are supplied to it afterwards, because an interpolated <see cref="FormattableString" /> makes a parameter of
+/// every hole in it — a column name written as one arrives at PostgreSQL as a parameter marker inside quotes rather
+/// than as the column. The identifiers are quoted because EF Core names the columns after the properties, which
 /// PostgreSQL would otherwise fold to lower case and fail to find.
 /// </para>
 /// </remarks>
 internal static class OutgoingEmailClaimStatement
 {
+    // Two predicates make a send due, and the second is the crash recovery: one nothing holds whose next-attempt
+    // instant has passed, and one whose lease has run out. The locking clause follows LIMIT, which is where the
+    // standard puts it and where the limit counts the rows that survived locking, so a batch of one against a row
+    // another worker holds takes the next free row rather than coming back empty.
+    private const string ClaimText = $$"""
+                                      WITH due AS (
+                                          SELECT candidate."Id"
+                                          FROM outgoing_emails AS candidate
+                                          WHERE candidate."{{nameof(OutgoingEmailEntity.Stage)}}" = {0}
+                                            AND candidate."{{nameof(OutgoingEmailEntity.MailboxAccountId)}}" = {1}
+                                            AND candidate."{{nameof(OutgoingEmailEntity.AvailableAt)}}" <= {2}
+                                            AND (candidate."{{nameof(OutgoingEmailEntity.LeaseExpiresAt)}}" IS NULL
+                                              OR candidate."{{nameof(OutgoingEmailEntity.LeaseExpiresAt)}}" <= {2})
+                                          ORDER BY candidate."{{nameof(OutgoingEmailEntity.AvailableAt)}}", candidate."Id"
+                                          LIMIT {3}
+                                          FOR UPDATE SKIP LOCKED
+                                      )
+                                      UPDATE outgoing_emails AS outgoing
+                                      SET "{{nameof(OutgoingEmailEntity.LeaseOwner)}}" = {4},
+                                          "{{nameof(OutgoingEmailEntity.LeaseExpiresAt)}}" = {5},
+                                          "{{nameof(OutgoingEmailEntity.AttemptCount)}}" = outgoing."{{nameof(OutgoingEmailEntity.AttemptCount)}}" + 1
+                                      FROM due
+                                      WHERE outgoing."Id" = due."Id"
+                                      RETURNING outgoing."Id" AS "Value"
+                                      """;
+
     /// <summary>Composes the statement that takes and stamps a batch of the account's due sends.</summary>
     /// <param name="request">Whose sends to take, how many, and under what lease.</param>
     /// <param name="claimedAt">The instant the claim is judged and stamped at.</param>
@@ -45,36 +75,13 @@ internal static class OutgoingEmailClaimStatement
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var accountId = request.AccountId.Value;
-        var recorded = nameof(OutgoingEmailStage.Recorded);
-        var leaseOwner = request.Owner;
-        var leaseExpiresAt = claimedAt + request.LeaseDuration;
-        var batchSize = request.BatchSize;
-
-        // Two predicates make a send due, and the second is the crash recovery: one nothing holds whose next-attempt
-        // instant has passed, and one whose lease has run out. The locking clause follows LIMIT, which is where the
-        // standard puts it and where the limit counts the rows that survived locking, so a batch of one against a row
-        // another worker holds takes the next free row rather than coming back empty.
-        return $"""
-                WITH due AS (
-                    SELECT candidate."Id"
-                    FROM outgoing_emails AS candidate
-                    WHERE candidate."{nameof(OutgoingEmailEntity.Stage)}" = {recorded}
-                      AND candidate."{nameof(OutgoingEmailEntity.MailboxAccountId)}" = {accountId}
-                      AND candidate."{nameof(OutgoingEmailEntity.AvailableAt)}" <= {claimedAt}
-                      AND (candidate."{nameof(OutgoingEmailEntity.LeaseExpiresAt)}" IS NULL
-                        OR candidate."{nameof(OutgoingEmailEntity.LeaseExpiresAt)}" <= {claimedAt})
-                    ORDER BY candidate."{nameof(OutgoingEmailEntity.AvailableAt)}", candidate."Id"
-                    LIMIT {batchSize}
-                    FOR UPDATE SKIP LOCKED
-                )
-                UPDATE outgoing_emails AS outgoing
-                SET "{nameof(OutgoingEmailEntity.LeaseOwner)}" = {leaseOwner},
-                    "{nameof(OutgoingEmailEntity.LeaseExpiresAt)}" = {leaseExpiresAt},
-                    "{nameof(OutgoingEmailEntity.AttemptCount)}" = outgoing."{nameof(OutgoingEmailEntity.AttemptCount)}" + 1
-                FROM due
-                WHERE outgoing."Id" = due."Id"
-                RETURNING outgoing."Id" AS "Value"
-                """;
+        return FormattableStringFactory.Create(
+            ClaimText,
+            nameof(OutgoingEmailStage.Recorded),
+            request.AccountId.Value,
+            claimedAt,
+            request.BatchSize,
+            request.Owner,
+            claimedAt + request.LeaseDuration);
     }
 }

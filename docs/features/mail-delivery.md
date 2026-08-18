@@ -366,6 +366,12 @@ server, and a second loop beside it would be an unstated second bound on how man
 the providers it sends through. A pass that throws is confined to its account: the loop logs it and serves the next
 account, because a database briefly unavailable for one account says nothing about whether another has mail to send.
 
+One send is confined the same way inside a pass. An attempt records its own answer, so what is left to fail is the
+recording — a store that went away while an outcome was being committed, which the recovery write then meets as well —
+and such a send is reported as *not recorded* and the pass goes on to the one behind it. Raising instead would hold
+every send left in that batch until its lease expired, over a failure that says nothing about any of them; the record
+stands where the failed write left it, and its lease is what makes it claimable again.
+
 **A pass claims before it attempts.** One statement takes a batch of the account's due sends, oldest first, and stamps
 each with an owner, an expiry, and the attempt it is about to be given — so no instant exists in which a send is chosen
 but unheld, and two passes over one account take disjoint sets rather than queueing behind each other. Every write about
@@ -391,7 +397,8 @@ Which of the two applies is read from the replies the server actually gave durin
 exception that ended it.
 
 Such a send is **visible rather than silent**: it stays in the outbox an operator reads, it says *unknown* rather than
-*stuck*, the worker logs it at error level, and the delivery counter measures it under `outcome-unknown`. It moves only
+*stuck*, whichever pass settled it logs it at error level — the signalled worker and the account's own run alike — and
+the delivery counter measures it under `outcome-unknown`. It moves only
 when somebody decides what happened; nothing automatic re-queues it.
 
 A pass stamps whatever it finds in that stage before it claims anything, so a send stranded by a process that stopped is
@@ -522,8 +529,9 @@ The unit suite carries the cases a real server cannot be asked for. A crash at e
 rewind and the refusal to rewind on either side of the first acceptance; a lease reassigned while an attempt was
 transmitting, which then writes nothing at all; a partial acceptance and the retry that offers only the addresses still
 outstanding; a permanent per-recipient refusal that still delivers the message; every recipient refused; the attempt
-bound being spent; host shutdown before and after an acceptance; and each of the settings validations, including the
-attempt timeout that reaches its lease. Beside them the loop's own claims — that a signal is what wakes it, that a full
+bound being spent; host shutdown before and after an acceptance; a store that will not take one send's outcome, which
+ends that send and leaves the one behind it in the batch still delivered; and each of the settings validations,
+including the attempt timeout that reaches its lease. Beside them the loop's own claims — that a signal is what wakes it, that a full
 batch asks for its account again, and that neither a failed pass nor an account with nowhere to submit stops the account
 behind it — and the signal's own: that one account signalled a hundred times is one pass, that a full queue refuses and
 says so, and that a queue refilled as fast as it drains still ends when the host stops.
@@ -532,7 +540,15 @@ The transmission itself is a unit test against a scripted submission client, bec
 there and none can be provoked from a real server on demand: a message accepted, a message refused permanently and
 temporarily, no address accepted, a server that stops answering mid-transmission with the addresses it had already
 accepted kept, and the bytes a transmission offers — blind recipients absent from the transmitted headers, and the line
-endings a submission requires.
+endings a submission requires. The three hooks the submission client overrides are exercised on the real client rather
+than through the scripted one, because they are what keeps a refused address from stopping the addresses beside it and a
+substitute would prove the substitute instead.
+
+The claim is asserted as text, without a database. It is one statement and each clause in it fails silently if it is
+lost, so the stage filter, the locking clause, the bound, the two predicates that make a send due, and the stamp that
+counts the attempt are each read off what is composed. So is the shape of the whole: the column names are part of the
+text and only the values are parameters, which is the difference between a statement PostgreSQL runs and one that
+reaches it asking for a column named after a parameter marker.
 
 The integration suite settles what only a real server and a real database can. A queued send is delivered, recorded as
 sent, and then found in the mailbox it was addressed to — read back over a connection nothing under test owns, which is

@@ -8,6 +8,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Failures;
+using Microsoft.Extensions.Time.Testing;
 
 namespace MailFathom.Application.UnitTests.TestDoubles;
 
@@ -28,7 +29,7 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 /// </para>
 /// </remarks>
 /// <param name="sessionCommits">Answers whether a session's writes become durable, and admits every session when absent.</param>
-/// <param name="timeProvider">Stamps what the store writes, and answers whether a lease has run out.</param>
+/// <param name="timeProvider">Stamps what the store writes, and answers whether a lease has run out. A test that does not supply one gets a clock standing still at the Unix epoch, never the machine's.</param>
 internal sealed class InMemoryOutgoingEmailStore(
     Func<IPersistenceSession, bool>? sessionCommits = null,
     TimeProvider? timeProvider = null)
@@ -39,10 +40,17 @@ internal sealed class InMemoryOutgoingEmailStore(
 
     private readonly Dictionary<OutgoingEmailId, StoredRow> rows = [];
     private readonly List<OutgoingEmailRequest> openRequests = [];
-    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
+    private readonly TimeProvider clock = timeProvider ?? new FakeTimeProvider(DateTimeOffset.UnixEpoch);
 
     /// <summary>Gets every request that reached the store, including the ones that read a record back.</summary>
     internal IReadOnlyList<OutgoingEmailRequest> OpenRequests => this.openRequests;
+
+    /// <summary>Gets or sets which records every write is refused for, and refuses none by default.</summary>
+    /// <remarks>
+    /// It stands in for the database going away while one send's answer was being written, which is the one failure an
+    /// attempt cannot record its way out of: the recovery write meets the same refusal the write it recovers from did.
+    /// </remarks>
+    internal Func<OutgoingEmailId, bool> RefusesWrites { get; set; } = _ => false;
 
     /// <summary>Writes a record the way a writer that has already committed left it, without going through a session.</summary>
     /// <param name="request">The request the other writer recorded.</param>
@@ -289,6 +297,17 @@ internal sealed class InMemoryOutgoingEmailStore(
 
         var row = this.RequireLeased(lease, outgoingEmailId);
         var answered = outcomes.ToDictionary(outcome => outcome.Recipient.Address.NormalizedAddress);
+        var carried = row.Record.Recipients
+            .Select(recipient => recipient.Recipient.Address.NormalizedAddress)
+            .ToHashSet(StringComparer.Ordinal);
+
+        // The real store refuses an outcome naming an address the record does not, and a double that accepted one
+        // would let a caller reporting against the wrong recipient pass every test built on it.
+        if (answered.Keys.Any(address => !carried.Contains(address)))
+        {
+            throw new InvalidOperationException(
+                $"Outgoing email record {outgoingEmailId.Value} was answered about a recipient it does not name.");
+        }
 
         row.Record = row.Record with
         {
@@ -325,6 +344,11 @@ internal sealed class InMemoryOutgoingEmailStore(
     private StoredRow RequireLeased(OutgoingEmailLease lease, OutgoingEmailId outgoingEmailId)
     {
         ArgumentNullException.ThrowIfNull(lease);
+
+        if (this.RefusesWrites(outgoingEmailId))
+        {
+            throw new InvalidOperationException("The store would not take a write for this outgoing email.");
+        }
 
         var row = this.rows[outgoingEmailId];
         if (row.LeaseOwner != lease.Owner)

@@ -2,7 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Failures;
+using MailFathom.Domain.Transport;
 
 namespace MailFathom.Application.Mail.Delivery.Outbox;
 
@@ -27,6 +30,13 @@ namespace MailFathom.Application.Mail.Delivery.Outbox;
 /// One send's failure never ends the pass. A submission server refusing one message is usually refusing every message,
 /// so the sends behind it fail quickly beside it and the account's next run is what defers them; a message that is
 /// broken on its own must not stop the ones that are not.
+/// </para>
+/// <para>
+/// That holds for a send whose attempt could not even be written down. An attempt records its own answer, so what is
+/// left to fail here is the recording itself — a database that went away while the outcome was being committed — and
+/// such a send is reported as <see cref="MailOutboxDeliveryOutcome.NotRecorded" /> rather than raised through the loop.
+/// Raising would leave every send behind it in the batch claimed until its lease expired, which is the delay this pass
+/// exists to avoid, over a failure that says nothing about them.
 /// </para>
 /// </remarks>
 public sealed class MailOutboxPass
@@ -86,12 +96,40 @@ public sealed class MailOutboxPass
         var results = new List<MailOutboxDeliveryResult>(claimed.Count);
         foreach (var send in claimed)
         {
-            results.Add(await this.delivery.DeliverAsync(send, transportSecurityPolicy, stoppingToken));
+            results.Add(await this.AttemptAsync(send, transportSecurityPolicy, stoppingToken));
         }
 
         return new MailOutboxPassReport(
             results,
             markedUnknownCount,
             claimed.Count >= this.settings.MaxDeliveriesPerPass);
+    }
+
+    /// <summary>Attempts one claimed send, and reports a failure the attempt could not record instead of raising it.</summary>
+    /// <remarks>
+    /// What is carried out is the code and nothing else, which is the same bound every other ending of a send obeys:
+    /// what a store or a driver wrote into an exception is not MailFathom's own text and has no place in a line about
+    /// somebody's message. A failure of the pass itself — the claim, the sweep — is not caught here and reaches its
+    /// caller whole.
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "One send whose outcome could not be written down must not leave the sends behind it in the batch claimed until their leases expire; the record stands where the failed write left it and the next pass claims it again.")]
+    private async Task<MailOutboxDeliveryResult> AttemptAsync(
+        ClaimedOutgoingEmail send,
+        MailTransportSecurityPolicy transportSecurityPolicy,
+        CancellationToken stoppingToken)
+    {
+        try
+        {
+            return await this.delivery.DeliverAsync(send, transportSecurityPolicy, stoppingToken);
+        }
+        catch (Exception failure)
+        {
+            return new MailOutboxDeliveryResult(
+                send.Record.Id,
+                MailOutboxDeliveryOutcome.NotRecorded,
+                (failure as MailFathomException)?.ErrorCode,
+                ReplyCode: null,
+                send.Record.AttemptCount);
+        }
     }
 }

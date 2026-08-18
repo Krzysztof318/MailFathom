@@ -85,6 +85,27 @@ public sealed class MailOutboxPassTests
         Assert.Equal(OutgoingEmailStage.Recorded, context.Store.Read(behind).Stage);
     }
 
+    /// <summary>A send whose outcome the store would not take ends alone, and the send behind it in the batch is still reached.</summary>
+    [Fact]
+    public async Task RunAsync_TheStoreWillNotRecordOneSendsOutcome_StillReachesTheSendBehindIt()
+    {
+        // Arrange
+        var context = new PassContext();
+        var unrecordable = context.Enqueue();
+        var behind = context.Enqueue();
+        context.Store.RefusesWrites = outgoingEmailId => outgoingEmailId == unrecordable;
+
+        // Act
+        var report = await context.RunAsync();
+
+        // Assert
+        Assert.Equal([unrecordable, behind], report.Results.Select(result => result.OutgoingEmailId));
+        Assert.Equal(MailOutboxDeliveryOutcome.NotRecorded, report.Results[0].Outcome);
+        Assert.Equal(1, report.NotRecordedCount);
+        Assert.Equal(1, report.SentCount);
+        Assert.Equal(OutgoingEmailStage.Sent, context.Store.Read(behind).Stage);
+    }
+
     /// <summary>A send a stopped process left mid-transmission is stamped with the reason before anything is claimed.</summary>
     [Fact]
     public async Task RunAsync_ARecordWasLeftMidTransmission_MarksItWithTheUnknownOutcome()

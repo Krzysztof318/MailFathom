@@ -27,7 +27,9 @@ internal sealed class MailKitSmtpDeliverySession(
     /// <remarks>
     /// The span covers the exchange with the server and nothing around it, which is what makes it answer the question
     /// it is for: whether the provider is the slow part. A refusal completes it rather than failing it — the server
-    /// answered, so the exchange did what it was for, and what the answer was belongs to the send's own record.
+    /// answered, so the exchange did what it was for, and what the answer was belongs to the send's own record. A
+    /// caller that stopped waiting and a host that is shutting down leave it unset for the same reason read the other
+    /// way: neither is the provider failing, and only a failed exchange marks the span as one.
     /// </remarks>
     public async Task<MailTransmission> TransmitAsync(
         MailTransmissionRequest request,
@@ -36,11 +38,20 @@ internal sealed class MailKitSmtpDeliverySession(
     {
         using var submission = telemetry.BeginSubmission(accountId);
 
-        var transmission = await connection.TransmitAsync(request, envelope, cancellationToken);
+        try
+        {
+            var transmission = await connection.TransmitAsync(request, envelope, cancellationToken);
 
-        submission.Completed();
+            submission.Completed();
 
-        return transmission;
+            return transmission;
+        }
+        catch (OperationCanceledException)
+        {
+            submission.Abandoned();
+
+            throw;
+        }
     }
 
     /// <inheritdoc />

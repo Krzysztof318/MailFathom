@@ -30,4 +30,14 @@ public enum MailOutboxDeliveryOutcome
 
     /// <summary>The record had moved on to a later attempt, so this one recorded nothing about it.</summary>
     LeaseLost = 5,
+
+    /// <summary>The attempt ended and nothing about it could be written down, so the record stands where the failed write left it.</summary>
+    /// <remarks>
+    /// It is the outcome of a store that would not take the answer rather than of a server that would not take the
+    /// message, which is why it is not any of the five above: what the send is owed next cannot be read off it, and
+    /// only the lease running out makes the record claimable again. It is separate from <see cref="LeaseLost" />
+    /// because there the write was refused for a reason — a later attempt owns the record — and here it was not
+    /// refused at all.
+    /// </remarks>
+    NotRecorded = 6,
 }

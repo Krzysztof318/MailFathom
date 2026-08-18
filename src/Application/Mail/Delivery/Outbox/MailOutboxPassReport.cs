@@ -32,6 +32,9 @@ public sealed record MailOutboxPassReport(
     /// <summary>Gets how many of the claimed sends ended with nobody able to say what their recipients received.</summary>
     public int UnknownOutcomeCount => this.CountOf(MailOutboxDeliveryOutcome.OutcomeUnknown);
 
+    /// <summary>Gets how many of the claimed sends ended with the store refusing to record what happened to them.</summary>
+    public int NotRecordedCount => this.CountOf(MailOutboxDeliveryOutcome.NotRecorded);
+
     /// <summary>Gets whether the pass met a submission server that would not serve it, which is what defers the account.</summary>
     /// <remarks>
     /// A send given back for another attempt is the shape a provider's unavailability takes here, and it is the one

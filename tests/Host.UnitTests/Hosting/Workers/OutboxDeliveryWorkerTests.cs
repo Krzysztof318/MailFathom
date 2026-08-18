@@ -135,7 +135,10 @@ public sealed class OutboxDeliveryWorkerTests
         await context.RunUntilAsync(async () =>
         {
             context.Signal.Signal(Work);
-            await Task.Delay(50, TestContext.Current.CancellationToken);
+
+            // The policy read is what the pass does first and is the point at which the account is decided against, so
+            // waiting for it proves the loop reached this account rather than proving only that time passed.
+            await context.WaitForPolicyReadAsync();
         });
 
         // Assert
@@ -151,6 +154,7 @@ public sealed class OutboxDeliveryWorkerTests
         private readonly ServiceProvider services;
         private readonly List<ClaimedOutgoingEmail> claimable = [];
         private readonly TaskCompletionSource claimsReached = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource policyRead = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         private int awaitedClaimCount = int.MaxValue;
 
@@ -173,7 +177,12 @@ public sealed class OutboxDeliveryWorkerTests
                 });
 
             var policyReader = Substitute.For<IMailTransportSecurityPolicyReader>();
-            policyReader.GetDeliveryPolicy(Arg.Any<MailAccountId>()).Returns(submits ? TransportSecurityPolicy() : null);
+            policyReader.GetDeliveryPolicy(Arg.Any<MailAccountId>()).Returns(_ =>
+            {
+                this.policyRead.TrySetResult();
+
+                return submits ? TransportSecurityPolicy() : null;
+            });
 
             var collection = new ServiceCollection();
             collection.AddSingleton<TimeProvider>(new FakeTimeProvider());
@@ -231,6 +240,10 @@ public sealed class OutboxDeliveryWorkerTests
 
             return this.claimsReached.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
         }
+
+        /// <summary>Waits for a pass to have asked whether the account submits at all, or fails rather than hanging.</summary>
+        internal Task WaitForPolicyReadAsync() =>
+            this.policyRead.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
 
         /// <summary>Runs the worker, drives the scenario, and stops it the way a host shutdown does.</summary>
         internal async Task RunUntilAsync(Func<Task> driveAsync)

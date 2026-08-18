@@ -705,7 +705,8 @@ for it. Two questions are worth answering, and each has one signal.
 
 **Is mail leaving?** `mailfathom.mail.delivery.attempts` counts every attempt that ended, tagged with the account alias
 and `mailfathom.mail.delivery.outcome`, whose values are `sent`, `refused`, `deferred`, `outcome-unknown`, `released`,
-and `lease-lost`. One measurement per send rather than per pass, because a pass routinely ends in several of them.
+`lease-lost`, and `not-recorded`. One measurement per send rather than per pass, because a pass routinely ends in
+several of them.
 
 `outcome-unknown` is a dimension of that counter rather than a counter of its own, deliberately: a send whose server
 never answered is neither a success nor a failure, and giving it an instrument would let a dashboard summing successes
@@ -714,12 +715,17 @@ each measurement is a message that may or may not have reached somebody and that
 person decides. `refused` is a terminal failure and worth watching as a rate; `deferred` is the ordinary answer to a
 provider that is briefly busy and is only interesting when it stops turning into `sent`. `released` is shutdown and
 `lease-lost` is an attempt that had already been taken over, so neither counts against a deployment's health.
+`not-recorded` is the store refusing to take an attempt's answer rather than a server refusing the message: the record
+stands where the failed write left it and its lease is what frees it, so a rate above zero is a database to look at and
+not an outbox to act on.
 
 **Is one submission the slow part?** Each opens **`submit_outgoing_email`** as a client span, tagged with the account
 alias, and `mailfathom.mail.delivery.submission.duration` records how long it took. Both cover the exchange with the
 server and nothing else: the claim, the record movements, and the backoff are local work, and including them would blur
 the one thing the span exists to attribute. A span that ends without the server having answered is marked as an error,
-which is what makes the trace and the `outcome-unknown` measurement the same event read two ways.
+which is what makes the trace and the `outcome-unknown` measurement the same event read two ways. A caller that stopped
+waiting and a host that is shutting down are the exception and leave the span unmarked, because neither says anything
+about the provider and marking them would make a rolling restart read as an outage on the rate an operator alerts on.
 
 There is deliberately no span or instrument per recipient. A message is offered per address, so one apiece would open a
 time series per person this deployment writes to; what each recipient was told is on the send's own record, where it is

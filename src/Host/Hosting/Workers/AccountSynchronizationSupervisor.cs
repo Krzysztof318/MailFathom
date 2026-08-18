@@ -393,6 +393,8 @@ internal sealed partial class AccountSynchronizationSupervisor
                     report.DeferredCount,
                     report.UnknownOutcomeCount + report.MarkedUnknownCount);
             }
+
+            this.ReportOutcomesNeedingAPerson(report);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -401,6 +403,32 @@ internal sealed partial class AccountSynchronizationSupervisor
         catch (Exception exception)
         {
             this.LogOutboxDrainFailed(exception, this.accountId.Value);
+        }
+    }
+
+    /// <summary>Says at error level what a pass produced that waits for somebody rather than for another attempt.</summary>
+    /// <remarks>
+    /// The summary line above is one line about a pass, and an operator alerts on a level rather than on a count inside
+    /// a sentence. This path settles a pass as often as the signalled worker does, so an ending that reaches a person
+    /// there has to reach them here too; anything else would make which of the two happened to claim the send decide
+    /// whether anybody hears about it.
+    /// </remarks>
+    private void ReportOutcomesNeedingAPerson(MailOutboxPassReport report)
+    {
+        var unknownCount = report.UnknownOutcomeCount + report.MarkedUnknownCount;
+        if (unknownCount > 0)
+        {
+            this.LogOutboxOutcomesUnknown(this.accountId.Value, unknownCount);
+        }
+
+        if (report.RefusedCount > 0)
+        {
+            this.LogOutboxSendsRefused(this.accountId.Value, report.RefusedCount);
+        }
+
+        if (report.NotRecordedCount > 0)
+        {
+            this.LogOutboxOutcomesNotRecorded(this.accountId.Value, report.NotRecordedCount);
         }
     }
 
@@ -1149,6 +1177,22 @@ internal sealed partial class AccountSynchronizationSupervisor
     private partial void LogFolderAliasAmbiguous(
         string accountId,
         string folderAlias);
+
+    /// <summary>Reports the ending that waits for a person; a recipient names a person and never reaches a log.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "{UnknownCount} message(s) queued for account {AccountId} went out with their submission server never answering, so whether the recipients received them is unknown. None is transmitted again, and each stays visible in the outbox until somebody decides what to do with it.")]
+    private partial void LogOutboxOutcomesUnknown(string accountId, int unknownCount);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "{RefusedCount} message(s) queued for account {AccountId} will not be offered again. What each recipient was told is on the send's own record.")]
+    private partial void LogOutboxSendsRefused(string accountId, int refusedCount);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "The outcome of {NotRecordedCount} message(s) queued for account {AccountId} could not be written down, so each record stands where the failed write left it and its lease is what frees it for another attempt.")]
+    private partial void LogOutboxOutcomesNotRecorded(string accountId, int notRecordedCount);
 
     /// <summary>Reports what the account's own run found waiting in its outbox; a recipient names a person and never reaches a log.</summary>
     [LoggerMessage(

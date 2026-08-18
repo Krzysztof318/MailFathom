@@ -22,6 +22,13 @@ namespace MailFathom.Infrastructure.Persistence.Delivery;
 /// transaction the caller opened; the read paths use the scoped context, because they join no transaction.
 /// </para>
 /// <para>
+/// <see cref="ClaimAsync" /> and <see cref="MarkUnknownOutcomesAsync" /> are the exception, and are given no session by
+/// the port for that reason. Each is one self-contained statement that decides and writes in the same breath and
+/// commits on its own — the claim because splitting it would open the window in which two workers take the same send,
+/// the sweep because it is a set-based stamp over rows nobody holds. Enlisting either in a caller's transaction would
+/// hold the rows it touched for as long as that caller ran, which is precisely what the statements are shaped to avoid.
+/// </para>
+/// <para>
 /// The idempotency identity is not checked and then written. The check exists — a request that already has a record
 /// reads it back rather than inserting a second — but it is the unique index that decides, because two callers can pass
 /// any application-level check between reading and writing and only the constraint closes that window. A loser is

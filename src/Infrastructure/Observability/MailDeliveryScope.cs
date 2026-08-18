@@ -10,9 +10,9 @@ namespace MailFathom.Infrastructure.Observability;
 /// <summary>Carries one submission's report from the call that starts it to the answer that ends it.</summary>
 /// <remarks>
 /// <para>
-/// The scope reports a failure unless <see cref="Completed" /> was called, so a submission that raised anywhere inside
-/// it is still measured rather than dropping out of the record entirely — which matters more here than anywhere else,
-/// because the submission that raised is the one whose outcome nobody knows.
+/// The scope reports a failure unless <see cref="Completed" /> or <see cref="Abandoned" /> was called, so a submission
+/// that raised anywhere inside it is still measured rather than dropping out of the record entirely — which matters
+/// more here than anywhere else, because the submission that raised is the one whose outcome nobody knows.
 /// </para>
 /// <para>
 /// What the span never carries is which recipients were offered, how many there were, or what the server wrote. A
@@ -20,14 +20,14 @@ namespace MailFathom.Infrastructure.Observability;
 /// how long the exchange with the provider took — needs none of it.
 /// </para>
 /// </remarks>
-public sealed class MailDeliveryScope : IDisposable
+internal sealed class MailDeliveryScope : IDisposable
 {
     private readonly MailDeliveryTelemetry telemetry;
     private readonly MailAccountId accountId;
     private readonly Activity? activity;
     private readonly long startingTimestamp;
 
-    private bool accepted;
+    private bool settled;
     private bool reported;
 
     internal MailDeliveryScope(
@@ -48,11 +48,20 @@ public sealed class MailDeliveryScope : IDisposable
     /// what the answer was belongs to the send's own record, and marking a refused message as a failed span would make
     /// a mistyped address read as an unhealthy provider.
     /// </remarks>
-    public void Completed()
+    internal void Completed()
     {
-        this.accepted = true;
+        this.settled = true;
         this.activity?.SetStatus(ActivityStatusCode.Ok);
     }
+
+    /// <summary>Marks the submission as one nobody waited for the end of, which is not the provider failing.</summary>
+    /// <remarks>
+    /// A caller that stopped waiting and a host that is shutting down both reach here, and neither says anything about
+    /// the server. Leaving the span unset rather than failed is what keeps a rolling restart from reading as an
+    /// unhealthy provider on the error rate an operator alerts on; what such a submission cost the message is decided
+    /// from its own durable record, which is the only place that question can be answered at all.
+    /// </remarks>
+    internal void Abandoned() => this.settled = true;
 
     /// <inheritdoc />
     public void Dispose()
@@ -64,7 +73,7 @@ public sealed class MailDeliveryScope : IDisposable
 
         this.reported = true;
 
-        if (!this.accepted)
+        if (!this.settled)
         {
             this.activity?.SetStatus(ActivityStatusCode.Error);
         }
