@@ -93,6 +93,12 @@ try
             .GetRequiredService<IOptions<ForwardedHeadersOptions>>()
             .Value;
 
+        if (!forwardedHeadersLogger.IsEnabled(LogLevel.Debug))
+        {
+            await next();
+            return;
+        }
+
         forwardedHeadersLogger.LogDebug(
             """
             BEFORE ForwardedHeaders
@@ -123,6 +129,12 @@ try
 
     app.Use(async (context, next) =>
     {
+        if (!forwardedHeadersLogger.IsEnabled(LogLevel.Debug))
+        {
+            await next();
+            return;
+        }
+
         forwardedHeadersLogger.LogDebug(
             """
             AFTER ForwardedHeaders
