@@ -21,6 +21,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
@@ -284,7 +285,12 @@ public sealed class MailboxQuestionReaderTests
             {
                 AuthorAuthentication = AuthorAuthenticationOutcome.Authenticated,
                 DeploymentTrust = SenderTrustLevel.Trusted,
-            });
+            },
+            machineAuthorship: MachineAuthorshipAssessment.Assessed(
+                MachineAuthorshipBand.Possible,
+                likelihood: 0.42,
+                MachineAuthorshipSignals.HiddenCharacters,
+                MachineAuthorshipProfile.Standard.Revision));
         var answerer = new RecordingMailQuestionAnswerer().Answering("An answer.", cited);
         var reader = ReaderOver(answerer);
 
@@ -300,6 +306,9 @@ public sealed class MailboxQuestionReaderTests
         Assert.Equal(Now, citation.ReceivedAt);
         Assert.Equal(AuthorAuthenticationOutcome.Authenticated, citation.SenderVerification.AuthorAuthentication);
         Assert.Equal(SenderTrustLevel.Trusted, citation.SenderVerification.DeploymentTrust);
+        Assert.Equal(MachineAuthorshipBand.Possible, citation.MachineAuthorship.Band);
+        Assert.Equal(0.42, citation.MachineAuthorship.Likelihood);
+        Assert.Equal(MachineAuthorshipSignals.HiddenCharacters, citation.MachineAuthorship.Signals);
     }
 
     /// <summary>Retrieval finding nothing is an ordinary outcome, and the answer that says so is a real answer.</summary>
@@ -665,7 +674,8 @@ public sealed class MailboxQuestionReaderTests
     private static EmailKnowledgePassage PassageOf(
         int position,
         string text,
-        SenderVerification? senderVerification = null) => new()
+        SenderVerification? senderVerification = null,
+        MachineAuthorshipAssessment? machineAuthorship = null) => new()
         {
             StoredEmailId = StoredEmailId.Create(EmailIdentityAt(position)),
             AccountId = MailAccountId.Create(ServedAccountId),
@@ -673,6 +683,7 @@ public sealed class MailboxQuestionReaderTests
             Subject = "Quarterly invoice",
             ReceivedAt = Now,
             SenderVerification = senderVerification ?? SenderVerification.NotEstablished,
+            MachineAuthorship = machineAuthorship ?? MachineAuthorshipAssessment.NotAssessed,
             Text = text,
         };
 

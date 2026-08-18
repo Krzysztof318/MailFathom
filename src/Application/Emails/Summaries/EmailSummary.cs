@@ -4,6 +4,7 @@
 
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.Emails.Summaries;
@@ -81,6 +82,16 @@ public sealed record EmailSummary
     /// reader recognize a message, and the evidence is for judging one already found.
     /// </remarks>
     public required SenderAuthenticationEvidence SenderAuthenticationEvidence { get; init; }
+
+    /// <summary>Gets how much the email's own text read as machine written, as extraction assessed it.</summary>
+    /// <remarks>
+    /// Carried by the summary for the reason the sender verdicts are: it is something a reader weighs a listed message
+    /// by, and the single-email read is built from this same summary — so a listing and a read cannot disagree about
+    /// one message. It is an informational reading of the text and never a finding against the message; what the
+    /// listing publishes of it is the band and the number, and the signals behind them belong to the read of a message
+    /// somebody has already found.
+    /// </remarks>
+    public required MachineAuthorshipAssessment MachineAuthorship { get; init; }
 
     /// <summary>Gets what the email carries besides its body.</summary>
     public required StoredEmailAttachmentSummary Attachments { get; init; }

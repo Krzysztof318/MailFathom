@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Emails.Authorship;
 
 namespace MailFathom.Application.Emails.Extraction;
 
@@ -42,4 +43,13 @@ public sealed record ExtractedEmailMetadata(
     /// policy has spoken over, which is unknown and carries no policy revision to say otherwise.
     /// </remarks>
     public SenderTrust SenderTrust { get; init; } = SenderTrust.NotEvaluated;
+
+    /// <summary>Gets how much this message's own text reads as machine written.</summary>
+    /// <remarks>
+    /// Not a parameter of the reading, for the reason <see cref="SenderTrust" /> is not: the parsing adapter produces
+    /// the text and <see cref="MachineAuthorshipEvaluatingEmailMimeReader" /> judges it afterwards, against a weighting
+    /// this deployment owns. Its default is therefore the state of a message nothing assessed, which is what a
+    /// deployment that assesses no authorship stores and what a message with no readable body carries.
+    /// </remarks>
+    public MachineAuthorshipAssessment MachineAuthorship { get; init; } = MachineAuthorshipAssessment.NotAssessed;
 }

@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Infrastructure.Persistence.Entities;
 
 namespace MailFathom.Infrastructure.Persistence.Emails;
@@ -72,6 +73,7 @@ internal static class StoredEmailMetadataMapping
         ApplyAttachmentSummary(entity, metadata.Attachments);
         ApplySenderAuthentication(entity, metadata.SenderAuthentication);
         ApplySenderTrust(entity, metadata.SenderTrust);
+        ApplyMachineAuthorship(entity, metadata.MachineAuthorship);
     }
 
     /// <summary>Records what the receiving mail server established about who sent the message.</summary>
@@ -106,6 +108,23 @@ internal static class StoredEmailMetadataMapping
         entity.SenderTrustGrantedBy = trust.GrantedBy;
         entity.SenderTrustPolicyRevision = trust.PolicyRevision.NamesAPolicy
             ? trust.PolicyRevision.Value
+            : null;
+    }
+
+    /// <summary>Records how much the message's own text read as machine written.</summary>
+    /// <remarks>
+    /// Written whole on every extraction, including the not-assessed state, so a re-derivation after a release changed
+    /// what the assessment reads replaces the whole group rather than leaving a likelihood beside signals a different
+    /// profile found. A revision that names no profile is stored as absent rather than as an empty string, because the
+    /// column's null is what says nothing assessed this row.
+    /// </remarks>
+    private static void ApplyMachineAuthorship(StoredEmailEntity entity, MachineAuthorshipAssessment authorship)
+    {
+        entity.MachineAuthorshipBand = authorship.Band;
+        entity.MachineAuthorshipLikelihood = authorship.Likelihood;
+        entity.MachineAuthorshipSignals = authorship.Signals;
+        entity.MachineAuthorshipProfileRevision = authorship.ProfileRevision.NamesAProfile
+            ? authorship.ProfileRevision.Value
             : null;
     }
 

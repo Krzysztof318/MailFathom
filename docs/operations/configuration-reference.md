@@ -99,6 +99,7 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `MailSynchronization:PushDegradationPeriod` | TimeSpan | `00:15:00` | 10 s – 1 day | reload |
 | `MailSynchronization:MaxSubscribedFolders` | int | `20` | 1 – 100; how many folders one push subscription may name on a server supporting `NOTIFY`, the rest synchronizing on the account's interval | reload |
 | `MailSynchronization:TrustOwnAccountDomains` | bool | `true` | Whether an author writing from a domain one of the configured accounts uses counts as trusted on every account. The set is read from each account's `UserName` where that is an address, so it needs no list of its own | reload; the next extraction judges against it |
+| `MailSynchronization:AssessMachineAuthorship` | bool | `true` | Whether extraction reads how much each message's own text reads as machine written. What the reading weighs is the project's and is not configurable; this decides only whether it runs | reload; the next extraction reads against it |
 
 ### One account — `MailSynchronization:Accounts:<n>`
 
@@ -147,6 +148,15 @@ intended outcome: the claim is that this deployment does not know the author, no
 Turning `TrustOwnAccountDomains` off is the right move for a deployment whose accounts sit on a large shared provider,
 since every user of that provider writes from the same domain; the same page states what an address entry rests on and
 what it deliberately does not establish.
+
+`AssessMachineAuthorship` answers a different question again — how a message's text was *written* rather than who sent
+it — and it defaults to on because the reading costs one pass over text extraction has already produced and needs
+nothing configured to mean something. What it reports is **informational and not a safety signal**: a high reading is an
+observation about the text, not a finding against the message or its sender, and nothing in MailFathom acts on it. The
+case for turning it off is a deployment that would rather its readers were not handed the observation at all; a
+deployment that does records the same not-assessed state a message with no readable body carries, so no stored row says
+which of the two reasons produced it. [Machine authorship](../features/machine-authorship.md) states what the reading is
+made of and what it deliberately does not claim.
 
 `RuleActions` is what a rule is judged against rather than what it is filtered by: a rule declaring an action this
 account does not permit **fails startup** naming the rule, the action, and the account, rather than running with that

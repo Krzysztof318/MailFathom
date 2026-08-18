@@ -133,6 +133,14 @@ was not established. Each value states its own absence, since a message nothing 
 domain and one displaying no usable `From` mailbox names no displayed one. [Sender authentication](sender-authentication.md#what-the-read-tools-publish) holds what
 each value means and what it deliberately does not claim.
 
+The machine-authorship reading is published on the same terms and split the same way: the band and the number reach
+every read tool, and only this one adds the signals the text carried and the weighting they were judged under. It is a
+second, independent answer rather than a refinement of the verdict above — that one is about who sent the message and
+this one is about how its text was written — and it is informational rather than a warning about either. It too is read
+from the row: a content read weighs no text and re-reads no body to produce it. [Machine
+authorship](machine-authorship.md#what-the-read-tools-publish) holds what each signal is and what the reading
+deliberately does not claim.
+
 ### Headers come from the message, not from the row
 
 The headers are read during the same parse that produces the body rather than from the columns a listing is served out

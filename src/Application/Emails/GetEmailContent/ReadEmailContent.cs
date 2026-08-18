@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Emails.Threads;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.Emails.GetEmailContent;
@@ -100,6 +101,14 @@ public sealed record ReadEmailContent
     /// act on, and it is read from the stored columns rather than by re-reading the message's headers.
     /// </remarks>
     public required SenderAuthenticationEvidence SenderAuthenticationEvidence { get; init; }
+
+    /// <summary>Gets how much the email's own text read as machine written, as extraction assessed it.</summary>
+    /// <remarks>
+    /// The same reading a listing carries, taken from the same summary, and it is the read of one message that carries
+    /// the signals behind it as well — for the reason the sender evidence sits here: what the text carried is how a
+    /// reader judges the number rather than what they act on.
+    /// </remarks>
+    public required MachineAuthorshipAssessment MachineAuthorship { get; init; }
 
     /// <summary>
     /// Gets the conversation this email belongs to and the other messages in it, or <see langword="null" /> when nothing

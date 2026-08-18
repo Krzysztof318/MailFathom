@@ -202,8 +202,8 @@ values, beside the total attachment size and the encrypted, unverified-signature
 `EmailSummary` is the bounded projection a listing returns: the stable local identifier every later request names the
 email by, its account and folder alias, the message identifier, the identifier of the
 [conversation](../architecture/stored-email-schema.md#the-conversation-a-message-belongs-to) it belongs to, subject,
-sent and received timestamps, size, the sender's display name and address, the sender verdict, the `To` addresses, the
-attachment summary, whether raw MIME is stored locally, and the remote flag snapshot.
+sent and received timestamps, size, the sender's display name and address, the sender verdict, the machine-authorship
+reading, the `To` addresses, the attachment summary, whether raw MIME is stored locally, and the remote flag snapshot.
 
 The conversation identifier is absent for a message nothing has assembled one for, which is what a mailbox stored before
 threading existed holds until `mfctl mailbox rederive` reaches it. It is MailFathom's own identifier and carries nothing
@@ -243,6 +243,17 @@ authentication](sender-authentication.md#what-the-read-tools-publish) holds what
 
 Every domain either value names is personal data on the same footing as an address, and neither reaches a log line, a
 metric label, or an exception message.
+
+### The machine-authorship reading a summary carries
+
+`MachineAuthorshipAssessment` sits beside the sender verdict and answers a different question: not who sent the message
+but how its text was *written*. It carries a band and a likelihood, and — for the single-email read, exactly as the
+sender evidence is — the signals the text carried and the weighting they were judged under. Every part of it is read
+from the columns extraction wrote, so a listing reads no body, weighs nothing, and re-derives nothing.
+
+It is **informational and never a finding against the message**. Nothing in the query path filters, sorts, ranks, or
+refuses on it, and it takes no part in the freshness reporting or the bounds around a page. [Machine
+authorship](machine-authorship.md) holds what the reading is made of and what it deliberately does not claim.
 
 ### The remote flag snapshot
 

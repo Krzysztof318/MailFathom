@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Retrieval;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using Xunit;
 
@@ -56,6 +57,7 @@ public sealed class EmailKnowledgeLookupTests
         AccountId = MailAccountId.Create("work"),
         FolderAlias = MailFolderAlias.Create("inbox"),
         SenderVerification = SenderVerification.NotEstablished,
+        MachineAuthorship = MachineAuthorshipAssessment.NotAssessed,
         Text = "the invoice is attached",
     };
 }

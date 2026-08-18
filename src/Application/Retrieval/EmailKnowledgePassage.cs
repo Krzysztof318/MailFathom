@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.Retrieval;
@@ -50,6 +51,14 @@ public sealed record EmailKnowledgePassage
     /// this reaches the caller instead, as part of saying where a claim came from.
     /// </remarks>
     public required SenderVerification SenderVerification { get; init; }
+
+    /// <summary>Gets how much the message's own text read as machine written.</summary>
+    /// <remarks>
+    /// It travels with the passage for the reason the sender verdict does, and is put to the same use: a citation states
+    /// it without a second read of the message, and nothing in the retrieval path acts on it or puts it in front of a
+    /// model.
+    /// </remarks>
+    public required MachineAuthorshipAssessment MachineAuthorship { get; init; }
 
     /// <summary>Gets the extract itself, already cut to the size one passage may carry.</summary>
     public required string Text { get; init; }

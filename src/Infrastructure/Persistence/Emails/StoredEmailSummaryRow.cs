@@ -8,6 +8,7 @@ using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Entities;
 
@@ -66,7 +67,11 @@ internal sealed record StoredEmailSummaryRow(
     string? AuthenticatedSenderDomain,
     string? DisplayedAuthorDomain,
     SenderAuthenticationMethod SenderAuthenticationMethod,
-    DmarcOutcome DmarcOutcome)
+    DmarcOutcome DmarcOutcome,
+    MachineAuthorshipBand MachineAuthorshipBand,
+    double MachineAuthorshipLikelihood,
+    MachineAuthorshipSignals MachineAuthorshipSignals,
+    string? MachineAuthorshipProfileRevision)
 {
     /// <summary>Gets the projection every summary query selects, which is what keeps the two readers publishing one shape.</summary>
     public static Expression<Func<StoredEmailEntity, StoredEmailSummaryRow>> Projection { get; } = email =>
@@ -102,7 +107,11 @@ internal sealed record StoredEmailSummaryRow(
             email.AuthenticatedSenderDomain,
             email.DisplayedAuthorDomain,
             email.SenderAuthenticationMethod,
-            email.DmarcOutcome);
+            email.DmarcOutcome,
+            email.MachineAuthorshipBand,
+            email.MachineAuthorshipLikelihood,
+            email.MachineAuthorshipSignals,
+            email.MachineAuthorshipProfileRevision);
 
     /// <summary>Turns the returned columns into the application read model.</summary>
     /// <returns>The summary, with every domain value object built by its own factory.</returns>
@@ -151,7 +160,38 @@ internal sealed record StoredEmailSummaryRow(
             AuthenticatedBy = this.SenderAuthenticationMethod,
             Dmarc = this.DmarcOutcome,
         },
+        MachineAuthorship = this.StoredAuthorship(),
     };
+
+    /// <summary>Reads the authorship columns back into the assessment they were written from.</summary>
+    /// <remarks>
+    /// The band is what says whether a reading happened, so it decides which of the two shapes the row holds rather
+    /// than the revision or the likelihood: a row nothing assessed carries the not-assessed state whole, and a row a
+    /// profile read carries what that profile found. A likelihood the column somehow holds outside the scale is read
+    /// as zero rather than raised over, for the reason an unusable domain column is read as absent — the alternative is
+    /// a stored email that can never be listed again, and nothing writes one, because the column is written from the
+    /// same record this rebuilds.
+    /// </remarks>
+    private MachineAuthorshipAssessment StoredAuthorship() =>
+        this.MachineAuthorshipBand == MachineAuthorshipBand.NotAssessed
+            ? MachineAuthorshipAssessment.NotAssessed
+            : MachineAuthorshipAssessment.Assessed(
+                this.MachineAuthorshipBand,
+                StoredLikelihood(this.MachineAuthorshipLikelihood),
+                this.MachineAuthorshipSignals,
+                // Qualified because the column and the value object it is read into carry the same name, which is what
+                // keeps the row's four authorship parameters reading as one group; the property would otherwise shadow
+                // the type at this one call site.
+                MailFathom.Domain.Emails.Authorship.MachineAuthorshipProfileRevision.FromStoredValue(
+                    this.MachineAuthorshipProfileRevision));
+
+    /// <summary>Reads a stored likelihood, or reports that the column holds no usable one.</summary>
+    /// <remarks>
+    /// Outside the scale is read as zero rather than clamped to the nearest end, because clamping upwards would turn a
+    /// column nobody can account for into the strongest reading this feature publishes.
+    /// </remarks>
+    private static double StoredLikelihood(double likelihood) =>
+        double.IsFinite(likelihood) && likelihood is >= 0 and <= 1 ? likelihood : 0;
 
     /// <summary>Reads one stored domain column back into its value object, or reports that the column holds none.</summary>
     /// <remarks>

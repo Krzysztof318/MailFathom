@@ -8,6 +8,7 @@ using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -371,6 +372,57 @@ public sealed class StoredEmailMetadataMappingTests
         Assert.Null(entity.AuthenticatedAuthorDomain);
     }
 
+    /// <summary>
+    /// The authorship reading reaches its own four columns, each carrying its own part of it. A later read rebuilds the
+    /// assessment from exactly these values, so a band recorded without the number it was reached from, or a number
+    /// recorded without the weighting that produced it, is a row nothing can interpret.
+    /// </summary>
+    [Fact]
+    public void ApplyExtractedMetadata_AnAssessedMessage_RecordsTheWholeReading()
+    {
+        // Arrange
+        var entity = CreateEntity();
+        var revision = MachineAuthorshipProfile.Standard.Revision;
+
+        // Act
+        StoredEmailMetadataMapping.ApplyExtractedMetadata(
+            entity,
+            CreateExtractedMetadata(
+                machineAuthorship: MachineAuthorshipAssessment.Assessed(
+                    MachineAuthorshipBand.Possible,
+                    likelihood: 0.42,
+                    MachineAuthorshipSignals.HiddenCharacters | MachineAuthorshipSignals.UnspacedEmDashes,
+                    revision)));
+
+        // Assert
+        Assert.Equal(MachineAuthorshipBand.Possible, entity.MachineAuthorshipBand);
+        Assert.Equal(0.42, entity.MachineAuthorshipLikelihood);
+        Assert.Equal(
+            MachineAuthorshipSignals.HiddenCharacters | MachineAuthorshipSignals.UnspacedEmDashes,
+            entity.MachineAuthorshipSignals);
+        Assert.Equal(revision.Value, entity.MachineAuthorshipProfileRevision);
+    }
+
+    /// <summary>
+    /// A message nothing read stores the state of a message nothing read, and names no profile: a revision on such a
+    /// row would say a weighting reached the lowest number rather than that nothing was weighed.
+    /// </summary>
+    [Fact]
+    public void ApplyExtractedMetadata_AMessageNothingAssessed_RecordsNoReadingAndNoProfile()
+    {
+        // Arrange
+        var entity = CreateEntity();
+
+        // Act
+        StoredEmailMetadataMapping.ApplyExtractedMetadata(entity, CreateExtractedMetadata());
+
+        // Assert
+        Assert.Equal(MachineAuthorshipBand.NotAssessed, entity.MachineAuthorshipBand);
+        Assert.Equal(0, entity.MachineAuthorshipLikelihood);
+        Assert.Equal(MachineAuthorshipSignals.None, entity.MachineAuthorshipSignals);
+        Assert.Null(entity.MachineAuthorshipProfileRevision);
+    }
+
     /// <summary>The displayed author's domain is recorded whether or not anything established it.</summary>
     /// <remarks>
     /// It is the half of the comparison a reader needs most where the author was not established, which is exactly
@@ -559,7 +611,8 @@ public sealed class StoredEmailMetadataMappingTests
         EmailAttachmentSummary? attachments = null,
         ExtractedEmailText? text = null,
         SenderAuthentication? senderAuthentication = null,
-        SenderTrust? senderTrust = null) =>
+        SenderTrust? senderTrust = null,
+        MachineAuthorshipAssessment? machineAuthorship = null) =>
         new(
             OccurrenceId,
             "Quarterly report",
@@ -572,6 +625,7 @@ public sealed class StoredEmailMetadataMappingTests
             senderAuthentication ?? SenderAuthentication.NotEstablished())
         {
             SenderTrust = senderTrust ?? SenderTrust.NotEvaluated,
+            MachineAuthorship = machineAuthorship ?? MachineAuthorshipAssessment.NotAssessed,
         };
 
     private static RemoteEmailMetadata CreateRemoteMetadata(string internetMessageId) =>

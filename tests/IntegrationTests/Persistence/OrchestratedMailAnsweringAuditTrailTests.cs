@@ -12,6 +12,7 @@ using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Answering.Audit;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.IntegrationTests.Orchestration;
@@ -163,6 +164,7 @@ public sealed class OrchestratedMailAnsweringAuditTrailTests(MailFathomOrchestra
         Subject = "Quarterly invoice",
         ReceivedAt = Clock.GetUtcNow(),
         SenderVerification = SenderVerification.NotEstablished,
+        MachineAuthorship = MachineAuthorshipAssessment.NotAssessed,
         Text = "the invoice is attached",
     };
 

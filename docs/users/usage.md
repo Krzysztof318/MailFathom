@@ -56,7 +56,7 @@ are, and a folder it does not name is one this deployment does not have.
 
 A summary is enough to recognize a message — subject, sender, recipients, timestamps, size, attachment counts, remote
 flags — and carries `storedEmailId`, the identifier a content read uses. It names its account both ways, as `accountId`
-and `accountDisplayName`, so telling a person which mailbox a message came from needs no second call. Four fields prevent
+and `accountDisplayName`, so telling a person which mailbox a message came from needs no second call. Five fields prevent
 common misreadings:
 
 - `senderVerification` is what somebody else established, next to the `senderAddress` the message wrote about itself.
@@ -65,6 +65,13 @@ common misreadings:
   sender — `trusted` or `unknown`. **Read the two together.** `authenticated` beside `unknown` is ordinary mail from
   somebody you have never listed and says nothing against it; `unknown` on its own says only that this deployment does
   not recognize the sender, and it is what an email whose sender failed authentication carries too.
+- `machineAuthorship` is about the text rather than the sender: `state` says how much the message's own wording reads as
+  machine written — `likely`, `possible`, `unlikely`, or `notAssessed` — and `likelihood` is the number behind it.
+  **It is a hint, not a verdict.** It is a heuristic estimate rather than a measured probability, and `likely` is not a
+  finding against the message or the person who sent it — plenty of honest mail is drafted with an AI these days.
+  MailFathom never acts on it. What makes it worth having is the strongest thing it notices: a message carrying
+  characters no mail client displays, which is how instructions aimed at *your* agent get hidden from you.
+  `notAssessed` means nothing read the text — an empty body, the reading turned off, or mail stored before this release.
 - `attachments` counts real attachments separately from inline images, so a message whose only payload is a logo in
   its signature does not read as one carrying a document.
 - `remoteFlags` reports what the mail server last said about the message, including `flagged` — the star a mail client
@@ -134,7 +141,7 @@ and leave `storedEmailIds` out entirely: the conversation's messages come back i
 `unreadThreadMessages` names the ones that did not fit so a second call asks for them directly. Give exactly one of the
 two; a call carrying both, or neither, is refused rather than guessed at.
 
-Nine parts of the result exist so that an agent does not misreport a message:
+Ten parts of the result exist so that an agent does not misreport a message:
 
 - **The sender verdict comes with the evidence behind it.** `senderVerification` is the same pair a listing carries, and
   `headers.senderAuthentication` adds what it was reached from: the domain that actually authenticated, the domain the
@@ -144,6 +151,13 @@ Nine parts of the result exist so that an agent does not misreport a message:
   authenticated exactly as it appears. `authorAuthentication` is the answer to whether the displayed author was
   established. Either domain can be `null`, which means nothing authenticated or the message wrote no usable `From` — an
   outcome rather than missing data.
+- **The authorship reading comes with what it was read from.** `machineAuthorship` is the same band and number a
+  listing carries, and `authorshipEvidence` adds `signals` — what the text actually carried — and `profileRevision`,
+  which says which weighting produced the number, so two messages are only comparable when it matches. The signals are
+  worth reading in two halves. `tagCharacters`, `variationSelectorRun`, `hiddenCharacters`, and `bidirectionalOverrides`
+  mean the message contains characters your mail client never shows you, which is worth a look on its own;
+  `formulaicFraming`, `unspacedEmDashes`, `listScaffolding`, and `uniformTypography` are style habits any careful writer
+  also has, and none of them means anything by itself. Both lists are empty on a message nothing assessed.
 - **Truncation is explicit, and says which limit cut.** Each body representation carries `truncatedBy` and the original
   character count, so a cut message is never summarized as a whole one. `bodyCharacterLimit` means the message is longer
   than any single call returns; `readCharacterBudget` means the messages named before it used up the call's shared

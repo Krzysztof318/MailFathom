@@ -16,6 +16,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Mcp.Tools;
@@ -377,6 +378,31 @@ public sealed class SearchEmailsToolTests
             published.Summary.SenderVerification);
     }
 
+    /// <summary>The authorship reading rides on that same summary, so a match carries it exactly as a listing does.</summary>
+    [Fact]
+    public async Task SearchEmailsAsync_AnAssessedMatch_RepublishesTheListingsAuthorshipReading()
+    {
+        // Arrange
+        var summary = SummaryOf(EmailIdentityAt(1), new DateTimeOffset(2026, 3, 1, 8, 0, 0, TimeSpan.Zero)) with
+        {
+            MachineAuthorship = MachineAuthorshipAssessment.Assessed(
+                MachineAuthorshipBand.Likely,
+                likelihood: 0.9,
+                MachineAuthorshipSignals.TagCharacters,
+                MachineAuthorshipProfile.Standard.Revision),
+        };
+        var tool = ToolOver(new StubEmailSearchIndexReader(
+            new EmailSearchMatch(summary, RelevanceRank: 0.5f, Snippets: [])));
+
+        // Act
+        var result = await tool.SearchEmailsAsync(Query, cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var published = Assert.Single(result.Matches);
+        Assert.Equal("Likely", published.Summary.MachineAuthorship.State.ToString());
+        Assert.Equal(0.9, published.Summary.MachineAuthorship.Likelihood);
+    }
+
     /// <summary>An email matched on its subject or a participant carries no extract, because the summary publishes both whole.</summary>
     [Fact]
     public async Task SearchEmailsAsync_MatchWithNoIndexedBodyText_PublishesNoSnippets()
@@ -592,6 +618,7 @@ public sealed class SearchEmailsToolTests
             DeploymentTrust = SenderTrustLevel.Unknown,
         },
         SenderAuthenticationEvidence = SenderAuthenticationEvidence.None,
+        MachineAuthorship = MachineAuthorshipAssessment.NotAssessed,
     };
 
     private static MailboxFolderFreshness FreshnessOf(string folderAlias, DateTimeOffset? synchronizedAt) => new(

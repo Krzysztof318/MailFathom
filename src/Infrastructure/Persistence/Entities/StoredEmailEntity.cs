@@ -5,6 +5,7 @@
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Emails.Authorship;
 
 namespace MailFathom.Infrastructure.Persistence.Entities;
 
@@ -157,6 +158,50 @@ internal sealed class StoredEmailEntity
     /// unknown.
     /// </remarks>
     public string? SenderTrustPolicyRevision { get; set; }
+
+    /// <summary>Gets or sets how much this message's own text read as machine written.</summary>
+    /// <remarks>
+    /// <para>
+    /// Columns on the email rather than a table hanging off it, for the reason the sender-authentication group is: every
+    /// message whose MIME was read carries an answer, including the not-assessed one a deployment that turned the
+    /// assessment off records on all of its mail, so a join per row would buy a nullable association nothing is ever
+    /// without.
+    /// </para>
+    /// <para>
+    /// It is an informational reading of the text and never a finding against the message. Nothing files, flags, hides,
+    /// or refuses a message because of it, and no rule reads it.
+    /// </para>
+    /// <para>
+    /// The whole group is written by extraction from the stored raw MIME and is re-derivable from it, which is what a
+    /// re-derivation pass does after a release changed what the assessment reads or what it weighs.
+    /// </para>
+    /// </remarks>
+    public MachineAuthorshipBand MachineAuthorshipBand { get; set; }
+
+    /// <summary>Gets or sets the likelihood the band above is the reading of, from zero to one inclusive.</summary>
+    /// <remarks>
+    /// Zero where nothing read the text, which is indistinguishable from a text that was read and carried no signal —
+    /// deliberately, because <see cref="MachineAuthorshipBand" /> is what separates the two and a second column saying
+    /// the same thing would be a second place to keep right.
+    /// </remarks>
+    public double MachineAuthorshipLikelihood { get; set; }
+
+    /// <summary>Gets or sets the set of signals the text carried, which is what the likelihood was computed from.</summary>
+    /// <remarks>
+    /// Stored as the integer the flag set is rather than as the text every other enum here is stored as. A set written
+    /// as text is a formatted list rather than a value: no query can ask which rows carry one member of it, and reading
+    /// one back depends on the separator that wrote it. The members are explicit powers of two that are never reordered
+    /// or reused, which is what makes the numeric form safe.
+    /// </remarks>
+    public MachineAuthorshipSignals MachineAuthorshipSignals { get; set; }
+
+    /// <summary>Gets or sets the weighting the likelihood was reached under, absent where nothing assessed the message.</summary>
+    /// <remarks>
+    /// Nullable because its absence is a statement: a row written before this deployment assessed authorship, one whose
+    /// body yielded no words, and one recorded while the assessment was turned off were all judged by nothing rather
+    /// than judged and found ordinary.
+    /// </remarks>
+    public string? MachineAuthorshipProfileRevision { get; set; }
 
     /// <summary>Gets or sets the normalized <c>To</c> addresses, which recipient filters test for containment.</summary>
     /// <remarks>

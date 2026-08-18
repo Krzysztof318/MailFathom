@@ -20,6 +20,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Mcp.Tools;
@@ -166,6 +167,40 @@ public sealed class GetEmailContentToolTests
         Assert.Equal(SenderAuthenticationCheck.Dkim, content.Headers.SenderAuthentication.AuthenticatedBy);
         Assert.Equal(DmarcResult.Fail, content.Headers.SenderAuthentication.Dmarc);
         Assert.Equal(ListedVerdictOf(summary), content.SenderVerification);
+    }
+
+    /// <summary>
+    /// The single-email read publishes the authorship reading beside the verdict and, unlike a listing, the signals
+    /// behind it — the same split the sender evidence takes, and for the same reason: what the text carried is how a
+    /// reader judges the number.
+    /// </summary>
+    [Fact]
+    public async Task GetEmailContentAsync_AnAssessedEmail_PublishesTheReadingAndTheSignalsBehindIt()
+    {
+        // Arrange
+        var summary = SummaryOf(
+            machineAuthorship: MachineAuthorshipAssessment.Assessed(
+                MachineAuthorshipBand.Possible,
+                likelihood: 0.42,
+                MachineAuthorshipSignals.HiddenCharacters | MachineAuthorshipSignals.UnspacedEmDashes,
+                MachineAuthorshipProfile.Standard.Revision));
+        var tool = ToolOver(new StubStoredEmailSummaryReader(summary));
+
+        // Act
+        var result = await tool.GetEmailContentAsync(
+            [summary.StoredEmailId.ToString()],
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var content = ContentOf(Assert.Single(result.Emails));
+        Assert.Equal("Possible", content.MachineAuthorship.State.ToString());
+        Assert.Equal(0.42, content.MachineAuthorship.Likelihood);
+        Assert.Equal(
+            ["HiddenCharacters", "UnspacedEmDashes"],
+            content.AuthorshipEvidence.Signals.Select(signal => signal.ToString()));
+        Assert.Equal(
+            MachineAuthorshipProfile.Standard.Revision.Value,
+            content.AuthorshipEvidence.ProfileRevision);
     }
 
     /// <summary>Two different domains on an authenticated email are published as they are, with the verdict unchanged.</summary>
@@ -1364,7 +1399,8 @@ public sealed class GetEmailContentToolTests
         string accountId = ServedAccountId,
         StoredEmailContentAvailability contentAvailability = StoredEmailContentAvailability.Available,
         SenderVerification? senderVerification = null,
-        SenderAuthenticationEvidence? senderAuthenticationEvidence = null) => new()
+        SenderAuthenticationEvidence? senderAuthenticationEvidence = null,
+        MachineAuthorshipAssessment? machineAuthorship = null) => new()
         {
             StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
             AccountId = MailAccountId.Create(accountId),
@@ -1390,6 +1426,7 @@ public sealed class GetEmailContentToolTests
                     Keywords: RemoteEmailKeywords.None)
                 : RemoteEmailFlagSnapshot.NeverObserved,
             SenderVerification = senderVerification ?? SenderVerification.NotEstablished,
+            MachineAuthorship = machineAuthorship ?? MachineAuthorshipAssessment.NotAssessed,
             SenderAuthenticationEvidence = senderAuthenticationEvidence ?? SenderAuthenticationEvidence.None,
         };
 

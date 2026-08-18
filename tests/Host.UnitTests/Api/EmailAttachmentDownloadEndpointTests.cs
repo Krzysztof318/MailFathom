@@ -15,6 +15,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
@@ -371,6 +372,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
         SizeOctets = 1024,
         RemoteFlags = RemoteEmailFlagSnapshot.NeverObserved,
         SenderVerification = SenderVerification.NotEstablished,
+        MachineAuthorship = MachineAuthorshipAssessment.NotAssessed,
         SenderAuthenticationEvidence = SenderAuthenticationEvidence.None,
         ContentAvailability = StoredEmailContentAvailability.Available,
         Attachments = new StoredEmailAttachmentSummary(

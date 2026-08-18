@@ -6,6 +6,7 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Retrieval;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 
 namespace MailFathom.AI.UnitTests.TestDoubles;
@@ -24,6 +25,11 @@ internal static class KnowledgePassages
     /// what reaches a model states it, because the guarantee there is that the verdict reaches no provider — which a
     /// passage carrying the default could not tell apart from one whose verdict was dropped.
     /// </param>
+    /// <param name="machineAuthorship">
+    /// How much the message's own text read as machine written, or <see langword="null" /> for the stored default. It is
+    /// stated for the reason the verdict above is: the reading reaches no provider either, and a passage carrying the
+    /// default could not tell that guarantee from a reading that was dropped.
+    /// </param>
     /// <returns>The passage.</returns>
     public static EmailKnowledgePassage Create(
         string text,
@@ -31,7 +37,8 @@ internal static class KnowledgePassages
         string accountId = "primary",
         string folderAlias = "INBOX",
         string? subject = null,
-        SenderVerification? senderVerification = null) => new()
+        SenderVerification? senderVerification = null,
+        MachineAuthorshipAssessment? machineAuthorship = null) => new()
         {
             StoredEmailId = StoredEmailId.Create(storedEmailId ?? Guid.CreateVersion7()),
             AccountId = MailAccountId.Create(accountId),
@@ -39,6 +46,7 @@ internal static class KnowledgePassages
             Subject = subject,
             ReceivedAt = null,
             SenderVerification = senderVerification ?? SenderVerification.NotEstablished,
+            MachineAuthorship = machineAuthorship ?? MachineAuthorshipAssessment.NotAssessed,
             Text = text,
         };
 }

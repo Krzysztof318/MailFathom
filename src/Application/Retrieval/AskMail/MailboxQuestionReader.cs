@@ -326,7 +326,8 @@ public sealed class MailboxQuestionReader
                     passage.Subject,
                     cancellationToken),
                 passage.ReceivedAt,
-                passage.SenderVerification));
+                passage.SenderVerification,
+                passage.MachineAuthorship));
         }
 
         return cited;

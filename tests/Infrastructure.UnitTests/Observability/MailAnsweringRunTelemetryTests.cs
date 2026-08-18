@@ -12,6 +12,7 @@ using MailFathom.Common.Observability;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Observability;
 using Xunit;
@@ -167,6 +168,7 @@ public sealed class MailAnsweringRunTelemetryTests : IDisposable
         Subject = "Quarterly invoice",
         ReceivedAt = StartedAt,
         SenderVerification = SenderVerification.NotEstablished,
+        MachineAuthorship = MachineAuthorshipAssessment.NotAssessed,
         Text = "the invoice is attached",
     };
 

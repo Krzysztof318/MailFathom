@@ -1448,6 +1448,27 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsRetainedAfterAuthoredDelete")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("MachineAuthorshipBand")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("NotAssessed");
+
+                    b.Property<double>("MachineAuthorshipLikelihood")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("double precision")
+                        .HasDefaultValue(0.0);
+
+                    b.Property<string>("MachineAuthorshipProfileRevision")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("MachineAuthorshipSignals")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<long>("MailFolderId")
                         .HasColumnType("bigint");
 

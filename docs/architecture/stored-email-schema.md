@@ -99,6 +99,32 @@ which list gave it.
 [Sender authentication](../features/sender-authentication.md#whether-the-author-is-one-this-deployment-recognizes)
 states the rule the verdict follows.
 
+### The machine-authorship reading
+
+Four columns record how much the message's own text read as machine written: `MachineAuthorshipBand`,
+`MachineAuthorshipLikelihood`, `MachineAuthorshipSignals`, and `MachineAuthorshipProfileRevision`. They sit on the email
+rather than in a table of their own for the reason the group above does — every message extraction reached carries an
+answer, including the not-assessed one every message of a deployment that turned the reading off carries, so a join per
+row would buy a nullable association nothing is ever without.
+
+`MachineAuthorshipBand` is text like every other enum here and defaults to `NotAssessed`, so the migration that adds the
+columns fills every stored message in with what was true of it. `MachineAuthorshipLikelihood` is `double precision`
+defaulting to `0`, which is deliberately indistinguishable from a text that was read and carried nothing: the band is
+what separates the two, and a second column saying the same thing would be a second place to keep right.
+`MachineAuthorshipProfileRevision` is `character varying(32)` and **nullable on purpose**, for the reason the trust
+revision is — its absence is what says nothing assessed this row, whether because the reading was off, because the body
+yielded no words, or because the row predates the columns.
+
+`MachineAuthorshipSignals` is **the one enum here stored numerically** rather than as text, because it is a flag set
+rather than a single value. A set written as text is a formatted list: no query can ask which rows carry one member of
+it, and reading one back depends on the separator that wrote it. Its members are explicit powers of two that are never
+reordered or reused, which is what makes the numeric form safe.
+
+The whole group is written by extraction from the stored raw MIME and is re-derivable from it, and it is written whole on
+every extraction so a re-derivation never leaves a likelihood beside signals a different profile found.
+[Machine authorship](../features/machine-authorship.md#what-is-recorded) states what each value means and what the
+reading deliberately does not claim.
+
 ### Bounds on what a header may contribute
 
 Nothing between the mail server and a row bounds a header's length or how many addresses it names. The MIME reader bounds a message's *structure* — part count and nesting depth — but not the width of a single header, so the persistence mapping applies its own ceilings: 320 octets per address, 998 per message identifier, 256 addresses per recipient array, and 64 thread ancestors.

@@ -341,13 +341,13 @@ states whether the account's junk folder took part, and `folderFreshness` states
 covered folder is.
 
 Each summary carries the stable local identifier a content read is performed by, the account identifier and the display
-name it is published under, the folder alias, the message identifier, the conversation identifier, the subject, the sender address and display name, the sender verdict, the `To` addresses, the sent and received timestamps, the
+name it is published under, the folder alias, the message identifier, the conversation identifier, the subject, the sender address and display name, the sender verdict, the machine-authorship reading, the `To` addresses, the sent and received timestamps, the
 size in bytes, the attachment summary, the remote flags with the time they were observed, and whether raw content is
 available locally. It is the use case's projection published as it stands, not narrowed a second time here — a boundary
 that re-decided what a listing may carry would put the privacy rule in two places and leave the one a client reads
 untested. [Mailbox queries](mailbox-queries.md#what-a-summary-carries) records what it carries and why.
 
-Five parts of it are worth reading before a caller writes against them:
+Six parts of it are worth reading before a caller writes against them:
 
 - **`senderVerification` is two answers, never one.** `senderAddress` beside it is a claim the email wrote about itself,
   and nothing on the way to a listing verified it. `authorAuthentication` is what the receiving mail server established
@@ -359,6 +359,17 @@ Five parts of it are worth reading before a caller writes against them:
   what synchronization stored; a listing evaluates nothing and contacts no mail server. [Sender
   authentication](sender-authentication.md#what-the-read-tools-publish) records what each value means and what it
   deliberately does not claim.
+- **`machineAuthorship` is about the text, not about the sender.** `state` is how much the email's own text reads as
+  machine written — `likely`, `possible`, `unlikely`, or `notAssessed` — and `likelihood` is the number that reading
+  came from. It is **a heuristic estimate rather than a measured probability, and it is informational rather than a
+  safety signal**: `likely` is not a finding against the email or its sender, warrants no action on its own, and says
+  nothing about whether the email is wanted, honest, or safe — a great deal of ordinary correspondence is drafted with
+  a text generator by people who mean every word of it. It is independent of `senderVerification` and neither is derived
+  from the other: that one is about who sent the email and this one is about how its text was written. `notAssessed` is
+  what an email with no readable body carries, what a deployment that turned the reading off records, and what mail
+  stored before this deployment assessed anything carries; `likelihood` is `0` there and means nothing, so read `state`
+  first. [Machine authorship](machine-authorship.md#what-the-read-tools-publish) records what each signal behind it is
+  and what the value deliberately does not claim.
 - **`toAddresses` and nothing beyond it.** `Cc` and `Reply-To` are searchable but not listed, and recipient display names
   are not returned at all. A listing exists to let a reader recognize a message; the full participant set belongs to
   reading one.
@@ -483,6 +494,8 @@ in it.
 | `accountId`, `folderAlias` | Where the email is, in MailFathom's own names |
 | `sizeBytes` | The size of the whole email as the mail server reported it |
 | `senderVerification` | The same verdict pair a listing publishes: what was established about the displayed author, and what this deployment made of them |
+| `machineAuthorship` | The same reading a listing publishes: how much the email's own text reads as machine written, as a band and a number |
+| `authorshipEvidence` | What that reading was computed from — the signals the text carried, strongest first, and the weighting they were judged under |
 | `headers` | Subject, sent and received timestamps, every participant with its header role, the three threading identifiers, and `senderAuthentication` — the evidence the verdict was reached from |
 | `body` | The representations, or the reason there are none |
 | `attachments` | One entry per attachment, always: normalized file name, media type, and decoded size, plus a short-lived address to fetch it from when the call asked for one |
@@ -490,7 +503,7 @@ in it.
 | `remoteFlags` | The flags a server last showed, and when they were read |
 | `thread` | The conversation this email belongs to, or `null` when nothing has assembled one for it |
 
-Eight parts of it are worth reading before a caller writes against them:
+Nine parts of it are worth reading before a caller writes against them:
 
 - **The verdict is beside the headers and its evidence is inside them.** `senderVerification` is the pair a listing, a
   search match, and a citation all publish, in one shape, so a client reads one thing everywhere. What only this read
@@ -505,6 +518,17 @@ Eight parts of it are worth reading before a caller writes against them:
   authenticated rather than against the one published here. A `null` domain is an ordinary
   outcome rather than missing data: nothing authenticated, or the email wrote no usable `From` mailbox. Nothing here is
   evaluated on the read path, and an email whose raw MIME was never stored carries the same stored verdict as any other.
+- **The authorship reading is beside its evidence, and only this read carries the evidence.** `machineAuthorship` is the
+  band and the number a listing, a search match, and a citation all publish. What only this read adds is
+  `authorshipEvidence`: `signals`, naming what the text carried, strongest first; and `profileRevision`, an opaque
+  identifier for the weighting the number was computed under — two likelihoods carrying the same value are directly
+  comparable, and two carrying different values are not, so it is read before the numbers are. **The signals divide into
+  two kinds worth very different things.** `tagCharacters`, `variationSelectorRun`, `hiddenCharacters`, and
+  `bidirectionalOverrides` are facts about the email's characters — it carries text no mail client renders — and are
+  close to unambiguous; `formulaicFraming`, `unspacedEmDashes`, `listScaffolding`, and `uniformTypography` are
+  observations about style that a careful writer also produces and that mean nothing individually. The list names which
+  signals fired and nothing else: no position, no count, and no matched text, so no part of the message reaches a caller
+  through it. `signals` is empty and `profileRevision` is `null` on an email nothing assessed.
 - **Truncation travels inside each representation, and names the bound.** `plainText` and `sanitizedHtml` each carry
   `text`, `originalCharacterCount`, and `truncatedBy`, because a body and the fact that it is incomplete are never useful
   apart: a model handed only the text would summarize a cut message as a whole one. `truncatedBy` is `none`,
@@ -664,8 +688,9 @@ because an argument added later would be the one thing that quietly changes what
 | `folderFreshness` | How current the local copy of each covered folder is, exactly as a listing reports it |
 
 Each match carries `summary`, which is the same shape `list_emails` publishes and is documented above, together with
-`relevanceRank` and `snippets`. `senderVerification` therefore arrives with the summary rather than as a shape of its
-own, so a client written against a listing reads a match's sender verdict with nothing new.
+`relevanceRank` and `snippets`. `senderVerification` and `machineAuthorship` therefore arrive with the summary rather
+than as shapes of their own, so a client written against a listing reads a match's sender verdict and its authorship
+reading with nothing new.
 
 - **`relevanceRank` is comparable within one response and nowhere else.** It is computed for the query that produced it,
   so storing it or comparing it with a rank from another call compares two different scales — and the scale itself
@@ -804,7 +829,7 @@ same refusals; the section above records that rule once.
 | `retrievalTruncated` | Whether the run hit this deployment's ceiling on how much mail one question may read |
 
 Each citation carries the `storedEmailId` a content read is performed by, the account identifier and the display name it
-is published under, the folder alias, the subject, the received time, and `senderVerification`. It deliberately carries
+is published under, the folder alias, the subject, the received time, `senderVerification`, and `machineAuthorship`. It deliberately carries
 no extract: the passage the run retrieved has already reached a model, and returning it here would put mail content into
 a response whose purpose is an answer. The subject and the received time
 are what let a reader recognize a message before fetching it.
@@ -814,6 +839,11 @@ what was established about the author of each message it was drawn from. It is w
 answer is worth what the mail behind it is worth, and a claim traced to a message whose displayed author failed
 authentication is worth reading differently from one traced to a correspondent this deployment recognizes. The evidence
 behind the verdict stays with the single-email read the citation points at.
+
+`machineAuthorship` travels beside it on the same terms and answers a different question: how the text of the cited
+message reads rather than who sent it. It is informational and is not a reason to discount a citation — mail drafted
+with a text generator is as citable as any other, and what it is good for here is the same thing it is good for on a
+listing, which is knowing what kind of text a claim came out of. The signals behind it stay with the single-email read.
 
 **The citations are what the run retrieved, not what the model demonstrably used.** Nothing outside the model knows which
 of them it drew on, so publishing the narrower set would state something this system cannot observe. What they are good

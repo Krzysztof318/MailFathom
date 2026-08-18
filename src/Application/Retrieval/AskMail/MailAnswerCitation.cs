@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.Retrieval.AskMail;
@@ -16,6 +17,7 @@ namespace MailFathom.Application.Retrieval.AskMail;
 /// <param name="Subject">The subject it carried, or <see langword="null" /> when it carried none.</param>
 /// <param name="ReceivedAt">When the last receiving hop recorded it, or <see langword="null" /> when no header carried a usable date.</param>
 /// <param name="SenderVerification">What was established about the author it displays, and what this deployment made of them.</param>
+/// <param name="MachineAuthorship">How much the email's own text read as machine written.</param>
 /// <remarks>
 /// <para>
 /// A citation is what turns an answer into a starting point rather than something to be believed: the identifier
@@ -33,7 +35,8 @@ namespace MailFathom.Application.Retrieval.AskMail;
 /// <para>
 /// It carries the sender verdict for the reason it carries the subject: an answer drawn from mail is worth exactly what
 /// the mail behind it is worth, and a reader deciding whether to act on a claim needs to know whether the message it
-/// came from had an author anybody established. The evidence behind that verdict stays with the single-email read.
+/// came from had an author anybody established. The evidence behind that verdict stays with the single-email read, and
+/// the authorship reading beside it travels on the same terms and for the same reason.
 /// </para>
 /// </remarks>
 public sealed record MailAnswerCitation(
@@ -42,4 +45,5 @@ public sealed record MailAnswerCitation(
     MailFolderAlias FolderAlias,
     string? Subject,
     DateTimeOffset? ReceivedAt,
-    SenderVerification SenderVerification);
+    SenderVerification SenderVerification,
+    MachineAuthorshipAssessment MachineAuthorship);

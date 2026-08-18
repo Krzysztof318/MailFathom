@@ -4,6 +4,7 @@
 
 using System.ComponentModel;
 using MailFathom.Application.Emails.GetEmailContent;
+using MailFathom.Mcp.Tools.Authorship;
 using MailFathom.Mcp.Tools.Senders;
 using MailFathom.Mcp.Tools.Summaries;
 
@@ -48,6 +49,17 @@ internal sealed record RetrievedEmailContent
     /// </remarks>
     public required ReportedSenderVerification SenderVerification { get; init; }
 
+    /// <summary>Gets how much the email's own text read as machine written.</summary>
+    /// <remarks>The same reading a listing and a citation publish, taken from the same summary.</remarks>
+    public required ReportedMachineAuthorship MachineAuthorship { get; init; }
+
+    /// <summary>Gets what the email's text carried, which is what the reading above was computed from.</summary>
+    /// <remarks>
+    /// Published by this read alone, for the reason the sender evidence is: it is how a reader judges the reading rather
+    /// than what they act on. It sits beside the reading rather than inside it so that one shape reaches all four tools.
+    /// </remarks>
+    public required ReportedAuthorshipEvidence AuthorshipEvidence { get; init; }
+
     /// <summary>Gets the normalized headers the email displays.</summary>
     public required NormalizedEmailHeaders Headers { get; init; }
 
@@ -83,6 +95,8 @@ internal sealed record RetrievedEmailContent
             FolderAlias = content.FolderAlias.Value,
             SizeBytes = content.SizeOctets,
             SenderVerification = ReportedSenderVerification.From(content.SenderVerification),
+            MachineAuthorship = ReportedMachineAuthorship.From(content.MachineAuthorship),
+            AuthorshipEvidence = ReportedAuthorshipEvidence.From(content.MachineAuthorship),
             Headers = NormalizedEmailHeaders.From(content.Headers, content.SenderAuthenticationEvidence),
             Body = EmailBodyContent.From(content.Body),
             Attachments = [.. content.Attachments.Select(RetrievedEmailAttachment.From)],

@@ -10,6 +10,7 @@ using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Retrieval;
 using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Emails.Authorship;
 using Xunit;
 
 namespace MailFathom.AI.UnitTests.Retrieval;
@@ -72,6 +73,40 @@ public sealed class RetrievedMailContextFormatterTests
         Assert.DoesNotContain("Authenticated", envelope, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Trusted", envelope, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("verification", envelope, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("the invoice is attached", envelope, StringComparison.Ordinal);
+    }
+
+    /// <summary>The authorship reading travels the same way, so the envelope must not carry it either.</summary>
+    /// <remarks>
+    /// The same direction and the same reason as the verdict above, with one of its own: a number describing how a
+    /// message was written is exactly the sort of thing an injected extract would argue about if a model could see it,
+    /// and this deployment publishes it to a caller rather than reasoning from it.
+    /// </remarks>
+    [Fact]
+    public void Format_APassageCarryingAnAuthorshipReading_LeavesItOutOfWhatTheModelIsHanded()
+    {
+        // Arrange
+        var passage = KnowledgePassages.Create(
+            "the invoice is attached",
+            subject: "Invoice 41",
+            machineAuthorship: MachineAuthorshipAssessment.Assessed(
+                MachineAuthorshipBand.Likely,
+                likelihood: 0.9,
+                MachineAuthorshipSignals.TagCharacters,
+                MachineAuthorshipProfile.Standard.Revision));
+
+        // Act
+        var envelope = RetrievedMailContextFormatter.Format([passage], EmailSearchRetrievalMode.Hybrid, retrievalLimitReached: false);
+
+        // Assert
+        Assert.DoesNotContain("Likely", envelope, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("authorship", envelope, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("TagCharacters", envelope, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("0.9", envelope, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            MachineAuthorshipProfile.Standard.Revision.Value,
+            envelope,
+            StringComparison.OrdinalIgnoreCase);
         Assert.Contains("the invoice is attached", envelope, StringComparison.Ordinal);
     }
 
