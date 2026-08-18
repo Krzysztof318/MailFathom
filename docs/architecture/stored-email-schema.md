@@ -42,17 +42,26 @@ Recipients are PostgreSQL `text[]` columns — `to_addresses`, `cc_addresses`, `
 
 ### The sender-authentication verdict
 
-Nine columns record what the receiving mail server established about who actually sent the message:
+Ten columns record what was established about who actually sent the message:
 `SenderAuthenticationOutcome`, `SenderAuthenticationMethod`, `AuthenticatedSenderDomain`, `DkimSignerDomain`,
-`SpfMailFromDomain`, `DmarcOutcome`, `AuthorAuthenticationOutcome`, `AuthenticatedAuthorDomain`, and
-`DisplayedAuthorDomain`. The four enums are
+`SpfMailFromDomain`, `DmarcOutcome`, `AuthorAuthenticationOutcome`, `AuthenticatedAuthorDomain`,
+`DisplayedAuthorDomain`, and `SenderAuthenticationSource`. The five enums are
 text for the reason `content_availability` is, and the five domains are `character varying(253)` — the length a
 resolver accepts, which the domain value already refuses to exceed, so no value ever reaches a column that would reject
 it.
 
-The last three are about the author the message displays, which is a different question from the six before them: those
-name the identity that handed the message over, and a relay, a mailing list, or a delivery provider authenticates as
-itself while carrying somebody else's `From`. `AuthenticatedAuthorDomain` is present exactly when the author
+`SenderAuthenticationSource` is what makes the rest of the group readable, and it is the one column that is not about
+the message: it names who reached the verdict. `ReceivingServer` says it was read back out of the header that server
+wrote, which is also what a row carrying nothing established holds; `LocalVerification` says MailFathom verified the
+message's own DKIM signatures, which it does only where no trusted header was found. The difference cannot be recovered
+from anything else on the row, and it cannot be inferred from the account's configuration either, because that may have
+changed since. On a `LocalVerification` row `SpfMailFromDomain` is empty and `DmarcOutcome` is `NotReported` by
+construction rather than by outcome: after delivery there is no envelope to authenticate and no published policy is
+resolved.
+
+Three of them — `AuthorAuthenticationOutcome`, `AuthenticatedAuthorDomain`, and `DisplayedAuthorDomain` — are about the
+author the message displays, which is a different question from the six naming the identity that handed the message
+over: a relay, a mailing list, or a delivery provider authenticates as itself while carrying somebody else's `From`. `AuthenticatedAuthorDomain` is present exactly when the author
 authenticated, and it is the domain a reader was shown rather than whichever identity established it.
 
 `DisplayedAuthorDomain` is the domain the `From` header wrote, recorded whether or not anything held it, so the two
@@ -71,9 +80,11 @@ read carries a verdict, including the not-established one that a deployment whos
 all of its mail. What reads the verdict is the arriving message's own presentation, one row at a time down a timeline,
 so a join per row would buy a nullable association nothing is ever without.
 
-Every enum column carries a database default naming the value that establishes nothing — `NotEstablished`, `None`,
-`NotReported`, and `NotEstablished` again for the author — so the migration that adds them fills every stored message
-in with what was true of it rather than with a value nothing wrote. A domain column takes no default and is simply
+Every enum column carries a database default naming what was true of a row written before it existed —
+`NotEstablished`, `None`, `NotReported`, `NotEstablished` again for the author, and `ReceivingServer` for the source,
+since every row written before this deployment verified anything itself came from the trusted-header reading whatever
+it found — so the migration that adds a column fills every stored message in rather than leaving a value nothing
+wrote. A domain column takes no default and is simply
 absent on a row written before it existed, which reads the same as a message that wrote no such domain at all: the two
 are indistinguishable from the row, and re-reading the message is what tells them apart. The whole group is written together on every extraction, so re-reading a
 message after its account gained a trusted identifier replaces the verdict rather than leaving one column of the

@@ -29,6 +29,7 @@ public sealed class ReportedSenderAuthenticationTests
             DisplayedAuthorDomain = DomainOf("bank.example.test"),
             AuthenticatedBy = SenderAuthenticationMethod.DomainKeysIdentifiedMail,
             Dmarc = DmarcOutcome.NotReported,
+            Source = SenderAuthenticationSource.ReceivingServer,
         };
 
         // Act
@@ -92,6 +93,33 @@ public sealed class ReportedSenderAuthenticationTests
 
         // Assert
         Assert.Equal(expected, published.Dmarc.ToString());
+    }
+
+    /// <summary>Who reached the verdict is published, because it is how a reader weighs everything beside it.</summary>
+    [Theory]
+    [InlineData(SenderAuthenticationSource.ReceivingServer, "ReceivingServer")]
+    [InlineData(SenderAuthenticationSource.LocalVerification, "LocalVerification")]
+    public void From_StoredVerdictSource_PublishesWhoReachedIt(SenderAuthenticationSource source, string expected)
+    {
+        // Arrange
+        var evidence = SenderAuthenticationEvidence.None with { Source = source };
+
+        // Act
+        var published = ReportedSenderAuthentication.From(evidence);
+
+        // Assert
+        Assert.Equal(expected, published.VerdictSource.ToString());
+    }
+
+    /// <summary>A stored verdict source nobody decided how to publish is refused rather than guessed at.</summary>
+    [Fact]
+    public void From_VerdictSourceWithNoPublishedValue_IsRefused()
+    {
+        // Arrange
+        var evidence = SenderAuthenticationEvidence.None with { Source = (SenderAuthenticationSource)99 };
+
+        // Act, Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => ReportedSenderAuthentication.From(evidence));
     }
 
     /// <summary>A stored check nobody decided how to publish is refused rather than guessed at.</summary>

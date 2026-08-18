@@ -205,6 +205,18 @@ is the layer rather than something MailFathom re-implements:
   leaves the message with the verdict its headers reached and a second attempt would buy a better record at the cost of
   holding a classification run. [Spam classification](../features/spam-classification.md#the-apache-spamassassin-scanner)
   states what each failure leaves behind.
+- **The DKIM key resolver.** A sixth outbound dependency is a DNS query rather than a request: where a message's server
+  wrote no `Authentication-Results` header, extraction asks for the TXT record at `<selector>._domainkey.<domain>` so a
+  signature can be verified locally. It is under no `OutboundDependency` pipeline and no HTTP client, and what bounds it
+  is stated in two places and covers both things a message can multiply — a per-query timeout, a single retry the DNS
+  client's own configuration allows, and a deadline around the whole lookup in the resolver, and a budget over the whole
+  of one message's verification above it, since how many lookups a message asks for is written by whoever sent it. Nothing above that retries, and the
+  reason is what a failure means here: an unanswered lookup leaves the verdict *not established*, which is a value the
+  reading already has, so a second attempt would buy a slightly better record at the cost of holding up the storing of a
+  message. What makes one query cheap enough not to want a pipeline is that its answer is shared: a bounded cache keyed
+  by selector and signing domain, honouring the record's own time-to-live, so a domain's key is resolved once for every
+  message it signs. [Sender authentication](../features/sender-authentication.md#where-no-server-said-anything-the-signature-still-does)
+  states what a failed lookup leaves behind.
 - **EF Core.** `EnableRetryOnFailure` is deliberately not configured. The obstacle is not the unit of work: with a
   retrying execution strategy each query and each `SaveChangesAsync` is already replayed as its own retriable unit. It
   is the *user-initiated* transaction. `PersistenceSessionFactory` opens one with `BeginTransactionAsync` for every

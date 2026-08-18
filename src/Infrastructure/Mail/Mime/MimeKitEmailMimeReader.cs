@@ -8,6 +8,7 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Mail;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Infrastructure.Mail.Dkim;
 using MimeKit;
 
 namespace MailFathom.Infrastructure.Mail.Mime;
@@ -34,27 +35,35 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
 {
     private readonly EmailMimeExtractionOptions options;
     private readonly ITrustedAuthenticationAuthorityReader trustedAuthorities;
+    private readonly ILocalSenderVerifier? localSenderVerifier;
     private readonly ParsedMimeMessageLoader loadMessage;
 
     /// <summary>Initializes a reader that parses with MimeKit.</summary>
     /// <param name="options">The configured structural limits.</param>
     /// <param name="trustedAuthorities">Resolves the server whose sender-authentication statements an account believes.</param>
-    /// <exception cref="ArgumentNullException">Thrown when either argument is <see langword="null" />.</exception>
+    /// <param name="localSenderVerifier">
+    /// Verifies a message's own DKIM signatures where no trusted server statement was found, or
+    /// <see langword="null" /> where this deployment verifies nothing itself and makes no lookup for it.
+    /// </param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="options" /> or <paramref name="trustedAuthorities" /> is <see langword="null" />.</exception>
     public MimeKitEmailMimeReader(
         EmailMimeExtractionOptions options,
-        ITrustedAuthenticationAuthorityReader trustedAuthorities)
-        : this(options, trustedAuthorities, LoadWithoutCopyingContentAsync)
+        ITrustedAuthenticationAuthorityReader trustedAuthorities,
+        ILocalSenderVerifier? localSenderVerifier)
+        : this(options, trustedAuthorities, localSenderVerifier, LoadWithoutCopyingContentAsync)
     {
     }
 
     /// <summary>Initializes a reader whose message load is supplied, so a test can observe whether it happens.</summary>
     /// <param name="options">The configured structural limits.</param>
     /// <param name="trustedAuthorities">Resolves the server whose sender-authentication statements an account believes.</param>
+    /// <param name="localSenderVerifier">Verifies a message's own DKIM signatures, or <see langword="null" /> where nothing does.</param>
     /// <param name="loadMessage">Turns raw MIME into a parsed message.</param>
-    /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when any argument other than the verifier is <see langword="null" />.</exception>
     internal MimeKitEmailMimeReader(
         EmailMimeExtractionOptions options,
         ITrustedAuthenticationAuthorityReader trustedAuthorities,
+        ILocalSenderVerifier? localSenderVerifier,
         ParsedMimeMessageLoader loadMessage)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -63,6 +72,7 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
 
         this.options = options;
         this.trustedAuthorities = trustedAuthorities;
+        this.localSenderVerifier = localSenderVerifier;
         this.loadMessage = loadMessage;
     }
 
@@ -142,22 +152,42 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
             headers.ThreadReferences,
             classification.Summary,
             EmailBodyTextExtractor.Extract(classification, this.options.MaxExtractedTextCharacters),
-            this.ReadSenderAuthentication(occurrenceId, message))
+            await this.ReadSenderAuthenticationAsync(occurrenceId, message, cancellationToken))
         {
             Automation = MailAutomationReading.Read(message),
         };
     }
 
-    /// <summary>Reads what the receiving server established about who sent the message.</summary>
+    /// <summary>Reads what was established about who sent the message, from the server that said so or from the bytes.</summary>
     /// <remarks>
+    /// <para>
+    /// The trusted header is asked first and its answer is final. Local verification is a fallback rather than a
+    /// supplement: it runs only where no header this account trusts was found at all, because a server that spoke about
+    /// the message saw the connection this process did not, and two verdicts of different provenance sitting beside
+    /// each other would make <em>which one is this</em> a question every reader has to ask.
+    /// </para>
+    /// <para>
     /// The displayed sender is taken from <c>From</c> alone and never from <c>Sender</c>, unlike the participant a
     /// timeline names. The two headers answer different questions: the timeline wants whoever the message is from for a
     /// reader, while alignment is defined against the domain a mail client shows, which is <c>From</c>'s. The first
     /// mailbox wins where the header carried several, because a message can display only one sender.
+    /// </para>
     /// </remarks>
-    private SenderAuthentication ReadSenderAuthentication(EmailOccurrenceId occurrenceId, MimeMessage message) =>
-        SenderAuthenticationReading.Read(
-            AuthenticationResultsHeaderReader.Read(message),
-            this.trustedAuthorities.GetTrustedAuthority(occurrenceId.AccountId),
-            message.From.Mailboxes.FirstOrDefault()?.Address);
+    private async Task<SenderAuthentication> ReadSenderAuthenticationAsync(
+        EmailOccurrenceId occurrenceId,
+        MimeMessage message,
+        CancellationToken cancellationToken)
+    {
+        var headers = AuthenticationResultsHeaderReader.Read(message);
+        var authority = this.trustedAuthorities.GetTrustedAuthority(occurrenceId.AccountId);
+        var displayedSenderAddress = message.From.Mailboxes.FirstOrDefault()?.Address;
+
+        if (this.localSenderVerifier is { } verifier
+            && !SenderAuthenticationReading.FindsTrustedStatement(headers, authority))
+        {
+            return await verifier.VerifyAsync(message, displayedSenderAddress, cancellationToken);
+        }
+
+        return SenderAuthenticationReading.Read(headers, authority, displayedSenderAddress);
+    }
 }

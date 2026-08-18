@@ -1,6 +1,6 @@
 # Sender authentication
 
-<!-- describes: src/Domain/Emails/Authentication/**, src/Application/Mail/ITrustedAuthenticationAuthorityReader.cs, src/Application/Mail/ISenderTrustPolicyReader.cs, src/Application/Emails/Extraction/SenderTrustEvaluatingEmailMimeReader.cs, src/Infrastructure/Mail/Mime/AuthenticationResultsHeaderReader.cs, src/Infrastructure/Mail/Mime/MimeKitEmailMimeReader.cs -->
+<!-- describes: src/Domain/Emails/Authentication/**, src/Application/Mail/ITrustedAuthenticationAuthorityReader.cs, src/Application/Mail/ISenderTrustPolicyReader.cs, src/Application/Mail/IDkimPublicKeyRecordResolver.cs, src/Application/Emails/Extraction/SenderTrustEvaluatingEmailMimeReader.cs, src/Infrastructure/Mail/Dkim/**, src/Infrastructure/Mail/Mime/AuthenticationResultsHeaderReader.cs, src/Infrastructure/Mail/Mime/MimeKitEmailMimeReader.cs -->
 
 Everything about deciding whether a message is from who it says rests on one question: which domain actually sent it?
 The obvious answer is wrong. `From` is a header the sender writes, it is what a mail client displays, and it is what
@@ -10,7 +10,13 @@ mail and silent about the mail it exists for.
 The answer that means something comes from the receiving mail server, because it is the only party in the chain that
 observed the connection. It saw the envelope sender and could check SPF against the connecting address, and it could
 verify a DKIM signature against a key the signing domain publishes. RFC 8601's `Authentication-Results` header is where
-it writes both down. MailFathom reads that header back and records what it said; it verifies nothing itself.
+it writes both down. MailFathom reads that header back and records what it said.
+
+Not every server writes one, and a mailbox on such a server would otherwise have no route to any verdict at all. So
+where no trusted header is found, MailFathom falls back to the one check a delivered message still answers by itself:
+it verifies the message's own DKIM signatures against the keys their domains publish. That is a narrower answer than a
+server's and it is [described below](#where-no-server-said-anything-the-signature-still-does), together with the switch
+that turns it off. Every verdict records which of the two produced it, because the two are not worth the same.
 
 Knowing that *an* identity authenticated is not yet knowing that the author a reader is shown did, and knowing that is
 still not knowing whether this deployment recognizes them. Those are three answers rather than one, and they are
@@ -42,18 +48,19 @@ header, and take the first token after the colon, which is the identifier that s
 delivers to this mailbox. RFC 8601 lets a server write a version number after that token, and the digit is not part of
 the identifier — a configured value carrying whitespace fails startup rather than matching a header.
 
-**An account naming no identifier believes no header at all**, and every message it holds carries the not-established
-verdict below. That is an ordinary state rather than a misconfiguration: it is also what a deployment whose provider
-publishes no results sees on every message. A value that is *present* and unusable — blank, longer than a domain name,
-or carrying whitespace — fails startup instead, because the two are indistinguishable afterwards.
+**An account naming no identifier believes no header at all**, and nothing it holds is judged by one. That is an
+ordinary state rather than a misconfiguration: it is also what a deployment whose provider publishes no results sees on
+every message. A value that is *present* and unusable — blank, longer than a domain name, or carrying whitespace —
+fails startup instead, because the two are indistinguishable afterwards.
 
-**A server that writes no header at all is the second of those two, and configuration does not answer it.** Nothing
-here verifies a sender, so a deployment whose receiving server neither evaluates SPF, DKIM, and DMARC nor records what
-it found has no route to any verdict but not established — and therefore no route to a trusted author either, since
-[the list below](#the-trusted-sender-list) is held against one. Switching those checks on at that server reaches mail
-delivered afterwards and cannot reach mail already delivered, because the header is part of the message. [Whether your
-server says who sent a message](../users/mailbox-providers.md#whether-your-server-says-who-sent-a-message) is how a
-reader tells the two cases apart against their own delivered mail.
+**A server that writes no header at all is the second of those two, and it is what the local verification below exists
+for.** A deployment whose receiving server neither evaluates SPF, DKIM, and DMARC nor records what it found had, before
+that fallback, no route to any verdict but not established — and therefore no route to a trusted author either, since
+[the list below](#the-trusted-sender-list) is held against one. Switching those checks on at that server is still the
+better answer where it is available, and it reaches mail delivered afterwards rather than mail already delivered,
+because the header is part of the message. [Whether your server says who sent a
+message](../users/mailbox-providers.md#whether-your-server-says-who-sent-a-message) is how a reader tells the two cases
+apart against their own delivered mail.
 
 The `ARC-Authentication-Results` header of RFC 8617 is deliberately not read here. It preserves an upstream hop's
 findings across forwarding, which is a claim a relay signed rather than something this mailbox's own server observed.
@@ -75,6 +82,7 @@ holds the columns.
 | The DMARC result the server reported | It is where an authenticated domain meets the displayed one, under the sender's own published policy |
 | Whether the displayed author authenticated, and their domain where they did | The identity a reader is shown is the one an impersonation gets wrong, and it is a different fact from the identity that handed the message over |
 | The domain the `From` header displayed, whether or not anything held | It is the other half of the comparison, and the half a reader needs most on the messages where nothing established an author. It is read from `From` alone, never from the `Sender` fallback a timeline names a message's sender by, so it cannot be derived from the stored address |
+| Who reached the verdict — the receiving server, or MailFathom | A server saw the connection and this process did not, so the two are worth different amounts, and no other column says which one this is. It cannot be inferred from the account's configuration either, since that may have changed since the message was stored |
 
 **DKIM is the authoritative identity wherever both checks produced one.** It is cryptographic — a key the signing
 domain publishes signed these bytes — while SPF says only that a particular address was permitted to connect on behalf
@@ -117,7 +125,7 @@ contradictions, and both stay visible because the identity and the author are re
 
 ### Not established is an answer
 
-A message carries the not-established verdict wherever nothing trusted could be read:
+The trusted reading establishes nothing wherever nothing trusted could be read:
 
 - the account names no trusted server;
 - no header carries that server's identifier;
@@ -125,10 +133,11 @@ A message carries the not-established verdict wherever nothing trusted could be 
 - the trusted header is malformed, or longer than the bound below;
 - a check passed but named no usable domain, so there is no identity to record.
 
-It is deliberately distinct from *failed*, which is the receiving server having attempted an identity and found it did
-not hold. Any result other than `pass` and `none` for DKIM or SPF is that failure — `fail`, `softfail`, `neutral`,
-`policy`, and both error results — because none of them establishes anything and the exact wording stays in the raw
-MIME the verdict is re-derivable from.
+The first two of those are where the local verification below takes over; the rest are a server having spoken, and are
+final. It is deliberately distinct from *failed*, which is the receiving server having attempted an identity and found
+it did not hold. Any result other than `pass` and `none` for DKIM or SPF is that failure — `fail`, `softfail`,
+`neutral`, `policy`, and both error results — because none of them establishes anything and the exact wording stays in
+the raw MIME the verdict is re-derivable from.
 
 ### The header is untrusted input, and bounded like it
 
@@ -137,6 +146,74 @@ The header is what an attacker writes to defeat the check, so the reading treats
 characters. A header past the length bound is passed over unread rather than truncated, and one no parser accepts
 contributes nothing rather than failing the extraction. Either way the message is still extracted and simply has one
 header fewer to read — which, where that was the only trusted header, is the not-established verdict.
+
+## Where no server said anything, the signature still does
+
+A mailbox whose receiving server writes no `Authentication-Results` header would otherwise carry the not-established
+verdict on every message it holds: no author would ever authenticate, the trusted-sender list would have no identity to
+be held against, and the warning a reader is shown would be uninformative on every message rather than on the
+interesting ones. That is not a misconfiguration anybody can repair from this side — the server simply does not produce
+the fact.
+
+**DKIM is the one check that is fully answerable after delivery.** The signature is in the stored bytes and verifying it
+needs one DNS lookup of the key its domain publishes, so MailFathom verifies it itself where nothing trusted was
+written. SPF is not attempted and no `Received`-chain heuristic stands in for it: SPF authenticates an envelope sender
+against a connecting address, and after delivery there is neither. Nor is a DMARC result produced, because that needs
+the displayed domain's own published policy and its alignment mode.
+
+**It is a fallback and never a supplement.** It runs only where the trusted reading produced no result at all — the
+account names no identifier, or no header carrying that identifier was found. An account whose server *does* write the
+header goes on believing that server and verifies nothing itself, including where that header established nothing: a
+server that spoke about the message saw the connection this process did not, and two verdicts of different provenance
+sitting beside each other would make *which one is this* a question every reader has to ask.
+
+What such a verdict reaches is the same three outcomes as any other, decided by the same rules:
+
+- **Authenticated**, naming every domain whose signature verified. Every signature the message carries is verified
+  rather than only the first, because a message legitimately carries a delivery provider's signature beside its
+  author's, and up to eight of them are checked — ordinary mail carries one or two, and the bound is what stops a
+  message written to be expensive from buying hundreds of lookups.
+- **Failed**, where a signature was checked against a key that resolved and did not verify. It says the same thing a
+  server's failure says: something was actually checked and did not hold.
+- **Not established**, where the message carries no signature, where a signature names no usable domain, and — the case
+  that has to stay distinct from a failure — where the key could not be resolved at all. An unreachable nameserver says
+  nothing whatever about the sender, and a verdict calling that a failure would turn this deployment's own network
+  trouble into a statement against somebody's mail.
+
+The author conclusion follows [the same rule](#whether-the-displayed-author-authenticated) and is not relaxed for
+running here. With no DMARC result to interpret a signing subdomain, an author is established only by a verified
+signature whose domain is exactly the displayed one.
+
+**The recorded verdict says which of the two reached it**, and that is the whole reason the column exists: a
+cryptographic signature check and a verdict taken with network context nobody has any more are worth different amounts,
+and a reader meeting a message months later cannot work out from today's configuration which produced it. On a locally
+reached verdict the SPF domain is always absent and the DMARC result is always *not reported*, by construction rather
+than by outcome.
+
+### What it puts on the wire, and how to switch it off
+
+The lookup asks for `<selector>._domainkey.<signing-domain>` and nothing else. That is a low-cardinality name the
+signing domain published in order to be asked for, shared by every message that domain signs, and carrying nothing
+about this message, this mailbox, or this recipient. What the signing domain can learn from being asked is that
+somebody here received mail they sent — which they already know, because they sent it. It happens when a message is
+stored rather than when one is read, so no lookup is ever correlated with somebody opening their mail.
+
+That is why this may default to **on** while [the spam scanner's DNS checks](spam-classification.md) stay off. What a
+blocklist query would send is high-entropy — the sending address and the URI hosts taken out of the body, where a URL
+may carry a token unique to this recipient and this message. The two are different transactions rather than the same
+one at different sizes.
+
+The lookups are bounded twice, because both how many of them a message asks for and which names they ask for are
+written by whoever sent it: an explicit deadline per name, and a budget over the whole of one message's verification,
+past which every signature still unchecked stays that way. Reaching either leaves the verdict not established, which is
+what it would have been anyway. They are cached as well, in a bounded cache keyed by selector and signing domain that
+holds each answer for as long as the record's own time-to-live allows, so a folder run resolves a dozen names rather
+than one per message and a re-derivation over a whole mailbox resolves each name once. The absence of a record is
+cached too, for a shorter time.
+
+`MailSynchronization:VerifyDkimLocally` is what turns it off, and a deployment that sets it to `false` makes no lookup
+at all and records exactly what it recorded before this existed. [The mail
+configuration](../operations/configuration-mail.md#mailsynchronization) states where the key lives.
 
 ## Whether the author is one this deployment recognizes
 
@@ -254,13 +331,13 @@ is described.
 | --- | --- |
 | `list_emails` | The pair, on each listed email's summary |
 | `search_emails` | The same pair, by republishing that summary rather than reshaping it |
-| `get_email_content` | The pair, and beside it the evidence: the domain that authenticated, the domain the `From` header displayed, which check established the first, and the DMARC result |
+| `get_email_content` | The pair, and beside it the evidence: the domain that authenticated, the domain the `From` header displayed, which check established the first, the DMARC result, and which of the two readings reached the verdict |
 | `ask_mail` | The pair, on each citation, without the evidence |
 
 **The listing carries the verdict and the single-email read carries the evidence.** A listing exists to let a reader
 recognize a message and already narrows `Cc` and `Reply-To` away, and the two outcomes are what a caller branches on;
-the domains, the method, and the DMARC result are how a reader judges the verdict rather than acts on it, so they sit
-with the rest of the headers, on the read of a message somebody has already found. Both domains are published in the
+the domains, the method, the DMARC result, and who reached the verdict are how a reader judges it rather than acts on
+it, so they sit with the rest of the headers, on the read of a message somebody has already found. Both domains are published in the
 comparison form the columns hold — upper-cased, and an internationalized name in its ASCII form. A `null` domain is an
 ordinary outcome rather than missing data: nothing authenticated, or the message wrote no usable `From` mailbox.
 
@@ -274,7 +351,7 @@ against the one kept as evidence, and the domains say what stood behind the mess
 themselves.
 
 **Every published value was stored when the message was extracted.** A read evaluates nothing, resolves no DNS, re-reads
-no header, and triggers no IMAP fetch. Mail stored before the columns existed therefore reads as *not established* and
+no header, verifies no signature, and triggers no IMAP fetch. Mail stored before the columns existed therefore reads as *not established* and
 *unknown*, with every domain absent, which is what its row holds rather than a state invented for it — and an absent
 domain there is indistinguishable from a message that displayed none. [`mfctl mailbox
 rederive`](imap-synchronization.md#bringing-stored-mail-up-to-a-later-release) is what fills it in, by re-reading the raw
@@ -292,10 +369,12 @@ of them characterizes the message or the sender's intent. A failed authenticatio
 
 ## What MailFathom does not do
 
-- It resolves no DNS, verifies no DKIM signature, and evaluates no SPF or DMARC policy. It computes no organizational
-  domain and consults no public suffix list, so it never reconstructs DMARC's relaxed alignment for itself. Everything
-  recorded was read back out of one header.
+- It evaluates no SPF policy and no DMARC policy, ever, whichever reading produced the verdict. It computes no
+  organizational domain and consults no public suffix list, so it never reconstructs DMARC's relaxed alignment for
+  itself. The only DNS it resolves is a published DKIM key, and only on the fallback path above.
 - It does not reason from the `Received` chain beyond identifying the trusted header.
+- It does not validate an ARC chain. An intact chain says an upstream relay signed a claim about what *it* saw, which
+  establishes no author and decides nothing about trust.
 - It acts on neither verdict by itself. Nothing here files, flags, or hides a message, and publishing the pair through
   the read tools is not acting on it: what a caller is handed is the stored conclusion, and what to make of it is the
   caller's. What can act on it is a rule the owner wrote — `authorAuthentication` and `senderTrust` are
@@ -306,10 +385,11 @@ of them characterizes the message or the sender's intent. A failed authenticatio
 
 ## Re-deriving what is already stored
 
-The authentication verdict is derived from the raw MIME the deployment stored, so it is re-derivable from it, and the
-trust verdict is re-derived in the same pass against whatever list is in force then. Configuring a trusted identifier
-for an account that previously had none changes what a later extraction records and leaves mail already stored on the
-verdict it was given; [`mfctl mailbox rederive`](imap-synchronization.md#bringing-stored-mail-up-to-a-later-release) is
+The authentication verdict is derived from the raw MIME the deployment stored, so it is re-derivable from it — the
+signatures a local verification checks are in those same bytes — and the trust verdict is re-derived in the same pass
+against whatever list is in force then. Configuring a trusted identifier for an account that previously had none, and
+upgrading into the release that verifies DKIM for itself, both change what a later extraction records and leave mail
+already stored on the verdict it was given; [`mfctl mailbox rederive`](imap-synchronization.md#bringing-stored-mail-up-to-a-later-release) is
 what re-reads that mail, writing the whole group of columns back through the extraction that first wrote them. The migration that adds each group of columns fills every stored message in with what was true of it
 — the not-established verdict, and the unknown answer under no policy at all.
 

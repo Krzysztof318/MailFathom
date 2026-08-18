@@ -139,6 +139,17 @@ internal sealed class StoredEmailEntity
     /// </remarks>
     public string? AuthenticatedAuthorDomain { get; set; }
 
+    /// <summary>Gets or sets who reached the verdict the columns above hold.</summary>
+    /// <remarks>
+    /// The rest of the group says what was established; this says by whom, and the two cannot be collapsed. A receiving
+    /// server saw the connection and could evaluate SPF and the sender's DMARC policy against it, while a verdict
+    /// reached here after delivery rests on a signature in the stored bytes and a key its domain publishes — so
+    /// <see cref="SpfMailFromDomain" /> and <see cref="DmarcOutcome" /> are empty on a locally reached row by
+    /// construction rather than by outcome. It cannot be inferred from the account's configuration either, because that
+    /// may have changed since the row was written.
+    /// </remarks>
+    public SenderAuthenticationSource SenderAuthenticationSource { get; set; }
+
     /// <summary>Gets or sets what this deployment made of the author the columns above establish.</summary>
     /// <remarks>
     /// Stored rather than decided when a message is read, because the trusted-sender list it was decided against

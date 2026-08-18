@@ -40,6 +40,7 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `MailSynchronization:PushDegradationPeriod` | TimeSpan | `00:15:00` | 10 s – 1 day | reload |
 | `MailSynchronization:MaxSubscribedFolders` | int | `20` | 1 – 100; how many folders one push subscription may name on a server supporting `NOTIFY`, the rest synchronizing on the account's interval | reload |
 | `MailSynchronization:TrustOwnAccountDomains` | bool | `true` | Whether an author writing from a domain one of the configured accounts uses counts as trusted on every account. The set is read from each account's `UserName` where that is an address, so it needs no list of its own | reload; the next extraction judges against it |
+| `MailSynchronization:VerifyDkimLocally` | bool | `true` | Whether extraction verifies a message's own DKIM signatures where no trusted `Authentication-Results` header was found. A fallback and never a supplement: an account whose server writes the header verifies nothing locally. It is the only path that makes an outbound DNS query | reload; the next extraction verifies against it |
 | `MailSynchronization:AssessMachineAuthorship` | bool | `true` | Whether extraction reads how much each message's own text reads as machine written. What the reading weighs is the project's and is not configurable; this decides only whether it runs | reload; the next extraction reads against it |
 
 ### One account — `MailSynchronization:Accounts:<n>`
@@ -100,6 +101,24 @@ that names no authority, and equally one whose receiving server records no resul
 established author reaches unknown without either being consulted. [Whether your server says who sent a
 message](../users/mailbox-providers.md#whether-your-server-says-who-sent-a-message) is how that is checked against a
 deployment's own delivered mail before entries are written here.
+
+`VerifyDkimLocally` is what a deployment whose receiving server writes no `Authentication-Results` header at all
+depends on. Without it every message there records that nothing was established, no author ever authenticates, and
+neither list above is ever consulted; with it, a message's own DKIM signatures are verified against the keys their
+domains publish and the whole chain has an identity to stand on. It defaults to **on** for that reason — shipping it
+off would switch it off for exactly the mailboxes it exists for, while leaving them looking correctly configured — and
+it changes nothing for an account whose server does write the header, which goes on believing that server.
+
+**It is the one path in MailFathom that makes an outbound DNS query, and what it sends is
+`<selector>._domainkey.<signing-domain>`**: a low-cardinality name the signing domain published in order to be asked
+for, shared by every message that domain signs, carrying nothing about the message, the mailbox, or the recipient, and
+resolved when a message is stored rather than when one is read. That is a different transaction from the spam scanner's
+DNS checks, which every deployment asset here leaves off: those would send the sending address and the URI hosts taken
+out of the body. The lookups are bounded by an explicit deadline, after which the verdict is simply not established,
+and cached per selector and signing domain for as long as the record's own time-to-live allows. **An operator who wants
+no egress from the extraction path at all sets this to `false`**, which gives exactly the behaviour of a deployment
+that never had it. [Sender authentication](../features/sender-authentication.md#where-no-server-said-anything-the-signature-still-does)
+states what such a verdict reaches, what it deliberately does not, and how a reader tells the two apart.
 
 `AssessMachineAuthorship` answers a different question again — how a message's text was *written* rather than who sent
 it — and it defaults to on because the reading costs one pass over text extraction has already produced and needs

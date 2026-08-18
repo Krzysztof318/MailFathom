@@ -104,11 +104,6 @@
           "System.Memory.Data": "10.0.3"
         }
       },
-      "BouncyCastle.Cryptography": {
-        "type": "Transitive",
-        "resolved": "2.6.2",
-        "contentHash": "7oWOcvnntmMKNzDLsdxAYqApt+AjpRpP2CShjMfIa3umZ42UQMvH0tl1qAliYPNYO6vTdcGMqnRrCPmsfzTI1w=="
-      },
       "CycleDetection": {
         "type": "Transitive",
         "resolved": "2.0.0",
@@ -858,6 +853,8 @@
         "type": "Project",
         "dependencies": {
           "Aspire.Npgsql.EntityFrameworkCore.PostgreSQL": "[13.4.6, )",
+          "BouncyCastle.Cryptography": "[2.6.2, )",
+          "DnsClient": "[1.8.0, )",
           "HtmlSanitizer": "[9.1.974, )",
           "MailFathom.Application": "[0.7.0, )",
           "MailFathom.Common": "[0.7.0, )",
@@ -929,6 +926,18 @@
         "dependencies": {
           "Azure.Core": "1.53.0"
         }
+      },
+      "BouncyCastle.Cryptography": {
+        "type": "CentralTransitive",
+        "requested": "[2.6.2, )",
+        "resolved": "2.6.2",
+        "contentHash": "7oWOcvnntmMKNzDLsdxAYqApt+AjpRpP2CShjMfIa3umZ42UQMvH0tl1qAliYPNYO6vTdcGMqnRrCPmsfzTI1w=="
+      },
+      "DnsClient": {
+        "type": "CentralTransitive",
+        "requested": "[1.8.0, )",
+        "resolved": "1.8.0",
+        "contentHash": "RRwtaCXkXWsx0mmsReGDqCbRLtItfUbkRJlet1FpdciVhyMGKcPd57T1+8Jki9ojHlq9fntVhXQroOOgRak8DQ=="
       },
       "HtmlSanitizer": {
         "type": "CentralTransitive",

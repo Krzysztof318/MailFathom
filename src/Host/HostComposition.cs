@@ -597,6 +597,7 @@ internal static class HostComposition
                 MaxPartCount = synchronizationSettings.MaxMimePartCount,
                 MaxNestingDepth = synchronizationSettings.MaxMimeNestingDepth,
                 MaxExtractedTextCharacters = synchronizationSettings.MaxExtractedTextCharacters,
+                VerifyDkimLocally = synchronizationSettings.VerifyDkimLocally,
             };
         });
         // A singleton, because the outbox's bounds describe the process rather than a work unit: an attempt count is

@@ -388,6 +388,29 @@ internal sealed class MailSynchronizationOptions
     /// </remarks>
     public bool TrustOwnAccountDomains { get; set; } = true;
 
+    /// <summary>Gets or sets whether extraction verifies a message's own DKIM signatures where no trusted server did.</summary>
+    /// <remarks>
+    /// <para>
+    /// It defaults to on because the deployment it was built for is the one whose receiving server writes no
+    /// <c>Authentication-Results</c> header. Every message there records that nothing was established, no author ever
+    /// authenticates, and the trusted-sender list has no identity to be held against — so shipping this off would
+    /// switch it off for exactly the mailboxes it exists for, while leaving them looking correctly configured.
+    /// </para>
+    /// <para>
+    /// It runs only as a fallback. An account naming a trusted authority whose header was found goes on believing that
+    /// server and verifies nothing itself, because that server observed the connection and this process did not.
+    /// </para>
+    /// <para>
+    /// What it costs is a bounded, cached DNS lookup of <c>&lt;selector&gt;._domainkey.&lt;domain&gt;</c> when a message
+    /// is stored. That is a low-cardinality name the signing domain published in order to be asked for, and it discloses
+    /// to that domain only that somebody here received mail they sent — which is why this may default on while the spam
+    /// scanner's DNS checks stay off, where what would be sent is the sending address and the URI hosts out of the body.
+    /// An operator who wants no egress from this path at all sets it to <see langword="false" /> and gets exactly the
+    /// behaviour of a deployment that never had it.
+    /// </para>
+    /// </remarks>
+    public bool VerifyDkimLocally { get; set; } = true;
+
     /// <summary>Gets or sets whether extraction assesses how much each message's own text reads as machine written.</summary>
     /// <remarks>
     /// <para>

@@ -19,10 +19,12 @@ namespace MailFathom.Domain.Emails.Authentication;
 /// <c>From</c>, so the two disagreeing is an ordinary state of legitimate mail rather than a contradiction.
 /// </para>
 /// <para>
-/// MailFathom verifies nothing itself. It resolves no DNS, evaluates no SPF policy, verifies no DKIM signature, computes
-/// no organizational domain, consults no public suffix list, and reasons from no <c>Received</c> chain. Everything here
-/// was read back out of one header written by the one server the account trusts, which is the only party in the chain
-/// that observed the connection the message arrived on.
+/// <b>One of two readings produced this, and <see cref="Source" /> says which.</b> The first is a header written by the
+/// one server the account trusts, which is the only party in the chain that observed the connection; everything it
+/// records was read back out of that header. The second runs only where no such statement was available, and verifies
+/// the message's own DKIM signatures against the keys their domains publish — a cryptographic identity reached from the
+/// stored bytes and one DNS lookup. Neither reading evaluates an SPF policy, computes an organizational domain,
+/// consults a public suffix list, or reasons from a <c>Received</c> chain.
 /// </para>
 /// <para>
 /// Every domain here is personal data. No log line, metric, or exception message may carry one; the occurrence identity,
@@ -39,6 +41,7 @@ public sealed record SenderAuthentication
         SenderDomain? spfDomain,
         SenderDomain? fromDomain,
         DmarcOutcome dmarc,
+        SenderAuthenticationSource source,
         IReadOnlyList<SenderDomain> authenticatedIdentities)
     {
         this.Outcome = outcome;
@@ -48,6 +51,7 @@ public sealed record SenderAuthentication
         this.SpfDomain = spfDomain;
         this.FromDomain = fromDomain;
         this.Dmarc = dmarc;
+        this.Source = source;
 
         (this.AuthorAuthentication, this.AuthenticatedAuthorDomain) =
             EstablishAuthor(fromDomain, dmarc, authenticatedIdentities);
@@ -90,6 +94,15 @@ public sealed record SenderAuthentication
 
     /// <summary>Gets the DMARC result the trusted header reported, or that it reported none.</summary>
     public DmarcOutcome Dmarc { get; }
+
+    /// <summary>Gets who reached this verdict, which decides what the rest of it is worth.</summary>
+    /// <remarks>
+    /// The absent values of a locally reached verdict are absent by construction rather than by outcome:
+    /// <see cref="SpfDomain" /> is never named because no envelope sender survives delivery, and <see cref="Dmarc" />
+    /// is never anything but <see cref="DmarcOutcome.NotReported" /> because reporting a DMARC result needs the
+    /// displayed domain's published policy and its alignment mode, which nothing here resolves.
+    /// </remarks>
+    public SenderAuthenticationSource Source { get; }
 
     /// <summary>Gets what was established about the author the message displays, which is a separate conclusion.</summary>
     /// <remarks>
@@ -141,6 +154,7 @@ public sealed record SenderAuthentication
             spfDomain: null,
             fromDomain,
             dmarc,
+            SenderAuthenticationSource.ReceivingServer,
             authenticatedIdentities: []);
 
     /// <summary>Records that the receiving server checked an identity and it did not hold.</summary>
@@ -156,6 +170,87 @@ public sealed record SenderAuthentication
             spfDomain: null,
             fromDomain,
             dmarc,
+            SenderAuthenticationSource.ReceivingServer,
+            authenticatedIdentities: []);
+
+    /// <summary>Records that this deployment verified a DKIM signature itself, no trusted server having said anything.</summary>
+    /// <param name="verifiedSigningDomains">Every domain whose signature verified here, in the order the message carried them.</param>
+    /// <param name="fromDomain">The domain the message displays as its sender, where it wrote a usable one.</param>
+    /// <returns>The verdict, naming DKIM as the method because it is the only one a delivered message still answers.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="verifiedSigningDomains" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when no signature verified, which is not an authenticated message.</exception>
+    /// <remarks>
+    /// Every signature is kept for the reason the trusted reading keeps every one the server reported: a message
+    /// legitimately carries a delivery provider's signature beside its author's, and taking whichever came first would
+    /// leave the author unestablished on ordinary mail. No SPF domain and no DMARC result accompany it, because neither
+    /// is answerable from stored bytes — the envelope and the connecting address are gone, and a DMARC result needs the
+    /// displayed domain's published policy.
+    /// </remarks>
+    public static SenderAuthentication LocallyVerified(
+        IReadOnlyList<SenderDomain> verifiedSigningDomains,
+        SenderDomain? fromDomain)
+    {
+        ArgumentNullException.ThrowIfNull(verifiedSigningDomains);
+
+        if (verifiedSigningDomains.Count == 0)
+        {
+            throw new ArgumentException(
+                "A locally verified verdict names the domain whose signature verified, so at least one must have.",
+                nameof(verifiedSigningDomains));
+        }
+
+        return new SenderAuthentication(
+            SenderAuthenticationOutcome.Authenticated,
+            SenderAuthenticationMethod.DomainKeysIdentifiedMail,
+            verifiedSigningDomains[0],
+            verifiedSigningDomains[0],
+            spfDomain: null,
+            fromDomain,
+            DmarcOutcome.NotReported,
+            SenderAuthenticationSource.LocalVerification,
+            verifiedSigningDomains);
+    }
+
+    /// <summary>Records that this deployment checked a DKIM signature itself and it did not verify.</summary>
+    /// <param name="fromDomain">The domain the message displays as its sender, where it wrote a usable one.</param>
+    /// <returns>The verdict.</returns>
+    /// <remarks>
+    /// It is a failure for the same reason a server-reported one is: something was actually checked, and a signature
+    /// that did not verify against the key its own domain publishes is more than knowing nothing. What it does not
+    /// reach is a failed <em>author</em>, because the signature may never have been the displayed author's — that
+    /// conclusion comes from a DMARC result, which no local verification produces.
+    /// </remarks>
+    public static SenderAuthentication LocalVerificationFailed(SenderDomain? fromDomain) =>
+        new(
+            SenderAuthenticationOutcome.Failed,
+            SenderAuthenticationMethod.None,
+            authenticatedDomain: null,
+            dkimDomain: null,
+            spfDomain: null,
+            fromDomain,
+            DmarcOutcome.NotReported,
+            SenderAuthenticationSource.LocalVerification,
+            authenticatedIdentities: []);
+
+    /// <summary>Records that this deployment verified what it could and established nothing.</summary>
+    /// <param name="fromDomain">The domain the message displays as its sender, where it wrote a usable one.</param>
+    /// <returns>The verdict.</returns>
+    /// <remarks>
+    /// A message carrying no signature at all, one whose signature named no usable domain, and one whose published key
+    /// could not be resolved before the lookup's deadline all reach it. The last is the reason the value has to be
+    /// distinct from a failure: an unreachable resolver says nothing whatever about the sender, and a verdict that
+    /// called it a failure would turn this deployment's own network trouble into a statement against somebody's mail.
+    /// </remarks>
+    public static SenderAuthentication LocalVerificationNotEstablished(SenderDomain? fromDomain) =>
+        new(
+            SenderAuthenticationOutcome.NotEstablished,
+            SenderAuthenticationMethod.None,
+            authenticatedDomain: null,
+            dkimDomain: null,
+            spfDomain: null,
+            fromDomain,
+            DmarcOutcome.NotReported,
+            SenderAuthenticationSource.LocalVerification,
             authenticatedIdentities: []);
 
     /// <summary>Records the identities the receiving server verified.</summary>
@@ -200,6 +295,7 @@ public sealed record SenderAuthentication
             spfDomain,
             fromDomain,
             dmarc,
+            SenderAuthenticationSource.ReceivingServer,
             [.. dkimDomains, .. spfDomains]);
     }
 

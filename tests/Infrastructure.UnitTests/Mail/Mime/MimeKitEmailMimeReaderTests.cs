@@ -8,6 +8,7 @@ using MailFathom.Application.Mail;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Infrastructure.Mail.Dkim;
 using MailFathom.Infrastructure.Mail.Mime;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
 using NSubstitute;
@@ -644,6 +645,7 @@ public sealed class MimeKitEmailMimeReaderTests
         var reader = new MimeKitEmailMimeReader(
             new EmailMimeExtractionOptions { MaxPartCount = 3, MaxNestingDepth = 30 },
             TrustedAuthorities(identifier: null),
+            localSenderVerifier: null,
             (rawMime, cancellationToken) =>
             {
                 treeWasConstructed = true;
@@ -683,6 +685,7 @@ public sealed class MimeKitEmailMimeReaderTests
         var reader = new MimeKitEmailMimeReader(
             new EmailMimeExtractionOptions { MaxPartCount = 1000, MaxNestingDepth = 2 },
             TrustedAuthorities(identifier: null),
+            localSenderVerifier: null,
             (rawMime, cancellationToken) =>
             {
                 treeWasConstructed = true;
@@ -706,7 +709,8 @@ public sealed class MimeKitEmailMimeReaderTests
         // Arrange
         var reader = new MimeKitEmailMimeReader(
             new EmailMimeExtractionOptions { MaxPartCount = 10, MaxNestingDepth = 4 },
-            TrustedAuthorities(identifier: null));
+            TrustedAuthorities(identifier: null),
+            localSenderVerifier: null);
 
         // Act
         var result = await reader.ReadMetadataAsync(CreateDeeplyNestedMessage(nestingDepth: 3), CancellationToken.None);
@@ -929,8 +933,149 @@ public sealed class MimeKitEmailMimeReaderTests
         Assert.Equal(AuthorAuthenticationOutcome.NotEstablished, authentication.AuthorAuthentication);
     }
 
-    private static MimeKitEmailMimeReader CreateReader(string? trustedAuthorityIdentifier = null) =>
-        new(new EmailMimeExtractionOptions(), TrustedAuthorities(trustedAuthorityIdentifier));
+    /// <summary>An account whose trusted server wrote a header goes on believing it and verifies nothing itself.</summary>
+    /// <remarks>
+    /// Local verification is a fallback rather than a supplement. A server that spoke about the message observed the
+    /// connection this process did not, so verifying the same message here would put a second verdict of a different
+    /// provenance beside the first.
+    /// </remarks>
+    [Fact]
+    public async Task ReadMetadataAsync_ATrustedHeaderWasFound_VerifiesNothingLocally()
+    {
+        // Arrange
+        var verifier = LocalVerifierAnswering();
+        var content = MimeFixtures.Message(
+            "Authentication-Results: mx.example.test; dkim=pass header.d=bank.test",
+            "From: alerts@bank.test",
+            "Content-Type: text/plain",
+            string.Empty,
+            "Body");
+
+        // Act
+        var result = await CreateReader("mx.example.test", verifier).ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        var authentication = AssertExtracted(result).SenderAuthentication;
+        Assert.Equal(SenderAuthenticationSource.ReceivingServer, authentication.Source);
+        await verifier.DidNotReceive().VerifyAsync(
+            Arg.Any<MimeKit.MimeMessage>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A trusted header that established nothing has still spoken, so nothing is verified locally either.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_ATrustedHeaderEstablishingNothing_VerifiesNothingLocally()
+    {
+        // Arrange
+        var verifier = LocalVerifierAnswering();
+        var content = MimeFixtures.Message(
+            "Authentication-Results: mx.example.test; dkim=none",
+            "From: alerts@bank.test",
+            "Content-Type: text/plain",
+            string.Empty,
+            "Body");
+
+        // Act
+        var result = await CreateReader("mx.example.test", verifier).ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        var authentication = AssertExtracted(result).SenderAuthentication;
+        Assert.Equal(SenderAuthenticationOutcome.NotEstablished, authentication.Outcome);
+        Assert.Equal(SenderAuthenticationSource.ReceivingServer, authentication.Source);
+        await verifier.DidNotReceive().VerifyAsync(
+            Arg.Any<MimeKit.MimeMessage>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A message no trusted header was found for reaches the local verification, which is what it exists for.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_NoTrustedHeaderWasFound_RecordsWhatTheLocalVerificationEstablished()
+    {
+        // Arrange
+        var verifier = LocalVerifierAnswering(SenderAuthentication.LocallyVerified([DomainOf("bank.test")], DomainOf("bank.test")));
+        var content = MimeFixtures.Message(
+            "Authentication-Results: other.example.test; dkim=pass header.d=bank.test",
+            "From: alerts@bank.test",
+            "Content-Type: text/plain",
+            string.Empty,
+            "Body");
+
+        // Act
+        var result = await CreateReader("mx.example.test", verifier).ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        var authentication = AssertExtracted(result).SenderAuthentication;
+        Assert.Equal(SenderAuthenticationOutcome.Authenticated, authentication.Outcome);
+        Assert.Equal(SenderAuthenticationSource.LocalVerification, authentication.Source);
+    }
+
+    /// <summary>An account naming no trusted server believes no header, so it reaches the local verification too.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_AccountNamingNoTrustedServer_ReachesTheLocalVerification()
+    {
+        // Arrange
+        var verifier = LocalVerifierAnswering();
+        var content = MimeFixtures.Message(
+            "Authentication-Results: mx.example.test; dkim=pass header.d=bank.test",
+            "From: alerts@bank.test",
+            "Content-Type: text/plain",
+            string.Empty,
+            "Body");
+
+        // Act
+        await CreateReader(trustedAuthorityIdentifier: null, verifier).ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        await verifier.Received(1).VerifyAsync(
+            Arg.Any<MimeKit.MimeMessage>(),
+            "alerts@bank.test",
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A deployment that verifies nothing itself records what the trusted reading found, as it always did.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_NoLocalVerification_NamesTheReceivingServerAsTheSource()
+    {
+        // Arrange
+        var content = MimeFixtures.Message(
+            "From: alerts@bank.test",
+            "Content-Type: text/plain",
+            string.Empty,
+            "Body");
+
+        // Act
+        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        var authentication = AssertExtracted(result).SenderAuthentication;
+        Assert.Equal(SenderAuthenticationOutcome.NotEstablished, authentication.Outcome);
+        Assert.Equal(SenderAuthenticationSource.ReceivingServer, authentication.Source);
+    }
+
+    private static MimeKitEmailMimeReader CreateReader(
+        string? trustedAuthorityIdentifier = null,
+        ILocalSenderVerifier? localSenderVerifier = null) =>
+        new(new EmailMimeExtractionOptions(), TrustedAuthorities(trustedAuthorityIdentifier), localSenderVerifier);
+
+    /// <summary>Answers every message with one verdict, standing in for a verification that reaches the network.</summary>
+    private static ILocalSenderVerifier LocalVerifierAnswering(SenderAuthentication? verdict = null)
+    {
+        var verifier = Substitute.For<ILocalSenderVerifier>();
+        verifier
+            .VerifyAsync(Arg.Any<MimeKit.MimeMessage>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(verdict ?? SenderAuthentication.LocalVerificationNotEstablished(fromDomain: null));
+
+        return verifier;
+    }
+
+    private static SenderDomain DomainOf(string value)
+    {
+        Assert.True(SenderDomain.TryCreate(value, out var domain));
+
+        return domain;
+    }
 
     /// <summary>Answers every account with the one authority a test configured, or with none.</summary>
     private static ITrustedAuthenticationAuthorityReader TrustedAuthorities(string? identifier)

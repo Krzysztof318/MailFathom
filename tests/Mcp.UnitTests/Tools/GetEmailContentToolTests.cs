@@ -150,6 +150,7 @@ public sealed class GetEmailContentToolTests
                 DisplayedAuthorDomain = DomainOf("bank.example.test"),
                 AuthenticatedBy = SenderAuthenticationMethod.DomainKeysIdentifiedMail,
                 Dmarc = DmarcOutcome.Fail,
+                Source = SenderAuthenticationSource.ReceivingServer,
             });
         var tool = ToolOver(new StubStoredEmailSummaryReader(summary));
 
@@ -226,6 +227,7 @@ public sealed class GetEmailContentToolTests
                 DisplayedAuthorDomain = DomainOf("bank.example.test"),
                 AuthenticatedBy = SenderAuthenticationMethod.DomainKeysIdentifiedMail,
                 Dmarc = DmarcOutcome.Pass,
+                Source = SenderAuthenticationSource.ReceivingServer,
             });
         var tool = ToolOver(new StubStoredEmailSummaryReader(summary));
 
@@ -318,6 +320,7 @@ public sealed class GetEmailContentToolTests
                 DisplayedAuthorDomain = DomainOf("bank.example.test"),
                 AuthenticatedBy = SenderAuthenticationMethod.DomainKeysIdentifiedMail,
                 Dmarc = DmarcOutcome.Pass,
+                Source = SenderAuthenticationSource.ReceivingServer,
             });
         var tool = ToolOver(new StubStoredEmailSummaryReader(summary));
 
