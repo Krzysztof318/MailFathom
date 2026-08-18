@@ -117,17 +117,35 @@ public sealed class JobQueueTelemetry
 
     /// <summary>Opens the span one attempt at a job is reported as, and returns the scope that ends it.</summary>
     /// <param name="jobType">The kind of work being attempted, which is the only thing about the job the span names.</param>
+    /// <param name="enqueuedTrace">The trace the job was enqueued inside, or <see langword="null" /> when its row records none.</param>
     /// <returns>The scope, which the caller must dispose; a scope disposed without <see cref="JobAttemptScope.Ended" /> reports an attempt that produced no result.</returns>
     /// <remarks>
+    /// <para>
     /// The span is opened around the attempt rather than around the pass that dispatched it, so a pass running several
     /// jobs at once produces one span each instead of one span covering all of them. Nothing about the job itself
     /// reaches it beyond the type: not the job's identifier, not the account, and above all not the idempotency key,
     /// which is composed of folder aliases and message occurrences.
+    /// </para>
+    /// <para>
+    /// A link rather than a parent, and the difference is the queue. The work that enqueued the job ended before a
+    /// worker claimed it — minutes earlier, or on another replica, or before a restart — so making the attempt that
+    /// work's child would ask a span store to hold a trace open for as long as the queue is deep. A link says the same
+    /// thing without that: the attempt is its own trace, and the cause is one step away rather than a search through
+    /// logs. A job whose row records nothing to link to opens the same span with no link, which is every row written
+    /// before the column existed.
+    /// </para>
     /// </remarks>
-    public JobAttemptScope BeginAttempt(JobType jobType)
+    public JobAttemptScope BeginAttempt(JobType jobType, JobTraceContext? enqueuedTrace)
     {
         var activity = Telemetry.ActivitySource.StartActivity(AttemptSpanName);
         activity?.SetTag(JobTypeTagName, jobType.Name);
+
+        if (activity is not null
+            && enqueuedTrace is { } trace
+            && ActivityContext.TryParse(trace.TraceParent, trace.TraceState, isRemote: true, out var enqueuedContext))
+        {
+            activity.AddLink(new ActivityLink(enqueuedContext));
+        }
 
         return new JobAttemptScope(activity);
     }

@@ -302,7 +302,8 @@ public sealed class JobWorkerTests
         },
         AccountId: null,
         AttemptCount: 1,
-        new JobLease(JobLeaseOwner.Create("attempt-a"), Noon.AddMinutes(10)));
+        new JobLease(JobLeaseOwner.Create("attempt-a"), Noon.AddMinutes(10)),
+        EnqueuedTrace: null);
 
     private static void WithAHandler(IServiceCollection services) =>
         services.AddSingleton<IJobHandler>(new NoOpJobHandler());

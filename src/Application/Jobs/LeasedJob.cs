@@ -19,6 +19,7 @@ namespace MailFathom.Application.Jobs;
 /// <param name="AccountId">The account the work belongs to, or <see langword="null" /> when it belongs to none.</param>
 /// <param name="AttemptCount">Which attempt this is, counting from one.</param>
 /// <param name="Lease">The lease this attempt holds the job under.</param>
+/// <param name="EnqueuedTrace">The trace the execution was enqueued inside, or <see langword="null" /> when the row records none.</param>
 public sealed record LeasedJob(
     JobId JobId,
     JobType JobType,
@@ -26,4 +27,5 @@ public sealed record LeasedJob(
     IJobPayload Payload,
     MailAccountId? AccountId,
     int AttemptCount,
-    JobLease Lease);
+    JobLease Lease,
+    JobTraceContext? EnqueuedTrace);

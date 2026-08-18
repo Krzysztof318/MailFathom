@@ -27,9 +27,26 @@ namespace MailFathom.Infrastructure.Observability;
 /// </remarks>
 public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTelemetry
 {
+    /// <summary>The name one guarded operation opens its span under, beneath whatever asked for the payload.</summary>
+    /// <remarks>
+    /// One span for the operation rather than one per text, because a body, a subject, and a display name are what a
+    /// single read publishes and their sum is what the caller waited for. The instruments beside it stay per value,
+    /// which is the level a category list or a bound is decided at.
+    /// </remarks>
+    internal const string GuardedOperationSpanName = "scan_sensitive_content";
+
     private const string EgressPointTagName = "mailfathom.sensitive_content.egress_point";
     private const string CategoryTagName = "mailfathom.sensitive_content.category";
     private const string ScannerTagName = "mailfathom.sensitive_content.scanner";
+
+    /// <summary>How many texts one guarded operation scanned, which is what its duration has to be read against.</summary>
+    private const string GuardedTextCountTagName = "mailfathom.sensitive_content.texts";
+
+    /// <summary>How the operation ended, in the two words that separate a scan that answered from one that could not.</summary>
+    private const string OutcomeTagName = "mailfathom.sensitive_content.outcome";
+
+    private const string SucceededOutcomeName = "succeeded";
+    private const string RefusedOutcomeName = "refused";
 
     private readonly Counter<long> guardedTextCount;
     private readonly Counter<long> findingCount;
@@ -103,6 +120,15 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
                 { ScannerTagName, TagOf(scanner) },
             });
 
+    /// <inheritdoc />
+    public ISensitiveContentGuardScope BeginGuardedOperation(SensitiveContentEgressPoint egressPoint)
+    {
+        var activity = Telemetry.ActivitySource.StartActivity(GuardedOperationSpanName);
+        activity?.SetTag(EgressPointTagName, TagOf(egressPoint));
+
+        return new GuardedOperation(activity);
+    }
+
     /// <summary>Names an egress point as a tag value.</summary>
     /// <remarks>
     /// A closed mapping rather than the member's own name, for the reason every published mapping here is closed: the
@@ -124,4 +150,36 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
         SensitiveContentScannerKind.Pii => "pii",
         _ => "unknown",
     };
+
+    /// <summary>Carries one guarded operation from the span that opens it to the count and the ending that close it.</summary>
+    /// <remarks>
+    /// The count is written at the end rather than as each text arrives, because a tag set repeatedly is a tag rewritten
+    /// repeatedly on a span nothing has read yet. A refusal is an ending rather than an error status for the reason the
+    /// refusal is not a defect: a scanner that could not answer stopped an egress on purpose, and the operation the
+    /// caller sees fails with an error code of its own.
+    /// </remarks>
+    private sealed class GuardedOperation(Activity? activity) : ISensitiveContentGuardScope
+    {
+        private int guardedTextCount;
+        private bool refused;
+
+        // Counted atomically because the operation is the unit and the values inside it are not: a consumer that
+        // guards the fields of one payload concurrently would otherwise publish a count lower than what it scanned.
+        public void TextGuarded() => Interlocked.Increment(ref this.guardedTextCount);
+
+        public void Refused() => this.refused = true;
+
+        public void Dispose()
+        {
+            if (activity is null)
+            {
+                return;
+            }
+
+            activity.SetTag(GuardedTextCountTagName, Volatile.Read(ref this.guardedTextCount));
+            activity.SetTag(OutcomeTagName, this.refused ? RefusedOutcomeName : SucceededOutcomeName);
+            activity.SetStatus(ActivityStatusCode.Ok);
+            activity.Dispose();
+        }
+    }
 }

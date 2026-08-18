@@ -72,7 +72,7 @@ public sealed class BackgroundWorkSpanTests : IDisposable
         var telemetry = new JobQueueTelemetry();
 
         // Act
-        using (var attempt = telemetry.BeginAttempt(JobType.ClassifyEmailSpam))
+        using (var attempt = telemetry.BeginAttempt(JobType.ClassifyEmailSpam, enqueuedTrace: null))
         {
             attempt.Ended(Attempt(JobExecutionOutcome.Succeeded, attemptCount: 3));
         }
@@ -83,6 +83,54 @@ public sealed class BackgroundWorkSpanTests : IDisposable
         Assert.Equal(JobType.ClassifyEmailSpam.Name, span.GetTagItem(JobQueueTelemetry.JobTypeTagName));
         Assert.Equal("succeeded", span.GetTagItem(JobQueueTelemetry.OutcomeTagName));
         Assert.Equal(ActivityStatusCode.Ok, span.Status);
+    }
+
+    /// <summary>
+    /// The queue is a break in a trace rather than a tree, so the attempt is its own trace with a link back to the
+    /// work that enqueued it — which is a cause hours earlier reached in one step rather than searched for in logs.
+    /// </summary>
+    [Fact]
+    public void BeginAttempt_AJobEnqueuedInsideATrace_LinksTheAttemptToThatTrace()
+    {
+        // Arrange
+        var telemetry = new JobQueueTelemetry();
+        var enqueued = JobTraceContext.FromTraceParent(
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            traceState: null);
+
+        // Act
+        using (var attempt = telemetry.BeginAttempt(JobType.ClassifyEmailSpam, enqueued))
+        {
+            attempt.Ended(Attempt(JobExecutionOutcome.Succeeded, attemptCount: 21));
+        }
+
+        // Assert
+        var span = this.Published(JobQueueTelemetry.AttemptSpanName, JobQueueTelemetry.AttemptNumberTagName, 21);
+        var link = Assert.Single(span.Links);
+
+        Assert.Equal("4bf92f3577b34da6a3ce929d0e0e4736", link.Context.TraceId.ToHexString());
+        Assert.Equal("00f067aa0ba902b7", link.Context.SpanId.ToHexString());
+        Assert.NotEqual(link.Context.TraceId, span.TraceId);
+    }
+
+    /// <summary>Every row written before the column existed carries none, and an attempt at one is a span without a link.</summary>
+    [Fact]
+    public void BeginAttempt_AJobWhoseRowRecordsNoTrace_PublishesTheAttemptWithNoLink()
+    {
+        // Arrange
+        var telemetry = new JobQueueTelemetry();
+
+        // Act
+        using (var attempt = telemetry.BeginAttempt(JobType.ClassifyEmailSpam, enqueuedTrace: null))
+        {
+            attempt.Ended(Attempt(JobExecutionOutcome.Succeeded, attemptCount: 22));
+        }
+
+        // Assert
+        Assert.Empty(this.Published(
+            JobQueueTelemetry.AttemptSpanName,
+            JobQueueTelemetry.AttemptNumberTagName,
+            22).Links);
     }
 
     /// <summary>An attempt the work itself failed is an error on the span, whichever of the three endings it reached.</summary>
@@ -99,7 +147,7 @@ public sealed class BackgroundWorkSpanTests : IDisposable
         var telemetry = new JobQueueTelemetry();
 
         // Act
-        using (var attempt = telemetry.BeginAttempt(JobType.ClassifyEmailSpam))
+        using (var attempt = telemetry.BeginAttempt(JobType.ClassifyEmailSpam, enqueuedTrace: null))
         {
             attempt.Ended(Attempt(outcome, attemptCount));
         }
@@ -132,7 +180,7 @@ public sealed class BackgroundWorkSpanTests : IDisposable
         var telemetry = new JobQueueTelemetry();
 
         // Act
-        using (var attempt = telemetry.BeginAttempt(JobType.ClassifyEmailSpam))
+        using (var attempt = telemetry.BeginAttempt(JobType.ClassifyEmailSpam, enqueuedTrace: null))
         {
             attempt.Ended(Attempt(outcome, attemptCount));
         }
@@ -159,7 +207,7 @@ public sealed class BackgroundWorkSpanTests : IDisposable
         var telemetry = new JobQueueTelemetry();
 
         // Act
-        using (telemetry.BeginAttempt(JobType.RunScheduledMailRules))
+        using (telemetry.BeginAttempt(JobType.RunScheduledMailRules, enqueuedTrace: null))
         {
             // Disposed without a result, which is what a dispatch that could not be composed produces.
         }
@@ -192,7 +240,7 @@ public sealed class BackgroundWorkSpanTests : IDisposable
         var telemetry = new JobQueueTelemetry();
 
         // Act
-        using (var attempt = telemetry.BeginAttempt(JobType.ClassifyEmailSpam))
+        using (var attempt = telemetry.BeginAttempt(JobType.ClassifyEmailSpam, enqueuedTrace: null))
         {
             attempt.Ended(Attempt(
                 JobExecutionOutcome.HandlerFailed,
@@ -223,7 +271,7 @@ public sealed class BackgroundWorkSpanTests : IDisposable
         var telemetry = new JobQueueTelemetry();
 
         // Act
-        using (var attempt = telemetry.BeginAttempt(JobType.ClassifyEmailSpam))
+        using (var attempt = telemetry.BeginAttempt(JobType.ClassifyEmailSpam, enqueuedTrace: null))
         {
             attempt.Ended(Attempt(
                 JobExecutionOutcome.HandlerFailed,

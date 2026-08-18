@@ -33,4 +33,14 @@ public interface ISensitiveContentEgressTelemetry
     /// <param name="egressPoint">Where the text was about to go, and did not.</param>
     /// <param name="scanner">Which switched-on scanner could not answer.</param>
     void RecordRefused(SensitiveContentEgressPoint egressPoint, SensitiveContentScannerKind scanner);
+
+    /// <summary>Opens the report of one guarded operation, which is what a caller actually waits on.</summary>
+    /// <param name="egressPoint">Where the texts this operation guards are going.</param>
+    /// <returns>The scope, which the caller must dispose exactly once and inside which the scanning happens.</returns>
+    /// <remarks>
+    /// The instruments above answer over every guarded text of a deployment; this answers what one operation cost the
+    /// caller in front of it. Both are needed and neither substitutes for the other: a percentile over values says a
+    /// scan is quick while a read that ran fifty of them was not.
+    /// </remarks>
+    ISensitiveContentGuardScope BeginGuardedOperation(SensitiveContentEgressPoint egressPoint);
 }

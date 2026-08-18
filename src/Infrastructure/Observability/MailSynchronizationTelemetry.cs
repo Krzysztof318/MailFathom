@@ -5,6 +5,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using MailFathom.Application.Observability;
 using MailFathom.Common.Observability;
 using MailFathom.Domain.Accounts;
 
@@ -33,7 +34,7 @@ namespace MailFathom.Infrastructure.Observability;
 /// written nowhere for a level or a setting to expose.
 /// </para>
 /// </remarks>
-public sealed class MailSynchronizationTelemetry
+public sealed class MailSynchronizationTelemetry : IMailSynchronizationPhaseTelemetry
 {
     /// <summary>The name one account's synchronization cycle opens its span under.</summary>
     /// <remarks>
@@ -44,6 +45,24 @@ public sealed class MailSynchronizationTelemetry
 
     /// <summary>The name one folder's turn through a cycle opens its span under, always beneath the span above.</summary>
     internal const string FolderRunSpanName = "synchronize_folder";
+
+    /// <summary>The name turning the configured alias into an advertised folder opens its span under.</summary>
+    internal const string ResolveFolderSpanName = "resolve_mail_folder";
+
+    /// <summary>The name opening the read-only session the run works over opens its span under.</summary>
+    internal const string OpenSessionSpanName = "open_mailbox_session";
+
+    /// <summary>The name the forward walk over the folder opens its span under.</summary>
+    internal const string DiscoverEmailsSpanName = "discover_mailbox_emails";
+
+    /// <summary>The name one batch of the forward walk's listing opens its span under.</summary>
+    internal const string FetchEmailBatchSpanName = "fetch_email_batch";
+
+    /// <summary>The name the backward pass over the window opens its span under.</summary>
+    internal const string ReconcileFolderSpanName = "reconcile_mailbox_folder";
+
+    /// <summary>The name retrieving the content an earlier run deferred opens its span under.</summary>
+    internal const string RefillDeferredContentSpanName = "refill_deferred_content";
 
     internal const string AccountTagName = "mailfathom.mail.account";
     internal const string FolderTagName = "mailfathom.mail.folder";
@@ -166,6 +185,30 @@ public sealed class MailSynchronizationTelemetry
         return new FolderRunScope(this, accountId, activity);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The stage carries no account and no folder alias of its own. It is always started inside the folder run's span,
+    /// which already names both, so repeating them here would put the same two dimensions on every stage of every run
+    /// to say what the parent says once.
+    /// </remarks>
+    public IMailSynchronizationPhaseScope BeginPhase(
+        MailSynchronizationPhase phase,
+        CancellationToken cancellationToken) =>
+        new PhaseScope(Telemetry.ActivitySource.StartActivity(SpanNameOf(phase)), cancellationToken);
+
+    /// <summary>Reads the name one stage of a folder run is published under.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the stage is not one this adapter publishes.</exception>
+    private static string SpanNameOf(MailSynchronizationPhase phase) => phase switch
+    {
+        MailSynchronizationPhase.ResolveFolder => ResolveFolderSpanName,
+        MailSynchronizationPhase.OpenSession => OpenSessionSpanName,
+        MailSynchronizationPhase.DiscoverEmails => DiscoverEmailsSpanName,
+        MailSynchronizationPhase.FetchEmailBatch => FetchEmailBatchSpanName,
+        MailSynchronizationPhase.ReconcileFolder => ReconcileFolderSpanName,
+        MailSynchronizationPhase.RefillDeferredContent => RefillDeferredContentSpanName,
+        _ => throw new ArgumentOutOfRangeException(nameof(phase), phase, "The synchronization stage has no published span name."),
+    };
+
     /// <summary>Publishes the wait an account's next run is scheduled behind, and the failure count that produced it.</summary>
     /// <param name="accountId">The account the wait belongs to.</param>
     /// <param name="delayBeforeNextRun">What the run backoff decided, which is the configured interval while nothing is failing.</param>
@@ -256,6 +299,51 @@ public sealed class MailSynchronizationTelemetry
     /// <param name="DelayBeforeNextRun">The wait the run backoff produced, which is the configured interval while nothing is failing.</param>
     /// <param name="ConsecutiveFailureCount">How many of the account's runs failed in a row.</param>
     private readonly record struct AccountSchedule(TimeSpan DelayBeforeNextRun, int ConsecutiveFailureCount);
+
+    /// <summary>Carries one stage of a folder run from the span that opens it to the ending that closes it.</summary>
+    /// <remarks>
+    /// A stage that never reported completing is published as interrupted where the run's token was cancelled and as
+    /// failed otherwise, which is the same distinction the folder run above it draws and for the same reason: shutdown
+    /// is not something the work did, and a restart that marked every stage in flight as an error would fill a trace
+    /// store with failures a rolling deployment produced.
+    /// </remarks>
+    private sealed class PhaseScope(Activity? activity, CancellationToken cancellationToken)
+        : IMailSynchronizationPhaseScope
+    {
+        private bool completed;
+        private bool reported;
+
+        public void Completed() => this.completed = true;
+
+        public void Dispose()
+        {
+            if (this.reported)
+            {
+                return;
+            }
+
+            this.reported = true;
+
+            if (activity is null)
+            {
+                return;
+            }
+
+            var outcome = this.completed
+                ? SucceededOutcomeName
+                : cancellationToken.IsCancellationRequested ? InterruptedOutcomeName : FailedOutcomeName;
+
+            activity.SetTag(OutcomeTagName, outcome);
+            activity.SetStatus(
+                outcome switch
+                {
+                    SucceededOutcomeName => ActivityStatusCode.Ok,
+                    FailedOutcomeName => ActivityStatusCode.Error,
+                    _ => ActivityStatusCode.Unset,
+                });
+            activity.Dispose();
+        }
+    }
 
     /// <summary>Holds one account run's place in the queue for a slot until the wait ends.</summary>
     private sealed class QueuedRun(MailSynchronizationTelemetry telemetry) : IDisposable

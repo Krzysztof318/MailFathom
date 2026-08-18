@@ -33,6 +33,38 @@ public sealed class JobRecordMappingTests
         Assert.Equal(ClaimedAt.AddMinutes(5), job.Lease.ExpiresAt);
     }
 
+    /// <summary>The row is what carries the enqueuing trace across the queue, so a claim reads it back onto the job.</summary>
+    [Fact]
+    public void ToLeasedJob_ARowRecordingTheEnqueuingTrace_RebuildsItOntoTheJob()
+    {
+        // Arrange
+        var entity = ClaimedRow();
+        entity.EnqueuedTraceParent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        entity.EnqueuedTraceState = "vendor=state";
+
+        // Act
+        var job = JobRecordMapping.ToLeasedJob(entity);
+
+        // Assert
+        Assert.NotNull(job.EnqueuedTrace);
+        Assert.Equal("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", job.EnqueuedTrace.TraceParent);
+        Assert.Equal("vendor=state", job.EnqueuedTrace.TraceState);
+    }
+
+    /// <summary>Every row written before the column existed reads this way, and the attempt at it links to nothing.</summary>
+    [Fact]
+    public void ToLeasedJob_ARowRecordingNoTrace_ReportsNoneRatherThanFailing()
+    {
+        // Arrange
+        var entity = ClaimedRow();
+
+        // Act
+        var job = JobRecordMapping.ToLeasedJob(entity);
+
+        // Assert
+        Assert.Null(job.EnqueuedTrace);
+    }
+
     /// <summary>A job belonging to no account is an ordinary case, and its column is null rather than a placeholder.</summary>
     [Fact]
     public void ToLeasedJob_ARowBelongingToNoAccount_ReportsNoAccountRatherThanOne()

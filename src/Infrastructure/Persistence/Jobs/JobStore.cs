@@ -5,6 +5,7 @@
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.CodeCoverage;
+using MailFathom.Infrastructure.Observability;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Jobs;
@@ -76,7 +77,8 @@ internal sealed class JobStore(
                 Guid.CreateVersion7(enqueuedAt),
                 request,
                 payload,
-                enqueuedAt))
+                enqueuedAt,
+                EnqueuedTraceCapture.Current()))
             .ToArrayAsync(cancellationToken);
 
         if (createdIds is [var createdId])

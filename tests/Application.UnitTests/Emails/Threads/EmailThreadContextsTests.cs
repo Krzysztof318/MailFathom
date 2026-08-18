@@ -225,6 +225,31 @@ public sealed class EmailThreadContextsTests
         Assert.DoesNotContain("secret-value", named.Email.Subject, StringComparison.Ordinal);
     }
 
+    /// <summary>The conversation is the unit its subjects are scanned as, so one call reports one guarded operation.</summary>
+    [Fact]
+    public async Task ContextForAsync_ActiveScanner_ReportsOneGuardedOperationForTheWholeConversation()
+    {
+        // Arrange
+        var opening = Message(1, Inbox, "2026-08-16T09:00:00Z") with { Subject = "token secret-value" };
+        var reply = Message(2, Inbox, "2026-08-16T10:00:00Z", answers: opening);
+        var later = Message(3, Inbox, "2026-08-16T11:00:00Z", answers: opening);
+        using var egress = ScanningSensitiveContentEgress.Finding("secret-value", TimeProvider.System);
+        var contexts = ContextsOver(
+            new StubEmailThreadReader((Thread, opening), (Thread, reply), (Thread, later)),
+            egress.Guard);
+
+        // Act
+        await contexts.ContextForAsync(Thread, reply.StoredEmailId, TestContext.Current.CancellationToken);
+
+        // Assert
+        var operation = Assert.Single(egress.Telemetry.Operations);
+
+        Assert.Equal(SensitiveContentEgressPoint.McpEmailContent, operation.EgressPoint);
+        Assert.Equal(egress.Telemetry.Guarded.Count, operation.GuardedTextCount);
+        Assert.True(operation.GuardedTextCount > 1);
+        Assert.True(operation.WasClosed);
+    }
+
     /// <summary>
     /// A merge folds one conversation into another and keeps the folded row, so an identifier a tool published before it
     /// still names a conversation. Assembling by that identifier reaches the mail of the conversation that survived,

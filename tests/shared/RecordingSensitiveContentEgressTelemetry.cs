@@ -18,12 +18,16 @@ internal sealed class RecordingSensitiveContentEgressTelemetry : ISensitiveConte
 {
     private readonly List<GuardedEgress> guarded = [];
     private readonly List<RefusedEgress> refused = [];
+    private readonly List<GuardedOperation> operations = [];
 
     /// <summary>Gets every text that passed a guard, in the order the guards ran.</summary>
     public IReadOnlyList<GuardedEgress> Guarded => this.guarded;
 
     /// <summary>Gets every egress a scanner refused, in the order the refusals happened.</summary>
     public IReadOnlyList<RefusedEgress> Refused => this.refused;
+
+    /// <summary>Gets every guarded operation that was opened, in the order they began.</summary>
+    public IReadOnlyList<GuardedOperation> Operations => this.operations;
 
     /// <inheritdoc />
     public void RecordGuarded(SensitiveContentEgressPoint egressPoint, RedactedText redacted, TimeSpan elapsed)
@@ -37,6 +41,15 @@ internal sealed class RecordingSensitiveContentEgressTelemetry : ISensitiveConte
     public void RecordRefused(SensitiveContentEgressPoint egressPoint, SensitiveContentScannerKind scanner) =>
         this.refused.Add(new RefusedEgress(egressPoint, scanner));
 
+    /// <inheritdoc />
+    public ISensitiveContentGuardScope BeginGuardedOperation(SensitiveContentEgressPoint egressPoint)
+    {
+        var operation = new GuardedOperation(egressPoint);
+        this.operations.Add(operation);
+
+        return operation;
+    }
+
     /// <summary>One text that passed a guard.</summary>
     /// <param name="EgressPoint">Where it was going.</param>
     /// <param name="Redacted">What the redaction produced.</param>
@@ -45,6 +58,32 @@ internal sealed class RecordingSensitiveContentEgressTelemetry : ISensitiveConte
         SensitiveContentEgressPoint EgressPoint,
         RedactedText Redacted,
         TimeSpan Elapsed);
+
+    /// <summary>One guarded operation and what was reported into it before its scope was closed.</summary>
+    /// <param name="egressPoint">Where the texts this operation guarded were going.</param>
+    internal sealed class GuardedOperation(SensitiveContentEgressPoint egressPoint) : ISensitiveContentGuardScope
+    {
+        /// <summary>Gets where the texts this operation guarded were going.</summary>
+        public SensitiveContentEgressPoint EgressPoint => egressPoint;
+
+        /// <summary>Gets how many texts were scanned inside this operation.</summary>
+        public int GuardedTextCount { get; private set; }
+
+        /// <summary>Gets whether a scanner refused the operation.</summary>
+        public bool WasRefused { get; private set; }
+
+        /// <summary>Gets whether the scope was closed, which a guarded operation always is.</summary>
+        public bool WasClosed { get; private set; }
+
+        /// <inheritdoc />
+        public void TextGuarded() => this.GuardedTextCount++;
+
+        /// <inheritdoc />
+        public void Refused() => this.WasRefused = true;
+
+        /// <inheritdoc />
+        public void Dispose() => this.WasClosed = true;
+    }
 
     /// <summary>One egress a scanner refused.</summary>
     /// <param name="EgressPoint">Where the text was going, and did not.</param>

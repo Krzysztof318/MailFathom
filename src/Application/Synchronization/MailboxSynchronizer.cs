@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Gating;
@@ -41,6 +42,7 @@ public sealed class MailboxSynchronizer
     private readonly MailboxReconciler reconciler;
     private readonly DerivedWorkGate derivedWorkGate;
     private readonly IDerivedWorkGateTelemetry gateTelemetry;
+    private readonly IMailSynchronizationPhaseTelemetry phaseTelemetry;
     private readonly SpamClassificationArrivals classificationArrivals;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly TimeProvider timeProvider;
@@ -64,6 +66,7 @@ public sealed class MailboxSynchronizer
         MailboxReconciler reconciler,
         DerivedWorkGate derivedWorkGate,
         IDerivedWorkGateTelemetry gateTelemetry,
+        IMailSynchronizationPhaseTelemetry phaseTelemetry,
         SpamClassificationArrivals classificationArrivals,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         TimeProvider timeProvider,
@@ -85,6 +88,7 @@ public sealed class MailboxSynchronizer
         this.reconciler = reconciler;
         this.derivedWorkGate = derivedWorkGate;
         this.gateTelemetry = gateTelemetry;
+        this.phaseTelemetry = phaseTelemetry;
         this.classificationArrivals = classificationArrivals;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.timeProvider = timeProvider;
@@ -141,7 +145,7 @@ public sealed class MailboxSynchronizer
 
         var transportSecurityPolicy = this.transportSecurityPolicyReader.GetPolicy(accountId);
 
-        var resolutionResult = await this.folderResolver.ResolveAsync(
+        var resolutionResult = await this.ResolveFolderAsync(
             accountId,
             folderMapping,
             transportSecurityPolicy,
@@ -170,7 +174,7 @@ public sealed class MailboxSynchronizer
         var persistedCheckpoint =
             await this.checkpointStore.GetCheckpointAsync(accountId, folder.Id, cancellationToken);
 
-        await using var mailboxSession = await this.mailboxSessionFactory.OpenReadOnlyAsync(
+        await using var mailboxSession = await this.OpenSessionAsync(
             accountId,
             folder,
             transportSecurityPolicy,
@@ -200,153 +204,178 @@ public sealed class MailboxSynchronizer
         var inspectedBatchCount = 0;
         var suppressedChanges = new List<SuppressedMailboxChange>();
 
-        while (hasMore && !stoppedForContentBudget && inspectedBatchCount < this.options.MaxMetadataBatchesPerRun)
+        using (var discovery = this.phaseTelemetry.BeginPhase(
+            MailSynchronizationPhase.DiscoverEmails,
+            cancellationToken))
         {
-            inspectedBatchCount++;
-
-            var batch = await mailboxSession.GetEmailBatchAfterAsync(
-                checkpoint.LastSeenUid,
-                this.options.MaxMetadataBatchSize,
-                synchronizationWindow,
-                cancellationToken);
-            var placements = await this.ReadPlacementsInBatchAsync(
-                accountId,
-                folder,
-                uidValidity,
-                batch,
-                cancellationToken);
-
-            var processedThroughUid = default(ImapUid?);
-
-            foreach (var metadata in batch.Emails.OrderBy(email => email.OccurrenceId.Uid.Value))
+            while (hasMore && !stoppedForContentBudget && inspectedBatchCount < this.options.MaxMetadataBatchesPerRun)
             {
-                var placement = FindPlacementOf(placements, folder, metadata.OccurrenceId);
+                inspectedBatchCount++;
 
-                if (placement is { } relocation
-                    && relocation.Request.Mutation == MailboxMutation.Relocate
-                    && await this.TryCarryRelocatedEmailAsync(relocation, metadata.OccurrenceId, cancellationToken))
-                {
-                    relocatedCount++;
-                    suppressedChanges.Add(new SuppressedMailboxChange(
-                        MailboxChangeKind.EmailAppearedInFolder,
-                        relocation.Request.Mutation,
-                        relocation.Request.StoredEmailId,
-                        relocation.Id));
-                    processedThroughUid = metadata.OccurrenceId.Uid;
-
-                    continue;
-                }
-
-                // The budget is tested before the occurrence is touched rather than while it is being stored, so a run
-                // that runs out of bytes ends between two emails and never halfway through one. An email above the size
-                // limit is exempt because it costs no fetch at all, and stopping the run for one would leave a
-                // checkpoint stuck in front of a message no budget will ever cover.
-                if (this.WouldFetchContentOf(metadata) && !budget.HasRunBudgetFor(this.AssumedContentCostOf(metadata)))
-                {
-                    stoppedForContentBudget = true;
-
-                    break;
-                }
-
-                // A copy is stored like any other discovery, because the email it duplicates stays where it was and a
-                // second live occurrence is a second local email under ADR 0008. What the record settles is only whose
-                // act the arrival was.
-                var copy = placement is { } candidate && candidate.Request.Mutation == MailboxMutation.Copy
-                    ? candidate
-                    : null;
-
-                var occurrence = await this.StoreOccurrenceAsync(mailboxSession, metadata, copy, budget, cancellationToken);
-                processedThroughUid = metadata.OccurrenceId.Uid;
-
-                if (occurrence.Availability is null)
-                {
-                    // The folder stopped holding the occurrence between the batch that described it and the fetch. There
-                    // is no message to record and nothing local to correct, so the checkpoint simply moves past it.
-                    continue;
-                }
-
-                switch (occurrence.Availability)
-                {
-                    case StoredEmailContentAvailability.Available:
-                        storedCount++;
-
-                        break;
-
-                    case StoredEmailContentAvailability.AwaitingStorageHeadroom:
-                        deferredForStorageCount++;
-
-                        break;
-
-                    default:
-                        skippedOversizedCount++;
-
-                        break;
-                }
-
-                if (occurrence.MimeCouldNotBeRead)
-                {
-                    unreadableMimeCount++;
-                }
-
-                if (copy is not null && occurrence.StoredEmailId is { } storedEmailId)
-                {
-                    suppressedChanges.Add(new SuppressedMailboxChange(
-                        MailboxChangeKind.EmailAppearedInFolder,
-                        copy.Request.Mutation,
-                        storedEmailId,
-                        copy.Id));
-                }
-            }
-
-            // A run stopped by its byte budget checkpoints through the last occurrence it actually handled rather than
-            // through the cursor the batch reported, which covers emails this run never reached. The two are the same
-            // whenever the batch was worked through, and only a truncated batch tells them apart.
-            var advanceThroughUid = stoppedForContentBudget ? processedThroughUid : batch.InspectedThroughUid;
-
-            if (advanceThroughUid is { } inspectedThroughUid)
-            {
-                var advancedCheckpoint = checkpoint.AdvanceTo(inspectedThroughUid, this.timeProvider.GetUtcNow());
-                await this.CommitCheckpointAsync(
+                var batch = await this.FetchBatchAsync(
+                    mailboxSession,
+                    checkpoint.LastSeenUid,
+                    synchronizationWindow,
+                    cancellationToken);
+                var placements = await this.ReadPlacementsInBatchAsync(
                     accountId,
                     folder,
-                    persistedCheckpoint,
-                    advancedCheckpoint,
+                    uidValidity,
+                    batch,
                     cancellationToken);
 
-                checkpoint = advancedCheckpoint;
-                persistedCheckpoint = advancedCheckpoint;
+                var processedThroughUid = default(ImapUid?);
+
+                foreach (var metadata in batch.Emails.OrderBy(email => email.OccurrenceId.Uid.Value))
+                {
+                    var placement = FindPlacementOf(placements, folder, metadata.OccurrenceId);
+
+                    if (placement is { } relocation
+                        && relocation.Request.Mutation == MailboxMutation.Relocate
+                        && await this.TryCarryRelocatedEmailAsync(relocation, metadata.OccurrenceId, cancellationToken))
+                    {
+                        relocatedCount++;
+                        suppressedChanges.Add(new SuppressedMailboxChange(
+                            MailboxChangeKind.EmailAppearedInFolder,
+                            relocation.Request.Mutation,
+                            relocation.Request.StoredEmailId,
+                            relocation.Id));
+                        processedThroughUid = metadata.OccurrenceId.Uid;
+
+                        continue;
+                    }
+
+                    // The budget is tested before the occurrence is touched rather than while it is being stored, so a run
+                    // that runs out of bytes ends between two emails and never halfway through one. An email above the size
+                    // limit is exempt because it costs no fetch at all, and stopping the run for one would leave a
+                    // checkpoint stuck in front of a message no budget will ever cover.
+                    if (this.WouldFetchContentOf(metadata) && !budget.HasRunBudgetFor(this.AssumedContentCostOf(metadata)))
+                    {
+                        stoppedForContentBudget = true;
+
+                        break;
+                    }
+
+                    // A copy is stored like any other discovery, because the email it duplicates stays where it was and a
+                    // second live occurrence is a second local email under ADR 0008. What the record settles is only whose
+                    // act the arrival was.
+                    var copy = placement is { } candidate && candidate.Request.Mutation == MailboxMutation.Copy
+                        ? candidate
+                        : null;
+
+                    var occurrence = await this.StoreOccurrenceAsync(mailboxSession, metadata, copy, budget, cancellationToken);
+                    processedThroughUid = metadata.OccurrenceId.Uid;
+
+                    if (occurrence.Availability is null)
+                    {
+                        // The folder stopped holding the occurrence between the batch that described it and the fetch. There
+                        // is no message to record and nothing local to correct, so the checkpoint simply moves past it.
+                        continue;
+                    }
+
+                    switch (occurrence.Availability)
+                    {
+                        case StoredEmailContentAvailability.Available:
+                            storedCount++;
+
+                            break;
+
+                        case StoredEmailContentAvailability.AwaitingStorageHeadroom:
+                            deferredForStorageCount++;
+
+                            break;
+
+                        default:
+                            skippedOversizedCount++;
+
+                            break;
+                    }
+
+                    if (occurrence.MimeCouldNotBeRead)
+                    {
+                        unreadableMimeCount++;
+                    }
+
+                    if (copy is not null && occurrence.StoredEmailId is { } storedEmailId)
+                    {
+                        suppressedChanges.Add(new SuppressedMailboxChange(
+                            MailboxChangeKind.EmailAppearedInFolder,
+                            copy.Request.Mutation,
+                            storedEmailId,
+                            copy.Id));
+                    }
+                }
+
+                // A run stopped by its byte budget checkpoints through the last occurrence it actually handled rather than
+                // through the cursor the batch reported, which covers emails this run never reached. The two are the same
+                // whenever the batch was worked through, and only a truncated batch tells them apart.
+                var advanceThroughUid = stoppedForContentBudget ? processedThroughUid : batch.InspectedThroughUid;
+
+                if (advanceThroughUid is { } inspectedThroughUid)
+                {
+                    var advancedCheckpoint = checkpoint.AdvanceTo(inspectedThroughUid, this.timeProvider.GetUtcNow());
+                    await this.CommitCheckpointAsync(
+                        accountId,
+                        folder,
+                        persistedCheckpoint,
+                        advancedCheckpoint,
+                        cancellationToken);
+
+                    checkpoint = advancedCheckpoint;
+                    persistedCheckpoint = advancedCheckpoint;
+                }
+
+                hasMore = stoppedForContentBudget || batch.HasMore;
             }
 
-            hasMore = stoppedForContentBudget || batch.HasMore;
+            discovery.Completed();
         }
 
         // The backward pass runs over the same open session, so it costs no second connection and inspects only what the
         // forward pass has already committed. It is deliberately not gated on the forward pass having finished its
         // folder: a mailbox whose backfill spans many runs must still notice a deletion in the part of it that is
         // already stored.
-        var reconciliation = await this.reconciler.ReconcileAsync(
-            mailboxSession,
-            accountId,
-            folder,
-            uidValidity,
-            checkpoint.ReconciledThroughModSeq,
-            cancellationToken);
+        MailboxReconciliationResult reconciliation;
 
-        checkpoint = await this.RecordReconciledModSeqAsync(
-            accountId,
-            folder,
-            persistedCheckpoint,
-            checkpoint,
-            reconciliation.ReconciledThroughModSeq,
-            cancellationToken);
+        using (var reconcilingFolder = this.phaseTelemetry.BeginPhase(
+            MailSynchronizationPhase.ReconcileFolder,
+            cancellationToken))
+        {
+            reconciliation = await this.reconciler.ReconcileAsync(
+                mailboxSession,
+                accountId,
+                folder,
+                uidValidity,
+                checkpoint.ReconciledThroughModSeq,
+                cancellationToken);
 
-        var refill = await this.RefillDeferredContentAsync(
-            mailboxSession,
-            accountId,
-            folder,
-            uidValidity,
-            budget,
-            cancellationToken);
+            checkpoint = await this.RecordReconciledModSeqAsync(
+                accountId,
+                folder,
+                persistedCheckpoint,
+                checkpoint,
+                reconciliation.ReconciledThroughModSeq,
+                cancellationToken);
+
+            reconcilingFolder.Completed();
+        }
+
+        DeferredContentRefill refill;
+
+        using (var refillingContent = this.phaseTelemetry.BeginPhase(
+            MailSynchronizationPhase.RefillDeferredContent,
+            cancellationToken))
+        {
+            refill = await this.RefillDeferredContentAsync(
+                mailboxSession,
+                accountId,
+                folder,
+                uidValidity,
+                budget,
+                cancellationToken);
+
+            refillingContent.Completed();
+        }
 
         return MailboxSynchronizationResult.Synchronized(
             folder,
@@ -365,6 +394,80 @@ public sealed class MailboxSynchronizer
                 deferredForStorageCount,
                 refill.RefilledEmailCount,
                 stoppedForContentBudget || refill.StoppedForContentBudget));
+    }
+
+    /// <summary>Turns the configured alias into the folder the mail server advertises for it, as a stage of the run.</summary>
+    /// <remarks>
+    /// It is the first stage rather than preparation for the run, because it opens a session of its own and asks the
+    /// server what it holds: an account whose folder listing became slow is attributable here and nowhere else.
+    /// </remarks>
+    private async Task<MailFolderResolutionResult> ResolveFolderAsync(
+        MailAccountId accountId,
+        MailFolderMapping folderMapping,
+        MailTransportSecurityPolicy transportSecurityPolicy,
+        CancellationToken cancellationToken)
+    {
+        using var phase = this.phaseTelemetry.BeginPhase(MailSynchronizationPhase.ResolveFolder, cancellationToken);
+
+        var resolutionResult = await this.folderResolver.ResolveAsync(
+            accountId,
+            folderMapping,
+            transportSecurityPolicy,
+            cancellationToken);
+
+        phase.Completed();
+
+        return resolutionResult;
+    }
+
+    /// <summary>Opens the read-only session the rest of the run works over, as a stage of the run.</summary>
+    /// <remarks>
+    /// The stage is the opening and not the session's lifetime: connecting, negotiating transport security,
+    /// authenticating, and selecting the folder is the part that waits on a mail server, and everything afterwards is
+    /// reported by the stage that issued it.
+    /// </remarks>
+    private async Task<IMailboxSession> OpenSessionAsync(
+        MailAccountId accountId,
+        MailFolderResolution folder,
+        MailTransportSecurityPolicy transportSecurityPolicy,
+        CancellationToken cancellationToken)
+    {
+        using var phase = this.phaseTelemetry.BeginPhase(MailSynchronizationPhase.OpenSession, cancellationToken);
+
+        var session = await this.mailboxSessionFactory.OpenReadOnlyAsync(
+            accountId,
+            folder,
+            transportSecurityPolicy,
+            cancellationToken);
+
+        phase.Completed();
+
+        return session;
+    }
+
+    /// <summary>Asks the mail server for one batch of the mail that follows the checkpoint, as a stage of the run.</summary>
+    /// <remarks>
+    /// Reported per batch, which is what separates a server slow to list a folder from local work slow to derive from
+    /// what it listed — the two are otherwise one duration, and they are remedied in different places. The count is
+    /// bounded by the run's batch limit, so a folder run publishes at most that many of these.
+    /// </remarks>
+    private async Task<RemoteEmailMetadataBatch> FetchBatchAsync(
+        IMailboxSession mailboxSession,
+        ImapUid? lastSeenUid,
+        MailSynchronizationWindow synchronizationWindow,
+        CancellationToken cancellationToken)
+    {
+        using var phase = this.phaseTelemetry.BeginPhase(MailSynchronizationPhase.FetchEmailBatch, cancellationToken);
+
+        var batch = await mailboxSession.GetEmailBatchAfterAsync(
+            lastSeenUid,
+            this.options.MaxMetadataBatchSize,
+            synchronizationWindow,
+            cancellationToken);
+
+        phase.Completed();
+
+        return batch;
     }
 
     /// <summary>Determines whether an occurrence would cost this run a payload retrieval at all.</summary>

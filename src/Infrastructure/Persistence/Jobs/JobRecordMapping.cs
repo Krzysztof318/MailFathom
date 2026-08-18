@@ -42,6 +42,7 @@ internal static class JobRecordMapping
             JobPayloadDocument.Deserialize(jobType, entity.Payload),
             entity.MailboxAccountId is { } accountId ? MailAccountId.Create(accountId) : null,
             entity.AttemptCount,
-            new JobLease(JobLeaseOwner.Create(leaseOwner), leaseExpiresAt));
+            new JobLease(JobLeaseOwner.Create(leaseOwner), leaseExpiresAt),
+            JobTraceContext.FromTraceParent(entity.EnqueuedTraceParent, entity.EnqueuedTraceState));
     }
 }

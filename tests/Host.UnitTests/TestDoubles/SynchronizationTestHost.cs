@@ -14,6 +14,7 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Mail.Mutations.Destinations;
+using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Actions;
@@ -169,6 +170,8 @@ internal static class SynchronizationTestHost
         // constructed per harness: a supervisor built with one instance and a coordinator with another would publish
         // two sets of the levels that describe the process.
         services.AddSingleton<MailSynchronizationTelemetry>();
+        services.AddSingleton<IMailSynchronizationPhaseTelemetry>(provider =>
+            provider.GetRequiredService<MailSynchronizationTelemetry>());
         services.AddScoped<IMailboxMutationPerformer, MailboxMutationPerformer>();
         services.AddScoped<MailboxMutationConverger>();
 

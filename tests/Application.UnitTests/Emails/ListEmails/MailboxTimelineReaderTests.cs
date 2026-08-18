@@ -738,6 +738,31 @@ public sealed class MailboxTimelineReaderTests
             result.Emails.Select(summary => summary.Subject));
     }
 
+    /// <summary>The page is the unit a caller waits for, so its guarding is reported once rather than once per summary.</summary>
+    [Fact]
+    public async Task ListEmailsAsync_ASwitchedOnScanner_ReportsOneGuardedOperationForTheWholePage()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var timeline = new InMemoryStoredEmailTimeline().WithAll(
+        [
+            SyntheticEmailSummaries.Create(FirstJuly, subject: $"the key is {Marker}"),
+            SyntheticEmailSummaries.Create(FirstJuly.AddDays(1), subject: "an ordinary subject"),
+        ]);
+        var reader = ReaderOver(timeline, egressGuard: egress.Guard);
+
+        // Act
+        await reader.ListEmailsAsync(new ListEmailsRequest(), TestContext.Current.CancellationToken);
+
+        // Assert
+        var operation = Assert.Single(egress.Telemetry.Operations);
+
+        Assert.Equal(SensitiveContentEgressPoint.McpSnippet, operation.EgressPoint);
+        Assert.Equal(egress.Telemetry.Guarded.Count, operation.GuardedTextCount);
+        Assert.True(operation.GuardedTextCount > 1);
+        Assert.True(operation.WasClosed);
+    }
+
     /// <summary>
     /// The name in front of an address is free text whoever sent the message chose, so it is scanned like the subject.
     /// The address beside it is a routing identity a server issued and is left alone, because a reply has to reach it.

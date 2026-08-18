@@ -106,7 +106,8 @@ public sealed class ScopedJobAttemptRunnerTests : IDisposable
         },
         AccountId: null,
         AttemptCount: 1,
-        new JobLease(JobLeaseOwner.Create("attempt-a"), Noon.AddMinutes(5)));
+        new JobLease(JobLeaseOwner.Create("attempt-a"), Noon.AddMinutes(5)),
+        EnqueuedTrace: null);
 
     /// <summary>Composes the smallest container an attempt resolves out of: a scoped store, and the executor over it.</summary>
     private ServiceProvider ComposedServices()

@@ -170,6 +170,9 @@ public sealed class MailboxTimelineReader
             return page;
         }
 
+        // One report for the page rather than one per summary, because the page is what a caller waits for.
+        using var scan = this.egressGuard.BeginGuardedOperation(SensitiveContentEgressPoint.McpSnippet);
+
         var guarded = new List<EmailSummary>(page.Count);
 
         foreach (var summary in page)

@@ -34,6 +34,102 @@ public sealed class SensitiveContentEgressGuardTests
         Assert.Equal("the key is [redacted:CloudKey] and it works", guarded);
     }
 
+    /// <summary>What a caller waits on is the operation, so every text guarded inside one is counted against it.</summary>
+    [Fact]
+    public async Task BeginGuardedOperation_TextsGuardedInsideIt_AreAllCountedAgainstTheOneOperation()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+
+        // Act
+        using (egress.Guard.BeginGuardedOperation(SensitiveContentEgressPoint.McpEmailContent))
+        {
+            await egress.Guard.GuardAsync(
+                SensitiveContentEgressPoint.McpEmailContent,
+                "a body",
+                TestContext.Current.CancellationToken);
+            await egress.Guard.GuardAllAsync(
+                SensitiveContentEgressPoint.McpEmailContent,
+                ["a subject", "a display name"],
+                TestContext.Current.CancellationToken);
+        }
+
+        // Assert
+        var operation = Assert.Single(egress.Telemetry.Operations);
+
+        Assert.Equal(SensitiveContentEgressPoint.McpEmailContent, operation.EgressPoint);
+        Assert.Equal(3, operation.GuardedTextCount);
+        Assert.False(operation.WasRefused);
+        Assert.True(operation.WasClosed);
+    }
+
+    /// <summary>A text guarded outside any operation is still guarded, and is counted against none of them.</summary>
+    [Fact]
+    public async Task BeginGuardedOperation_ATextGuardedAfterItClosed_IsCountedAgainstNoOperation()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+
+        // Act
+        using (egress.Guard.BeginGuardedOperation(SensitiveContentEgressPoint.McpSnippet))
+        {
+            await egress.Guard.GuardAsync(
+                SensitiveContentEgressPoint.McpSnippet,
+                "inside",
+                TestContext.Current.CancellationToken);
+        }
+
+        await egress.Guard.GuardAsync(
+            SensitiveContentEgressPoint.McpSnippet,
+            "outside",
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, Assert.Single(egress.Telemetry.Operations).GuardedTextCount);
+        Assert.Equal(2, egress.Telemetry.Guarded.Count);
+    }
+
+    /// <summary>A refusal is what the operation ended as, because the caller was served nothing rather than served late.</summary>
+    [Fact]
+    public async Task BeginGuardedOperation_AScannerThatCouldNotAnswer_EndsTheOperationAsRefused()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Unavailable(this.timeProvider);
+
+        // Act
+        using (egress.Guard.BeginGuardedOperation(SensitiveContentEgressPoint.McpSnippet))
+        {
+            await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(
+                () => egress.Guard.GuardAsync(
+                    SensitiveContentEgressPoint.McpSnippet,
+                    "a snippet",
+                    TestContext.Current.CancellationToken));
+        }
+
+        // Assert
+        var operation = Assert.Single(egress.Telemetry.Operations);
+
+        Assert.True(operation.WasRefused);
+        Assert.Equal(0, operation.GuardedTextCount);
+    }
+
+    /// <summary>An opt-in nobody took opens no operation either, so a deployment that scans nothing reports nothing.</summary>
+    [Fact]
+    public void BeginGuardedOperation_ADeploymentThatScansNothing_OpensNoOperation()
+    {
+        // Arrange
+        var telemetry = new RecordingSensitiveContentEgressTelemetry();
+        var guard = new SensitiveContentEgressGuard(redactor: null, telemetry, this.timeProvider);
+
+        // Act
+        using (guard.BeginGuardedOperation(SensitiveContentEgressPoint.ChatPrompt))
+        {
+        }
+
+        // Assert
+        Assert.Empty(telemetry.Operations);
+    }
+
     /// <summary>An opt-in nobody took must not appear on any path, so an inactive guard constructs nothing and scans nothing.</summary>
     [Fact]
     public async Task GuardAsync_ADeploymentThatScansNothing_HandsTheTextBackUnchanged()

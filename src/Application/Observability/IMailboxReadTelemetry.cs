@@ -26,4 +26,15 @@ public interface IMailboxReadTelemetry
     /// <param name="cancellationToken">The caller's token, read as the scope is disposed to tell a caller that walked away from a read that broke.</param>
     /// <returns>The scope, which the caller must dispose exactly once and which the read must be conducted inside.</returns>
     IMailboxReadScope BeginRead(MailboxReadOperation operation, CancellationToken cancellationToken);
+
+    /// <summary>Opens the report of the ranking one search runs, beneath the span of the search itself.</summary>
+    /// <param name="cancellationToken">The caller's token, read as the scope is disposed to tell a caller that walked away from a ranking that broke.</param>
+    /// <returns>The scope, which the caller must dispose exactly once and which the ranking must be conducted inside.</returns>
+    /// <remarks>
+    /// The ends of a ranking are already spanned by the libraries they run through — the provider call by the AI
+    /// instrumentation, the queries by the database one — and neither says what the ranking as a whole cost. That is
+    /// the gap this closes: a search that spent its time in neither the model nor the database is still attributable,
+    /// and the fusion of two rankings becomes measurable rather than being inferred from the difference.
+    /// </remarks>
+    IMailboxReadScope BeginSearchRanking(CancellationToken cancellationToken);
 }

@@ -55,6 +55,34 @@ public sealed class RecordingSensitiveContentEgressTelemetryTests
     }
 
     [Fact]
+    public void BeginGuardedOperation_TextsAndARefusalReportedIntoIt_AreKeptOnTheOperationTheyBelongTo()
+    {
+        // Arrange
+        var telemetry = new RecordingSensitiveContentEgressTelemetry();
+
+        // Act
+        using (var operation = telemetry.BeginGuardedOperation(SensitiveContentEgressPoint.McpEmailContent))
+        {
+            operation.TextGuarded();
+            operation.TextGuarded();
+            operation.Refused();
+        }
+
+        using (telemetry.BeginGuardedOperation(SensitiveContentEgressPoint.McpSnippet))
+        {
+        }
+
+        // Assert
+        Assert.Equal(
+            [
+                (SensitiveContentEgressPoint.McpEmailContent, 2, true, true),
+                (SensitiveContentEgressPoint.McpSnippet, 0, false, true),
+            ],
+            telemetry.Operations.Select(operation =>
+                (operation.EgressPoint, operation.GuardedTextCount, operation.WasRefused, operation.WasClosed)));
+    }
+
+    [Fact]
     public void RecordGuarded_NoRedaction_IsRefusedAsAnArgument()
     {
         // Arrange

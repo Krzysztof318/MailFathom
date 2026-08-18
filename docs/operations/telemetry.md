@@ -366,6 +366,28 @@ returns columns sized like a row; this one returns a whole message, so a command
 forty-megabyte message from a two-kilobyte one. An email whose content was never stored reports `found` as false and no
 size, which is an answer rather than a failure.
 
+Two more sit there for the same reason one level along, and both exist because the libraries span only the ends. A
+provider call is spanned by the AI instrumentation and a query by the database one, so a read whose time went into
+neither would otherwise be a duration with nothing under it.
+
+| Span | Where it is opened | What it carries |
+| --- | --- | --- |
+| `rank_mailbox_search` | Inside `search_mailbox`, and inside an answering run's own retrieval | The same two tags the reads above carry, with the count being the candidates the ranking produced rather than the window returned |
+| `scan_sensitive_content` | Wherever a read guards a payload before publishing it | `mailfathom.sensitive_content.egress_point`, `…texts` as how many texts the operation scanned, and `…outcome` as `succeeded` or `refused` |
+
+The ranking's count is deliberately the ranking's rather than the read's. A hybrid search asks each side for four times
+the window so the fusion has agreement to observe, so a call returning ten matches having ranked eighty candidates is
+the ordinary case, and the two numbers side by side are what separate a slow fusion from a wide one.
+
+**The scan is spanned per guarded operation and never per guarded value.** One `get_email_content` call scans a body
+representation, a subject, and a display name for every email it names, so a span apiece would report each of those as
+quick while the read they compose stayed slow — and the instruments under
+[what guarding an egress point publishes](#what-guarding-an-egress-point-publishes) already answer at the level of a
+value. The operation is the payload a use case is about to publish: one message's content, one page of a listing, one
+window of results, one conversation's subjects. A deployment with both scanner switches off opens none of them, because
+nothing is constructed on that path at all. A `refused` ending is not an error status: a scanner that could not answer
+stopped the egress on purpose, and the read above it carries the failure.
+
 Four instruments answer over all of those reads what that span answers about one, and cover the write beside it.
 `mailfathom.mail.content.read.bytes` and `mailfathom.mail.content.write.bytes` are how large the messages moving through
 the store are, and `mailfathom.mail.content.read.duration` and `mailfathom.mail.content.write.duration` are how long
@@ -436,6 +458,19 @@ produces one span each rather than one covering all of them.
 | `mailfathom.job.attempt` | Which attempt this was, counting from one, which is what separates a slow job from one that has been failing all day |
 | `mailfathom.job.outcome` | How it ended, in the same six words the instruments below carry |
 | `mailfathom.job.failure` | `transient` or `permanent`, on the attempt that dead-lettered the job and on no other |
+
+**The attempt also carries a link to the trace that enqueued it, where one was recorded.** A durable queue is a break
+in a trace rather than a tree: the folder run, the tool call, or the pass that asked for the work ends long before a
+worker claims it, so making the attempt that work's child would ask a span store to hold one trace open for as long as
+the queue is deep. What travels instead is the W3C context of whatever was running at the enqueue, written onto the job
+row in `EnqueuedTraceParent` and `EnqueuedTraceState` and turned back into an `ActivityLink` when the attempt opens. The
+attempt stays its own trace, and a mailbox change that never converged is one link away from the run that asked for it
+rather than a search through logs.
+
+Absence is ordinary and is never a failure. Every row written before those columns existed carries none, a job enqueued
+while nothing was being traced carries none, and an attempt at either opens the same span with no link on it. Nothing
+else about the enqueue is kept: a trace identifier is a random number this process minted, which is the whole reason it
+is safe to store beside work that points at mail.
 
 Three of those six endings mark the span as an error, and they are the three where the work itself failed:
 `handler_failed`, `handler_missing`, and `timed_out`. An attempt the host released on shutdown and one whose lease had
@@ -517,6 +552,35 @@ That nesting is the whole point of the pair — a cycle whose duration doubled i
 in rather than to the account as a whole — and the records the same cycle already logs carry the trace and span
 identifiers of whichever of the two they were written inside, so a count in a log line and the span it belongs to are
 one thing.
+
+Beneath the folder run sit the stages it passes through, for the same reason one level down: a folder run fails and
+slows for reasons that are remedied in different places, and one duration over all of them says only which folder was
+slow. Each carries `mailfathom.mail.sync.outcome` as `succeeded`, `failed`, or `interrupted`, and nothing else — the
+account and the folder alias are on the run above and would be repeated on every stage of every run to say what the
+parent already says once.
+
+| Span | The stage it reports |
+| --- | --- |
+| `resolve_mail_folder` | Turning the configured alias into the folder the server advertises for it, which opens a session of its own |
+| `open_mailbox_session` | Connecting, negotiating transport security, authenticating, and selecting the folder |
+| `discover_mailbox_emails` | The forward walk: discovering mail, retrieving what it stores, deriving from it, and committing the checkpoint |
+| `fetch_email_batch` | One batch of that walk's listing, opened once per batch and bounded by `MaxMetadataBatchesPerRun` |
+| `reconcile_mailbox_folder` | The backward pass over the window, and the modification sequence it commits |
+| `refill_deferred_content` | Retrieving the content of mail an earlier run recorded without it |
+
+`fetch_email_batch` is the one that repeats, and it is what makes the story the pair was introduced for readable inside
+the walk: a discovery whose duration doubled while its batches stayed quick is local work — a scanner, a derivation, a
+database under contention — while a discovery that doubled along with them is a mail server. It repeats at most
+`MailSynchronization:MaxMetadataBatchesPerRun` times, which is what keeps the bound on how many of these a run can publish.
+
+There is deliberately no stage per message. A folder run stores as many emails as its batch bounds allow, so a span
+apiece would put one per synchronized message into a trace store to say what
+[`mailfathom.mail.sync.emails.stored`](#what-a-synchronization-cycle-emits) says better — the same reasoning that keeps
+the content write measured and unspanned.
+
+A run that ended early publishes the stages it reached and no others, which is how far it got: an alias the server
+advertises no folder for publishes the resolution stage alone. `interrupted` is shutdown rather than a defect, exactly
+as it is on the folder run above.
 
 | Tag | Where | What it carries |
 | --- | --- | --- |
@@ -639,7 +703,9 @@ snippet scanning that would otherwise average it away.
 **Every one of these series counts a guarded value rather than a guarded operation**, because a value is what a scan
 runs over. One `get_email_content` call scans each body representation, the subject, and each display name it publishes,
 for every email it names, so what the caller waits for is the sum of the durations that call recorded rather than any
-one of them — read the count beside the duration before sizing the feature or alerting on a percentile.
+one of them — read the count beside the duration before sizing the feature or alerting on a percentile. That sum is
+also a span: `scan_sensitive_content` is opened once per guarded operation, carries how many texts it scanned, and sits
+beneath the read that asked for the payload, so one call's guarding is readable without adding the values up.
 
 | Instrument | What it answers |
 | --- | --- |
