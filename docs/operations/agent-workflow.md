@@ -741,21 +741,18 @@ files or comments; the line list derived from the files would inherit that shape
 and the submission step would then validate every anchor against the first page
 alone and push every other finding into the review body.
 
-Claude then runs with `Read`, `Grep`, `Glob`, and `Agent` and nothing else: no
-shell, no editor, no writer, no network tool, no MCP tool, and no read access to
-`.git`, where the action leaves a token for its own use. It holds no credential it
-could use and posts nothing. Its findings are the run's own answer, and the step
-after it validates them and submits a single review: `event: COMMENT` when the
-answer holds findings that withhold approval, `event: APPROVE` when it holds none
-— and, from the fourth pass, when the ones it holds are all P3, described under
-**What a later pass is for** below.
+The collection then splits the change into groups and the run starts one reader per
+group, concurrently — the fan-out described under **How a review is spread over
+readers** below.
 
-`Agent` is what spreads the first pass over subagents, described under **What the
-reviewer is measured against** below. It widens what the session can *read* in
-parallel and nothing else: a subagent inherits the permission rules of the session
-that spawned it, so the deny list reaches it unchanged, and what it returns is
-model text the main session confirms against the file before it can become a
-finding.
+Every session, reader or judge, runs with `Read`, `Grep`, and `Glob` and nothing
+else: no shell, no editor, no writer, no network tool, no MCP tool, no subagent,
+and no read access to `.git`, where the action leaves a token for its own use.
+None of them holds a credential it could use and none posts anything. The judge's
+findings are the run's own answer, and the step after it validates them and submits
+a single review: `event: COMMENT` when the answer holds findings that withhold
+approval, `event: APPROVE` when it holds none and when the ones it holds are all P3,
+described under **What a later pass is for** below.
 
 The model is named exactly rather than by alias: `claude-sonnet-5` at
 `--effort high`. An alias re-points at whatever ships next, and findings are only
@@ -830,7 +827,7 @@ further seconds of jitter so several calls failing at once do not come back in
 step. The deadline is what makes the attempt budget a bound at all: `gh` sets none
 of its own, so a connection that stalls rather than drops — the same failure in
 its other shape — would otherwise hang with the budget never advancing, until the
-reviewing job's thirty minutes ran out. That recovers a request that was dropped
+collecting job's twelve minutes ran out. That recovers a request that was dropped
 and deliberately cannot wait out an outage: a call that exhausts its budget
 returns the failure rather than swallowing it, and says how many attempts it made,
 because the caller's own failure would otherwise say only that the call did not
@@ -991,22 +988,23 @@ is not what it does. `issue_comment` and a label event carry no head ref to run,
 and reviewing a fork at a maintainer's request is the whole reason the workflow
 reaches one at all; `pull_request` would give the run neither the secrets it needs
 to publish under the App nor a trigger a maintainer can aim. What makes that safe
-is structural rather than procedural: the workspace holds `base.sha` and never the
-branch, nothing from the contribution is executed, and the reviewer runs with
-`Read`, `Grep`, `Glob`, and `Agent` and no shell, writer, network tool, or MCP
-tool. The purpose of the prohibition — untrusted code never runs with a credential
-— is met without avoiding the trigger.
+is structural rather than procedural: every job holds `base.sha` and never the
+branch, nothing from the contribution is executed, and every session — each reader
+and the judge — runs with `Read`, `Grep`, and `Glob` and no shell, writer, network
+tool, MCP tool, or subagent. The purpose of the prohibition — untrusted code never
+runs with a credential — is met without avoiding the trigger.
 
-`Agent` is inside that argument rather than an exception to it. A subagent
-inherits the spawning session's permission rules, so every deny rule the reviewer
-runs under applies to it and it reaches nothing the reviewer cannot; what it adds
-is a second reader of the same files, and what it returns is untrusted text on the
-same terms as the diff that produced it.
+The reader jobs are inside that argument rather than an exception to it. A reader
+holds the Claude credential and nothing else: no App token, no write permission of
+any kind, and no API call. Six of them read the same frozen snapshot one session
+used to, under the same deny list, and what each returns is untrusted text on the
+same terms as the diff that produced it — which is why the judge confirms a
+candidate against the file before it can become a finding.
 
 The exception is scoped to this workflow and to that shape. It is revoked by any
 change that checks out, builds, restores, or executes the branch under review,
-that grants the reviewer a shell, a writer, or a network tool, that gives a
-subagent a permission the main session does not hold, that adds
+that grants a reader or the judge a shell, a writer, or a network tool, that lets
+a job other than the judge hold a credential that writes, that adds
 `workflow_dispatch` — a dispatch takes a ref, which would let the branch supply
 the job that receives the Claude credential — or that lets a trigger other than a
 maintainer's label or comment reach a fork. A second workflow wanting the trigger
@@ -1017,7 +1015,7 @@ does not inherit this reasoning; it argues its own case or uses `pull_request`.
 The run spends the repository owner's personal Claude subscription — whichever of
 the two the `CLAUDE_CODE_PROFILE` variable selects, as
 [Provisioning the App](#provisioning-the-app) describes — so what limits how
-often it runs is a design concern rather than an operational one. Nine things do,
+often it runs is a design concern rather than an operational one. Eleven things do,
 and they are listed together because each closes a different way the bill could
 grow:
 
@@ -1042,13 +1040,21 @@ grow:
   measured rather than assumed: the table under **What the reviewer is measured
   against** is what put it back there after a day at `xhigh` nearly doubled the
   median run;
-- past three passes a change settles on what it has, so a P3 can cost a fourth
-  round at most rather than every round until somebody fixes it.
+- the readers are capped at six concurrent sessions, and a change too large for
+  that gets larger groups rather than more of them — the concurrency is a decision
+  about the subscription rather than about any one change;
+- a later pass starts readers only for the groups holding a path that moved since the
+  previous review, so the second and later rounds cost a fraction of the first;
+- a P3 never withholds approval, so no round is ever spent on a finding whose own
+  severity says it can wait.
 
-The last two are the only ones that bound how *hard* a run works rather than how
-often one starts, and they are the pair worth re-measuring rather than tuning by
+The last four are the only ones that bound how *hard* a run works rather than how
+often one starts, and they are the set worth re-measuring rather than tuning by
 feel: reading depth is where this workflow spends deliberately, and a change that
-stops converging is where that spending stops paying.
+stops converging is where that spending stops paying. The metrics artifact
+described under **What a run leaves behind** is what makes re-measuring them
+possible; the fan-out spends the same tokens as the session it replaced, only
+concurrently, so what it changed is the duration rather than the bill.
 
 Moving the run onto a metered API key with a spend limit would replace that set
 with one number, and it is deliberately not done: the gate above already stops
@@ -1108,61 +1114,97 @@ migration paths, and a request for tests that names no untested case, so the two
 reviewers do not spend threads on findings this repository has already decided
 against.
 
-The prompt splits the work into two passes and forbids interleaving them, which
-is what separates coverage from the bar. The first pass reads every entry in
-`files.json` and the resulting file around every hunk, collecting candidates
-without filtering or ranking any of them; it is finished when every file and
-every row of `obligations.json` has been read, not when the list feels long
-enough. The second pass confirms each
-candidate against the file it concerns, names the rule it rests on, and drops
-whatever cannot be confirmed, is already answered by the surrounding file, or was
-already raised by another reviewer.
+The work is two passes and they are two different jobs, which is what separates
+coverage from the bar. The first pass reads every entry in `files.json` and the
+resulting file around every hunk, collecting candidates without filtering or
+ranking any of them. The second pass confirms each candidate against the file it
+concerns, names the rule it rests on, and drops whatever cannot be confirmed, is
+already answered by the surrounding file, or was already raised by another
+reviewer.
 
-That first pass is spread over subagents rather than read in one sitting.
-`files.json` is split into groups of four to six related files — one project, one
-feature, one directory, so that a group reads as a piece of work — and each group
-goes to a subagent that returns candidates and reaches no verdict, because it saw
-a fraction of the change and cannot know what the rest of it answers. One reader
-holding thirty files reads the last of them less closely than the first, which is
-what #811 cost four rounds; a reader holding six has no twentieth file to tire on.
+### How a review is spread over readers
 
-Three things are never delegated, each being a judgment about the change as a
+The first pass is a matrix of reader jobs rather than one session. The collection
+step runs `group-changed-files.sh`, which assigns every collected file to exactly
+one group, and the run starts one reader per group with a ceiling of six
+concurrent readers and a target of a dozen files each. A reader is given the paths
+of its group and returns the paths it opened, the candidates it noticed, and its
+notes; it reaches no verdict, because it saw a fraction of the change and cannot
+know what the rest of it answers.
+
+The split is where it is because a request is not a property. The reading used to
+happen in one session that the prompt asked to spread the work over subagents, and
+nothing enforced the split, the grouping, or the launch — so both the duration and
+the coverage of a review were decided by what the model chose. Measured over the
+39 runs that reached the model between 2026-08-16 and 2026-08-18:
+
+| changed files | runs | median run | longest |
+|---|---|---|---|
+| 1–5 | 3 | 3.4 min | 5.2 min |
+| 6–15 | 2 | 5.8 min | 7.7 min |
+| 16–30 | 13 | 8.1 min | 20.1 min |
+| 31–60 | 12 | 17.9 min | 22.2 min |
+| 60+ | 8 | 24.7 min | 28.1 min |
+
+Twelve of the 39 passed twenty minutes and every one of them was a change of 42
+files or more, against a job ceiling of thirty. Three others ended early having read
+a fraction of the change — 8 of 42 files in 2.7 minutes, 27 of 51 in 4.7, 15 of 21
+in 6.3 — and each published a verdict shaped exactly like a complete one. Both are
+the same defect, and the split answers both: the duration now follows the largest
+group rather than the whole change, and a group nobody read is a missing report
+rather than a silence.
+
+Three things are never a reader's, each being a judgment about the change as a
 whole: the reading of `obligations.json`, the two readings of the pull request
-body, and the second pass. A subagent's report is untrusted in exactly the way the
-diff it read is, so it is a list of places to look, and the main session confirms
-every candidate by opening the file itself. Where the subagents are unavailable
-the reviewer reads the files directly and says so in its summary — covering the
-change matters more than covering it in a particular shape.
+body, and the second pass. A reader's report is untrusted in exactly the way the
+diff it read is, so it is a list of places to look, and the judge confirms every
+candidate by opening the file itself.
 
 ### The review states what it read
 
-The reviewer's answer carries a `covered` list naming the entries of `files.json`
-it opened, and a step between the review and its submission compares that list
-against the collection and writes the difference into the published body, beside
-whatever a ceiling dropped. Until it existed, a pass that covered eleven of
-twenty-seven files published a verdict shaped exactly like one that covered all of
-them, and the only thing that told them apart was a later round finding what the
-first walked past.
+The coverage is composed from what the readers reported opening, not claimed by the
+reviewer about itself. A step between the review and its submission gathers every
+reader's list, compares it against the collection, and writes the difference into
+the published body beside whatever a ceiling dropped — and states separately how
+many readers reported back, because a group whose reader failed is a part of the
+change no session opened rather than one a model skipped.
 
-It reports and never gates. The ledger is the reviewer's own account and nothing
-in the job can verify it, so failing a run on it would buy a stricter-sounding
-gate that any reviewer closes by naming every file; what it is worth is that the
-gap is visible where the verdict is already read. An approval is where that
+It reports and never gates. A partial review that says what it missed is worth more
+than no review, so the verdict is published either way. An approval is where that
 matters most, since an approval asserts the absence of defects across a whole
 change.
 
-Every path it prints comes from `files.json` rather than from the answer, because
+Every path it prints comes from `files.json` rather than from a report, because
 this is a path from model text into a published review body: what the step names
-is the difference — paths the collection step wrote — and a name in the ledger
-that matches nothing in the collection is reported as a count and never quoted.
-The list of unread paths is bounded, and the remainder becomes a number.
+is the difference — paths the collection step wrote — and a name in a report that
+matches nothing in the collection is reported as a count and never quoted. The list
+of unread paths is bounded, and the remainder becomes a number.
+
+### What a run leaves behind
+
+Each run publishes a `fathom-review-metrics` artifact holding numbers alone: the
+changed-file count, how the split fell, what each reader covered and how long its
+session took, the judge's own duration and turn count, the coverage, the verdict,
+and the findings by severity. It carries no summary, no finding, no path, and no
+prose from any session.
+
+It exists because adjustments to this workflow could not be told apart. `--effort`
+moved to `xhigh` and back, the reading was narrowed, the settling threshold was
+added, and each was judged by wall-clock duration on whichever pull requests were
+open that day — while duration here is mostly a function of how many files the
+change has, which nothing recorded alongside it. The action's own execution log is
+never published, so this file is the whole of what a run leaves for the next
+comparison. It is retained for thirty days, against the one day the collected
+inputs and the candidates keep, because it is read across runs rather than inside
+one.
 
 ### What a later pass is for
 
-Reading the whole change on every pass is right. Judging it again on every pass is
-not, and the two came in together: with the ledger asking for the whole change to
-be read and `xhigh` paying for it, a fourth pass had both the reach and the budget
-to open a file no fix had touched and start there.
+Judging the whole change again on every pass is wrong, and so — once the reading
+was split across jobs and priced — is re-reading it. The two came in together:
+with the ledger asking for the whole change to be read and `xhigh` paying for it, a
+fourth pass had both the reach and the budget to open a file no fix had touched and
+start there.
 
 #839 is what that looks like. Four files, 401 added lines — the smallest pull
 request of the sample — six automatic rounds, 34 inline findings, no approval, and
@@ -1173,7 +1215,8 @@ sixth opened `SECURITY.md` and raised another. Not one of those pages had been
 touched by a single fix. The reviewer was not converging on the change; it was
 widening across it.
 
-Two rules answer that, and neither one makes a pass read less.
+Three rules answer that. Two bound what a pass may conclude; the third bounds what
+it re-reads, and it arrived later, when the fan-out made the cost of a pass legible.
 
 **What moved is what a later pass may conclude something about.** The collection
 step compares the head of the reviewer's previous review with the one in front of
@@ -1199,18 +1242,35 @@ somebody asked for, and where the comparison failed, and each of those puts the
 whole change back in scope — a bound derived from an API error would silence
 findings on files that did move.
 
-**Past three passes a change settles on what it has.** A P1 breaks something and a
-P2 is owed by a rule, so either withholds approval however late it arrives. A P3
-is paid for later by definition, and a fourth round spent holding a change for one
-costs more than the finding is worth. So from the fourth pass a review carrying
-nothing above P3 is published as an approval with those findings attached as
-inline comments rather than as one that holds the change. Nothing is hidden and
-nothing is postponed silently: the findings are published exactly as they would
-have been, and the thread-resolution rule the `main` ruleset carries still makes
-each one answerable before the merge. What changes is only the verdict they arrive
-under. The count is of automatic passes alone, so asking for a review never
-advances a pull request toward its own threshold, and a requested pass is judged
-at full strictness.
+**A later pass re-reads only the groups that moved.** `group-changed-files.sh` reads
+`changed-since-last-review.txt` beside the split and marks each group
+`read_this_pass`, and the run starts readers for the marked ones alone. The rule
+above already bounds what a later pass may conclude to those paths, so a reader
+opening the rest was paying full price for a reading no verdict could rest on — and
+at 2.94 reviews per pull request, that was the largest recurring cost this workflow
+carried. The judge is not bounded by it: it reads `obligations.json` over the whole
+change, reads the body twice, and has `files.json` and `head/` in front of it. The
+coverage line then separates the two shapes of unread — a file inside a re-read
+group that no report names, which is a gap and is named, and a file in a group
+nobody re-read, which carries the previous review's verdict and is counted.
+
+**A P3 never withholds approval.** A P1 breaks something and a P2 is owed by a rule,
+so either holds the change however late it arrives. A P3 is paid for later by
+definition, and a round spent holding a change for one costs more than the finding
+is worth. So a review carrying nothing above P3 is published as an approval with
+those findings attached as inline comments, at every pass including the first.
+Nothing is hidden and nothing is postponed silently: the findings are published
+exactly as they would have been, and the thread-resolution rule the `main` ruleset
+carries still makes each one answerable before the merge. What changes is only the
+verdict they arrive under.
+
+This started at the fourth pass and became unconditional on measurement. Across 106
+published reviews on 36 pull requests, 72 withheld approval and exactly one of them
+carried nothing but P3 findings — so the threshold bought one review, at the price of
+a verdict that depended on which round a finding happened to be noticed in and a pass
+counter threaded into the submission. P3 findings themselves are not rare, at 95 of
+326, which is the other half of the reading: they arrive beside P1 and P2 findings,
+where the verdict was never theirs to decide.
 
 The prompt states the severities and the consequence together, because the
 reviewer writing a P3 as a P2 to make it hold the change would be arranging a
@@ -1438,7 +1498,7 @@ The workflow writes the roadmap board's `Status` field twice, on every issue the
 pull request's body closes and on nothing else — because closing an issue is what
 makes a review of the pull request a statement about that issue's lifecycle.
 
-The first write happens as the review starts, beside the reviewing job rather
+The first write happens as the review starts, beside the collecting job rather
 than before it, and it writes `In review`. A review takes minutes, and without it
 the column says whatever the last event left there for that whole time — usually
 `In progress`, the state the work was in before the pull request existed. Nothing
@@ -1447,8 +1507,8 @@ API failure must not delay or skip a review.
 
 The last write is the verdict: `Changes requested` where the review withheld
 approval, `Ready to merge` where it gave it. That is the verdict rather than the
-presence of findings, and the two stopped being the same question once a settled
-late pass began publishing its remaining P3 findings under an approval. A run that publishes no verdict
+presence of findings, and the two stopped being the same question once a review
+carrying only P3 findings began publishing them under an approval. A run that publishes no verdict
 writes nothing and leaves `In review` standing, where a reader sees that a review
 was asked for and produced nothing.
 

@@ -1,16 +1,11 @@
 {
   "type": "object",
   "additionalProperties": false,
-  "required": ["summary", "covered", "findings"],
+  "required": ["summary", "findings"],
   "properties": {
     "summary": {
       "type": "string",
-      "description": "What the change does, how much of it was covered, and anything left out. Never a tally by severity and never a restatement of a finding."
-    },
-    "covered": {
-      "type": "array",
-      "description": "Every path of files.json whose resulting file was read in the first pass, written exactly as files.json spells it. A file with no finding belongs here as much as one with six.",
-      "items": { "type": "string" }
+      "description": "What the change does, what the readers covered and what went unread, and anything a ceiling left out. Never a tally by severity and never a restatement of a finding."
     },
     "findings": {
       "type": "array",

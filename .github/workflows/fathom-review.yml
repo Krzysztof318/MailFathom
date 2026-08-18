@@ -21,6 +21,20 @@ name: Fathom review
 # and submits one review. That split is what keeps a prompt injection in the diff, in a comment, or
 # in the linked issue from reaching an authenticated API call.
 #
+# A review is four jobs, and which job does what is the load-bearing part of the design rather than
+# an arrangement of steps. `collect` freezes the change as data and splits it into groups, holding no
+# credential that writes anything. `read` runs one session per group, concurrently, and each returns
+# candidates under a schema of its own — that is the first pass, and it is the run rather than a
+# model that decides who reads what, so an 88-file change is six readers of fifteen files instead of
+# one session of 88. `judge` performs the second pass: it confirms every candidate against the file
+# it concerns, reads what no reader could — the obligations index, the change's own account of
+# itself, the previous passes — and is the one job that holds the App token and publishes. `board`
+# records the verdict.
+#
+# What that buys is a run whose length follows the largest group rather than the whole change, and a
+# coverage list composed from what the readers reported opening rather than claimed by the reviewer
+# about itself. The measurement that argued for it is in the `collect` job below.
+#
 # What that step posts, it posts as the `Fathom reviewer` GitHub App rather than as `github-actions`.
 # The App is the owner's, so the review carries an identity that says what produced it, and the
 # workflow token it replaces drops to read-only: the only credential in this file that can write to
@@ -586,58 +600,62 @@ jobs:
 
           "$BOARD_STATUS_SCRIPT" "$IN_REVIEW_STATUS" "$PRESERVED_STATUSES"
 
-  fathom-review:
-    name: Fathom review
+  # The change as data, and the split that decides who reads what. Nothing here runs a model, which
+  # is why it holds no Claude credential and no App token: it calls the API the workflow token
+  # already reaches, freezes what it collected, and hands the result to the jobs that do.
+  #
+  # Reading used to happen in the same job as this, in one session, and the prompt asked that session
+  # to spread the reading over subagents. Nothing enforced it. Measured over the 39 runs that reached
+  # the model between 2026-08-16 and 2026-08-18: a change of 60 files or more took a median of 24.7
+  # minutes against a 30-minute ceiling, twelve runs of the 39 passed twenty minutes and every one of
+  # them was a change of 42 files or more, and three runs ended early having read a fraction of the
+  # change — 8 of 42 files in 2.7 minutes, 27 of 51 in 4.7, 15 of 21 in 6.3 — each publishing a
+  # verdict shaped exactly like a complete one. Those are one defect: coverage and duration were both
+  # properties of what the model chose rather than of how the run was built.
+  #
+  # `group-changed-files.sh` is where that choice stops being the model's. Every collected file is
+  # assigned to exactly one group before a model starts, and the `read` job below runs one reader per
+  # group, concurrently. What that buys is a run whose length follows the largest group rather than
+  # the whole change, and a coverage list the run composes from what the readers actually opened
+  # instead of one the reviewer writes about itself.
+  collect:
+    name: Collect the change
     needs:
       - decide
     if: needs.decide.outputs.review == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The model-free half of the run, and the sum of its own bounds: the settle wait ends at five
+    # minutes, the head-content loop at two, the closing-issue loop at two, and each of the two loops
+    # may spend one further call's retry budget past its window. Twelve is that with room for the
+    # checkout, and it fails loudly rather than eating into what the readers have.
+    #
+    # The three jobs together are what has to land inside twenty minutes, and they do so by their
+    # measured cost rather than by their ceilings: about two minutes here, eight in the slowest
+    # reader, and nine in the judge. A ceiling reached is a job that hung, and the timeout is what
+    # ends it rather than a budget anything plans against.
+    timeout-minutes: 12
     outputs:
-      # What the submission step published, and nothing else: a run that posted no review states no
-      # verdict, so the job below is skipped rather than left to infer one from a job result that is
-      # green for several different reasons.
-      verdict: ${{ steps.submit.outputs.verdict }}
+      head_sha: ${{ steps.collect.outputs.head_sha }}
+      snapshot_taken: ${{ steps.collect.outputs.snapshot_taken }}
+      # The matrix the readers run as: one entry per group, as the group's index. The files each
+      # index stands for are in `groups.json` inside the collected inputs rather than in this
+      # output, because a matrix is rendered into the job name and a list of paths would make one
+      # unreadable — and because the split is data the readers read rather than a value they are
+      # configured with.
+      groups: ${{ steps.split.outputs.groups }}
+      group_count: ${{ steps.split.outputs.group_count }}
+      changed_files: ${{ steps.split.outputs.changed_files }}
     permissions:
       contents: read
-      # Read-only throughout. The workflow token collects the change and nothing else; every write
-      # this job performs is made with the `Fathom reviewer` App's installation token, minted below.
-      # That is what lets this block stay narrower than the job's behavior suggests: `write` here
-      # would also permit closing or relabelling a pull request, which nothing in this file does.
+      # Read-only throughout, and here that is the whole of what the job can do: no credential in
+      # this job writes anything. The App token that publishes the review is minted in `judge`
+      # below, which is the one job that publishes.
       pull-requests: read
       # The pull request's body names the issue it closes, and that issue is the change's stated
       # contract. `contents: read` does not reach an issue, so the scope is stated rather than
       # inherited — and stating it keeps the read from depending on the repository staying public.
       issues: read
-      # No `actions: write`, which is why every run logs `Cache reservation failed: cache write
-      # denied: token has no writable scopes`. `claude-code-action` installs Bun through
-      # `setup-bun`, which tries to cache the binary, and caching is a write. The warning is the
-      # expected outcome rather than a defect: it costs one download of a runner-local binary per
-      # run, while the scope that would silence it also permits cancelling workflow runs and
-      # deleting artifacts and caches — from a job that `pull_request_target` starts. Nothing here
-      # is worth that, and `setup-bun`'s own `no-cache` input is not one the action forwards.
     steps:
-      # The identity the review is published under. `create-github-app-token` exchanges the App's
-      # client id and private key for an installation token scoped to this repository, valid for an
-      # hour and revoked when the job ends, so the long-lived credential in the secret store is a
-      # signing key rather than something that can call the API on its own. The App needs exactly
-      # one permission: `Pull requests: Read and write`, which covers both submitting a review and
-      # commenting on a pull request.
-      - name: Mint the reviewer App's token
-        id: reviewer
-        uses: actions/create-github-app-token@v3
-        with:
-          # `client-id` rather than `app-id`: the action deprecated the numeric App id in v3 and
-          # warns on every run that still passes it. Both end up as the issuer of the same JWT, so
-          # this is the identifier GitHub now expects rather than a different credential.
-          #
-          # A variable rather than a secret, because a client id is not one: it is visible on the
-          # App's own page and in every installation. Only the private key is a credential, and
-          # keeping the identifier out of the secret store is what makes a failed run say which App
-          # it tried to authenticate as instead of printing `***`.
-          client-id: ${{ vars.REVIEWER_APP_CLIENT_ID }}
-          private-key: ${{ secrets.REVIEWER_APP_PRIVATE_KEY }}
-
       # The base commit, which is code that already merged, and never the branch under review. It
       # supplies the repository's own instructions — `AGENTS.md`, the `review-change` skill, the
       # ADRs and the architecture draft — so the reviewer measures the change against the contract as it
@@ -1135,13 +1153,418 @@ jobs:
             "$REVIEW_DIRECTORY/files.json" \
             "$REVIEW_DIRECTORY/obligations.json"
 
-          # Read-only from here on. The reviewer reads these files and the submission step trusts
-          # them — `lines.json` in particular is what makes an anchor valid — so nothing that runs
-          # in between may rewrite them. Removing write permission from the directories as well as
-          # the files is what stops an entry being replaced rather than modified. It happens here
-          # rather than at the end of the collection above because this is the last step that
-          # writes into the directory.
+      # Who reads what, decided here and not by a model. `group-changed-files.sh` holds the reasoning
+      # and the balance rule; this states the two bounds it is given and why each is that number.
+      - name: Split the change between the readers
+        id: split
+        shell: bash
+        env:
+          REVIEW_DIRECTORY: ${{ runner.temp }}/review
+          GROUP_SCRIPT: ${{ github.workspace }}/.github/fathom-review/group-changed-files.sh
+          # How many readers may run at once. Every one of them is a session on the owner's personal
+          # Claude subscription, so this is a decision about that subscription rather than about any
+          # one change: six concurrent readers is the ceiling the owner set, and a change large
+          # enough to want more gets larger groups instead of more sessions.
+          MAX_GROUPS: '6'
+          # What a group holds while the ceiling is not binding. Measured from the runs this replaces:
+          # a session reading 16 to 30 files took a median of 8.1 minutes, and 6 to 15 took 5.8, so a
+          # dozen files is a reader that finishes inside the time the judge still needs after it.
+          TARGET_GROUP_SIZE: '12'
+        run: |
+          set -euo pipefail
+
+          # The last argument is what bounds a later pass. The collection step writes
+          # `changed-since-last-review.txt` only for an automatic pass that has a previous review to
+          # compare against, so its absence is what puts every group in scope — a first pass, a
+          # review somebody asked for, and a comparison the API refused all take that path.
+          "$GROUP_SCRIPT" \
+            "$REVIEW_DIRECTORY/files.json" \
+            "$REVIEW_DIRECTORY/groups.json" \
+            "$MAX_GROUPS" \
+            "$TARGET_GROUP_SIZE" \
+            "$REVIEW_DIRECTORY/changed-since-last-review.txt"
+
+          # The matrix is the indices alone, and only of the groups this pass re-reads. A matrix
+          # value is rendered into the job name, and a list of twenty paths would make one
+          # unreadable; the files each index stands for are in `groups.json`, which every reader
+          # has, along with which groups were left out and why.
+          {
+            echo "groups=$(jq -c '[.[] | select(.read_this_pass) | .index]' "$REVIEW_DIRECTORY/groups.json")"
+            echo "group_count=$(jq '[.[] | select(.read_this_pass)] | length' "$REVIEW_DIRECTORY/groups.json")"
+            echo "changed_files=$(jq 'length' "$REVIEW_DIRECTORY/files.json")"
+          } >> "$GITHUB_OUTPUT"
+
+          # Read-only from here on. The readers and the judge read these files and the submission
+          # step trusts them — `lines.json` in particular is what makes an anchor valid — so nothing
+          # that runs afterwards may rewrite them. Removing write permission from the directories as
+          # well as the files is what stops an entry being replaced rather than modified, and it
+          # happens here because this is the last step that writes into the directory.
+          #
+          # It does not survive the handoff, which is why each job that downloads the artifact
+          # applies it again: `upload-artifact` documents that file permissions are not maintained
+          # and that every downloaded directory is `755` and every file `644`. A property asserted
+          # only in the job that asserts it would be no property at all.
           chmod -R a-w "$REVIEW_DIRECTORY"
+
+      # The collected change, handed to the jobs that read it. Everything in it is public already —
+      # a diff, the conversation on a public pull request, the issues it closes — so the artifact
+      # discloses nothing the pull request does not, and it carries the shortest retention the
+      # setting allows because its only readers are two jobs in this same run.
+      #
+      # This is what lets the readers run concurrently at all: collecting once and sharing the result
+      # keeps six readers from making six copies of the same hundred API calls, and it means every
+      # reader and the judge are looking at the same frozen snapshot rather than at six snapshots
+      # taken minutes apart.
+      - name: Publish the collected change
+        uses: actions/upload-artifact@v7
+        with:
+          name: fathom-review-inputs
+          path: ${{ runner.temp }}/review
+          if-no-files-found: error
+          retention-days: 1
+          # `head/` mirrors the repository's own paths, so a change under `.github/`, `.config/`, or
+          # `.agents/` is a hidden path to this action, which ignores those by default. Without this
+          # the reviewer would silently lose the head content of exactly the files this repository
+          # protects most closely — including this workflow.
+          include-hidden-files: true
+
+  # One reader per group, all at once. This is the first pass over the change, and the concurrency
+  # is the whole point: the run now takes as long as the largest group rather than as long as the
+  # change, so an 88-file pull request is six readers of about fifteen files instead of one session
+  # of 88 that measured 24.7 minutes at the median and 28.1 at the worst.
+  #
+  # A reader holds the Claude credential and nothing else. It has no App token, no write permission
+  # of any kind, and it checks out the base commit exactly as every other job here does — nothing
+  # from the branch under review is fetched, built, or executed, so the posture argued under
+  # *Why `pull_request_target` is the trigger* is unchanged by there being six of these instead of
+  # one session with subagents. What a reader produces is text validated against a schema and
+  # published as an artifact for the judge, which treats it as untrusted input on the same terms as
+  # the diff that produced it.
+  read:
+    name: Read group ${{ matrix.group }}
+    needs:
+      - decide
+      - collect
+    if: needs.decide.outputs.review == 'true' && needs.collect.outputs.group_count != '0'
+    runs-on: ubuntu-latest
+    # A reader reads a dozen files and writes one object. Fifteen minutes is roughly twice the
+    # median a session of that size measured, so a reader that hits this was not slow but stuck —
+    # and one stuck reader must not hold the review open, which is what `fail-fast: false` and the
+    # judge's own condition below make survivable.
+    timeout-minutes: 15
+    strategy:
+      # A reader that fails takes its group's coverage with it and nothing else. The judge still
+      # runs, the coverage line states which files nobody opened, and the review is published saying
+      # so — a partial review that admits what it missed is worth more than no review at all.
+      fail-fast: false
+      # The ceiling the split was computed against, restated here because a matrix is what actually
+      # bounds the concurrency. `group-changed-files.sh` never emits more groups than this, so the
+      # two agreeing is an invariant rather than a coincidence — but a later change to one that
+      # forgot the other would spend more of the subscription at once than the owner agreed to,
+      # which is the failure this line exists to make loud rather than silent.
+      max-parallel: 6
+      matrix:
+        group: ${{ fromJSON(needs.collect.outputs.groups) }}
+    permissions:
+      # Everything this job needs and nothing else. It reads the base checkout and an artifact from
+      # its own run; it calls no API, so it holds neither `pull-requests` nor `issues`.
+      contents: read
+    steps:
+      - name: Check out the base commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Take the collected change
+        uses: actions/download-artifact@v8
+        with:
+          name: fathom-review-inputs
+          path: ${{ runner.temp }}/review
+
+      - name: Compose the reader's prompt and the answer schema
+        id: reader_prompt
+        shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+          PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
+          HEAD_SHA: ${{ needs.collect.outputs.head_sha }}
+          SNAPSHOT_TAKEN: ${{ needs.collect.outputs.snapshot_taken }}
+          GROUP_INDEX: ${{ matrix.group }}
+          GROUP_COUNT: ${{ needs.collect.outputs.group_count }}
+          REVIEW_DIRECTORY: ${{ runner.temp }}/review
+          TEMPLATE_FILE: ${{ github.workspace }}/.github/fathom-review/reader-prompt.md
+          RUBRICS_FILE: ${{ github.workspace }}/.github/fathom-review/review-rubrics.md
+          SCHEMA_FILE: ${{ github.workspace }}/.github/fathom-review/candidates-schema.json
+          PROMPT_FILE: ${{ runner.temp }}/reader-prompt.md
+        run: |
+          set -euo pipefail
+
+          # The modes the collection step set, applied again because the artifact did not carry
+          # them. The reader holds no tool that writes, so this is defence in depth rather than the
+          # only thing stopping a write — but `lines.json` is what makes an anchor valid and
+          # `files.json` is what the coverage is measured against, and neither may be rewritten by
+          # anything that runs after they were frozen.
+          chmod -R a-w "$REVIEW_DIRECTORY"
+
+          group_files="$(
+            jq -r --argjson index "$GROUP_INDEX" \
+              '.[] | select(.index == $index) | .files[] | "- `\(.)`"' \
+              "$REVIEW_DIRECTORY/groups.json"
+          )"
+
+          # A reader with no files is a split this workflow cannot produce — `group-changed-files.sh`
+          # emits no empty group and the matrix comes from the same file — so reaching this means the
+          # two have come apart, and a session given no files would return an empty answer that reads
+          # exactly like a clean group.
+          if [[ -z "$group_files" ]]; then
+            printf 'Group %s holds no files, so the split and the matrix disagree.\n' "$GROUP_INDEX" >&2
+            exit 1
+          fi
+
+          # `awk` rather than `sed` for the two placeholders that stand for a whole file. `sed`
+          # substitutes a pattern into a line and would need every `&`, `\`, and newline in the
+          # rubrics escaped; reading the replacement as a file and printing it whole cannot be
+          # confused by its content.
+          awk -v group_files="$group_files" -v rubrics_file="$RUBRICS_FILE" '
+            $0 == "{{GROUP_FILES}}" { print group_files; next }
+            $0 == "{{RUBRICS}}" { while ((getline line < rubrics_file) > 0) print line; next }
+            { print }
+          ' "$TEMPLATE_FILE" \
+            | sed \
+              -e "s|{{REPOSITORY}}|${REPOSITORY}|g" \
+              -e "s|{{PULL_REQUEST_NUMBER}}|${PULL_REQUEST_NUMBER}|g" \
+              -e "s|{{HEAD_SHA}}|${HEAD_SHA}|g" \
+              -e "s|{{SNAPSHOT_TAKEN}}|${SNAPSHOT_TAKEN}|g" \
+              -e "s|{{GROUP_INDEX}}|${GROUP_INDEX}|g" \
+              -e "s|{{GROUP_COUNT}}|${GROUP_COUNT}|g" \
+              -e "s|{{REVIEW_DIRECTORY}}|${REVIEW_DIRECTORY}|g" \
+              > "$PROMPT_FILE"
+
+          # A placeholder that survived substitution reaches the model as literal text, which is a
+          # reader that opens the wrong paths rather than a run that fails, so it fails here.
+          if grep -nE '\{\{[A-Z_]+\}\}' "$PROMPT_FILE" >&2; then
+            echo "The reader prompt still holds an unsubstituted placeholder." >&2
+            exit 1
+          fi
+
+          schema="$(jq -c . "$SCHEMA_FILE")"
+
+          if [[ "$schema" == *"'"* ]]; then
+            echo 'The candidates schema contains an apostrophe, which the reader flag cannot quote.' >&2
+            exit 1
+          fi
+
+          {
+            echo 'prompt<<FATHOM_READER_PROMPT'
+            cat "$PROMPT_FILE"
+            echo 'FATHOM_READER_PROMPT'
+            echo "schema=${schema}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Read the group
+        id: read
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ vars.CLAUDE_CODE_PROFILE == 'secondary' && secrets.CLAUDE_CODE_OAUTH_TOKEN_SECONDARY || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          classify_inline_comments: 'false'
+          # The same deny list the judge runs under, for the same reasons, stated here rather than
+          # shared because a workflow has no mechanism to share one and a reader that quietly ran
+          # under a wider one would be the only place in this file where untrusted text meets a
+          # permission nobody argued.
+          settings: |
+            {
+              "permissions": {
+                "deny": [
+                  "Bash",
+                  "Edit",
+                  "Write",
+                  "WebFetch",
+                  "WebSearch",
+                  "mcp__*",
+                  "Read(//proc/**)",
+                  "Read(//**/.git/**)",
+                  "Read(//**/.claude/**)",
+                  "Read(//**/.ssh/**)",
+                  "Read(//**/.npmrc)",
+                  "Read(//**/.netrc)"
+                ]
+              }
+            }
+          prompt: ${{ steps.reader_prompt.outputs.prompt }}
+          # No `Agent`. The fan-out this workflow used to ask a session for is now the matrix that
+          # started this job, and a reader holding a dozen files has nothing left to split: a second
+          # layer of it would put the same non-determinism back one level down, where nothing counts
+          # the groups or notices a subagent that returned early.
+          #
+          # The model is whatever the gate chose for this run, so a `security` change is read by the
+          # costlier one in the readers as well as in the judge — the label widens what is read, and
+          # the reading is here.
+          claude_args: |
+            --model ${{ needs.decide.outputs.model }}
+            --effort high
+            --allowedTools "Read,Grep,Glob"
+            --setting-sources user
+            --json-schema '${{ steps.reader_prompt.outputs.schema }}'
+
+      # What the reader returned, written to a file the judge downloads. A reader that failed
+      # publishes nothing, which is exactly how the judge and the coverage step tell an unread group
+      # apart from a clean one.
+      - name: Publish what the group produced
+        if: success()
+        shell: bash
+        env:
+          CANDIDATES: ${{ steps.read.outputs.structured_output }}
+          GROUP_INDEX: ${{ matrix.group }}
+          CANDIDATES_DIRECTORY: ${{ runner.temp }}/candidates
+          REVIEW_DIRECTORY: ${{ runner.temp }}/review
+          # Where `claude-code-action` writes what the session did. It is read here for the numbers
+          # alone — how long, how many turns — and never for what the session said, which is model
+          # text derived from an untrusted diff and belongs in no artifact.
+          EXECUTION_FILE: ${{ runner.temp }}/claude-execution-output.json
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$CANDIDATES_DIRECTORY"
+
+          printf '%s' "$CANDIDATES" > "$CANDIDATES_DIRECTORY/group-${GROUP_INDEX}.json"
+
+          # An answer that is not JSON cannot have come back from the action, which validates it
+          # against the schema and fails its own step otherwise. It is checked anyway, because the
+          # judge reads this file as data and a malformed one would reach it as a group that looks
+          # read and holds nothing.
+          if ! jq -e '.covered | type == "array"' "$CANDIDATES_DIRECTORY/group-${GROUP_INDEX}.json" > /dev/null; then
+            printf 'Group %s returned no coverage list, so its answer is not usable.\n' "$GROUP_INDEX" >&2
+            exit 1
+          fi
+
+          printf 'Group %s covered %s files and raised %s candidates.\n' \
+            "$GROUP_INDEX" \
+            "$(jq '.covered | length' "$CANDIDATES_DIRECTORY/group-${GROUP_INDEX}.json")" \
+            "$(jq '.candidates | length' "$CANDIDATES_DIRECTORY/group-${GROUP_INDEX}.json")"
+
+          # What this reader cost, beside what it produced. The judge gathers these into the run's
+          # metrics, and they are the reason a later adjustment to this workflow can be judged
+          # against a measurement: before this existed, the only signals a change here could be read
+          # by were the wall-clock duration of the whole job and a coverage notice, which is how
+          # successive adjustments produced impressions rather than comparable numbers.
+          jq -n \
+            --argjson group "$GROUP_INDEX" \
+            --argjson files_given "$(jq --argjson index "$GROUP_INDEX" \
+              '[.[] | select(.index == $index) | .files[]] | length' "$REVIEW_DIRECTORY/groups.json")" \
+            --argjson covered "$(jq '.covered | length' "$CANDIDATES_DIRECTORY/group-${GROUP_INDEX}.json")" \
+            --argjson candidates "$(jq '.candidates | length' "$CANDIDATES_DIRECTORY/group-${GROUP_INDEX}.json")" \
+            --argjson session "$(jq '[.[] | select(.type == "result")] | last
+                                     | {duration_ms: .duration_ms, turns: .num_turns}
+                                     | if . == null then {} else . end' \
+                                  "$EXECUTION_FILE" 2>/dev/null || echo '{}')" \
+            '{group: $group, files_given: $files_given, covered: $covered,
+              candidates: $candidates, session: $session}' \
+            > "$CANDIDATES_DIRECTORY/metrics-${GROUP_INDEX}.json"
+
+      - name: Hand the candidates to the judge
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fathom-review-candidates-${{ matrix.group }}
+          path: ${{ runner.temp }}/candidates
+          if-no-files-found: error
+          retention-days: 1
+
+  # The second pass, and the only job that publishes anything. It confirms every candidate against
+  # the file it concerns, reads what no reader could — the obligations index, the pull request's own
+  # account of itself, the previous passes and their threads — and answers with the findings that
+  # survive.
+  #
+  # It runs whether or not every reader finished. A group that failed is a group nobody read, and
+  # the coverage step states which files that leaves unopened; publishing a review that says so
+  # beats losing the verdict along with the reader.
+  judge:
+    name: Fathom review
+    needs:
+      - decide
+      - collect
+      - read
+    if: ${{ !cancelled() && needs.collect.result == 'success' }}
+    runs-on: ubuntu-latest
+    # The judge no longer reads the change file by file, so its work is bounded by the number of
+    # candidates rather than by the size of the diff. Twenty minutes is the whole run's budget minus
+    # what collection and the readers spend before it.
+    timeout-minutes: 20
+    outputs:
+      # What the submission step published, and nothing else: a run that posted no review states no
+      # verdict, so the job below is skipped rather than left to infer one from a job result that is
+      # green for several different reasons.
+      verdict: ${{ steps.submit.outputs.verdict }}
+    permissions:
+      contents: read
+      # Read-only throughout. The workflow token collects nothing here and reads nothing this job
+      # writes; every write this job performs is made with the `Fathom reviewer` App's installation
+      # token, minted below. That is what lets this block stay narrower than the job's behavior
+      # suggests: `write` here would also permit closing or relabelling a pull request, which
+      # nothing in this file does.
+      pull-requests: read
+      issues: read
+      # No `actions: write`, which is why every run logs `Cache reservation failed: cache write
+      # denied: token has no writable scopes`. `claude-code-action` installs Bun through
+      # `setup-bun`, which tries to cache the binary, and caching is a write. The warning is the
+      # expected outcome rather than a defect: it costs one download of a runner-local binary per
+      # run, while the scope that would silence it also permits cancelling workflow runs and
+      # deleting artifacts and caches — from a job that `pull_request_target` starts. Nothing here
+      # is worth that, and `setup-bun`'s own `no-cache` input is not one the action forwards.
+    steps:
+      # The identity the review is published under. `create-github-app-token` exchanges the App's
+      # client id and private key for an installation token scoped to this repository, valid for an
+      # hour and revoked when the job ends, so the long-lived credential in the secret store is a
+      # signing key rather than something that can call the API on its own. The App needs exactly
+      # one permission: `Pull requests: Read and write`, which covers both submitting a review and
+      # commenting on a pull request.
+      #
+      # It is minted in this job alone. The readers publish nothing and hold nothing that could,
+      # which is what keeps the write credential in the one job that makes one API call with it.
+      - name: Mint the reviewer App's token
+        id: reviewer
+        uses: actions/create-github-app-token@v3
+        with:
+          # `client-id` rather than `app-id`: the action deprecated the numeric App id in v3 and
+          # warns on every run that still passes it. Both end up as the issuer of the same JWT, so
+          # this is the identifier GitHub now expects rather than a different credential.
+          #
+          # A variable rather than a secret, because a client id is not one: it is visible on the
+          # App's own page and in every installation. Only the private key is a credential, and
+          # keeping the identifier out of the secret store is what makes a failed run say which App
+          # it tried to authenticate as instead of printing `***`.
+          client-id: ${{ vars.REVIEWER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.REVIEWER_APP_PRIVATE_KEY }}
+
+      # The base commit, which is code that already merged, and never the branch under review. It
+      # supplies the repository's own instructions — `AGENTS.md`, the `review-change` skill, the
+      # ADRs and the architecture draft — so the reviewer measures the change against the contract
+      # as it stands on `main` rather than as the branch would rewrite it.
+      - name: Check out the base commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Take the collected change
+        uses: actions/download-artifact@v8
+        with:
+          name: fathom-review-inputs
+          path: ${{ runner.temp }}/review
+
+      # Whatever the readers produced, merged into one directory beside the collected inputs. A
+      # group that failed left no artifact, so what arrives here is exactly the set of groups that
+      # were read — which is what the coverage step measures and what the prompt tells the judge to
+      # read `groups.json` against.
+      - name: Take what the readers produced
+        uses: actions/download-artifact@v8
+        with:
+          pattern: fathom-review-candidates-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/review/candidates
+        continue-on-error: true
 
       # The reviewer's instructions live in `.github/fathom-review/reviewer-prompt.md` rather than
       # in a block scalar here, because GitHub compiles any string holding a `${{ }}` expression
@@ -1165,22 +1588,37 @@ jobs:
         env:
           REPOSITORY: ${{ github.repository }}
           PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
-          HEAD_SHA: ${{ steps.collect.outputs.head_sha }}
-          SNAPSHOT_TAKEN: ${{ steps.collect.outputs.snapshot_taken }}
+          HEAD_SHA: ${{ needs.collect.outputs.head_sha }}
+          SNAPSHOT_TAKEN: ${{ needs.collect.outputs.snapshot_taken }}
           REVIEW_DIRECTORY: ${{ runner.temp }}/review
           TEMPLATE_FILE: ${{ github.workspace }}/.github/fathom-review/reviewer-prompt.md
+          # The rubrics the readers were given, verbatim. They are one file because the judge
+          # confirms candidates against the same bar the readers raised them against, and a second
+          # copy of them here is exactly how the two would come to disagree about what a finding is.
+          RUBRICS_FILE: ${{ github.workspace }}/.github/fathom-review/review-rubrics.md
           SCHEMA_FILE: ${{ github.workspace }}/.github/fathom-review/findings-schema.json
           PROMPT_FILE: ${{ runner.temp }}/reviewer-prompt.md
         run: |
           set -euo pipefail
 
-          sed \
-            -e "s|{{REPOSITORY}}|${REPOSITORY}|g" \
-            -e "s|{{PULL_REQUEST_NUMBER}}|${PULL_REQUEST_NUMBER}|g" \
-            -e "s|{{HEAD_SHA}}|${HEAD_SHA}|g" \
-            -e "s|{{SNAPSHOT_TAKEN}}|${SNAPSHOT_TAKEN}|g" \
-            -e "s|{{REVIEW_DIRECTORY}}|${REVIEW_DIRECTORY}|g" \
-            "$TEMPLATE_FILE" > "$PROMPT_FILE"
+          # The modes the collection step set, applied again for the reason the readers apply them:
+          # the artifact does not carry them, and `lines.json` is what makes an anchor valid. It
+          # happens here rather than after the download because the candidates land inside the same
+          # directory, and they are model text — the one part of this tree that was not frozen when
+          # the rest of it was.
+          chmod -R a-w "$REVIEW_DIRECTORY"
+
+          awk -v rubrics_file="$RUBRICS_FILE" '
+            $0 == "{{RUBRICS}}" { while ((getline line < rubrics_file) > 0) print line; next }
+            { print }
+          ' "$TEMPLATE_FILE" \
+            | sed \
+              -e "s|{{REPOSITORY}}|${REPOSITORY}|g" \
+              -e "s|{{PULL_REQUEST_NUMBER}}|${PULL_REQUEST_NUMBER}|g" \
+              -e "s|{{HEAD_SHA}}|${HEAD_SHA}|g" \
+              -e "s|{{SNAPSHOT_TAKEN}}|${SNAPSHOT_TAKEN}|g" \
+              -e "s|{{REVIEW_DIRECTORY}}|${REVIEW_DIRECTORY}|g" \
+              > "$PROMPT_FILE"
 
           # A placeholder that survived substitution reaches the model as literal text, which is a
           # review that reads the wrong paths rather than a run that fails, so it fails here.
@@ -1240,11 +1678,10 @@ jobs:
           # where the CLI keeps its own configuration. This input is written to the user settings
           # file, which is why every path pattern is absolute.
           #
-          # It is also what bounds the subagents `Agent` lets the reviewer launch. A subagent
-          # inherits the permission rules of the session that spawned it rather than being granted
-          # its own, so every rule below reaches one, and a later change that widened a subagent
-          # beyond the main session would have to be made here, in the one place the session is
-          # already argued.
+          # The same list governs every reader job above. It is written twice because a workflow has
+          # no mechanism to share one, and the two must not drift: a reader reads the same untrusted
+          # diff this job does, and a session of this file running under a wider rule than the other
+          # would be the one place that property was never argued.
           settings: |
             {
               "permissions": {
@@ -1272,8 +1709,8 @@ jobs:
           # something there.
           #
           # `--effort high` decides how much the model thinks and how much work it does before
-          # answering. A review is the shape of task where that matters: the cheap failure is a
-          # reviewer that reads the first few files closely, finds something, and coasts.
+          # answering. Confirming a candidate is the shape of task where that matters: the cheap
+          # failure is a judge that takes a plausible-sounding report on trust.
           #
           # This was `xhigh` for a day, on #811's argument that a round finding nothing new costs
           # more than the depth that would have avoided it. The measurement over the day that
@@ -1282,23 +1719,16 @@ jobs:
           # thirty-five runs past twenty minutes where none had been, and approvals falling from 47%
           # of reviews to 29%. The depth did not buy earlier convergence; it bought a reviewer with
           # the budget to keep finding one more thing, which the coverage ledger then pointed at the
-          # whole change every pass. Reading everything is still right, and it is the narrowing this
-          # change adds — not a shallower pass — that stops the widening.
+          # whole change every pass.
           #
-          # `Agent` is what lets the first pass be spread over subagents instead of read in one
-          # sitting, which is the other half of the same measurement: a session reading thirty files
-          # reads the last of them less closely than the first, and the prompt splits `files.json`
-          # into groups of a handful and gives each group its own reader. The tool is named `Agent`
-          # rather than `Task` — the two are the same tool and `Task` still resolves as an alias,
-          # but the alias is the older spelling and this is the flag that has to keep matching what
-          # the CLI documents.
-          #
-          # It grants the reviewer no reach it did not have. A subagent inherits this session's
-          # permission rules, so the deny list above applies to it unchanged: no shell, no editor,
-          # no writer, no network tool, no MCP tool, and none of the paths that hold a credential.
-          # What comes back from one is model text derived from the same untrusted diff the session
-          # already reads, and the prompt treats it as such — a list of places to look, confirmed by
-          # the main session against the file itself before it can become a finding.
+          # No `Agent`, in this job or in a reader. The fan-out it used to provide is the `read`
+          # matrix, which is the same idea with the parts this file can count: the groups are formed
+          # before a model starts, every changed file is in exactly one of them, a reader that dies
+          # is a missing artifact rather than a subagent nobody notices, and the coverage the review
+          # publishes is composed from what the readers reported opening. What the tool bought was
+          # never the parallelism alone — it was a second reader of the same files — and that is
+          # what the matrix supplies, with the count, the assignment, and the failure all visible to
+          # the run rather than to the session.
           #
           # `--json-schema` is what makes the verdict the run's own answer rather than a side effect
           # of the session. Under it the model's final message is validated against the schema and
@@ -1315,7 +1745,7 @@ jobs:
           claude_args: |
             --model ${{ needs.decide.outputs.model }}
             --effort high
-            --allowedTools "Read,Grep,Glob,Agent"
+            --allowedTools "Read,Grep,Glob"
             --setting-sources user
             --json-schema '${{ steps.prompt.outputs.schema }}'
 
@@ -1382,34 +1812,34 @@ jobs:
 
           printf '::error::The reviewer stopped: %s\n' "$reason"
 
-      # What the review says it read, against what the change actually contains. The reviewer answers
-      # with a `covered` list naming the entries of `files.json` it opened, and this is what turns
-      # that list into something a reader can act on: a run that covered eleven of twenty-seven files
-      # publishes a verdict shaped exactly like one that covered all of them, and until this step
-      # existed the only thing that told the two apart was the next round finding what the first pass
-      # walked past. #811 is the worked case — six rounds, two of them reporting first-commit code
-      # three earlier passes had read through.
+      # What the readers actually opened, against what the change contains. Each reader names the
+      # paths of its own group that it read, and this gathers those lists, compares them against
+      # `files.json`, and states the difference where the verdict is read.
       #
-      # It reports and never gates. The ledger is the reviewer's own account of its reading and
-      # nothing here can verify it, so failing a run on it would buy a stricter-sounding gate that a
-      # reviewer closes by naming every file. What it is worth is the opposite: the gap is stated
-      # where the author and the owner already read the verdict, beside what a collection ceiling
-      # dropped, so a thin pass is visible at the moment it is published.
+      # The coverage is no longer a claim the reviewer makes about itself. It used to be: the answer
+      # carried a `covered` array, and a run that had read a fifth of the change could name every
+      # file in it and publish a verdict shaped exactly like a complete one — three of the 39 runs
+      # measured before this change did read a fraction, 8 of 42 files being the worst. Now the list
+      # comes from the jobs that did the reading, one per group, and a group that failed leaves no
+      # report at all: what is unread is visible here because of how the run is built rather than
+      # because a model owned up to it.
       #
-      # Every path it prints comes from `files.json` rather than from the answer. The reviewer's list
-      # is untrusted model text derived from the diff, and this step publishes into a review body, so
-      # what it names is the *difference* — paths the collection step wrote — and a name in the
-      # answer that matches nothing in `files.json` is reported as a count and never quoted.
-      - name: Compare what the review says it read with what changed
+      # It reports and never gates, exactly as before. A partial review that says what it missed is
+      # worth more than no review, so the gap is published beside the findings and the verdict still
+      # stands.
+      #
+      # Every path it prints comes from `files.json` rather than from a report. A reader's list is
+      # untrusted model text derived from the diff and this step publishes into a review body, so
+      # what it names is the *difference* — paths the collection step wrote — and a name in a report
+      # matching nothing in `files.json` is reported as a count and never quoted.
+      - name: Compare what the readers opened with what changed
         id: coverage
-        if: ${{ !cancelled() && steps.collect.outcome == 'success' }}
+        if: ${{ !cancelled() && needs.collect.result == 'success' }}
         shell: bash
         env:
           REVIEW_DIRECTORY: ${{ runner.temp }}/review
           COVERAGE_FILE: ${{ runner.temp }}/coverage.txt
-          # Model text derived from an untrusted diff, so it arrives through the environment rather
-          # than through an expression, exactly as the submission step takes it.
-          FINDINGS: ${{ steps.review.outputs.structured_output }}
+          GROUP_COUNT: ${{ needs.collect.outputs.group_count }}
           # How many unread paths are named before the rest become a count. A review body is read by
           # a person, and a change of three hundred files would otherwise put three hundred lines of
           # it above the findings.
@@ -1419,45 +1849,71 @@ jobs:
 
           : > "$COVERAGE_FILE"
 
-          answer_file="$(mktemp)"
-          printf '%s' "$FINDINGS" > "$answer_file"
+          candidates_directory="$REVIEW_DIRECTORY/candidates"
+          reports_file="$(mktemp)"
 
-          # A reviewer that never answered has already failed and said why. There is no ledger to
-          # compare and no second error worth adding.
-          if [[ ! -s "$answer_file" ]] || ! jq -e '.' "$answer_file" > /dev/null 2>&1; then
-            echo '::notice::The reviewer returned no answer, so there is no coverage ledger to compare.'
-            exit 0
+          # Every report that arrived, as one array. A group whose reader failed published nothing,
+          # so it is absent here rather than empty — and the two mean different things, which is why
+          # the count of reports is compared against the number of groups below.
+          if compgen -G "$candidates_directory/group-*.json" > /dev/null; then
+            jq -s '[.[] | select(type == "object")]' "$candidates_directory"/group-*.json > "$reports_file"
+          else
+            echo '[]' > "$reports_file"
           fi
+
+          reports="$(jq 'length' "$reports_file")"
+          group_count="${GROUP_COUNT:-0}"
+          [[ "$group_count" =~ ^[0-9]+$ ]] || group_count='0'
 
           unread_file="$(mktemp)"
 
-          # `unique` on both sides, so a path the answer names twice counts once and the difference
-          # below stays set arithmetic over two normalized lists.
-          #
-          # The ledger is read for its type before its contents. The schema requires an array of
-          # strings and the action refuses an answer that does not conform, so an answer reaching
-          # here with something else is unreachable — but this step runs between a model and a
-          # published review, and the cost of being wrong about that is a red job on a review that
-          # was otherwise ready to post. A ledger of the wrong shape reads as an empty one, which
-          # reports the whole change as unnamed and is exactly what it says.
-          jq -r --slurpfile answer "$answer_file" '
-            ([$answer[0].covered | select(type == "array") | .[] | select(type == "string")] | unique) as $named
+          # `unique` on both sides, so a path two reports name counts once and the difference stays
+          # set arithmetic over two normalized lists. A report of the wrong shape contributes
+          # nothing rather than failing the step: the action validates every answer against the
+          # schema, so reaching here with something else is unreachable, and the cost of being wrong
+          # about that is a red job on a review that was otherwise ready to post.
+          jq -r --slurpfile reports "$reports_file" '
+            ([$reports[0][] | .covered | select(type == "array") | .[] | select(type == "string")]
+             | unique) as $named
             | ((map(.filename) | unique) - $named)[]
           ' "$REVIEW_DIRECTORY/files.json" > "$unread_file"
 
           changed_count="$(jq 'map(.filename) | unique | length' "$REVIEW_DIRECTORY/files.json")"
-          unread_count="$(wc -l < "$unread_file" | tr -d ' ')"
-          read_count=$(( changed_count - unread_count ))
 
-          # A name the answer carries that `files.json` does not. It means the ledger was composed
-          # from something other than the collected change — a path invented, or one spelled the way
-          # the working directory spells it rather than the way the collection does — so it is worth
-          # a sentence, and the names themselves are not printed.
+          # What this pass was asked to read, which is the whole change on a first pass and the
+          # groups that moved on a later one. A file in a group nobody re-read is not an unread file:
+          # it is one the previous review already covered and nothing has touched since, and stating
+          # the two the same way would report every later pass as a review with a hole in it.
+          not_re_read="$(mktemp)"
+          jq -r '.[] | select(.read_this_pass | not) | .files[]' \
+            "$REVIEW_DIRECTORY/groups.json" | sort -u > "$not_re_read"
+
+          in_scope_unread="$(mktemp)"
+          comm -23 <(sort -u "$unread_file") "$not_re_read" > "$in_scope_unread"
+          mv "$in_scope_unread" "$unread_file"
+
+          not_re_read_count="$(wc -l < "$not_re_read" | tr -d ' ')"
+          unread_count="$(wc -l < "$unread_file" | tr -d ' ')"
+          scope_count=$(( changed_count - not_re_read_count ))
+          read_count=$(( scope_count - unread_count ))
+
+          # A name a report carries that `files.json` does not. It means the list was composed from
+          # something other than the group the reader was given — a path invented, or one spelled
+          # the way the working directory spells it — so it is worth a sentence, and the names
+          # themselves are not printed.
           unknown_count="$(jq --slurpfile files "$REVIEW_DIRECTORY/files.json" '
-            ([.covered | select(type == "array") | .[] | select(type == "string")] | unique)
+            ([.[] | .covered | select(type == "array") | .[] | select(type == "string")] | unique)
             - ($files[0] | map(.filename) | unique)
             | length
-          ' "$answer_file")"
+          ' "$reports_file")"
+
+          # Said first and separately, because it is the one line that explains the rest: a missing
+          # report is a part of the change no session ever opened, and the unread paths below are
+          # its consequence rather than a second, independent gap.
+          if (( reports < group_count )); then
+            printf 'The change was split between %s readers and %s reported back, so one part of it was not read.\n' \
+              "$group_count" "$reports" >> "$COVERAGE_FILE"
+          fi
 
           if (( unread_count > 0 )); then
             # `jq` rather than `paste -sd ', '`, which takes its argument as a *list* of delimiters
@@ -1471,19 +1927,34 @@ jobs:
               listed="${listed}, and $(( unread_count - NAME_CEILING )) more"
             fi
 
-            printf 'The review names %s of the %s changed files as read. Not named: %s.\n' \
-              "$read_count" "$changed_count" "$listed" >> "$COVERAGE_FILE"
+            printf 'The readers opened %s of the %s changed files this pass covers. Not opened: %s.\n' \
+              "$read_count" "$scope_count" "$listed" >> "$COVERAGE_FILE"
+          fi
+
+          # Said whenever a later pass bounded itself, including when everything in scope was read.
+          # An approval on a change of eighty files that re-read six of them is exactly the verdict a
+          # reader has to be able to see the shape of.
+          if (( not_re_read_count > 0 )); then
+            printf 'This pass re-read the %s of the %s changed files that moved since the last review; the other %s have not moved since and carry that review'"'"'s verdict.\n' \
+              "$scope_count" "$changed_count" "$not_re_read_count" >> "$COVERAGE_FILE"
           fi
 
           if (( unknown_count > 0 )); then
-            printf 'The review also names %s path(s) that the collected change does not contain.\n' \
+            printf 'A reader also named %s path(s) that the collected change does not contain.\n' \
               "$unknown_count" >> "$COVERAGE_FILE"
           fi
+
+          {
+            echo "coverage_read=${read_count}"
+            echo "coverage_changed=${changed_count}"
+            echo "coverage_scope=${scope_count}"
+            echo "coverage_reports=${reports}"
+          } >> "$GITHUB_OUTPUT"
 
           if [[ -s "$COVERAGE_FILE" ]]; then
             echo "::notice::$(head -n 1 "$COVERAGE_FILE")"
           else
-            printf 'Coverage: the review names every one of the %s changed files as read.\n' "$changed_count"
+            printf 'Coverage: the readers opened every one of the %s changed files.\n' "$scope_count"
           fi
 
       # `!cancelled()` rather than `always()`, which GitHub documents as running a step even when the
@@ -1494,7 +1965,7 @@ jobs:
       # prevent. The `${{ }}` is required, because a YAML scalar may not begin with `!`.
       - name: Submit the review
         id: submit
-        if: ${{ !cancelled() && steps.collect.outcome == 'success' }}
+        if: ${{ !cancelled() && needs.collect.result == 'success' }}
         shell: bash
         env:
           # The App's installation token, not the workflow token: this is the step that publishes,
@@ -1503,7 +1974,7 @@ jobs:
           GH_TOKEN: ${{ steps.reviewer.outputs.token }}
           REPOSITORY: ${{ github.repository }}
           PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
-          HEAD_SHA: ${{ steps.collect.outputs.head_sha }}
+          HEAD_SHA: ${{ needs.collect.outputs.head_sha }}
           WORKFLOW_TOKEN: ${{ github.token }}
           REVIEWER_TOKEN: ${{ steps.reviewer.outputs.token }}
           # Held only by this step, which runs no model output and makes one API call, so that a
@@ -1534,11 +2005,6 @@ jobs:
           # submitted a review and when, never what asked for it, and the gate of a later run needs
           # exactly that to count the automatic passes without counting the requested ones.
           TRIGGER_MARKER: ${{ needs.decide.outputs.explicit == 'true' && env.REQUESTED_REVIEW_MARKER || env.AUTOMATIC_REVIEW_MARKER }}
-          # How many passes this pull request has already had, which is what decides whether a
-          # review carrying nothing but P3 findings still withholds approval. The gate counts it and
-          # this step spends it; nothing recomputes it here, so the number the ceiling reasons about
-          # and the number the threshold reasons about cannot come to disagree.
-          AUTOMATIC_REVIEWS: ${{ needs.decide.outputs.automatic_reviews }}
         run: |
           set -euo pipefail
 
@@ -1659,40 +2125,35 @@ jobs:
             exit 0
           fi
 
-          # Past this many passes a change settles on what it has. A P1 breaks something and a P2 is
-          # owed by a rule, so either withholds approval however late it arrives; a P3 is paid for
-          # later by definition, and a review that holds a change for one on its fourth pass is
-          # spending a round on work its own severity says can wait. The findings are still published
-          # — as inline comments under the approval, where the thread-resolution rule the `main`
-          # ruleset carries still makes each one answerable — so nothing is hidden and nothing is
-          # postponed silently. What changes is only which verdict they arrive under.
+          # A P3 never withholds approval, at any pass. A P1 breaks something and a P2 is owed by a
+          # rule, so either holds the change however late it arrives; a P3 is paid for later by
+          # definition, and holding a change for one spends a round on work its own severity says can
+          # wait. The findings are still published — as inline comments under the approval, where the
+          # thread-resolution rule the `main` ruleset carries still makes each one answerable — so
+          # nothing is hidden and nothing is postponed silently. What changes is only which verdict
+          # they arrive under.
           #
-          # Three is the count because it is the pass a change should be settling on. #839 ran six and
-          # its last three each raised a P1 on a page no fix had touched, which is what the narrowing
-          # above removes; this is the other half of the same problem — the passes that stay in scope
-          # and still find one more sentence to sharpen.
+          # This used to start at the fourth pass, on the reasoning that an early P3 was worth one
+          # round. The measurement says it was not worth the rule: across 106 published reviews on 36
+          # pull requests, 72 withheld approval and exactly **one** of them carried nothing but P3
+          # findings. What the threshold actually bought was a rule with two states to reason about,
+          # a pass counter threaded into the submission, and a verdict that depended on which round a
+          # finding happened to be noticed in — for one review. P3s themselves are not rare (95 of
+          # 326 findings), which is the other half of the reading: they arrive beside P1s and P2s,
+          # where the verdict was never theirs to decide anyway.
           #
-          # A requested review is not exempt. A maintainer asking for a pass this late wants the
-          # verdict rather than another round, and the number counts automatic passes alone, so
-          # asking never advances a pull request toward its own threshold.
-          settle_after_passes=3
-
-          # Read defensively: the output is a string from another job, and an unset or malformed one
-          # must leave the stricter verdict in place rather than approving on a value nobody wrote.
-          automatic_reviews="${AUTOMATIC_REVIEWS:-0}"
-          [[ "$automatic_reviews" =~ ^[0-9]+$ ]] || automatic_reviews='0'
-
+          # What this does not change is that the finding is reported. A P3 is a thread the author
+          # answers and resolves like any other, and the ceiling on findings still applies to it.
           verdict_event='COMMENT'
           verdict_heading='# NEEDS CHANGES'
           verdict_output='changes_requested'
           settled_note=''
 
-          if (( automatic_reviews >= settle_after_passes )) \
-            && [[ "$(jq '[(.findings // [])[] | select(.severity != "P3")] | length' "$findings_file")" == '0' ]]; then
+          if [[ "$(jq '[(.findings // [])[] | select(.severity != "P3")] | length' "$findings_file")" == '0' ]]; then
             verdict_event='APPROVE'
             verdict_heading='# APPROVED'
             verdict_output='approved'
-            settled_note="This is pass $((automatic_reviews + 1)) and nothing above P3 is left, so the change is approved carrying the findings below rather than held for them."
+            settled_note='Nothing above P3 is left, so the change is approved carrying the findings below rather than held for them.'
           fi
 
           # Anchors are checked against the same patches the reviewer was given, so a line that has
@@ -1795,6 +2256,100 @@ jobs:
           printf 'Posted a %s review with %s inline findings.\n' \
             "$verdict_event" "$(jq -r '.comments | length' "$payload_file")"
 
+      # What this run cost and covered, as numbers a later run can be compared against.
+      #
+      # It exists because the adjustments to this workflow could not be told apart. `--effort` moved
+      # to `xhigh` and back, the reading was narrowed, the settling threshold was added — and each
+      # was judged by wall-clock duration on whichever pull requests happened to be open that day,
+      # which is why the readings came back mixed: duration here is a function of how many files the
+      # change has, and nothing recorded that alongside it. The action's own execution log is never
+      # published, so this is the whole of what a run leaves behind.
+      #
+      # Numbers only. No summary, no finding, no path, no prose from any session — a metrics file
+      # that carried model text would be a copy of the review in an artifact nobody redacts, and the
+      # severities below are counts rather than the findings they count.
+      - name: Record what the run cost
+        if: ${{ !cancelled() && needs.collect.result == 'success' }}
+        shell: bash
+        env:
+          REVIEW_DIRECTORY: ${{ runner.temp }}/review
+          METRICS_DIRECTORY: ${{ runner.temp }}/metrics
+          EXECUTION_FILE: ${{ runner.temp }}/claude-execution-output.json
+          FINDINGS: ${{ steps.review.outputs.structured_output }}
+          MODEL: ${{ needs.decide.outputs.model }}
+          PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
+          HEAD_SHA: ${{ needs.collect.outputs.head_sha }}
+          GROUP_COUNT: ${{ needs.collect.outputs.group_count }}
+          CHANGED_FILES: ${{ needs.collect.outputs.changed_files }}
+          COVERAGE_READ: ${{ steps.coverage.outputs.coverage_read }}
+          COVERAGE_REPORTS: ${{ steps.coverage.outputs.coverage_reports }}
+          AUTOMATIC_REVIEWS: ${{ needs.decide.outputs.automatic_reviews }}
+          REVIEW_OUTCOME: ${{ steps.review.outcome }}
+          VERDICT: ${{ steps.submit.outputs.verdict }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$METRICS_DIRECTORY"
+
+          findings_file="$(mktemp)"
+          printf '%s' "$FINDINGS" > "$findings_file"
+
+          # The readers' own numbers, or none where every reader failed. `compgen` rather than
+          # letting the glob reach `jq` unmatched, which would hand it a literal `metrics-*.json`
+          # and fail the step over a file that was never expected to exist.
+          readers_file="$(mktemp)"
+          if compgen -G "$REVIEW_DIRECTORY/candidates/metrics-*.json" > /dev/null; then
+            jq -s '.' "$REVIEW_DIRECTORY"/candidates/metrics-*.json > "$readers_file"
+          else
+            echo '[]' > "$readers_file"
+          fi
+
+          # A run that produced no answer still records everything else it did. The severities are
+          # then absent rather than zero, which is the honest reading: nobody counted them.
+          severities='null'
+          if [[ -s "$findings_file" ]] && jq -e '.' "$findings_file" > /dev/null 2>&1; then
+            severities="$(jq -c '[(.findings // [])[] | .severity]
+                                 | group_by(.) | map({key: .[0], value: length}) | from_entries' \
+                            "$findings_file")"
+          fi
+
+          jq -n \
+            --arg model "$MODEL" \
+            --arg head_sha "$HEAD_SHA" \
+            --arg outcome "$REVIEW_OUTCOME" \
+            --arg verdict "${VERDICT:-none}" \
+            --argjson pull_request "$PULL_REQUEST_NUMBER" \
+            --argjson automatic_reviews "${AUTOMATIC_REVIEWS:-0}" \
+            --argjson changed_files "${CHANGED_FILES:-0}" \
+            --argjson groups "${GROUP_COUNT:-0}" \
+            --argjson reports "${COVERAGE_REPORTS:-0}" \
+            --argjson covered "${COVERAGE_READ:-0}" \
+            --argjson severities "$severities" \
+            --slurpfile readers "$readers_file" \
+            --argjson judge "$(jq '[.[] | select(.type == "result")] | last
+                                   | {duration_ms: .duration_ms, turns: .num_turns}
+                                   | if . == null then {} else . end' \
+                                "$EXECUTION_FILE" 2>/dev/null || echo '{}')" \
+            '{pull_request: $pull_request, head_sha: $head_sha, model: $model,
+              automatic_reviews: $automatic_reviews, changed_files: $changed_files,
+              groups: $groups, reader_reports: $reports, files_covered: $covered,
+              readers: $readers[0], judge: $judge, outcome: $outcome, verdict: $verdict,
+              findings_by_severity: $severities}' \
+            > "$METRICS_DIRECTORY/run.json"
+
+          cat "$METRICS_DIRECTORY/run.json"
+
+      - name: Publish what the run cost
+        if: ${{ !cancelled() && needs.collect.result == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: fathom-review-metrics
+          path: ${{ runner.temp }}/metrics
+          if-no-files-found: warn
+          # Longer than the inputs and the candidates, which are consumed inside the run, because
+          # this is read across runs: comparing a week of them is what the file is for.
+          retention-days: 30
+
   # The verdict as the board reads it. `Status` is the lifecycle field the owner's views group by,
   # and until this job existed the two values a review decides had no writer at all: the built-in
   # `Code changes requested` workflow fires on a review submitted as `REQUEST_CHANGES`, which
@@ -1817,12 +2372,12 @@ jobs:
     name: Record the verdict on the board
     needs:
       - decide
-      - fathom-review
+      - judge
     # A verdict exists only where a review was published, so this asks the one question that
     # separates a run that concluded something from a run that ended for any of the other reasons
     # the submission step returns on. `!cancelled()` is what lets it still run after a reviewer that
     # failed *after* posting findings — that verdict is real and the board should carry it.
-    if: ${{ !cancelled() && needs.fathom-review.outputs.verdict != '' }}
+    if: ${{ !cancelled() && needs.judge.outputs.verdict != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -1848,7 +2403,7 @@ jobs:
           BOARD_TOKEN: ${{ secrets.BOARD_PROJECT_TOKEN }}
           REPOSITORY: ${{ github.repository }}
           PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
-          VERDICT: ${{ needs.fathom-review.outputs.verdict }}
+          VERDICT: ${{ needs.judge.outputs.verdict }}
           # The board is the owner's rather than an organization's, which is the whole reason the
           # credential above is what it is. The number belongs to that login's namespace.
           BOARD_OWNER: Krzysztof318

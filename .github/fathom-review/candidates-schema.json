@@ -1,0 +1,43 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["covered", "candidates", "notes"],
+  "properties": {
+    "covered": {
+      "type": "array",
+      "description": "Every path from the group this reader was given whose patch and resulting file were read, spelled exactly as files.json spells it. A file read and found clean belongs here as much as one that produced six candidates.",
+      "items": { "type": "string" }
+    },
+    "candidates": {
+      "type": "array",
+      "description": "Every place that looks wrong, unfiltered and unranked. Not findings: the judge confirms each one against the file before it becomes one.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "line", "concern", "rule"],
+        "properties": {
+          "path": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "description": "A path from the group this reader was given, or null for a concern with no line of its own."
+          },
+          "line": {
+            "anyOf": [{ "type": "integer" }, { "type": "null" }],
+            "description": "One of the numbers lines.json lists for path, or null when path is null."
+          },
+          "concern": {
+            "type": "string",
+            "description": "What looks wrong, in a sentence or two: what reaches this code and what goes wrong when it does."
+          },
+          "rule": {
+            "type": "string",
+            "description": "The file and section, or the ADR, this would rest on. Say so plainly where nothing in the repository states it."
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "What the judge cannot see from the candidates: a file that could not be read and why, a concern spanning this group and one it was not given, or a ceiling that cut the group short. Empty when there is nothing."
+    }
+  }
+}
