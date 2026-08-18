@@ -258,6 +258,13 @@ public sealed class MailboxSearchReader
             return matches;
         }
 
+        // One report for the window rather than one per field: a caller waits for the whole scan of what it is about
+        // to receive, and a subject, a display name, and a set of snippets apiece would report each as quick while the
+        // read they compose stayed slow.
+        using var scan = this.egressGuard.BeginGuardedOperation(
+            SensitiveContentEgressPoint.McpSnippet,
+            cancellationToken);
+
         var guarded = new List<EmailSearchMatch>(matches.Count);
 
         foreach (var match in matches)
@@ -282,6 +289,8 @@ public sealed class MailboxSearchReader
             });
         }
 
+        scan.Completed();
+
         return guarded;
     }
 
@@ -302,6 +311,8 @@ public sealed class MailboxSearchReader
             int resultLimit,
             CancellationToken cancellationToken)
     {
+        using var ranking = this.readTelemetry.BeginSearchRanking(cancellationToken);
+
         var candidateDepth = resultLimit * FusionCandidateDepthMultiplier;
 
         var semantic = await this.semanticSearch.FindNearestCandidatesAsync(
@@ -318,6 +329,8 @@ public sealed class MailboxSearchReader
                 resultLimit,
                 cancellationToken);
 
+            ranking.Completed(lexicalWindow.Count);
+
             return (lexicalWindow, EmailSearchRetrievalMode.Lexical, semantic.Capability);
         }
 
@@ -328,6 +341,10 @@ public sealed class MailboxSearchReader
             cancellationToken);
 
         var fused = ReciprocalRankFusion.Fuse(lexicalCandidates, semanticCandidates, resultLimit);
+
+        // What the ranking produced rather than what the search returns: the fused window is bounded by the result
+        // limit, so reporting it would publish a number that never differs from the count on the read above.
+        ranking.Completed(lexicalCandidates.Count + semanticCandidates.Count);
 
         return (fused, EmailSearchRetrievalMode.Hybrid, semantic.Capability);
     }

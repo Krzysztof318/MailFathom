@@ -42,6 +42,15 @@ public sealed class SensitiveContentEgressGuard
     private readonly ISensitiveContentEgressTelemetry telemetry;
     private readonly TimeProvider timeProvider;
 
+    /// <summary>The operation the guarding on this asynchronous flow is being reported as, where one was opened.</summary>
+    /// <remarks>
+    /// Ambient rather than an argument, because the operation is delimited by the consumer that owns the payload while
+    /// the values are guarded field by field several calls deeper. Threading a scope through every overload would put
+    /// a telemetry parameter on the whole of this contract to say what the flow already knows — which is the same
+    /// reason the tracing API itself keeps the current span this way.
+    /// </remarks>
+    private readonly AsyncLocal<ISensitiveContentGuardScope?> currentOperation = new();
+
     /// <summary>Initializes the guard of a deployment, whether or not it scans anything.</summary>
     /// <param name="redactor">The one redaction every consumer shares, or <see langword="null" /> where both switches are off.</param>
     /// <param name="telemetry">Reports what each guarded call found and what it cost.</param>
@@ -66,6 +75,38 @@ public sealed class SensitiveContentEgressGuard
     /// hand text on unguarded, which is what calling the guard already does when it is inactive.
     /// </remarks>
     public bool IsActive => this.redactor is not null;
+
+    /// <summary>Opens the report of one guarded operation, and reports every text guarded inside it as part of it.</summary>
+    /// <param name="egressPoint">Where the texts this operation guards are going.</param>
+    /// <param name="cancellationToken">The caller's token, which separates an operation a shutdown stopped from one that broke.</param>
+    /// <returns>The operation, which the caller tells it finished and then disposes.</returns>
+    /// <remarks>
+    /// <para>
+    /// The operation is the payload a consumer is about to publish — one message's content, one page of a listing, one
+    /// window of results — rather than each field of it. That is what a caller waits on, and what a percentile over
+    /// individual values cannot say.
+    /// </para>
+    /// <para>
+    /// A deployment that scans nothing opens nothing, so an opt-in nobody took stays as free here as every other path
+    /// through this guard.
+    /// </para>
+    /// </remarks>
+    public EgressOperation BeginGuardedOperation(
+        SensitiveContentEgressPoint egressPoint,
+        CancellationToken cancellationToken)
+    {
+        if (this.redactor is null)
+        {
+            return EgressOperation.Inert;
+        }
+
+        var previous = this.currentOperation.Value;
+        var scope = this.telemetry.BeginGuardedOperation(egressPoint, cancellationToken);
+
+        this.currentOperation.Value = scope;
+
+        return new EgressOperation(this, scope, previous);
+    }
 
     /// <summary>Guards one text about to cross out of this deployment.</summary>
     /// <param name="egressPoint">Where the text is going.</param>
@@ -217,14 +258,69 @@ public sealed class SensitiveContentEgressGuard
             var redacted = await active.RedactAsync(text, cancellationToken);
 
             this.telemetry.RecordGuarded(egressPoint, redacted, this.timeProvider.GetElapsedTime(startedAt));
+            this.currentOperation.Value?.TextGuarded();
 
             return redacted;
         }
         catch (SensitiveContentScannerUnavailableException refusal)
         {
             this.telemetry.RecordRefused(egressPoint, refusal.Scanner);
+            this.currentOperation.Value?.Refused();
 
             throw;
+        }
+    }
+
+    /// <summary>Keeps one guarded operation current for as long as its consumer is guarding into it.</summary>
+    /// <remarks>
+    /// The previous operation is restored rather than cleared, so a consumer that guards a payload while assembling
+    /// another one leaves the outer report intact instead of ending it early. A deployment that scans nothing receives
+    /// <see cref="Inert" />, which reports nothing and costs one shared instance.
+    /// </remarks>
+    public sealed class EgressOperation : IDisposable
+    {
+        private readonly SensitiveContentEgressGuard? guard;
+        private readonly ISensitiveContentGuardScope? scope;
+        private readonly ISensitiveContentGuardScope? previous;
+
+        private bool closed;
+
+        private EgressOperation()
+        {
+        }
+
+        internal EgressOperation(
+            SensitiveContentEgressGuard guard,
+            ISensitiveContentGuardScope scope,
+            ISensitiveContentGuardScope? previous)
+        {
+            this.guard = guard;
+            this.scope = scope;
+            this.previous = previous;
+        }
+
+        /// <summary>Gets the operation of a deployment that scans nothing.</summary>
+        internal static EgressOperation Inert { get; } = new();
+
+        /// <summary>Records that the consumer guarded everything the payload was going to publish.</summary>
+        /// <remarks>
+        /// Called before the payload is returned rather than by disposal, because every way a scan ends badly — a
+        /// refusal, a cancelled shutdown, a scanner that faulted — leaves through the same <c>using</c> as a scan that
+        /// worked. Only the consumer knows which of the two happened.
+        /// </remarks>
+        public void Completed() => this.scope?.Completed();
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            if (this.closed || this.guard is null || this.scope is null)
+            {
+                return;
+            }
+
+            this.closed = true;
+            this.guard.currentOperation.Value = this.previous;
+            this.scope.Dispose();
         }
     }
 }

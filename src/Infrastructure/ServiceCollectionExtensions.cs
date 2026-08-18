@@ -709,6 +709,10 @@ public static class ServiceCollectionExtensions
         // account runs are queued behind the concurrency bound, and how long each account waits before its next run —
         // describe the process rather than any run, and a second instance would publish a second set of them.
         services.AddSingleton<MailSynchronizationTelemetry>();
+        // The same instance under the port the use case reaches it by. A folder run's stages are reported by whoever
+        // reports the run itself, so a second registration would be a second vocabulary for one span tree.
+        services.AddSingleton<IMailSynchronizationPhaseTelemetry>(provider =>
+            provider.GetRequiredService<MailSynchronizationTelemetry>());
         services.AddScoped<MailboxMutationConverger>();
         services.AddScoped<MailboxDestinationResolver>();
         services.AddScoped<IRemoteFolderCatalog>(provider => new MailKitRemoteFolderCatalog(

@@ -628,6 +628,55 @@ public sealed class MailboxSearchReaderTests
         Assert.True(read.WasClosed);
     }
 
+    /// <summary>
+    /// The ranking is the work between two library-spanned ends, so it is reported beneath the search with how many
+    /// candidates it ranked — which is what a window count on the read above it cannot say.
+    /// </summary>
+    [Fact]
+    public async Task SearchEmailsAsync_AWindowThatWasRanked_ReportsTheRankingBesideTheRead()
+    {
+        // Arrange
+        var readTelemetry = new RecordingMailboxReadTelemetry();
+        var index = new InMemoryEmailSearchIndex()
+            .With(SyntheticEmailSummaries.Create(FirstJuly), relevanceRank: 0.9f, matchedText: "invoice")
+            .With(SyntheticEmailSummaries.Create(FirstJuly.AddDays(1)), relevanceRank: 0.2f, matchedText: "invoice");
+        var reader = ReaderOver(index, readTelemetry: readTelemetry);
+
+        // Act
+        await reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken);
+
+        // Assert
+        var ranking = Assert.Single(readTelemetry.Rankings);
+
+        Assert.Equal(2, ranking.ResultCount);
+        Assert.True(ranking.WasClosed);
+    }
+
+    /// <summary>
+    /// The window is one guarded operation rather than one per field, so a caller waiting on a scan is reported as
+    /// having waited once for everything the window publishes.
+    /// </summary>
+    [Fact]
+    public async Task SearchEmailsAsync_AWindowThatWasScanned_ReportsOneGuardedOperationForTheWholeWindow()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var index = new InMemoryEmailSearchIndex()
+            .With(SyntheticEmailSummaries.Create(FirstJuly), relevanceRank: 0.9f, matchedText: "invoice")
+            .With(SyntheticEmailSummaries.Create(FirstJuly.AddDays(1)), relevanceRank: 0.2f, matchedText: "invoice");
+        var reader = ReaderOver(index, egressGuard: egress.Guard);
+
+        // Act
+        await reader.SearchEmailsAsync(RequestFor("invoice"), TestContext.Current.CancellationToken);
+
+        // Assert
+        var operation = Assert.Single(egress.Telemetry.Operations);
+
+        Assert.Equal(SensitiveContentEgressPoint.McpSnippet, operation.EgressPoint);
+        Assert.Equal(egress.Telemetry.Guarded.Count, operation.GuardedTextCount);
+        Assert.True(operation.WasClosed);
+    }
+
     /// <summary>A refused search reports no result, which is what makes the span say the read did not finish.</summary>
     [Fact]
     public async Task SearchEmailsAsync_ARefusedQuery_ReportsAReadThatReturnedNothing()

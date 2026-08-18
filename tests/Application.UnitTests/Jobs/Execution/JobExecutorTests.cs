@@ -529,7 +529,8 @@ public sealed class JobExecutorTests
         },
         AccountId: null,
         attemptCount,
-        new JobLease(JobLeaseOwner.Create("attempt-a"), Noon + LeaseDuration));
+        new JobLease(JobLeaseOwner.Create("attempt-a"), Noon + LeaseDuration),
+        EnqueuedTrace: null);
 
     /// <summary>Lets the lease keep being renewed, which is what a healthy long execution sees.</summary>
     private void AllowLeaseRenewal(LeasedJob job) => this.store

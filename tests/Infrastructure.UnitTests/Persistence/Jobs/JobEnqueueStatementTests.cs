@@ -40,7 +40,7 @@ public sealed class JobEnqueueStatementTests
     public void Compose_AnEnqueue_ConflictsOnTheTypeAndTheKeyTogether()
     {
         // Act
-        var statement = JobEnqueueStatement.Compose(Guid.CreateVersion7(), Request, "{}", EnqueuedAt);
+        var statement = JobEnqueueStatement.Compose(Guid.CreateVersion7(), Request, "{}", EnqueuedAt, enqueuedTrace: null);
 
         // Assert
         Assert.Contains(
@@ -57,7 +57,7 @@ public sealed class JobEnqueueStatementTests
     public void Compose_AnEnqueue_LeavesAnExistingJobUntouched()
     {
         // Act
-        var statement = JobEnqueueStatement.Compose(Guid.CreateVersion7(), Request, "{}", EnqueuedAt);
+        var statement = JobEnqueueStatement.Compose(Guid.CreateVersion7(), Request, "{}", EnqueuedAt, enqueuedTrace: null);
 
         // Assert
         Assert.DoesNotContain("DO UPDATE", statement.Format, StringComparison.Ordinal);
@@ -69,7 +69,7 @@ public sealed class JobEnqueueStatementTests
     public void Compose_AnEnqueueThatNamesNoAvailableInstant_UsesTheInstantItIsWrittenAt()
     {
         // Act
-        var statement = JobEnqueueStatement.Compose(Guid.CreateVersion7(), Request, "{}", EnqueuedAt);
+        var statement = JobEnqueueStatement.Compose(Guid.CreateVersion7(), Request, "{}", EnqueuedAt, enqueuedTrace: null);
 
         // Assert
         Assert.Equal(3, statement.GetArguments().Count(argument => Equals(argument, EnqueuedAt)));
@@ -87,7 +87,7 @@ public sealed class JobEnqueueStatementTests
             availableAt);
 
         // Act
-        var statement = JobEnqueueStatement.Compose(Guid.CreateVersion7(), scheduled, "{}", EnqueuedAt);
+        var statement = JobEnqueueStatement.Compose(Guid.CreateVersion7(), scheduled, "{}", EnqueuedAt, enqueuedTrace: null);
 
         // Assert
         Assert.Contains(statement.GetArguments(), argument => Equals(argument, availableAt));
@@ -99,7 +99,7 @@ public sealed class JobEnqueueStatementTests
     public void Compose_AnEnqueue_PassesEveryValueAsAParameter()
     {
         // Act
-        var statement = JobEnqueueStatement.Compose(Guid.CreateVersion7(), Request, """{"accountId":"a"}""", EnqueuedAt);
+        var statement = JobEnqueueStatement.Compose(Guid.CreateVersion7(), Request, """{"accountId":"a"}""", EnqueuedAt, enqueuedTrace: null);
 
         // Assert
         Assert.DoesNotContain("account-a", statement.Format, StringComparison.Ordinal);
@@ -124,11 +124,57 @@ public sealed class JobEnqueueStatementTests
 
         // Act
         var sql = context.Database
-            .SqlQuery<Guid>(JobEnqueueStatement.Compose(Guid.CreateVersion7(), Request, "{}", EnqueuedAt))
+            .SqlQuery<Guid>(JobEnqueueStatement.Compose(Guid.CreateVersion7(), Request, "{}", EnqueuedAt, enqueuedTrace: null))
             .ToQueryString();
 
         // Assert
         Assert.Contains("INSERT INTO jobs", sql, StringComparison.Ordinal);
         Assert.EndsWith("RETURNING \"Id\" AS \"Value\"", sql.TrimEnd(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The trace is written by the insert as two parameters, so a job carries the work that enqueued it without the
+    /// statement ever naming a value in its own text.
+    /// </summary>
+    [Fact]
+    public void Compose_AnEnqueueInsideATrace_WritesBothPropagationValuesAsParameters()
+    {
+        // Arrange
+        var enqueuedTrace = JobTraceContext.FromTraceParent(
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-1a2b3c4d5e6f7081-01",
+            "vendor=state");
+
+        // Act
+        var statement = JobEnqueueStatement.Compose(
+            Guid.CreateVersion7(),
+            Request,
+            "{}",
+            EnqueuedAt,
+            enqueuedTrace);
+
+        // Assert
+        Assert.Contains("\"EnqueuedTraceParent\", \"EnqueuedTraceState\"", statement.Format, StringComparison.Ordinal);
+        Assert.Contains(
+            statement.GetArguments(),
+            argument => Equals(argument, "00-4bf92f3577b34da6a3ce929d0e0e4736-1a2b3c4d5e6f7081-01"));
+        Assert.Contains(statement.GetArguments(), argument => Equals(argument, "vendor=state"));
+    }
+
+    /// <summary>An enqueue nothing was tracing writes the columns as absent, which is what an attempt reads as no link.</summary>
+    [Fact]
+    public void Compose_AnEnqueueOutsideAnyTrace_WritesTheColumnsAsAbsent()
+    {
+        // Arrange
+
+        // Act
+        var statement = JobEnqueueStatement.Compose(
+            Guid.CreateVersion7(),
+            Request,
+            "{}",
+            EnqueuedAt,
+            enqueuedTrace: null);
+
+        // Assert
+        Assert.Equal(2, statement.GetArguments().Count(argument => argument is null));
     }
 }

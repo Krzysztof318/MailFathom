@@ -29,6 +29,14 @@ internal sealed class MailboxReadTelemetry : IMailboxReadTelemetry
     internal const string MailboxSearchSpanName = "search_mailbox";
     internal const string EmailContentSpanName = "read_email_content";
 
+    /// <summary>The name the ranking inside one search opens its span under, beneath the search's own.</summary>
+    /// <remarks>
+    /// The ends of a ranking are spanned by the libraries they run through and the middle is not: a fusion of two
+    /// rankings, and the depth each of them was asked for, are MailFathom's own work between a provider call and a
+    /// query. Without this the two are separable only by subtraction.
+    /// </remarks>
+    internal const string SearchRankingSpanName = "rank_mailbox_search";
+
     internal const string ResultCountTagName = "mailfathom.mailbox.read.results";
     internal const string OutcomeTagName = "mailfathom.mailbox.read.outcome";
 
@@ -42,6 +50,10 @@ internal sealed class MailboxReadTelemetry : IMailboxReadTelemetry
     /// <inheritdoc />
     public IMailboxReadScope BeginRead(MailboxReadOperation operation, CancellationToken cancellationToken) =>
         new ReadSpan(Telemetry.ActivitySource.StartActivity(SpanNameOf(operation)), cancellationToken);
+
+    /// <inheritdoc />
+    public IMailboxReadScope BeginSearchRanking(CancellationToken cancellationToken) =>
+        new ReadSpan(Telemetry.ActivitySource.StartActivity(SearchRankingSpanName), cancellationToken);
 
     /// <summary>Reads the name one operation is published under.</summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the operation is not one this adapter publishes.</exception>

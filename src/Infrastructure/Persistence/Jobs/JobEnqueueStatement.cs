@@ -32,13 +32,20 @@ internal static class JobEnqueueStatement
     /// <param name="request">The execution to enqueue.</param>
     /// <param name="payload">The serialized document describing what the work points at.</param>
     /// <param name="enqueuedAt">The instant the job is written at, and its available instant unless the request names one.</param>
+    /// <param name="enqueuedTrace">The trace the enqueue is happening inside, or <see langword="null" /> when none is being recorded.</param>
     /// <returns>The statement, whose one row is the identifier of a created job and which returns none when the identity was taken.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The trace is written by the insert and by nothing else. A losing insert leaves the row that already exists
+    /// alone, including its trace, which is the right answer rather than a limitation: the job that will run is the one
+    /// that was enqueued first, and pointing its attempt at a later caller would name a cause that produced nothing.
+    /// </remarks>
     internal static FormattableString Compose(
         Guid jobId,
         JobEnqueueRequest request,
         string payload,
-        DateTimeOffset enqueuedAt)
+        DateTimeOffset enqueuedAt,
+        JobTraceContext? enqueuedTrace)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -47,14 +54,18 @@ internal static class JobEnqueueStatement
         var accountId = request.AccountId?.Value;
         var availableAt = request.AvailableAt ?? enqueuedAt;
         var pending = nameof(JobState.Pending);
+        var traceParent = enqueuedTrace?.TraceParent;
+        var traceState = enqueuedTrace?.TraceState;
 
         return $"""
                 INSERT INTO jobs (
                     "Id", "JobType", "IdempotencyKey", "Payload", "MailboxAccountId",
-                    "State", "AvailableAt", "EnqueuedAt", "StateChangedAt", "AttemptCount")
+                    "State", "AvailableAt", "EnqueuedAt", "StateChangedAt", "AttemptCount",
+                    "EnqueuedTraceParent", "EnqueuedTraceState")
                 VALUES (
                     {jobId}, {jobTypeName}, {idempotencyKey}, CAST({payload} AS jsonb), {accountId},
-                    {pending}, {availableAt}, {enqueuedAt}, {enqueuedAt}, 0)
+                    {pending}, {availableAt}, {enqueuedAt}, {enqueuedAt}, 0,
+                    {traceParent}, {traceState})
                 ON CONFLICT ("JobType", "IdempotencyKey") DO NOTHING
                 RETURNING "Id" AS "Value"
                 """;

@@ -341,7 +341,7 @@ public sealed class TelemetrySurfaceContractTests
 
             JobQueue.RecordAttempt(result);
 
-            using var attempt = JobQueue.BeginAttempt(result.JobType);
+            using var attempt = JobQueue.BeginAttempt(result.JobType, enqueuedTrace: null);
             attempt.Ended(result);
         }
 
@@ -397,6 +397,18 @@ public sealed class TelemetrySurfaceContractTests
         {
             using var read = MailboxRead.BeginRead(operation, CancellationToken.None);
             read.Completed(3);
+        }
+
+        using (var ranking = MailboxRead.BeginSearchRanking(CancellationToken.None))
+        {
+            ranking.Completed(12);
+        }
+
+        foreach (var egressPoint in Enum.GetValues<SensitiveContentEgressPoint>())
+        {
+            using var guarded = Egress.BeginGuardedOperation(egressPoint, CancellationToken.None);
+            guarded.TextGuarded();
+            guarded.Completed();
         }
 
         ContentVolume.Report(
@@ -465,6 +477,12 @@ public sealed class TelemetrySurfaceContractTests
         using (Synchronization.EnterRunQueue())
         {
             // The queue depth is a level rather than an event, so it is observed while something is in it.
+        }
+
+        foreach (var phase in Enum.GetValues<MailSynchronizationPhase>())
+        {
+            using var stage = Synchronization.BeginPhase(phase, CancellationToken.None);
+            stage.Completed();
         }
 
         using (var cycle = Synchronization.BeginAccountRun(Account))

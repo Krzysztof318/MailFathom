@@ -908,6 +908,11 @@ internal sealed class MailFathomDbContext : DbContext
             entity.Property(job => job.MailboxAccountId).HasMaxLength(128);
             entity.Property(job => job.LeaseOwner).HasMaxLength(JobLeaseOwner.MaximumLength);
 
+            // Nothing queries by either, and nothing indexes them: they are read back with the row a claim already
+            // selected, and their only reader is the link put on that attempt's span.
+            entity.Property(job => job.EnqueuedTraceParent).HasMaxLength(JobTraceContext.MaximumTraceParentLength);
+            entity.Property(job => job.EnqueuedTraceState).HasMaxLength(JobTraceContext.MaximumTraceStateLength);
+
             // Stored as text for the reason every other bounded value in this schema is: it stays readable in an ad-hoc
             // query and survives any later reordering of the enum.
             entity.Property(job => job.State).HasConversion<string>().HasMaxLength(64).IsRequired();

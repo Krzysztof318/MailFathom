@@ -14,7 +14,7 @@ namespace MailFathom.Infrastructure.UnitTests.Observability;
 /// <summary>Covers the span a local read publishes: what it is called, where it sits, and what it carries.</summary>
 /// <remarks>
 /// It listens to the real activity source, because the rule under test is about what an exporter would receive. The
-/// listener is narrowed to the four read span names, so a span published by another test class at the same moment is not
+/// listener is narrowed to the five read span names, so a span published by another test class at the same moment is not
 /// mistaken for one of these — the source is the process's and is shared by everything MailFathom publishes.
 /// </remarks>
 public sealed class MailboxReadTelemetryTests : IDisposable
@@ -25,6 +25,7 @@ public sealed class MailboxReadTelemetryTests : IDisposable
         MailboxReadTelemetry.MailboxTimelineSpanName,
         MailboxReadTelemetry.MailboxSearchSpanName,
         MailboxReadTelemetry.EmailContentSpanName,
+        MailboxReadTelemetry.SearchRankingSpanName,
     ];
 
     private readonly ConcurrentBag<Activity> published = [];
@@ -92,6 +93,37 @@ public sealed class MailboxReadTelemetryTests : IDisposable
 
         // Assert
         Assert.Equal(expectedSpanName, Assert.Single(this.published).OperationName);
+    }
+
+    /// <summary>
+    /// The ranking sits between two library-spanned ends — a provider call and a set of queries — and neither of them
+    /// says what the ranking as a whole cost, so it is published beneath the search that ran it.
+    /// </summary>
+    [Fact]
+    public void BeginSearchRanking_ARankingInsideASearch_PublishesTheCandidateCountBeneathTheSearch()
+    {
+        // Arrange
+        var telemetry = new MailboxReadTelemetry();
+
+        // Act
+        using (var read = telemetry.BeginRead(MailboxReadOperation.SearchMailbox, TestContext.Current.CancellationToken))
+        {
+            using (var ranking = telemetry.BeginSearchRanking(TestContext.Current.CancellationToken))
+            {
+                ranking.Completed(20);
+            }
+
+            read.Completed(5);
+        }
+
+        // Assert
+        var search = this.published.Single(span => span.OperationName == MailboxReadTelemetry.MailboxSearchSpanName);
+        var rankingSpan = this.published.Single(
+            span => span.OperationName == MailboxReadTelemetry.SearchRankingSpanName);
+
+        Assert.Equal(search.SpanId, rankingSpan.ParentSpanId);
+        Assert.Equal(20, rankingSpan.GetTagItem("mailfathom.mailbox.read.results"));
+        Assert.Equal("succeeded", rankingSpan.GetTagItem("mailfathom.mailbox.read.outcome"));
     }
 
     /// <summary>What a completed read says: how much it returned, and that it returned it.</summary>

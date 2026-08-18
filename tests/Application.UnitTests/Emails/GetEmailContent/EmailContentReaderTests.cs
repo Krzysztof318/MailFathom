@@ -1034,6 +1034,34 @@ public sealed class EmailContentReaderTests
         Assert.Equal("<p>the key is [redacted:CloudKey]</p>", content.Body.SanitizedHtml?.Text);
     }
 
+    /// <summary>The message is the unit a caller waits for, so its guarding is reported once rather than once per field.</summary>
+    [Fact]
+    public async Task ReadContentAsync_ASwitchedOnScanner_ReportsOneGuardedOperationForTheWholeMessage()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(
+                new EmailBodyRepresentation($"the key is {Marker}", 19, EmailBodyTruncation.None),
+                new EmailBodyRepresentation($"<p>the key is {Marker}</p>", 26, EmailBodyTruncation.None))),
+            egressGuard: egress.Guard);
+
+        // Act
+        await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId], includeSanitizedHtml: true),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var operation = Assert.Single(egress.Telemetry.Operations);
+
+        Assert.Equal(SensitiveContentEgressPoint.McpEmailContent, operation.EgressPoint);
+        Assert.Equal(egress.Telemetry.Guarded.Count, operation.GuardedTextCount);
+        Assert.True(operation.GuardedTextCount > 1);
+        Assert.True(operation.WasClosed);
+    }
+
     /// <summary>A listing redacts a subject and a display name, and two tools disagreeing about one message is what a caller cannot resolve.</summary>
     [Fact]
     public async Task ReadContentAsync_ACredentialInTheHeaders_RedactsTheSubjectAndTheDisplayNameAndKeepsTheAddress()

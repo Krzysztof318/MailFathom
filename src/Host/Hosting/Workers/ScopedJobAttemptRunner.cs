@@ -34,7 +34,7 @@ internal sealed class ScopedJobAttemptRunner(IServiceScopeFactory scopeFactory, 
     {
         ArgumentNullException.ThrowIfNull(job);
 
-        using var attempt = telemetry.BeginAttempt(job.JobType);
+        using var attempt = telemetry.BeginAttempt(job.JobType, job.EnqueuedTrace);
 
         await using var scope = scopeFactory.CreateAsyncScope();
 

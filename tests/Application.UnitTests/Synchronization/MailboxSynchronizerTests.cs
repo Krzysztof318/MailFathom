@@ -8,6 +8,7 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail;
+using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Gating;
@@ -26,6 +27,7 @@ using MailFathom.Domain.Transport;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Synchronization;
@@ -1874,6 +1876,28 @@ public sealed class MailboxSynchronizerTests
             timeProvider);
     }
 
+    /// <summary>Builds a resolver for a mail server that advertises no folder the configured alias could name.</summary>
+    private static MailFolderResolver CreateFolderResolverThatResolvesNothing()
+    {
+        var remoteFolderCatalog = Substitute.For<IRemoteFolderCatalog>();
+        remoteFolderCatalog
+            .ListFoldersAsync(Arg.Any<MailAccountId>(), Arg.Any<MailTransportSecurityPolicy>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<RemoteFolder>>([]));
+
+        var resolutionStore = Substitute.For<IMailFolderResolutionStore>();
+        resolutionStore
+            .GetCurrentResolutionAsync(Arg.Any<MailAccountId>(), Arg.Any<MailFolderAlias>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<MailFolderResolution?>(null));
+
+        return new MailFolderResolver(
+            remoteFolderCatalog,
+            Substitute.For<IRemoteFolderCreator>(),
+            resolutionStore,
+            Substitute.For<IMailFolderMappingChangeAuditor>(),
+            Substitute.For<IPersistenceSessionFactory>(),
+            new FakeTimeProvider(new DateTimeOffset(2026, 8, 18, 12, 0, 0, TimeSpan.Zero)));
+    }
+
     /// <summary>Builds a resolver whose alias is already bound to the folder the server advertises, so no run rebinds it.</summary>
     /// <remarks>
     /// These tests are about what synchronization does once a folder is known. Resolution has tests of its own, and
@@ -2228,6 +2252,175 @@ public sealed class MailboxSynchronizerTests
         return sessionFactory;
     }
 
+    /// <summary>
+    /// A folder run reports one duration for work that fails and slows down for different reasons, so each stage it
+    /// passes through is reported beneath it — and a run that reached the end reports every one of them as completed.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_AFolderRunThatReachedItsEnd_ReportsEveryStageItPassedThrough()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(9);
+        var persistenceSession = Substitute.For<IPersistenceSession>();
+        var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
+        sessionScopeFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(persistenceSession);
+        persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
+        var phaseTelemetry = new RecordingMailSynchronizationPhaseTelemetry();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 18, 12, 0, 0, TimeSpan.Zero));
+        var session = Substitute.For<IMailboxSession>();
+        session.GetUidValidityAsync(Arg.Any<CancellationToken>()).Returns(uidValidity);
+        session
+            .GetEmailBatchAfterAsync(
+                Arg.Any<ImapUid?>(),
+                Arg.Any<int>(),
+                Arg.Any<MailSynchronizationWindow>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new RemoteEmailMetadataBatch([], InspectedThroughUid: null, HasMore: false));
+        var synchronizer = CreateSynchronizer(
+            CreateSessionFactoryFor(accountId, session),
+            CreateCheckpointStoreAt(accountId, uidValidity),
+            sessionScopeFactory,
+            Substitute.For<IEmailMetadataRepository>(),
+            contentStore: Substitute.For<IEmailContentStore>(),
+            clock,
+            new MailboxSynchronizationOptions(),
+            phaseTelemetry: phaseTelemetry);
+
+        // Act
+        await synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(
+            [
+                MailSynchronizationPhase.ResolveFolder,
+                MailSynchronizationPhase.OpenSession,
+                MailSynchronizationPhase.DiscoverEmails,
+                MailSynchronizationPhase.FetchEmailBatch,
+                MailSynchronizationPhase.ReconcileFolder,
+                MailSynchronizationPhase.RefillDeferredContent,
+            ],
+            phaseTelemetry.Phases.Select(phase => phase.Phase).Distinct());
+        Assert.All(phaseTelemetry.Phases, phase => Assert.True(phase.WasCompleted && phase.WasClosed));
+    }
+
+    /// <summary>
+    /// A run stopped before it reached a stage reports the stages it did reach and no others, which is what makes a
+    /// mail server that stopped answering readable as the stage it stopped in.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_AnAliasTheServerAdvertisesNoFolderFor_ReportsTheResolutionStageAndNoOther()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var phaseTelemetry = new RecordingMailSynchronizationPhaseTelemetry();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 18, 12, 0, 0, TimeSpan.Zero));
+        var synchronizer = CreateSynchronizer(
+            Substitute.For<IMailboxSessionFactory>(),
+            Substitute.For<ISynchronizationCheckpointStore>(),
+            Substitute.For<IPersistenceSessionFactory>(),
+            Substitute.For<IEmailMetadataRepository>(),
+            contentStore: Substitute.For<IEmailContentStore>(),
+            clock,
+            new MailboxSynchronizationOptions(),
+            folderResolver: CreateFolderResolverThatResolvesNothing(),
+            phaseTelemetry: phaseTelemetry);
+
+        // Act
+        await synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        var phase = Assert.Single(phaseTelemetry.Phases);
+
+        Assert.Equal(MailSynchronizationPhase.ResolveFolder, phase.Phase);
+        Assert.True(phase.WasCompleted);
+    }
+
+    /// <summary>
+    /// A stage reports completing only where its work reached the end, which is the whole of what separates a
+    /// succeeded span from a failed one. A mail server that stopped answering has to be readable as the stage that
+    /// waited on it rather than as a run that ended quietly.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_AMailServerThatRefusedTheSession_ReportsTheOpeningStageAsNotCompleted()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var phaseTelemetry = new RecordingMailSynchronizationPhaseTelemetry();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 18, 12, 0, 0, TimeSpan.Zero));
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                accountId,
+                InboxFolder,
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("The mail server closed the connection."));
+        var synchronizer = CreateSynchronizer(
+            sessionFactory,
+            CreateCheckpointStoreAt(accountId, ImapUidValidity.Create(9)),
+            Substitute.For<IPersistenceSessionFactory>(),
+            Substitute.For<IEmailMetadataRepository>(),
+            contentStore: Substitute.For<IEmailContentStore>(),
+            clock,
+            new MailboxSynchronizationOptions(),
+            phaseTelemetry: phaseTelemetry);
+
+        // Act
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None));
+
+        // Assert
+        Assert.Equal(
+            [MailSynchronizationPhase.ResolveFolder, MailSynchronizationPhase.OpenSession],
+            phaseTelemetry.Phases.Select(phase => phase.Phase));
+
+        var openingSession = phaseTelemetry.Phases[1];
+
+        Assert.False(openingSession.WasCompleted);
+        Assert.True(openingSession.WasClosed);
+    }
+
+    /// <summary>
+    /// The validity is read inside the opening stage rather than after it, so a server slow to answer which incarnation
+    /// of a folder it is serving is attributable to a stage at all. A session opened and then left unreadable is
+    /// released rather than surviving the run that could not use it.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_AServerThatWouldNotNameTheFolderIncarnation_EndsTheOpeningStageAndReleasesTheSession()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var phaseTelemetry = new RecordingMailSynchronizationPhaseTelemetry();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 18, 12, 0, 0, TimeSpan.Zero));
+        var session = Substitute.For<IMailboxSession>();
+        session
+            .GetUidValidityAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("The mail server would not answer UIDVALIDITY."));
+        var synchronizer = CreateSynchronizer(
+            CreateSessionFactoryFor(accountId, session),
+            CreateCheckpointStoreAt(accountId, ImapUidValidity.Create(9)),
+            Substitute.For<IPersistenceSessionFactory>(),
+            Substitute.For<IEmailMetadataRepository>(),
+            contentStore: Substitute.For<IEmailContentStore>(),
+            clock,
+            new MailboxSynchronizationOptions(),
+            phaseTelemetry: phaseTelemetry);
+
+        // Act
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None));
+
+        // Assert
+        var openingSession = phaseTelemetry.Phases[1];
+
+        Assert.Equal(MailSynchronizationPhase.OpenSession, openingSession.Phase);
+        Assert.False(openingSession.WasCompleted);
+        Assert.True(openingSession.WasClosed);
+        Assert.Equal(2, phaseTelemetry.Phases.Count);
+        await session.Received(1).DisposeAsync();
+    }
+
     private static ISynchronizationCheckpointStore CreateCheckpointStoreAt(
         MailAccountId accountId,
         ImapUidValidity uidValidity)
@@ -2260,6 +2453,7 @@ public sealed class MailboxSynchronizerTests
         SpamClassificationSettings? classificationSettings = null,
         IJunkMailFolderCatalog? junkFolders = null,
         IDerivedWorkGateTelemetry? gateTelemetry = null,
+        IMailSynchronizationPhaseTelemetry? phaseTelemetry = null,
         IJobStore? jobStore = null)
     {
         var concurrencyRetryPolicy = new OptimisticConcurrencyRetryPolicy(
@@ -2295,6 +2489,7 @@ public sealed class MailboxSynchronizerTests
                 junkFolders ?? StubJunkMailFolderCatalog.None,
                 timeProvider),
             gateTelemetry ?? new RecordingDerivedWorkGateTelemetry(),
+            phaseTelemetry ?? new RecordingMailSynchronizationPhaseTelemetry(),
             new SpamClassificationArrivals(
                 jobStore ?? Substitute.For<IJobStore>(),
                 new StubSpamClassificationSettingsReader(

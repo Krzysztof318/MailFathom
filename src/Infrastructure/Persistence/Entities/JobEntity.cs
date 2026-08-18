@@ -77,6 +77,19 @@ internal sealed class JobEntity
     /// </remarks>
     public string? LastFailureReason { get; set; }
 
+    /// <summary>Gets or sets the W3C <c>traceparent</c> of whatever enqueued the job, and <see langword="null" /> when nothing recorded one.</summary>
+    /// <remarks>
+    /// The one thing on this row that describes neither the work nor its state. A worker claims a job long after the
+    /// span that caused it has ended, so the attempt cannot be that span's child; what this makes possible instead is a
+    /// link from the attempt back to the trace, which is a cause hours earlier reached in one step rather than searched
+    /// for in logs. Every row written before the column existed carries <see langword="null" />, which is read as an
+    /// attempt with nothing to link to.
+    /// </remarks>
+    public string? EnqueuedTraceParent { get; set; }
+
+    /// <summary>Gets or sets the W3C <c>tracestate</c> that accompanied it, and <see langword="null" /> when there was none.</summary>
+    public string? EnqueuedTraceState { get; set; }
+
     /// <summary>Gets or sets the attempt holding the job, and <see langword="null" /> while none does.</summary>
     public string? LeaseOwner { get; set; }
 

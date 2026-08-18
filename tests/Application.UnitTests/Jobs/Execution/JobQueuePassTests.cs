@@ -216,7 +216,8 @@ public sealed class JobQueuePassTests : IDisposable
         },
         AccountId: null,
         AttemptCount: 1,
-        new JobLease(JobLeaseOwner.Create("attempt-a"), Noon + LeaseDuration));
+        new JobLease(JobLeaseOwner.Create("attempt-a"), Noon + LeaseDuration),
+        EnqueuedTrace: null);
 
     private JobQueuePass PassFor(params IJobHandler[] handlers) =>
         this.PassFor(JobCapacitySettings.Create(BatchSize, BatchSize, MaxQueueDepthPerType), handlers);

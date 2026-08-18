@@ -135,6 +135,12 @@ public sealed class EmailThreadContexts
             return emails;
         }
 
+        // One report for the conversation, which is the unit its subjects are scanned as: a call naming ten messages
+        // of one exchange guards these once rather than once per message.
+        using var scan = this.egressGuard.BeginGuardedOperation(
+            SensitiveContentEgressPoint.McpEmailContent,
+            cancellationToken);
+
         var guarded = new List<ThreadedEmailSummary>(emails.Length);
 
         foreach (var email in emails)
@@ -147,6 +153,8 @@ public sealed class EmailThreadContexts
                     cancellationToken),
             });
         }
+
+        scan.Completed();
 
         return guarded;
     }

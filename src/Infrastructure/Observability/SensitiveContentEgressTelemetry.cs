@@ -27,9 +27,28 @@ namespace MailFathom.Infrastructure.Observability;
 /// </remarks>
 public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTelemetry
 {
+    /// <summary>The name one guarded operation opens its span under, beneath whatever asked for the payload.</summary>
+    /// <remarks>
+    /// One span for the operation rather than one per text, because a body, a subject, and a display name are what a
+    /// single read publishes and their sum is what the caller waited for. The instruments beside it stay per value,
+    /// which is the level a category list or a bound is decided at.
+    /// </remarks>
+    internal const string GuardedOperationSpanName = "scan_sensitive_content";
+
     private const string EgressPointTagName = "mailfathom.sensitive_content.egress_point";
     private const string CategoryTagName = "mailfathom.sensitive_content.category";
     private const string ScannerTagName = "mailfathom.sensitive_content.scanner";
+
+    /// <summary>How many texts one guarded operation scanned, which is what its duration has to be read against.</summary>
+    private const string GuardedTextCountTagName = "mailfathom.sensitive_content.texts";
+
+    /// <summary>How the operation ended, which separates a scan that answered from one that could not and one that stopped.</summary>
+    private const string OutcomeTagName = "mailfathom.sensitive_content.outcome";
+
+    private const string SucceededOutcomeName = "succeeded";
+    private const string RefusedOutcomeName = "refused";
+    private const string CancelledOutcomeName = "cancelled";
+    private const string FailedOutcomeName = "failed";
 
     private readonly Counter<long> guardedTextCount;
     private readonly Counter<long> findingCount;
@@ -103,6 +122,17 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
                 { ScannerTagName, TagOf(scanner) },
             });
 
+    /// <inheritdoc />
+    public ISensitiveContentGuardScope BeginGuardedOperation(
+        SensitiveContentEgressPoint egressPoint,
+        CancellationToken cancellationToken)
+    {
+        var activity = Telemetry.ActivitySource.StartActivity(GuardedOperationSpanName);
+        activity?.SetTag(EgressPointTagName, TagOf(egressPoint));
+
+        return new GuardedOperation(activity, cancellationToken);
+    }
+
     /// <summary>Names an egress point as a tag value.</summary>
     /// <remarks>
     /// A closed mapping rather than the member's own name, for the reason every published mapping here is closed: the
@@ -124,4 +154,70 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
         SensitiveContentScannerKind.Pii => "pii",
         _ => "unknown",
     };
+
+    /// <summary>Carries one guarded operation from the span that opens it to the count and the ending that close it.</summary>
+    /// <remarks>
+    /// <para>
+    /// The count is written at the end rather than as each text arrives, because a tag set repeatedly is a tag rewritten
+    /// repeatedly on a span nothing has read yet.
+    /// </para>
+    /// <para>
+    /// Four endings rather than two, because every way a scan stops leaves through the same disposal. A refusal is not
+    /// an error status, for the reason the refusal is not a defect: a scanner that could not answer stopped an egress on
+    /// purpose, and the operation the caller sees fails with an error code of its own. A shutdown is cancelled and
+    /// carries no error either. What is left — an operation that neither finished nor was stopped — is the scanner
+    /// having faulted, and reporting that as a success is what would rule the scanner out of an investigation it
+    /// belongs in.
+    /// </para>
+    /// </remarks>
+    private sealed class GuardedOperation(Activity? activity, CancellationToken cancellationToken)
+        : ISensitiveContentGuardScope
+    {
+        private int guardedTextCount;
+        private bool refused;
+        private bool completed;
+
+        // Counted atomically because the operation is the unit and the values inside it are not: a consumer that
+        // guards the fields of one payload concurrently would otherwise publish a count lower than what it scanned.
+        public void TextGuarded() => Interlocked.Increment(ref this.guardedTextCount);
+
+        public void Refused() => this.refused = true;
+
+        public void Completed() => this.completed = true;
+
+        public void Dispose()
+        {
+            if (activity is null)
+            {
+                return;
+            }
+
+            var outcome = this.OutcomeName();
+
+            activity.SetTag(GuardedTextCountTagName, Volatile.Read(ref this.guardedTextCount));
+            activity.SetTag(OutcomeTagName, outcome);
+            activity.SetStatus(outcome == FailedOutcomeName ? ActivityStatusCode.Error : ActivityStatusCode.Ok);
+            activity.Dispose();
+        }
+
+        /// <summary>Reads which of the four endings this operation reached.</summary>
+        /// <remarks>
+        /// A refusal is read before completion because it is the stronger fact: it stopped the egress, whatever the
+        /// consumer went on to report.
+        /// </remarks>
+        private string OutcomeName()
+        {
+            if (this.refused)
+            {
+                return RefusedOutcomeName;
+            }
+
+            if (this.completed)
+            {
+                return SucceededOutcomeName;
+            }
+
+            return cancellationToken.IsCancellationRequested ? CancelledOutcomeName : FailedOutcomeName;
+        }
+    }
 }

@@ -15,9 +15,17 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 internal sealed class RecordingMailboxReadTelemetry : IMailboxReadTelemetry
 {
     private readonly List<PublishedRead> reads = [];
+    private readonly List<PublishedRead> rankings = [];
 
     /// <summary>Gets the reads that were opened, in the order they began.</summary>
     public IReadOnlyList<PublishedRead> Reads => this.reads;
+
+    /// <summary>Gets the rankings that were opened, in the order they began.</summary>
+    /// <remarks>
+    /// Kept apart from the reads because a ranking happens inside one: a search that opened a read and no ranking is a
+    /// different defect from one that opened neither.
+    /// </remarks>
+    public IReadOnlyList<PublishedRead> Rankings => this.rankings;
 
     /// <inheritdoc />
     public IMailboxReadScope BeginRead(MailboxReadOperation operation, CancellationToken cancellationToken)
@@ -26,6 +34,15 @@ internal sealed class RecordingMailboxReadTelemetry : IMailboxReadTelemetry
         this.reads.Add(read);
 
         return read;
+    }
+
+    /// <inheritdoc />
+    public IMailboxReadScope BeginSearchRanking(CancellationToken cancellationToken)
+    {
+        var ranking = new PublishedRead(MailboxReadOperation.SearchMailbox);
+        this.rankings.Add(ranking);
+
+        return ranking;
     }
 
     /// <summary>One opened read and what it reported before its scope was closed.</summary>
