@@ -50,7 +50,7 @@ public interface IContactDirectory
     /// <summary>Reads who each name resolves to, by the whole of that name rather than by part of it.</summary>
     /// <param name="displayNames">The names to resolve, at most one page of the book's worth.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>An entry for every supplied name at least one contact carries, keyed by the name as supplied; a name nobody carries is absent.</returns>
+    /// <returns>An entry for every supplied name, keyed by the name as supplied, carrying the one contact under it or how many carry it; a name nobody carries reports none.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="displayNames" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when more names are supplied than one page of the book holds.</exception>
     /// <remarks>
@@ -65,6 +65,10 @@ public interface IContactDirectory
     /// name a hundred collected contacts happen to share costs one number rather than a page of somebody else's
     /// correspondents. A name resolving to one person answers with that person and with the count that decided it read
     /// together, so no caller can be handed a contact the book no longer holds uniquely.
+    /// </para>
+    /// <para>
+    /// Every supplied name is answered rather than only the ones somebody carries, because <see cref="ContactMatch" />
+    /// already states "nobody" and a caller reading a set has to tell that answer from a name the read never covered.
     /// </para>
     /// </remarks>
     Task<IReadOnlyDictionary<ContactDisplayName, ContactMatch>> MatchDisplayNamesAsync(

@@ -229,7 +229,8 @@ Three lookups and one listing:
 
 The name lookup and the identity lookup each also answer a **set**, up to a page of the book's worth in one read, because
 one message may name many people and a query per person would let its recipients decide what addressing it costs. What
-comes back is a match for every name and a contact for every identity the book holds; both are the same answers the
+comes back is a match for every name asked about — reporting nobody where nobody carries it — and a contact for each of
+the identities the book holds, with nothing standing in for the ones it does not. Both are the same answers the
 single-value lookups give, which is why nothing above changes for a caller with one name in hand.
 
 A search is text a contact has to carry somewhere in its name or in one of its addresses, matched on the same comparison

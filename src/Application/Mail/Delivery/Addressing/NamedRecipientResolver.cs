@@ -52,8 +52,10 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts)
     /// parsing it is the composition's to do and to refuse.
     /// </para>
     /// <para>
-    /// The book is read once for the identities named and once for the names, whatever the list holds, so the number of
-    /// queries follows from how a message is addressed rather than from how many people it is addressed to. The count is
+    /// The identities named and the names are each read in groups of at most a page of the book, so a message costs one
+    /// read per way its recipients were named and a second of that way only past two hundred distinct people — at most
+    /// four for the longest list an outgoing record can hold, against one per recipient. What addressing costs therefore
+    /// follows from how a message was addressed rather than from how many people it goes to. The count is
     /// bounded before the first lookup all the same, because the reads carry what the caller supplied: the bound is the
     /// greatest number of recipients an outgoing record can hold at all, so a longer list describes a send that could not
     /// be written down whatever the book answered — and the deployment's own, smaller recipient bound is still the
@@ -142,8 +144,8 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts)
 
     /// <summary>Reads every contact the act named by the identity the book gave it.</summary>
     /// <remarks>
-    /// The identities are read in groups the book answers in one statement, so the reads are counted by the bound rather
-    /// than by the recipients: the whole of a message's recipients takes at most two of them.
+    /// The identities are read in groups the book answers in one read, so what a message costs is counted by that bound
+    /// rather than by its recipients: the most an outgoing record can hold takes two of them.
     /// </remarks>
     private async Task<IReadOnlyDictionary<ContactId, Contact>> ReadContactsNamedByIdentityAsync(
         IReadOnlyList<NamedRecipient> namedContacts,
