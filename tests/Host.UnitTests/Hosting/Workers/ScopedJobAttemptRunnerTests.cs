@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
+using MailFathom.Common.Observability;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Observability;
@@ -18,6 +19,10 @@ namespace MailFathom.Host.UnitTests.Hosting.Workers;
 
 public sealed class ScopedJobAttemptRunnerTests : IDisposable
 {
+    private const string EnqueuedTraceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+    private const string EnqueuedSpanId = "1a2b3c4d5e6f7081";
+    private const string EnqueuedTraceParent = $"00-{EnqueuedTraceId}-{EnqueuedSpanId}-01";
+
     private static readonly DateTimeOffset Noon = new(2026, 8, 13, 12, 0, 0, TimeSpan.Zero);
 
     private readonly ConcurrentQueue<IJobStore> resolvedStores = new();
@@ -90,6 +95,96 @@ public sealed class ScopedJobAttemptRunnerTests : IDisposable
 
         // Assert
         Assert.Equal([JobQueueTelemetry.AttemptSpanName], this.spansTheAttemptRanInside);
+    }
+
+    /// <summary>
+    /// The trace a job was enqueued inside reaches the attempt through this runner and nowhere else, so a parameter
+    /// dropped here would leave every attempt unlinked while the telemetry below it went on passing its own tests.
+    /// </summary>
+    /// <remarks>
+    /// The link is found by the span identity this test minted rather than by being the only one published, because
+    /// the activity source is the process's and another class may be running an attempt at the same moment.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_AJobEnqueuedInsideATrace_LinksTheAttemptToThatTrace()
+    {
+        // Arrange
+        var enqueuedContexts = new ConcurrentQueue<ActivityContext>();
+        using var attemptSpans = new ActivityListener
+        {
+            ShouldListenTo = source => StringComparer.Ordinal.Equals(source.Name, Telemetry.Name),
+            Sample = static (ref ActivityCreationOptions<ActivityContext> _) =>
+                ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activity =>
+            {
+                if (!StringComparer.Ordinal.Equals(activity.OperationName, JobQueueTelemetry.AttemptSpanName))
+                {
+                    return;
+                }
+
+                foreach (var link in activity.Links)
+                {
+                    enqueuedContexts.Enqueue(link.Context);
+                }
+            },
+        };
+
+        ActivitySource.AddActivityListener(attemptSpans);
+
+        await using var services = this.ComposedServices();
+        var runner = new ScopedJobAttemptRunner(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            new JobQueueTelemetry());
+        var job = LeasedJobFor(5) with
+        {
+            EnqueuedTrace = JobTraceContext.FromTraceParent(EnqueuedTraceParent, traceState: null),
+        };
+
+        // Act
+        await runner.RunAsync(job, CancellationToken.None);
+
+        // Assert
+        var linked = Assert.Single(
+            enqueuedContexts,
+            context => StringComparer.Ordinal.Equals(context.SpanId.ToHexString(), EnqueuedSpanId));
+
+        Assert.Equal(EnqueuedTraceId, linked.TraceId.ToHexString());
+        Assert.True(linked.IsRemote);
+    }
+
+    /// <summary>The one job whose row records nothing to link to, which is every row written before the columns existed.</summary>
+    [Fact]
+    public async Task RunAsync_AJobWhoseRowRecordsNoTrace_OpensTheAttemptWithNoLink()
+    {
+        // Arrange
+        var linkCounts = new ConcurrentQueue<int>();
+        using var attemptSpans = new ActivityListener
+        {
+            ShouldListenTo = source => StringComparer.Ordinal.Equals(source.Name, Telemetry.Name),
+            Sample = static (ref ActivityCreationOptions<ActivityContext> _) =>
+                ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activity =>
+            {
+                if (StringComparer.Ordinal.Equals(activity.OperationName, JobQueueTelemetry.AttemptSpanName))
+                {
+                    linkCounts.Enqueue(activity.Links.Count());
+                }
+            },
+        };
+
+        ActivitySource.AddActivityListener(attemptSpans);
+
+        await using var services = this.ComposedServices();
+        var runner = new ScopedJobAttemptRunner(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            new JobQueueTelemetry());
+
+        // Act
+        await runner.RunAsync(LeasedJobFor(6), CancellationToken.None);
+
+        // Assert
+        Assert.All(linkCounts, linkCount => Assert.Equal(0, linkCount));
+        Assert.NotEmpty(linkCounts);
     }
 
     private static LeasedJob LeasedJobFor(int uid) => new(

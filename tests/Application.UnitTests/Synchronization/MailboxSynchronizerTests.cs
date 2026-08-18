@@ -1876,12 +1876,6 @@ public sealed class MailboxSynchronizerTests
             timeProvider);
     }
 
-    /// <summary>Builds a resolver whose alias is already bound to the folder the server advertises, so no run rebinds it.</summary>
-    /// <remarks>
-    /// These tests are about what synchronization does once a folder is known. Resolution has tests of its own, and
-    /// leaving it unbound here would make every run write a binding and consume a persistence session the assertions
-    /// about checkpoint commits are counting.
-    /// </remarks>
     /// <summary>Builds a resolver for a mail server that advertises no folder the configured alias could name.</summary>
     private static MailFolderResolver CreateFolderResolverThatResolvesNothing()
     {

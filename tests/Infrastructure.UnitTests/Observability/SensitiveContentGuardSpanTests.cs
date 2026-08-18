@@ -4,7 +4,6 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using MailFathom.Application.Observability;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Common.Observability;
 using MailFathom.Infrastructure.Observability;
@@ -20,13 +19,23 @@ namespace MailFathom.Infrastructure.UnitTests.Observability;
 public sealed class SensitiveContentGuardSpanTests : IDisposable
 {
     private readonly ConcurrentBag<Activity> published = [];
+
+    /// <summary>Stands in for whichever read is publishing above the guard, which is a span this class alone owns.</summary>
+    /// <remarks>
+    /// A real <c>read_email_content</c> span would be the honest parent and is the wrong one to open here: it is
+    /// published on the process-wide source that <see cref="MailboxReadTelemetryTests" /> listens to by name, and xUnit
+    /// may run that class at the same moment. Parenting is decided by the ambient activity rather than by who published
+    /// it, so a source of this class's own proves the nesting without publishing into another class's assertions.
+    /// </remarks>
+    private readonly ActivitySource readAboveTheGuard = new("SensitiveContentGuardSpanTests.ReadAboveTheGuard");
+
     private readonly ActivityListener listener;
 
     public SensitiveContentGuardSpanTests()
     {
         this.listener = new ActivityListener
         {
-            ShouldListenTo = source => source.Name == Telemetry.Name,
+            ShouldListenTo = source => source.Name == Telemetry.Name || source == this.readAboveTheGuard,
             Sample = static (ref ActivityCreationOptions<ActivityContext> _) =>
                 ActivitySamplingResult.AllDataAndRecorded,
             ActivityStopped = activity =>
@@ -41,7 +50,11 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         ActivitySource.AddActivityListener(this.listener);
     }
 
-    public void Dispose() => this.listener.Dispose();
+    public void Dispose()
+    {
+        this.listener.Dispose();
+        this.readAboveTheGuard.Dispose();
+    }
 
     /// <summary>The duration is what a caller waited for, and the count beside it is what that duration was spent on.</summary>
     [Fact]
@@ -97,27 +110,19 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
     public void BeginGuardedOperation_AnOperationInsideARead_PublishesBeneathIt()
     {
         // Arrange
-        var readTelemetry = new MailboxReadTelemetry();
         var telemetry = new SensitiveContentEgressTelemetry();
 
         // Act
         Activity? readSpan;
 
-        using (var read = readTelemetry.BeginRead(
-            MailboxReadOperation.ReadEmailContent,
-            TestContext.Current.CancellationToken))
+        using (readSpan = this.readAboveTheGuard.StartActivity("read_above_the_guard"))
         {
-            readSpan = Activity.Current;
-
-            using (var operation = telemetry.BeginGuardedOperation(
+            using var operation = telemetry.BeginGuardedOperation(
                 SensitiveContentEgressPoint.McpEmailContent,
-                TestContext.Current.CancellationToken))
-            {
-                operation.TextGuarded();
-                operation.Completed();
-            }
+                TestContext.Current.CancellationToken);
 
-            read.Completed(1);
+            operation.TextGuarded();
+            operation.Completed();
         }
 
         // Assert

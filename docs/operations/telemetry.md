@@ -570,7 +570,7 @@ parent already says once.
 | Span | The stage it reports |
 | --- | --- |
 | `resolve_mail_folder` | Turning the configured alias into the folder the server advertises for it, which opens a session of its own |
-| `open_mailbox_session` | Connecting, negotiating transport security, authenticating, and selecting the folder |
+| `open_mailbox_session` | Connecting, negotiating transport security, authenticating, selecting the folder, and reading which incarnation of it the server is serving |
 | `discover_mailbox_emails` | The forward walk: discovering mail, retrieving what it stores, deriving from it, and committing the checkpoint |
 | `fetch_email_batch` | One batch of that walk's listing, opened once per batch and bounded by `MaxMetadataBatchesPerRun` |
 | `reconcile_mailbox_folder` | The backward pass over the window, and the modification sequence it commits |
