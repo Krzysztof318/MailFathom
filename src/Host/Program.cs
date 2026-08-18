@@ -138,21 +138,23 @@ try
         forwardedHeadersLogger.LogDebug(
             """
             AFTER ForwardedHeaders
+            TraceId: {TraceId}
+            Method: {Method}
+            Path: {Path}
+            Host: {Host}
             Scheme: {Scheme}
             IsHttps: {IsHttps}
             X-Forwarded-Proto: {ForwardedProto}
             X-Original-Proto: {OriginalProto}
-            X-Forwarded-Host: {ForwardedHost}
-            X-Original-Host: {OriginalHost}
-            RemoteIp: {RemoteIp}
             """,
+            context.TraceIdentifier,
+            context.Request.Method,
+            context.Request.Path,
+            context.Request.Host,
             context.Request.Scheme,
             context.Request.IsHttps,
             context.Request.Headers["X-Forwarded-Proto"].ToString(),
-            context.Request.Headers["X-Original-Proto"].ToString(),
-            context.Request.Headers["X-Forwarded-Host"].ToString(),
-            context.Request.Headers["X-Original-Host"].ToString(),
-            context.Connection.RemoteIpAddress);
+            context.Request.Headers["X-Original-Proto"].ToString());
 
         await next();
     });

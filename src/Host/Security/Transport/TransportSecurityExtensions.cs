@@ -196,11 +196,22 @@ internal static partial class TransportSecurityExtensions
         {
             var forwardedProtocol = context.Request.Headers[ForwardedHeadersDefaults.XForwardedProtoHeaderName].ToString();
 
+            var originalProtocol = context.Request.Headers["X-Original-Proto"].ToString();
+
             LogTokenRefusedOnAClearTextHop(
-                context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
-                    .CreateLogger(typeof(TransportSecurityExtensions)),
-                context.Scheme.Name,
-                string.IsNullOrEmpty(forwardedProtocol) ? "none" : forwardedProtocol);
+            context.HttpContext.RequestServices
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger(typeof(TransportSecurityExtensions)),
+            context.Scheme.Name,
+            context.HttpContext.TraceIdentifier,
+            context.Request.Method,
+            context.Request.Path.Value ?? string.Empty,
+            context.Request.Host.Value ?? string.Empty,
+            context.Request.Scheme,
+            string.IsNullOrEmpty(forwardedProtocol) ? "none" : forwardedProtocol,
+            string.IsNullOrEmpty(originalProtocol) ? "none" : originalProtocol,
+            context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            context.HttpContext.Connection.LocalPort);
         }
 
         context.NoResult();
@@ -209,17 +220,30 @@ internal static partial class TransportSecurityExtensions
     }
 
     [LoggerMessage(
-        Level = LogLevel.Warning,
-        Message = "An access token presented to {AuthenticationScheme} arrived over a hop this process sees as clear "
-            + "text, so it was refused without being read and the caller received the challenge an anonymous request "
-            + "receives. The request carried X-Forwarded-Proto: {ForwardedProtocol}. 'none' means nothing in front of "
-            + "this process sent a forwarded scheme; any other value means one was sent and not applied, which is what "
-            + "ReverseProxy:TrustedProxies and ReverseProxy:MaximumForwardedHops decide. Behind a TLS-terminating "
-            + "reverse proxy every authenticated request fails this way until one of those is corrected.")]
+    Level = LogLevel.Warning,
+    Message =
+        "An access token presented to {AuthenticationScheme} arrived over a request this process currently sees as "
+        + "clear text, so it was refused without being read. "
+        + "Request: TraceIdentifier={TraceIdentifier}, Method={Method}, Path={Path}, Host={Host}, "
+        + "Scheme={Scheme}, RemoteIp={RemoteIp}, LocalPort={LocalPort}. "
+        + "Forwarded protocol state after forwarded-header processing: "
+        + "X-Forwarded-Proto={ForwardedProtocol}, X-Original-Proto={OriginalProtocol}. "
+        + "A remaining X-Forwarded-Proto value may be an unprocessed value or the unconsumed remainder of a forwarded "
+        + "header chain; X-Original-Proto indicates that forwarded-header processing changed the request scheme at least "
+        + "once. Correlate this request by TraceIdentifier with forwarded-header diagnostics to determine where the "
+        + "request scheme became clear text.")]
     private static partial void LogTokenRefusedOnAClearTextHop(
         ILogger logger,
         string authenticationScheme,
-        string forwardedProtocol);
+        string traceIdentifier,
+        string method,
+        string path,
+        string host,
+        string scheme,
+        string forwardedProtocol,
+        string originalProtocol,
+        string remoteIp,
+        int localPort);
 
     /// <summary>Registers the scheme that reads the presented credential and forwards it to the handler that judges it.</summary>
     private static void AddRoutingScheme(
