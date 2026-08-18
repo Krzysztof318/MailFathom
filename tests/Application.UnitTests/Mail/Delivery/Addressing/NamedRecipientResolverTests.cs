@@ -272,6 +272,46 @@ public sealed class NamedRecipientResolverTests
             new NamedRecipientResolver(book).ResolveAsync(
                 beyondTheBound,
                 TestContext.Current.CancellationToken));
+
+        Assert.Equal(0, book.BatchedLookupCount);
+    }
+
+    /// <summary>
+    /// The book is read once for the identities named and once for the names, so what a message costs to address follows
+    /// from how it was addressed rather than from how many people it names.
+    /// </summary>
+    [Fact]
+    public async Task ResolveAsync_ManyContactsNamedBothWays_ReadsTheBookOncePerWayTheyWereNamed()
+    {
+        // Arrange
+        var book = new InMemoryContactBookStore();
+
+        var held = Enumerable
+            .Range(0, 20)
+            .Select(number => ContactOf($"Correspondent {number:D2}", $"correspondent.{number:D2}@example.test"))
+            .ToArray();
+
+        foreach (var contact in held)
+        {
+            book.Hold(contact);
+        }
+
+        var namedBothWays = held
+            .Select(contact => NamedRecipient.ByContact(OutgoingRecipientRole.To, contact.Id))
+            .Concat(held.Select(contact => NamedRecipient.ByContactName(
+                OutgoingRecipientRole.Cc,
+                contact.DisplayName)))
+            .ToArray();
+
+        // Act
+        var resolution = await new NamedRecipientResolver(book).ResolveAsync(
+            namedBothWays,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(resolution.IsResolved);
+        Assert.Equal(namedBothWays.Length, resolution.Recipients.Count);
+        Assert.Equal(2, book.BatchedLookupCount);
     }
 
     /// <summary>Addressing somebody is not a fact about them, so the book is read and never written.</summary>

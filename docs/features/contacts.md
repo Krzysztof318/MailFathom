@@ -219,11 +219,18 @@ Three lookups and one listing:
   Addressing a message by naming a contact](mail-delivery.md#addressing-a-message-by-naming-a-contact) is where refusing
   that is argued. The count is exact and comes from the database, and the addresses of the people a shared name matched
   are never read, so a name a hundred collected contacts happen to share costs one number rather than a hundred records.
+  A name resolving to one person answers with that person and with the count that decided it read together, so the answer
+  can never be one of two people a namesake written down meanwhile made ambiguous.
 - **A page of the book**, bounded and continued by a keyset cursor. The order is the name's comparison form and then the
   identity, which makes it total: two people with one name are still served in a fixed order, so a walk of the book
   serves every contact exactly once. A page holds 50 contacts unless the caller asks for fewer, and never more than 200.
   A listing may be narrowed to one origin, which is the question "what did my instance pick up" and its inverse, and to
   a **search**.
+
+The name lookup and the identity lookup each also answer a **set**, up to a page of the book's worth in one read, because
+one message may name many people and a query per person would let its recipients decide what addressing it costs. What
+comes back is a match for every name and a contact for every identity the book holds; both are the same answers the
+single-value lookups give, which is why nothing above changes for a caller with one name in hand.
 
 A search is text a contact has to carry somewhere in its name or in one of its addresses, matched on the same comparison
 forms everything else here is matched on — so the search text is upper-cased once and compared against the stored name

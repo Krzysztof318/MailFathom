@@ -43,6 +43,37 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<ContactId, Contact>> FindAllAsync(
+        IReadOnlyCollection<ContactId> contactIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(contactIds);
+
+        // The bound the contract states, enforced here rather than trusted: the identities become the elements of one
+        // query parameter, so a caller asking about more people than a page of the book holds would decide the size of
+        // this read.
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            contactIds.Count,
+            ContactQuery.MaximumPageSize,
+            nameof(contactIds));
+
+        if (contactIds.Count == 0)
+        {
+            return new Dictionary<ContactId, Contact>();
+        }
+
+        var contactValues = contactIds.Select(contactId => contactId.Value).Distinct().ToArray();
+
+        var entities = await readContext.Contacts
+            .AsNoTracking()
+            .Include(record => record.Addresses)
+            .Where(record => contactValues.Contains(record.Id))
+            .ToArrayAsync(cancellationToken);
+
+        return entities.ToDictionary(entity => ContactId.Create(entity.Id), ContactMapping.ToContact);
+    }
+
+    /// <inheritdoc />
     public async Task<Contact?> FindByAddressAsync(EmailAddress address, CancellationToken cancellationToken)
     {
         var normalizedAddress = address.NormalizedAddress;
@@ -59,34 +90,55 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
 
     /// <inheritdoc />
     /// <remarks>
-    /// The count comes back from the database rather than from a page this read would otherwise have to hold, which is
-    /// what keeps a name a hundred collected contacts happen to share from costing a hundred records to answer with one
-    /// number. The one contact is read only where there is exactly one, so the addresses of people a shared name matched
-    /// are never loaded at all.
+    /// Two statements answer the whole set, whatever it holds: one groups the names by their comparison form and counts
+    /// the carriers of each, and one reads the contacts of the names exactly one person carries. The counts come back
+    /// from the database rather than from pages this read would otherwise have to hold, which is what keeps a name a
+    /// hundred collected contacts happen to share from costing a hundred records to answer with one number, and the
+    /// addresses of the people a shared name matched are never loaded at all.
     /// </remarks>
-    public async Task<ContactMatch> MatchDisplayNameAsync(
-        ContactDisplayName displayName,
+    public async Task<IReadOnlyDictionary<ContactDisplayName, ContactMatch>> MatchDisplayNamesAsync(
+        IReadOnlyCollection<ContactDisplayName> displayNames,
         CancellationToken cancellationToken)
     {
-        var sortKey = displayName.SortKey;
+        ArgumentNullException.ThrowIfNull(displayNames);
 
-        var matchCount = await readContext.Contacts
-            .AsNoTracking()
-            .CountAsync(record => record.DisplayNameSortKey == sortKey, cancellationToken);
+        // The bound the contract states, enforced here rather than trusted, for the reason the identity lookup above
+        // carries: the names become the elements of one query parameter.
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            displayNames.Count,
+            ContactQuery.MaximumPageSize,
+            nameof(displayNames));
 
-        if (matchCount != 1)
+        if (displayNames.Count == 0)
         {
-            return matchCount == 0 ? ContactMatch.None : ContactMatch.Several(matchCount);
+            return new Dictionary<ContactDisplayName, ContactMatch>();
         }
 
-        var entity = await readContext.Contacts
-            .AsNoTracking()
-            .Include(record => record.Addresses)
-            .FirstOrDefaultAsync(record => record.DisplayNameSortKey == sortKey, cancellationToken);
+        var sortKeys = displayNames.Select(displayName => displayName.SortKey).Distinct().ToArray();
 
-        // A contact renamed or erased between the two reads leaves the name matching nobody, which is the same answer as
-        // a name nobody carried when the count was taken. Reporting it as unique would answer with no contact at all.
-        return entity is null ? ContactMatch.None : ContactMatch.Unique(ContactMapping.ToContact(entity));
+        var carrierCounts = await readContext.Contacts
+            .AsNoTracking()
+            .Where(record => sortKeys.Contains(record.DisplayNameSortKey))
+            .GroupBy(record => record.DisplayNameSortKey)
+            .Select(carriers => new { SortKey = carriers.Key, CarrierCount = carriers.Count() })
+            .ToArrayAsync(cancellationToken);
+
+        var countBySortKey = carrierCounts.ToDictionary(
+            row => row.SortKey,
+            row => row.CarrierCount,
+            StringComparer.Ordinal);
+
+        var carriersBySortKey = await this.ReadCarriersOfAsync(
+            [.. carrierCounts.Where(row => row.CarrierCount == 1).Select(row => row.SortKey)],
+            cancellationToken);
+
+        return displayNames
+            .Distinct()
+            .ToDictionary(
+                displayName => displayName,
+                displayName => MatchOf(
+                    countBySortKey.GetValueOrDefault(displayName.SortKey),
+                    carriersBySortKey.GetValueOrDefault(displayName.SortKey, [])));
     }
 
     /// <inheritdoc />
@@ -149,6 +201,59 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
             entities.Length > query.PageSize && contacts.Length > 0
                 ? ContactCursor.After(contacts[^1].DisplayName, contacts[^1].Id)
                 : null);
+    }
+
+    /// <summary>States what a name resolved to, from the count of its carriers and the ones actually read.</summary>
+    /// <remarks>
+    /// The count and the contacts come from two statements, so a namesake written down between them leaves a name the
+    /// count called unique carrying two people. The verdict for such a name is therefore taken from the read that
+    /// produced the contact rather than from the count alone: two carriers refuse as ambiguous, and none — a contact
+    /// renamed or erased — resolves to nobody. Either answer is one the count itself would have given a moment later, and
+    /// neither hands back a contact the book no longer holds that name uniquely for.
+    /// </remarks>
+    private static ContactMatch MatchOf(int countedCarriers, ContactEntity[] readCarriers)
+    {
+        if (countedCarriers == 0)
+        {
+            return ContactMatch.None;
+        }
+
+        if (countedCarriers > 1)
+        {
+            return ContactMatch.Several(countedCarriers);
+        }
+
+        return readCarriers.Length switch
+        {
+            0 => ContactMatch.None,
+            1 => ContactMatch.Unique(ContactMapping.ToContact(readCarriers[0])),
+            _ => ContactMatch.Several(readCarriers.Length),
+        };
+    }
+
+    /// <summary>Reads the contacts carrying each of the names exactly one person was counted under.</summary>
+    /// <remarks>
+    /// A name is grouped by its comparison form rather than read as one row, because the read is what decides whether the
+    /// count still holds and a second carrier has to be visible to it.
+    /// </remarks>
+    private async Task<IReadOnlyDictionary<string, ContactEntity[]>> ReadCarriersOfAsync(
+        string[] sortKeys,
+        CancellationToken cancellationToken)
+    {
+        if (sortKeys.Length == 0)
+        {
+            return new Dictionary<string, ContactEntity[]>(StringComparer.Ordinal);
+        }
+
+        var entities = await readContext.Contacts
+            .AsNoTracking()
+            .Include(record => record.Addresses)
+            .Where(record => sortKeys.Contains(record.DisplayNameSortKey))
+            .ToArrayAsync(cancellationToken);
+
+        return entities
+            .GroupBy(entity => entity.DisplayNameSortKey, StringComparer.Ordinal)
+            .ToDictionary(carriers => carriers.Key, carriers => carriers.ToArray(), StringComparer.Ordinal);
     }
 
     /// <summary>Applies the filter and the boundary a query names, leaving the ordering to the caller.</summary>

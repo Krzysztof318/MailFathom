@@ -7,7 +7,7 @@ using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Contacts;
 
-/// <summary>Reads the contact book: one person by identity, by name, or by an address they use, and a page of the whole.</summary>
+/// <summary>Reads the contact book: one person by identity or by an address they use, a set of them by identity or by name, and a page of the whole.</summary>
 /// <remarks>
 /// Every read joins no transaction and returns complete contacts rather than an entity graph, which is why it is a port
 /// of its own beside <see cref="IContactStore" /> rather than a set of methods on it. Every lookup is answered from an
@@ -21,6 +21,22 @@ public interface IContactDirectory
     /// <returns>The complete contact, or <see langword="null" /> when the book holds none.</returns>
     Task<Contact?> FindAsync(ContactId contactId, CancellationToken cancellationToken);
 
+    /// <summary>Reads several contacts by the identities the book gave them.</summary>
+    /// <param name="contactIds">The contacts to read, at most one page of the book's worth.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>An entry for every identity the book holds, keyed by that identity; identities it holds none of are absent.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="contactIds" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when more identities are supplied than one page of the book holds.</exception>
+    /// <remarks>
+    /// One read for a whole set rather than one per identity, because a caller resolving the people an act named would
+    /// otherwise make the number of queries its own input's to decide. A caller with more identities than the bound admits
+    /// asks in bounded groups; the bound is the same one a page of the book is read under, so no read here is larger than
+    /// one this port already answers.
+    /// </remarks>
+    Task<IReadOnlyDictionary<ContactId, Contact>> FindAllAsync(
+        IReadOnlyCollection<ContactId> contactIds,
+        CancellationToken cancellationToken);
+
     /// <summary>Reads the person who uses one address.</summary>
     /// <param name="address">The address to resolve.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
@@ -31,24 +47,28 @@ public interface IContactDirectory
     /// </remarks>
     Task<Contact?> FindByAddressAsync(EmailAddress address, CancellationToken cancellationToken);
 
-    /// <summary>Reads who one name resolves to, by the whole of that name rather than by part of it.</summary>
-    /// <param name="displayName">The name to resolve.</param>
+    /// <summary>Reads who each name resolves to, by the whole of that name rather than by part of it.</summary>
+    /// <param name="displayNames">The names to resolve, at most one page of the book's worth.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The one contact carrying the name, or how many carry it when that is not one.</returns>
+    /// <returns>An entry for every supplied name at least one contact carries, keyed by the name as supplied; a name nobody carries is absent.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="displayNames" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when more names are supplied than one page of the book holds.</exception>
     /// <remarks>
     /// <para>
-    /// The comparison is on the name's whole comparison form, which is what separates this from the contained match a
+    /// The comparison is on each name's whole comparison form, which is what separates this from the contained match a
     /// page's search performs: a lookup that addresses a message resolves to one person or to nobody, and text that
     /// merely appears inside somebody's name is not that person being named. Both are answered from the listing index
     /// the book is ordered by.
     /// </para>
     /// <para>
-    /// The count is exact and the addresses of the people it counted are never read, so an ambiguous name costs one
-    /// number rather than a page of somebody else's correspondents.
+    /// The count an ambiguous name answers with is exact, and the addresses of the people it counted are never read, so a
+    /// name a hundred collected contacts happen to share costs one number rather than a page of somebody else's
+    /// correspondents. A name resolving to one person answers with that person and with the count that decided it read
+    /// together, so no caller can be handed a contact the book no longer holds uniquely.
     /// </para>
     /// </remarks>
-    Task<ContactMatch> MatchDisplayNameAsync(
-        ContactDisplayName displayName,
+    Task<IReadOnlyDictionary<ContactDisplayName, ContactMatch>> MatchDisplayNamesAsync(
+        IReadOnlyCollection<ContactDisplayName> displayNames,
         CancellationToken cancellationToken);
 
     /// <summary>Reads which contacts already hold each of the given addresses.</summary>

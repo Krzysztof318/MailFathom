@@ -251,6 +251,12 @@ person rather than to a mailbox.
 **One unresolved recipient refuses the whole message.** Sending to everybody else would tell an author their message went
 out while the person they cared about never receives it.
 
+**The book is read once for the identities named and once for the names**, whatever a message names, so what addressing
+costs follows from how a message was addressed rather than from how many people it goes to. The recipient count is
+bounded before the first of those reads at the most an outgoing record can hold, because the reads carry what the caller
+supplied. A name resolving to one person comes back with the count that decided it, which is what stops a namesake
+written down while the read ran from turning an ambiguous name into an arbitrary one of two people.
+
 **The record keeps both facts.** A recipient resolved from the book is written down with the address the send was offered
 to and the contact it came from, so what was sent stays answerable after the contact is amended, promoted, or erased. The
 addresses in the composed message are the ones that were resolved; nothing re-reads the book to resume a send.

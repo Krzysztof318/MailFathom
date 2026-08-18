@@ -52,11 +52,12 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts)
     /// parsing it is the composition's to do and to refuse.
     /// </para>
     /// <para>
-    /// The count is bounded before the first lookup, because each contact named is a read of the book: without a ceiling
-    /// here, a caller would decide how many queries addressing one message costs. The bound is the greatest number of
-    /// recipients an outgoing record can hold at all, so a longer list describes a send that could not be written down
-    /// whatever the book answered — and the deployment's own, smaller recipient bound is still the composition's to apply,
-    /// where it is refused as a bound rather than raised as a defect.
+    /// The book is read once for the identities named and once for the names, whatever the list holds, so the number of
+    /// queries follows from how a message is addressed rather than from how many people it is addressed to. The count is
+    /// bounded before the first lookup all the same, because the reads carry what the caller supplied: the bound is the
+    /// greatest number of recipients an outgoing record can hold at all, so a longer list describes a send that could not
+    /// be written down whatever the book answered — and the deployment's own, smaller recipient bound is still the
+    /// composition's to apply, where it is refused as a bound rather than raised as a defect.
     /// </para>
     /// </remarks>
     public async Task<RecipientResolution> ResolveAsync(
@@ -69,6 +70,10 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts)
             OutgoingEmailRequest.MaximumRecipientCount,
             nameof(recipients));
 
+        var namedContacts = recipients.Where(named => named.Address is null).ToArray();
+        var contactsByIdentity = await this.ReadContactsNamedByIdentityAsync(namedContacts, cancellationToken);
+        var matchesByName = await this.MatchContactsNamedByNameAsync(namedContacts, cancellationToken);
+
         var resolved = new List<AuthoredEmailRecipient>(recipients.Count);
 
         foreach (var named in recipients)
@@ -80,7 +85,7 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts)
                 continue;
             }
 
-            var match = await this.MatchContactAsync(named, cancellationToken);
+            var match = MatchOf(named, contactsByIdentity, matchesByName);
 
             if (match.OnlyMatch is not { } contact)
             {
@@ -108,20 +113,21 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts)
         return RecipientResolution.Resolved(resolved);
     }
 
-    /// <summary>Reads who one recipient names, whichever of the two ways it names them.</summary>
+    /// <summary>States who one recipient names, whichever of the two ways it names them, out of what the book answered.</summary>
     /// <remarks>
     /// An identity resolves to one contact or to none and can never be ambiguous, so both ways of naming answer in the
     /// same shape and the caller acts on the count rather than on which way was used.
     /// </remarks>
-    private async Task<ContactMatch> MatchContactAsync(
+    private static ContactMatch MatchOf(
         NamedRecipient named,
-        CancellationToken cancellationToken)
+        IReadOnlyDictionary<ContactId, Contact> contactsByIdentity,
+        IReadOnlyDictionary<ContactDisplayName, ContactMatch> matchesByName)
     {
         if (named.Contact is { } contactId)
         {
-            var contact = await contacts.FindAsync(contactId, cancellationToken);
-
-            return contact is null ? ContactMatch.None : ContactMatch.Unique(contact);
+            return contactsByIdentity.TryGetValue(contactId, out var contact)
+                ? ContactMatch.Unique(contact)
+                : ContactMatch.None;
         }
 
         if (named.ContactName is not { } contactName)
@@ -131,7 +137,60 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts)
             throw new InvalidOperationException("An authored recipient names an address or a contact.");
         }
 
-        return await contacts.MatchDisplayNameAsync(contactName, cancellationToken);
+        return matchesByName.GetValueOrDefault(contactName, ContactMatch.None);
+    }
+
+    /// <summary>Reads every contact the act named by the identity the book gave it.</summary>
+    /// <remarks>
+    /// The identities are read in groups the book answers in one statement, so the reads are counted by the bound rather
+    /// than by the recipients: the whole of a message's recipients takes at most two of them.
+    /// </remarks>
+    private async Task<IReadOnlyDictionary<ContactId, Contact>> ReadContactsNamedByIdentityAsync(
+        IReadOnlyList<NamedRecipient> namedContacts,
+        CancellationToken cancellationToken)
+    {
+        var identities = namedContacts
+            .Where(named => named.Contact is not null)
+            .Select(named => named.Contact!.Value)
+            .Distinct()
+            .ToArray();
+
+        var held = new Dictionary<ContactId, Contact>();
+
+        foreach (var group in identities.Chunk(ContactQuery.MaximumPageSize))
+        {
+            foreach (var (contactId, contact) in await contacts.FindAllAsync(group, cancellationToken))
+            {
+                held[contactId] = contact;
+            }
+        }
+
+        return held;
+    }
+
+    /// <summary>Resolves every name the act named a contact by.</summary>
+    /// <remarks>Grouped for the same reason the identities are, and answered by the same bound.</remarks>
+    private async Task<IReadOnlyDictionary<ContactDisplayName, ContactMatch>> MatchContactsNamedByNameAsync(
+        IReadOnlyList<NamedRecipient> namedContacts,
+        CancellationToken cancellationToken)
+    {
+        var contactNames = namedContacts
+            .Where(named => named.Contact is null && named.ContactName is not null)
+            .Select(named => named.ContactName!.Value)
+            .Distinct()
+            .ToArray();
+
+        var matches = new Dictionary<ContactDisplayName, ContactMatch>();
+
+        foreach (var group in contactNames.Chunk(ContactQuery.MaximumPageSize))
+        {
+            foreach (var (contactName, match) in await contacts.MatchDisplayNamesAsync(group, cancellationToken))
+            {
+                matches[contactName] = match;
+            }
+        }
+
+        return matches;
     }
 
     /// <summary>Decides which of the contact's addresses the message is offered to.</summary>

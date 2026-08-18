@@ -21,9 +21,10 @@ namespace MailFathom.IntegrationTests.Persistence;
 /// along a foreign key the schema declares. That one address stays in one person's hands is a unique index, and losing
 /// that race has to reach a caller as a conflict rather than as a provider failure. That a walk of the book serves every
 /// contact once depends on PostgreSQL comparing the same two columns the index is ordered by, which is also the one part
-/// of the read that has to survive being translated into SQL at all. That resolving a whole name answers with one person
-/// or with an exact count turns on that same collation and on a count the database takes rather than a page this read
-/// holds. And that an amendment which drops an address frees it is the interaction between the replacement's deletes and
+/// of the read that has to survive being translated into SQL at all. That resolving whole names answers each with one
+/// person or with an exact count turns on that same collation, on counts the database groups rather than pages this read
+/// holds, and on the one translation that grouping is. And that an amendment which drops an address frees it is the
+/// interaction between the replacement's deletes and
 /// that same index.
 /// </para>
 /// <para>
@@ -288,12 +289,13 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
     }
 
     /// <summary>
-    /// Addressing a message by naming somebody turns on this lookup answering with one person or with a count, and both
-    /// halves of it are PostgreSQL's: the equality is on a column pinned to the <c>C</c> collation, and the count is the
-    /// database's own rather than the length of a page this read never holds.
+    /// Addressing a message by naming somebody turns on this lookup answering with one person or with a count, and every
+    /// half of it is PostgreSQL's: the equality is on a column pinned to the <c>C</c> collation, the counts are grouped by
+    /// the database rather than read as pages this query never holds, and one statement answers however many names a
+    /// message named.
     /// </summary>
     [Fact]
-    public async Task MatchDisplayNameAsync_ANameOnePersonCarriesAndOneSeveralDo_AnswersWithThePersonAndWithTheCount()
+    public async Task MatchDisplayNamesAsync_NamesOnePersonCarriesAndSeveralDo_AnswerWithThePeopleAndWithTheCounts()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -321,14 +323,25 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
             cancellationToken);
 
         // Act
-        // The casing is the author's rather than the book's, which is the whole reason the comparison form is stored.
-        var byName = await MatchDisplayNameAsync(services, "solveig lindqvist", cancellationToken);
-        var shared = await MatchDisplayNameAsync(services, "Namesake Halvorsen", cancellationToken);
-        var carriedByNobody = await MatchDisplayNameAsync(services, "Solveig", cancellationToken);
+        // Every name a message named, in one read. The casing is the author's rather than the book's, which is the whole
+        // reason the comparison form is stored.
+        var matches = await MatchDisplayNamesAsync(
+            services,
+            ["solveig lindqvist", "Namesake Halvorsen", "Solveig"],
+            cancellationToken);
+
+        var held = await FindAllAsync(
+            services,
+            [unique.Contact!.Id, ContactId.Create(Guid.CreateVersion7())],
+            cancellationToken);
 
         // Assert
+        var byName = matches[ContactDisplayName.Create("solveig lindqvist")];
+        var shared = matches[ContactDisplayName.Create("Namesake Halvorsen")];
+        var carriedByNobody = matches[ContactDisplayName.Create("Solveig")];
+
         Assert.Equal(1, byName.MatchCount);
-        Assert.Equal(unique.Contact!.Id, byName.OnlyMatch?.Id);
+        Assert.Equal(unique.Contact.Id, byName.OnlyMatch?.Id);
         Assert.Equal("solveig@named.contacts.test", byName.OnlyMatch?.PreferredAddress.Address);
 
         Assert.Equal(2, shared.MatchCount);
@@ -337,6 +350,11 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         // Part of a name is not a person being named, which is what separates this lookup from a search.
         Assert.Equal(0, carriedByNobody.MatchCount);
         Assert.Null(carriedByNobody.OnlyMatch);
+
+        // The identity lookup answers the same way for a set: the people the book holds, and nothing standing in for the
+        // one it does not.
+        Assert.Equal([unique.Contact.Id], held.Keys);
+        Assert.Equal("solveig@named.contacts.test", held[unique.Contact.Id].PreferredAddress.Address);
     }
 
     /// <summary>An amendment is the whole record: what it stops naming is removed, and the address it releases is free.</summary>
@@ -453,13 +471,20 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
                 token),
             cancellationToken);
 
-    private static Task<ContactMatch> MatchDisplayNameAsync(
+    private static Task<IReadOnlyDictionary<ContactDisplayName, ContactMatch>> MatchDisplayNamesAsync(
         OrchestratedMailFathomServices services,
-        string displayName,
+        IReadOnlyCollection<string> displayNames,
         CancellationToken cancellationToken) => services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IContactDirectory>().MatchDisplayNameAsync(
-                ContactDisplayName.Create(displayName),
+            (scope, token) => scope.GetRequiredService<IContactDirectory>().MatchDisplayNamesAsync(
+                [.. displayNames.Select(ContactDisplayName.Create)],
                 token),
+            cancellationToken);
+
+    private static Task<IReadOnlyDictionary<ContactId, Contact>> FindAllAsync(
+        OrchestratedMailFathomServices services,
+        IReadOnlyCollection<ContactId> contactIds,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IContactDirectory>().FindAllAsync(contactIds, token),
             cancellationToken);
 
     private static Task<ContactPage> SearchAsync(

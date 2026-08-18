@@ -26,6 +26,14 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
     /// <summary>Gets every contact the book holds, for a test asserting on the records rather than on their number.</summary>
     internal IReadOnlyCollection<Contact> Contacts => this.contactsById.Values;
 
+    /// <summary>Gets how many batched lookups the directory has answered, for a test asserting the cost of a read.</summary>
+    /// <remarks>
+    /// A real book is read by a query, and a caller looking one person up at a time cannot be told apart from one looking
+    /// a set up in a single read by what either of them gets back. The number of lookups is the only observation that
+    /// separates them, so it is the one this double publishes.
+    /// </remarks>
+    internal int BatchedLookupCount { get; private set; }
+
     /// <summary>Puts a contact into the book without going through a write, for arranging what was already held.</summary>
     internal void Hold(Contact contact) => this.contactsById[contact.Id] = contact;
 
@@ -99,23 +107,44 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
         Task.FromResult(this.contactsById.Values.FirstOrDefault(contact => contact.Holds(address)));
 
     /// <inheritdoc />
-    public Task<ContactMatch> MatchDisplayNameAsync(
-        ContactDisplayName displayName,
+    public Task<IReadOnlyDictionary<ContactId, Contact>> FindAllAsync(
+        IReadOnlyCollection<ContactId> contactIds,
         CancellationToken cancellationToken)
     {
-        var carrying = this.contactsById.Values
-            .Where(contact => string.Equals(
-                contact.DisplayName.SortKey,
-                displayName.SortKey,
-                StringComparison.Ordinal))
-            .ToArray();
+        ArgumentNullException.ThrowIfNull(contactIds);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            contactIds.Count,
+            ContactQuery.MaximumPageSize,
+            nameof(contactIds));
 
-        return Task.FromResult(carrying.Length switch
-        {
-            0 => ContactMatch.None,
-            1 => ContactMatch.Unique(carrying[0]),
-            _ => ContactMatch.Several(carrying.Length),
-        });
+        this.BatchedLookupCount++;
+
+        IReadOnlyDictionary<ContactId, Contact> held = contactIds
+            .Distinct()
+            .Where(this.contactsById.ContainsKey)
+            .ToDictionary(contactId => contactId, contactId => this.contactsById[contactId]);
+
+        return Task.FromResult(held);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyDictionary<ContactDisplayName, ContactMatch>> MatchDisplayNamesAsync(
+        IReadOnlyCollection<ContactDisplayName> displayNames,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(displayNames);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            displayNames.Count,
+            ContactQuery.MaximumPageSize,
+            nameof(displayNames));
+
+        this.BatchedLookupCount++;
+
+        IReadOnlyDictionary<ContactDisplayName, ContactMatch> matches = displayNames
+            .Distinct()
+            .ToDictionary(displayName => displayName, this.MatchOf);
+
+        return Task.FromResult(matches);
     }
 
     /// <inheritdoc />
@@ -158,6 +187,24 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
         var byName = string.CompareOrdinal(contact.DisplayName.SortKey, cursor.DisplayNameSortKey);
 
         return byName > 0 || (byName == 0 && contact.Id.Value > cursor.ContactId.Value);
+    }
+
+    /// <summary>States who one name resolves to, on the comparison form the listing index is built on.</summary>
+    private ContactMatch MatchOf(ContactDisplayName displayName)
+    {
+        var carrying = this.contactsById.Values
+            .Where(contact => string.Equals(
+                contact.DisplayName.SortKey,
+                displayName.SortKey,
+                StringComparison.Ordinal))
+            .ToArray();
+
+        return carrying.Length switch
+        {
+            0 => ContactMatch.None,
+            1 => ContactMatch.Unique(carrying[0]),
+            _ => ContactMatch.Several(carrying.Length),
+        };
     }
 
     /// <summary>Names the other contact already holding one of this record's addresses, as the unique index would.</summary>
