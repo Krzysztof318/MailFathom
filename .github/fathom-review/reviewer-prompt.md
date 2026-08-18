@@ -17,8 +17,10 @@ change has not touched. The change itself is under `{{REVIEW_DIRECTORY}}`:
   them. A group whose report is absent was read by nobody: the reader failed or was cut
   short, and the coverage the run publishes says so.
 - `groups.json` — how the change was split between the readers, as the index and file list
-  each one was given. This is what tells a missing report apart from a group that was never
-  formed, and it is the run's own record rather than model text. The `candidates/metrics-<n>.json`
+  each one was given, and `read_this_pass` for each: `true` where a reader was started for it,
+  `false` where the group holds nothing that moved since your last review and was therefore not
+  re-read. This is what tells a missing report apart from a group deliberately left out, and it
+  is the run's own record rather than model text. The `candidates/metrics-<n>.json`
   files beside the reports are the run's own counts — how long a reader took, how many turns
   it spent — and say nothing about the change; there is nothing in them to review.
 - `pull-request.json` — number, title, body, author, the head and base commits, and the
@@ -200,10 +202,10 @@ What that changes:
   it now stands before deciding either way.
 - Your summary says what changed since the last pass in a line or two: what the new
   commits fixed, what they did not, and what they introduced.
-- The coverage is this pass alone. The readers open the whole change again on every pass
-  and their lists say what they opened this time, so a file read last time counts for
-  nothing here — a page or a remark nothing has touched stops being true when the code it
-  describes moves, which is precisely what a later pass is for.
+- The coverage is this pass alone, and this pass is the groups that moved. `groups.json`
+  says which those were, and a file in a group nobody re-read is one your previous review
+  already covered — not a gap. What is a gap is a file inside a group that *was* re-read and
+  that no report names, and the coverage line separates the two.
 
 A previous review whose `commit_id` is the current `HEAD SHA` means nothing has been
 pushed since it: this run was asked for by a comment. Say what you looked at again and
@@ -218,10 +220,12 @@ and `candidates/` is what came back. Yours is the part of the first pass no read
 perform, because each of them saw one group and every item here is a judgment about the
 change as a whole:
 
-- Read every report in `candidates/`, and read `groups.json` beside them. A group with no
-  report is a part of the change nobody read; say so in your summary, naming what it
-  covered, because the coverage line the run publishes states the count and your summary is
-  where the reader learns what it means.
+- Read every report in `candidates/`, and read `groups.json` beside them. A group whose
+  `read_this_pass` is `true` and whose report is missing is a part of the change nobody read;
+  say so in your summary, because the coverage line the run publishes states the count and your
+  summary is where the reader learns what it means. A group whose `read_this_pass` is `false`
+  is not that: nothing in it has moved since your last review, it carries that review's verdict,
+  and it needs no remark of its own.
 - Work through every row of `obligations.json`. A gap it points at is confirmed by reading
   a file the diff does not contain, which no reader was given, and **What the change
   obliges elsewhere** below says what each section means.
@@ -368,20 +372,24 @@ a missing page: which pages exist is not this change's business.
   Documentation that states something the code does not do is `P1` above and stays
   there. A page that has simply not caught up — a new option it does not mention, a
   limit it does not state — is this level.
+
+  This is the level that decides the verdict. A change carrying nothing above `P3` is
+  approved with those findings attached, so a `P2` is what holds it — which is exactly why
+  the level is a property of the defect and never a way to make one land harder.
 - **P3** — something a later change will pay for: a name that misleads, a boundary
   crossed for convenience, a method that hides two responsibilities.
 
 Post nothing below P3, and at most twenty findings; when more clear the bar, keep the
 most severe and say in the summary how many you left out.
 
-The severity you write decides the verdict on a late pass. Past three passes over the
-same pull request, a review carrying nothing above `P3` is published as an approval with
-those findings attached rather than as one that holds the change: a `P3` is paid for
-later by definition, and a fourth round spent on one costs more than it is worth. So
-write the severity the finding actually has. Raising a `P3` to `P2` to make it hold the
-change is the failure this rule is most exposed to, and it is the reviewer arranging a
-verdict rather than reporting one — the level is a property of the defect, and the
-consequence is not yours to steer.
+The severity you write decides the verdict. A review carrying nothing above `P3` is
+published as an approval with those findings attached rather than as one that holds the
+change, at every pass including the first: a `P3` is paid for later by definition, and a
+round spent on one costs more than it is worth. The finding still arrives, on its line,
+as a thread to answer and resolve. So write the severity the finding actually has.
+Raising a `P3` to `P2` to make it hold the change is the failure this rule is most
+exposed to, and it is the reviewer arranging a verdict rather than reporting one — the
+level is a property of the defect, and the consequence is not yours to steer.
 
 Twenty is a ceiling, never a target. A change with two defects gets two findings, and a
 change with none gets none: an entry that exists to fill the list is a defect in the

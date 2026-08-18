@@ -751,8 +751,8 @@ and no read access to `.git`, where the action leaves a token for its own use.
 None of them holds a credential it could use and none posts anything. The judge's
 findings are the run's own answer, and the step after it validates them and submits
 a single review: `event: COMMENT` when the answer holds findings that withhold
-approval, `event: APPROVE` when it holds none — and, from the fourth pass, when the
-ones it holds are all P3, described under **What a later pass is for** below.
+approval, `event: APPROVE` when it holds none and when the ones it holds are all P3,
+described under **What a later pass is for** below.
 
 The model is named exactly rather than by alias: `claude-sonnet-5` at
 `--effort high`. An alias re-points at whatever ships next, and findings are only
@@ -1015,7 +1015,7 @@ does not inherit this reasoning; it argues its own case or uses `pull_request`.
 The run spends the repository owner's personal Claude subscription — whichever of
 the two the `CLAUDE_CODE_PROFILE` variable selects, as
 [Provisioning the App](#provisioning-the-app) describes — so what limits how
-often it runs is a design concern rather than an operational one. Ten things do,
+often it runs is a design concern rather than an operational one. Eleven things do,
 and they are listed together because each closes a different way the bill could
 grow:
 
@@ -1043,10 +1043,12 @@ grow:
 - the readers are capped at six concurrent sessions, and a change too large for
   that gets larger groups rather than more of them — the concurrency is a decision
   about the subscription rather than about any one change;
-- past three passes a change settles on what it has, so a P3 can cost a fourth
-  round at most rather than every round until somebody fixes it.
+- a later pass starts readers only for the groups holding a path that moved since the
+  previous review, so the second and later rounds cost a fraction of the first;
+- a P3 never withholds approval, so no round is ever spent on a finding whose own
+  severity says it can wait.
 
-The last three are the only ones that bound how *hard* a run works rather than how
+The last four are the only ones that bound how *hard* a run works rather than how
 often one starts, and they are the set worth re-measuring rather than tuning by
 feel: reading depth is where this workflow spends deliberately, and a change that
 stops converging is where that spending stops paying. The metrics artifact
@@ -1198,10 +1200,11 @@ one.
 
 ### What a later pass is for
 
-Reading the whole change on every pass is right. Judging it again on every pass is
-not, and the two came in together: with the ledger asking for the whole change to
-be read and `xhigh` paying for it, a fourth pass had both the reach and the budget
-to open a file no fix had touched and start there.
+Judging the whole change again on every pass is wrong, and so — once the reading
+was split across jobs and priced — is re-reading it. The two came in together:
+with the ledger asking for the whole change to be read and `xhigh` paying for it, a
+fourth pass had both the reach and the budget to open a file no fix had touched and
+start there.
 
 #839 is what that looks like. Four files, 401 added lines — the smallest pull
 request of the sample — six automatic rounds, 34 inline findings, no approval, and
@@ -1212,7 +1215,8 @@ sixth opened `SECURITY.md` and raised another. Not one of those pages had been
 touched by a single fix. The reviewer was not converging on the change; it was
 widening across it.
 
-Two rules answer that, and neither one makes a pass read less.
+Three rules answer that. Two bound what a pass may conclude; the third bounds what
+it re-reads, and it arrived later, when the fan-out made the cost of a pass legible.
 
 **What moved is what a later pass may conclude something about.** The collection
 step compares the head of the reviewer's previous review with the one in front of
@@ -1238,18 +1242,35 @@ somebody asked for, and where the comparison failed, and each of those puts the
 whole change back in scope — a bound derived from an API error would silence
 findings on files that did move.
 
-**Past three passes a change settles on what it has.** A P1 breaks something and a
-P2 is owed by a rule, so either withholds approval however late it arrives. A P3
-is paid for later by definition, and a fourth round spent holding a change for one
-costs more than the finding is worth. So from the fourth pass a review carrying
-nothing above P3 is published as an approval with those findings attached as
-inline comments rather than as one that holds the change. Nothing is hidden and
-nothing is postponed silently: the findings are published exactly as they would
-have been, and the thread-resolution rule the `main` ruleset carries still makes
-each one answerable before the merge. What changes is only the verdict they arrive
-under. The count is of automatic passes alone, so asking for a review never
-advances a pull request toward its own threshold, and a requested pass is judged
-at full strictness.
+**A later pass re-reads only the groups that moved.** `group-changed-files.sh` reads
+`changed-since-last-review.txt` beside the split and marks each group
+`read_this_pass`, and the run starts readers for the marked ones alone. The rule
+above already bounds what a later pass may conclude to those paths, so a reader
+opening the rest was paying full price for a reading no verdict could rest on — and
+at 2.94 reviews per pull request, that was the largest recurring cost this workflow
+carried. The judge is not bounded by it: it reads `obligations.json` over the whole
+change, reads the body twice, and has `files.json` and `head/` in front of it. The
+coverage line then separates the two shapes of unread — a file inside a re-read
+group that no report names, which is a gap and is named, and a file in a group
+nobody re-read, which carries the previous review's verdict and is counted.
+
+**A P3 never withholds approval.** A P1 breaks something and a P2 is owed by a rule,
+so either holds the change however late it arrives. A P3 is paid for later by
+definition, and a round spent holding a change for one costs more than the finding
+is worth. So a review carrying nothing above P3 is published as an approval with
+those findings attached as inline comments, at every pass including the first.
+Nothing is hidden and nothing is postponed silently: the findings are published
+exactly as they would have been, and the thread-resolution rule the `main` ruleset
+carries still makes each one answerable before the merge. What changes is only the
+verdict they arrive under.
+
+This started at the fourth pass and became unconditional on measurement. Across 106
+published reviews on 36 pull requests, 72 withheld approval and exactly one of them
+carried nothing but P3 findings — so the threshold bought one review, at the price of
+a verdict that depended on which round a finding happened to be noticed in and a pass
+counter threaded into the submission. P3 findings themselves are not rare, at 95 of
+326, which is the other half of the reading: they arrive beside P1 and P2 findings,
+where the verdict was never theirs to decide.
 
 The prompt states the severities and the consequence together, because the
 reviewer writing a P3 as a P2 to make it hold the change would be arranging a
@@ -1486,8 +1507,8 @@ API failure must not delay or skip a review.
 
 The last write is the verdict: `Changes requested` where the review withheld
 approval, `Ready to merge` where it gave it. That is the verdict rather than the
-presence of findings, and the two stopped being the same question once a settled
-late pass began publishing its remaining P3 findings under an approval. A run that publishes no verdict
+presence of findings, and the two stopped being the same question once a review
+carrying only P3 findings began publishing them under an approval. A run that publishes no verdict
 writes nothing and leaves `In review` standing, where a reader sees that a review
 was asked for and produced nothing.
 

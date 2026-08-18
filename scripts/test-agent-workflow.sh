@@ -2580,10 +2580,6 @@ run_fathom_review_submit() {
   # Which marker the published review carries. A push is the ordinary case, and the gate of the next
   # run counts exactly the reviews carrying this one.
   local trigger_marker="${6:-<!-- fathom-review: automatic -->}"
-  # How many passes this pull request has already had. Zero is the ordinary case, and the settling
-  # contracts are the ones that name a number: past three, a review carrying only P3 findings is
-  # published as an approval instead of one that holds the change.
-  local automatic_reviews="${7:-0}"
   local step_script="$test_directory/fathom-review-submit.sh"
   local review_directory="$test_directory/fathom-review-submit-review"
   local coverage_file="$test_directory/fathom-review-submit-coverage"
@@ -2616,7 +2612,6 @@ run_fathom_review_submit() {
     export REVIEW_DIRECTORY="$review_directory"
     export COVERAGE_FILE="$coverage_file"
     export TRIGGER_MARKER="$trigger_marker"
-    export AUTOMATIC_REVIEWS="$automatic_reviews"
     export FAKE_REVIEW_PAYLOAD="$payload_file"
     # The verdict the board job reads. It is written only where a review was posted, so a contract
     # that asserts on an empty file is asserting that nothing was published.
@@ -2645,34 +2640,34 @@ fathom_review_anchors_a_finding_to_its_line() {
   assert_contains 'verdict=changes_requested' "$submit_step_output_file"
 }
 
-# A change settles on what it has. These four fix both edges of that: which pass it starts on, and
-# what still holds a change however late it arrives.
-fathom_review_settles_a_late_pass_carrying_only_deferred_findings() {
+# A change settles on what it has, and a P3 never holds it. These three fix that from both sides:
+# what a review carrying only deferred findings does, and what still holds a change beside one.
+fathom_review_approves_a_pass_carrying_only_deferred_findings() {
   local output_file="$test_directory/fathom-review-submit-settled-output"
   local payload_file="$test_directory/fathom-review-submit-settled-payload"
 
   run_fathom_review_submit \
-    '{"summary":"Fourth pass.","findings":[{"severity":"P3","path":"src/Sample.cs","start_line":null,"line":12,"title":"Name the guard for what it refuses","impact":"The name says what passes rather than what it stops.","correction":"Rename it.","rule":"`AGENTS.md`, \"Conventions & naming\""}]}' \
-    "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' '3'
+    '{"summary":"Nothing owed.","findings":[{"severity":"P3","path":"src/Sample.cs","start_line":null,"line":12,"title":"Name the guard for what it refuses","impact":"The name says what passes rather than what it stops.","correction":"Rename it.","rule":"`AGENTS.md`, \"Conventions & naming\""}]}' \
+    "$output_file" "$payload_file"
 
   ((submit_status == 0))
   assert_json '"APPROVE"' '.event' "$payload_file"
-  # The finding is still published, and still on its line: settling changes the verdict it arrives
-  # under, never whether it arrives. The thread-resolution rule then keeps it answerable.
+  # The finding is still published, and still on its line: the verdict it arrives under changed,
+  # never whether it arrives. The thread-resolution rule then keeps it answerable.
   assert_json '["src/Sample.cs"]' '[.comments[].path]' "$payload_file"
   assert_contains '# APPROVED' "$payload_file"
   assert_contains '**Findings** — P3: 1' "$payload_file"
-  assert_contains 'This is pass 4 and nothing above P3 is left' "$payload_file"
+  assert_contains 'Nothing above P3 is left' "$payload_file"
   assert_contains 'verdict=approved' "$submit_step_output_file"
 }
 
-fathom_review_holds_a_late_pass_that_still_found_something_owed() {
+fathom_review_holds_a_pass_that_still_found_something_owed() {
   local output_file="$test_directory/fathom-review-submit-held-output"
   local payload_file="$test_directory/fathom-review-submit-held-payload"
 
   run_fathom_review_submit \
-    '{"summary":"Fourth pass.","findings":[{"severity":"P3","path":"src/Sample.cs","start_line":null,"line":12,"title":"Name the guard for what it refuses","impact":"The name says what passes.","correction":"Rename it.","rule":"`AGENTS.md`, \"Conventions & naming\""},{"severity":"P2","path":"src/Sample.cs","start_line":null,"line":14,"title":"Bound the sequence","impact":"A remote list is expanded without a ceiling.","correction":"Take the first hundred.","rule":"`AGENTS.md`, \"Reliability, security, and performance\""}]}' \
-    "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' '3'
+    '{"summary":"One thing owed.","findings":[{"severity":"P3","path":"src/Sample.cs","start_line":null,"line":12,"title":"Name the guard for what it refuses","impact":"The name says what passes.","correction":"Rename it.","rule":"`AGENTS.md`, \"Conventions & naming\""},{"severity":"P2","path":"src/Sample.cs","start_line":null,"line":14,"title":"Bound the sequence","impact":"A remote list is expanded without a ceiling.","correction":"Take the first hundred.","rule":"`AGENTS.md`, \"Reliability, security, and performance\""}]}' \
+    "$output_file" "$payload_file"
 
   ((submit_status == 0))
   assert_json '"COMMENT"' '.event' "$payload_file"
@@ -2680,32 +2675,21 @@ fathom_review_holds_a_late_pass_that_still_found_something_owed() {
   assert_contains 'verdict=changes_requested' "$submit_step_output_file"
 }
 
-fathom_review_holds_an_early_pass_carrying_only_deferred_findings() {
+# The first pass is the one this rule changed. A P3 on a change nobody has reviewed yet used to hold
+# it for three more rounds, and the measurement that removed the threshold is in the workflow beside
+# the branch: of 72 reviews that withheld approval, one carried nothing but P3 findings.
+fathom_review_approves_a_first_pass_carrying_only_deferred_findings() {
   local output_file="$test_directory/fathom-review-submit-early-output"
   local payload_file="$test_directory/fathom-review-submit-early-payload"
 
   run_fathom_review_submit \
-    '{"summary":"Third pass.","findings":[{"severity":"P3","path":"src/Sample.cs","start_line":null,"line":12,"title":"Name the guard for what it refuses","impact":"The name says what passes.","correction":"Rename it.","rule":"`AGENTS.md`, \"Conventions & naming\""}]}' \
-    "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' '2'
+    '{"summary":"First pass.","findings":[{"severity":"P3","path":"src/Sample.cs","start_line":null,"line":12,"title":"Name the guard for what it refuses","impact":"The name says what passes.","correction":"Rename it.","rule":"`AGENTS.md`, \"Conventions & naming\""}]}' \
+    "$output_file" "$payload_file"
 
   ((submit_status == 0))
-  assert_json '"COMMENT"' '.event' "$payload_file"
-  assert_contains 'verdict=changes_requested' "$submit_step_output_file"
-}
-
-# The count arrives as a string from another job, so a run whose gate never wrote it must leave the
-# stricter verdict standing rather than approve on a value nobody set.
-fathom_review_holds_a_pass_whose_count_is_not_a_number() {
-  local output_file="$test_directory/fathom-review-submit-unset-count-output"
-  local payload_file="$test_directory/fathom-review-submit-unset-count-payload"
-
-  run_fathom_review_submit \
-    '{"summary":"Pass of unknown number.","findings":[{"severity":"P3","path":"src/Sample.cs","start_line":null,"line":12,"title":"Name the guard for what it refuses","impact":"The name says what passes.","correction":"Rename it.","rule":"`AGENTS.md`, \"Conventions & naming\""}]}' \
-    "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' 'not-a-number'
-
-  ((submit_status == 0))
-  assert_json '"COMMENT"' '.event' "$payload_file"
-  assert_contains 'verdict=changes_requested' "$submit_step_output_file"
+  assert_json '"APPROVE"' '.event' "$payload_file"
+  assert_json '["src/Sample.cs"]' '[.comments[].path]' "$payload_file"
+  assert_contains 'verdict=approved' "$submit_step_output_file"
 }
 
 fathom_review_moves_a_finding_with_no_line_into_the_body() {
@@ -2862,6 +2846,7 @@ run_fathom_review_coverage() {
   local output_file="$3"
   local coverage_file="$4"
   local group_count="${5:-}"
+  local groups_json="${6:-}"
   local step_script="$test_directory/fathom-review-coverage.sh"
   local review_directory="$test_directory/fathom-review-coverage-review"
   local index=0
@@ -2871,6 +2856,15 @@ run_fathom_review_coverage() {
   rm -rf "$review_directory"
   mkdir -p "$review_directory/candidates"
   printf '%s\n' "$changed_files" > "$review_directory/files.json"
+  # The split this pass ran with. A caller that names none gets the first-pass shape — one group
+  # holding every changed file, read this pass — which is what every contract below describes except
+  # the one about a later pass bounding itself.
+  if [[ -n "$groups_json" ]]; then
+    printf '%s\n' "$groups_json" > "$review_directory/groups.json"
+  else
+    jq -c '[{index: 1, files: map(.filename), read_this_pass: true}]' \
+      "$review_directory/files.json" > "$review_directory/groups.json"
+  fi
   rm -f "$coverage_file"
 
   # Each argument is one reader's answer, and an empty one is a reader that published nothing.
@@ -2982,6 +2976,46 @@ fathom_review_reads_a_ledger_of_the_wrong_shape_as_an_empty_one() {
 
   ((coverage_status == 0))
   assert_contains 'opened 0 of the 1 changed files' "$coverage_file"
+}
+
+# A later pass re-reads only the groups that moved since the last review, so a file nobody re-read is
+# one the previous review already covered rather than a hole in this one. Reporting the two the same
+# way would describe every later pass as a review that walked past most of the change.
+fathom_review_separates_what_moved_from_what_nobody_re_read() {
+  local output_file="$test_directory/fathom-review-coverage-bounded-output"
+  local coverage_file="$test_directory/fathom-review-coverage-bounded"
+
+  run_fathom_review_coverage \
+    '{"covered":["src/Moved.cs"],"candidates":[],"notes":""}' \
+    '[{"filename":"src/Moved.cs"},{"filename":"src/Still.cs"},{"filename":"docs/still.md"}]' \
+    "$output_file" "$coverage_file" '1' \
+    '[{"index":1,"files":["src/Moved.cs"],"read_this_pass":true},{"index":2,"files":["src/Still.cs","docs/still.md"],"read_this_pass":false}]'
+
+  ((coverage_status == 0))
+  # Everything in scope was read, so there is no gap line — only the sentence saying what the pass
+  # bounded itself to.
+  assert_excludes 'Not opened' "$coverage_file"
+  assert_contains 're-read the 1 of the 3 changed files that moved since the last review' "$coverage_file"
+  assert_contains 'the other 2 have not moved since' "$coverage_file"
+}
+
+# The gap that survives the bound: a file the pass *was* asked to re-read and nobody opened. It is
+# named, while the files outside the bound are counted, because only the first is something the
+# author can act on.
+fathom_review_reports_a_gap_inside_what_the_pass_re_read() {
+  local output_file="$test_directory/fathom-review-coverage-bounded-gap-output"
+  local coverage_file="$test_directory/fathom-review-coverage-bounded-gap"
+
+  run_fathom_review_coverage \
+    '{"covered":["src/Moved.cs"],"candidates":[],"notes":""}' \
+    '[{"filename":"src/Moved.cs"},{"filename":"src/AlsoMoved.cs"},{"filename":"src/Still.cs"}]' \
+    "$output_file" "$coverage_file" '1' \
+    '[{"index":1,"files":["src/Moved.cs","src/AlsoMoved.cs"],"read_this_pass":true},{"index":2,"files":["src/Still.cs"],"read_this_pass":false}]'
+
+  ((coverage_status == 0))
+  assert_contains 'opened 1 of the 2 changed files this pass covers' "$coverage_file"
+  assert_contains 'Not opened: `src/AlsoMoved.cs`.' "$coverage_file"
+  assert_excludes 'src/Still.cs' "$coverage_file"
 }
 
 # A reader that failed published nothing, and that is a part of the change no session opened. The
@@ -4867,9 +4901,13 @@ run_group_split() {
   local groups_json="$2"
   local max_groups="${3:-6}"
   local target_group_size="${4:-12}"
+  # The paths that moved since the last review, absent by default: a first pass is the ordinary case
+  # and the contracts about a bounded pass are the ones that name a file.
+  local changed_since_last_review="${5:-}"
 
   bash "$source_repository_root/.github/fathom-review/group-changed-files.sh" \
-    "$files_json" "$groups_json" "$max_groups" "$target_group_size" > /dev/null
+    "$files_json" "$groups_json" "$max_groups" "$target_group_size" "$changed_since_last_review" \
+    > /dev/null
 }
 
 # The files of a change, as `files.json` carries them, spread over the directories a real one
@@ -5056,6 +5094,48 @@ fathom_review_refuses_a_reader_group_that_holds_no_files() {
 
   (( status == 1 ))
   assert_contains 'the split and the matrix disagree' "$output_file"
+}
+
+# A later pass re-reads the groups that moved and no others. This is the largest saving in the
+# workflow — a change is reviewed 2.94 times on average and the readers used to pay full price for
+# every pass — so what it must never do is drop a group that did move.
+group_split_reads_only_the_groups_that_moved() {
+  local files_json="$test_directory/split-bounded-files.json"
+  local groups_json="$test_directory/split-bounded-groups.json"
+  local moved_file="$test_directory/split-bounded-moved.txt"
+
+  local first_moved later_moved
+
+  write_split_fixture "$files_json" 40
+  # One path out of the fixture's first directory and one out of a later one, so the answer cannot
+  # come from a group boundary happening to fall in the right place.
+  first_moved="$(jq -r '.[0].filename' "$files_json")"
+  later_moved="$(jq -r '.[25].filename' "$files_json")"
+  printf '%s\n%s\n' "$first_moved" "$later_moved" > "$moved_file"
+
+  run_group_split "$files_json" "$groups_json" 6 12 "$moved_file"
+
+  # Every group holding a moved path is read, and every group holding none is not.
+  assert_json 'true' \
+    "[.[] | {read: .read_this_pass, holds: ((.files | map(select(. == \"${first_moved}\" or . == \"${later_moved}\")) | length) > 0)}] | all(.read == .holds)" \
+    "$groups_json"
+  # At least one group is left out, or the contract would pass on a split that read everything.
+  assert_json 'true' '[.[] | select(.read_this_pass | not)] | length > 0' "$groups_json"
+  # And the split itself is unchanged: the bound decides what is re-read, never what is grouped.
+  assert_json '40' '[.[].files[]] | length' "$groups_json"
+}
+
+# A first pass, a review somebody asked for, and a comparison the API refused all arrive here as an
+# absent file, and all three put the whole change in scope. A bound nobody could establish must not
+# silence a reader.
+group_split_reads_every_group_when_nothing_bounds_the_pass() {
+  local files_json="$test_directory/split-unbounded-files.json"
+  local groups_json="$test_directory/split-unbounded-groups.json"
+
+  write_split_fixture "$files_json" 40
+  run_group_split "$files_json" "$groups_json" 6 12 "$test_directory/split-unbounded-absent.txt"
+
+  assert_json 'true' 'all(.read_this_pass)' "$groups_json"
 }
 
 # The prompts are templates the workflow substitutes into, and a placeholder nobody substitutes
@@ -6594,10 +6674,9 @@ run_test apply_pull_request_labels_posts_the_labels_the_change_earns
 run_test apply_pull_request_labels_posts_nothing_for_an_ordinary_change
 run_test apply_pull_request_labels_reports_a_write_it_was_refused
 run_test fathom_review_anchors_a_finding_to_its_line
-run_test fathom_review_settles_a_late_pass_carrying_only_deferred_findings
-run_test fathom_review_holds_a_late_pass_that_still_found_something_owed
-run_test fathom_review_holds_an_early_pass_carrying_only_deferred_findings
-run_test fathom_review_holds_a_pass_whose_count_is_not_a_number
+run_test fathom_review_approves_a_pass_carrying_only_deferred_findings
+run_test fathom_review_holds_a_pass_that_still_found_something_owed
+run_test fathom_review_approves_a_first_pass_carrying_only_deferred_findings
 run_test fathom_review_moves_a_finding_with_no_line_into_the_body
 run_test fathom_review_approves_when_it_finds_nothing
 run_test fathom_review_reports_the_files_a_review_never_named
@@ -6605,6 +6684,8 @@ run_test fathom_review_reports_no_gap_when_the_review_named_every_file
 run_test fathom_review_counts_a_named_path_the_change_does_not_contain
 run_test fathom_review_bounds_how_many_unread_files_it_names
 run_test fathom_review_reads_a_ledger_of_the_wrong_shape_as_an_empty_one
+run_test fathom_review_separates_what_moved_from_what_nobody_re_read
+run_test fathom_review_reports_a_gap_inside_what_the_pass_re_read
 run_test fathom_review_says_when_a_reader_never_reported
 run_test fathom_review_reports_the_whole_change_when_no_reader_returned
 run_test fathom_review_marks_a_review_with_what_started_it
@@ -6684,6 +6765,8 @@ run_test group_split_never_exceeds_the_reader_ceiling
 run_test group_split_balances_what_each_reader_is_given
 run_test group_split_keeps_a_small_change_whole
 run_test group_split_accepts_a_change_it_was_given_no_files_for
+run_test group_split_reads_only_the_groups_that_moved
+run_test group_split_reads_every_group_when_nothing_bounds_the_pass
 run_test fathom_review_composes_a_reader_prompt_naming_only_its_group
 run_test fathom_review_refuses_a_reader_group_that_holds_no_files
 run_test fathom_review_substitutes_every_placeholder_its_prompts_carry

@@ -1173,18 +1173,24 @@ jobs:
         run: |
           set -euo pipefail
 
+          # The last argument is what bounds a later pass. The collection step writes
+          # `changed-since-last-review.txt` only for an automatic pass that has a previous review to
+          # compare against, so its absence is what puts every group in scope — a first pass, a
+          # review somebody asked for, and a comparison the API refused all take that path.
           "$GROUP_SCRIPT" \
             "$REVIEW_DIRECTORY/files.json" \
             "$REVIEW_DIRECTORY/groups.json" \
             "$MAX_GROUPS" \
-            "$TARGET_GROUP_SIZE"
+            "$TARGET_GROUP_SIZE" \
+            "$REVIEW_DIRECTORY/changed-since-last-review.txt"
 
-          # The matrix is the indices alone. A matrix value is rendered into the job name, and a
-          # list of twenty paths would make one unreadable; the files each index stands for are in
-          # `groups.json`, which every reader has.
+          # The matrix is the indices alone, and only of the groups this pass re-reads. A matrix
+          # value is rendered into the job name, and a list of twenty paths would make one
+          # unreadable; the files each index stands for are in `groups.json`, which every reader
+          # has, along with which groups were left out and why.
           {
-            echo "groups=$(jq -c '[.[].index]' "$REVIEW_DIRECTORY/groups.json")"
-            echo "group_count=$(jq 'length' "$REVIEW_DIRECTORY/groups.json")"
+            echo "groups=$(jq -c '[.[] | select(.read_this_pass) | .index]' "$REVIEW_DIRECTORY/groups.json")"
+            echo "group_count=$(jq '[.[] | select(.read_this_pass)] | length' "$REVIEW_DIRECTORY/groups.json")"
             echo "changed_files=$(jq 'length' "$REVIEW_DIRECTORY/files.json")"
           } >> "$GITHUB_OUTPUT"
 
@@ -1873,8 +1879,23 @@ jobs:
           ' "$REVIEW_DIRECTORY/files.json" > "$unread_file"
 
           changed_count="$(jq 'map(.filename) | unique | length' "$REVIEW_DIRECTORY/files.json")"
+
+          # What this pass was asked to read, which is the whole change on a first pass and the
+          # groups that moved on a later one. A file in a group nobody re-read is not an unread file:
+          # it is one the previous review already covered and nothing has touched since, and stating
+          # the two the same way would report every later pass as a review with a hole in it.
+          not_re_read="$(mktemp)"
+          jq -r '.[] | select(.read_this_pass | not) | .files[]' \
+            "$REVIEW_DIRECTORY/groups.json" | sort -u > "$not_re_read"
+
+          in_scope_unread="$(mktemp)"
+          comm -23 <(sort -u "$unread_file") "$not_re_read" > "$in_scope_unread"
+          mv "$in_scope_unread" "$unread_file"
+
+          not_re_read_count="$(wc -l < "$not_re_read" | tr -d ' ')"
           unread_count="$(wc -l < "$unread_file" | tr -d ' ')"
-          read_count=$(( changed_count - unread_count ))
+          scope_count=$(( changed_count - not_re_read_count ))
+          read_count=$(( scope_count - unread_count ))
 
           # A name a report carries that `files.json` does not. It means the list was composed from
           # something other than the group the reader was given — a path invented, or one spelled
@@ -1906,8 +1927,16 @@ jobs:
               listed="${listed}, and $(( unread_count - NAME_CEILING )) more"
             fi
 
-            printf 'The readers opened %s of the %s changed files. Not opened: %s.\n' \
-              "$read_count" "$changed_count" "$listed" >> "$COVERAGE_FILE"
+            printf 'The readers opened %s of the %s changed files this pass covers. Not opened: %s.\n' \
+              "$read_count" "$scope_count" "$listed" >> "$COVERAGE_FILE"
+          fi
+
+          # Said whenever a later pass bounded itself, including when everything in scope was read.
+          # An approval on a change of eighty files that re-read six of them is exactly the verdict a
+          # reader has to be able to see the shape of.
+          if (( not_re_read_count > 0 )); then
+            printf 'This pass re-read the %s of the %s changed files that moved since the last review; the other %s have not moved since and carry that review'"'"'s verdict.\n' \
+              "$scope_count" "$changed_count" "$not_re_read_count" >> "$COVERAGE_FILE"
           fi
 
           if (( unknown_count > 0 )); then
@@ -1918,13 +1947,14 @@ jobs:
           {
             echo "coverage_read=${read_count}"
             echo "coverage_changed=${changed_count}"
+            echo "coverage_scope=${scope_count}"
             echo "coverage_reports=${reports}"
           } >> "$GITHUB_OUTPUT"
 
           if [[ -s "$COVERAGE_FILE" ]]; then
             echo "::notice::$(head -n 1 "$COVERAGE_FILE")"
           else
-            printf 'Coverage: the readers opened every one of the %s changed files.\n' "$changed_count"
+            printf 'Coverage: the readers opened every one of the %s changed files.\n' "$scope_count"
           fi
 
       # `!cancelled()` rather than `always()`, which GitHub documents as running a step even when the
@@ -1975,11 +2005,6 @@ jobs:
           # submitted a review and when, never what asked for it, and the gate of a later run needs
           # exactly that to count the automatic passes without counting the requested ones.
           TRIGGER_MARKER: ${{ needs.decide.outputs.explicit == 'true' && env.REQUESTED_REVIEW_MARKER || env.AUTOMATIC_REVIEW_MARKER }}
-          # How many passes this pull request has already had, which is what decides whether a
-          # review carrying nothing but P3 findings still withholds approval. The gate counts it and
-          # this step spends it; nothing recomputes it here, so the number the ceiling reasons about
-          # and the number the threshold reasons about cannot come to disagree.
-          AUTOMATIC_REVIEWS: ${{ needs.decide.outputs.automatic_reviews }}
         run: |
           set -euo pipefail
 
@@ -2100,40 +2125,35 @@ jobs:
             exit 0
           fi
 
-          # Past this many passes a change settles on what it has. A P1 breaks something and a P2 is
-          # owed by a rule, so either withholds approval however late it arrives; a P3 is paid for
-          # later by definition, and a review that holds a change for one on its fourth pass is
-          # spending a round on work its own severity says can wait. The findings are still published
-          # — as inline comments under the approval, where the thread-resolution rule the `main`
-          # ruleset carries still makes each one answerable — so nothing is hidden and nothing is
-          # postponed silently. What changes is only which verdict they arrive under.
+          # A P3 never withholds approval, at any pass. A P1 breaks something and a P2 is owed by a
+          # rule, so either holds the change however late it arrives; a P3 is paid for later by
+          # definition, and holding a change for one spends a round on work its own severity says can
+          # wait. The findings are still published — as inline comments under the approval, where the
+          # thread-resolution rule the `main` ruleset carries still makes each one answerable — so
+          # nothing is hidden and nothing is postponed silently. What changes is only which verdict
+          # they arrive under.
           #
-          # Three is the count because it is the pass a change should be settling on. #839 ran six and
-          # its last three each raised a P1 on a page no fix had touched, which is what the narrowing
-          # above removes; this is the other half of the same problem — the passes that stay in scope
-          # and still find one more sentence to sharpen.
+          # This used to start at the fourth pass, on the reasoning that an early P3 was worth one
+          # round. The measurement says it was not worth the rule: across 106 published reviews on 36
+          # pull requests, 72 withheld approval and exactly **one** of them carried nothing but P3
+          # findings. What the threshold actually bought was a rule with two states to reason about,
+          # a pass counter threaded into the submission, and a verdict that depended on which round a
+          # finding happened to be noticed in — for one review. P3s themselves are not rare (95 of
+          # 326 findings), which is the other half of the reading: they arrive beside P1s and P2s,
+          # where the verdict was never theirs to decide anyway.
           #
-          # A requested review is not exempt. A maintainer asking for a pass this late wants the
-          # verdict rather than another round, and the number counts automatic passes alone, so
-          # asking never advances a pull request toward its own threshold.
-          settle_after_passes=3
-
-          # Read defensively: the output is a string from another job, and an unset or malformed one
-          # must leave the stricter verdict in place rather than approving on a value nobody wrote.
-          automatic_reviews="${AUTOMATIC_REVIEWS:-0}"
-          [[ "$automatic_reviews" =~ ^[0-9]+$ ]] || automatic_reviews='0'
-
+          # What this does not change is that the finding is reported. A P3 is a thread the author
+          # answers and resolves like any other, and the ceiling on findings still applies to it.
           verdict_event='COMMENT'
           verdict_heading='# NEEDS CHANGES'
           verdict_output='changes_requested'
           settled_note=''
 
-          if (( automatic_reviews >= settle_after_passes )) \
-            && [[ "$(jq '[(.findings // [])[] | select(.severity != "P3")] | length' "$findings_file")" == '0' ]]; then
+          if [[ "$(jq '[(.findings // [])[] | select(.severity != "P3")] | length' "$findings_file")" == '0' ]]; then
             verdict_event='APPROVE'
             verdict_heading='# APPROVED'
             verdict_output='approved'
-            settled_note="This is pass $((automatic_reviews + 1)) and nothing above P3 is left, so the change is approved carrying the findings below rather than held for them."
+            settled_note='Nothing above P3 is left, so the change is approved carrying the findings below rather than held for them.'
           fi
 
           # Anchors are checked against the same patches the reviewer was given, so a line that has

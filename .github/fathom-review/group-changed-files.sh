@@ -30,7 +30,18 @@
 # the nearest directory boundary within a quarter of a group, which keeps a directory whole wherever
 # doing so costs nothing much and splits one that is simply too large to place.
 #
-# Usage: group-changed-files.sh <files.json> <groups.json> <max-groups> <target-group-size>
+# The split also decides which groups a later pass actually re-reads. `changed-since-last-review.txt`
+# names the paths that moved since this App's previous review, and a group holding none of them holds
+# nothing this pass may conclude anything about: #844 already bounds a later pass's verdict to what
+# moved, so re-reading the rest bought a second reading of files the verdict could not rest on. That
+# is the largest cost this workflow carries — a change is reviewed 2.94 times on average, and the
+# readers were paying full price for every one of them.
+#
+# The bound applies to the readers alone. The judge still reads `obligations.json` over the whole
+# change, still reads the pull request body twice, and still has `files.json` and `head/` in front of
+# it, so nothing that a later pass is *for* moves out of reach.
+#
+# Usage: group-changed-files.sh <files.json> <groups.json> <max-groups> <target-group-size> [changed-since-last-review.txt]
 
 set -euo pipefail
 
@@ -38,6 +49,10 @@ files_json="${1:?the collected files.json is required}"
 output_file="${2:?the output path is required}"
 max_groups="${3:?the maximum number of groups is required}"
 target_group_size="${4:?the target group size is required}"
+# Absent on a first pass, on a review somebody asked for, and where the comparison could not be made
+# — all three of which put every group in scope, for the same reason the prompt reads its absence
+# that way: a bound nobody could establish must not silence a reader.
+changed_since_last_review="${5:-}"
 
 for bound in "$max_groups" "$target_group_size"; do
   if [[ ! "$bound" =~ ^[1-9][0-9]*$ ]]; then
@@ -113,6 +128,23 @@ jq -r 'map(.filename) | sort | .[]' "$files_json" \
     | map({index: (.key + 1), files: .value})
   ' > "$output_file"
 
+# Which groups this pass re-reads. Every group when nothing bounds the pass, and otherwise the ones
+# holding at least one path that moved since the last review.
+if [[ -n "$changed_since_last_review" && -f "$changed_since_last_review" ]]; then
+  moved_paths="$(jq -R -s -c 'split("\n") | map(select(. != ""))' < "$changed_since_last_review")"
+else
+  moved_paths='null'
+fi
+
+grouped_file="$(mktemp)"
+jq --argjson moved "$moved_paths" '
+  map(. + {read_this_pass: (
+    if $moved == null then true
+    else ((.files - ($moved | map(select(. != "")))) | length) < (.files | length)
+    end)})
+' "$output_file" > "$grouped_file"
+mv "$grouped_file" "$output_file"
+
 grouped="$(jq '[.[].files | length] | add // 0' "$output_file")"
 
 # Every collected file reaches exactly one group, or the split is wrong and the run must not spend a
@@ -124,5 +156,13 @@ if (( grouped != file_count )); then
   exit 1
 fi
 
-printf 'Grouped %s changed files into %s groups of at most %s.\n' \
-  "$file_count" "$(jq 'length' "$output_file")" "$(jq '[.[].files | length] | max' "$output_file")"
+reading="$(jq '[.[] | select(.read_this_pass)] | length' "$output_file")"
+skipped_files="$(jq '[.[] | select(.read_this_pass | not) | .files | length] | add // 0' "$output_file")"
+
+printf 'Grouped %s changed files into %s groups of at most %s; %s of them are read this pass.\n' \
+  "$file_count" "$(jq 'length' "$output_file")" "$(jq '[.[].files | length] | max' "$output_file")" \
+  "$reading"
+
+if (( skipped_files > 0 )); then
+  printf '%s changed files have not moved since the last review and are not re-read.\n' "$skipped_files"
+fi
