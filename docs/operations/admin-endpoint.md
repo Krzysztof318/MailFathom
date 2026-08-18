@@ -223,6 +223,7 @@ what it was never granted is what the record exists to make visible.
 | `PUT /api/admin/contacts/{id}` | `mailfathom.admin.operate` | Amends one contact to the whole record the body states. |
 | `POST /api/admin/contacts/{id}/promotion` | `mailfathom.admin.operate` | Takes on a contact the deployment collected, so it becomes one the owner asserted. |
 | `DELETE /api/admin/contacts/{id}` | `mailfathom.admin.erase` | Erases one person and everything the book derived from them. **This is the one route that disposes of a contact, and it cannot be undone.** |
+| `DELETE /api/admin/contacts/collected` | `mailfathom.admin.erase` | Erases every contact this deployment collected from arriving mail, leaving every one its owner asserted. **This cannot be undone either.** |
 | `GET /api/admin/contacts/{id}/export` | `mailfathom.admin.audit.read` | Produces everything the book holds about one person, as of the instant it was taken. |
 
 The write route's body carries a long-lived credential for a named mailbox owner, which is what makes the clear-text
@@ -795,6 +796,7 @@ Amended:    2026-08-16 09:00:00Z
 | `contact remove-address` | Takes one address off. `--preferred` is required when the one being removed is the default |
 | `contact promote` | Takes on a contact the deployment collected, so it becomes one you asserted. It reports that the promotion happened rather than the record, because it sent none and reading the book is a permission of its own; `contact show` is how you look at the person afterwards |
 | `contact delete` | Erases the person. **This cannot be undone**; see below |
+| `contact delete-collected` | Erases every contact the deployment collected from arriving mail, keeping the ones you entered. **This cannot be undone**; see below |
 | `contact export` | Writes everything held about the person to standard output, as JSON |
 
 **Amendments state the whole record.** The book replaces what it is given rather than merging a difference, so
@@ -804,7 +806,16 @@ as a contact the book does not hold rather than putting the person back.
 
 **A contact the deployment collected is not amended in place.** Collection writes into its own origin and an owner does
 not edit those records directly — `contact promote` is the act of taking one on, after which every other command here
-works on it. Amending one without promoting it is refused, and the refusal says so.
+works on it. Amending one without promoting it is refused, and the refusal says so. An agent over the MCP endpoint
+reaches the same act as `promote_contact`, under the writing grant it already holds.
+
+**`mfctl contact delete-collected` is the way out of collection.** Everything
+[collection](../features/contacts.md#collecting-contacts-from-arriving-mail) built is a contact of its own origin, so
+this takes the whole of what the deployment inferred and nothing of what you entered. It asks first, `--yes` is how a
+scripted erasure states the agreement, and an invocation with nobody at the terminal and no flag is refused — the same
+rule the erasure of one person follows. What it asks names nobody, and what it answers is two counts. It cannot be
+undone, and switching collection off is a separate act in configuration: with it still on, the book fills again from
+the mail that arrives next.
 
 **`mfctl contact delete` is the contact book's erasure path.** It removes the person and their addresses from the
 database rather than marking them, and nothing in MailFathom can put the record back. The command shows the record and

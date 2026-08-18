@@ -1015,6 +1015,7 @@ write. Nothing is fetched twice, and no extraction path can select a folder or s
 | Thread identifiers | `Message-ID`, `In-Reply-To`, `References` | Angle brackets and the whitespace around them removed; `References` keeps header order and collapses duplicates. |
 | Attachment summary | the message structure | Counts, total decoded size, inline-resource count, three markers, and one record per attachment. |
 | Sender-authentication verdict | the trusted `Authentication-Results` header | What the receiving server established about who sent the message. Only the header carrying the account's configured authserv-id is read, and only the topmost such header; everything else yields the not-established verdict. [Sender authentication](sender-authentication.md) holds the whole rule. |
+| Automation claim | `List-Id`, `List-Post`, `List-Unsubscribe`, `Auto-Submitted`, `Precedence` | What the message says about itself: a list posting, something submitted automatically, or bulk. It is read for [contact collection](contacts.md#collecting-contacts-from-arriving-mail), which refuses the whole message rather than one of its addresses, and it is deliberately not persisted — it is a claim one message makes rather than a property of the mail, and a reader wanting it has the headers. |
 
 An address is normalized to an upper-cased comparison form and keeps what the message wrote alongside it, and that
 comparison form is the whole of its identity: two addresses differing only in case, or only in the display name one

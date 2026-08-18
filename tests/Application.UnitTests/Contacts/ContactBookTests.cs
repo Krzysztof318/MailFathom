@@ -401,23 +401,176 @@ public sealed class ContactBookTests
         Assert.Null(refusal);
     }
 
-    /// <summary>Taking a collected record on is the owner's judgement about somebody collection inferred, so the alternative stops short of it.</summary>
+    /// <summary>A collected record exists to be taken on, so both surfaces that write the book reach the act that does it.</summary>
     [Fact]
-    public async Task PromoteAsync_ACallerGrantedOnlyTheProtocolWrite_IsRefusedWithTheTransportAbsent()
+    public async Task PromoteAsync_ACallerGrantedEitherWrite_ReachesTheBook()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+
+        // Act
+        var byOperator = await BookOver(
+                store,
+                authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate))
+            .PromoteAsync(
+                ContactId.Create(Guid.CreateVersion7(Now)),
+                ContactOrigin.Asserted,
+                TestContext.Current.CancellationToken);
+        var byAgent = await BookOver(
+                store,
+                authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailContactsWrite))
+            .PromoteAsync(
+                ContactId.Create(Guid.CreateVersion7(Now)),
+                ContactOrigin.Asserted,
+                TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ContactWriteOutcome.NotFound, byOperator.Outcome);
+        Assert.Equal(ContactWriteOutcome.NotFound, byAgent.Outcome);
+    }
+
+    /// <summary>Collection reading its own mail must not be able to award itself the authority promotion carries.</summary>
+    [Fact]
+    public async Task PromoteAsync_AWriterActingUnderTheCollectedOrigin_IsRefusedByTheRecordItNamed()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        var collected = ContactOf("Anna Kowalska", ["anna@example.test"], ContactOrigin.Collected);
+        store.Hold(collected);
+
+        var book = BookOver(
+            store,
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailContactsWrite));
+
+        // Act
+        var promoted = await book.PromoteAsync(
+            collected.Id,
+            ContactOrigin.Collected,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ContactWriteOutcome.OriginRefusesWriter, promoted.Outcome);
+        Assert.Equal(ContactOrigin.Collected, Assert.Single(store.Contacts).Origin);
+    }
+
+    /// <summary>Collection is work no caller requested, so it states MailFathom's own identity instead of holding a grant.</summary>
+    [Fact]
+    public async Task CollectAsync_ReachedAsThisProcessesOwnWork_RecordsUnderTheCollectedOrigin()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        var book = BookOver(store, authorization: AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
+
+        // Act
+        var recorded = await book.CollectAsync(
+            NewContactOf("Anna Kowalska", ["anna@example.test"]) with { Origin = ContactOrigin.Collected },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ContactWriteOutcome.Written, recorded.Outcome);
+        Assert.Equal(ContactOrigin.Collected, Assert.Single(store.Contacts).Origin);
+    }
+
+    /// <summary>A permission would make writing into the collected origin reachable by whoever an operator granted it to.</summary>
+    [Fact]
+    public async Task CollectAsync_ReachedByACallerHoldingEveryWritingGrant_IsRefused()
     {
         // Arrange
         var book = BookOver(
             new InMemoryContactBookStore(),
-            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailContactsWrite));
+            authorization: AccessAuthorizations.ForCallerGranted(
+                MailFathomPermission.AdminOperate,
+                MailFathomPermission.MailContactsWrite));
+
+        // Act & Assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => book.CollectAsync(
+            NewContactOf("Anna Kowalska", ["anna@example.test"]) with { Origin = ContactOrigin.Collected },
+            TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>The one writer that could award itself an owner's authority must not be able to do it on the way in.</summary>
+    [Fact]
+    public async Task CollectAsync_ARecordNamingTheAssertedOrigin_IsRefused()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        var book = BookOver(store, authorization: AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentException>(() => book.CollectAsync(
+            NewContactOf("Anna Kowalska", ["anna@example.test"]),
+            TestContext.Current.CancellationToken));
+        Assert.Equal(0, store.ContactCount);
+    }
+
+    /// <summary>Collection asks whether an address is spoken for; handing it the record would put a person in reach of work that may not touch them.</summary>
+    [Fact]
+    public async Task HoldsAddressAsync_AnAddressTheBookHolds_AnswersWithoutProducingTheRecord()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        store.Hold(ContactOf("Anna Kowalska", ["anna@example.test"], ContactOrigin.Asserted));
+
+        var book = BookOver(store, authorization: AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
+
+        // Act & Assert
+        Assert.True(await book.HoldsAddressAsync(Address("ANNA@example.test"), TestContext.Current.CancellationToken));
+        Assert.False(await book.HoldsAddressAsync(Address("marek@example.test"), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>Everything collection built is a contact of its own origin, so an owner reversing their mind takes exactly that out.</summary>
+    [Fact]
+    public async Task EraseCollectedAsync_ABookOfBothOrigins_RemovesOnlyWhatWasCollected()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        store.Hold(ContactOf("Anna Kowalska", ["anna@example.test"], ContactOrigin.Asserted));
+        store.Hold(ContactOf("Marek Nowak", ["marek@example.test", "m.nowak@work.test"], ContactOrigin.Collected));
+        store.Hold(ContactOf("Ewa Lis", ["ewa@example.test"], ContactOrigin.Collected));
+
+        var book = BookOver(store, authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminErase));
 
         // Act
-        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => book.PromoteAsync(
-            ContactId.Create(Guid.CreateVersion7(Now)),
-            ContactOrigin.Asserted,
-            TestContext.Current.CancellationToken));
+        var erasure = await book.EraseCollectedAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(MailFathomPermission.AdminOperate, refusal.RequiredPermission);
+        Assert.Equal(2, erasure.ContactsErased);
+        Assert.Equal(3, erasure.AddressesErased);
+        Assert.Equal(ContactOrigin.Asserted, Assert.Single(store.Contacts).Origin);
+    }
+
+    /// <summary>Erasing a book that had collected nobody is the state the owner asked for rather than a failure.</summary>
+    [Fact]
+    public async Task EraseCollectedAsync_ABookThatCollectedNobody_ReportsNothingRemoved()
+    {
+        // Arrange
+        var book = BookOver(
+            new InMemoryContactBookStore(),
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminErase));
+
+        // Act
+        var erasure = await book.EraseCollectedAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, erasure.ContactsErased);
+        Assert.Equal(0, erasure.AddressesErased);
+    }
+
+    /// <summary>Undoing what collection built is a disposal, so it is behind the erasing grant rather than the operating one.</summary>
+    [Fact]
+    public async Task EraseCollectedAsync_ACallerGrantedOnlyTheOperatingName_IsRefused()
+    {
+        // Arrange
+        var book = BookOver(
+            new InMemoryContactBookStore(),
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            book.EraseCollectedAsync(TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminErase, refusal.RequiredPermission);
     }
 
     private static ContactBook BookOver(

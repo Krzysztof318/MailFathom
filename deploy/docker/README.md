@@ -17,7 +17,7 @@ Two properties hold everywhere:
 - **Reading is local.** A tool call answers from your copy and never contacts a mail server, so it is fast, it works while the server is down, and it cannot change anything remotely.
 - **Synchronization never writes to your mailbox.** Fetching mail never sets the remote `\Seen` flag, so mail MailFathom has copied still shows as unread in your own mail client.
 
-An agent gets ten tools, and they are the whole surface. Five of them read your mail:
+An agent gets eleven tools, and they are the whole surface. Five of them read your mail:
 
 | Tool | What it answers |
 | --- | --- |
@@ -29,7 +29,7 @@ An agent gets ten tools, and they are the whole surface. Five of them read your 
 
 The first four are always there. `ask_mail` needs a chat model and an embedding model you configure and point at, so a deployment with neither does not advertise it at all.
 
-The other five are MailFathom's own contact book — `list_contacts`, `get_contact`, `create_contact`, `update_contact`, and `delete_contact` — which record the people you write down and the addresses each of them uses. They are offered to a credential granted them, which every credential is until you narrow its entry, and both `update_contact` and `delete_contact` announce themselves as destructive — an amendment drops whatever the caller left out of the record, and an erasure cannot be undone.
+The other six are MailFathom's own contact book — `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact`, and `promote_contact` — which record the people you write down and the addresses each of them uses, and take on the ones this deployment collected from arriving mail. They are offered to a credential granted them, which every credential is until you narrow its entry, and both `update_contact` and `delete_contact` announce themselves as destructive — an amendment drops whatever the caller left out of the record, and an erasure cannot be undone.
 
 No tool writes to a mailbox. An agent cannot send, delete, move, or mark mail, and the contact tools reach no mail server at all.
 

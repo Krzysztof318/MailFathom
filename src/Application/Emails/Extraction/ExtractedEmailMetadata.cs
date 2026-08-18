@@ -44,6 +44,15 @@ public sealed record ExtractedEmailMetadata(
     /// </remarks>
     public SenderTrust SenderTrust { get; init; } = SenderTrust.NotEvaluated;
 
+    /// <summary>Gets what the message said about having been sent by a machine rather than written to one person.</summary>
+    /// <remarks>
+    /// Read out of the message like every other member here, and deliberately not stored: it is a claim the sender made
+    /// about one delivery, and the only thing that reads it — collection into the contact book — runs inside the pass
+    /// that parsed the message. A column for it would be a column nothing queries, and a re-derivation that had to
+    /// answer for it would be re-reading the same headers this reading already has in hand.
+    /// </remarks>
+    public EmailAutomation Automation { get; init; } = EmailAutomation.None;
+
     /// <summary>Gets how much this message's own text reads as machine written.</summary>
     /// <remarks>
     /// Not a parameter of the reading, for the reason <see cref="SenderTrust" /> is not: the parsing adapter produces

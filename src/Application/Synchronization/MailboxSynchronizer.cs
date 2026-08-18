@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Folders;
@@ -44,6 +45,7 @@ public sealed class MailboxSynchronizer
     private readonly IDerivedWorkGateTelemetry gateTelemetry;
     private readonly IMailSynchronizationPhaseTelemetry phaseTelemetry;
     private readonly SpamClassificationArrivals classificationArrivals;
+    private readonly MailContactCollector contactCollection;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly TimeProvider timeProvider;
     private readonly MailboxSynchronizationOptions options;
@@ -68,6 +70,7 @@ public sealed class MailboxSynchronizer
         IDerivedWorkGateTelemetry gateTelemetry,
         IMailSynchronizationPhaseTelemetry phaseTelemetry,
         SpamClassificationArrivals classificationArrivals,
+        MailContactCollector contactCollection,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         TimeProvider timeProvider,
         MailboxSynchronizationOptions options)
@@ -90,6 +93,7 @@ public sealed class MailboxSynchronizer
         this.gateTelemetry = gateTelemetry;
         this.phaseTelemetry = phaseTelemetry;
         this.classificationArrivals = classificationArrivals;
+        this.contactCollection = contactCollection;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.timeProvider = timeProvider;
         this.options = options;
@@ -159,6 +163,7 @@ public sealed class MailboxSynchronizer
         return await this.SynchronizeResolvedFolderAsync(
             accountId,
             folder,
+            folderMapping.SpecialUse,
             transportSecurityPolicy,
             this.synchronizationWindowReader.GetWindow(accountId),
             cancellationToken);
@@ -167,6 +172,7 @@ public sealed class MailboxSynchronizer
     private async Task<MailboxSynchronizationResult> SynchronizeResolvedFolderAsync(
         MailAccountId accountId,
         MailFolderResolution folder,
+        MailFolderSpecialUse? folderRole,
         MailTransportSecurityPolicy transportSecurityPolicy,
         MailSynchronizationWindow synchronizationWindow,
         CancellationToken cancellationToken)
@@ -195,6 +201,10 @@ public sealed class MailboxSynchronizer
             claimMark);
 
         var budget = new SynchronizationContentBudget(this.options.MaxContentBytesPerRun);
+
+        // Opened here for the reason the content budget above is, and with the same scope: what needs bounding is one
+        // pass over one folder, and the account's own settings decide how much of it may reach the contact book.
+        var collection = this.contactCollection.OpenRun(accountId, folderRole);
 
         var storedCount = 0;
         var skippedOversizedCount = 0;
@@ -265,7 +275,13 @@ public sealed class MailboxSynchronizer
                         ? candidate
                         : null;
 
-                    var occurrence = await this.StoreOccurrenceAsync(mailboxSession, metadata, copy, budget, cancellationToken);
+                    var occurrence = await this.StoreOccurrenceAsync(
+                        mailboxSession,
+                        metadata,
+                        copy,
+                        budget,
+                        collection,
+                        cancellationToken);
                     processedThroughUid = metadata.OccurrenceId.Uid;
 
                     if (occurrence.Availability is null)
@@ -374,6 +390,7 @@ public sealed class MailboxSynchronizer
                 folder,
                 uidValidity,
                 budget,
+                collection,
                 cancellationToken);
 
             refillingContent.Completed();
@@ -524,6 +541,7 @@ public sealed class MailboxSynchronizer
         MailFolderResolution folder,
         ImapUidValidity uidValidity,
         SynchronizationContentBudget budget,
+        ContactCollectionRun collection,
         CancellationToken cancellationToken)
     {
         var awaiting = await this.contentInventory.GetEmailsAwaitingContentAsync(
@@ -551,6 +569,7 @@ public sealed class MailboxSynchronizer
                 metadata,
                 placement: null,
                 budget,
+                collection,
                 cancellationToken);
 
             // The ceiling filled up again while this pass ran, which is true of the whole queue rather than of this
@@ -722,6 +741,7 @@ public sealed class MailboxSynchronizer
         RemoteEmailMetadata metadata,
         MailboxMutationRecord? placement,
         SynchronizationContentBudget budget,
+        ContactCollectionRun collection,
         CancellationToken cancellationToken)
     {
         if (!this.WouldFetchContentOf(metadata))
@@ -828,6 +848,15 @@ public sealed class MailboxSynchronizer
             storedEmailId,
             metadata.OccurrenceId,
             cancellationToken);
+
+        // The second hand-off, and the one that stays inside this pass rather than reaching a queue: the headers it
+        // reads are the ones the extraction above already produced, so a contact costs a bounded number of indexed
+        // reads and no round trip to the mail server. It follows the commit for the reason the enqueue does, and it is
+        // skipped outright on an account whose owner never switched collection on.
+        if (extraction.Metadata is { } extracted)
+        {
+            await this.contactCollection.CollectFromAsync(extracted, collection, cancellationToken);
+        }
 
         return new OccurrenceSynchronizationOutcome(
             storedEmailId,

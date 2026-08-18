@@ -142,7 +142,10 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
             headers.ThreadReferences,
             classification.Summary,
             EmailBodyTextExtractor.Extract(classification, this.options.MaxExtractedTextCharacters),
-            this.ReadSenderAuthentication(occurrenceId, message));
+            this.ReadSenderAuthentication(occurrenceId, message))
+        {
+            Automation = MailAutomationReading.Read(message),
+        };
     }
 
     /// <summary>Reads what the receiving server established about who sent the message.</summary>

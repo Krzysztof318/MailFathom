@@ -287,7 +287,7 @@ shapes for each one by name.
 
 A connected client's tool listing should show at least four tools — `list_accounts`, `list_emails`,
 `get_email_content`, `search_emails` — each advertising itself as read-only, non-destructive, and idempotent, and beside
-them the five contact tools over the deployment's own contact book, of which three change state and two —
+them the six contact tools over the deployment's own contact book, of which four change state and two —
 `update_contact`, which replaces a whole record, and `delete_contact`, which erases one — announce themselves as
 destructive. `ask_mail`
 appears only once you have configured a chat model and an embedding model and both are working; until then

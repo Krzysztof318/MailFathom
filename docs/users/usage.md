@@ -2,7 +2,7 @@
 
 <!-- describes: src/Mcp/Tools/** -->
 
-MailFathom publishes ten MCP tools, and together they are the whole surface: an agent can see which mailboxes exist,
+MailFathom publishes eleven MCP tools, and together they are the whole surface: an agent can see which mailboxes exist,
 list mail, read one message, search, ask a question, and keep the deployment's own contact book — nothing else. This
 page is the user's view of that surface: what each tool answers, what every result carries, what the deliberate limits
 are, and how to read a failure. The full contracts — every argument, every field, every bound — live in
@@ -12,12 +12,12 @@ Four of the five mailbox tools are always within the deployment's reach. `ask_ma
 model configured and working, so a deployment that has neither does not offer it at all; its absence from a tool listing
 is that deployment saying it cannot answer questions rather than something being broken.
 
-Which of the ten *you* are offered is a second question, and its answer is the grant on the credential you connected
+Which of the eleven *you* are offered is a second question, and its answer is the grant on the credential you connected
 with. A tool that grant does not permit is absent from the listing, and calling it anyway is answered as though no such
 tool existed — nothing names the permission that was missing, so a shorter tool list than this page describes is a
 question for whoever configured the deployment:
 [what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do). A deployment that wrote no grant,
-which is the default, offers everything it has, and the five contact tools are part of that everything.
+which is the default, offers everything it has, and the six contact tools are part of that everything.
 
 ## The model behind every call
 
@@ -278,8 +278,9 @@ process.
 
 ## The contact tools — a book of people, not addresses
 
-Five tools over MailFathom's own contact book: `list_contacts` pages it by name, `get_contact` resolves one person by
-identifier or by any address they use, and `create_contact`, `update_contact`, and `delete_contact` maintain it. The
+Six tools over MailFathom's own contact book: `list_contacts` pages it by name, `get_contact` resolves one person by
+identifier or by any address they use, and `create_contact`, `update_contact`, `delete_contact`, and `promote_contact`
+maintain it. The
 record is a person with the addresses they use rather than an address with a name attached, which is what lets an agent
 answer "who is this from" for somebody who writes from three of them.
 
@@ -287,19 +288,22 @@ answer "who is this from" for somebody who writes from three of them.
 person in the book can answer it. Searching for an address in `list_contacts` finds the same person more slowly and
 finds others besides.
 
-Three of them change state, so they carry the annotations that make a client pause. `create_contact` is not idempotent —
+Four of them change state, and three of those carry the annotations that make a client pause. `create_contact` is not idempotent —
 the book mints the identity, and calling it twice for one person records them once and then answers
 `addressHeldByAnotherContact`, naming who holds the address. `update_contact` states the **whole** record rather than
 the change: an address the new record does not name is removed, and an omitted note clears the one held, so read the
 contact first and send it back with the change. It is destructive for exactly that reason, and a client that asks
 before calling a destructive tool will ask here. `delete_contact` is destructive and cannot be undone; it erases the
-person and every address recorded with them, and answers with how many went.
+person and every address recorded with them, and answers with how many went. `promote_contact` is the one write that is
+neither destructive nor a first record: it takes on a person the deployment collected from arriving mail, so the record
+becomes one you asserted. It answers with the outcome and never with the person, so an agent that wants to read them
+back calls `get_contact`.
 
-Two limits are worth knowing before an agent is pointed at the book. A record this deployment collected from arriving
-mail is not an agent's to amend — that call answers `contactWasCollected`, and taking such a record on is the operator's
-act at `mfctl`. And the book is somebody's list of real people: a name, an address, and above all a note are things
-about a third party rather than facts about your mail, so what an agent writes there is what you asked it to write
-down.
+One thing is worth knowing before an agent is pointed at the book. A record this deployment collected is not an agent's
+to amend as it stands — that call answers `contactWasCollected` — and `promote_contact` is what it calls instead, after
+which every other tool works on the record. And the book is somebody's list of real people: a name, an address, and
+above all a note are things about a third party rather than facts about your mail, so what an agent writes there is what
+you asked it to write down.
 
 ## Reading a failure
 

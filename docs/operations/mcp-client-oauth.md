@@ -290,7 +290,7 @@ add `Permissions` beside `OAuth` — and add `"PermissionsFromTokenScopes": true
 step 2 should narrow the list per subject. On this surface that is a bound rather than a statement, for the reason
 [step 2](#2-register-mailfathom-as-a-resource-in-the-provider) gives: a token admitted without a `mailfathom.mail.*`
 permission is listed fewer tools and is answered about the rest as though they did not exist. The example below
-therefore withholds all five contact tools from every token this entry admits — write the contact permissions in beside
+therefore withholds all six contact tools from every token this entry admits — write the contact permissions in beside
 `mailfathom.mail.read` where they should reach the book.
 
 ```json

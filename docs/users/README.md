@@ -11,7 +11,7 @@ MailFathom is a self-hosted service that synchronizes mail from your IMAP accoun
 indexes it for search, and serves it to AI agents as tools over the
 [Model Context Protocol](https://modelcontextprotocol.io/). An agent connected to it can list, read, and search your
 mail; it cannot send, delete, move, or mark any of it, because no tool on the surface writes to a mailbox. What it can
-write is MailFathom's own contact book — the people you or your deployment wrote down — which five tools read and
+write is MailFathom's own contact book — the people you or your deployment wrote down — which six tools read and
 maintain, one of them by erasing a record for good.
 
 Two properties hold everywhere and are worth knowing before anything is installed:

@@ -753,6 +753,22 @@ internal sealed class AdminApiClient
             CliJsonContext.Default.ContactErasure,
             cancellationToken);
 
+    /// <summary>Asks the deployment to erase every contact it collected from arriving mail.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the erasure removed, including a book that had collected nobody.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an erasure.</exception>
+    internal Task<CollectedContactErasure> EraseCollectedContactsAsync(
+        string token,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Delete,
+            AdminEndpointRoutes.CollectedContactsPath,
+            token,
+            CliJsonContext.Default.CollectedContactErasure,
+            cancellationToken);
+
     /// <summary>Asks the deployment for everything its book holds about one person.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="contactId">The contact to export.</param>

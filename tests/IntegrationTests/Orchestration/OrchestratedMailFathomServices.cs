@@ -6,6 +6,7 @@ using MailFathom.AI;
 using MailFathom.AI.Chat;
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Storage;
@@ -158,6 +159,11 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// no scanner. Absent everywhere but the class that scores, exactly as a deployment which never switched the scanner
     /// on registers no implementation of the port.
     /// </param>
+    /// <param name="contactCollection">
+    /// What this deployment decided about collecting contacts from arriving mail, or <see langword="null" /> for the
+    /// shipped default of collecting nobody. Stated only by the class that collects, because every other class stores
+    /// mail whose senders must not end up in the book it reads.
+    /// </param>
     /// <returns>The composed services, which the caller owns and must dispose.</returns>
     internal static async Task<OrchestratedMailFathomServices> StartAsync(
         MailFathomOrchestrationFixture orchestration,
@@ -171,7 +177,8 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         IReadOnlyList<MailFolderIdentity>? foldersHiddenFromTools = null,
         IReadOnlyList<MailFolderIdentity>? foldersNotMirrored = null,
         SpamClassificationSettings? spamClassification = null,
-        SpamAssassinScannerProfile? spamScanner = null)
+        SpamAssassinScannerProfile? spamScanner = null,
+        ContactCollectionSettings? contactCollection = null)
     {
         var builder = new HostApplicationBuilder();
         var account = new SyntheticMailAccount(
@@ -340,6 +347,13 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // composition without it would fail to resolve rather than behave like a deployment that classifies nothing.
         builder.Services.AddSingleton<ISpamClassificationSettingsReader>(
             new FixedSpamClassificationSettingsReader(spamClassification ?? SpamClassificationSettings.Disabled));
+
+        // The same arrangement for the other decision a composition root reads out of the account's own section: the
+        // synchronizer resolves the collector for every folder run, the collector asks this what the owner switched on,
+        // and a composition without it would fail to resolve rather than behave like the deployment that collects
+        // nobody — which is the deployment every test here composes unless it says otherwise.
+        builder.Services.AddSingleton<IContactCollectionSettingsReader>(
+            new FixedContactCollectionSettingsReader(contactCollection ?? ContactCollectionSettings.CollectingNothing));
 
         // Registered exactly as the composition root registers it, and only where a scanner was named — so a test that
         // states none composes the deployment that deployed no sidecar, where the classifier resolves no scanner and the

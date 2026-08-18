@@ -113,6 +113,14 @@ internal static class FakeContactDeployment
         CultureInfo.InvariantCulture,
         $$"""{"contact":"{{ContactIdentity:D}}","wasHeld":{{(wasHeld ? "true" : "false")}},"addressesErased":{{addressesErased}}}""");
 
+    /// <summary>Writes the body an erasure of everything the deployment collected answers with.</summary>
+    /// <param name="contactsErased">How many collected contacts went.</param>
+    /// <param name="addressesErased">How many addresses went with them.</param>
+    /// <returns>The response body.</returns>
+    internal static string CollectedErasure(int contactsErased, int addressesErased) => string.Create(
+        CultureInfo.InvariantCulture,
+        $$"""{"contactsErased":{{contactsErased}},"addressesErased":{{addressesErased}}}""");
+
     /// <summary>Writes the body an export answers with.</summary>
     /// <param name="displayName">The name the exported record carries.</param>
     /// <returns>The response body.</returns>
@@ -212,6 +220,11 @@ internal static class FakeContactDeployment
         if (path?.EndsWith("/promotion", StringComparison.Ordinal) == true)
         {
             return Json(HttpStatusCode.OK, write ?? Written());
+        }
+
+        if (path == AdminEndpointRoutes.CollectedContactsPath)
+        {
+            return Json(HttpStatusCode.OK, erasure ?? CollectedErasure(contactsErased: 2, addressesErased: 3));
         }
 
         if (path?.StartsWith(AdminEndpointRoutes.ContactsPath, StringComparison.Ordinal) == true)

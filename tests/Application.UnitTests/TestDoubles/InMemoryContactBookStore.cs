@@ -23,6 +23,9 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
     /// <summary>Gets how many contacts the book holds.</summary>
     internal int ContactCount => this.contactsById.Count;
 
+    /// <summary>Gets every contact the book holds, for a test asserting on the records rather than on their number.</summary>
+    internal IReadOnlyCollection<Contact> Contacts => this.contactsById.Values;
+
     /// <summary>Puts a contact into the book without going through a write, for arranging what was already held.</summary>
     internal void Hold(Contact contact) => this.contactsById[contact.Id] = contact;
 
@@ -66,6 +69,25 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
         this.contactsById.Remove(contactId);
 
         return Task.FromResult(new ContactErasure(contactId, WasHeld: true, held.Addresses.Count));
+    }
+
+    /// <inheritdoc />
+    public Task<CollectedContactErasure> EraseCollectedAsync(
+        IPersistenceSession session,
+        CancellationToken cancellationToken)
+    {
+        var collected = this.contactsById.Values
+            .Where(contact => contact.Origin == ContactOrigin.Collected)
+            .ToArray();
+
+        foreach (var contact in collected)
+        {
+            this.contactsById.Remove(contact.Id);
+        }
+
+        return Task.FromResult(new CollectedContactErasure(
+            collected.Length,
+            collected.Sum(contact => contact.Addresses.Count)));
     }
 
     /// <inheritdoc />

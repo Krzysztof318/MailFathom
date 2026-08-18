@@ -8,6 +8,7 @@ using MailFathom.AI.Providers;
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Storage;
@@ -530,6 +531,7 @@ internal static class HostComposition
         builder.Services.AddScoped<IMailFolderParticipationReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         builder.Services.AddScoped<IJunkMailFolderCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         builder.Services.AddScoped<IMailFolderMappingReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
+        builder.Services.AddScoped<IContactCollectionSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         builder.Services.AddScoped<ISpamClassificationSettingsReader, ConfiguredSpamClassificationSettingsReader>();
         builder.Services.AddScoped<ISpamActionSettingsReader, ConfiguredSpamActionSettingsReader>();
         builder.Services.AddScoped<IImapAccountSettingsProvider, ConfiguredImapAccountSettingsProvider>();

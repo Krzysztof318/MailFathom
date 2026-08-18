@@ -13,17 +13,19 @@ namespace MailFathom.Application.Contacts;
 /// <summary>Writes to the contact book for a caller that was granted writing it.</summary>
 /// <remarks>
 /// <para>
-/// The three acts a caller performs on the book — record a person, amend one, erase one — each behind
-/// <see cref="MailFathomPermission.MailContactsWrite" />. The permission is asked for here rather than only at the
-/// transport, so an entrypoint added later cannot change what this deployment holds about somebody by arriving another
-/// way, and erasure is behind the same grant as the other two: a caller that may edit the book may take somebody out of
-/// it, and no smaller grant reaches an act that cannot be undone.
+/// The four acts a caller performs on the book — record a person, amend one, erase one, promote one this deployment
+/// collected — each behind <see cref="MailFathomPermission.MailContactsWrite" />. The permission is asked for here
+/// rather than only at the transport, so an entrypoint added later cannot change what this deployment holds about
+/// somebody by arriving another way, and erasure is behind the same grant as the rest: a caller that may edit the book
+/// may take somebody out of it, and no smaller grant reaches an act that cannot be undone.
 /// </para>
 /// <para>
 /// Every write acts under <see cref="ContactOrigin.Asserted" />, because a caller granted this permission is writing for
 /// the owner: what an agent is told to record is a person somebody wrote down. What follows from it is the one refusal a
 /// caller meets that is about the record rather than about the request — amending a contact this deployment collected is
-/// refused, and promoting it is the owner's own act through the administrative surface.
+/// refused until it has been promoted. Promotion is the fourth act for exactly that reason: leaving it to the
+/// administrative surface alone would put every collected record permanently out of this one's reach, so it is offered
+/// here as well and under the same grant.
 /// </para>
 /// <para>
 /// The rules a record obeys are applied here rather than at whichever boundary the caller arrived by, so the book cannot
@@ -110,6 +112,25 @@ public sealed class ContactBookWriter
                 Note = record.Note,
             },
             cancellationToken);
+    }
+
+    /// <summary>Takes on a contact this deployment collected, so it becomes one the owner asserted.</summary>
+    /// <param name="contactId">The contact to promote.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>The promoted record, or the refusal naming what stopped it.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the writing grant.</exception>
+    /// <remarks>
+    /// The act that turns a record nobody wrote down into one somebody did, and the only crossing between the origins.
+    /// It is what unlocks amending a collected contact: a caller refused an amendment is told the record was collected,
+    /// promotes it, and then amends it like any other. It acts under <see cref="CallerWriter" /> for the same reason
+    /// every other write here does — a caller granted this permission is writing for the owner — which is also what
+    /// keeps collection from performing it on its own output.
+    /// </remarks>
+    public Task<ContactWriteResult> PromoteAsync(ContactId contactId, CancellationToken cancellationToken)
+    {
+        this.authorization.RequirePermission(MailFathomPermission.MailContactsWrite);
+
+        return this.book.PromoteAsync(contactId, CallerWriter, cancellationToken);
     }
 
     /// <summary>Erases one person and everything the book derived from them.</summary>

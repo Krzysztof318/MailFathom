@@ -2,6 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
+using MailFathom.Application.Contacts;
+using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings.Generation;
@@ -242,6 +245,20 @@ internal static class SynchronizationTestHost
         // message and the substituted queue is never asked for anything.
         services.AddSingleton(Substitute.For<IJobStore>());
         services.AddScoped<SpamClassificationArrivals>();
+
+        // The other thing the run reaches after each message it commits. Every account these tests configure leaves
+        // contact collection off, so the collector reads one property per stored message and neither the book nor the
+        // tally below is ever asked anything; both are composed because a pass that could not resolve one would fail
+        // the folder rather than the assertion.
+        services.AddSingleton(Substitute.For<IContactStore>());
+        services.AddSingleton(Substitute.For<IContactDirectory>());
+        services.AddSingleton(Substitute.For<IAuthoredMailTally>());
+        services.AddSingleton(Substitute.For<IContactCollectionTelemetry>());
+        services.AddScoped<IContactCollectionSettingsReader>(provider =>
+            provider.GetRequiredService<MailSynchronizationOptions>());
+        services.AddScoped(_ => AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
+        services.AddScoped<ContactBook>();
+        services.AddScoped<MailContactCollector>();
 
         // The cut is the run's last local step, after the rules for the ordering the arrival pipeline is built on, and a
         // supervisor resolves it from the same scope. The store answers that no message is awaiting passages, which is

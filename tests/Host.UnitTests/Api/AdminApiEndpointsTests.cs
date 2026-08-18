@@ -116,13 +116,15 @@ public sealed class AdminApiEndpointsTests
         // The activation path, the rule-run path, the classification-run path, and the rewind path each appear twice,
         // because each is one resource read with a get and performed with a post, and both verbs are mapped separately.
         // The contact-book paths appear twice and three times for the same reason: the book is listed and written to at
-        // one path, and one contact is read, amended, and erased at another.
+        // one path, and one contact is read, amended, and erased at another. The collected half is erased at a path of
+        // its own, because what it names is every record of one origin rather than a resource anybody can read.
         Assert.Equal(
             [
                 $"{AdminEndpointOptions.RoutePrefix}{MailAnsweringAuditEndpoint.Route}",
                 $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactsRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactsRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactByAddressRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.CollectedContactsRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactRoute}",
@@ -222,6 +224,7 @@ public sealed class AdminApiEndpointsTests
                 $"GET {prefix}{ContactEndpoints.ContactRoute} -> {MailFathomPermission.AdminAuditRead.Name}",
                 $"PUT {prefix}{ContactEndpoints.ContactRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"DELETE {prefix}{ContactEndpoints.ContactRoute} -> {MailFathomPermission.AdminErase.Name}",
+                $"DELETE {prefix}{ContactEndpoints.CollectedContactsRoute} -> {MailFathomPermission.AdminErase.Name}",
                 $"GET {prefix}{ContactEndpoints.ContactExportRoute} -> {MailFathomPermission.AdminAuditRead.Name}",
                 $"POST {prefix}{ContactEndpoints.ContactPromotionRoute} -> {MailFathomPermission.AdminOperate.Name}",
             }.Order(StringComparer.Ordinal),

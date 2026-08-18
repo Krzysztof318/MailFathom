@@ -19,7 +19,7 @@ onto the published contract. It holds no query, no persistence, and no mail-prot
 nothing else, `get_email_content` calls the `EmailContentReader` use case and nothing else, `search_emails` calls the
 `MailboxSearchReader` use case and nothing else, `ask_mail` calls the `MailboxQuestionReader` use case and nothing else,
 `list_contacts` and `get_contact` call the `ContactBookReader` use case and nothing else, and `create_contact`,
-`update_contact`, and `delete_contact` call the `ContactBookWriter` use case and nothing else.
+`update_contact`, `delete_contact`, and `promote_contact` call the `ContactBookWriter` use case and nothing else.
 
 It holds no AI code either, and cannot. The project references `Domain` and `Application` and no other MailFathom assembly,
 which `Mcp.UnitTests` asserts against the compiled reference list rather than against a convention — so no tool on this
@@ -67,11 +67,11 @@ Four properties hold for every tool and are proven by test rather than asserted 
   at 200 people. A caller can never raise any of them, and the `ask_mail` set is the operator's to lower or raise in
   [`MailAnswering`](../operations/configuration-reference.md#mailanswering).
 
-One property holds for nine of the ten and is stated where it stops. `list_accounts`, `list_emails`,
-`get_email_content`, `search_emails`, and the five contact tools are within reach of every deployment, because local
+One property holds for ten of the eleven and is stated where it stops. `list_accounts`, `list_emails`,
+`get_email_content`, `search_emails`, and the six contact tools are within reach of every deployment, because local
 state is all they need. `ask_mail` needs two AI providers an operator configures separately, so it is advertised only
 while both are configured and working; the [`ask_mail`](#ask_mail) section records what decides that and what a call
-meets when it arrives anyway. Whether any of the ten is offered to a particular caller is a second question, which the
+meets when it arrives anyway. Whether any of the eleven is offered to a particular caller is a second question, which the
 next section answers.
 
 ## What a caller is offered
@@ -93,6 +93,7 @@ credential, the permission, or what a different caller would have been served.
 | `create_contact` | `mailfathom.mail.contacts.write` |
 | `update_contact` | `mailfathom.mail.contacts.write` |
 | `delete_contact` | `mailfathom.mail.contacts.write` |
+| `promote_contact` | `mailfathom.mail.contacts.write` |
 
 No permission implies another. `mailfathom.mail.ask` is not the weaker of the mail pair — a cited answer returns mail
 content — and `mailfathom.mail.read` is not egress-free: where semantic retrieval is configured, `search_emails` places
@@ -129,7 +130,7 @@ it calls anything:
 
 | Element | Convention |
 |---|---|
-| `name` | Snake case, as the MCP tool ecosystem spells tool names — `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `ask_mail`, `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact` |
+| `name` | Snake case, as the MCP tool ecosystem spells tool names — `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `ask_mail`, `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact`, `promote_contact` |
 | `title` | A human-readable label for display — `List accounts`, `List emails`, `Get email content`, `Search emails`, `Ask about mail`, `List contacts`, `Get contact`, `Create contact`, `Update contact`, `Delete contact` |
 | `description` | States what the tool reads or changes, that it reaches no mail server, and what it bounds |
 | `inputSchema` | Every argument is a top-level property carrying its own description, unit, and absence meaning |
@@ -146,6 +147,7 @@ per tool rather than per surface:
 | `create_contact` | `false` | `false` | `false` |
 | `update_contact` | `false` | `true` | `true` |
 | `delete_contact` | `false` | `true` | `true` |
+| `promote_contact` | `false` | `false` | `true` |
 
 Each of those three values is a fact about the tool rather than a posture. `create_contact` is not idempotent because
 the book mints the identity: calling it twice with one person records them once and then answers
@@ -154,7 +156,9 @@ second identical call writes what the first one already wrote — and destructiv
 the whole record removes an address the caller left out and clears a note it omitted. `delete_contact` is idempotent
 too and destructive all the same: erasing somebody twice leaves the state the caller asked for, and the first call
 removed a record nothing here can bring back. `create_contact` is the one write that is neither, because it mints a
-record where none was held and so has nothing to drop. Nothing on this surface is `openWorld`, contact writes included, because a write
+record where none was held and so has nothing to drop. `promote_contact` is idempotent and not destructive: nothing
+about the person is rewritten, what moves is which half of the book they are in, and the second call answers
+`alreadyAsserted`. Nothing on this surface is `openWorld`, contact writes included, because a write
 here reaches MailFathom's own database and no third party.
 
 The annotations are contract metadata rather than documentation, so `Mcp.UnitTests` asserts the advertised
@@ -942,15 +946,15 @@ message says whether this deployment answers no questions at all or answers them
 
 ## The contact book on this surface
 
-Five tools reach MailFathom's own contact book: `list_contacts` and `get_contact` read it, and `create_contact`,
-`update_contact`, and `delete_contact` write it. [Contacts](contacts.md) is the record and every rule a writer of it
-obeys — what identifies a person, when two addresses are the same address, who may amend what, and what an erasure
-removes. Nothing of that is restated here; what this section holds is what the tools publish and refuse.
+Six tools reach MailFathom's own contact book: `list_contacts` and `get_contact` read it, and `create_contact`,
+`update_contact`, `delete_contact`, and `promote_contact` write it. [Contacts](contacts.md) is the record and every rule
+a writer of it obeys — what identifies a person, when two addresses are the same address, who may amend what, and what
+an erasure removes. Nothing of that is restated here; what this section holds is what the tools publish and refuse.
 
 The book is why an agent can answer "who is this from" without being handed a list in a prompt, and the reason the write
 half exists rather than only the read half is that a book nobody can add to is one that stays empty. A caller writes as
 **asserted** — somebody writing a person down — so a record this deployment collected from arriving mail is not an
-agent's to amend in place.
+agent's to amend in place; `promote_contact` is what it does instead.
 
 **Everything these tools return is personal data about third parties**, and a note is free text somebody typed about
 somebody else. A client passes a name, an address, and a note into a model as data, exactly as it does message content.
@@ -1090,8 +1094,8 @@ The same shape `create_contact` answers with, and two more states it can carry:
 | `addressHeldByAnotherContact` | One of the addresses belongs to somebody else, named by `addressHolderContactId` |
 | `contactWasCollected` | The record came from mail that arrived rather than from somebody writing it down |
 
-`contactWasCollected` is the origin rule rather than a failure: only the deployment's operator takes such a record on,
-through `mfctl contact promote`, and it is amendable afterwards.
+`contactWasCollected` is the origin rule rather than a failure: the record is taken on first — with `promote_contact`
+here, or `mfctl contact promote` at a terminal — and is amendable afterwards.
 
 ## `delete_contact`
 
@@ -1120,12 +1124,38 @@ entitled to an answer saying what was removed. Erasing somebody the book does no
 `wasHeld` false, not a failure — the state the caller asked for is the state the book is in, and reporting it as an
 error would only say whether somebody had already erased that person.
 
+## `promote_contact`
+
+Takes on one person MailFathom collected from arriving mail, so the record becomes one the owner asserted.
+
+It is the only path between the two origins and it runs one way. It is also what unlocks `update_contact` on a record
+that answered `contactWasCollected`: an agent that read the book and found somebody the deployment picked up takes the
+record on for the same owner an operator at a terminal would, and a promotion reachable from only one of the two
+surfaces would leave an amendment permanently refused here for every record collection produced. Nothing about the
+person is rewritten, and no mail server is contacted.
+
+### Arguments
+
+`contactId`, and nothing else.
+
+### Result
+
+The same shape `create_contact` answers with, and it carries the state alone. `written` means the record is now under
+the `asserted` origin; `notFound` means the book holds no contact of that identifier; `alreadyAsserted` means the
+promotion had nothing left to do, which is the state a first call left the record in.
+
+**No record comes back, deliberately.** The caller supplied an identifier rather than a person, so answering with the
+promoted contact would hand the whole of what `get_contact` serves — the name, every address, the note — to a caller
+holding `mailfathom.mail.contacts.write` and nothing else, and no permission here implies another. A caller that also
+holds `mailfathom.mail.contacts.read` reads the person through the tool published for reading them. The administrative
+route behind the same use case answers the same way and for the same reason.
+
 ## Pending
 
 The five mailbox tools are complete. `list_accounts` publishes the accounts a caller may name,
 `list_emails`, `get_email_content`, and `search_emails` read the PostgreSQL read models, the lexical index, and the
 content store that landed with their use cases, and `ask_mail` answers over the retrieval and the agent composition
-above them, under the ceilings an operator sets on what one question and one period may spend. The five contact tools
+above them, under the ceilings an operator sets on what one question and one period may spend. The six contact tools
 are complete as well, and are the whole of what this surface writes.
 
 What is still pending is the run trace an operator reads after a question, its own change, and any tool that sends mail:

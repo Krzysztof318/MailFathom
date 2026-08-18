@@ -48,6 +48,7 @@ public sealed class ContactEndpointsTests
     {
         Assert.Equal("/contacts", ContactEndpoints.ContactsRoute);
         Assert.Equal("/contacts/by-address", ContactEndpoints.ContactByAddressRoute);
+        Assert.Equal("/contacts/collected", ContactEndpoints.CollectedContactsRoute);
         Assert.Equal("/contacts/{contactId:guid}", ContactEndpoints.ContactRoute);
         Assert.Equal("/contacts/{contactId:guid}/promotion", ContactEndpoints.ContactPromotionRoute);
         Assert.Equal("/contacts/{contactId:guid}/export", ContactEndpoints.ContactExportRoute);
@@ -412,6 +413,38 @@ public sealed class ContactEndpointsTests
             erasure.Value!.Contact,
             erasure.Value.WasHeld,
             erasure.Value.AddressesErased));
+    }
+
+    /// <summary>Everything collection built is a contact of its own origin, so the route answers in both figures.</summary>
+    [Fact]
+    public async Task EraseCollectedAsync_ABookHoldingCollectedRecords_AnswersWithWhatItRemoved()
+    {
+        // Arrange
+        this.store.EraseCollectedAsync(Arg.Any<IPersistenceSession>(), Arg.Any<CancellationToken>())
+            .Returns(new CollectedContactErasure(ContactsErased: 12, AddressesErased: 17));
+
+        // Act
+        var result = await ContactEndpoints.EraseCollectedAsync(this.Book(), TestContext.Current.CancellationToken);
+
+        // Assert
+        var erasure = Assert.IsType<Ok<CollectedContactErasureResponse>>(result.Result);
+        Assert.Equal((12, 17), (erasure.Value!.ContactsErased, erasure.Value.AddressesErased));
+    }
+
+    /// <summary>A deployment that collected nobody is the state the owner asked for rather than a failure to report.</summary>
+    [Fact]
+    public async Task EraseCollectedAsync_ABookThatCollectedNobody_AnswersThatNothingWasRemoved()
+    {
+        // Arrange
+        this.store.EraseCollectedAsync(Arg.Any<IPersistenceSession>(), Arg.Any<CancellationToken>())
+            .Returns(new CollectedContactErasure(ContactsErased: 0, AddressesErased: 0));
+
+        // Act
+        var result = await ContactEndpoints.EraseCollectedAsync(this.Book(), TestContext.Current.CancellationToken);
+
+        // Assert
+        var erasure = Assert.IsType<Ok<CollectedContactErasureResponse>>(result.Result);
+        Assert.Equal((0, 0), (erasure.Value!.ContactsErased, erasure.Value.AddressesErased));
     }
 
     /// <summary>Exporting somebody the book does not hold produces no document rather than an empty one.</summary>

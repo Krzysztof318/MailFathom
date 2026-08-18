@@ -130,6 +130,13 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `…:TrustedSenders:<n>:Domain` | string | unset | A domain this account recognizes. Exactly one of `Domain` and `Address` is written, and an entry writing neither or both fails startup naming the account and the entry's position | reload |
 | `…:TrustedSenders:<n>:Address` | string | unset | A single mailbox this account recognizes. It matches when the established author's domain is that address's own **and** the message's `From` displays exactly that address | reload |
 | `…:TrustedSenders:<n>:IncludeSubdomains` | bool | `false` | Whether a domain entry also reaches the names beneath that domain. Refused on an address entry, where it could mean nothing | reload |
+| `…:ContactCollection:Enabled` | bool | `false` | Whether this account records the people it corresponds with as its mail is synchronized | reload; the next folder run collects under it |
+| `…:ContactCollection:MinimumMessagesFromSender` | int | `2` | 1 – 100; how many messages an address must have written to this account before the person behind it is recorded. One records every admitted sender on first sight. It bounds only that direction — an address the owner wrote to is recorded at once | reload; the next folder run |
+| `…:ContactCollection:MaxContactsPerRun` | int | `50` | 0 – 1000; how many contacts one folder run may record, bounded per folder exactly as `MaxContentBytesPerRun` is, so an account synchronizing several folders may reach it once for each. Zero records nobody while leaving collection on | reload; the run after the one in flight |
+| `…:ContactCollection:Exclusions` | list | empty | The addresses and domains this account never records a contact from; each entry below | reload; the next folder run |
+| `…:ContactCollection:Exclusions:<n>:Domain` | string | unset | A domain this account collects nobody at. Exactly one of `Domain` and `AddressPattern` is written, and an entry writing neither or both fails startup naming the account and the entry's position | reload |
+| `…:ContactCollection:Exclusions:<n>:AddressPattern` | string | unset | A pattern over the whole address, where `*` stands for any run of characters including none and `?` for exactly one; at most 320 characters, and a pattern whose only characters are those two and the at-sign is refused, because `*@*` takes every address and `*@` takes none | reload |
+| `…:ContactCollection:Exclusions:<n>:IncludeSubdomains` | bool | `false` | Whether a domain entry also reaches the names beneath that domain. Refused on a pattern entry, which writes its own | reload |
 | `…:Folders` | list | inbox by role | Aliases unique; each entry below | reload |
 
 `TrustedAuthenticationServiceIdentifier` names the one server whose `Authentication-Results` headers this account
@@ -258,6 +265,32 @@ schedules it.
 [What a mapping decides beyond where the folder is](../features/imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
 states all three switches together, what an unmapped folder is instead, and what becomes of the local copy of a message
 relocated into a folder nothing mirrors.
+
+### Contact collection
+
+`…:ContactCollection` is per account and off unless an owner switches it on, because what it produces is derived
+personal data about people who never dealt with MailFathom: an instance nobody asked never accumulates a contact book,
+and a deployment reading a work mailbox and a personal one decides separately for each. Switched on, the account records
+the author of mail arriving in its ordinary folders and the primary recipients of mail in the folder mapped as `Sent`,
+as those messages are synchronized.
+
+The two numbers bound who is written down and how fast. `MinimumMessagesFromSender` is the evidence an address that
+wrote to the owner needs — two by default, because one message from a stranger is not correspondence — and it says
+nothing about an address the owner wrote to, which is recorded on first sight. `MaxContactsPerRun` paces the first
+synchronization of a mailbox holding years of mail; a run that reaches it leaves the rest for the next run rather than
+losing them.
+
+`Exclusions` is the owner's own list. The structural half needs no entry and cannot be switched off: a message a mailing
+list or an automatic responder stamped as its own, a role mailbox, a `no-reply` name, a list-administration address, and
+every mailbox a configured account's own user name names. An entry naming both a domain and a pattern, or neither, or
+asking to include subdomains on a pattern, or writing a pattern that selects on nothing but the at-sign every address
+carries, **fails startup** naming the
+account and the entry's position and never the value it holds — because a domain and a pattern over an address are both
+personal data, and a validation failure is written to a log.
+
+[Contacts § Collecting contacts from arriving mail](../features/contacts.md#collecting-contacts-from-arriving-mail)
+states which header each folder contributes, what is never collected, and how an owner takes back everything a
+deployment collected.
 
 ### OAuth — `…:OAuth`
 
@@ -1185,7 +1218,7 @@ disjoint halves, and the name says which half it belongs to.
 | `mailfathom.mail.read` | MCP | The tools that read the local mailbox copy: `list_accounts`, `list_emails`, `get_email_content`, `search_emails`. Where semantic retrieval is configured, searching places the caller's own query text with the embedding provider, so this is not an egress-free grant |
 | `mailfathom.mail.ask` | MCP | `ask_mail`, which answers from mail content by sending it to a model provider. It does not imply `mailfathom.mail.read`, and granting it is granting access to mail |
 | `mailfathom.mail.contacts.read` | MCP | `list_contacts` and `get_contact`, which read the deployment's own contact book: names, addresses, and the notes an owner wrote about identified third parties |
-| `mailfathom.mail.contacts.write` | MCP | `create_contact`, `update_contact`, and `delete_contact`, which record, amend, and erase a person in that book. The erasure is here rather than apart, because a grant that cannot edit the book cannot be trusted to take somebody out of it |
+| `mailfathom.mail.contacts.write` | MCP | `create_contact`, `update_contact`, `delete_contact`, and `promote_contact`, which record, amend, erase, and take on a person in that book. The erasure is here rather than apart, because a grant that cannot edit the book cannot be trusted to take somebody out of it |
 | `mailfathom.admin.read` | administrative | The reads reporting the deployment's own state and no mail: what synchronization is doing, embedding status and the activation preview, the loaded rules, a run's progress, what a rewind would cost, the stopped-job list |
 | `mailfathom.admin.audit.read` | administrative | Everything derived from somebody's mail: the mailbox-mutation audit, the answering audit, the rules history, the spam classifications, and reading the contact book |
 | `mailfathom.admin.operate` | administrative | Asking the deployment to do work it can already do: running rules, classifying an account, retrying or dropping a stopped job, cancelling a reindex, rewinding synchronization, re-deriving stored mail, writing to the contact book |

@@ -118,6 +118,7 @@ internal static class CliRootCommand
             RemoveContactAddressCommand.Create(context),
             PromoteContactCommand.Create(context),
             DeleteContactCommand.Create(context),
+            DeleteCollectedContactsCommand.Create(context),
             ExportContactCommand.Create(context),
         };
 

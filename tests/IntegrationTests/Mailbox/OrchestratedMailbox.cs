@@ -69,17 +69,38 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
     internal async Task AppendAsync(string folderPath, string subject, CancellationToken cancellationToken)
     {
         using var message = CreateSyntheticMessage(subject);
-        using var client = await this.ConnectAndAuthenticateAsync(cancellationToken);
 
-        var folder = await client.GetFolderAsync(folderPath, cancellationToken);
-        await folder.OpenAsync(FolderAccess.ReadWrite, cancellationToken);
+        await this.AppendAsync(folderPath, message, cancellationToken);
+    }
 
-        // MessageFlags.None on purpose. The invariant under test is about mail the server considers unread, so an
-        // appended message must arrive in the same state a delivered one does.
-        await folder.AppendAsync(message, MessageFlags.None, cancellationToken);
-        await folder.CloseAsync(expunge: false, cancellationToken);
+    /// <summary>Appends one synthetic message written by a stated author, carrying headers the generator writes none of.</summary>
+    /// <param name="folderPath">The folder to append to.</param>
+    /// <param name="subject">The subject the appended message carries, which also names its identifier.</param>
+    /// <param name="author">Who the message is from, which is what a test about correspondents has to arrange.</param>
+    /// <param name="additionalHeaders">Headers written onto the composed message, empty where it needs none.</param>
+    /// <param name="cancellationToken">Cancels the append.</param>
+    /// <remarks>
+    /// The identifier is derived from the subject rather than left at whatever the seed produced, because the generator
+    /// is asked for one message and every append would otherwise carry the same <c>Message-Id</c> — which anything
+    /// counting distinct messages reads as one message stored repeatedly rather than as several.
+    /// </remarks>
+    internal async Task AppendAsync(
+        string folderPath,
+        string subject,
+        SyntheticParticipant author,
+        IReadOnlyList<(string Name, string Value)> additionalHeaders,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(additionalHeaders);
 
-        await client.DisconnectAsync(quit: true, cancellationToken);
+        using var message = CreateSyntheticMessage(subject, author);
+
+        foreach (var (name, value) in additionalHeaders)
+        {
+            message.Headers.Add(name, value);
+        }
+
+        await this.AppendAsync(folderPath, message, cancellationToken);
     }
 
     /// <summary>Reads every message in a folder with the flags the server currently holds for it.</summary>
@@ -349,7 +370,7 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
     /// rather than inherit a share of them.
     /// </para>
     /// </remarks>
-    private static MimeMessage CreateSyntheticMessage(string subject)
+    private static MimeMessage CreateSyntheticMessage(string subject, SyntheticParticipant? author = null)
     {
         var plan = new SyntheticCorpusPlan(
             SyntheticSeed,
@@ -359,13 +380,32 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
             MaximumAttachmentBytes: 0,
             SensitivePercentage: 0);
 
-        var generated = SyntheticEmailGenerator.Generate(plan)[0] with { Subject = subject };
+        var seeded = SyntheticEmailGenerator.Generate(plan)[0];
+        var generated = author is null
+            ? seeded with { Subject = subject }
+            : seeded with { Subject = subject, Author = author, MessageId = $"{subject}@mailfathom.test" };
 
         return SyntheticMimeComposer.Compose(
             generated,
             MailboxRecipient,
             SyntheticSender,
             SyntheticAuthorIdentity.Fabricated);
+    }
+
+    /// <summary>Appends a composed message to a folder, in the unread state a delivered one arrives in.</summary>
+    private async Task AppendAsync(string folderPath, MimeMessage message, CancellationToken cancellationToken)
+    {
+        using var client = await this.ConnectAndAuthenticateAsync(cancellationToken);
+
+        var folder = await client.GetFolderAsync(folderPath, cancellationToken);
+        await folder.OpenAsync(FolderAccess.ReadWrite, cancellationToken);
+
+        // MessageFlags.None on purpose. The invariant under test is about mail the server considers unread, so an
+        // appended message must arrive in the same state a delivered one does.
+        await folder.AppendAsync(message, MessageFlags.None, cancellationToken);
+        await folder.CloseAsync(expunge: false, cancellationToken);
+
+        await client.DisconnectAsync(quit: true, cancellationToken);
     }
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the connected client passes to the caller, which disposes it when its observation ends.")]
