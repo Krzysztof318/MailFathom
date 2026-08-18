@@ -1493,7 +1493,7 @@ that caused it and searching the folder for something that looks right is refuse
 ### What a run reports
 
 The counts reach the log and nothing else does. A window that observed something logs how many snapshots it refreshed
-and whether the folder has more to reconcile; a window that found messages gone logs that at warning level, with the
+and whether the folder has more to reconcile; a window that found messages gone logs that at information level, with the
 account, the folder alias, the count, and the disposition that was applied. A run that recognized changes of
 MailFathom's own logs them on a line of their own, at information level: how many discoveries carried an existing local
 email across, and how many occurrences left the folder because MailFathom moved or deleted them. Without it an operator
