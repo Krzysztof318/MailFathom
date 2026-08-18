@@ -53,6 +53,10 @@ public sealed class MailRuleFactTests
     [InlineData("sizeInBytes", MailRuleFactType.Number)]
     [InlineData("isSeen", MailRuleFactType.Boolean)]
     [InlineData("receivedAt", MailRuleFactType.Timestamp)]
+    [InlineData("keywords", MailRuleFactType.TextSet)]
+    [InlineData("senderTrust", MailRuleFactType.Text)]
+    [InlineData("authorAuthentication", MailRuleFactType.Text)]
+    [InlineData("machineAuthorship", MailRuleFactType.Text)]
     public void TryParseName_DeclaredName_ResolvesTheFactWithItsShape(string name, MailRuleFactType expectedType)
     {
         // Act

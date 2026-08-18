@@ -2,6 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Emails.Authorship;
+
 namespace MailFathom.Application.Rules.Facts;
 
 /// <summary>Carries everything a condition can read about one email without a further read of stored content.</summary>
@@ -11,6 +14,11 @@ namespace MailFathom.Application.Rules.Facts;
 /// keeps the cost of a condition a property of the fact surface rather than of what somebody typed. The two derived
 /// facts — the sender's domain and the recipients' domains — are computed from the addresses beside them rather than
 /// carried separately, so nothing can supply an address and a domain that disagree.
+/// </para>
+/// <para>
+/// Three of them are stored as domain enumerations rather than as the words a condition compares against, because the
+/// authoring names are part of the rule contract and belong beside the fact surface that publishes them rather than in
+/// whatever queried the row.
 /// </para>
 /// <para>
 /// The one fact this does not carry is the extracted body text, which reaches a condition through
@@ -33,6 +41,15 @@ public sealed record MailRuleEmailFacts
 
     /// <summary>Gets the addresses the email was sent to and copied to, in their comparison form.</summary>
     public IReadOnlyList<string> RecipientAddresses { get; init; } = [];
+
+    /// <summary>Gets what the receiving server established about the author the email displays.</summary>
+    public AuthorAuthenticationOutcome AuthorAuthentication { get; init; } = AuthorAuthenticationOutcome.NotEstablished;
+
+    /// <summary>Gets whether this deployment recognizes the author the email authenticated as.</summary>
+    public SenderTrustLevel SenderTrust { get; init; } = SenderTrustLevel.Unknown;
+
+    /// <summary>Gets how much the email's own text reads as machine written.</summary>
+    public MachineAuthorshipBand MachineAuthorship { get; init; } = MachineAuthorshipBand.NotAssessed;
 
     /// <summary>Gets when the last receiving hop recorded the email, or <see langword="null" /> when no hop recorded one.</summary>
     public DateTimeOffset? ReceivedAt { get; init; }
@@ -66,6 +83,9 @@ public sealed record MailRuleEmailFacts
 
     /// <summary>Gets whether the server reports the email as a draft.</summary>
     public bool IsDraft { get; init; }
+
+    /// <summary>Gets the keywords the server reports the email as carrying.</summary>
+    public IReadOnlyList<string> Keywords { get; init; } = [];
 
     /// <summary>Gets whether text has been extracted from the email's body.</summary>
     public bool HasExtractedContent { get; init; }

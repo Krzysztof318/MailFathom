@@ -195,6 +195,10 @@ internal sealed class MailRuleEvaluationStore(
                 email.IsRemotelyAnswered,
                 email.IsRemotelyFlagged,
                 email.IsRemotelyDraft,
+                email.RemoteKeywords,
+                email.AuthorAuthenticationOutcome,
+                email.SenderTrustLevel,
+                email.MachineAuthorshipBand,
                 HasExtractedContent = email.SearchDocument != null
                     && email.SearchDocument.TextSource != ExtractedEmailTextSource.BodyNotExtracted,
                 AwaitsExtraction =
@@ -233,6 +237,10 @@ internal sealed class MailRuleEvaluationStore(
                     IsAnswered = candidate.IsRemotelyAnswered,
                     IsFlagged = candidate.IsRemotelyFlagged,
                     IsDraft = candidate.IsRemotelyDraft,
+                    Keywords = candidate.RemoteKeywords,
+                    AuthorAuthentication = candidate.AuthorAuthenticationOutcome,
+                    SenderTrust = candidate.SenderTrustLevel,
+                    MachineAuthorship = candidate.MachineAuthorshipBand,
                     HasExtractedContent = candidate.HasExtractedContent,
                 },
                 candidate.AwaitsExtraction)),

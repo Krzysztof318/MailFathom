@@ -5,6 +5,8 @@
 using System.Collections.Frozen;
 using MailFathom.Application.Folders;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.Rules.Facts;
@@ -50,6 +52,8 @@ public sealed class MailRuleFacts
             [MailRuleFact.SenderDomain] = facts => facts.email.SenderDomain,
             [MailRuleFact.RecipientAddresses] = facts => facts.email.RecipientAddresses,
             [MailRuleFact.RecipientDomains] = facts => facts.email.RecipientDomains,
+            [MailRuleFact.AuthorAuthentication] = facts => AuthoringName(facts.email.AuthorAuthentication),
+            [MailRuleFact.SenderTrust] = facts => AuthoringName(facts.email.SenderTrust),
             [MailRuleFact.ReceivedAt] = facts => facts.email.ReceivedAt?.UtcDateTime,
             [MailRuleFact.SentAt] = facts => facts.email.SentAt?.UtcDateTime,
             [MailRuleFact.AgeInDays] = facts => facts.email.ReceivedAt is { } receivedAt
@@ -64,6 +68,8 @@ public sealed class MailRuleFacts
             [MailRuleFact.IsAnswered] = facts => facts.email.IsAnswered,
             [MailRuleFact.IsFlagged] = facts => facts.email.IsFlagged,
             [MailRuleFact.IsDraft] = facts => facts.email.IsDraft,
+            [MailRuleFact.Keywords] = facts => facts.email.Keywords,
+            [MailRuleFact.MachineAuthorship] = facts => AuthoringName(facts.email.MachineAuthorship),
             [MailRuleFact.HasExtractedContent] = facts => facts.email.HasExtractedContent,
         }.ToFrozenDictionary();
 
@@ -183,6 +189,47 @@ public sealed class MailRuleFacts
         .FindFolderNamed(MailAccountId.Create(this.email.Account), MailFolderAlias.Create(this.email.Folder))
         ?.SpecialUse
         ?.ToString();
+
+    /// <summary>Names a stored verdict the way a condition writes it.</summary>
+    /// <remarks>
+    /// The words are declared here rather than taken from the enumeration's own member names, so that renaming a
+    /// member cannot silently change what an operator has to type — these are the authoring surface, and the MCP
+    /// surface publishes its own copy of the same words for the same reason.
+    /// </remarks>
+    private static string AuthoringName(AuthorAuthenticationOutcome outcome) => outcome switch
+    {
+        AuthorAuthenticationOutcome.NotEstablished => "notEstablished",
+        AuthorAuthenticationOutcome.Failed => "failed",
+        AuthorAuthenticationOutcome.Authenticated => "authenticated",
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(outcome),
+            outcome,
+            "The stored author-authentication outcome has no authoring name."),
+    };
+
+    /// <inheritdoc cref="AuthoringName(AuthorAuthenticationOutcome)" />
+    private static string AuthoringName(SenderTrustLevel level) => level switch
+    {
+        SenderTrustLevel.Unknown => "unknown",
+        SenderTrustLevel.Trusted => "trusted",
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(level),
+            level,
+            "The stored sender-trust level has no authoring name."),
+    };
+
+    /// <inheritdoc cref="AuthoringName(AuthorAuthenticationOutcome)" />
+    private static string AuthoringName(MachineAuthorshipBand band) => band switch
+    {
+        MachineAuthorshipBand.NotAssessed => "notAssessed",
+        MachineAuthorshipBand.Unlikely => "unlikely",
+        MachineAuthorshipBand.Possible => "possible",
+        MachineAuthorshipBand.Likely => "likely",
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(band),
+            band,
+            "The stored machine-authorship band has no authoring name."),
+    };
 
     private static Func<MailRuleFacts, object?> ReadMetadata(MailRuleFact fact) =>
         MetadataReaders.TryGetValue(fact, out var reader)
