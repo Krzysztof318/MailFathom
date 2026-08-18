@@ -1,16 +1,18 @@
 # Contacts
 
-<!-- describes: src/Domain/Contacts/**, src/Application/Contacts/**, src/Infrastructure/Persistence/Contacts/**, src/Infrastructure/Persistence/Entities/ContactEntity.cs, src/Infrastructure/Persistence/Entities/ContactAddressEntity.cs, src/Host/Api/Contact*.cs, src/Cli/Commands/Contacts/**, src/Cli/Administration/Contacts/** -->
+<!-- describes: src/Domain/Contacts/**, src/Application/Contacts/**, src/Infrastructure/Persistence/Contacts/**, src/Infrastructure/Persistence/Entities/ContactEntity.cs, src/Infrastructure/Persistence/Entities/ContactAddressEntity.cs, src/Host/Api/Contact*.cs, src/Cli/Commands/Contacts/**, src/Cli/Administration/Contacts/**, src/Mcp/Tools/Contacts/** -->
 
 MailFathom holds a contact book of its own: people, the addresses they use, and what an owner recorded about them, in
 the same PostgreSQL database the mail is in. This page describes the record and the rules every writer of it obeys —
 what identifies a person, when two addresses are the same address, who may change what, and what erasing somebody
 removes.
 
-**`mfctl contact` is where the book is maintained**, over the deployment's administrative endpoint; [administering a
-deployment](../operations/admin-endpoint.md#administering-the-contact-book) holds the command group in full. The MCP
-tools over the book and collection from arriving mail are separate changes, so nothing writes to the book on its own and
-an instance nobody has written to holds no contacts at all.
+**Two surfaces reach the book.** `mfctl contact` maintains it over the deployment's administrative endpoint;
+[administering a deployment](../operations/admin-endpoint.md#administering-the-contact-book) holds the command group in
+full. An agent reads and writes it over the MCP endpoint, under two grants of its own; [MCP tools §
+`list_contacts`](mcp-tools.md#list_contacts) holds those five tools and what each of them answers. Collection from
+arriving mail is a separate change, so nothing writes to the book on its own and an instance nobody has written to holds
+no contacts at all.
 
 ## A contact is a person, not an address
 
@@ -85,6 +87,11 @@ What the difference decides is who may change the record without anybody asking:
   down. Promoting a contact that is already asserted is answered as such rather than written again.
 - Origin is recorded when the contact is created and is never changed by an amendment.
 
+Both surfaces a caller reaches the book through write as **asserted**, because both are somebody writing a person down:
+`mfctl` is the owner at a terminal, and an agent over MCP is acting for them. What follows is that an agent cannot amend
+a collected record in place — the call is answered `contactWasCollected` rather than refused — and promotion stays the
+operator's act through `mfctl`, which is the point of the origin rule rather than a limitation of the tool.
+
 Erasure is deliberately outside that rule. It is the data-subject path, and somebody asking to be removed from a contact
 book is not answered with which half of the book they happen to be in.
 
@@ -114,7 +121,24 @@ Two lookups and one listing:
 - **A page of the book**, bounded and continued by a keyset cursor. The order is the name's comparison form and then the
   identity, which makes it total: two people with one name are still served in a fixed order, so a walk of the book
   serves every contact exactly once. A page holds 50 contacts unless the caller asks for fewer, and never more than 200.
-  A listing may be narrowed to one origin, which is the question "what did my instance pick up" and its inverse.
+  A listing may be narrowed to one origin, which is the question "what did my instance pick up" and its inverse, and to
+  a **search**.
+
+A search is text a contact has to carry somewhere in its name or in one of its addresses, matched on the same comparison
+forms everything else here is matched on — so the search text is upper-cased once and compared against the stored name
+key and the stored address key, and casing is not a thing a caller has to get right. It is a containment match rather
+than a pattern: a wildcard character a caller wrote is text to look for, and there is no syntax to learn. The text is
+bounded at 320 characters, the longest address the book can hold, and is refused for the characters a name is refused
+for, because a value that renders as nothing would select on something nobody can see.
+
+It is the one read here no index answers, and that is deliberate rather than pending. A book is a few hundred people at
+the scale this system is written for, the pages are bounded whatever narrows them, and an index over "text anywhere in a
+value" is a different structure from the ones that make the lookups above exact. Where a caller has an address, the
+address lookup is the answer and is served from the unique index; a search is for the case where they have a fragment of
+a name.
+
+A search never widens what a walk serves: the cursor is the position in the book's own order and is not bound to the
+filters, so continuing a walk with a different search or a different origin is defined rather than refused.
 
 The order is taken on a comparison form stored beside the name rather than on the name itself, and the column holding it
 is pinned to PostgreSQL's `C` collation, so the order is the ordinal one MailFathom derived the form to produce rather
@@ -140,6 +164,11 @@ Both are commands rather than seams something else is expected to reach: `mfctl 
 `mfctl contact export` writes the document, because a data-subject path nothing invokes is one that will not work on the
 day somebody asks for it. The erasure asks before it runs and answers with what went — the identity and how many
 addresses — and never with the person.
+
+Erasure is also a tool, `delete_contact`, and it answers the same counts. Export is not: the document is the answer to a
+request a person made of the deployment's owner, and the surface that produces it is the one the owner is identified at.
+An agent that needs what an export holds reads the contact, which is the same record without the framing of a
+data-subject reply.
 
 ## What the book is held under
 

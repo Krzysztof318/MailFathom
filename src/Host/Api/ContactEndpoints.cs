@@ -158,7 +158,7 @@ internal static class ContactEndpoints
 
         try
         {
-            query = ContactQuery.Create(narrowedOrigin, pageSize, decodedCursor);
+            query = ContactQuery.Create(narrowedOrigin, search: null, pageSize, decodedCursor);
         }
         catch (ArgumentOutOfRangeException)
         {
@@ -433,9 +433,16 @@ internal static class ContactEndpoints
     {
         resolved = default;
 
-        return !string.IsNullOrWhiteSpace(address)
-            && address.Trim().Length <= Contact.MaximumAddressLength
-            && EmailAddress.TryCreate(displayName: null, address.Trim(), out resolved);
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            return false;
+        }
+
+        var trimmed = address.Trim();
+
+        return trimmed.Length <= Contact.MaximumAddressLength
+            && !ContactAddressText.IsAngleAddress(trimmed)
+            && EmailAddress.TryCreate(displayName: null, trimmed, out resolved);
     }
 
     /// <summary>Reads the record a request states, or names the one rule it broke.</summary>

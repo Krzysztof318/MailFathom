@@ -220,8 +220,9 @@ write_map() {
 # MailFathom
 
 > MailFathom is a self-hosted service that synchronizes mail from your IMAP accounts into a local PostgreSQL copy,
-> indexes it for search, and serves it to AI agents as read-only tools over the Model Context Protocol. Reading is
-> local, and synchronization never marks anything read on the mail server.
+> indexes it for search, and serves it to AI agents as tools over the Model Context Protocol. Reading is local, no
+> tool writes to a mailbox, and synchronization never marks anything read on the mail server. What an agent can write
+> is MailFathom's own contact book.
 
 This is the whole of the published documentation for one version of MailFathom, one line per page. Every link below
 is a page's Markdown source, served beside the rendered page at the same address with a `.md` extension, so fetching
