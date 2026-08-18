@@ -1007,9 +1007,8 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <summary>Emits the audit line for the backward pass, and emits it only when the pass found something to record.</summary>
     /// <remarks>
     /// A window that observed nothing says nothing, so a folder whose emails are all up to date does not repeat a line
-    /// per interval forever. Local deletion is reported at warning level whichever disposition produced it, because an
-    /// operator watching this is watching for mail leaving the local copy — and a misconfigured folder alias or a
-    /// server rebuilding a mailbox shows up here first.
+    /// per interval forever. Local deletion is reported at information level whichever disposition produced it, because
+    /// mail leaving a mailbox is what synchronization is for rather than a fault an operator has to act on.
     /// </remarks>
     private void ReportReconciliation(
         string folderAlias,
@@ -1154,7 +1153,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// it. Only counts and MailFathom's own configured names appear here; nothing derived from a message may.
     /// </remarks>
     [LoggerMessage(
-        Level = LogLevel.Warning,
+        Level = LogLevel.Information,
         Message = "Mail server no longer holds {RemotelyDeletedEmailCount} messages stored for {AccountId}/{FolderAlias}; their local copies were handled as {RemotelyDeletedEmailDisposition}.")]
     private partial void LogRemotelyDeletedEmailsRecorded(
         string accountId,
