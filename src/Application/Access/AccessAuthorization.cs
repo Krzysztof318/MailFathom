@@ -45,6 +45,23 @@ public sealed class AccessAuthorization
         this.principals = principals;
     }
 
+    /// <summary>Gets what the work in hand was admitted as, or <see langword="null" /> where it was reached under no principal.</summary>
+    /// <remarks>
+    /// <para>
+    /// It decides nothing and is never asked before an operation runs. It is here for a boundary that has to name the
+    /// caller in a record of its own — which is what an operator diagnosing a refusal reads, since the MCP surface
+    /// tells a refused caller nothing at all — and reading it through the same object the decision was asked of is what
+    /// keeps a boundary from acquiring the principal source and deciding for itself what holding a permission means.
+    /// </para>
+    /// <para>
+    /// What it carries is what <see cref="AuthorizedPrincipal.Identity" /> carries, which for a token is the issuer and
+    /// the subject the deployment authorized — a host name and a remote party's identifier for a person. That is why
+    /// <see cref="PrincipalNotAuthorizedException" /> is barred from naming it and why a boundary reading it decides
+    /// for itself what its own readers may see.
+    /// </para>
+    /// </remarks>
+    public string? PrincipalIdentity => this.principals.Current?.Identity;
+
     /// <summary>Requires that an admitted caller holding one named capability is what reached this use case.</summary>
     /// <param name="permission">The capability the operation is published under.</param>
     /// <exception cref="ArgumentException">Thrown when <paramref name="permission" /> names no published capability, which is a defect in the calling use case rather than a refusal.</exception>

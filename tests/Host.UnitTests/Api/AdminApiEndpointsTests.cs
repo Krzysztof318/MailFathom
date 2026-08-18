@@ -12,6 +12,7 @@ using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Mail.Mutations.Audit;
+using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
@@ -355,6 +356,7 @@ public sealed class AdminApiEndpointsTests
         services.AddScoped(_ => Substitute.For<IMailAccountCatalog>());
         services.AddScoped(_ => Substitute.For<IMailboxMutationAuditEntryStore>());
         services.AddScoped(_ => Substitute.For<IAuthorizedPrincipalSource>());
+        services.AddSingleton(Substitute.For<IAuthorizationRefusalTelemetry>());
         RegisterEmbeddingAdministration(services);
         RegisterContactBook(services);
 

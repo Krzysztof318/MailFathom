@@ -324,6 +324,46 @@ of, and the denominator is MailFathom's own sessions rather than EF Core's count
 issues. What was written is nowhere on it: a session covers whatever a use case staged, so any dimension naming it would
 eventually name mail.
 
+### What an authorization refusal records
+
+A caller reaching something its grant does not carry is counted by `mailfathom.authorization.refusals`, tagged with
+`mailfathom.authorization.surface` as `mail` or `administration`, `mailfathom.authorization.operation` with the tool or
+the route that was refused, and `mailfathom.authorization.permission` with the permission that would have sufficed. It
+is the signal worth alerting on rather than any single failure: one refusal is a client that was narrowed, and a
+credential that starts producing them is one being used for something it was never provisioned for.
+
+**On the MCP surface this record is the only place the boundary is visible at all.** A tool a caller may not reach is
+absent from its listing, and a call naming one is answered exactly as a call naming a tool that does not exist, so a
+client that stopped working is diagnosed from here rather than from anything it received —
+[the MCP endpoint page](mcp-endpoint.md#what-a-credential-decides-and-what-it-does-not) records why. The administrative
+surface names the permission to the caller as well, and is still counted here, because `mfctl` reporting one refusal to
+one operator is not a rate anybody can watch.
+
+Beside each measurement is a `Warning`, and it carries the one thing the counter deliberately does not: the credential
+the caller was admitted as, which is what an operator repairs the grant of. That value is on the log alone because its
+cardinality follows the credentials an operator wrote and, where a token admitted the caller, it is an issuer and that
+authorization server's identifier for a person — which belongs in a record a deployment sets a level on rather than in
+an exported series that never goes away. Work reached under no principal at all is recorded as `(none)`.
+
+The operation dimension is bounded the same way the tool dimension above is, and for the same reason: a tool name is
+used only where this surface publishes a tool answering to it and anything else is `(unpublished)`, while an
+administrative route is named by the pattern this repository mapped it under rather than by the address the request
+carried. A refusal that no grant would have satisfied is counted under `(none)`, and its log line names no permission
+rather than naming one that would not have helped. Three arrangements produce one, and they are not equally
+interesting: a call naming a tool this surface does not publish, which lands as `(unpublished)` under `(none)` and is
+the ordinary mistake of a client on a stale or misspelled name; a route that published no decision; and a use case
+refusing over the kind of principal that reached it rather than over a grant. The first is a client to repair and the
+other two are defects in this repository, so read the operation before reading the remedy — and an alert on this
+counter as *a credential asking for what it was never granted* is written against the operations a grant could have
+reached rather than against `(unpublished)`.
+
+**A listing that withholds a tool records nothing.** Nothing was refused there, every narrowed caller would produce one
+on every listing it asked for, and the omission has no operation to partition by — so the reading this signal exists for
+would sit under the steady state. Nor does a permitted call or a permitted route record anything here, so the ordinary
+path costs what it did before. Nothing about the refused request reaches either channel beyond the four values above:
+not an argument, not a route value, not a header, not the credential the caller presented, and nothing about the mail
+the request was for.
+
 ### What a request-path trace contains
 
 A tool call arrives with a span from the request pipeline and leaves a set of database spans behind it, and neither of

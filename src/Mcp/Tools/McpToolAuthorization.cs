@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Observability;
+using MailFathom.Domain.Access;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
@@ -109,14 +111,58 @@ internal static class McpToolAuthorization
         ArgumentNullException.ThrowIfNull(request);
 
         var requestedToolName = request.Params?.Name;
+        var authorization = RequiredAuthorization(request);
 
-        if (!IsPermitted(RequiredAuthorization(request), requestedToolName))
+        if (!IsPermitted(authorization, requestedToolName))
         {
+            PublishedTools.TryGetRequiredPermission(requestedToolName, out var declaredPermission);
+            RecordRefusal(request, authorization, requestedToolName, declaredPermission);
+
             throw UnknownTool(requestedToolName);
         }
 
-        return await next(request, cancellationToken);
+        try
+        {
+            return await next(request, cancellationToken);
+        }
+        catch (PrincipalNotAuthorizedException refusal)
+        {
+            // The use case is the authority and this filter is the cheap reading in front of it, so the two can
+            // disagree — over a permission the tool and the use case name differently, or over the kind of principal
+            // that reached the work. The refusal keeps the answer it already had; what is added is that a boundary the
+            // caller learns nothing from is not also one the deployment learns nothing from.
+            RecordRefusal(request, authorization, requestedToolName, refusal.RequiredPermission);
+
+            throw;
+        }
     }
+
+    /// <summary>Records the refusal on the one channel that can report it, since the caller is told nothing.</summary>
+    /// <remarks>
+    /// <para>
+    /// A call is recorded and a withheld descriptor is not. Nothing was refused by a listing, every narrowed caller
+    /// would report one on every listing it asked for, and the omission has no operation to partition by — so counting
+    /// it would bury the reading this record exists for, which is a credential that has begun asking for what it was
+    /// never granted.
+    /// </para>
+    /// <para>
+    /// The operation is reduced to a name this surface publishes before it is recorded, because the name a call carried
+    /// is a string of the caller's choosing and a dimension taking one would let a client mint a time series apiece.
+    /// The permission is unspecified for a name no tool declared anything for, and for a use case refusing over the
+    /// kind of principal that reached it — which is the refusal no grant would have satisfied rather than a narrower
+    /// one.
+    /// </para>
+    /// </remarks>
+    private static void RecordRefusal(
+        MessageContext request,
+        AccessAuthorization authorization,
+        string? requestedToolName,
+        MailFathomPermission requiredPermission) =>
+        RequiredService<IAuthorizationRefusalTelemetry>(request).RecordRefusal(
+            ProtectedSurface.Mail,
+            PublishedTools.MeasurableName(requestedToolName),
+            requiredPermission,
+            authorization.PrincipalIdentity);
 
     /// <summary>Reports whether the caller may be offered, and may call, the tool a descriptor or a request named.</summary>
     /// <remarks>A tool this surface does not publish answers <see langword="false" />: nothing declared what reaching it requires, and a boundary that let an undeclared tool through would make forgetting to grant one the way to publish it ungoverned.</remarks>
@@ -151,7 +197,13 @@ internal static class McpToolAuthorization
     /// established this caller holds, so the composition fault is raised instead.
     /// </remarks>
     private static AccessAuthorization RequiredAuthorization(MessageContext request) =>
-        request.Services?.GetRequiredService<AccessAuthorization>()
-        ?? throw new InvalidOperationException(
-            "A tool request arrived without a service provider, so the caller's grant could not be read.");
+        RequiredService<AccessAuthorization>(request);
+
+    /// <summary>Resolves one service from the scope the request arrived in.</summary>
+    private static TService RequiredService<TService>(MessageContext request)
+        where TService : notnull =>
+        request.Services is { } services
+            ? services.GetRequiredService<TService>()
+            : throw new InvalidOperationException(
+                "A tool request arrived without a service provider, so the caller's grant could not be read.");
 }

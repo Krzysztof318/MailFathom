@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Mcp.Observability;
+using MailFathom.Mcp.Tools;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -48,7 +49,7 @@ public sealed class TelemetrySurfaceContractTests
         Assert.Contains(
             surface.EmittedTags,
             tag => tag.Key == McpToolCallTelemetry.ToolTagName
-                && Equals(tag.Value, McpToolCallTelemetry.UnpublishedToolName));
+                && Equals(tag.Value, PublishedTools.UnpublishedToolName));
     }
 
     /// <summary>Nothing this boundary publishes is named after a message, a person, or a secret.</summary>

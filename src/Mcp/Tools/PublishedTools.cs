@@ -24,6 +24,15 @@ namespace MailFathom.Mcp.Tools;
 /// </remarks>
 internal static class PublishedTools
 {
+    /// <summary>The one name every tool this surface does not publish is reported under.</summary>
+    /// <remarks>
+    /// A signal about a call names the tool only where a published tool answers to it, and this otherwise. That is what
+    /// separates a dimension from a log line, where the same name is recorded whenever its shape is safe: a log line
+    /// costs what it is written to, and a dimension costs a time series that never goes away, so a client calling
+    /// <c>list_email</c> in a loop must not be able to mint one apiece.
+    /// </remarks>
+    internal const string UnpublishedToolName = "(unpublished)";
+
     private static readonly FrozenDictionary<string, MailFathomPermission> RequiredPermissionsByName =
         new Dictionary<string, MailFathomPermission>(StringComparer.Ordinal)
         {
@@ -44,6 +53,12 @@ internal static class PublishedTools
     /// <returns><see langword="true" /> when a published tool answers to that name.</returns>
     public static bool Contains(string? toolName) =>
         toolName is not null && RequiredPermissionsByName.ContainsKey(toolName);
+
+    /// <summary>Reduces a name a caller sent to one this surface publishes, so it is safe to make a dimension of.</summary>
+    /// <param name="toolName">The name the request carried, which may be absent or anything at all.</param>
+    /// <returns>The name itself where a published tool answers to it, and <see cref="UnpublishedToolName" /> otherwise.</returns>
+    /// <remarks>It lives here rather than beside a publisher because the closed set is what decides the answer, and two publishers reducing the same name apart would let one of them drift into measuring what a caller wrote.</remarks>
+    public static string MeasurableName(string? toolName) => Contains(toolName) ? toolName! : UnpublishedToolName;
 
     /// <summary>Reports the permission a caller must hold to be offered a tool and to call it.</summary>
     /// <param name="toolName">The name the request or the descriptor carried.</param>

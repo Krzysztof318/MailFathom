@@ -339,6 +339,29 @@ public sealed class AccessAuthorizationTests
         Assert.False(authorization.Permits(default));
     }
 
+    /// <summary>A boundary recording a refusal has to name the credential, since the refusal itself may name nothing.</summary>
+    [Fact]
+    public void PrincipalIdentity_WorkAdmittedUnderACaller_ReportsWhatTheTransportAdmittedItAs()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(
+            AuthorizedPrincipal.Caller(ConfiguredCredentialName, [MailFathomPermission.MailRead]));
+
+        // Act, Assert
+        Assert.Equal(ConfiguredCredentialName, authorization.PrincipalIdentity);
+    }
+
+    /// <summary>An entrypoint that stated nothing has nothing to name, and reporting a name for it would invent one.</summary>
+    [Fact]
+    public void PrincipalIdentity_WorkReachedUnderNoPrincipal_ReportsNothing()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(principal: null);
+
+        // Act, Assert
+        Assert.Null(authorization.PrincipalIdentity);
+    }
+
     public static TheoryData<MailFathomPermission> EveryPublishedPermission() =>
         [.. MailFathomPermission.All];
 

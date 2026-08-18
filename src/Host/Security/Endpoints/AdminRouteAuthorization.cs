@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Observability;
 using MailFathom.Domain.Access;
 using Microsoft.AspNetCore.Http.HttpResults;
 
@@ -38,6 +39,9 @@ internal static class AdminRouteAuthorization
     /// the sentence would make the wording a contract, and the sentence is written for a person.
     /// </remarks>
     internal const string PermissionExtension = "permission";
+
+    /// <summary>The one name a refusal on an endpoint carrying no route pattern is recorded under.</summary>
+    internal const string UnroutedOperationName = "(unrouted)";
 
     /// <summary>States the one permission a route is published under.</summary>
     /// <param name="route">The route being mapped.</param>
@@ -94,12 +98,16 @@ internal static class AdminRouteAuthorization
 
         if (context.HttpContext.GetEndpoint()?.Metadata.GetOrderedMetadata<AdminRoutePermission>() is not [{ } published])
         {
+            RecordRefusal(context.HttpContext, default);
+
             return Undeclared();
         }
 
         if (published.Permission.IsSpecified
             && !context.HttpContext.RequestServices.GetRequiredService<AccessAuthorization>().Permits(published.Permission))
         {
+            RecordRefusal(context.HttpContext, published.Permission);
+
             return Refused(published.Permission);
         }
 
@@ -109,9 +117,43 @@ internal static class AdminRouteAuthorization
         }
         catch (PrincipalNotAuthorizedException refusal)
         {
+            RecordRefusal(context.HttpContext, refusal.RequiredPermission);
+
             return Refused(refusal.RequiredPermission);
         }
     }
+
+    /// <summary>Records the refusal beside the answer the caller receives, which is what makes a rate of them readable.</summary>
+    /// <remarks>
+    /// <para>
+    /// Recorded once per refused request, wherever the refusal was decided. The filter refuses before the use case is
+    /// reached, so a request stopped here never produces a second record from the authority behind it, and a use case
+    /// refusing a request the filter admitted is recorded here because that is where the refusal becomes an answer.
+    /// </para>
+    /// <para>
+    /// The operation is the route's own pattern rather than the address the caller sent: a pattern is written in this
+    /// repository and bounded by it, while a path carries whatever the request put in each segment. A route that
+    /// published no single decision is recorded under a permission of none, because none would have helped — the remedy
+    /// is a defect report rather than a wider grant, and a refusal nobody counted is the one nobody finds.
+    /// </para>
+    /// </remarks>
+    private static void RecordRefusal(HttpContext context, MailFathomPermission requiredPermission) =>
+        context.RequestServices.GetRequiredService<IAuthorizationRefusalTelemetry>().RecordRefusal(
+            ProtectedSurface.Administration,
+            OperationOf(context),
+            requiredPermission,
+            context.RequestServices.GetRequiredService<AccessAuthorization>().PrincipalIdentity);
+
+    /// <summary>Names the route that was refused, as this repository wrote it.</summary>
+    /// <remarks>
+    /// An endpoint that is not a routed one carries no pattern to name, which no mapped administrative route is; it is
+    /// recorded under a fixed name rather than left out, so the refusal is still counted and still says which
+    /// deployment produced it.
+    /// </remarks>
+    private static string OperationOf(HttpContext context) =>
+        context.GetEndpoint() is RouteEndpoint { RoutePattern.RawText: { Length: > 0 } pattern }
+            ? pattern
+            : UnroutedOperationName;
 
     /// <summary>Writes the refusal a caller reads, which names the permission and nothing beside it.</summary>
     /// <remarks>

@@ -116,6 +116,14 @@ permission, because reporting what the credential is and what it may do is what 
 to learn that it holds nothing.
 [The administrative endpoint page](../operations/admin-endpoint.md#what-the-endpoint-serves) carries the whole mapping.
 
+**Both surfaces record every refusal, and neither surface's answer is the record.** A refusal is counted by
+`mailfathom.authorization.refusals` — by surface, by the tool or route that was refused, and by the permission that
+would have sufficed — with a warning beside it naming the credential the work was admitted as, which the boundary reads
+from `AccessAuthorization` rather than from the refusal, since the failure itself is barred from carrying an identity. A
+tool withheld from a listing is not a refusal and is not recorded: nothing was refused, and every narrowed caller would
+produce one on every listing.
+[Telemetry](../operations/telemetry.md#what-an-authorization-refusal-records) holds what each channel carries.
+
 The other requirement in force is the download route's, which admits a signed capability and nothing else.
 
 The transport's own reading of the grant goes through the same `AccessAuthorization` the use cases ask, which reports a

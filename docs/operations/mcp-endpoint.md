@@ -723,7 +723,11 @@ saying one is required, and no `insufficient_scope` challenge inviting a client 
 came from a token's scopes and its authorization server could in principle mint it. The listing already said what this
 caller may do, and a refusal it could tell apart from an unknown tool would say that a capability exists which you chose
 not to offer it. Diagnosing a client that stopped working is therefore done from this deployment's own record rather
-than from what the client received.
+than from what the client received: every refusal is counted by `mailfathom.authorization.refusals` and written as a
+warning naming the credential it was refused, and the permission the grant omits wherever the tool the call named
+publishes one — a call naming no tool this surface publishes is refused for no permission and its warning names none,
+which is how a client on a stale or misspelled name reads apart from one asking for what it was never granted.
+[Telemetry](telemetry.md#what-an-authorization-refusal-records) describes both in full.
 
 **Which mailboxes a caller reaches is not something a credential decides.** Every tool call resolves the accounts the
 configured owner controls and refuses anything outside them, whichever credential got the caller in, and no setting
@@ -1701,6 +1705,11 @@ about why. When a client reports `54001`, the server log is where the reason is.
 
 A refused call is logged with the five-digit code it was refused with, so an operator can correlate a client's complaint
 against a server record without learning what was searched for.
+
+A call refused for want of a permission is recorded once more, and separately, because the caller was told nothing it
+could report: it is counted by `mailfathom.authorization.refusals` and written as a warning naming the credential and
+the permission the grant omits. That record is the whole of what an operator has for this boundary, and
+[telemetry](telemetry.md#what-an-authorization-refusal-records) says what it carries and what it deliberately does not.
 
 That same measurement is published as instruments, so a rate and a distribution can be read without going through the
 records one at a time. What they carry is the tool and how the call ended, and nothing else;
