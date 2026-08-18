@@ -195,23 +195,22 @@ internal static partial class TransportSecurityExtensions
         if (context.Request.Headers.Authorization.Count > 0)
         {
             var forwardedProtocol = context.Request.Headers[ForwardedHeadersDefaults.XForwardedProtoHeaderName].ToString();
-
-            var originalProtocol = context.Request.Headers["X-Original-Proto"].ToString();
+            var originalProtocol = context.Request.Headers[ForwardedHeadersDefaults.XOriginalProtoHeaderName].ToString();
 
             LogTokenRefusedOnAClearTextHop(
-            context.HttpContext.RequestServices
-                .GetRequiredService<ILoggerFactory>()
-                .CreateLogger(typeof(TransportSecurityExtensions)),
-            context.Scheme.Name,
-            context.HttpContext.TraceIdentifier,
-            context.Request.Method,
-            context.Request.Path.Value ?? string.Empty,
-            context.Request.Host.Value ?? string.Empty,
-            context.Request.Scheme,
-            string.IsNullOrEmpty(forwardedProtocol) ? "none" : forwardedProtocol,
-            string.IsNullOrEmpty(originalProtocol) ? "none" : originalProtocol,
-            context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            context.HttpContext.Connection.LocalPort);
+                context.HttpContext.RequestServices
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger(typeof(TransportSecurityExtensions)),
+                context.Scheme.Name,
+                context.HttpContext.TraceIdentifier,
+                context.Request.Method,
+                context.Request.Path.Value ?? string.Empty,
+                context.Request.Host.Value ?? string.Empty,
+                context.Request.Scheme,
+                string.IsNullOrEmpty(forwardedProtocol) ? "none" : forwardedProtocol,
+                string.IsNullOrEmpty(originalProtocol) ? "none" : originalProtocol,
+                context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                context.HttpContext.Connection.LocalPort);
         }
 
         context.NoResult();
