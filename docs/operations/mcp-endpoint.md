@@ -622,8 +622,8 @@ The operational consequences are the ones that always applied to an unauthentica
 ### What a credential may do
 
 Every entry in `McpEndpoint:Authentication` states what the credentials it admits may do, as `Permissions`. This
-surface's half of the published set is four names — `mailfathom.mail.read`, `mailfathom.mail.ask`,
-`mailfathom.mail.contacts.read`, and `mailfathom.mail.contacts.write` — and
+surface's half of the published set is five names — `mailfathom.mail.read`, `mailfathom.mail.ask`,
+`mailfathom.mail.contacts.read`, `mailfathom.mail.contacts.write`, and `mailfathom.mail.flags.write` — and
 [what a credential may do](permissions.md) holds the model behind them in full: what each name reaches, which tool each
 one covers, how a grant is written, what an absent `Permissions` key and an empty list mean, what
 `PermissionsFromTokenScopes` turns the list into, and what fails startup.
@@ -650,10 +650,10 @@ chosen what it holds:
 ```text
 info: MailFathom.Host.Hosting.Warnings.TransportGrantStartupReport
       The MCP endpoint entry McpEndpoint:Authentication:0 writes down no grant, so every credential it admits holds
-      mailfathom.mail.read, mailfathom.mail.ask, mailfathom.mail.contacts.read, mailfathom.mail.contacts.write —
-      everything this surface publishes. Write a 'Permissions' list on the entry to narrow it, or an empty one to grant
-      nothing. A caller here is served only the tools its grant permits, and a call naming any other is answered as a
-      tool that does not exist.
+      mailfathom.mail.read, mailfathom.mail.ask, mailfathom.mail.contacts.read, mailfathom.mail.contacts.write,
+      mailfathom.mail.flags.write — everything this surface publishes. Write a 'Permissions' list on the entry to
+      narrow it, or an empty one to grant nothing. A caller here is served only the tools its grant permits, and a call
+      naming any other is answered as a tool that does not exist.
 ```
 
 Every line closes with what a grant on that surface does, so an operator reading back the one entry they edited learns
@@ -1700,6 +1700,13 @@ writes no `Permissions` list does: `list_contacts` and `get_contact` read like t
 `delete_contact` report `destructiveHint` true.
 A contact tool missing from the listing is the grant rather than a fault — [What a credential may
 do](#what-a-credential-may-do) is what decides it, and the startup line for the entry says what it resolved to.
+
+`set_mail_flags` is beside them under the same condition, and it is the one tool in the listing that reports
+`readOnlyHint` false with `openWorldHint` true: it changes the owner's mailbox rather than MailFathom's copy of it, so
+its effect leaves this process. It is also `idempotentHint` true and `destructiveHint` false, because each value it
+writes is stated rather than adjusted and every one of them is reversible. An entry granting
+`mailfathom.mail.flags.write` is what puts it in the listing, and an entry that writes no `Permissions` list grants it
+like everything else this surface publishes.
 
 **Verify with a credential whose entry writes no grant, or read what that entry granted first.** A listing narrows to
 the caller's grant as well as to the deployment, so a credential granted less than the whole surface is served fewer

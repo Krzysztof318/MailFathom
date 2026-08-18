@@ -23,6 +23,7 @@ surfaces draw from disjoint halves, and the prefix after `mailfathom.` says whic
 | --- | --- | --- |
 | `mailfathom.mail.read` | MCP | The tools that read the local mailbox copy: `list_accounts`, `list_emails`, `get_email_content`, `search_emails`. Where semantic retrieval is configured, searching places the caller's own query text with the embedding provider, so this is not an egress-free grant |
 | `mailfathom.mail.ask` | MCP | `ask_mail`, which answers from mail content by sending it to a model provider. It does not imply `mailfathom.mail.read`, and granting it is granting access to mail |
+| `mailfathom.mail.flags.write` | MCP | `set_mail_flags`, which marks mail read or unread, stars or unstars it, and writes its keywords. It is the one MCP grant whose effect reaches the owner's mail server, and it does not follow from reading mail: a deployment that lets an agent read has not thereby let it change anything |
 | `mailfathom.mail.contacts.read` | MCP | `list_contacts` and `get_contact`, which read the deployment's own contact book: names, addresses, and the notes an owner wrote about identified third parties |
 | `mailfathom.mail.contacts.write` | MCP | `create_contact`, `update_contact`, `delete_contact`, and `promote_contact`, which record, amend, erase, and take on a person in that book. The erasure is here rather than apart, because a grant that cannot edit the book cannot be trusted to take somebody out of it |
 | `mailfathom.admin.read` | administrative | The reads reporting the deployment's own state and no mail: what synchronization is doing per account and per folder, embedding status and the activation preview, the loaded rules, a run's progress, what a rewind would cost, where a re-derivation has got to, the stopped-job list |
@@ -38,6 +39,11 @@ one carries which. `mailfathom.mail.ask` in particular is not the weaker of the 
 content. What withholding it stops is mail content going to a *chat* provider on a caller's behalf, which is not the
 same as making `mailfathom.mail.read` egress-free — a deployment with semantic retrieval configured places the caller's
 own query text with the embedding provider before anything is read back.
+
+`mailfathom.mail.flags.write` is separate from `mailfathom.mail.read` for the reason no permission here implies
+another, and the separation is the useful one on this surface: reading a mailbox and changing it are different acts with
+different consequences, and only the second is visible to the owner in the client they open. It carries no read of its
+own either — a credential granted it and nothing else can change an email it can name and cannot list one.
 
 The contact permissions are separate from the mailbox ones and from each other, because the book is a different body of
 personal data from the mail: an assembled record about identified third parties rather than correspondence that
@@ -63,6 +69,7 @@ call.
 | `list_emails` | `mailfathom.mail.read` |
 | `get_email_content` | `mailfathom.mail.read` |
 | `search_emails` | `mailfathom.mail.read` |
+| `set_mail_flags` | `mailfathom.mail.flags.write` |
 | `ask_mail` | `mailfathom.mail.ask` |
 | `list_contacts` | `mailfathom.mail.contacts.read` |
 | `get_contact` | `mailfathom.mail.contacts.read` |

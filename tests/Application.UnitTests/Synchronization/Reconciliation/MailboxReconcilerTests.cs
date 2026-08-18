@@ -402,6 +402,172 @@ public sealed class MailboxReconcilerTests
         Assert.True(store.RowOf(10).Snapshot!.IsSeen);
     }
 
+    /// <summary>A star standing where MailFathom's own store put it is that store completing, not the owner starring the message.</summary>
+    [Fact]
+    public async Task ReconcileAsync_FlaggedStateMailFathomSetItself_WithholdsTheChange()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: true));
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        var record = MutationSettingFlagged(store.StoredEmailIdOf(10), uid: 10, isFlagged: true);
+        mutationStore.Add(record);
+        await using var mailboxSession = CreateSessionReportingFlags(
+            isSeen: true,
+            isFlagged: true,
+            RemoteEmailKeywords.None,
+            10);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.FlaggedStateChangedEmailCount);
+        var suppressed = Assert.Single(result.SuppressedChanges);
+        Assert.Equal(MailboxChangeKind.FlaggedStateChanged, suppressed.Kind);
+        Assert.Equal(MailboxMutation.SetFlagged, suppressed.Mutation);
+        Assert.Equal(record.Id, suppressed.MutationRecordId);
+
+        // The stored snapshot still follows the server, because what was withheld is the trigger and never the reading.
+        Assert.True(store.RowOf(10).Snapshot!.IsFlagged);
+    }
+
+    /// <summary>Starring mail by hand is the mailbox owner's act, and it stays a change to react to.</summary>
+    [Fact]
+    public async Task ReconcileAsync_OwnerStarredMailThemselves_RaisesTheChange()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: true));
+        await using var mailboxSession = CreateSessionReportingFlags(
+            isSeen: true,
+            isFlagged: true,
+            RemoteEmailKeywords.None,
+            10);
+        var reconciler = CreateReconciler(store, RemotelyDeletedEmailDisposition.RetainTombstone);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.FlaggedStateChangedEmailCount);
+        Assert.Equal(0, result.SeenStateChangedEmailCount);
+        Assert.Empty(result.SuppressedChanges);
+    }
+
+    /// <summary>Keywords standing as MailFathom's own addition asked for are that addition completing.</summary>
+    [Fact]
+    public async Task ReconcileAsync_KeywordsMailFathomWroteItself_WithholdsTheChange()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: true));
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        var record = MutationAddingKeywords(store.StoredEmailIdOf(10), uid: 10, "$Todo");
+        mutationStore.Add(record);
+        await using var mailboxSession = CreateSessionReportingFlags(
+            isSeen: true,
+            isFlagged: false,
+            RemoteEmailKeywords.Create(["$Todo"]),
+            10);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.KeywordsChangedEmailCount);
+        var suppressed = Assert.Single(result.SuppressedChanges);
+        Assert.Equal(MailboxChangeKind.KeywordsChanged, suppressed.Kind);
+        Assert.Equal(MailboxMutation.AddKeywords, suppressed.Mutation);
+        Assert.Equal(record.Id, suppressed.MutationRecordId);
+
+        // The stored keywords still follow the server, which is what keeps the column a mirror of the last observation.
+        Assert.Equal(RemoteEmailKeywords.Create(["$Todo"]), store.RowOf(10).Snapshot!.Keywords);
+    }
+
+    /// <summary>Labelling mail in a client is the mailbox owner's act, and it stays a change to react to.</summary>
+    [Fact]
+    public async Task ReconcileAsync_OwnerLabelledMailThemselves_RaisesTheChange()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: true));
+        await using var mailboxSession = CreateSessionReportingFlags(
+            isSeen: true,
+            isFlagged: false,
+            RemoteEmailKeywords.Create(["$Waiting"]),
+            10);
+        var reconciler = CreateReconciler(store, RemotelyDeletedEmailDisposition.RetainTombstone);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.KeywordsChangedEmailCount);
+        Assert.Empty(result.SuppressedChanges);
+    }
+
+    /// <summary>One FLAGS response carries every value, so an occurrence whose star and labels both moved is one read rather than three.</summary>
+    [Fact]
+    public async Task ReconcileAsync_SeveralValuesMovedOnOneOccurrence_AsksTheRecordOnce()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: false));
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        await using var mailboxSession = CreateSessionReportingFlags(
+            isSeen: true,
+            isFlagged: true,
+            RemoteEmailKeywords.Create(["$Waiting"]),
+            10);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, mutationStore.FlagChangeReadCount);
+        Assert.Equal(1, result.SeenStateChangedEmailCount);
+        Assert.Equal(1, result.FlaggedStateChangedEmailCount);
+        Assert.Equal(1, result.KeywordsChangedEmailCount);
+    }
+
     /// <summary>Marking mail read by hand is the mailbox owner's act, and it stays a change to react to.</summary>
     [Fact]
     public async Task ReconcileAsync_OwnerMarkedMailReadThemselves_RaisesTheChange()
@@ -618,7 +784,7 @@ public sealed class MailboxReconcilerTests
         // Assert
         Assert.Equal(0, result.SeenStateChangedEmailCount);
         Assert.Empty(result.SuppressedChanges);
-        Assert.Equal(0, mutationStore.SeenStateChangeReadCount);
+        Assert.Equal(0, mutationStore.FlagChangeReadCount);
         Assert.True(store.RowOf(10).Snapshot!.IsSeen);
     }
 
@@ -1053,7 +1219,15 @@ public sealed class MailboxReconcilerTests
     }
 
     /// <summary>Builds a session whose folder holds the named UIDs and reports one <c>\Seen</c> value for all of them.</summary>
-    private static IMailboxSession CreateSessionReportingSeenState(bool isSeen, params uint[] presentUids)
+    private static IMailboxSession CreateSessionReportingSeenState(bool isSeen, params uint[] presentUids) =>
+        CreateSessionReportingFlags(isSeen, isFlagged: false, RemoteEmailKeywords.None, presentUids);
+
+    /// <summary>Builds a session whose folder holds the named UIDs and reports the same three writable values for all of them.</summary>
+    private static IMailboxSession CreateSessionReportingFlags(
+        bool isSeen,
+        bool isFlagged,
+        RemoteEmailKeywords keywords,
+        params uint[] presentUids)
     {
         var mailboxSession = Substitute.For<IMailboxSession>();
         IReadOnlyList<RemoteEmailFlagObservation> observations =
@@ -1064,10 +1238,10 @@ public sealed class MailboxReconcilerTests
                     RunInstant,
                     isSeen,
                     IsAnswered: false,
-                    IsFlagged: false,
+                    isFlagged,
                     IsDraft: false,
                     IsDeleted: false,
-                    Keywords: RemoteEmailKeywords.None))),
+                    keywords))),
         ];
 
         mailboxSession
@@ -1212,6 +1386,34 @@ public sealed class MailboxReconcilerTests
         };
     }
 
+    /// <summary>Builds the record a completed <c>\Flagged</c> store against one stored occurrence would have left behind.</summary>
+    private static MailboxMutationRecord MutationSettingFlagged(
+        StoredEmailId storedEmailId,
+        uint uid,
+        bool isFlagged) =>
+        MutationSettingSeen(storedEmailId, uid, isSeen: false) with
+        {
+            Request = MailboxMutationRequest.SetFlagged(
+                storedEmailId,
+                EmailOccurrenceId.Create(Account, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid)),
+                MailboxMutationRequester.Command("triage-1"),
+                isFlagged),
+        };
+
+    /// <summary>Builds the record a completed keyword addition against one stored occurrence would have left behind.</summary>
+    private static MailboxMutationRecord MutationAddingKeywords(
+        StoredEmailId storedEmailId,
+        uint uid,
+        params string[] keywords) =>
+        MutationSettingSeen(storedEmailId, uid, isSeen: false) with
+        {
+            Request = MailboxMutationRequest.AddKeywords(
+                storedEmailId,
+                EmailOccurrenceId.Create(Account, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid)),
+                MailboxMutationRequester.Command("triage-1"),
+                AuthoredMailKeywords.Create(keywords)),
+        };
+
     private static IReadOnlyList<StoredOccurrence> StoredOccurrences(params uint[] uids) =>
     [
         .. uids.Select(uid => new StoredOccurrence(
@@ -1220,12 +1422,18 @@ public sealed class MailboxReconcilerTests
     ];
 
     /// <summary>Builds one stored occurrence whose remote flags an earlier run already read, so a later reading can differ from them.</summary>
-    private static IReadOnlyList<StoredOccurrence> ObservedOccurrence(uint uid, bool isSeen) =>
+    private static IReadOnlyList<StoredOccurrence> ObservedOccurrence(
+        uint uid,
+        bool isSeen,
+        bool isFlagged = false,
+        params string[] keywords) =>
     [
         new StoredOccurrence(
             StoredEmailId.Create(Guid.CreateVersion7(RunInstant.AddSeconds(uid))),
             uid,
-            isSeen),
+            isSeen,
+            isFlagged,
+            RemoteEmailKeywords.Create(keywords)),
     ];
 
     /// <summary>One locally stored occurrence a test arranged, before any run has touched it.</summary>
@@ -1236,10 +1444,14 @@ public sealed class MailboxReconcilerTests
     /// occurrence's flags. Supplying one is what makes the row previously observed, exactly as the column pair does in
     /// the database.
     /// </param>
+    /// <param name="PreviouslyObservedFlaggedState">Where the <c>\Flagged</c> flag stood at that earlier reading.</param>
+    /// <param name="PreviouslyObservedKeywords">The keywords that earlier reading recorded, or <see langword="null" /> for none.</param>
     private sealed record StoredOccurrence(
         StoredEmailId StoredEmailId,
         uint Uid,
-        bool? PreviouslyObservedSeenState = null);
+        bool? PreviouslyObservedSeenState = null,
+        bool PreviouslyObservedFlaggedState = false,
+        RemoteEmailKeywords? PreviouslyObservedKeywords = null);
 
     /// <summary>
     /// Holds the reconciliation queue the way the database does, because the queue is the mechanism under test: the
@@ -1254,7 +1466,11 @@ public sealed class MailboxReconcilerTests
         {
             this.rowsById = storedOccurrences.ToDictionary(
                 occurrence => occurrence.StoredEmailId,
-                static occurrence => new ReconciledRow(occurrence.Uid, occurrence.PreviouslyObservedSeenState));
+                static occurrence => new ReconciledRow(
+                    occurrence.Uid,
+                    occurrence.PreviouslyObservedSeenState,
+                    occurrence.PreviouslyObservedFlaggedState,
+                    occurrence.PreviouslyObservedKeywords));
         }
 
         public List<uint> AskedAboutUids { get; } = [];
@@ -1316,7 +1532,11 @@ public sealed class MailboxReconcilerTests
                         entry.Key,
                         ImapUid.Create(entry.Value.Uid),
                         entry.Value.ObservedAt is { } observedAt
-                            ? new RemoteSeenStateObservation(observedAt, entry.Value.Snapshot?.IsSeen ?? false)
+                            ? new RemoteWritableFlagObservation(
+                                observedAt,
+                                entry.Value.Snapshot?.IsSeen ?? false,
+                                entry.Value.Snapshot?.IsFlagged ?? false,
+                                entry.Value.Snapshot?.Keywords ?? RemoteEmailKeywords.None)
                             : null)),
             ];
 
@@ -1397,7 +1617,11 @@ public sealed class MailboxReconcilerTests
     /// </remarks>
     private sealed class ReconciledRow
     {
-        public ReconciledRow(uint uid, bool? previouslyObservedSeenState = null)
+        public ReconciledRow(
+            uint uid,
+            bool? previouslyObservedSeenState = null,
+            bool previouslyObservedFlaggedState = false,
+            RemoteEmailKeywords? previouslyObservedKeywords = null)
         {
             this.Uid = uid;
 
@@ -1413,10 +1637,10 @@ public sealed class MailboxReconcilerTests
                 seededAt,
                 seenState,
                 IsAnswered: false,
-                IsFlagged: false,
+                previouslyObservedFlaggedState,
                 IsDraft: false,
                 IsDeleted: false,
-                Keywords: RemoteEmailKeywords.None);
+                previouslyObservedKeywords ?? RemoteEmailKeywords.None);
         }
 
         public uint Uid { get; }

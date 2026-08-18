@@ -422,8 +422,8 @@ guarantee that synchronization and content retrieval never mark mail read is a p
 [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 records in full — and the push session is never taken out of `IDLE` to carry a change.
 
-Nothing in this release asks for a change yet, so an account nobody has written to holds no such connection and this
-setting costs nothing.
+A rule's action and the `set_mail_flags` MCP tool are what ask for a change today, so an account whose rules write
+nothing and whose mail no caller has changed holds no such connection and this setting costs nothing.
 
 ### Every change is written down before it is issued
 
@@ -530,6 +530,13 @@ synchronization pass, a reconciliation pass, a content fetch, and every MCP tool
 operation capable of writing a flag, so none of them can mark mail read whatever a later change does inside them.
 Marking a message read or unread is not one of those paths at all: it is a change the mailbox owner authored, carried by
 the write session above, which nothing on the read side can open, borrow, or reach.
+
+A caller can now author one, through
+[`set_mail_flags`](mcp-tools.md#set_mail_flags), and that does not weaken the sentence above. The tool holds neither
+session type: it writes the same durable record a rule's action writes and returns, and the account's own run is what
+opens the write session and issues the command. So the flag still moves because somebody asked for it in as many words,
+never because something read the message — and the type separation stays a property of the code rather than a rule
+somebody has to remember.
 
 Both directions are one mutation and one authored act, because both are the same statement about the same flag. Setting
 it is what stops mail MailFathom has already handled from sitting unread in the client the owner actually opens;
@@ -1345,10 +1352,16 @@ is what tells the two apart, and both halves are joined to it by a recorded fact
   nothing, and the row keeps its place while only its position in the reconciliation queue moves; a delete, and a
   relocation whose destination nothing mirrors, carry the `AuthoredDeleteEmailDisposition` they were authored under and
   [that setting](#what-becomes-of-a-message-mailfathom-deleted-itself) is applied here.
-- **A remote `\Seen` flag standing somewhere new** is matched against the `\Seen` stores issued against that occurrence,
-  and the direction is compared as well: a store that asked for the flag to be set answers for the flag becoming set and
-  never for it becoming clear. The stored snapshot still follows the server either way — what the match decides is whose
-  act it was, not what is recorded.
+- **A writable flag standing somewhere new** is matched against the stores issued against that occurrence, one value
+  at a time. A `\Seen` or `\Flagged` flag is matched against the stores for that flag and the direction is compared as
+  well, so a store that asked for the flag to be set answers for the flag becoming set and never for it becoming clear.
+  Keywords are matched by computing the set the store would have left on the message that was last read — the earlier
+  keywords plus the ones an addition named, minus the ones a removal named, or exactly the ones a replacement stated —
+  and comparing that whole set, folded, with what the server now reports. Anything else is somebody else's, which is
+  the direction this has to fail in: a message MailFathom labelled and the owner then labelled again reaches evaluation
+  as their change, and so does a removal that would otherwise have been read as accounting for a label it never
+  touched. The stored snapshot still follows the server in every case — what the match decides is whose act it was, not
+  what is recorded.
 
 A relocation or a copy whose server named no placement is joined to no discovery at all. Searching the destination
 folder for something that looks like the message would replace a fact the server gave with a guess, and guessing by
@@ -1380,11 +1393,16 @@ answers the question exactly.
 
 The suppression is scoped to the one change the record describes and expires with it. A relocation or a copy is written
 down as observed the first time synchronization meets the occurrence it placed, and answers for no discovery afterwards.
-A `\Seen` store moves no occurrence, so it expires against the message's own flag observation instead: it accounts for a
-reading only while the last one predates the moment the store completed, and every window advances that for every
-occurrence it asked about. So the mailbox owner setting by hand the same flag MailFathom set months earlier, or moving
-the message back themselves, reaches rule evaluation as the change it is — including when they reverted the flag before
-any window had seen MailFathom's own change at all.
+A flag or keyword store moves no occurrence, so it expires against the message's own flag observation instead: it
+accounts for a reading only while the last one predates the moment the store completed, and every window advances that
+for every occurrence it asked about. So the mailbox owner setting by hand the same flag MailFathom set months earlier,
+starring a message it had starred, or moving the message back themselves, reaches rule evaluation as the change it is —
+including when they reverted the value before any window had seen MailFathom's own change at all.
+
+The three values are matched independently, because a folder reports them in one `FLAGS` response and any of them may
+have moved. One occurrence whose seen state, star, and keywords all changed is one read of the records and up to three
+attributions, so a run can withhold the star MailFathom set while raising the label the owner attached in the same
+window.
 
 A withheld change is visible rather than silent, because a rule that appears not to have fired is otherwise
 indistinguishable from a rule that never matched. Each folder's run reports how many changes it withheld at
@@ -1496,7 +1514,10 @@ The counts reach the log and nothing else does. A window that observed something
 and whether the folder has more to reconcile; a window that found messages gone logs that at information level, with the
 account, the folder alias, the count, and the disposition that was applied. A run that recognized changes of
 MailFathom's own logs them on a line of their own, at information level: how many discoveries carried an existing local
-email across, and how many occurrences left the folder because MailFathom moved or deleted them. Without it an operator
+email across, and how many occurrences left the folder because MailFathom moved or deleted them. Each of the three
+writable values a run found standing somewhere new is counted separately beside those — how many messages somebody
+else marked read or unread, how many they starred or unstarred, and how many they relabelled — because they are three
+different acts and an operator reading one number could not tell which of them happened. Without it an operator
 reading the counts would see mail arriving in one folder and vanishing from another, which is exactly the conclusion the
 join exists to stop the system itself from drawing. No subject, address, or fragment of a message takes part in deciding
 whether a message still exists, so none of it is read to decide it and none of it can reach an audit line.

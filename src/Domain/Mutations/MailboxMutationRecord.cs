@@ -233,6 +233,68 @@ public sealed record MailboxMutationRecord
         && this.Request.Occurrence == occurrence
         && this.Request.DesiredSeenState == observedSeenState;
 
+    /// <summary>Reports whether the remote <c>\Flagged</c> flag a folder just reported stands where this mutation set it.</summary>
+    /// <param name="occurrence">The occurrence whose flag changed.</param>
+    /// <param name="observedFlaggedState">The <c>\Flagged</c> value the server has now reported.</param>
+    /// <param name="previouslyObservedAt">When synchronization last read this occurrence's flags before the reading being judged.</param>
+    /// <returns><see langword="true" /> when this mutation is what moved the flag to that value.</returns>
+    /// <remarks>Every condition is the one <see cref="AccountsForSeenStateOf" /> applies and holds for the same reason; only the value being compared differs, because the two flags are the same act against different bits of the same <c>STORE</c>.</remarks>
+    public bool AccountsForFlaggedStateOf(
+        EmailOccurrenceId occurrence,
+        bool observedFlaggedState,
+        DateTimeOffset previouslyObservedAt) =>
+        this.Request.Mutation == MailboxMutation.SetFlagged
+        && this.Stage != MailboxMutationStage.Recorded
+        && previouslyObservedAt < this.StageChangedAt
+        && this.Request.Occurrence == occurrence
+        && this.Request.DesiredFlaggedState == observedFlaggedState;
+
+    /// <summary>Reports whether the keywords a folder just reported are exactly what this mutation would have left.</summary>
+    /// <param name="occurrence">The occurrence whose keywords changed.</param>
+    /// <param name="previouslyObservedKeywords">The keywords the last reading before this mutation found.</param>
+    /// <param name="observedKeywords">The keywords the server has now reported.</param>
+    /// <param name="previouslyObservedAt">When synchronization last read this occurrence's flags before the reading being judged.</param>
+    /// <returns><see langword="true" /> when this mutation is what left the keywords standing as they do.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when either keyword set is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// The set this mutation would have produced is computed from the earlier reading and compared whole, which is what
+    /// makes the answer exact in both directions. Asking only whether the named keywords are carried, or are not, would
+    /// be satisfied by a reading the mutation cannot have produced: a removal of <c>$Todo</c> would account for the
+    /// owner attaching <c>$Invoice</c> to a message that never carried <c>$Todo</c>, and their label would be withheld
+    /// from evaluation as though MailFathom had caused it. A set the mutation cannot explain is somebody else's, which
+    /// is the direction this has to fail in.
+    /// </para>
+    /// <para>
+    /// The comparison is folded, because RFC 9051 compares keywords case-insensitively and the server may report a
+    /// spelling other than the one written. Every other condition is the one <see cref="AccountsForSeenStateOf" />
+    /// applies, for the same reasons.
+    /// </para>
+    /// </remarks>
+    public bool AccountsForKeywordsOf(
+        EmailOccurrenceId occurrence,
+        RemoteEmailKeywords previouslyObservedKeywords,
+        RemoteEmailKeywords observedKeywords,
+        DateTimeOffset previouslyObservedAt)
+    {
+        ArgumentNullException.ThrowIfNull(previouslyObservedKeywords);
+        ArgumentNullException.ThrowIfNull(observedKeywords);
+
+        if (this.Stage == MailboxMutationStage.Recorded
+            || previouslyObservedAt >= this.StageChangedAt
+            || this.Request.Occurrence != occurrence
+            || this.Request.Keywords is not { } authored)
+        {
+            return false;
+        }
+
+        var expected = ExpectedKeywordsOf(this.Request.Mutation, previouslyObservedKeywords, authored);
+
+        return expected is not null
+            && observedKeywords.Values.Count == expected.Count
+            && observedKeywords.Values.All(expected.Contains);
+    }
+
     /// <summary>Reports whether a newly discovered occurrence is the one this mutation's placement created.</summary>
     /// <param name="discoveredFolderPath">The remote path of the folder the occurrence was discovered in.</param>
     /// <param name="discoveredUidValidity">The UIDVALIDITY that folder reports now.</param>
@@ -295,4 +357,39 @@ public sealed record MailboxMutationRecord
         this.ExpectsSourceRemovalObservation
         && this.Stage != MailboxMutationStage.Recorded
         && this.Request.Occurrence == sourceOccurrence;
+
+    /// <summary>Builds the keyword set one mutation would have left on a message that carried the earlier one.</summary>
+    /// <returns>The set, or <see langword="null" /> when the mutation writes no keyword at all.</returns>
+    /// <remarks>
+    /// The comparer folds case, so a written spelling and the server's own spelling of one keyword collapse to one
+    /// member — which is what lets an authored set and an observed set be compared without either being rewritten.
+    /// </remarks>
+    private static HashSet<string>? ExpectedKeywordsOf(
+        MailboxMutation mutation,
+        RemoteEmailKeywords previouslyObservedKeywords,
+        AuthoredMailKeywords authored)
+    {
+        if (mutation == MailboxMutation.SetKeywords)
+        {
+            return new HashSet<string>(authored.Values, StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (mutation != MailboxMutation.AddKeywords && mutation != MailboxMutation.RemoveKeywords)
+        {
+            return null;
+        }
+
+        var expected = new HashSet<string>(previouslyObservedKeywords.Values, StringComparer.OrdinalIgnoreCase);
+
+        if (mutation == MailboxMutation.AddKeywords)
+        {
+            expected.UnionWith(authored.Values);
+        }
+        else
+        {
+            expected.ExceptWith(authored.Values);
+        }
+
+        return expected;
+    }
 }

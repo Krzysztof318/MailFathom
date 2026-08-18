@@ -46,6 +46,7 @@ public sealed class RegisteredToolSurfaceTests
                 ListEmailsTool.ToolName,
                 PromoteContactTool.ToolName,
                 SearchEmailsTool.ToolName,
+                SetMailFlagsTool.ToolName,
                 UpdateContactTool.ToolName,
             ],
             registeredNames);

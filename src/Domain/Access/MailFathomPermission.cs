@@ -77,6 +77,23 @@ public readonly record struct MailFathomPermission
     /// </remarks>
     public static MailFathomPermission MailContactsWrite { get; } = new("mailfathom.mail.contacts.write", ProtectedSurface.Mail);
 
+    /// <summary>Gets the permission covering the tool that writes <c>\Seen</c>, <c>\Flagged</c>, and keywords onto mail this deployment holds.</summary>
+    /// <remarks>
+    /// <para>
+    /// It is the first grant on this surface that reaches somebody's mail server rather than the local copy, which is
+    /// why it is its own and does not follow from <see cref="MailRead" />: a deployment that lets an agent read the
+    /// mailbox has not thereby let it change what the owner sees in their own client. Nothing about it widens what may
+    /// be read, either, since no permission implies another.
+    /// </para>
+    /// <para>
+    /// The three values are one grant because they are one act — a <c>STORE</c> against one message, in a direction the
+    /// caller stated, undone in any mail client with the gesture that would have made it. Splitting them would offer a
+    /// deployment a combination whose only effect is mail accumulating labels nothing may take off again, which is the
+    /// reasoning the account's own switches already follow.
+    /// </para>
+    /// </remarks>
+    public static MailFathomPermission MailFlagsWrite { get; } = new("mailfathom.mail.flags.write", ProtectedSurface.Mail);
+
     #endregion
 
     #region Administration
@@ -109,6 +126,7 @@ public readonly record struct MailFathomPermission
         MailAsk,
         MailContactsRead,
         MailContactsWrite,
+        MailFlagsWrite,
         AdminRead,
         AdminAuditRead,
         AdminOperate,

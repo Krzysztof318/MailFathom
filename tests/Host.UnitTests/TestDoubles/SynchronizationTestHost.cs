@@ -541,7 +541,7 @@ internal static class SynchronizationTestHost
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<MailboxMutationRecord>>([]));
         mutationStore
-            .ReadSeenStateChangesOnAsync(
+            .ReadFlagChangesOnAsync(
                 Arg.Any<MailAccountId>(),
                 Arg.Any<MailFolderResolutionId>(),
                 Arg.Any<ImapUidValidity>(),

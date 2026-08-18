@@ -54,33 +54,41 @@ public interface IMailboxMutationReconciliationStore
         IReadOnlyCollection<ImapUid> uids,
         CancellationToken cancellationToken);
 
-    /// <summary>Reads the <c>\Seen</c> stores issued against any of the occurrences a reconciliation window read flags for.</summary>
+    /// <summary>Reads the flag and keyword stores issued against any of the occurrences a reconciliation window found moved.</summary>
     /// <param name="accountId">The account whose mutations are read.</param>
     /// <param name="folderResolutionId">The alias binding the occurrences were stored under.</param>
     /// <param name="uidValidity">The UIDVALIDITY the window was opened for.</param>
-    /// <param name="uids">The UIDs whose remote <c>\Seen</c> flag the window found standing somewhere new.</param>
+    /// <param name="uids">The UIDs whose <c>\Seen</c> flag, <c>\Flagged</c> flag, or keywords the window found standing somewhere new.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>Every <c>\Seen</c> store issued against one of those occurrences, which may be none.</returns>
+    /// <returns>Every store of one of those values issued against one of those occurrences, which may be none.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="uids" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
-    /// This is the read the whole issue turns on. A flag change reaches synchronization as a changed modification
-    /// sequence, which is exactly what a person marking mail read in their own client produces, so nothing in the
-    /// server's answer distinguishes the two and only the record does. A rule conditioned on unread mail that marks mail
-    /// read would otherwise re-evaluate every message it had just acted on.
+    /// This is the read the whole provenance question turns on. A flag change reaches synchronization as a changed
+    /// modification sequence, which is exactly what a person marking mail read or starring it in their own client
+    /// produces, so nothing in the server's answer distinguishes the two and only the record does. A rule conditioned on
+    /// unread mail that marks mail read would otherwise re-evaluate every message it had just acted on.
     /// </para>
     /// <para>
-    /// Only the occurrences whose flag actually moved are asked about, so a window that found the mailbox unchanged —
-    /// which is most windows — asks nothing. The answer is bounded by <paramref name="uids" /> and by the idempotency
+    /// All five stores are read together rather than one query per value, because one <c>FLAGS</c> response carries
+    /// every value at once: an occurrence whose star and whose label both moved is one question, and splitting it would
+    /// cost a query per value on every window that found anything. Which record answers for which value is settled by
+    /// the caller against the record's own comparisons.
+    /// </para>
+    /// <para>
+    /// Only the occurrences where something actually moved are asked about, so a window that found the mailbox unchanged
+    /// — which is most windows — asks nothing. The answer is bounded by <paramref name="uids" /> and by the idempotency
     /// identity, which admits one record per occurrence, requester, and mutation.
     /// </para>
     /// <para>
     /// Every such record is returned, spent or not, because whether one still accounts for anything is settled against
     /// the occurrence's own last observation rather than against a mark on the row. That comparison belongs to
-    /// <see cref="MailboxMutationRecord.AccountsForSeenStateOf" />, which the caller applies to what this returns.
+    /// <see cref="MailboxMutationRecord.AccountsForSeenStateOf" />,
+    /// <see cref="MailboxMutationRecord.AccountsForFlaggedStateOf" />, and
+    /// <see cref="MailboxMutationRecord.AccountsForKeywordsOf" />, which the caller applies to what this returns.
     /// </para>
     /// </remarks>
-    Task<IReadOnlyList<MailboxMutationRecord>> ReadSeenStateChangesOnAsync(
+    Task<IReadOnlyList<MailboxMutationRecord>> ReadFlagChangesOnAsync(
         MailAccountId accountId,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,

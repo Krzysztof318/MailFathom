@@ -40,8 +40,8 @@ says so and names the release, rather than describing it as though you could alr
    popular mail service publishes, and what each one does differently once synchronization runs.
 4. **[Connecting the chat client you already use](mcp-clients.md)** — where the dialog is in each popular client, which
    address kind it needs, and which of them cannot present an API key at all.
-5. **[Using the tools](usage.md)** — what `list_emails`, `search_emails`, `get_email_content`, `ask_mail`, and the five
-   contact tools do, what they deliberately bound, and how to read a failure.
+5. **[Using the tools](usage.md)** — what `list_emails`, `search_emails`, `get_email_content`, `set_mail_flags`,
+   `ask_mail`, and the six contact tools do, what they deliberately bound, and how to read a failure.
 6. **[Administering your deployment](administering.md)** — the `mfctl` command: what it is for, signing in to a
    deployment from your own machine, and what it cannot do yet.
 7. **[Configuration reference](../operations/configuration-reference.md)** — the map to the four pages that list every

@@ -2,9 +2,9 @@
 
 <!-- describes: src/Mcp/** -->
 
-MailFathom publishes Model Context Protocol tools over the Streamable HTTP transport: the mailbox read side, and the
-contact book, which is the one part of this surface a call can write to. This page records the conventions every tool
-follows, the contract of the tools that exist, and what a client reads when a call fails.
+MailFathom publishes Model Context Protocol tools over the Streamable HTTP transport: the mailbox read side, one
+tool that changes the flags and keywords on mail this deployment holds, and the contact book. This page records the
+conventions every tool follows, the contract of the tools that exist, and what a client reads when a call fails.
 
 The endpoint is disabled by default, and enabling it requires stating whether a client presents an API key or nothing at all.
 `docs/operations/mcp-endpoint.md` records that posture and how to enable the endpoint; this page describes the surface it
@@ -17,7 +17,8 @@ protocol arguments into the domain identities a use case is expressed in, and th
 onto the published contract. It holds no query, no persistence, and no mail-protocol code: `list_accounts` calls the
 `MailAccountDirectoryReader` use case and nothing else, `list_emails` calls the `MailboxTimelineReader` use case and
 nothing else, `get_email_content` calls the `EmailContentReader` use case and nothing else, `search_emails` calls the
-`MailboxSearchReader` use case and nothing else, `ask_mail` calls the `MailboxQuestionReader` use case and nothing else,
+`MailboxSearchReader` use case and nothing else, `set_mail_flags` calls the `MailFlagChangeRecorder` use case and
+nothing else, `ask_mail` calls the `MailboxQuestionReader` use case and nothing else,
 `list_contacts` and `get_contact` call the `ContactBookReader` use case and nothing else, and `create_contact`,
 `update_contact`, `delete_contact`, and `promote_contact` call the `ContactBookWriter` use case and nothing else.
 
@@ -36,9 +37,10 @@ alias, and refusing text that names neither.
 
 Where a table below says a tool reads every folder of the accounts in scope, "every folder" means every folder the
 deployment lets tools read: a folder configuration maps and does not withhold. A folder mapped with
-`VisibleToTools: false` and a folder **no mapping names** are both outside all four mailbox tools and are never
+`VisibleToTools: false` and a folder **no mapping names** are both outside every mailbox tool and are never
 mentioned by one — a request naming such an alias comes back empty rather than refused, and an email of it reads as not
-found. The decision is made once, where the scope a read is expressed in is resolved, and what it carries is the list of
+found. `set_mail_flags` resolves what it may change through that same scope, so a folder no tool may read is a folder no
+tool may write. The decision is made once, where the scope a read is expressed in is resolved, and what it carries is the list of
 folders that may be read, so it holds for a tool added later without that tool doing anything, and an account whose
 configuration maps no folder reads as empty;
 [folders withheld from tools](mailbox-queries.md#folders-withheld-from-tools) states what a caller sees and why nothing
@@ -46,8 +48,11 @@ says the folder exists.
 
 Four properties hold for every tool and are proven by test rather than asserted here:
 
-- A call reaches no mail server. Nothing in a tool request speaks IMAP or SMTP, so a request cannot wait on a mailbox
-  and cannot set the remote `\Seen` flag, and the mailbox tools read the local copy only. `ask_mail` reaches a chat
+- A call reaches no mail server. Nothing in a tool request speaks IMAP or SMTP, so a request cannot wait on a mailbox,
+  and the mailbox tools read the local copy only — reading mail through this surface still never sets the remote
+  `\Seen` flag. `set_mail_flags` is the one tool whose effect reaches a mail server at all, and it reaches one no
+  sooner than the rest: the call writes a durable record and the account's own synchronization run issues the `STORE`,
+  so nothing in the request opens a session or holds a type that could. `ask_mail` reaches a chat
   provider, which is a different thing and the one exception to "a call reaches nothing outside this process": it still
   reads mail from the local copy alone and still speaks to no mail server. The three contact writes change local state
   and reach nothing outside the process at all.
@@ -67,12 +72,12 @@ Four properties hold for every tool and are proven by test rather than asserted 
   at 200 people. A caller can never raise any of them, and the `ask_mail` set is the operator's to lower or raise in
   [`MailAnswering`](../operations/configuration-ai.md#mailanswering).
 
-One property holds for ten of the eleven and is stated where it stops. `list_accounts`, `list_emails`,
-`get_email_content`, `search_emails`, and the six contact tools are within reach of every deployment, because local
-state is all they need. `ask_mail` needs two AI providers an operator configures separately, so it is advertised only
-while both are configured and working; the [`ask_mail`](#ask_mail) section records what decides that and what a call
-meets when it arrives anyway. Whether any of the eleven is offered to a particular caller is a second question, which the
-next section answers.
+One property holds for eleven of the twelve and is stated where it stops. `list_accounts`, `list_emails`,
+`get_email_content`, `search_emails`, `set_mail_flags`, and the six contact tools are within reach of every deployment,
+because local state is all they need. `ask_mail` needs two AI providers an operator configures separately, so it is
+advertised only while both are configured and working; the [`ask_mail`](#ask_mail) section records what decides that and
+what a call meets when it arrives anyway. Whether any of the twelve is offered to a particular caller is a second
+question, which the next section answers.
 
 ## What a caller is offered
 
@@ -113,12 +118,12 @@ it calls anything:
 
 | Element | Convention |
 |---|---|
-| `name` | Snake case, as the MCP tool ecosystem spells tool names — `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `ask_mail`, `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact`, `promote_contact` |
-| `title` | A human-readable label for display — `List accounts`, `List emails`, `Get email content`, `Search emails`, `Ask about mail`, `List contacts`, `Get contact`, `Create contact`, `Update contact`, `Delete contact` |
+| `name` | Snake case, as the MCP tool ecosystem spells tool names — `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `set_mail_flags`, `ask_mail`, `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact`, `promote_contact` |
+| `title` | A human-readable label for display — `List accounts`, `List emails`, `Get email content`, `Search emails`, `Set mail flags`, `Ask about mail`, `List contacts`, `Get contact`, `Create contact`, `Update contact`, `Delete contact` |
 | `description` | States what the tool reads or changes, that it reaches no mail server, and what it bounds |
 | `inputSchema` | Every argument is a top-level property carrying its own description, unit, and absence meaning |
 | `outputSchema` | Generated from the result type, whose properties carry descriptions of their own |
-| `openWorldHint` | `false` — every tool is confined to MailFathom-controlled local state |
+| `openWorldHint` | `false` for every tool but `set_mail_flags`, whose effect leaves this process for the mailbox it changes; the rest are confined to MailFathom-controlled local state |
 
 The remaining three annotations are what a client reads before it decides whether a call needs a human, so they differ
 per tool rather than per surface:
@@ -126,6 +131,7 @@ per tool rather than per surface:
 | Tool | `readOnlyHint` | `destructiveHint` | `idempotentHint` |
 |---|---|---|---|
 | `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `ask_mail` | `true` | `false` | `true` |
+| `set_mail_flags` | `false` | `false` | `true` |
 | `list_contacts`, `get_contact` | `true` | `false` | `true` |
 | `create_contact` | `false` | `false` | `false` |
 | `update_contact` | `false` | `true` | `true` |
@@ -141,8 +147,13 @@ too and destructive all the same: erasing somebody twice leaves the state the ca
 removed a record nothing here can bring back. `create_contact` is the one write that is neither, because it mints a
 record where none was held and so has nothing to drop. `promote_contact` is idempotent and not destructive: nothing
 about the person is rewritten, what moves is which half of the book they are in, and the second call answers
-`alreadyAsserted`. Nothing on this surface is `openWorld`, contact writes included, because a write
-here reaches MailFathom's own database and no third party.
+`alreadyAsserted`. `set_mail_flags` is idempotent because each value it writes is stated rather than adjusted, so a
+second identical call asks for exactly what the first one asked for — and it is not destructive, because every value it
+writes is reversible with the gesture that would have made it, in MailFathom or in any mail client the owner opens.
+
+`set_mail_flags` is also the one tool marked `openWorld`, because what it changes is the owner's mailbox on somebody
+else's server. Every other tool on this surface, contact writes included, reaches MailFathom's own database and no third
+party.
 
 The annotations are contract metadata rather than documentation, so `Mcp.UnitTests` asserts the advertised
 `tools/list` output: the name, the title, the description, every input property, the descriptions on them, the output
@@ -187,7 +198,7 @@ configured name for an account and carries nothing the caller did not already wr
 | `51001` | A page size outside the range the query serves | A page size of 0 or above 100, refused rather than clamped |
 | `51002` | A filter carries a value, a count, or a length the query does not accept | An unusable address, a subject fragment over 256 characters or carrying a control character, a received range that ends before it starts, more than 64 accounts or folders, an account identifier or folder alias that is blank, over 256 characters, or carrying a control character, a keyword over 64 characters or carrying a control character, a search query that is blank, over 512 characters, or carrying a control character |
 | `51003` | A search asked for more ranked results than a search serves | A `resultLimit` of 0 or above 50, refused rather than clamped |
-| `51004` | The call named an email with text that is no identifier this system issues | A `storedEmailIds` element that is blank, not a UUID, or the all-zero UUID, refused before anything is looked up |
+| `51004` | The call named an email with text that is no identifier this system issues | A `storedEmailIds` element, or the `storedEmailId` a flag change names, that is blank, not a UUID, or the all-zero UUID, refused before anything is looked up |
 | `51005` | A content read named no emails, or more than one call serves | A `storedEmailIds` list that is empty or holds more than 10 entries, refused rather than truncated |
 | `51006` | A content read named the same email more than once | A `storedEmailIds` list carrying one identifier twice, in any spelling, refused rather than served twice or collapsed |
 | `51007` | A content read named both ways of selecting what to read, or neither | A call carrying `storedEmailIds` and `threadId` together, or omitting both, refused rather than resolved by precedence |
@@ -195,6 +206,7 @@ configured name for an account and carries nothing the caller did not already wr
 | `51009` | A contact listing carries a page size, an origin, or a search the book does not serve | A `pageSize` of 0 or above 200, refused rather than clamped; an `origin` that is neither published name; a `search` over 320 characters or carrying a character that renders as nothing |
 | `51010` | The call named a contact with text that is no identifier and no usable address | A `contactId` that is blank, not a UUID, or the all-zero UUID; an `address` that is no address; or a `get_contact` call naming both or neither |
 | `51011` | A contact record breaks a rule the book holds | No name or one over 256 characters, no address or more than 32, an address that is not one, a preferred address the record does not name, or a note over 4000 characters — the message names the rule and never the value |
+| `51012` | A flag change asks for nothing, states half a keyword change, or names a value no record could carry | A call naming an email and no value at all; `keywordChange` without `keywords` or the reverse; an empty list under `add` or `remove`; a keyword that is no IMAP atom, one over 64 characters, or more than 64 of them; a `requestId` that is blank, over 128 characters, or carrying a control character — the message names the rule and never the keyword |
 | `52001` | A continuation cursor is not one this system issued | A truncated, hand-written, or foreign cursor |
 | `52002` | A continuation cursor was issued for different filters | A cursor reused after a filter or the reading direction changed |
 | `52003` | A contact listing's cursor is not one this system issued | A truncated, hand-written, or foreign `cursor`; a contact cursor is not bound to the filters, so changing `search` or `origin` mid-walk is not what produces it |
@@ -822,6 +834,99 @@ The query text is never logged and no failure message repeats it. What somebody 
 personal data of a particularly revealing kind, and the refusals this tool raises name the filter and its limit rather
 than the value.
 
+## `set_mail_flags`
+
+Marks one email read or unread, stars or unstars it, and adds, removes, or replaces its keywords — the labels a mail
+client shows as tags. It is the one tool that changes the owner's mailbox rather than MailFathom's copy of it, and the
+three values are one tool because they are one act: a caller triaging a message decides what to do with it once, and a
+mail server writes all three with the same command against the same UID.
+
+It is still not the thing that talks to a mail server. The call writes one durable mutation record per value asked for
+and returns; the account's own synchronization run issues the `STORE` and carries each record to a completed or a
+dead-lettered ending, exactly as it carries a change a rule authored.
+[IMAP synchronization](imap-synchronization.md#every-change-is-written-down-before-it-is-issued) records that machinery.
+Three things follow, and the tool's description states each of them:
+
+- A protocol request never waits on IMAP and never opens a connection against an account's budget.
+- The result reports records rather than a mailbox that has already changed. A value the owner cannot see in their own
+  client after a few minutes is looked up by the `changeRecordId` this returned.
+- A crash between the record and the command leaves a change that converges, rather than a stored value that quietly
+  disagrees with the mailbox.
+
+### Arguments
+
+| Argument | Type | Meaning |
+|---|---|---|
+| `storedEmailId` | `string` | **Required.** The email to change, as a listing, a search, or a read returned it. Blank, not a UUID, or the all-zero UUID is refused with `51004` before anything is looked up |
+| `seen` | `boolean` | `true` marks the email read, `false` marks it unread. Omitted leaves the flag where it stands. Reading mail through MailFathom never sets it, so this is the only way it moves from here |
+| `flagged` | `boolean` | `true` stars the email, `false` unstars it — the flag a mail client draws as a star or a flag |
+| `keywordChange` | `string` | `add`, `remove`, or `replace`. Sent together with `keywords`; either one alone is refused with `51012` |
+| `keywords` | `string[]` | The keywords the change names, at most 64, each at most 64 characters and each an IMAP atom. Two spellings differing only in case are one keyword. An empty list is accepted only with `replace`, where it clears every keyword |
+| `requestId` | `string` | The caller's own identity for this request, up to 128 characters. The same value on a retry makes it the same request; a new value, or none, is a new request |
+
+At least one of `seen`, `flagged`, and the keyword pair has to be given. A call that names an email and asks for nothing
+is refused with `51012` rather than answered with a change of nothing.
+
+`replace` states the whole keyword set, so a keyword the caller did not list is removed. That is the one call on this
+surface worth a second thought and no annotation can say so — it is idempotent and reversible like the rest — so the
+description says it instead, and points a caller working from a partial view of a message's labels at `add` and
+`remove`, which touch only what they name.
+
+### Result
+
+| Field | Meaning |
+|---|---|
+| `storedEmailId` | The email the change was recorded against, which is the one the call named |
+| `accountId` | The account whose next synchronization run issues the change |
+| `folderAlias` | The folder the email is in, as MailFathom's configuration names it |
+| `recordedChanges[]` | One entry per value asked for, in the order `seen`, `flagged`, keywords |
+| `recordedChanges[].change` | `set-seen`, `set-flagged`, `add-keywords`, `remove-keywords`, or `set-keywords` |
+| `recordedChanges[].changeRecordId` | The durable record's identifier, which is what an operator looks a change up by |
+| `recordedChanges[].state` | `pending`, `converging`, `completed`, or `dead-lettered` |
+
+The change and the state are published under the names MailFathom's own log lines and counters use, so a caller quoting
+one to an operator is quoting the word they will find. Nothing derived from the message appears, and the keywords the
+caller sent are not repeated back: a label is text the owner chose and can name a person or a case, and the caller
+already holds what it wrote.
+
+### Asking twice
+
+A record's identity is the email occurrence, the mutation, and who asked, and `requestId` is the third of those. A retry
+carrying the `requestId` the first call carried is answered with the record that call opened, whatever state it has
+reached by then — which is what makes a call safe to repeat after a timeout, and why `idempotentHint` is `true`. A call
+carrying a new `requestId`, or none at all, is a new request, which is what lets a caller star a message, unstar it, and
+star it again. A call that sent none is given an identity of MailFathom's own, per call: a request that declined to say
+whether it was a retry is honestly read as a new one, and collapsing two of them would silently discard the second of a
+star and an unstar.
+
+The records for one call are written in one commit, so a call either records everything it asked for or nothing. A
+partially recorded triage is the outcome worth avoiding: a caller told its call failed while one of the three values is
+already on its way to the server has no way to find out which.
+
+### What it refuses, and what it does not reveal
+
+`mailfathom.mail.flags.write` is what reaches this tool, and holding `mailfathom.mail.read` is not holding it — a
+deployment that lets an agent read mail has not thereby let it star, unstar, or relabel any. The tool is absent from
+`tools/list` for a caller without it and a call is answered as a call naming a tool that does not exist, exactly as
+[§ What a caller is offered](#what-a-caller-is-offered) describes. The use case asks for the same grant on its own, so
+an entrypoint added later reaches the same refusal without passing this boundary.
+
+Which mail may be written is the same question as which mail may be read, answered by the same resolver. An email of an
+account this deployment does not serve, an email in a folder mapped `VisibleToTools: false`, and an email no row is held
+for are one answer — `53002`, the same one a read gives — so a write surface is neither a way round a withheld folder
+nor a way to learn which identifiers exist by asking about them.
+
+Only these three values can be written. `\Answered` and `\Draft` each assert that an act was performed rather than
+describing the message, nothing here deletes mail, and nothing here sends any;
+[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
+records what that boundary admits and why.
+
+A keyword a folder will not keep permanently is a failure the record reports rather than a command the server accepts
+and forgets, and it is reported after the call has already answered — the tool's answer is that the change was written
+down, and where it got to afterwards is read from the record.
+[Marking mail read is an act](imap-synchronization.md#marking-mail-read-is-an-act-never-a-side-effect-of-reading)
+states the rules every authored flag change obeys, whichever requester asked for it.
+
 ## `ask_mail`
 
 Answers a question about the local mailbox copy and names the emails the answer was drawn from. A chat model conducts
@@ -1146,12 +1251,13 @@ route behind the same use case answers the same way and for the same reason.
 
 ## Pending
 
-The five mailbox tools are complete. `list_accounts` publishes the accounts a caller may name,
+The six mailbox tools are complete. `list_accounts` publishes the accounts a caller may name,
 `list_emails`, `get_email_content`, and `search_emails` read the PostgreSQL read models, the lexical index, and the
-content store that landed with their use cases, and `ask_mail` answers over the retrieval and the agent composition
-above them, under the ceilings an operator sets on what one question and one period may spend. The six contact tools
-are complete as well, and are the whole of what this surface writes.
+content store that landed with their use cases, `set_mail_flags` writes the three values an authored change may carry
+back to the mailbox, and `ask_mail` answers over the retrieval and the agent composition above them, under the ceilings
+an operator sets on what one question and one period may spend. The six contact tools are complete as well.
 
 What is still pending is the run trace an operator reads after a question, its own change, and any tool that sends mail:
-SMTP delivery is deliberately absent from this tool set, and a contact write is not a step towards it — it changes a
-row in MailFathom's own database and reaches nothing outside the process.
+SMTP delivery is deliberately absent from this tool set. Neither of the two writes here is a step towards it — a contact
+write changes a row in MailFathom's own database and reaches nothing outside the process, and a flag change asks a mail
+server to record something about a message that is already there.

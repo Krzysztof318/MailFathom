@@ -139,7 +139,7 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
         // Act
         var seenStateChanges = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailboxMutationReconciliationStore>()
-                .ReadSeenStateChangesOnAsync(
+                .ReadFlagChangesOnAsync(
                     SyntheticMailAccount.AccountId,
                     binding.Id,
                     seenOccurrence.UidValidity,

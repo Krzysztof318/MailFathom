@@ -54,14 +54,14 @@ MailFathom also resolves in [Context7](https://context7.com/krzysztof318/mailfat
 
 ## What exists today
 
-What is implemented is read-only mail retrieval, eleven tools, and the rules and spam actions your own configuration turns on, and this README is split on that line: this section and [What it does well](https://github.com/Krzysztof318/MailFathom#what-it-does-well) describe the code as it stands, while [Where it is going](https://github.com/Krzysztof318/MailFathom#where-it-is-going) is the roadmap.
+What is implemented is read-only mail retrieval, twelve tools, and the changes your own configuration and one grant let something ask for, and this README is split on that line: this section and [What it does well](https://github.com/Krzysztof318/MailFathom#what-it-does-well) describe the code as it stands, while [Where it is going](https://github.com/Krzysztof318/MailFathom#where-it-is-going) is the roadmap.
 
 Two properties hold everywhere, and much of the rest of the design follows from them:
 
-- **Reading is local.** A tool call answers from your copy and never contacts a mail server, so it is fast, it works while the server is down, and it cannot change anything remotely. Every result states how fresh the local copy is.
-- **Retrieval never writes to your mailbox.** Fetching mail never sets the remote `\Seen` flag, so mail MailFathom has copied still shows as unread in your own mail client until you read it there. What can write is what you configured to: a `MailRules` rule whose action moves, copies, deletes, or marks a message read, and `SpamClassification:Actions`, which files junk and marks it read. Both are off until you turn them on, and each account states which of the four actions a rule may ask of it.
+- **Reading is local.** A read answers from your copy and never contacts a mail server, so it is fast, it works while the server is down, and it changes nothing remotely. Every result states how fresh the local copy is.
+- **Retrieval never writes to your mailbox.** Fetching mail never sets the remote `\Seen` flag, so mail MailFathom has copied still shows as unread in your own mail client until you read it there. What can write is what you asked to: a `MailRules` rule whose action moves, copies, deletes, or marks a message read, `SpamClassification:Actions`, which files junk and marks it read, and the `set_mail_flags` tool, which an agent calls to mark, star, or label one message. The two configured paths are off until you turn them on, and each account states which of the actions a rule may ask of it; the tool needs a grant of its own that reading mail does not carry.
 
-What an agent gets is eleven tools, and they are the whole surface. Five of them read your mail:
+What an agent gets is twelve tools, and they are the whole surface. Five of them read your mail:
 
 | Tool | What it answers |
 | --- | --- |
@@ -73,7 +73,15 @@ What an agent gets is eleven tools, and they are the whole surface. Five of them
 
 The first four are always there. `ask_mail` needs a chat model and an embedding model you configure and point at, so a deployment with neither does not advertise it at all rather than offering a tool that would fail on first use.
 
-The other six are MailFathom's own contact book — `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact`, and `promote_contact`. It holds the people you write down and every address each of them uses, which is what lets an agent answer who a message is from for somebody who writes from three addresses. Four of the six change that book, and they are the only tools on the surface that change anything: they reach MailFathom's own database and no mail server, and two of them announce themselves as destructive: `delete_contact`, because an erasure removes a person and every address recorded with them for good, and `update_contact`, because an amendment states the whole record and drops whatever it leaves out. `promote_contact` is neither: it takes on a person MailFathom collected from arriving mail, so the record becomes one you asserted and every other tool may amend it. They are offered to a credential granted them, which every credential is until you narrow its entry.
+One tool writes to your mailbox, and it is the only thing on this surface that reaches a mail server at all:
+
+| Tool | What it does |
+| --- | --- |
+| `set_mail_flags` | Marks one message read or unread, stars or unstars it, and adds, removes, or replaces its keywords — the labels your mail client shows as tags. Every value is optional and at least one is required |
+
+It does not wait on your mail server. The call writes the change down and answers with a record identity per value; the account's next synchronization run issues it, so a crash mid-flight leaves a change that finishes by itself rather than a value MailFathom believes it set. Every change is reversible with the call that would have made it, nothing here deletes mail or sends any, and it is offered only to a credential granted `mailfathom.mail.flags.write`, which reading mail does not carry. [What the tool answers, refuses, and never repeats back](https://krzysztof318.github.io/MailFathom/features/mcp-tools.html#set_mail_flags) is the contract.
+
+The other six are MailFathom's own contact book — `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact`, and `promote_contact`. It holds the people you write down and every address each of them uses, which is what lets an agent answer who a message is from for somebody who writes from three addresses. Four of the six change that book, and unlike the tool above they reach MailFathom's own database and no mail server. Two of them announce themselves as destructive: `delete_contact`, because an erasure removes a person and every address recorded with them for good, and `update_contact`, because an amendment states the whole record and drops whatever it leaves out. `promote_contact` is neither: it takes on a person MailFathom collected from arriving mail, so the record becomes one you asserted and every other tool may amend it. They are offered to a credential granted them, which every credential is until you narrow its entry.
 
 The book can also fill itself. Switch [contact collection](https://krzysztof318.github.io/MailFathom/features/contacts.html#collecting-contacts-from-arriving-mail) on for an account and it records the people that account corresponds with as its mail is synchronized — the author of mail that arrives, the recipients of mail you sent, held to a threshold you set and never a mailing list, a role mailbox, or an address you excluded. It is off until you switch it on, per account, and one command takes back everything it collected.
 

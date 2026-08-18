@@ -146,6 +146,11 @@ stops serving for the same reason, because the question is asked where the downl
 was issued. None of those answers says the folder exists, because a refusal naming it would publish exactly what the
 switch withholds.
 
+**The same list decides what a tool may write.** `set_mail_flags` resolves the email it was given through this scope
+before anything is recorded, so a folder the switch withholds is one no caller can mark, star, or label, and what it
+meets is the not-found answer above rather than one that says the folder exists. A write surface that reached what a
+read withholds would be a way round the switch rather than a second capability.
+
 A folder **no mapping names** gives the same answers, and for a stronger reason: the scope carries the folders a mapping
 names and leaves visible, so a read admits that list and nothing else. Mail stored under an alias whose mapping was
 later removed is therefore mail no page reaches, no search matches, and no identifier resolves — the rows stay in the

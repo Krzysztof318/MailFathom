@@ -41,9 +41,9 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
 
         // Read first so the never-observed budget can be computed from how many previously observed emails actually
         // exist: a folder that has none must still fill its whole window with new mail rather than leave it empty.
-        // The previous reading of the \Seen flag travels with the candidate because a flag change is a comparison rather
-        // than a reading: the server reports what the flag is now, and only the earlier value and the moment it was
-        // taken say whether anybody moved it and whether a change MailFathom made could still be why.
+        // The previous reading of the values a mutation may write travels with the candidate because such a change is a
+        // comparison rather than a reading: the server reports what stands now, and only the earlier values and the
+        // moment they were taken say whether anybody moved one and whether a change MailFathom made could still be why.
         var previouslyObserved = await eligible
             .Where(email => email.RemoteFlagsObservedAt != null)
             .OrderBy(email => email.RemoteFlagsObservedAt)
@@ -55,6 +55,8 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
                 email.Uid,
                 ObservedAt = email.RemoteFlagsObservedAt,
                 email.IsRemotelySeen,
+                email.IsRemotelyFlagged,
+                email.RemoteKeywords,
             })
             .ToArrayAsync(cancellationToken);
 
@@ -68,6 +70,8 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
                 email.Uid,
                 ObservedAt = (DateTimeOffset?)null,
                 email.IsRemotelySeen,
+                email.IsRemotelyFlagged,
+                email.RemoteKeywords,
             })
             .ToArrayAsync(cancellationToken);
 
@@ -79,7 +83,11 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
                     StoredEmailId.Create(candidate.Id),
                     ImapUid.Create(candidate.Uid),
                     candidate.ObservedAt is { } observedAt
-                        ? new RemoteSeenStateObservation(observedAt, candidate.IsRemotelySeen)
+                        ? new RemoteWritableFlagObservation(
+                            observedAt,
+                            candidate.IsRemotelySeen,
+                            candidate.IsRemotelyFlagged,
+                            RemoteEmailKeywords.Create(candidate.RemoteKeywords))
                         : null)),
         ];
     }

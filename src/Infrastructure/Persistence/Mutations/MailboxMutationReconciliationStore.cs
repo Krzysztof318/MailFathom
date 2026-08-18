@@ -31,6 +31,21 @@ namespace MailFathom.Infrastructure.Persistence.Mutations;
 internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext readContext)
     : IMailboxMutationReconciliationStore
 {
+    /// <summary>The stored names of every mutation whose whole effect is a value a <c>FLAGS</c> response reports back.</summary>
+    /// <remarks>
+    /// Composed from the mutations themselves rather than written out, so a mutation renamed in the one place it is
+    /// declared cannot leave a literal here that matches no row. It is an array because that is the shape the Npgsql
+    /// provider translates into the <c>= ANY</c> the query wants; a frozen set would be evaluated in this process.
+    /// </remarks>
+    private static readonly string[] FlagWritingMutationNames =
+    [
+        MailboxMutation.SetSeen.Name,
+        MailboxMutation.SetFlagged.Name,
+        MailboxMutation.AddKeywords.Name,
+        MailboxMutation.RemoveKeywords.Name,
+        MailboxMutation.SetKeywords.Name,
+    ];
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<MailboxMutationRecord>> ReadPlacementsAtAsync(
         MailAccountId accountId,
@@ -73,7 +88,7 @@ internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext rea
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<MailboxMutationRecord>> ReadSeenStateChangesOnAsync(
+    public async Task<IReadOnlyList<MailboxMutationRecord>> ReadFlagChangesOnAsync(
         MailAccountId accountId,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
@@ -91,7 +106,6 @@ internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext rea
         var alias = folderResolutionId.Alias.Value;
         var generation = folderResolutionId.Generation.Value;
         var uidValidityValue = uidValidity.Value;
-        var setSeenName = MailboxMutation.SetSeen.Name;
         uint[] changedUids = [.. uids.Select(static uid => uid.Value)];
 
         // Reached through the prefix of the identity index — folder, UIDVALIDITY, UID — which is why this question needs
@@ -104,7 +118,7 @@ internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext rea
                 && mutation.MailFolder.ResolutionGeneration == generation
                 && mutation.UidValidity == uidValidityValue
                 && changedUids.Contains(mutation.Uid)
-                && mutation.Mutation == setSeenName)
+                && FlagWritingMutationNames.Contains(mutation.Mutation))
             .OrderBy(mutation => mutation.RecordedAt)
             .ThenBy(mutation => mutation.Id)
             .ToArrayAsync(cancellationToken);

@@ -258,8 +258,10 @@ given client is one of them, and each has an answer above rather than a setting 
 
 ## What a working connection looks like
 
-Whichever client was configured, a connected one lists at least four tools — `list_accounts`, `list_emails`,
-`get_email_content`, and `search_emails` — each advertising itself as read-only, non-destructive, and idempotent. Where
+Whichever client was configured, a connected one lists at least five tools. Four of them — `list_accounts`,
+`list_emails`, `get_email_content`, and `search_emails` — advertise themselves as read-only, non-destructive, and
+idempotent; `set_mail_flags` is beside them and is the one tool that is not read-only, because it changes your mailbox
+on the mail server rather than MailFathom's copy of it. Where
 that list is shown is the one client-specific part: `claude mcp list` or the `/mcp` panel for the command-line tool, the
 server's entry in the editor's MCP view for Visual Studio Code and for Cursor, the connector's own settings page for the
 two cloud clients.
