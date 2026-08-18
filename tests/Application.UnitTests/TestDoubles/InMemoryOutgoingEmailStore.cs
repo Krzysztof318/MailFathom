@@ -350,10 +350,25 @@ internal sealed class InMemoryOutgoingEmailStore(
             throw new InvalidOperationException("The store would not take a write for this outgoing email.");
         }
 
-        var row = this.rows[outgoingEmailId];
+        // The order is the real store's: an identifier nothing carries is refused before the lease is compared, and a
+        // record nothing attempts again after it. A dictionary lookup would report a missing record as a
+        // KeyNotFoundException, which is not the failure the port documents.
+        if (!this.rows.TryGetValue(outgoingEmailId, out var row))
+        {
+            throw new InvalidOperationException($"No outgoing email record carries the identifier {outgoingEmailId}.");
+        }
+
         if (row.LeaseOwner != lease.Owner)
         {
             throw new OutgoingEmailLeaseLostException(outgoingEmailId, lease.Owner);
+        }
+
+        if (row.Record.Stage is OutgoingEmailStage.Sent
+            or OutgoingEmailStage.Refused
+            or OutgoingEmailStage.Cancelled)
+        {
+            throw new InvalidOperationException(
+                $"Outgoing email record {outgoingEmailId} is at terminal stage {row.Record.Stage} and is never attempted again.");
         }
 
         return row;

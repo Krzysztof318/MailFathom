@@ -706,7 +706,9 @@ for it. Two questions are worth answering, and each has one signal.
 **Is mail leaving?** `mailfathom.mail.delivery.attempts` counts every attempt that ended, tagged with the account alias
 and `mailfathom.mail.delivery.outcome`, whose values are `sent`, `refused`, `deferred`, `outcome-unknown`, `released`,
 `lease-lost`, and `not-recorded`. One measurement per send rather than per pass, because a pass routinely ends in
-several of them.
+several of them. A send a stopped process left mid-transmission is counted too, under `outcome-unknown`, at the pass
+that finds it: the attempt was made by a process that never lived to report it, and it is stamped once, so counting it
+where it becomes knowable is the only place it can be counted at all.
 
 `outcome-unknown` is a dimension of that counter rather than a counter of its own, deliberately: a send whose server
 never answered is neither a success nor a failure, and giving it an instrument would let a dashboard summing successes

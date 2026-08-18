@@ -91,6 +91,20 @@ public sealed class MailDeliveryTelemetry
                     { OutcomeTagName, NameOf(result.Outcome) },
                 });
         }
+
+        // What the sweep found is an attempt too — one an earlier process made and never lived to report. It is
+        // counted where it becomes knowable rather than not at all, because a stranded send is exactly the measurement
+        // this counter exists to surface, and it is stamped once, so counting it here cannot count it twice.
+        if (report.MarkedUnknownCount > 0)
+        {
+            this.attemptCount.Add(
+                report.MarkedUnknownCount,
+                new TagList
+                {
+                    { AccountTagName, accountId.Value },
+                    { OutcomeTagName, NameOf(MailOutboxDeliveryOutcome.OutcomeUnknown) },
+                });
+        }
     }
 
     /// <summary>Records how long one submission took and whether the server took the message.</summary>

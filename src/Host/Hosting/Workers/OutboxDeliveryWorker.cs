@@ -228,8 +228,9 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
         Message = "The outcome of attempt {AttemptCount} for a message queued for account {AccountId} could not be written down [failure {FailureCode}], so its record stands where the failed write left it and its lease is what frees it for another attempt.")]
     private partial void LogSendNotRecorded(string accountId, int attemptCount, int? failureCode);
 
+    /// <summary>Reports the sweep's discovery at the level the account's own run reports it at, for the same reason.</summary>
     [LoggerMessage(
-        Level = LogLevel.Warning,
+        Level = LogLevel.Error,
         Message = "{MarkedCount} message(s) queued for account {AccountId} were found mid-transmission with no attempt left holding them, and are recorded as having an unknown outcome. Each one may or may not have been delivered; none is transmitted again.")]
     private partial void LogUnknownOutcomesMarked(string accountId, int markedCount);
 

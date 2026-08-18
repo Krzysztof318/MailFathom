@@ -38,8 +38,14 @@ public sealed record MailOutboxPassReport(
     /// <summary>Gets whether the pass met a submission server that would not serve it, which is what defers the account.</summary>
     /// <remarks>
     /// A send given back for another attempt is the shape a provider's unavailability takes here, and it is the one
-    /// outcome that says something about the account rather than about the message. A refusal does not: a server that
-    /// answered is a server that is working.
+    /// outcome that can say something about the account rather than about the message. A refusal never does: a server
+    /// that answered is a server that is working.
+    /// <para>
+    /// It is a signal rather than a diagnosis, because one other thing produces the same outcome: a transmission the
+    /// server took whose envelope one address was temporarily refused for is deferred as well, so those addresses are
+    /// offered again. That send says nothing about the provider. Reading a true value as "the endpoint is down" is
+    /// therefore wrong on its own; what it says is that this account has work coming back.
+    /// </para>
     /// </remarks>
     public bool AccountDeferred => this.DeferredCount > 0;
 

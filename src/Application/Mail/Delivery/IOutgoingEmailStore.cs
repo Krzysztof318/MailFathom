@@ -24,9 +24,12 @@ namespace MailFathom.Application.Mail.Delivery;
 /// take none, because a read joins no transaction.
 /// </para>
 /// <para>
-/// A claim is the exception to both. It selects and stamps in one statement so two workers claiming at the same moment
-/// take different records rather than the same one, which no session-scoped read followed by a write can promise, and
-/// its transaction ends with the claim because the attempt that follows reaches a submission server.
+/// Two writes are the exception to both, and are the two this port hands no session. A claim selects and stamps in one
+/// statement so two workers claiming at the same moment take different records rather than the same one, which no
+/// session-scoped read followed by a write can promise, and its transaction ends with the claim because the attempt
+/// that follows reaches a submission server. The sweep that stamps the records a stopped process left mid-transmission
+/// is the other: it is one set-based write over rows nobody holds, and joining a caller's transaction would hold them
+/// for as long as that caller ran.
 /// </para>
 /// <para>
 /// Every write an attempt makes afterwards names the lease it holds and is refused when the record has moved on to a
