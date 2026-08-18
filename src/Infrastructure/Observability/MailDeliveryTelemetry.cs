@@ -102,7 +102,9 @@ public sealed class MailDeliveryTelemetry
     /// <summary>Names an outcome as the dimension a dashboard groups by.</summary>
     /// <remarks>
     /// Written out rather than derived from the member name, so a rename of the enum cannot silently split a metric
-    /// series that a dashboard or an alert was already grouping by.
+    /// series that a dashboard or an alert was already grouping by. Every member is named and nothing falls through,
+    /// because a default arm answering for a member nobody listed would publish one outcome under another's word —
+    /// which is the same failure read from the other end.
     /// </remarks>
     private static string NameOf(MailOutboxDeliveryOutcome outcome) => outcome switch
     {
@@ -112,6 +114,7 @@ public sealed class MailDeliveryTelemetry
         MailOutboxDeliveryOutcome.OutcomeUnknown => "outcome-unknown",
         MailOutboxDeliveryOutcome.ReleasedForShutdown => "released",
         MailOutboxDeliveryOutcome.LeaseLost => "lease-lost",
-        _ => "not-recorded",
+        MailOutboxDeliveryOutcome.NotRecorded => "not-recorded",
+        _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "No metric dimension is defined for this delivery outcome."),
     };
 }

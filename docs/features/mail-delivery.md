@@ -378,9 +378,17 @@ but unheld, and two passes over one account take disjoint sets rather than queue
 that send afterwards carries the lease it was claimed under and is refused if the row no longer names that owner, which
 is what stops an attempt whose lease ran out from recording an outcome over the attempt that has since taken the
 message. The attempt itself is bounded below the lease, so that case stays rare rather than routine, and startup
-refuses a configuration stating otherwise.
+refuses a configuration stating otherwise. That budget opens before the first thing the attempt waits on rather than
+before the first thing it sends, so a content read that never answers is cancelled with everything else instead of
+holding the whole batch behind it.
 [The claim a delivery attempt holds](../architecture/stored-email-schema.md#the-claim-a-delivery-attempt-holds) has the
 predicate and the columns.
+
+One claim stamps a whole batch with one expiry while the sends under it are attempted one at a time, so a send far
+enough down a slow batch is reached after its own lease has already run out. It is reported as such and nothing is
+offered for it: every write it would make is refused anyway — which is what keeps a reclaimed send from being
+transmitted twice — so asking first buys the connection, the submission, and the wait that would otherwise be spent on
+a record this attempt no longer holds.
 
 ## The window that cannot be decided
 

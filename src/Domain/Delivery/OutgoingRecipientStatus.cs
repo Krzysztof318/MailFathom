@@ -27,8 +27,17 @@ public enum OutgoingRecipientStatus
 {
     /// <summary>Nothing has settled this recipient, so the next attempt offers them.</summary>
     /// <remarks>
-    /// It covers a recipient never offered and one a server temporarily rejected, which are the same thing to the
-    /// attempt that follows. Which of the two it is reads from the recorded reply beside it.
+    /// <para>
+    /// It covers a recipient never offered, one a server temporarily rejected, and one whose address a server accepted
+    /// on an attempt that then failed — all the same thing to the attempt that follows. Which of them it is reads from
+    /// the recorded reply beside it.
+    /// </para>
+    /// <para>
+    /// On a record that has reached a terminal stage it says the recipient was never settled by an answer, not that
+    /// one is still owed: whether anything is offered again is the record's stage, and this member is about the
+    /// address. Writing <see cref="Refused" /> there instead would state that a server refused an address it may well
+    /// have accepted.
+    /// </para>
     /// </remarks>
     Pending = 0,
 

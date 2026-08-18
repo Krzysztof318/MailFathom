@@ -144,6 +144,16 @@ public sealed class MailOutboxDelivery
     {
         var record = claimed.Record;
 
+        // One claim stamps a whole batch with one expiry while the sends under it are attempted one at a time, so a
+        // send far enough down a slow batch can be reached after its own lease has already run out. Every write it
+        // would make is refused anyway — which is what keeps a reclaimed send from being transmitted twice — so what
+        // asking first buys is not safety but the connection, the submission, and the wait that would all have been
+        // spent on a record this attempt no longer holds.
+        if (claimed.Lease.HasExpiredAt(this.timeProvider.GetUtcNow()))
+        {
+            return LeaseLost(claimed);
+        }
+
         if (this.senderIdentities.FindSenderIdentity(record.AccountId) is not { } sender)
         {
             // The account configures no address to send from, so there is no reverse path to write and no later
@@ -163,7 +173,13 @@ public sealed class MailOutboxDelivery
             return await this.RefuseAsync(claimed, outcomes: [], MailFathomErrorCode.OutgoingEmailRefused, replyCode: null);
         }
 
-        var content = await this.contentStore.FindOutgoingContentAsync(record.Id, stoppingToken);
+        // The budget opens before the first thing the attempt waits on rather than before the first thing it sends. A
+        // content read that never answers would otherwise be bounded by the host's shutdown alone, and would hold the
+        // whole batch behind it while this send's lease quietly ran out.
+        using var attemptBudget = new CancellationTokenSource(this.settings.AttemptTimeout, this.timeProvider);
+        using var attemptToken = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, attemptBudget.Token);
+
+        var content = await this.contentStore.FindOutgoingContentAsync(record.Id, attemptToken.Token);
         if (content is null || content.RawMime.IsEmpty)
         {
             // The record and its message are written in one transaction, so a record without one describes a send that
@@ -174,9 +190,6 @@ public sealed class MailOutboxDelivery
                 MailFathomErrorCode.OutgoingEmailDeliveryFailedUnexpectedly,
                 replyCode: null);
         }
-
-        using var attemptBudget = new CancellationTokenSource(this.settings.AttemptTimeout, this.timeProvider);
-        using var attemptToken = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, attemptBudget.Token);
 
         await using var session = await this.sessions.OpenForDeliveryAsync(
             record.AccountId,

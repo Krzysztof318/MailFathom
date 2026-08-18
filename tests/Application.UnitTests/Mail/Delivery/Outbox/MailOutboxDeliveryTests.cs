@@ -382,6 +382,27 @@ public sealed class MailOutboxDeliveryTests
         Assert.Null(record.LastFailure);
     }
 
+    /// <summary>
+    /// One claim stamps a whole batch with one expiry, so a send far enough down a slow batch is reached after its own
+    /// lease ran out. It is reported without a connection being opened for it.
+    /// </summary>
+    [Fact]
+    public async Task DeliverAsync_LeaseHadAlreadyRunOut_ReportsItWithoutOfferingAnything()
+    {
+        // Arrange
+        var context = new DeliveryContext();
+        var claimed = await context.ClaimAsync("anna@example.test");
+        context.Advance(claimed.Lease.ExpiresAt - ClaimedAt);
+
+        // Act
+        var result = await context.DeliverAsync(claimed, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailOutboxDeliveryOutcome.LeaseLost, result.Outcome);
+        Assert.Empty(context.Session.Transmitted);
+        Assert.Equal(OutgoingEmailStage.Recorded, context.Store.Read(claimed.Record.Id).Stage);
+    }
+
     /// <summary>An account with no address to send from has nothing a later attempt could repair.</summary>
     [Fact]
     public async Task DeliverAsync_AccountConfiguresNoSendingAddress_EndsTheSend()
@@ -534,6 +555,9 @@ public sealed class MailOutboxDeliveryTests
 
             return claimed.Single(entry => entry.Record.Id == outgoingEmailId);
         }
+
+        /// <summary>Moves the clock on, which is how a lease is made to run out before an attempt reaches its send.</summary>
+        internal void Advance(TimeSpan elapsed) => this.clock.Advance(elapsed);
 
         internal Task<MailOutboxDeliveryResult> DeliverAsync(
             ClaimedOutgoingEmail claimed,

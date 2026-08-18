@@ -15,6 +15,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // Npgsql writes the minimum value as `-infinity`, so every row that existed before this column did is due
+            // at once rather than at the instant of the upgrade: a send already waiting has waited longer than any
+            // backoff this deployment configures.
             migrationBuilder.AddColumn<DateTimeOffset>(
                 name: "AvailableAt",
                 table: "outgoing_emails",

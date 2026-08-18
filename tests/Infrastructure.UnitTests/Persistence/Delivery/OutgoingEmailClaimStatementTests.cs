@@ -20,6 +20,7 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Delivery;
 /// </remarks>
 public sealed class OutgoingEmailClaimStatementTests
 {
+    private static readonly MailAccountId Account = MailAccountId.Create("work");
     private static readonly DateTimeOffset ClaimedAt = DateTimeOffset.UnixEpoch.AddHours(9);
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(10);
 
@@ -35,6 +36,21 @@ public sealed class OutgoingEmailClaimStatementTests
         // Assert
         Assert.Contains($"""candidate."{nameof(OutgoingEmailEntity.Stage)}" =""", statement.Format, StringComparison.Ordinal);
         Assert.Contains(nameof(OutgoingEmailStage.Recorded), statement.GetArguments().OfType<string>());
+    }
+
+    /// <summary>The claim takes one account's sends, which is what keeps a pass out of every other account's outbox.</summary>
+    [Fact]
+    public void Compose_Always_TakesTheAccountItWasAskedAbout()
+    {
+        // Act
+        var statement = Compose();
+
+        // Assert
+        Assert.Contains(
+            $"""candidate."{nameof(OutgoingEmailEntity.MailboxAccountId)}" =""",
+            statement.Format,
+            StringComparison.Ordinal);
+        Assert.Contains(Account.Value, statement.GetArguments().OfType<string>());
     }
 
     /// <summary>The locking clause is what makes two workers claiming at once take different sends.</summary>
@@ -100,6 +116,6 @@ public sealed class OutgoingEmailClaimStatementTests
     }
 
     private static FormattableString Compose() => OutgoingEmailClaimStatement.Compose(
-        OutgoingEmailClaimRequest.Create(MailAccountId.Create("work"), BatchSize, LeaseDuration),
+        OutgoingEmailClaimRequest.Create(Account, BatchSize, LeaseDuration),
         ClaimedAt);
 }
