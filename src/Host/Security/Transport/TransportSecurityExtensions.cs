@@ -14,6 +14,7 @@ using MailFathom.Infrastructure.Security.OAuth;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
@@ -34,7 +35,7 @@ namespace MailFathom.Host.Security.Transport;
 /// by the other's credential — because a policy names only its own routing scheme.
 /// </para>
 /// </remarks>
-internal static class TransportSecurityExtensions
+internal static partial class TransportSecurityExtensions
 {
     /// <summary>Names the registered transport an authorization server's metadata is retrieved over.</summary>
     /// <remarks>One transport for every scheme on every surface, because what it carries is the same fetch of the same kind of document under the same bounds. Each scheme still holds a client of its own over it, so no key refresh can observe another scheme's.</remarks>
@@ -172,21 +173,53 @@ internal static class TransportSecurityExtensions
     /// fetches; neither says anything about the transport an incoming request arrived on.
     /// </para>
     /// <para>
-    /// The refusal is silent — no result rather than a failure — so the caller receives the same challenge an
-    /// unauthenticated request receives, and the token is never read, validated, or recorded.
+    /// The refusal is silent to the caller — no result rather than a failure — so the answer is the same challenge an
+    /// unauthenticated request receives, and the token is never read, validated, or recorded. It is not silent to the
+    /// operator: behind a TLS-terminating proxy this refusal fires on every authenticated request the moment a
+    /// forwarded scheme stops arriving, and a challenge indistinguishable from the anonymous one is the one symptom no
+    /// amount of reading the client's logs explains. The record names the forwarded scheme the request carried, which
+    /// is what separates a proxy that sends none from a proxy whose value this process does not believe.
     /// </para>
     /// </remarks>
     internal static Task RefuseATokenThatArrivedWithoutTransportEncryption(MessageReceivedContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (!context.Request.IsHttps)
+        if (context.Request.IsHttps)
         {
-            context.NoResult();
+            return Task.CompletedTask;
         }
+
+        // The event fires for every request the scheme sees, and one that presented nothing has nothing refused, so
+        // only a request that actually carried a credential is worth a record.
+        if (context.Request.Headers.Authorization.Count > 0)
+        {
+            var forwardedProtocol = context.Request.Headers[ForwardedHeadersDefaults.XForwardedProtoHeaderName].ToString();
+
+            LogTokenRefusedOnAClearTextHop(
+                context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger(typeof(TransportSecurityExtensions)),
+                context.Scheme.Name,
+                string.IsNullOrEmpty(forwardedProtocol) ? "none" : forwardedProtocol);
+        }
+
+        context.NoResult();
 
         return Task.CompletedTask;
     }
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "An access token presented to {AuthenticationScheme} arrived over a hop this process sees as clear "
+            + "text, so it was refused without being read and the caller received the challenge an anonymous request "
+            + "receives. The request carried X-Forwarded-Proto: {ForwardedProtocol}. 'none' means nothing in front of "
+            + "this process sent a forwarded scheme; any other value means one was sent and not applied, which is what "
+            + "ReverseProxy:TrustedProxies and ReverseProxy:MaximumForwardedHops decide. Behind a TLS-terminating "
+            + "reverse proxy every authenticated request fails this way until one of those is corrected.")]
+    private static partial void LogTokenRefusedOnAClearTextHop(
+        ILogger logger,
+        string authenticationScheme,
+        string forwardedProtocol);
 
     /// <summary>Registers the scheme that reads the presented credential and forwards it to the handler that judges it.</summary>
     private static void AddRoutingScheme(

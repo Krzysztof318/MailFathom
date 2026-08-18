@@ -11,11 +11,13 @@ using MailFathom.Host.Security.ClientAssertions;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Security.OAuth;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -46,6 +48,83 @@ public sealed class TransportSecurityExtensionsTests
         // Assert
         Assert.NotNull(context.Result);
         Assert.True(context.Result.None);
+    }
+
+    /// <summary>
+    /// The caller cannot tell this refusal from the challenge an anonymous request receives, which is deliberate and
+    /// which is also why the operator has to be able to. Behind a proxy that stopped forwarding a scheme, this record
+    /// is the only place the cause appears at all.
+    /// </summary>
+    [Fact]
+    public async Task RefuseATokenThatArrivedWithoutTransportEncryption_APresentedToken_RecordsThatNoSchemeWasForwarded()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        using var loggerFactory = LoggerFactory.Create(logging => logging.AddProvider(logs));
+        using var services = new ServiceCollection()
+            .AddSingleton(loggerFactory)
+            .BuildServiceProvider();
+
+        var context = MessageReceivedOver("http", authorization: "Bearer a-token", services: services);
+
+        // Act
+        await TransportSecurityExtensions.RefuseATokenThatArrivedWithoutTransportEncryption(context);
+
+        // Assert
+        Assert.True(context.Result?.None);
+
+        var record = Assert.Single(logs.Records);
+        Assert.Equal(LogLevel.Warning, record.Level);
+        Assert.Equal("none", Assert.Contains("ForwardedProtocol", record.Properties));
+    }
+
+    /// <summary>
+    /// A forwarded scheme that arrived and was not applied is a different fault from one that was never sent — the
+    /// first is who this process believes, the second is what the proxy sends — so the record names which it was.
+    /// </summary>
+    [Fact]
+    public async Task RefuseATokenThatArrivedWithoutTransportEncryption_AForwardedSchemeThatWasNotApplied_RecordsIt()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        using var loggerFactory = LoggerFactory.Create(logging => logging.AddProvider(logs));
+        using var services = new ServiceCollection()
+            .AddSingleton(loggerFactory)
+            .BuildServiceProvider();
+
+        var context = MessageReceivedOver(
+            "http",
+            authorization: "Bearer a-token",
+            forwardedProtocol: "https",
+            services: services);
+
+        // Act
+        await TransportSecurityExtensions.RefuseATokenThatArrivedWithoutTransportEncryption(context);
+
+        // Assert
+        Assert.True(context.Result?.None);
+        Assert.Equal("https", Assert.Contains("ForwardedProtocol", Assert.Single(logs.Records).Properties));
+    }
+
+    /// <summary>A request that presented nothing has nothing refused, so it is not worth a line in an operator's log.</summary>
+    [Fact]
+    public async Task RefuseATokenThatArrivedWithoutTransportEncryption_APlaintextRequestCarryingNoToken_RecordsNothing()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        using var loggerFactory = LoggerFactory.Create(logging => logging.AddProvider(logs));
+        using var services = new ServiceCollection()
+            .AddSingleton(loggerFactory)
+            .BuildServiceProvider();
+
+        var context = MessageReceivedOver("http", services: services);
+
+        // Act
+        await TransportSecurityExtensions.RefuseATokenThatArrivedWithoutTransportEncryption(context);
+
+        // Assert
+        Assert.True(context.Result?.None);
+        Assert.Empty(logs.Records);
     }
 
     [Fact]
@@ -578,10 +657,29 @@ public sealed class TransportSecurityExtensionsTests
             ],
             surface.IsSpecified ? surface.ApiKeySchemeName : "unused");
 
-    private static MessageReceivedContext MessageReceivedOver(string scheme)
+    private static MessageReceivedContext MessageReceivedOver(
+        string scheme,
+        string? authorization = null,
+        string? forwardedProtocol = null,
+        IServiceProvider? services = null)
     {
         var request = new DefaultHttpContext();
         request.Request.Scheme = scheme;
+
+        if (authorization is not null)
+        {
+            request.Request.Headers.Authorization = authorization;
+        }
+
+        if (forwardedProtocol is not null)
+        {
+            request.Request.Headers["X-Forwarded-Proto"] = forwardedProtocol;
+        }
+
+        if (services is not null)
+        {
+            request.RequestServices = services;
+        }
 
         return new MessageReceivedContext(
             request,
