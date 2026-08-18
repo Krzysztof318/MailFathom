@@ -87,3 +87,4 @@ deploy/quadlet/config/*.json
 .claude/scheduled_tasks.json
 .codex/config.toml
 .claude/settings.json
+graphify-out/
