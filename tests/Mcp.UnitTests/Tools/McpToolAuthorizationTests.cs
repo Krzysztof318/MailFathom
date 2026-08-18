@@ -23,7 +23,8 @@ namespace MailFathom.Mcp.UnitTests.Tools;
 /// </remarks>
 public sealed class McpToolAuthorizationTests
 {
-    private const string UnpublishedToolName = "delete_everything";
+    /// <summary>A name no tool answers to, which is what a caller sends; never the placeholder such a name is measured under.</summary>
+    private const string UndeclaredToolName = "delete_everything";
 
     /// <summary>What the shared helper admits every test caller as, which is what a refusal names in a log.</summary>
     private const string CallerIdentity = "test-caller";
@@ -104,7 +105,7 @@ public sealed class McpToolAuthorizationTests
         // Act
         var listing = await FilteredListingAsync(
             authorization,
-            ListingOf([UnpublishedToolName, SearchEmailsTool.ToolName]));
+            ListingOf([UndeclaredToolName, SearchEmailsTool.ToolName]));
 
         // Assert
         Assert.Equal([SearchEmailsTool.ToolName], listing.Tools.Select(static tool => tool.Name));
@@ -223,12 +224,12 @@ public sealed class McpToolAuthorizationTests
         // Act
         var refusal = await Assert.ThrowsAsync<McpProtocolException>(() => CalledAsync(
             authorization,
-            UnpublishedToolName,
+            UndeclaredToolName,
             ServedResult,
             onReached: () => reached = true));
 
         // Assert
-        Assert.Equal($"Unknown tool: '{UnpublishedToolName}'", refusal.Message);
+        Assert.Equal($"Unknown tool: '{UndeclaredToolName}'", refusal.Message);
         Assert.Equal(McpErrorCode.InvalidParams, refusal.ErrorCode);
         Assert.False(reached);
     }
@@ -265,7 +266,7 @@ public sealed class McpToolAuthorizationTests
         // Act
         await Assert.ThrowsAsync<McpProtocolException>(() => CalledAsync(
             AccessAuthorizations.ForCallerGranted([.. MailFathomPermission.PublishedFor(ProtectedSurface.Mail)]),
-            UnpublishedToolName,
+            UndeclaredToolName,
             ServedResult,
             refusals: refusals));
 

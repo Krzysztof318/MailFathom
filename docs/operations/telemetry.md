@@ -348,9 +348,14 @@ an exported series that never goes away. Work reached under no principal at all 
 The operation dimension is bounded the same way the tool dimension above is, and for the same reason: a tool name is
 used only where this surface publishes a tool answering to it and anything else is `(unpublished)`, while an
 administrative route is named by the pattern this repository mapped it under rather than by the address the request
-carried. A refusal that no grant would have satisfied — a route that published no decision, or a use case refusing over
-the kind of principal that reached it rather than over a grant — is counted under `(none)`, and its log line names no
-permission rather than naming one that would not have helped.
+carried. A refusal that no grant would have satisfied is counted under `(none)`, and its log line names no permission
+rather than naming one that would not have helped. Three arrangements produce one, and they are not equally
+interesting: a call naming a tool this surface does not publish, which lands as `(unpublished)` under `(none)` and is
+the ordinary mistake of a client on a stale or misspelled name; a route that published no decision; and a use case
+refusing over the kind of principal that reached it rather than over a grant. The first is a client to repair and the
+other two are defects in this repository, so read the operation before reading the remedy — and an alert on this
+counter as *a credential asking for what it was never granted* is written against the operations a grant could have
+reached rather than against `(unpublished)`.
 
 **A listing that withholds a tool records nothing.** Nothing was refused there, every narrowed caller would produce one
 on every listing it asked for, and the omission has no operation to partition by — so the reading this signal exists for

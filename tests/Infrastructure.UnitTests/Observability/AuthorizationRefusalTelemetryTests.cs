@@ -12,9 +12,12 @@ namespace MailFathom.Infrastructure.UnitTests.Observability;
 
 /// <summary>Covers the only record an operator has of a boundary a refused caller is told nothing about.</summary>
 /// <remarks>
-/// One telemetry instance serves the whole class, because its counter is created on the application's one meter and an
-/// instance per test would leave an instrument per test on it. Each test therefore names an operation of its own,
-/// which is what keeps the measurements it asserts on apart from the ones the other tests published.
+/// The publisher is built per test, because each one asserts over a logger of its own and a shared instance could
+/// carry only one. What that costs is an instrument per test on the application's one meter, which is affordable here
+/// and would not be for an observable one: a counter measures when something calls it, so an instance nothing calls
+/// again reports nothing, while a gauge would answer the meter for the rest of the run. What keeps the measurements
+/// apart is not the instance but the operation — every test names one of its own, so a listener watching a shared
+/// counter name reads back only what that test published.
 /// </remarks>
 public sealed class AuthorizationRefusalTelemetryTests : IDisposable
 {
