@@ -52,6 +52,23 @@ public sealed class ListContactsToolTests
         Assert.Null(query.Cursor);
     }
 
+    /// <summary>A caller's own page size is the bound it stated, so it has to reach the query rather than the default reaching it.</summary>
+    [Fact]
+    public async Task ListContactsAsync_APageSizeTheCallerChose_ReachesTheBookAsThatBound()
+    {
+        // Arrange
+        var book = AnEmptyBook();
+        var tool = new ListContactsTool(book.Reader);
+
+        // Act
+        await tool.ListContactsAsync(
+            pageSize: ContactQuery.MaximumPageSize,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ContactQuery.MaximumPageSize, QueryReadBy(book).PageSize);
+    }
+
     /// <summary>A page is published as the contacts a client reads and the cursor it continues from.</summary>
     [Fact]
     public async Task ListContactsAsync_APageTheBookAnswered_PublishesTheContactsAndTheCursor()

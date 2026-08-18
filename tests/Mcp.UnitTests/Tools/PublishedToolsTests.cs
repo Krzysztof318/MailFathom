@@ -4,6 +4,7 @@
 
 using MailFathom.Domain.Access;
 using MailFathom.Mcp.Tools;
+using MailFathom.Mcp.Tools.Contacts;
 using MailFathom.Mcp.UnitTests.TestDoubles;
 using Xunit;
 
@@ -95,6 +96,34 @@ public sealed class PublishedToolsTests
         // Assert
         Assert.True(declared);
         Assert.Equal(MailFathomPermission.MailAsk, permission);
+    }
+
+    [Theory]
+    [InlineData(ListContactsTool.ToolName)]
+    [InlineData(GetContactTool.ToolName)]
+    public void TryGetRequiredPermission_AToolThatReadsTheContactBook_RequiresTheContactReadingGrant(string toolName)
+    {
+        // Act
+        var declared = PublishedTools.TryGetRequiredPermission(toolName, out var permission);
+
+        // Assert
+        Assert.True(declared);
+        Assert.Equal(MailFathomPermission.MailContactsRead, permission);
+    }
+
+    /// <summary>Writing the book is separated from reading it because erasing a person is not something a reader's grant may reach.</summary>
+    [Theory]
+    [InlineData(CreateContactTool.ToolName)]
+    [InlineData(UpdateContactTool.ToolName)]
+    [InlineData(DeleteContactTool.ToolName)]
+    public void TryGetRequiredPermission_AToolThatWritesTheContactBook_RequiresTheContactWritingGrant(string toolName)
+    {
+        // Act
+        var declared = PublishedTools.TryGetRequiredPermission(toolName, out var permission);
+
+        // Assert
+        Assert.True(declared);
+        Assert.Equal(MailFathomPermission.MailContactsWrite, permission);
     }
 
     [Theory]

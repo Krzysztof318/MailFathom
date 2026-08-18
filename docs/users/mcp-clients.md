@@ -265,9 +265,10 @@ server's entry in the editor's MCP view for Visual Studio Code and for Cursor, t
 two cloud clients.
 
 Beside them are the five contact tools — `list_contacts`, `get_contact`, `create_contact`, `update_contact`, and
-`delete_contact` — over MailFathom's own contact book. Three of them change local state, and `delete_contact`
-advertises itself as destructive, which is what makes a client ask before calling it. They reach no mail server and
-touch no mail.
+`delete_contact` — over MailFathom's own contact book. Three of them change local state, and two of those three
+advertise themselves as destructive, which is what makes a client ask before calling them: `delete_contact` erases a
+person, and `update_contact` replaces a whole record, so anything the caller left out of it is dropped. They reach no
+mail server and touch no mail.
 
 `ask_mail` appears only once a chat model and an embedding model are both configured and working. Its
 absence is the deployment saying it cannot answer questions yet rather than a connection fault, and no client setting

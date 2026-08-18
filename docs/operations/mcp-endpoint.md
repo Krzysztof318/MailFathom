@@ -640,8 +640,8 @@ The two contact permissions are separate from the mailbox ones and from each oth
 of personal data from the mail — an assembled record about identified third parties rather than correspondence that
 arrived — and because a credential that may look somebody up is not thereby a credential that may erase them.
 `mailfathom.mail.contacts.write` covers the erasure with the two other writes rather than standing apart: a grant that
-cannot edit the book cannot sensibly be trusted to take somebody out of it, and `delete_contact` advertises itself as
-destructive so a client asks before calling it.
+cannot edit the book cannot sensibly be trusted to take somebody out of it, and both `delete_contact` and
+`update_contact` advertise themselves as destructive so a client asks before calling either.
 
 **A name nothing publishes fails startup, naming the entry and the position in the list.** That is what the closed
 vocabulary buys: `mailfathom.mail.reads` is refused rather than read as a grant narrower than the one you meant. A
@@ -711,8 +711,12 @@ credential reaches by omission.
 **The endpoint asks whether this is a caller the deployment serves, and of a token also which person it names.** What an
 admitted caller may then do is the grant its entry carries, and that decides one thing: which of this surface's tools it
 is offered and may call. A credential granted `mailfathom.mail.read` alone is served the four tools that read the local
-copy and is answered about `ask_mail` as though no such tool existed; one granted `mailfathom.mail.ask` alone is served
-that tool and nothing else; one granted neither is served an empty tool list and refused every call it makes.
+copy of the mail; one granted `mailfathom.mail.ask` alone is served that tool; one granted
+`mailfathom.mail.contacts.read` alone is served `list_contacts` and `get_contact`; one granted
+`mailfathom.mail.contacts.write` alone is served `create_contact`, `update_contact`, and `delete_contact`. Each of the
+four is answered about every tool its own name does not cover as though no such tool existed, so an entry narrowed to
+the contact half reaches the contact book and nothing else, and one granted none of the four is served an empty tool
+list and refused every call it makes.
 
 **A refused caller is told nothing.** There is no message naming the permission it lacked, no field on a descriptor
 saying one is required, and no `insufficient_scope` challenge inviting a client to acquire one — even where the grant
@@ -1732,7 +1736,8 @@ client that speaks Streamable HTTP can list what it advertises; `tools/list` sho
 
 The five contact tools are beside them whenever the credential holds the permission each one needs, which an entry that
 writes no `Permissions` list does: `list_contacts` and `get_contact` read like the four above, while `create_contact`,
-`update_contact`, and `delete_contact` report `readOnlyHint` false, and `delete_contact` reports `destructiveHint` true.
+`update_contact`, and `delete_contact` report `readOnlyHint` false, and `update_contact` and `delete_contact` report
+`destructiveHint` true.
 A contact tool missing from the listing is the grant rather than a fault — [What a credential may
 do](#what-a-credential-may-do) is what decides it, and the startup line for the entry says what it resolved to.
 

@@ -25,9 +25,11 @@ namespace MailFathom.Mcp.Tools.Contacts;
 /// a client may safely repeat, not one that leaves no trace of having been made.
 /// </para>
 /// <para>
-/// It changes state and reaches nothing outside this process, which is what its annotations say. It is not destructive:
-/// what it replaces is a record the caller is restating, and taking somebody out of the book is
-/// <c>delete_contact</c>.
+/// It changes state, reaches nothing outside this process, and is destructive, which is what its annotations say. The
+/// last of those is the record replacing the whole record: an address the caller did not restate is removed and a note
+/// it omitted is cleared, so a client working from a partial view drops what it never saw. A client reads that
+/// annotation to decide what it may call unattended, and this is not one of them — the tool taking somebody out of the
+/// book altogether is still <c>delete_contact</c>.
 /// </para>
 /// </remarks>
 [McpServerToolType]
@@ -59,7 +61,7 @@ internal sealed class UpdateContactTool(ContactBookWriter contactBookWriter)
         Name = ToolName,
         Title = "Update contact",
         ReadOnly = false,
-        Destructive = false,
+        Destructive = true,
         Idempotent = true,
         OpenWorld = false,
         UseStructuredContent = true)]

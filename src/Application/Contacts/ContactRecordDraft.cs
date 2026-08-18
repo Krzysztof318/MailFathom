@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Contacts;
+
 namespace MailFathom.Application.Contacts;
 
 /// <summary>The record a caller wants a contact to have, as the caller wrote it and before any rule has judged it.</summary>
@@ -26,7 +28,8 @@ public sealed record ContactRecordDraft
     /// <summary>Gets the name to record for this person.</summary>
     public string? DisplayName { get; init; }
 
-    /// <summary>Gets every address this person uses; two spellings of one address count once.</summary>
+    /// <summary>Gets every address this person uses, at most <see cref="Contact.MaximumAddressCount" /> values, of which two spellings of one address are stored as one.</summary>
+    /// <remarks>The ceiling is on the values sent rather than on the mailboxes they name, so a list naming fewer distinct addresses than it holds entries is refused on its length before anything is deduplicated.</remarks>
     public IReadOnlyList<string>? Addresses { get; init; }
 
     /// <summary>Gets the address to use by default, which must be one of <see cref="Addresses" />.</summary>

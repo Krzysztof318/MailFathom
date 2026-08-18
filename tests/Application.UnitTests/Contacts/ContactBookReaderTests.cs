@@ -89,6 +89,24 @@ public sealed class ContactBookReaderTests
         Assert.Null(query.Cursor);
     }
 
+    /// <summary>A page size inside the bound is the caller's, so the book reads exactly what was asked for.</summary>
+    [Fact]
+    public async Task ReadPageAsync_APageSizeInsideTheBound_ReadsThatManyRatherThanTheDefault()
+    {
+        // Arrange
+        var directory = DirectoryAnswering(new ContactPage([], NextCursor: null));
+        var reader = ReaderOver(directory);
+        var pageSize = ContactQuery.DefaultPageSize + 1;
+
+        // Act
+        await reader.ReadPageAsync(
+            new ContactPageRequest { PageSize = pageSize },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(pageSize, QueryReadBy(directory).PageSize);
+    }
+
     /// <summary>The ceiling is refused rather than clamped, so a short page never reads as the end of the book.</summary>
     [Theory]
     [InlineData(0)]

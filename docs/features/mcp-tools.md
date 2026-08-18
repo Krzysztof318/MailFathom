@@ -139,15 +139,17 @@ per tool rather than per surface:
 | `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `ask_mail` | `true` | `false` | `true` |
 | `list_contacts`, `get_contact` | `true` | `false` | `true` |
 | `create_contact` | `false` | `false` | `false` |
-| `update_contact` | `false` | `false` | `true` |
+| `update_contact` | `false` | `true` | `true` |
 | `delete_contact` | `false` | `true` | `true` |
 
 Each of those three values is a fact about the tool rather than a posture. `create_contact` is not idempotent because
 the book mints the identity: calling it twice with one person records them once and then answers
 `addressHeldByAnotherContact`. `update_contact` is idempotent because an amendment states the whole record, so the
-second identical call writes what the first one already wrote. `delete_contact` is idempotent for the same reason and
-destructive all the same: erasing somebody twice leaves the state the caller asked for, and the first call removed a
-record nothing here can bring back. Nothing on this surface is `openWorld`, contact writes included, because a write
+second identical call writes what the first one already wrote — and destructive for that same reason, because stating
+the whole record removes an address the caller left out and clears a note it omitted. `delete_contact` is idempotent
+too and destructive all the same: erasing somebody twice leaves the state the caller asked for, and the first call
+removed a record nothing here can bring back. `create_contact` is the one write that is neither, because it mints a
+record where none was held and so has nothing to drop. Nothing on this surface is `openWorld`, contact writes included, because a write
 here reaches MailFathom's own database and no third party.
 
 The annotations are contract metadata rather than documentation, so `Mcp.UnitTests` asserts the advertised
@@ -1090,8 +1092,9 @@ through `mfctl contact promote`, and it is amendable afterwards.
 
 Erases one person from the book and removes every address recorded with them.
 
-It is the only destructive tool on this surface and the annotation says so. The record is deleted rather than marked,
-and nothing here brings it back. It removes the contact record alone: no mail is deleted, and no mail server is
+It is destructive and the annotation says so, as `update_contact`'s does for the part of a record an amendment drops.
+What is different here is that nothing of the person survives: the record is deleted rather than marked, and nothing
+here brings it back. It removes the contact record alone: no mail is deleted, and no mail server is
 contacted.
 
 ### Arguments

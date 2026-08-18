@@ -72,12 +72,19 @@ public sealed class ContactToolMetadataTests
         Assert.False(annotations.OpenWorldHint);
     }
 
-    /// <summary>Erasing somebody is the one act on this surface a client must not auto-approve, and the hint is how it learns that.</summary>
+    /// <summary>Erasing somebody and restating their whole record both drop what they replace, and the hint is how a client learns not to auto-approve either.</summary>
+    /// <remarks>
+    /// A creation is the one write that removes nothing: it mints a record where none was held, so nothing a caller
+    /// omitted was there to be lost. An amendment replaces the addresses and the note outright, which is the same loss
+    /// as an erasure over the part of the record the caller did not restate.
+    /// </remarks>
     [Theory]
     [InlineData(CreateContactTool.ToolName, false)]
-    [InlineData(UpdateContactTool.ToolName, false)]
+    [InlineData(UpdateContactTool.ToolName, true)]
     [InlineData(DeleteContactTool.ToolName, true)]
-    public void AddMailFathomServer_AdvertisesDestructivenessOnTheErasureAlone(string toolName, bool expectedHint)
+    public void AddMailFathomServer_AdvertisesDestructivenessOnTheWritesThatDropWhatTheyReplace(
+        string toolName,
+        bool expectedHint)
     {
         // Arrange, Act
         var annotations = AdvertisedTool(toolName).Annotations;

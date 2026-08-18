@@ -29,7 +29,7 @@ An agent gets ten tools, and they are the whole surface. Five of them read your 
 
 The first four are always there. `ask_mail` needs a chat model and an embedding model you configure and point at, so a deployment with neither does not advertise it at all.
 
-The other five are MailFathom's own contact book — `list_contacts`, `get_contact`, `create_contact`, `update_contact`, and `delete_contact` — which record the people you write down and the addresses each of them uses. They are offered to a credential granted them, which every credential is until you narrow its entry, and `delete_contact` announces itself as destructive because an erasure cannot be undone.
+The other five are MailFathom's own contact book — `list_contacts`, `get_contact`, `create_contact`, `update_contact`, and `delete_contact` — which record the people you write down and the addresses each of them uses. They are offered to a credential granted them, which every credential is until you narrow its entry, and both `update_contact` and `delete_contact` announce themselves as destructive — an amendment drops whatever the caller left out of the record, and an erasure cannot be undone.
 
 No tool writes to a mailbox. An agent cannot send, delete, move, or mark mail, and the contact tools reach no mail server at all.
 
