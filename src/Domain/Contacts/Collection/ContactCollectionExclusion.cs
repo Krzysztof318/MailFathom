@@ -85,9 +85,19 @@ public sealed record ContactCollectionExclusion
     /// <param name="exclusion">The entry, when the text is a pattern this system can hold an address against.</param>
     /// <returns><see langword="true" /> when the text is usable; otherwise <see langword="false" />.</returns>
     /// <remarks>
-    /// Blank text and text beyond <see cref="MaximumPatternLength" /> are refused, and so is a pattern of nothing but
-    /// wildcards: an entry that matches every address would switch collection off through a list written to narrow it,
-    /// and an owner meaning that turns collection off where it is turned on.
+    /// <para>
+    /// Blank text and text beyond <see cref="MaximumPatternLength" /> are refused, and so is a pattern that narrows
+    /// nothing: an entry matching every address would switch collection off through a list written to narrow it, and an
+    /// owner meaning that turns collection off where it is turned on.
+    /// </para>
+    /// <para>
+    /// A pattern narrows nothing when its only characters are the two wildcards and the at-sign, which is wider than
+    /// refusing an all-wildcard pattern and is the shape that actually reaches an owner. <c>*@*</c> is not all wildcards
+    /// — it carries a literal — and yet it matches every address there is, because a normalized address holds exactly
+    /// one at-sign and arbitrary text on either side of it. The same rule also refuses the mirror mistakes, <c>*@</c>
+    /// and <c>@*</c>, which match no address at all, and that is deliberate: an entry selecting on nothing an address
+    /// can differ by is a typo whichever way it lands, and this is the one place it can still be said out loud.
+    /// </para>
     /// </remarks>
     public static bool TryCreateForAddressPattern(
         string? pattern,
@@ -102,7 +112,7 @@ public sealed record ContactCollectionExclusion
 
         var trimmed = pattern.Trim();
 
-        if (trimmed.Length > MaximumPatternLength || trimmed.All(static character => character is '*' or '?'))
+        if (trimmed.Length > MaximumPatternLength || NarrowsNothing(trimmed))
         {
             return false;
         }
@@ -133,4 +143,8 @@ public sealed record ContactCollectionExclusion
         return SenderDomain.TryCreateFromMailbox(address.Address, out var domain)
             && (domain == this.Domain || (this.IncludesSubdomains && domain.IsSubdomainOf(this.Domain)));
     }
+
+    /// <summary>Answers whether a pattern selects on nothing an address can differ by.</summary>
+    private static bool NarrowsNothing(string pattern) =>
+        pattern.All(static character => character is '*' or '?' or '@');
 }

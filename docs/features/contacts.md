@@ -155,11 +155,14 @@ Four things are never collected, and none of them can be switched off:
 
 On top of those an owner writes their own exclusions per account, each naming either a domain — optionally reaching the
 names beneath it — or a pattern over the whole address, where `*` stands for any run of characters and `?` for exactly
-one. An entry that names both, or neither, or a pattern matching every address, is refused at startup rather than
+one. An entry that names both, or neither, or a pattern whose only characters are the two wildcards and the at-sign —
+which takes every address or none of them, `*@*` being the shape that reaches an owner — is refused at startup rather than
 silently excluding nobody.
 
-**A run records at most `MaxContactsPerRun` contacts**, 50 by default, counted across every folder of one account
-synchronizing at once. What that paces is the first synchronization of a mailbox holding years of mail, where every
+**One folder run records at most `MaxContactsPerRun` contacts**, 50 by default. The bound is per folder rather than per
+account, exactly as the run's content budget is, so an account whose configuration maps several folders may reach it
+once for each of them in a single synchronization cycle. What that paces is the first synchronization of a mailbox
+holding years of mail, where every
 message is new and the book would otherwise gain thousands of people in one pass before anybody had seen one of them. A
 run that reaches the bound stops recording and leaves the rest for the next run, which reads the same senders again and
 finds the evidence they need still standing. Zero records nobody while leaving collection on, which is a way to see what

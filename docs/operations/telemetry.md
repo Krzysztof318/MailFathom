@@ -688,7 +688,8 @@ about third parties without anybody asking it to, so an owner who switched it on
 The six are what make the readings distinguishable. `recorded` rising is the book filling; a deployment where it is
 almost all of the traffic is one whose threshold is too low. `already_held` becoming almost everything is the ordinary
 state of a book that has filled. `excluded` at nearly the whole volume is a policy excluding everybody, which usually
-means one pattern is wider than its author meant. `run_bound_reached` appearing repeatedly says runs are stopping at
+means one pattern is wider than its author meant; it also carries the rare address collection could derive no name
+from, which is why the reading is *this address was never a candidate* rather than *the owner's list caught it*. `run_bound_reached` appearing repeatedly says runs are stopping at
 `MaxContactsPerRun` rather than at the end of the mail, which is expected during a first synchronization and worth
 looking at afterwards. `below_threshold` and `not_correspondence` are the two that mean collection is working as
 configured and writing nothing.

@@ -23,7 +23,15 @@ public enum ContactCollectionOutcome
     /// <summary>The address has not written often enough for the person behind it to be a correspondent yet.</summary>
     BelowThreshold = 2,
 
-    /// <summary>The account's policy refuses that address: it is automated, excluded, or the deployment's own.</summary>
+    /// <summary>The address is not one this account records: the policy refuses it, or nothing usable could name it.</summary>
+    /// <remarks>
+    /// Two refusals under one value, because both are the same answer to an operator: this address was never a
+    /// candidate. The policy half is the ordinary one — an automated mailbox, an owner's exclusion, or the deployment's
+    /// own address — and the other is an address collection could derive no display name from, which needs an address
+    /// past <c>ContactDisplayName</c>'s length carrying no name of its own and is correspondingly rare. They are not
+    /// split because an operator reads a rising count as *my list is doing its work*, and a second value nobody's
+    /// configuration can move would be a dimension to explain rather than one to act on.
+    /// </remarks>
     Excluded = 3,
 
     /// <summary>The message said of itself that no person wrote it, so none of its addresses was considered.</summary>

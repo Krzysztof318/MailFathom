@@ -1472,7 +1472,7 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             if (entry is null || !entry.TryCreateExclusion(out _))
             {
                 yield return new ValidationResult(
-                    $"Account '{this.AccountId}': contact collection exclusion {position} must name exactly one of a usable domain or a usable address pattern, may ask to include subdomains only where it names a domain, and may not write a pattern that matches every address.",
+                    $"Account '{this.AccountId}': contact collection exclusion {position} must name exactly one of a usable domain or a usable address pattern, may ask to include subdomains only where it names a domain, and may not write a pattern whose only characters are the two wildcards and the at-sign.",
                     [nameof(this.ContactCollection)]);
             }
         }

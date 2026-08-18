@@ -4,7 +4,7 @@
 
 namespace MailFathom.Application.Contacts.Collection;
 
-/// <summary>Bounds how many contacts one synchronization run may record.</summary>
+/// <summary>Bounds how many contacts one folder synchronization run may record.</summary>
 /// <remarks>
 /// <para>
 /// The bound belongs to a run rather than to the book, for the reason the content budget beside it does: what needs
@@ -14,8 +14,11 @@ namespace MailFathom.Application.Contacts.Collection;
 /// they need still standing.
 /// </para>
 /// <para>
-/// The claim is interlocked because an account may synchronize several folders at once and the bound is meant to be the
-/// run's rather than each folder's share of it.
+/// <b>One folder run, exactly as the content budget beside it is bounded</b>, so an account whose configuration maps
+/// several folders may reach the ceiling once for each of them in one synchronization cycle. That is the bound the
+/// configuration reference states, and pacing a first synchronization is what it is sized against. The claim is
+/// interlocked all the same, because a budget that leaked under contention would leak precisely where a book is
+/// filling fastest, and an owner reading the ceiling is entitled to it holding.
 /// </para>
 /// </remarks>
 public sealed class ContactCollectionBudget

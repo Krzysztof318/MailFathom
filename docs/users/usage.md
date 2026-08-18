@@ -12,7 +12,7 @@ Four of the five mailbox tools are always within the deployment's reach. `ask_ma
 model configured and working, so a deployment that has neither does not offer it at all; its absence from a tool listing
 is that deployment saying it cannot answer questions rather than something being broken.
 
-Which of the ten *you* are offered is a second question, and its answer is the grant on the credential you connected
+Which of the eleven *you* are offered is a second question, and its answer is the grant on the credential you connected
 with. A tool that grant does not permit is absent from the listing, and calling it anyway is answered as though no such
 tool existed — nothing names the permission that was missing, so a shorter tool list than this page describes is a
 question for whoever configured the deployment:
@@ -288,7 +288,7 @@ answer "who is this from" for somebody who writes from three of them.
 person in the book can answer it. Searching for an address in `list_contacts` finds the same person more slowly and
 finds others besides.
 
-Four of them change state, so they carry the annotations that make a client pause. `create_contact` is not idempotent —
+Four of them change state, and three of those carry the annotations that make a client pause. `create_contact` is not idempotent —
 the book mints the identity, and calling it twice for one person records them once and then answers
 `addressHeldByAnotherContact`, naming who holds the address. `update_contact` states the **whole** record rather than
 the change: an address the new record does not name is removed, and an omitted note clears the one held, so read the
@@ -296,7 +296,8 @@ contact first and send it back with the change. It is destructive for exactly th
 before calling a destructive tool will ask here. `delete_contact` is destructive and cannot be undone; it erases the
 person and every address recorded with them, and answers with how many went. `promote_contact` is the one write that is
 neither destructive nor a first record: it takes on a person the deployment collected from arriving mail, so the record
-becomes one you asserted.
+becomes one you asserted. It answers with the outcome and never with the person, so an agent that wants to read them
+back calls `get_contact`.
 
 One thing is worth knowing before an agent is pointed at the book. A record this deployment collected is not an agent's
 to amend as it stands — that call answers `contactWasCollected` — and `promote_contact` is what it calls instead, after

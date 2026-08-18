@@ -40,20 +40,25 @@ public sealed class ContactCollectionBudgetTests
         Assert.Equal(0, budget.Recorded);
     }
 
-    /// <summary>An account synchronizes several folders at once, so the ceiling is the run's rather than each folder's.</summary>
+    /// <summary>The ceiling holds under concurrent claims, so it bounds the run rather than each claimant.</summary>
+    /// <remarks>
+    /// A folder run reaches the collector one committed message at a time today, so this is a property of the type
+    /// rather than a scenario the pipeline produces. It is asserted because the budget is what stands between a first
+    /// synchronization and a book of thousands, and a ceiling that leaked under contention would leak exactly there.
+    /// </remarks>
     [Fact]
-    public async Task TryClaim_ClaimedFromSeveralFoldersAtOnce_AdmitsTheCeilingOnceForTheWholeRun()
+    public async Task TryClaim_ClaimedConcurrently_AdmitsExactlyTheCeilingAcrossEveryClaimant()
     {
         // Arrange
         const int Ceiling = 50;
         var budget = new ContactCollectionBudget(Ceiling);
 
         // Act
-        var folders = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(
+        var claimants = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(
             () => Enumerable.Range(0, 40).Count(_ => budget.TryClaim()))));
 
         // Assert
-        Assert.Equal(Ceiling, folders.Sum());
+        Assert.Equal(Ceiling, claimants.Sum());
         Assert.Equal(Ceiling, budget.Recorded);
     }
 

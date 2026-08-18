@@ -67,11 +67,11 @@ Four properties hold for every tool and are proven by test rather than asserted 
   at 200 people. A caller can never raise any of them, and the `ask_mail` set is the operator's to lower or raise in
   [`MailAnswering`](../operations/configuration-reference.md#mailanswering).
 
-One property holds for nine of the ten and is stated where it stops. `list_accounts`, `list_emails`,
+One property holds for ten of the eleven and is stated where it stops. `list_accounts`, `list_emails`,
 `get_email_content`, `search_emails`, and the six contact tools are within reach of every deployment, because local
 state is all they need. `ask_mail` needs two AI providers an operator configures separately, so it is advertised only
 while both are configured and working; the [`ask_mail`](#ask_mail) section records what decides that and what a call
-meets when it arrives anyway. Whether any of the ten is offered to a particular caller is a second question, which the
+meets when it arrives anyway. Whether any of the eleven is offered to a particular caller is a second question, which the
 next section answers.
 
 ## What a caller is offered
@@ -1140,9 +1140,15 @@ person is rewritten, and no mail server is contacted.
 
 ### Result
 
-The same shape `create_contact` answers with. `written` carries the record as it now stands, under the `asserted`
-origin; `notFound` means the book holds no contact of that identifier; `alreadyAsserted` means the promotion had nothing
-left to do, which is the state a first call left the record in.
+The same shape `create_contact` answers with, and it carries the state alone. `written` means the record is now under
+the `asserted` origin; `notFound` means the book holds no contact of that identifier; `alreadyAsserted` means the
+promotion had nothing left to do, which is the state a first call left the record in.
+
+**No record comes back, deliberately.** The caller supplied an identifier rather than a person, so answering with the
+promoted contact would hand the whole of what `get_contact` serves — the name, every address, the note — to a caller
+holding `mailfathom.mail.contacts.write` and nothing else, and no permission here implies another. A caller that also
+holds `mailfathom.mail.contacts.read` reads the person through the tool published for reading them. The administrative
+route behind the same use case answers the same way and for the same reason.
 
 ## Pending
 

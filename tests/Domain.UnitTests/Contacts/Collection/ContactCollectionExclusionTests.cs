@@ -66,12 +66,36 @@ public sealed class ContactCollectionExclusionTests
     }
 
     /// <summary>An entry that excluded everybody would switch collection off through a list written to narrow it.</summary>
+    /// <remarks>
+    /// The at-sign shapes are the ones worth stating: <c>*@*</c> carries a literal, so a rule refusing only all-wildcard
+    /// text accepts it, and it matches every address there is — a normalized address holds exactly one at-sign with
+    /// arbitrary text either side. <c>*@</c> and <c>@*</c> are the mirror of it and match nothing, which is the same
+    /// typo landing the other way.
+    /// </remarks>
     [Theory]
     [InlineData("*")]
     [InlineData("**")]
     [InlineData("*?*")]
-    public void TryCreateForAddressPattern_APatternThatMatchesEveryAddress_IsRefused(string pattern) =>
+    [InlineData("*@*")]
+    [InlineData("**@**")]
+    [InlineData("*@")]
+    [InlineData("@*")]
+    [InlineData("?@?")]
+    [InlineData("@")]
+    public void TryCreateForAddressPattern_APatternSelectingOnNothingAnAddressDiffersBy_IsRefused(string pattern) =>
         Assert.False(ContactCollectionExclusion.TryCreateForAddressPattern(pattern, out _));
+
+    /// <summary>The rule stops at the at-sign, so a pattern carrying any other literal is a narrowing and is kept.</summary>
+    /// <remarks>
+    /// The control for the refusals above. Without it a rule that had grown to refuse every pattern containing an
+    /// at-sign — which is nearly every useful one — would pass every case in that theory.
+    /// </remarks>
+    [Theory]
+    [InlineData("*@example.test")]
+    [InlineData("noreply@*")]
+    [InlineData("*@*.example.test")]
+    public void TryCreateForAddressPattern_APatternCarryingALiteralBesideTheAtSign_IsKept(string pattern) =>
+        Assert.True(ContactCollectionExclusion.TryCreateForAddressPattern(pattern, out _));
 
     /// <summary>Blank text and text longer than any address the book holds are entries nobody could have meant.</summary>
     [Theory]

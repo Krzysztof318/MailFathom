@@ -202,8 +202,8 @@ public sealed class MailboxSynchronizer
 
         var budget = new SynchronizationContentBudget(this.options.MaxContentBytesPerRun);
 
-        // Opened per run for the reason the content budget above is: what needs bounding is one pass over a mailbox,
-        // and the account's own settings decide how much of it may reach the contact book.
+        // Opened here for the reason the content budget above is, and with the same scope: what needs bounding is one
+        // pass over one folder, and the account's own settings decide how much of it may reach the contact book.
         var collection = this.contactCollection.OpenRun(accountId, folderRole);
 
         var storedCount = 0;

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Contacts.Failures;
+using MailFathom.Application.Persistence;
 using MailFathom.Domain.Contacts;
 using MailFathom.Mcp.Tools.Contacts;
 using MailFathom.Mcp.UnitTests.TestDoubles;
@@ -14,9 +15,14 @@ namespace MailFathom.Mcp.UnitTests.Tools.Contacts;
 /// <summary>Covers the one crossing between the two halves of the book, and what each way it can end reads as.</summary>
 public sealed class PromoteContactToolTests
 {
-    /// <summary>A record the deployment collected becomes one the owner asserted, and the answer says so.</summary>
+    /// <summary>A record the deployment collected becomes one the owner asserted, and the answer says so and no more.</summary>
+    /// <remarks>
+    /// The record is deliberately absent from a success. A caller reaches this tool with the writing grant alone, which
+    /// implies no reading grant, and it named an identifier rather than a person — so publishing the promoted contact
+    /// would hand over the whole of what <c>get_contact</c> serves to somebody never granted it.
+    /// </remarks>
     [Fact]
-    public async Task PromoteContactAsync_AContactTheDeploymentCollected_PublishesItAsAsserted()
+    public async Task PromoteContactAsync_AContactTheDeploymentCollected_AnswersThatItWasWrittenAndPublishesNoRecord()
     {
         // Arrange
         var collected = StubContactBook.ContactOf("Anna Kowalska", "anna@example.test", ContactOrigin.Collected);
@@ -32,8 +38,15 @@ public sealed class PromoteContactToolTests
 
         // Assert
         Assert.Equal(ContactWriteState.Written, result.State);
-        Assert.Equal(PublishedContactOrigin.Asserted, result.Contact?.Origin);
-        Assert.Equal("Anna Kowalska", result.Contact?.DisplayName);
+        Assert.Null(result.Contact);
+
+        // The promotion is a required side effect rather than something the answer reports, now that the answer
+        // reports nothing about the person, so it is asserted where it actually happens.
+        await book.Store.Received(1).ReplaceAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Is<Contact>(promoted =>
+                promoted != null && promoted.Id == collected.Id && promoted.Origin == ContactOrigin.Asserted),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>Asking twice is asking once, so the second call answers with the state the first left the record in.</summary>
