@@ -413,7 +413,8 @@ burst of changes never becomes a burst of logins against a server that counts th
 
 Setting the period lower gives the slot back sooner and makes the next change pay for a fresh connection, a TLS
 handshake, and an authentication. Setting it higher does the opposite. It is read once at startup, which is why the
-[configuration reference](../operations/configuration-reference.md) marks it *restart* rather than *reload*.
+[mail configuration](../operations/configuration-mail.md#mailsynchronization) marks it *restart* rather than
+*reload*.
 
 A write connection is pinned to the folder it selected, the way any IMAP selection is, so changing a message in a second
 folder replaces the connection rather than adding one. Nothing on the read side can open, borrow, or reach it — the

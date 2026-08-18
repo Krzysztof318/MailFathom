@@ -89,7 +89,7 @@ The native process is the shape that brings no database at all.
   bytes and a longer one is refused at startup. **Back it up with the database and never regenerate it** — the key is
   not in the database, and losing it means re-authorizing every mailbox.
   [Secret provisioning](../operations/secret-provisioning.md#the-data-encryption-key) covers where it goes in each
-  shape, and [the configuration reference](../operations/configuration-reference.md#dataencryption) the section that
+  shape, and [`DataEncryption`](../operations/configuration-runtime.md#dataencryption) the section that
   points at it. A deployment whose mailboxes all authenticate with a password needs none, and starts without one.
 - **OpenSSL 3.0 or later**, because MailFathom connects to the mail server over TLS and .NET hands every handshake to
   the system library. **1.1.1 is the floor below which nothing runs at all**: .NET 10 requires it on Unix and
@@ -164,7 +164,7 @@ Build with the SDK pinned in `global.json`. The process is then an ordinary ASP.
   [What an encrypted credential is bound to](../operations/secret-provisioning.md#what-an-encrypted-credential-is-bound-to)
   states the whole binding, including which flag makes the chip a requirement rather than a preference and why a
   firmware update does not invalidate the credential.
-- [Where each surface is served](../operations/configuration-reference.md#where-each-surface-is-served) is stated by
+- [Where each surface is served](../operations/configuration-endpoints.md#where-each-surface-is-served) is stated by
   each surface's own section. `McpEndpoint:BindAddress` and `McpEndpoint:Port` bind the protocol surface, `0.0.0.0:8080`
   by default, in clear text unless you configure otherwise. `ASPNETCORE_URLS`, `ASPNETCORE_HTTP_PORTS`, and
   `Kestrel:Endpoints` are refused at startup, so an address you state is never one the process quietly ignores. The

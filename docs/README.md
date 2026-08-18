@@ -23,7 +23,8 @@ below for depth instead of duplicating them.
 - [Features](features/initial-scope.md) summarizes the first scaffolded capability scope.
 - [Operations](operations/local-development.md) covers local .NET and Aspire development commands.
 - [Configuration sources](operations/configuration-sources.md) covers the source precedence, the deployment-provisioned JSON directory and file, and the Kubernetes ConfigMap and Secret mapping.
-- [Configuration reference](operations/configuration-reference.md) lists every user-settable option in one place, with its type, default, constraints, and whether changing it needs a restart.
+- [Configuration reference](operations/configuration-reference.md) is the map to the four pages that list every user-settable option with its type, default, constraints, and whether changing it needs a restart, and it holds the settings read from the environment alone.
+- [Permissions](operations/permissions.md) states what a credential may do: the names MailFathom publishes, what each one reaches, how a grant is written on an authentication entry, and what a refused caller is told.
 - [Telemetry](operations/telemetry.md) records what the host emits over OpenTelemetry, the one environment variable that decides whether it is exported, the Aspire dashboard as the local destination, and why deployments export nothing by default.
 - [The platform TLS policy](operations/platform-tls-policy.md) explains why a legacy mail server's handshake can be refused before any MailFathom setting applies, the one supported way to relax it, and what relaxing it costs the whole process.
 - [Secret provisioning](operations/secret-provisioning.md) covers secret references, the systemd and container provisioning paths, and in-memory exposure.

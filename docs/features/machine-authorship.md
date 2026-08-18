@@ -128,7 +128,7 @@ columns fills every stored message in with the not-assessed state, which is what
 costs one pass over text the extraction has already produced — no network, no model, no DNS, and nothing an operator has
 to configure for it to mean something — and the strongest thing it reports is a message carrying characters no mail
 client renders, which is worth knowing on a first run rather than after somebody has thought to look for it. [The
-configuration reference](../operations/configuration-reference.md) states where the setting lives.
+mail configuration](../operations/configuration-mail.md#mailsynchronization) states where the setting lives.
 
 A deployment that turns it off records the not-assessed state, which is exactly what a message with no readable body
 carries and what mail stored before this release carries. That is deliberate: **nothing about a stored row says which of

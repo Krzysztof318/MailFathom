@@ -119,7 +119,7 @@ Before a release is pushed it is built, unit-tested, format-checked, proven agai
 | [Installing MailFathom](https://krzysztof318.github.io/MailFathom/users/installation.html) | Which deployment shape fits, and what each one needs |
 | [Getting started](https://krzysztof318.github.io/MailFathom/users/getting-started.html) | From an installed instance to a first successful tool call |
 | [Using the tools](https://krzysztof318.github.io/MailFathom/users/usage.html) | What each tool does, what they bound, and how to read a failure |
-| [Configuration reference](https://krzysztof318.github.io/MailFathom/operations/configuration-reference.html) | Every user-settable option, its default, and whether changing it needs a restart |
+| [Configuration reference](https://krzysztof318.github.io/MailFathom/operations/configuration-reference.html) | Every user-settable option, grouped by what it configures, with its default and whether changing it needs a restart |
 | [The MCP endpoint](https://krzysztof318.github.io/MailFathom/operations/mcp-endpoint.html) | Authentication, TLS, browser origins, client certificates, rate limits |
 | [The container image](https://krzysztof318.github.io/MailFathom/operations/container-image.html) | This page's subject, in full |
 | [Changelog](https://krzysztof318.github.io/MailFathom/CHANGELOG.html) | What each release promises across the four public surfaces |

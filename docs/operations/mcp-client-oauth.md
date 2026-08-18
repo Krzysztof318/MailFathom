@@ -129,7 +129,7 @@ decide per subject what an admitted caller may do rather than the deployment gra
 one further client scope per permission you intend a token to bring, named exactly as MailFathom publishes it —
 `mailfathom.mail.read`, `mailfathom.mail.ask`, `mailfathom.mail.contacts.read`, `mailfathom.mail.contacts.write`, or on
 the administrative endpoint one of the `mailfathom.admin.*` names
-[the reference](configuration-reference.md#what-a-credential-may-do--permissions) lists. The spelling is compared byte
+[the published set](permissions.md#the-published-set) lists. The spelling is compared byte
 for byte, so a differently cased or padded name is a different scope and grants nothing. Leave **Include in token scope**
 on, as above, and assign each to the client in [step 4](#4-register-an-application-for-the-client) — a scope the client
 never receives is a permission the caller never holds. Step 8's metadata document lists exactly the ones to create: an

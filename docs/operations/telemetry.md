@@ -326,7 +326,8 @@ eventually name mail.
 
 ### What an authorization refusal records
 
-A caller reaching something its grant does not carry is counted by `mailfathom.authorization.refusals`, tagged with
+A caller reaching something its grant does not carry — [what a credential may do](permissions.md) is the vocabulary
+those grants are written in — is counted by `mailfathom.authorization.refusals`, tagged with
 `mailfathom.authorization.surface` as `mail` or `administration`, `mailfathom.authorization.operation` with the tool or
 the route that was refused, and `mailfathom.authorization.permission` with the permission that would have sufficed. It
 is the signal worth alerting on rather than any single failure: one refusal is a client that was narrowed, and a
@@ -789,7 +790,7 @@ how close the deployment is to reaching it now — and neither is visible from t
 An endpoint that reports no usage advances neither token figure, which is why the run and period ceilings exist in a
 call-count form as well. [Mail answering § What one question may
 spend](../features/mail-answering.md#what-one-question-may-spend) holds the ceilings these are read against, and
-[`MailAnswering`](configuration-reference.md#mailanswering) the keys.
+[`MailAnswering`](configuration-ai.md#mailanswering) the keys.
 
 ### What a run records
 
@@ -1064,6 +1065,6 @@ The console log needs none of this. A container's log driver, `journalctl` for a
 What that stream looks like is configuration rather than a fixed shape. `Logging:Console` selects the formatter —
 `json` where something parses the lines, `systemd` where `journalctl` should read the level rather than print it as
 text — and carries a level filter of its own, so a noisy container log can be quietened without changing what the
-exporter sends to a collector. [The `Logging` section](configuration-reference.md#logging) states those keys, together
+exporter sends to a collector. [The `Logging` section](configuration-runtime.md#logging) states those keys, together
 with the one asymmetry worth planning for: the startup records are written before that configuration exists and keep
 the default format whatever it selects.

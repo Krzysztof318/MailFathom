@@ -34,8 +34,9 @@ and the reading follows two rules and no others:
 
 The identifier is compared without regard to case, since RFC 8601 writes it as a domain-shaped token and a server may
 change its casing between messages. Which identifier is right is a property of who receives that account's mail rather
-than of MailFathom, so there is nothing to default it to; [the configuration
-reference](../operations/configuration-reference.md) states where the setting lives. What to write in it is read off
+than of MailFathom, so there is nothing to default it to; [the mail
+configuration](../operations/configuration-mail.md#one-account--mailsynchronizationaccountsn) states where the setting
+lives. What to write in it is read off
 the mail the account already holds: open a message that arrived recently, read its topmost `Authentication-Results`
 header, and take the token before the first semicolon, which is the identifier that server stamps on everything it
 delivers to this mailbox.

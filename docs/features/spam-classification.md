@@ -127,7 +127,7 @@ gives up is the owner's mail, in full, to somebody else.
 
 Three bounds are the adapter's own, because each is a property of the daemon rather than of classification, and each is
 configurable with the default stated in the
-[configuration reference](../operations/configuration-reference.md#spamclassification):
+[AI configuration](../operations/configuration-ai.md#spamclassification):
 
 | Bound | Default | Why that number |
 | --- | --- | --- |
@@ -467,7 +467,7 @@ unchanged rather than wrapped in a predicate that admits everything.
 ## Configuration
 
 The `SpamClassification` section, in full, is in the
-[configuration reference](../operations/configuration-reference.md#spamclassification). What it decides:
+[AI configuration](../operations/configuration-ai.md#spamclassification). What it decides:
 
 - whether classification runs at all;
 - whether a configured scanner is consulted after the deterministic stage;

@@ -64,8 +64,8 @@ endpoint at all — an ordinary shape, and the one every account has until someb
 ```
 
 `Host` is what decides whether the endpoint exists: every other setting has a usable default or an inherited value, so
-presence of a host is the whole switch. [The configuration reference](../operations/configuration-reference.md) holds
-each key of the block, its default, and its constraint.
+presence of a host is the whole switch. [The mail configuration](../operations/configuration-mail.md#maildelivery)
+holds each key of the block, its default, and its constraint.
 
 **The block also states who this account writes as**, through `FromAddress` and `FromDisplayName`. Most deployments
 write neither: a provider that authenticates the mailbox by its address has already stated it as the account's
@@ -204,7 +204,7 @@ what somebody else's file is.
 
 **And some are bounds.** A recipient count, a body length, an attachment count, a per-file size, and a whole-message
 size are all the deployment's numbers rather than whatever a caller passed, and each is checked before a connection is
-worth opening. `MailDelivery` in [the configuration reference](../operations/configuration-reference.md#maildelivery)
+worth opening. `MailDelivery` in [the mail configuration](../operations/configuration-mail.md#maildelivery)
 holds each of them. The whole-message bound is the one a server has an answer to as well: the `SIZE` it advertised is
 checked beside that number rather than in place of it, so whichever is smaller decides, while the other four are the
 deployment's alone because nothing on the far side advertises them. It is measured on the composed bytes, because

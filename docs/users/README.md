@@ -44,8 +44,8 @@ says so and names the release, rather than describing it as though you could alr
    contact tools do, what they deliberately bound, and how to read a failure.
 6. **[Administering your deployment](administering.md)** — the `mfctl` command: what it is for, signing in to a
    deployment from your own machine, and what it cannot do yet.
-7. **[Configuration reference](../operations/configuration-reference.md)** — every user-settable option in one place,
-   with its type, default, constraints, and whether changing it needs a restart.
+7. **[Configuration reference](../operations/configuration-reference.md)** — the map to the four pages that list every
+   user-settable option with its type, default, constraints, and whether changing it needs a restart.
 
 ## Handing this guide to your own agent
 
@@ -70,7 +70,7 @@ deliberately leave out.
 | Question | Page |
 | --- | --- |
 | Is it healthy, and how do I probe it? | [Health endpoints](../operations/health-endpoints.md) |
-| Which port does it serve `/mcp` on, and is it HTTP or HTTPS? | [Where each surface is served](../operations/configuration-reference.md#where-each-surface-is-served) |
+| Which port does it serve `/mcp` on, and is it HTTP or HTTPS? | [Where each surface is served](../operations/configuration-endpoints.md#where-each-surface-is-served) |
 | How do I reach a running deployment from my own machine? | [Administering your deployment](administering.md), [the administrative endpoint](../operations/admin-endpoint.md) |
 | How do I provision and rotate credentials? | [Secret provisioning](../operations/secret-provisioning.md), [secret rotation](../operations/secret-rotation.md) |
 | How do I protect the MCP endpoint — keys, OAuth, TLS, client certificates, rate limits? | [The MCP endpoint](../operations/mcp-endpoint.md) |

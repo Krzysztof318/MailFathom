@@ -73,7 +73,7 @@ Five things, because those are what a declaration writes and what a first call f
 | Whether a requested width is honoured | `SupportsRequestedDimension` defaults to `true`, so an endpoint that ignores or rejects `dimensions` needs it written `false` |
 | Which chat API it serves | `Chat:Api` names `ChatCompletions` or `Responses`, and a service serving only one refuses the other as *request refused* |
 
-[Configuration reference § `Embeddings`](configuration-reference.md#embeddings) and [§ `Chat`](configuration-reference.md#chat)
+[AI configuration § `Embeddings`](configuration-ai.md#embeddings) and [§ `Chat`](configuration-ai.md#chat)
 are the inventory of every key named here.
 
 ## Vendor APIs with a compatibility layer

@@ -27,4 +27,4 @@
   description: The mfctl command — what it is for, signing in to a running deployment from your own machine, and what it cannot do yet.
 - name: Configuration reference
   href: ../operations/configuration-reference.md
-  description: Every user-settable option in one place, with its type, default, constraint, and whether changing it needs a restart.
+  description: How every configuration table is read, which page holds each section, and the settings read from the environment alone.

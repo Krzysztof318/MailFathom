@@ -71,55 +71,22 @@ reverse proxy, write the public URL and keep the path: `https://mail.example.tes
 ## What a credential may do
 
 Each entry states what the credentials it admits may do, as `Permissions`. This surface's half of the published set is
-six names, allocated so that the separations an operator would plausibly want to make are the ones they can:
+six names — `mailfathom.admin.read`, `mailfathom.admin.audit.read`, `mailfathom.admin.operate`,
+`mailfathom.admin.credentials.write`, `mailfathom.admin.spend`, and `mailfathom.admin.erase` — allocated so that the
+separations an operator would plausibly want to make are the ones they can: reading state, reading what was derived
+from mail, causing work, placing a credential, starting a bill, and destroying what the deployment holds.
+[What a credential may do](permissions.md) states what each name reaches, which two permissions the six commands that
+read before they write need together, how a grant is written, and what fails startup;
+[what the endpoint serves](#what-the-endpoint-serves) names the permission every route is published under.
 
-| Permission | What it covers |
-| --- | --- |
-| `mailfathom.admin.read` | The reads reporting the deployment's own state and no mail: what synchronization is doing per account and per folder, embedding status and the activation preview, the loaded rules, a run's progress, what a rewind would cost, the stopped-job list |
-| `mailfathom.admin.audit.read` | Everything derived from somebody's mail: the mailbox-mutation audit, the answering audit, the rules history, the spam classifications, and reading the contact book — a listing, one person, or their export |
-| `mailfathom.admin.operate` | Asking the deployment to do work it can already do: running rules over an account, classifying an account, retrying or dropping a stopped job, cancelling a reindex, rewinding synchronization, re-deriving stored mail, and writing to the contact book |
-| `mailfathom.admin.credentials.write` | Storing a mailbox refresh token |
-| `mailfathom.admin.spend` | Activating the declared embedding model, which is the one operation that starts a provider bill |
-| `mailfathom.admin.erase` | Disposing of what this deployment holds: the mail stored for a folder an account no longer mirrors, and one person and everything the contact book derived from them |
-
-No permission implies another, so a credential that needs to read state and to run rules is granted both names. A name
-nothing publishes fails startup, naming the entry and the position in the list, so a misspelling is refused rather than
-read as a narrower grant than you meant; so is a name the same grant already carries. A `mailfathom.mail.*` name is
-refused for a second reason as well — it belongs to the MCP surface and would grant nothing on this one.
-
-**Six `mfctl` commands make two requests and therefore need two permissions.** The table below publishes one permission
-per route, and a command that reads before it writes reaches two routes — because what it read is what it puts in front
-of you, or what it amends from:
-
-| Command | Needs |
-| --- | --- |
-| `mfctl contact update`, `mfctl contact add-address`, `mfctl contact remove-address` | `mailfathom.admin.audit.read` beside `mailfathom.admin.operate`, because each reads the record it is about to amend from |
-| `mfctl contact delete` | `mailfathom.admin.audit.read` beside `mailfathom.admin.erase`, because it shows you the person before erasing them |
-| `mfctl mailbox rewind` | `mailfathom.admin.read` beside `mailfathom.admin.operate`, because it always reads what the rewind would cost, including under `--yes` |
-| `mfctl embedding activate` | `mailfathom.admin.read` beside `mailfathom.admin.spend`, because it always reads what activating would spend before it spends it |
-
-A credential granted only the permission the operation itself is published under meets the refusal at the first request
-and nothing is done — which is the safe half of it, and still not what the operator intended.
-
-`GET /api/admin/session` sits outside the model and needs no permission. It reports the credential the caller already
-presented, the version this deployment already publishes, and the permissions that credential holds — all of which it
-brought or could ask about itself — and it is what every command reads first, `mfctl login` included. Requiring a
-permission for it would make that permission a component of every administrative grant, so a credential granted only
-the spend permission could not sign in to use it. **A credential granted nothing therefore still answers here and
-nowhere else**; an operator who wants nothing answered at all removes the entry.
-
-`mfctl status` prints what that route reports, which is how an operator reads their own grant back:
+`GET /api/admin/session` is the one route that requires none, which is what lets a credential granted nothing still
+sign in and read that it holds nothing. `mfctl status` prints what that route reports, and is how an operator reads
+their own grant back:
 
 ```text
 'production' (https://mail.example.test:8443) accepts the stored credential as 'workstation' (MailFathom 0.2.0).
 It holds mailfathom.admin.read, mailfathom.admin.operate.
 ```
-
-The rest of the reading is the same on both surfaces and is written once, under
-[what a credential may do](mcp-endpoint.md#what-a-credential-may-do): the grant belongs to the entry rather than to the
-block inside it, an absent `Permissions` key leaves the entry holding everything this surface publishes while
-`Permissions: []` grants nothing, an endpoint with no entry at all grants everything to every caller it serves, and
-`PermissionsFromTokenScopes` turns the list into a ceiling a token's own scopes narrow.
 
 Startup records what every entry resolved to, one line per entry, and names the ones that wrote no grant:
 
@@ -135,20 +102,9 @@ whether the grant is enforced: the MCP endpoint answers a call naming a tool the
 exist, and this one names the permission. Nothing in those lines names a key, a public key, a token, an authorization
 server, or a subject: a grant is what the deployment wrote, never who presented something.
 
-**The contact book falls under the six above rather than under names of its own.** Reading the book, reading one person
-and exporting them are `mailfathom.admin.audit.read`, because what the book holds is derived from mail; recording,
-amending and promoting are `mailfathom.admin.operate`; erasing somebody is `mailfathom.admin.erase`. Nothing about the
-book needed a seventh name — what it needed was for each of its routes to be placed against the separations the six
-already draw.
-
-**The book is also written from the MCP endpoint, under that surface's own name.** Recording, amending, and erasing a
-person are performed by the contact tools as well as by these routes, so the use case behind them admits the
-administrative name above *or* `mailfathom.mail.contacts.write` — the two surfaces draw from disjoint halves, so
-requiring one would leave the act reachable from `mfctl` and refused from every agent. It is an alternative rather than
-a widening, and it stops where the act does: promoting a collected contact and exporting one are named for this surface
-alone, because taking a record on is the owner's judgement about somebody collection inferred and an export answers a
-data-subject request. [MCP tools](../features/mcp-tools.md#the-contact-book-on-this-surface) is what the other half
-publishes.
+The contact book needed no name of its own on this surface and is reachable from the other one under that surface's
+name — [the contact book draws from both halves](permissions.md#the-contact-book-draws-from-both-halves) is why, and
+which of the six each of its routes falls under.
 
 ### What a refusal says
 
@@ -466,7 +422,7 @@ identifier are the whole of it.
 
 Five commands, and none of them writes a rule. A rule is authored in configuration, where an edit is reviewable in a
 diff before it reaches a mailbox, so `mfctl` runs the rules and reads what they concluded and never creates, edits,
-enables, disables, or deletes one. [`MailRules`](configuration-reference.md#mailrules) is the section they are declared
+enables, disables, or deletes one. [`MailRules`](configuration-mail.md#mailrules) is the section they are declared
 in, and [mail rules](../features/mail-rules.md) is the whole authoring surface.
 
 **`mfctl rules list` is the command to run after editing rules.** A reload whose rules do not validate is refused and
@@ -544,7 +500,7 @@ what happened on the server, which [the mutation
 trail](../features/imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default)
 answers.
 
-The history is held for [`MailRules:HistoryRetention`](configuration-reference.md#mailrules) and is erased with the mail
+The history is held for [`MailRules:HistoryRetention`](configuration-mail.md#mailrules) and is erased with the mail
 it describes, whichever comes first. Nothing any of these four routes answers with is mail: rule names, folder aliases,
 special-use roles, mutation names, fact names, counts, instants, and identifiers are the whole of it.
 
@@ -559,7 +515,7 @@ to name and the rule's own words are what an operator has to correct.
 
 Three commands, and none of them writes a setting. Whether mail is classified at all, what a scanner is judged by, and
 what happens to junk are configuration for the reason a rule is, so `mfctl` applies them to the mail a deployment
-already holds and reads what was decided. [`SpamClassification`](configuration-reference.md#spamclassification) is the
+already holds and reads what was decided. [`SpamClassification`](configuration-ai.md#spamclassification) is the
 section, and [spam classification](../features/spam-classification.md) is what the feature does.
 
 **`mfctl spam run --account <id>` is a dry run unless you add `--apply`.** It returns as soon as the deployment has
@@ -875,7 +831,7 @@ where a successful guess is worth the most.
 `AdminEndpoint:RateLimiting` is the same section `McpEndpoint:RateLimiting` is, with the same keys, the same product
 defaults, and the same validation. [Rate limiting](mcp-endpoint.md#rate-limiting) is where the settings, the ranges, the
 reasoning, and what a refused request receives are recorded in full;
-[configuration reference](configuration-reference.md#rate-limiting--mcpendpointratelimiting-and-adminendpointratelimiting)
+[endpoint configuration](configuration-endpoints.md#rate-limiting--mcpendpointratelimiting-and-adminendpointratelimiting)
 is the key table.
 
 Two things differ here, and both follow from where the credential is judged:
@@ -945,7 +901,7 @@ arrived. `mfctl login --endpoint https://admin.example.com:8543` writes the corr
 That listener maps no route. No administrative operation, no session probe, and no protected-resource metadata document is
 reachable over it, and no credential check runs for a request that arrived on it — every path gets the same redirect, and a
 `Host` header naming no configured domain gets `400`. The port is checked against every other listener in the process, so a
-port the MCP surface or the probes also bind is shared rather than refused. What the two surfaces must then agree about is the socket itself — the scheme, the redirect, the client-certificate question — while their credentials, limits, and HTTPS ports stay their own; [which settings a shared socket couples](configuration-reference.md#which-settings-a-shared-socket-couples) is the table.
+port the MCP surface or the probes also bind is shared rather than refused. What the two surfaces must then agree about is the socket itself — the scheme, the redirect, the client-certificate question — while their credentials, limits, and HTTPS ports stay their own; [which settings a shared socket couples](configuration-endpoints.md#which-settings-a-shared-socket-couples) is the table.
 
 Turn it off with `AdminEndpoint:Https:Redirect:Enabled` set to `false`, which is what a deployment behind a proxy that
 already answers the clear-text port wants. The setting shape and every refusal are the MCP endpoint's, documented once in
@@ -1532,4 +1488,4 @@ removing the log is a way to start a new one rather than a way to turn it off.
 
 - [MCP endpoint](mcp-endpoint.md) — the other protected surface, and the one this is deliberately separate from
 - [Secret provisioning](secret-provisioning.md) — how an API key reference is backed by material
-- [Configuration reference](configuration-reference.md) — every key in the `AdminEndpoint` block
+- [Endpoint configuration](configuration-endpoints.md#adminendpoint) — every key in the `AdminEndpoint` block

@@ -70,7 +70,7 @@ so the host refuses `ASPNETCORE_URLS`, `ASPNETCORE_HTTP_PORTS`, and `ASPNETCORE_
 and the aspnet base image sets `ASPNETCORE_HTTP_PORTS=8080` in its own config. The runtime stage clears that variable to
 an empty value, which is what the refusal treats as absent, so a container serves what `McpEndpoint:Port` and
 `HealthEndpoints:Port` say and no deployment has to unset anything. The other two are absent. [Where each surface is
-served](configuration-reference.md#where-each-surface-is-served) is the contract, and [Verification](#verification) is
+served](configuration-endpoints.md#where-each-surface-is-served) is the contract, and [Verification](#verification) is
 the gate that reads all three back off the built image so a base-image bump cannot reintroduce one unnoticed.
 
 `DOTNET_EnableDiagnostics=0` is set, so no diagnostic IPC socket is created. That socket can request a process dump,

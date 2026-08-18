@@ -210,7 +210,7 @@ writes. A database that cannot answer it is reported as unavailable and the host
 nothing, and a failed count is a worse reason to refuse a start than the stale rows it was counting.
 
 The rebuild is opt-in, off by default, and asked for with
-[`SensitiveContent:RebuildStaleDerivedData`](../operations/configuration-reference.md#sensitivecontent). Switched on,
+[`SensitiveContent:RebuildStaleDerivedData`](../operations/configuration-ai.md#sensitivecontent). Switched on,
 the extraction backfill stops selecting only messages that never had text and selects every message whose stamp is not
 the current one, walking them at its configured batch size and interval; its cursor is scoped to the stamp, so a switch
 flipped after a walk finished restarts that walk instead of resuming past the rows it must revisit.
@@ -284,7 +284,7 @@ Three bounds, because a scan goes wrong in three different ways.
 - **Concurrency.** How many scans run at once across the process, which matters most for the scanner that reaches a
   container over the network and would otherwise open a connection per caller.
 
-The defaults are in the [configuration reference](../operations/configuration-reference.md#sensitivecontent).
+The defaults are in the [AI configuration](../operations/configuration-ai.md#sensitivecontent).
 
 ## Failing closed
 

@@ -248,7 +248,7 @@ is the layer rather than something MailFathom re-implements:
   `OutboundDependencyUnavailableException` is a dependency declining the work and therefore worth attempting again
   later, a failure that declares its own repeatability is deferred to, and anything unrecognized is permanent, which is
   the same refusal this classifier makes. [The stored schema](stored-email-schema.md#durable-background-work) holds
-  what the queue writes and [`Jobs`](../operations/configuration-reference.md#jobs) the budget it runs under.
+  what the queue writes and [`Jobs`](../operations/configuration-runtime.md#jobs) the budget it runs under.
 
 ## Telemetry and privacy
 

@@ -52,9 +52,9 @@ Five things about that block are worth understanding before you copy it:
 
 - **It binds a socket of its own.** `127.0.0.1` above is the safe starting point — reachable from the machine the
   service runs on and nowhere else, which is what an SSH tunnel is for. Publishing it more widely is a decision, not a
-  default. The keys are in the [configuration reference](../operations/configuration-reference.md#adminendpoint), and
+  default. The keys are in the [endpoint configuration](../operations/configuration-endpoints.md#adminendpoint), and
   how it relates to the port your MCP clients use is
-  [where each surface is served](../operations/configuration-reference.md#where-each-surface-is-served).
+  [where each surface is served](../operations/configuration-endpoints.md#where-each-surface-is-served).
 - **`SecretReference` is a pointer, not a secret.** Where the material actually lives, and how it gets there, is
   [secret provisioning](../operations/secret-provisioning.md). Never write a key into a configuration file.
 - **A clear-text endpoint is warned about at startup, not refused.** It is the right posture behind a TLS-terminating
@@ -178,8 +178,9 @@ needs none, so a key that reads `It holds no administrative permission` still si
 which is how a credential is retired without its entry being removed. When a command is refused for want of one, it
 names the permission to add and where it is written, so the answer is to widen that credential's grant rather than to
 replace the key.
-[What a credential may do](../operations/admin-endpoint.md#what-a-credential-may-do) lists the names, what each covers,
-which permission every route is published under, and which six commands need a second one.
+[What a credential may do](../operations/permissions.md) lists the names, what each covers, and which six commands need
+a second one; [what the endpoint serves](../operations/admin-endpoint.md#what-the-endpoint-serves) names the permission
+every route is published under.
 
 When you work against one deployment for a whole session, `MAILFATHOM_ENDPOINT` states it once for the shell.
 `--endpoint` beats it, and both beat the profile you last switched to.
@@ -509,6 +510,6 @@ about the whole thing, `mfctl contact delete-collected` erases everything it col
 - [Mail rules](../features/mail-rules.md) — every fact, operator, and action a rule can use
 - [Mailbox OAuth](../operations/mailbox-oauth.md) — registering the application, and every mode of the sign-in above
 - [Changing the embedding model](../operations/embedding-profiles.md) — what activating, switching, and rolling back cost
-- [Configuration reference](../operations/configuration-reference.md#adminendpoint) — every `AdminEndpoint` key
+- [Endpoint configuration](../operations/configuration-endpoints.md#adminendpoint) — every `AdminEndpoint` key
 - [Secret provisioning](../operations/secret-provisioning.md) and [rotation](../operations/secret-rotation.md) — how
   the key on the server is supplied and replaced

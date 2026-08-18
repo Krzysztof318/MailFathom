@@ -260,7 +260,7 @@ The key is generated once and never regenerated. Losing it makes every value sea
 
 **What is backed up is the base64 the generating command printed, and a sealed `.cred` file does not stand in for it.** That is the substitution most likely to look like a backup and be none: a credential produced by `systemd-creds encrypt` opens on the machine that produced it and nowhere else, as [what an encrypted credential is bound to](#what-an-encrypted-credential-is-bound-to) describes, so a database restored beside a `.cred` file carried off a machine that no longer exists restores nothing either. Keep the base64 wherever the deployment keeps material it cannot re-obtain — the mail provider can issue another mailbox password, and nothing can issue this key again — and treat the `.cred` file as an artifact of one host, produced from that material again on whatever host runs next.
 
-`DataEncryption:ActiveKeyId` selects which configured key new values are sealed under, and the ring keeps every key a stored value may still name. Rotating is therefore two steps and no downtime: add the new key, move `ActiveKeyId` to it, and leave the previous key configured until nothing references it. [Configuration reference](configuration-reference.md#dataencryption) states every key of the section.
+`DataEncryption:ActiveKeyId` selects which configured key new values are sealed under, and the ring keeps every key a stored value may still name. Rotating is therefore two steps and no downtime: add the new key, move `ActiveKeyId` to it, and leave the previous key configured until nothing references it. [Storage, keys, jobs, and logging](configuration-runtime.md#dataencryption) states every key of the section.
 
 ## Certificate material
 

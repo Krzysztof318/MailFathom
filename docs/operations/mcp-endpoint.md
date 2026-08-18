@@ -621,52 +621,27 @@ The operational consequences are the ones that always applied to an unauthentica
 
 ### What a credential may do
 
-Every entry in `McpEndpoint:Authentication` states what the credentials it admits may do, as `Permissions` — a list of
-names MailFathom publishes. This surface's half is four:
+Every entry in `McpEndpoint:Authentication` states what the credentials it admits may do, as `Permissions`. This
+surface's half of the published set is four names — `mailfathom.mail.read`, `mailfathom.mail.ask`,
+`mailfathom.mail.contacts.read`, and `mailfathom.mail.contacts.write` — and
+[what a credential may do](permissions.md) holds the model behind them in full: what each name reaches, which tool each
+one covers, how a grant is written, what an absent `Permissions` key and an empty list mean, what
+`PermissionsFromTokenScopes` turns the list into, and what fails startup.
 
-| Permission | What it covers |
-| --- | --- |
-| `mailfathom.mail.read` | The tools that read the local mailbox copy: `list_accounts`, `list_emails`, `get_email_content`, `search_emails` |
-| `mailfathom.mail.ask` | `ask_mail`, which answers from mail content by sending it to a model provider |
-| `mailfathom.mail.contacts.read` | `list_contacts` and `get_contact`, which read the deployment's own contact book |
-| `mailfathom.mail.contacts.write` | `create_contact`, `update_contact`, `delete_contact`, and `promote_contact`, which record, amend, erase, and take on a person in it |
+Two things about it are this surface's own, and both are below. The first is what a grant does to what a caller is
+offered; the second is what startup writes about every entry.
 
-No one of them implies another. `mailfathom.mail.ask` is not the weaker of the first two — a cited answer returns mail
-content — and `mailfathom.mail.read` is not egress-free either: where semantic retrieval is configured, `search_emails`
-places the caller's own query text with the embedding provider before anything is read back. What withholding
-`mailfathom.mail.ask` stops is mail content going to a *chat* provider on a caller's behalf.
+**What varies by the grant is the tool surface itself.** A caller is offered exactly the tools its grant permits and no
+others: `tools/list` omits the rest, so a client never plans a call that could only fail, and a call naming one of them
+is answered as a call naming a tool that does not exist. The refusal says nothing about the caller, the credential, the
+permission, or what a different caller would have been served: a message a client could tell apart would disclose the
+capability the listing just withheld. Nothing is cached either — the listing is composed per request, so one caller's
+answer never serves another.
 
-The two contact permissions are separate from the mailbox ones and from each other, because the book is a different body
-of personal data from the mail — an assembled record about identified third parties rather than correspondence that
-arrived — and because a credential that may look somebody up is not thereby a credential that may erase them.
-`mailfathom.mail.contacts.write` covers the erasure with the other writes rather than standing apart: a grant that
-cannot edit the book cannot sensibly be trusted to take somebody out of it, and both `delete_contact` and
-`update_contact` advertise themselves as destructive so a client asks before calling either. `promote_contact` is under
-the same name for the same reason it exists: a caller that may amend the book is the caller that meets a record it may
-not amend until it takes the record on.
-
-**A name nothing publishes fails startup, naming the entry and the position in the list.** That is what the closed
-vocabulary buys: `mailfathom.mail.reads` is refused rather than read as a grant narrower than the one you meant. A
-`mailfathom.admin.*` name is refused the same way and for a second reason — the two surfaces draw from disjoint halves,
-so a permission on the wrong one would sit in the file granting nothing. So is a name the same grant already carries.
-
-**The grant belongs to the entry.** An entry may carry an `ApiKey`, a `PublicKey`, and an `OAuth` block at once, and
-`Permissions` applies to every credential it admits — so two credentials to be granted differently are two entries.
-
-**Writing no `Permissions` key leaves the entry holding all four.** That is the default a deployment gets for configuring
-nothing, and it is why nothing about this has to be configured before the endpoint works. It is also what makes a
-permission added in a later release reach an unrestricted entry on its own: the key's absence means *this surface*, not
-the names that were published the day the file was written. Writing `Permissions: []`
-grants nothing instead: the credential still authenticates and holds no capability, which is how one is retired without
-its entry being deleted. An endpoint with no `Authentication` entry at all grants all four to every caller it serves, for
-the same reason — there is no entry for a grant to be written on.
-
-**`PermissionsFromTokenScopes` turns the list into a ceiling.** On an entry whose sole block is `OAuth`, a token then
-holds the published names its scopes carry *and* the entry lists, so the authorization server decides per subject within
-a bound this deployment fixed. A scope naming anything else is ignored, and one naming a permission the entry never
-listed grants nothing. Startup refuses the setting beside an `ApiKey` or a `PublicKey`, because neither credential can
-carry a scope. A permission name written into `RequiredScopes` or `AdvertisedScopes` is refused too: the first would
-refuse at the door a caller meant to be served less, and the second is already published by the grant that reads it.
+The availability rule that already decides `ask_mail` composes with this rather than being replaced by it. A tool may be
+unavailable, unauthorized, or both, and no grant makes a capability this deployment does not have appear — an endpoint
+whose chat provider is unconfigured withholds `ask_mail` from a caller granted `mailfathom.mail.ask` exactly as it does
+from one granted nothing.
 
 Startup states what every entry resolved to, one line per entry, so the posture is one an operator reads on the first
 run rather than infers later. An entry that wrote no grant says so rather than being reported as though somebody had
@@ -682,61 +657,34 @@ info: MailFathom.Host.Hosting.Warnings.TransportGrantStartupReport
 ```
 
 Every line closes with what a grant on that surface does, so an operator reading back the one entry they edited learns
-what the narrowing costs a caller without reading the rest of the report. The two surfaces differ in the refusal rather
-than in whether the grant bites: here a tool the grant omits is one that does not exist, and the administrative
-endpoint's lines say instead that a refused caller is told the permission that would have sufficed.
-
-An entry that narrowed its grant is reported as what it grants, an entry with `PermissionsFromTokenScopes` as what it
-grants *at most*, and an entry granted nothing as `nothing` rather than as a line that lost its argument. An endpoint
-with no entry at all gets one line naming the section a grant would be written under. Nothing in the report names a key,
-a public key, a token, an authorization server, or a subject: a grant is what the deployment wrote, never who presented
-something.
-
-**What varies by the grant is the tool surface itself.** A caller is offered exactly the tools its grant permits and no
-others: `tools/list` omits the rest, so a client never plans a call that could only fail, and a call naming one of them
-is answered as a call naming a tool that does not exist. The refusal says nothing about the caller, the credential, the
-permission, or what a different caller would have been served: a message a client could tell apart would disclose the
-capability the listing just withheld. Nothing is cached either — the listing is composed per request, so one caller's
-answer never serves another.
-
-The availability rule that already decides `ask_mail` composes with this rather than being replaced by it. A tool may be
-unavailable, unauthorized, or both, and no grant makes a capability this deployment does not have appear — an endpoint
-whose chat provider is unconfigured withholds `ask_mail` from a caller granted `mailfathom.mail.ask` exactly as it does
-from one granted nothing.
-
-The grant is enforced twice. The endpoint refuses cheaply, before a use case is reached, and the use case behind each
-tool asks the same question again on its own — so a second entrypoint added to this deployment later cannot widen what a
-credential reaches by omission.
+what the narrowing costs a caller without reading the rest of the report. An entry that narrowed its grant is reported
+as what it grants, an entry with `PermissionsFromTokenScopes` as what it grants *at most*, and an entry granted nothing
+as `nothing` rather than as a line that lost its argument. An endpoint with no entry at all gets one line naming the
+section a grant would be written under.
 
 ### What a credential decides, and what it does not
 
 **The endpoint asks whether this is a caller the deployment serves, and of a token also which person it names.** What an
 admitted caller may then do is the grant its entry carries, and that decides one thing: which of this surface's tools it
-is offered and may call. A credential granted `mailfathom.mail.read` alone is served the four tools that read the local
-copy of the mail; one granted `mailfathom.mail.ask` alone is served that tool; one granted
-`mailfathom.mail.contacts.read` alone is served `list_contacts` and `get_contact`; one granted
-`mailfathom.mail.contacts.write` alone is served `create_contact`, `update_contact`, `delete_contact`, and
-`promote_contact`. Each of the
-four is answered about every tool its own name does not cover as though no such tool existed, so an entry narrowed to
-the contact half reaches the contact book and nothing else, and one granted none of the four is served an empty tool
-list and refused every call it makes.
+is offered and may call. Which tool each of the four names covers is
+[what a credential may do](permissions.md#which-tool-each-name-covers); an entry narrowed to the contact half therefore
+reaches the contact book and nothing else, and one granted none of the four is served an empty tool list and refused
+every call it makes.
 
-**A refused caller is told nothing.** There is no message naming the permission it lacked, no field on a descriptor
-saying one is required, and no `insufficient_scope` challenge inviting a client to acquire one — even where the grant
-came from a token's scopes and its authorization server could in principle mint it. The listing already said what this
-caller may do, and a refusal it could tell apart from an unknown tool would say that a capability exists which you chose
-not to offer it. Diagnosing a client that stopped working is therefore done from this deployment's own record rather
-than from what the client received: every refusal is counted by `mailfathom.authorization.refusals` and written as a
-warning naming the credential it was refused, and the permission the grant omits wherever the tool the call named
-publishes one — a call naming no tool this surface publishes is refused for no permission and its warning names none,
-which is how a client on a stale or misspelled name reads apart from one asking for what it was never granted.
+**A refused caller is told nothing**, for the reason
+[what a refused caller is told](permissions.md#what-a-refused-caller-is-told) gives: a message a client could tell apart
+from an unknown tool would disclose the capability the listing withheld. Diagnosing a client that stopped working is
+therefore done from this deployment's own record rather than from what the client received: every refusal is counted by
+`mailfathom.authorization.refusals` and written as a warning naming the credential it was refused, and the permission
+the grant omits wherever the tool the call named publishes one — a call naming no tool this surface publishes is refused
+for no permission and its warning names none, which is how a client on a stale or misspelled name reads apart from one
+asking for what it was never granted.
 [Telemetry](telemetry.md#what-an-authorization-refusal-records) describes both in full.
 
 **Which mailboxes a caller reaches is not something a credential decides.** Every tool call resolves the accounts the
 configured owner controls and refuses anything outside them, whichever credential got the caller in, and no setting
-narrows that. Two admitted callers therefore see the same mailboxes — which is exactly why a token has to name an
-authorized subject: admitting a colleague of the same tenant would admit them to the owner's mail rather than to their
-own. `Permissions` says what a caller may do; every admitted caller does it to every account this deployment configures.
+narrows that — which is exactly why a token has to name an authorized subject, since admitting a colleague of the same
+tenant would admit them to the owner's mail rather than to their own.
 
 A key identifies a *client*, a public key identifies a *client that can prove it holds the other half*, a token
 identifies a *person*, and the difference matters operationally. A shared bearer credential has the properties every
@@ -1613,7 +1561,7 @@ and comparing every configured key, on every request — happens before a permit
 per-client limit possible at all: run ahead of authentication and there is no client to count against, and every request
 shares the anonymous bucket. What a bad credential costs the sender is therefore a partition it shares with every other
 unidentified request, not the work the server already did to refuse it. What bounds the connections underneath all of
-that — including the ones that never send a request at all — is [`ConnectionLimits`](configuration-reference.md#connectionlimits),
+that — including the ones that never send a request at all — is [`ConnectionLimits`](configuration-endpoints.md#connectionlimits),
 which is a ceiling on the process rather than on this endpoint.
 
 Turning the limits off is an explicit value and costs one startup warning:
@@ -1796,7 +1744,7 @@ smaller window.
 latency and cost an operator has to think about: a run is a conversation, so one question is several calls to the
 declared chat endpoint, each under that endpoint's own deadline and resilience budget. What the run may spend across all
 of them, and what every run of a period may spend between them, is
-[`MailAnswering`](configuration-reference.md#mailanswering); a question the current period has no allowance left for and
+[`MailAnswering`](configuration-ai.md#mailanswering); a question the current period has no allowance left for and
 a run that reached what one question may cost are both refused with `57001`, whose message says which. A failure inside the run reaches
 the client as `54001` and reaches the log as the chat-provider code it actually was — `71001` for a refused credential,
 `72001` for an endpoint that did not answer, `73001` for a call that produced no text. Nothing on this path logs the

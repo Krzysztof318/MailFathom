@@ -12,7 +12,22 @@
   items:
     - name: Configuration reference
       href: configuration-reference.md
-      description: Every user-settable option in one place, with its type, default, constraint, and whether changing it needs a restart.
+      description: How every configuration table is read, which page holds each section, and the settings read from the environment alone.
+    - name: Mail configuration
+      href: configuration-mail.md
+      description: Every key deciding which mail is fetched and sent, what is recorded about it, and which rules run over it.
+    - name: AI configuration
+      href: configuration-ai.md
+      description: Every key deciding what leaves this process for a model provider, which model each capability reaches, and what it may spend.
+    - name: Endpoint configuration
+      href: configuration-endpoints.md
+      description: Every key deciding where each surface is served, what a caller has to present, and how much traffic each endpoint takes.
+    - name: Storage, keys, jobs, and logging
+      href: configuration-runtime.md
+      description: Every key about the deployment itself — its configuration sources, database, key ring, job queue, retries, and log.
+    - name: Permissions
+      href: permissions.md
+      description: What a permission is, which ones exist, what each one reaches, how a grant is written, and what a refused caller is told.
     - name: Configuration sources
       href: configuration-sources.md
       description: Where settings are read from and in which order, what a deployment may provision outside the content root, and why configuration is read-only.

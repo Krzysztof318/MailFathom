@@ -594,7 +594,7 @@ named address is one the contact holds is enforced by the domain when the record
 
 ## Durable background work
 
-`jobs` holds work that is enqueued now and done later: what it is, what it points at, who is holding it, and until when. A [rule's schedule](../features/mail-rules.md#running-a-rule-on-a-schedule) is what enqueues into it today, and the handler that runs one records a whole-mailbox rule run for an account; this is the record every consumer of durable background work is written against, and [ADR 0009](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0009-durable-job-store-and-execution-identity.md) is the decision it implements. What paces the worker over it is the [`Jobs`](../operations/configuration-reference.md#jobs) configuration section.
+`jobs` holds work that is enqueued now and done later: what it is, what it points at, who is holding it, and until when. A [rule's schedule](../features/mail-rules.md#running-a-rule-on-a-schedule) is what enqueues into it today, and the handler that runs one records a whole-mailbox rule run for an account; this is the record every consumer of durable background work is written against, and [ADR 0009](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0009-durable-job-store-and-execution-identity.md) is the decision it implements. What paces the worker over it is the [`Jobs`](../operations/configuration-runtime.md#jobs) configuration section.
 
 | Column | What it records |
 |---|---|
@@ -611,7 +611,7 @@ named address is one the contact holds is enforced by the domain when the record
 | `LeaseOwner`, `LeaseExpiresAt` | The attempt holding the job and the instant after which it is claimable again, both null while nothing holds it |
 
 Enqueuing asks the table one question before it writes to it: whether this job type already has as many rows `Pending` as
-[`Jobs:MaxQueueDepthPerType`](../operations/configuration-reference.md#jobs) allows. That runs on every enqueue rather
+[`Jobs:MaxQueueDepthPerType`](../operations/configuration-runtime.md#jobs) allows. That runs on every enqueue rather
 than occasionally, which makes it the second query this table runs at any volume — and it is bounded rather than
 counted, because the read stops at the depth it is comparing against instead of totalling the backlog. A queue at its
 depth refuses the enqueue and says so, so the caller slows down, asks again later, or stops producing; a request whose
