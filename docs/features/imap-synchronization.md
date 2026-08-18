@@ -44,7 +44,9 @@ MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for 
 starts one `AccountSynchronizationSupervisor` per configured account and supervises those supervisors; everything a
 run actually does belongs to the supervisor of the account it runs for.
 [The arrival pipeline](../architecture/arrival-pipeline.md) draws what a run does after its folders have finished — the
-classification pass, the rules, and the cut that produces a message's passages — and in what order.
+classification pass, the rules, and the cut that produces a message's passages — and in what order. A run also drains
+the account's outbox there, which is what makes sending correct without anything watching for it;
+[mail delivery](mail-delivery.md#how-a-written-down-send-reaches-a-server) states why that step can never fail the run.
 
 Each supervisor owns its own schedule, its own consecutive-failure count, and its own backoff, and creates a scope per
 folder work unit. That is what a server which stops answering can no longer reach: no other account inherits its

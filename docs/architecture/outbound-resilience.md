@@ -15,7 +15,7 @@ them:
 |---|---|
 | `MailboxSessionEstablishment` | Connecting, negotiating TLS with, and authenticating an IMAP session |
 | `MailboxDataRetrieval` | Listing, fetching, and streaming mailbox data over an established session |
-| `EmailDelivery` | Submitting an email to the SMTP server |
+| `EmailDelivery` | Opening a submission session against the SMTP server |
 | `DatabaseCommandExecution` | Commands and queries against the local PostgreSQL database |
 | `AiProviderInvocation` | Chat and embedding provider calls |
 | `MailAuthorizationServerInvocation` | Exchanging a configured OAuth grant for a mailbox access token |
@@ -23,7 +23,8 @@ them:
 A class exists when its failure modes and its rules for safe repetition differ from every other class. Session
 establishment is separate from retrieval because a rejected credential must never be repeated — against a mail server
 that is how an account gets locked. Delivery is separate because a repeated submission is visible in the recipient's
-inbox, which is why its shipped budget is the smallest of the six.
+inbox, which is why its shipped budget is the smallest of the six — and why the class stops at the session: the
+transmission itself is deliberately outside every pipeline, for the reason the single-layer rule gives below.
 
 Token acquisition is separate from session establishment for the same kind of reason read the other way. A token
 request carries no mailbox password, so it cannot lock an account, and an authorization server answering an overload
@@ -221,6 +222,20 @@ is the layer rather than something MailFathom re-implements:
   Until then the boundary is: the `DatabaseCommandExecution` pipeline covers command paths that own no transaction,
   and a transient failure *inside* a transactional write is surfaced rather than retried. The commit either succeeds
   or the session rolls back and the caller decides.
+- **An outgoing message being transmitted.** The submission is reached under no pipeline at all, and that is the
+  point rather than an omission. A retry there would offer a body a server may already have taken, which is the one
+  failure this system cannot withdraw, so the layer sits where it can be made idempotent instead: the outbox, which
+  claims a durable record, counts the attempt on it, and hands the send back to a later pass with a jittered backoff.
+  What the `EmailDelivery` pipeline still covers is establishing the session, which reaches a server without offering
+  anybody a message. The two never stack, because the transmission happens outside the pipeline rather than inside it.
+  [Mail delivery § Failing, retrying, and the single layer of
+  it](../features/mail-delivery.md#failing-retrying-and-the-single-layer-of-it) states what each ending records.
+
+  `JitteredRetryBackoff` is the delay both durable layers draw from — this one and the job queue above — because the
+  question they ask is identical: how long to wait before an attempt that failed for a reason that may have cleared. It
+  doubles from a base delay, caps at a ceiling, and draws inside the resulting window, which is what stops every send
+  and every job deferred by one outage returning together.
+
 - **Optimistic concurrency.** `OptimisticConcurrencyRetryPolicy` in `Application` already retries a commit that lost a
   race. That is why the classifier reports a concurrency conflict as terminal: the pipeline must not become a second
   layer around the same rows.

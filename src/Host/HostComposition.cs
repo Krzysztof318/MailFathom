@@ -22,6 +22,7 @@ using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
@@ -598,6 +599,25 @@ internal static class HostComposition
                 MaxExtractedTextCharacters = synchronizationSettings.MaxExtractedTextCharacters,
             };
         });
+        // A singleton, because the outbox's bounds describe the process rather than a work unit: an attempt count is
+        // carried across runs on the record, and a lease read per scope would let two passes of the same instance
+        // disagree about how long they hold what they claimed. That also means it is read once at startup, which the
+        // configuration reference marks as needing a restart.
+        builder.Services.AddSingleton(provider =>
+        {
+            var deliverySettings = provider.GetRequiredService<IOptions<MailDeliveryOptions>>().Value;
+            return MailOutboxSettings.Create(
+                deliverySettings.MaxDeliveriesPerPass,
+                deliverySettings.LeaseDuration,
+                deliverySettings.AttemptTimeout,
+                deliverySettings.MaxAttempts,
+                deliverySettings.RetryBaseDelay,
+                deliverySettings.RetryMaxDelay);
+        });
+        // A singleton for a different reason: it carries accounts from the scope that wrote a record to the loop that
+        // delivers it, so a queue per scope would be a queue nobody reads.
+        builder.Services.AddSingleton(provider => new MailOutboxSignal(
+            provider.GetRequiredService<IOptions<MailDeliveryOptions>>().Value.SignalQueueCapacity));
         builder.Services.AddScoped(provider =>
         {
             var deliverySettings = provider.GetRequiredService<IOptions<MailDeliveryOptions>>().Value;
@@ -978,6 +998,11 @@ internal static class HostComposition
         }
 
         builder.Services.AddHostedService<MailSynchronizationCoordinator>();
+        // Registered beside the coordinator rather than instead of anything it does: the account run already drains
+        // whatever is outstanding, and this is what makes a message written down leave in seconds instead of waiting for
+        // that run. An account that configures no submission endpoint is answered by an empty pass, so nothing here is
+        // conditional on a deployment sending at all.
+        builder.Services.AddHostedService<OutboxDeliveryWorker>();
         builder.Services.AddHostedService<MailExtractionBackfillWorker>();
         // Registered unconditionally, and inert on an instance that registered no handler: the worker says so once and
         // stops, which is the same answer a conditional registration would give without putting the condition in a second

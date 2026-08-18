@@ -37,6 +37,7 @@ using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -668,6 +669,7 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<OutboundOperationExecutor>(),
             provider.GetRequiredService<ITransientFailureClassifier>(),
             MailDeliveryTimeouts.Default,
+            provider.GetRequiredService<MailDeliveryTelemetry>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<ILogger<MailKitSmtpConnection>>()));
         // Registered beside the write session and against the same pool, because a creation is issued over the account's
@@ -682,8 +684,14 @@ public static class ServiceCollectionExtensions
         // The outgoing record is written before the delivery session above is opened, and for a stronger reason than the
         // mutation record is: a send is the one act here that cannot be undone once it leaves. The outbox in front of it
         // is what makes the record and the message it points at one write.
+        services.AddSingleton<MailDeliveryTelemetry>();
         services.AddScoped<IOutgoingEmailStore, OutgoingEmailStore>();
         services.AddScoped<MailOutbox>();
+        // The attempt and the pass over it are scoped like every other work unit, because each opens a submission
+        // session and commits through the caller's persistence scope. The signal they answer is not: it carries accounts
+        // between a scope that wrote a record and the loop that delivers it, so it belongs to the process.
+        services.AddScoped<MailOutboxDelivery>();
+        services.AddScoped<MailOutboxPass>();
         // Scoped beside the outbox and beside the sending identities it reads, which are the account snapshot's and
         // therefore belong to one work unit. The composer itself holds nothing across a call.
         services.AddScoped<IAuthoredEmailComposer>(provider => new MimeKitAuthoredEmailComposer(

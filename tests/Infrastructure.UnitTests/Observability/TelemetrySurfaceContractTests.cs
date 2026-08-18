@@ -14,6 +14,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Scheduling;
+using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Retrieval.AskMail;
@@ -25,7 +26,9 @@ using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
+using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Mutations.Audit;
@@ -96,6 +99,8 @@ public sealed class TelemetrySurfaceContractTests
         Clock,
         NullLogger<MailAnsweringSpendTracker>.Instance);
 
+    private static readonly MailDeliveryTelemetry Delivery = new(Clock);
+
     private static readonly MailboxContentVolumeTelemetry ContentVolume =
         new(NullLogger<MailboxContentVolumeTelemetry>.Instance);
 
@@ -133,6 +138,7 @@ public sealed class TelemetrySurfaceContractTests
         typeof(MailAnsweringAuditTelemetry),
         typeof(MailAnsweringRunTelemetry),
         typeof(MailAnsweringSpendTracker),
+        typeof(MailDeliveryTelemetry),
         typeof(MailboxContentVolumeTelemetry),
         typeof(MailboxConvergenceTelemetry),
         typeof(MailboxMutationAuditTelemetry),
@@ -259,6 +265,7 @@ public sealed class TelemetrySurfaceContractTests
         DriveAnswering();
         DriveMailbox();
         DriveMutations();
+        DriveDelivery();
         DriveSynchronization();
         DriveContentStore();
         DriveSensitiveContent();
@@ -480,6 +487,33 @@ public sealed class TelemetrySurfaceContractTests
                         Count: 1,
                         OldestRecordedAt: Moment.AddMinutes(-5)),
                 ]));
+    }
+
+    private static void DriveDelivery()
+    {
+        using (var submission = Delivery.BeginSubmission(Account))
+        {
+            submission.Completed();
+        }
+
+        using (Delivery.BeginSubmission(Account))
+        {
+            // Disposed without being completed, which is the shape a submission nobody got an answer to reports.
+        }
+
+        Delivery.Report(
+            Account,
+            new MailOutboxPassReport(
+                [
+                    .. Enum.GetValues<MailOutboxDeliveryOutcome>().Select(outcome => new MailOutboxDeliveryResult(
+                        OutgoingEmailId.Create(Guid.CreateVersion7()),
+                        outcome,
+                        MailFathomErrorCode.OutgoingEmailRefused,
+                        ReplyCode: 550,
+                        AttemptCount: 1)),
+                ],
+                MarkedUnknownCount: 1,
+                BatchFilled: true));
     }
 
     private static void DriveMutations()

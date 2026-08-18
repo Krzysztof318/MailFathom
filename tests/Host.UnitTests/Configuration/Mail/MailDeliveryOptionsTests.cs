@@ -156,6 +156,65 @@ public sealed class MailDeliveryOptionsTests
             result => result.MemberNames.Contains(nameof(MailDeliveryOptions.MaxMessageBytes)));
     }
 
+    /// <summary>
+    /// An attempt that could still be transmitting when its lease runs out is a second attempt taking a message the
+    /// first may already have sent, so the ordering is refused at startup rather than met in a mailbox.
+    /// </summary>
+    [Theory]
+    [InlineData(10, 10)]
+    [InlineData(10, 11)]
+    public void Validate_AttemptTimeoutReachingTheLeaseDuration_IsRefused(int leaseMinutes, int timeoutMinutes)
+    {
+        // Arrange
+        var options = new MailDeliveryOptions
+        {
+            LeaseDuration = TimeSpan.FromMinutes(leaseMinutes),
+            AttemptTimeout = TimeSpan.FromMinutes(timeoutMinutes),
+        };
+
+        // Act
+        var results = Validate(options);
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Contains(nameof(MailDeliveryOptions.AttemptTimeout), result.MemberNames);
+    }
+
+    /// <summary>A ceiling below the delay it caps would shorten every retry rather than bounding the growth.</summary>
+    [Fact]
+    public void Validate_RetryCeilingBelowItsBaseDelay_IsRefused()
+    {
+        // Arrange
+        var options = new MailDeliveryOptions
+        {
+            RetryBaseDelay = TimeSpan.FromMinutes(10),
+            RetryMaxDelay = TimeSpan.FromMinutes(1),
+        };
+
+        // Act
+        var results = Validate(options);
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Contains(nameof(MailDeliveryOptions.RetryMaxDelay), result.MemberNames);
+    }
+
+    /// <summary>The defaults deliver: every outbox bound is inside its documented range and the two orderings hold.</summary>
+    [Fact]
+    public void Defaults_UnconfiguredSection_AreOutboxBoundsThatDeliver()
+    {
+        // Act
+        var options = new MailDeliveryOptions();
+
+        // Assert
+        Assert.True(options.AttemptTimeout < options.LeaseDuration);
+        Assert.True(options.RetryBaseDelay <= options.RetryMaxDelay);
+        Assert.True(options.MaxDeliveriesPerPass > 0);
+        Assert.True(options.MaxAttempts > 0);
+        Assert.True(options.SignalQueueCapacity > 0);
+        Assert.Empty(ValidateWithDataAnnotations(options));
+    }
+
     private static IReadOnlyList<ValidationResult> Validate(MailDeliveryOptions options) =>
         [.. options.Validate(new ValidationContext(options))];
 

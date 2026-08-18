@@ -55,5 +55,13 @@
   <ItemGroup>
     <InternalsVisibleTo Include="MailFathom.Infrastructure.UnitTests" />
     <InternalsVisibleTo Include="MailFathom.IntegrationTests" />
+
+    <!--
+      NSubstitute proxies a type at run time from a generated assembly, which the two grants above do not name, so an
+      internal interface is refused with an accessibility error rather than substituted. ISubmissionClient is one:
+      it is the mail library's client contract with the per-recipient replies added, and a test scripts a submission
+      server through it instead of opening a socket. The name is Castle DynamicProxy's fixed one.
+    -->
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>
 </Project>

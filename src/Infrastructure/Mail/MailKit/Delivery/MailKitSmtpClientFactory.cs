@@ -2,8 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailKit.Net.Smtp;
-
 namespace MailFathom.Infrastructure.Mail.MailKit.Delivery;
 
 /// <summary>Creates every SMTP client this deployment opens, and is the one place a protocol logger could be attached.</summary>
@@ -23,5 +21,13 @@ internal static class MailKitSmtpClientFactory
 {
     /// <summary>Creates an SMTP client that writes no protocol traffic anywhere.</summary>
     /// <returns>A disconnected client, owned by the caller.</returns>
-    internal static SmtpClient CreateWithoutProtocolLogging() => new();
+    /// <remarks>
+    /// It is MailFathom's own subclass rather than the library's client, because a partial acceptance has to be
+    /// recorded rather than raised on. What the subclass changes is stated where it is declared. The concrete type is
+    /// what is returned rather than <see cref="ISubmissionClient" />, so the invariant this factory exists for stays
+    /// assertable: the protocol logger a client was constructed with is a property of the library's client class and
+    /// of no interface it implements. A caller that wants the contract converts the method group, which delegate
+    /// return-type covariance already permits.
+    /// </remarks>
+    internal static SubmissionSmtpClient CreateWithoutProtocolLogging() => new();
 }

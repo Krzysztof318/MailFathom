@@ -2,12 +2,12 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.Jobs.Execution;
+using MailFathom.Application.Resilience;
 using Xunit;
 
-namespace MailFathom.Application.UnitTests.Jobs.Execution;
+namespace MailFathom.Application.UnitTests.Resilience;
 
-public sealed class JobRetryBackoffTests
+public sealed class JitteredRetryBackoffTests
 {
     private static readonly TimeSpan BaseDelay = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan MaxDelay = TimeSpan.FromMinutes(30);
@@ -24,7 +24,7 @@ public sealed class JobRetryBackoffTests
         int ceilingSeconds)
     {
         // Act
-        var delay = JobRetryBackoff.DelayBeforeNextAttempt(BaseDelay, MaxDelay, attemptCount);
+        var delay = JitteredRetryBackoff.DelayBeforeNextAttempt(BaseDelay, MaxDelay, attemptCount);
 
         // Assert
         Assert.InRange(delay, TimeSpan.FromSeconds(floorSeconds), TimeSpan.FromSeconds(ceilingSeconds));
@@ -41,7 +41,7 @@ public sealed class JobRetryBackoffTests
     public void DelayBeforeNextAttempt_AnAttemptCountPastTheCeiling_StaysWithinIt(int attemptCount)
     {
         // Act
-        var delay = JobRetryBackoff.DelayBeforeNextAttempt(BaseDelay, MaxDelay, attemptCount);
+        var delay = JitteredRetryBackoff.DelayBeforeNextAttempt(BaseDelay, MaxDelay, attemptCount);
 
         // Assert
         Assert.InRange(delay, MaxDelay / 2, MaxDelay);
@@ -57,7 +57,7 @@ public sealed class JobRetryBackoffTests
         // Act
         var delays = Enumerable
             .Range(0, 64)
-            .Select(_ => JobRetryBackoff.DelayBeforeNextAttempt(BaseDelay, MaxDelay, attemptCount: 3))
+            .Select(_ => JitteredRetryBackoff.DelayBeforeNextAttempt(BaseDelay, MaxDelay, attemptCount: 3))
             .ToArray();
 
         // Assert
@@ -71,7 +71,7 @@ public sealed class JobRetryBackoffTests
         // Act
         var delays = Enumerable
             .Range(1, 8)
-            .Select(attemptCount => JobRetryBackoff.DelayBeforeNextAttempt(BaseDelay, MaxDelay, attemptCount))
+            .Select(attemptCount => JitteredRetryBackoff.DelayBeforeNextAttempt(BaseDelay, MaxDelay, attemptCount))
             .ToArray();
 
         // Assert
@@ -91,7 +91,7 @@ public sealed class JobRetryBackoffTests
         int attemptCount)
     {
         // Act & Assert
-        Assert.Throws<ArgumentOutOfRangeException>(() => JobRetryBackoff.DelayBeforeNextAttempt(
+        Assert.Throws<ArgumentOutOfRangeException>(() => JitteredRetryBackoff.DelayBeforeNextAttempt(
             TimeSpan.FromSeconds(baseDelaySeconds),
             TimeSpan.FromSeconds(maxDelaySeconds),
             attemptCount));

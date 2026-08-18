@@ -25,4 +25,12 @@ internal enum MailDeliveryPhase
 
     /// <summary>Every command issued over the established session, which the client bounds for itself.</summary>
     Command = 3,
+
+    /// <summary>Offering the envelope and transmitting the message, from the first command of the submission to the server's answer to the body.</summary>
+    /// <remarks>
+    /// It is separated from every other command because it is the one that cannot be repeated: a budget that expires
+    /// here leaves a message that may already have reached its recipients, and the record the send is written on has to
+    /// be able to say that rather than reading it as one more command that timed out.
+    /// </remarks>
+    Transmission = 4,
 }

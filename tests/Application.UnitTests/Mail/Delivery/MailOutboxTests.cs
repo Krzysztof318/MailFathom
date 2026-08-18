@@ -5,6 +5,7 @@
 using System.Text;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail.Delivery;
+using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
@@ -126,7 +127,7 @@ public sealed class MailOutboxTests
             return PersistenceCommitResult.ConcurrencyConflict;
         });
         retrying.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
-        var outbox = new MailOutbox(store, contentStore, CreateRetryPolicy(sessionFactory));
+        var outbox = new MailOutbox(store, contentStore, CreateRetryPolicy(sessionFactory), new MailOutboxSignal(capacity: 8));
 
         // Act
         var record = await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None);
@@ -136,6 +137,37 @@ public sealed class MailOutboxTests
         Assert.Equal(2, store.OpenRequests.Count);
         var outstanding = await store.ReadOutstandingAsync(Account, limit: 10, CancellationToken.None);
         Assert.Equal(record.Id, Assert.Single(outstanding).Id);
+    }
+
+    /// <summary>A durable record says so, which is what makes an authored send leave in seconds rather than at the next run.</summary>
+    [Fact]
+    public async Task EnqueueAsync_NewRequest_SignalsTheAccountAfterTheRecordIsDurable()
+    {
+        // Arrange
+        var signal = new MailOutboxSignal(capacity: 4);
+        var outbox = CreateOutbox(new InMemoryOutgoingEmailStore(), Substitute.For<IEmailContentStore>(), signal: signal);
+
+        // Act
+        await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, signal.Depth);
+    }
+
+    /// <summary>A send that was never written down signals nothing, so no pass is woken for work that does not exist.</summary>
+    [Fact]
+    public async Task EnqueueAsync_NoMime_SignalsNothing()
+    {
+        // Arrange
+        var signal = new MailOutboxSignal(capacity: 4);
+        var outbox = CreateOutbox(new InMemoryOutgoingEmailStore(), Substitute.For<IEmailContentStore>(), signal: signal);
+
+        // Act
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), ReadOnlyMemory<byte>.Empty, CancellationToken.None));
+
+        // Assert
+        Assert.Equal(0, signal.Depth);
     }
 
     private static OutgoingEmailRequest CreateRequest(string invocationIdentity)
@@ -151,7 +183,8 @@ public sealed class MailOutboxTests
     private static MailOutbox CreateOutbox(
         IOutgoingEmailStore store,
         IEmailContentStore contentStore,
-        List<IPersistenceSession>? stagedSessions = null)
+        List<IPersistenceSession>? stagedSessions = null,
+        MailOutboxSignal? signal = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ =>
@@ -163,7 +196,7 @@ public sealed class MailOutboxTests
             return session;
         });
 
-        return new MailOutbox(store, contentStore, CreateRetryPolicy(sessionFactory));
+        return new MailOutbox(store, contentStore, CreateRetryPolicy(sessionFactory), signal ?? new MailOutboxSignal(capacity: 8));
     }
 
     /// <summary>Builds the policy the outbox commits through, over the real clock the policy's own tests use.</summary>

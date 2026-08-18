@@ -692,7 +692,9 @@ withdrawn from the mailbox it reached.
 | `RequesterOrigin`, `RequesterIdentity` | The authored act that asked, by kind and by the text two requests are compared by. A rule answers with its name, the revision it was evaluated at, and the email it acted on; somebody present answers with a key of their own |
 | `Stage` | How far the submission has durably got, in the vocabulary below |
 | `MimeByteLength` | How many bytes of MIME were stored. Kept beside the record as well as on the message, so the size bound a submission server advertised can be compared against it — and the outbox listed — without reading a single queued message's `bytea` |
-| `AttemptCount` | Written before each attempt rather than after it, so an attempt that kills the process still counted |
+| `AttemptCount` | Counted by the claim itself rather than after the attempt, so an attempt that kills the process still counted |
+| `AvailableAt` | The instant the record may next be claimed. It is the backoff written down: a transient failure moves it forward by the delay that attempt earned, and a send nothing has deferred carries the instant it was recorded |
+| `LeaseOwner`, `LeaseExpiresAt` | Who is attempting it and until when, both null while nobody is. The pair is what makes a crash recoverable without anything being told the process died |
 | `RecordedAt`, `StageChangedAt` | When the intent was written, and when the record last moved. The second is what says how long a stuck send has been stuck |
 | `LastFailureCode` | The code of the failure the last attempt ended in, null while none has. The code is kept and the message is not, because a failure message is assembled at the failure site and may repeat what a remote server wrote |
 | `LastReplyCode` | The reply code the server last answered the transmission with, null while it has answered none. A different fact from the per-recipient codes: a server accepts or refuses each address separately and then answers once for the body |
@@ -702,7 +704,7 @@ reads:
 
 | Stage | What it says |
 |---|---|
-| `Recorded` | The intent and the message are durable, and nothing has reached a submission server |
+| `Recorded` | The intent and the message are durable, and nothing has reached a submission server. It is also where a failed attempt that provably transmitted nothing is rewound to, so a deferred send waits here rather than in a stage of its own |
 | `TransmissionBegun` | The body has begun to go out and the server's answer to it was never read |
 | `Sent` | The server accepted the message for every recipient it had accepted |
 | `Refused` | Nothing will offer it again, and `LastFailureCode` says what ended it |
@@ -712,9 +714,20 @@ reads:
 afterwards would announce it only in the case where the crash it exists for did not happen. A record found there is not
 re-sent. Two of the terminal stages are reachable from one stage only, which is that same window read from either end —
 `Sent` follows only `TransmissionBegun`, so no row claims a delivery nothing could have produced, and `Cancelled`
-follows only `Recorded`, so no row claims a withdrawal after bytes that may already have reached somebody. A send
-stopped mid-transmission therefore ends at `Refused`, which states that nothing more will be attempted and states
-nothing about what was received.
+follows only `Recorded`, so no row claims a withdrawal after bytes that may already have reached somebody.
+
+**A send stopped mid-transmission stays at `TransmissionBegun` and is never advanced by anything automatic.** Moving it
+to `Refused` would be this system stating that nothing reached anybody, which is the one thing nobody can establish
+about that window; moving it back would send it twice. So the stage is left where it is and `LastFailureCode` is
+stamped with `28011`, which is what makes the row say *unknown* rather than *stuck*. It is claimed by nothing
+afterwards — the claim below takes `Recorded` rows alone — so the only thing that moves it is a person deciding what
+happened.
+
+That is also why the rewind exists. An attempt that failed before any recipient was accepted has provably transmitted
+no body, so its record goes back to `Recorded` and is attempted again; an attempt that failed after one was accepted
+may have, so it stays where the paragraph above leaves it. Which of the two applies is decided from the replies the
+server actually gave during that attempt rather than from the exception, because a body is only ever offered after at
+least one `RCPT TO` was accepted.
 
 A send that has not reached a terminal stage is what a restart reads, oldest first and bounded like every other public
 query. A refused row stays in that answer for the reason an abandoned mutation does: being given up on is what stops a
@@ -748,6 +761,24 @@ a single message's bytes. It is written **once** and read back for every attempt
 optimization — a message rebuilt between attempts carries a different `Message-ID` and would thread as a second message
 in every recipient's client. A second enqueue of the same identity therefore leaves the stored payload exactly as it is.
 
+### The claim a delivery attempt holds
+
+An attempt takes a batch of an account's outbox with a single statement: the rows are selected `FOR UPDATE SKIP LOCKED`
+under the claimable index, oldest `AvailableAt` first, and the same statement stamps `LeaseOwner`, `LeaseExpiresAt`,
+and the incremented `AttemptCount` onto them. Skipping locked rows rather than waiting is what makes two passes over
+one account claim disjoint sets instead of queueing behind each other, and doing the selection and the stamp in one
+statement is what leaves no instant in which a row is chosen but unheld.
+
+What a row has to satisfy to be claimed is stated in the predicate rather than in the code around it: the stage is
+`Recorded`, `AvailableAt` has passed, and either nothing holds it or what held it has expired. Every subsequent write
+about that record carries the lease it was claimed under and is refused when the row no longer names that owner, which
+is what stops an attempt whose lease ran out from recording an outcome over the attempt that took the message from it.
+`AttemptTimeout` is configured below `LeaseDuration` precisely so that case stays rare rather than routine.
+
+A lease is released by the attempt that ends: a settled send has no need of one, a deferred send gives it back with
+`AvailableAt` moved forward, and a send the host stopped before it transmitted anything gives it back together with the
+attempt it had counted. A send whose transmission had begun is the one case nothing releases.
+
 ## Indexes
 
 | Index | Columns | Purpose |
@@ -779,6 +810,7 @@ in every recipient's client. A second enqueue of the same identity therefore lea
 | `ix_mailbox_mutations_placement` | `(MailboxAccountId, DestinationFolderPath, PlacementUidValidity, PlacementUid)` where `PlacementObservedAt` is null | The question the forward pass asks of every batch it discovers: is one of these UIDs where a relocation or a copy put an email |
 | `ix_mailbox_mutation_audit_entries_mutation` | `(MutationRecordId)`, unique | One audit entry per mutation ending, whatever a repeated append attempts |
 | `ix_outgoing_emails_identity` | `(MailboxAccountId, RequesterOrigin, RequesterIdentity)`, unique | An outgoing message's idempotency identity, which is what makes the same authored request twice one delivery. It spans terminal rows deliberately: a row that was sent is what stops the same request asking again |
+| `ix_outgoing_emails_claimable` | `(MailboxAccountId, AvailableAt, Id)` where the stage is `Recorded` | The batch a delivery pass claims, oldest first. The filter is what keeps it proportionate to the outbox rather than to everything the deployment has ever sent: a claim reads only rows nothing has transmitted for, and in steady state that is almost none of the table. The identity is in the key because two sends recorded in one instant need a total order for the claim to be deterministic |
 | `ix_outgoing_emails_outstanding` | `(MailboxAccountId, RecordedAt)` where the stage is none of `Sent`, `Refused`, or `Cancelled` | The outbox a restart reads and an operator asks about: what is queued, what is in flight, and what has stopped. The filter names the three terminal stages rather than the successful one alone, so a refused send stays visible while the deployment's whole sending history does not |
 | `ix_mail_rule_executions_account_evaluated` | `(MailboxAccountId, EvaluatedAt, Id)` | An account's rule history newest first, and the retention pass that erases what has outlived its window. The identifier is in the key because two executions of one batch share an instant and a keyset page needs a total order to continue from |
 | `ix_mail_rule_executions_account_rule_evaluated` | `(MailboxAccountId, RuleName, EvaluatedAt, Id)` | What one rule has been concluding, which is the question a rule that never seems to fire is investigated with |

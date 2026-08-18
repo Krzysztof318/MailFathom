@@ -9,8 +9,8 @@ using MailFathom.Application.Resilience;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Transport;
 using MailFathom.Infrastructure.Mail.OAuth;
+using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Resilience;
-using MailKit.Net.Smtp;
 using Microsoft.Extensions.Logging;
 
 namespace MailFathom.Infrastructure.Mail.MailKit.Delivery;
@@ -23,13 +23,14 @@ namespace MailFathom.Infrastructure.Mail.MailKit.Delivery;
 /// moment delivery is attempted rather than one discovered part-way through transmitting a message.
 /// </remarks>
 internal sealed class MailKitSmtpDeliverySessionFactory(
-    Func<ISmtpClient> clientFactory,
+    Func<ISubmissionClient> clientFactory,
     Func<string, int, CancellationToken, Task<Socket>> socketConnector,
     ISmtpAccountSettingsProvider settingsProvider,
     IMailAccessTokenSource accessTokenSource,
     OutboundOperationExecutor operationExecutor,
     ITransientFailureClassifier transientFailureClassifier,
     MailDeliveryTimeouts timeouts,
+    MailDeliveryTelemetry telemetry,
     TimeProvider timeProvider,
     ILogger<MailKitSmtpConnection> logger) : IMailDeliverySessionFactory
 {
@@ -66,6 +67,6 @@ internal sealed class MailKitSmtpDeliverySessionFactory(
             throw;
         }
 
-        return new MailKitSmtpDeliverySession(connection);
+        return new MailKitSmtpDeliverySession(connection, accountId, telemetry);
     }
 }

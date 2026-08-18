@@ -5,6 +5,7 @@
 using System.Text;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail.Delivery;
+using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
@@ -123,14 +124,14 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
                 .EnqueueAsync(request, MimeOf("unknown-outcome"), token),
             cancellationToken);
 
+        // The claim is what counts the attempt and takes the lease, in one statement and its own transaction, exactly
+        // as a delivery pass reaches this record.
+        var claimed = await ClaimAsync(services, enqueued.Id, cancellationToken);
+
         // Act
         var announced = await services.CommitAsync(
-            async (scope, session, token) =>
-            {
-                var store = scope.GetRequiredService<IOutgoingEmailStore>();
-                await store.CountAttemptAsync(session, enqueued.Id, token);
-                await store.RecordTransmissionBegunAsync(session, enqueued.Id, token);
-            },
+            (scope, session, token) => scope.GetRequiredService<IOutgoingEmailStore>()
+                .RecordTransmissionBegunAsync(session, claimed.Lease, enqueued.Id, token),
             cancellationToken);
 
         // Assert
@@ -142,10 +143,19 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
         Assert.False(found.IsTerminal);
         Assert.Equal(1, found.AttemptCount);
 
+        // Nothing claims it again, whatever its lease says: a second attempt would transmit a message that may
+        // already be in somebody's mailbox, and the stage is what refuses it rather than a timer. Asserted over this
+        // record rather than over the batch, because every class in this collection shares one account and another
+        // test's queued send is a row this claim legitimately takes.
+        Assert.DoesNotContain(
+            await ClaimBatchAsync(services, cancellationToken),
+            entry => entry.Record.Id == enqueued.Id);
+
         // A message that may already have been transmitted can never be recorded as withdrawn.
         await Assert.ThrowsAsync<InvalidOperationException>(() => services.CommitAsync(
             (scope, session, token) => scope.GetRequiredService<IOutgoingEmailStore>().AdvanceAsync(
                 session,
+                claimed.Lease,
                 enqueued.Id,
                 OutgoingEmailStage.Cancelled,
                 replyCode: null,
@@ -154,18 +164,22 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
 
         // Once the send has stopped, nothing goes on writing about it: a late reply would settle a recipient on a
         // record nothing will offer again, and a later failure would overwrite the one an operator reads as the reason.
+        // Reaching a terminal stage gives the lease back with it, so what refuses the two writes below is the lease
+        // rather than the stage — the record is held by nobody, and an attempt that holds nothing writes nothing.
         await services.CommitAsync(
             (scope, session, token) => scope.GetRequiredService<IOutgoingEmailStore>().AdvanceAsync(
                 session,
+                claimed.Lease,
                 enqueued.Id,
                 OutgoingEmailStage.Refused,
                 replyCode: 554,
                 token),
             cancellationToken);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => services.CommitAsync(
+        await Assert.ThrowsAsync<OutgoingEmailLeaseLostException>(() => services.CommitAsync(
             (scope, session, token) => scope.GetRequiredService<IOutgoingEmailStore>().RecordRecipientOutcomesAsync(
                 session,
+                claimed.Lease,
                 enqueued.Id,
                 [OutgoingRecipientOutcome.Answered(
                     request.Recipients[0],
@@ -175,9 +189,10 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
                 token),
             cancellationToken));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => services.CommitAsync(
+        await Assert.ThrowsAsync<OutgoingEmailLeaseLostException>(() => services.CommitAsync(
             (scope, session, token) => scope.GetRequiredService<IOutgoingEmailStore>().RecordFailureAsync(
                 session,
+                claimed.Lease,
                 enqueued.Id,
                 MailFathomErrorCode.MailDeliveryUnavailable,
                 token),
@@ -204,12 +219,14 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
                 .EnqueueAsync(request, MimeOf("partial-acceptance"), token),
             cancellationToken);
         var answeredAt = DateTimeOffset.UnixEpoch.AddMinutes(1);
+        var claimed = await ClaimAsync(services, enqueued.Id, cancellationToken);
 
         // Act
         var answered = await services.CommitAsync(
             (scope, session, token) => scope.GetRequiredService<IOutgoingEmailStore>()
                 .RecordRecipientOutcomesAsync(
                     session,
+                    claimed.Lease,
                     enqueued.Id,
                     [
                         Answered(request, 0, OutgoingRecipientStatus.Accepted, 250, answeredAt),
@@ -235,6 +252,7 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
             (scope, session, token) => scope.GetRequiredService<IOutgoingEmailStore>()
                 .RecordRecipientOutcomesAsync(
                     session,
+                    claimed.Lease,
                     enqueued.Id,
                     [Answered(request, 0, OutgoingRecipientStatus.Pending, 451, answeredAt.AddMinutes(1))],
                     token),
@@ -283,6 +301,30 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
             cancellationToken);
         Assert.Equal(0, remainingRecipientCount);
     }
+
+    /// <summary>Claims one named record the way a delivery pass does, and fails the test when the claim missed it.</summary>
+    private static async Task<ClaimedOutgoingEmail> ClaimAsync(
+        OrchestratedMailFathomServices services,
+        OutgoingEmailId outgoingEmailId,
+        CancellationToken cancellationToken)
+    {
+        var claimed = await ClaimBatchAsync(services, cancellationToken);
+
+        return Assert.Single(claimed, entry => entry.Record.Id == outgoingEmailId);
+    }
+
+    /// <summary>Claims whatever the account has due, which is what a pass reads and what a test asserts an absence over.</summary>
+    /// <remarks>
+    /// The batch is wide because every class in this collection shares one account: another test's queued send is
+    /// somebody else's row, and a narrow batch would let one hide this test's record rather than report it.
+    /// </remarks>
+    private static Task<IReadOnlyList<ClaimedOutgoingEmail>> ClaimBatchAsync(
+        OrchestratedMailFathomServices services,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IOutgoingEmailStore>().ClaimAsync(
+                OutgoingEmailClaimRequest.Create(Account, batchSize: 100, TimeSpan.FromMinutes(10)),
+                token),
+            cancellationToken);
 
     private static OutgoingRecipientOutcome Answered(
         OutgoingEmailRequest request,

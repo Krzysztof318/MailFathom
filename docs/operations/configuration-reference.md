@@ -355,12 +355,13 @@ see.
 
 ## `MailDelivery`
 
-How large a message this deployment is willing to compose. The submission endpoints above are per account because they
-are different servers; these are one answer for the whole installation, because what a mailbox may send is a policy an
-operator holds once. `MaxMessageBytes` is the only one of them the submission server has an answer to as well, through
-the size it advertises on connection, and a composed message is measured against both with the smaller deciding. The
-other four are this deployment's alone: no server advertises how many people a message may be addressed to or how many
-files it may carry, so a small server bound is no protection against either.
+How large a message this deployment is willing to compose, and how it delivers one. The submission endpoints above are
+per account because they are different servers; these are one answer for the whole installation, because what a mailbox
+may send is a policy an operator holds once and a provider that is briefly unreachable is answered the same way
+whichever mailbox was waiting on it. `MaxMessageBytes` is the only key here the submission server has an answer to as
+well, through the size it advertises on connection, and a composed message is measured against both with the smaller
+deciding. The other composition bounds are this deployment's alone: no server advertises how many people a message may
+be addressed to or how many files it may carry, so a small server bound is no protection against either.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
@@ -373,6 +374,35 @@ files it may carry, so a small server bound is no protection against either.
 The whole-message bound is measured on what the message became rather than on what an author supplied, because transfer
 encoding decides the difference: base64 costs roughly a third more than the octets it carries, and headers, boundaries,
 and folding are the rest of it.
+
+The remaining keys govern the delivery of what has been written down: how much of one account's outbox a pass takes,
+how long it holds it, and how patient this deployment is with a submission server that is not answering.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `MailDelivery:MaxDeliveriesPerPass` | int | `10` | 1 – 1000 | restart |
+| `MailDelivery:LeaseDuration` | TimeSpan | `00:10:00` | 30 s – 1 h | restart |
+| `MailDelivery:AttemptTimeout` | TimeSpan | `00:07:00` | 10 s – 59 min, and always shorter than `LeaseDuration` | restart |
+| `MailDelivery:MaxAttempts` | int | `5` | 1 – 100; `1` leaves no retry at all | restart |
+| `MailDelivery:RetryBaseDelay` | TimeSpan | `00:01:00` | 1 s – 1 h | restart |
+| `MailDelivery:RetryMaxDelay` | TimeSpan | `01:00:00` | 1 s – 24 h, and never below `RetryBaseDelay` | restart |
+| `MailDelivery:SignalQueueCapacity` | int | `64` | 1 – 1000 | restart |
+
+**`AttemptTimeout` below `LeaseDuration` is the one ordering startup refuses rather than warns about.** The lease is
+what lets a crashed process's send be attempted again without anything being told the process died, and an attempt
+still transmitting when its own lease expires is a second attempt taking a message the first may already have sent. So
+the attempt is cancelled first, by a margin the operator chooses, and a configuration stating otherwise fails startup
+naming `AttemptTimeout`.
+
+A send that spends `MaxAttempts` stops being attempted and stands in the outbox where an operator can see it, rather
+than being retried forever; a permanent refusal is terminal at the first answer and never spends the remaining
+attempts. Between attempts the delay doubles from `RetryBaseDelay`, drawn with jitter so a provider that refused every
+account at once is not offered all of them back together, and is capped at `RetryMaxDelay`.
+
+`SignalQueueCapacity` bounds only how promptly a send leaves, never whether it leaves. The queue holds accounts rather
+than messages and an account already waiting is not queued twice, so it cannot grow past the number of configured
+accounts however much is enqueued: raising it past that buys nothing, and a value below it means a signal is
+occasionally refused and those sends wait for the account's own synchronization run instead.
 
 ## `Persistence` and the connection string
 

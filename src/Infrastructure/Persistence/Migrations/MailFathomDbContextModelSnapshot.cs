@@ -1196,6 +1196,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<int>("AttemptCount")
                         .HasColumnType("integer");
 
+                    b.Property<DateTimeOffset>("AvailableAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<uint>("ConcurrencyVersion")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -1207,6 +1210,12 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.Property<int?>("LastReplyCode")
                         .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("LeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LeaseOwner")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("MailboxAccountId")
                         .IsRequired()
@@ -1242,6 +1251,10 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.HasIndex("MailboxAccountId", "RecordedAt")
                         .HasDatabaseName("ix_outgoing_emails_outstanding")
                         .HasFilter("\"Stage\" NOT IN ('Sent', 'Refused', 'Cancelled')");
+
+                    b.HasIndex("MailboxAccountId", "AvailableAt", "Id")
+                        .HasDatabaseName("ix_outgoing_emails_claimable")
+                        .HasFilter("\"Stage\" = 'Recorded'");
 
                     b.HasIndex("MailboxAccountId", "RequesterOrigin", "RequesterIdentity")
                         .IsUnique()

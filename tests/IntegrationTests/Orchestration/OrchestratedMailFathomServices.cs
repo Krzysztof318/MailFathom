@@ -18,6 +18,8 @@ using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Mail;
+using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
@@ -201,6 +203,24 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // The port every mailbox read resolves its scope through, registered by the composition root from the same
         // options section the account above comes from. Without it a search or a listing resolves nothing rather than
         // narrowing to this account, so it belongs here with the other host-bound ports.
+        // Who the mailbox's own mail is written from, registered by the composition root from the same options
+        // section. Every delivery attempt reads it before it opens anything, so an account without it delivers nothing
+        // rather than delivering as somebody unnamed.
+        builder.Services.AddSingleton<IOutgoingSenderIdentityReader>(account);
+        // What one pass over an account's outbox is allowed to do, which a composition root validates out of the
+        // MailDelivery section. The values are the deployed defaults with the two the suite has to be able to reach
+        // narrowed: a batch small enough for a test to fill, and a retry ceiling a test can exhaust without waiting.
+        builder.Services.AddSingleton(MailOutboxSettings.Create(
+            maxDeliveriesPerPass: 5,
+            leaseDuration: TimeSpan.FromMinutes(10),
+            attemptTimeout: TimeSpan.FromMinutes(1),
+            maxAttempts: 2,
+            retryBaseDelay: TimeSpan.FromMinutes(1),
+            retryMaxDelay: TimeSpan.FromMinutes(5)));
+        // The queue an authored send is announced on. Nothing in this suite reads it — the pass is invoked directly —
+        // so it is here because the outbox writes to it, and its depth is what a test reads to see that the write
+        // announced anything at all.
+        builder.Services.AddSingleton(new MailOutboxSignal(capacity: 16));
         builder.Services.AddSingleton<IMailAccountCatalog>(account);
         // The port every folder decision is read through, registered by the composition root from the same options
         // section the account above comes from. Chunking and every mailbox read resolve it, so a harness without it

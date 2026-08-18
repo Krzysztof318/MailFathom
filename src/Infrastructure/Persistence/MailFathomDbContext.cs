@@ -210,6 +210,9 @@ internal sealed class MailFathomDbContext : DbContext
     /// <summary>The index the outbox is read through, filtered to the sends that have not finished.</summary>
     internal const string OutgoingEmailOutstandingIndexName = "ix_outgoing_emails_outstanding";
 
+    /// <summary>Names the index one claim over the outbox reads, which is the only query on its hot path.</summary>
+    internal const string OutgoingEmailClaimableIndexName = "ix_outgoing_emails_claimable";
+
     /// <summary>The foreign key that removes an outgoing email's recipients with the record.</summary>
     /// <remarks>
     /// Named because EF's convention composes one from both table names and PostgreSQL truncates an identifier at 63
@@ -1360,6 +1363,13 @@ internal sealed class MailFathomDbContext : DbContext
                     + $"'{nameof(OutgoingEmailStage.Sent)}', "
                     + $"'{nameof(OutgoingEmailStage.Refused)}', "
                     + $"'{nameof(OutgoingEmailStage.Cancelled)}')");
+
+            // Filtered to the one stage a claim may take a record from, which is both what makes the structure small
+            // and what lets PostgreSQL prove it applies to the claim's own predicate. Ordered the way that claim
+            // orders, so the batch it takes is a range read rather than a sort over everything the account has queued.
+            entity.HasIndex(message => new { message.MailboxAccountId, message.AvailableAt, message.Id })
+                .HasDatabaseName(OutgoingEmailClaimableIndexName)
+                .HasFilter($"\"{nameof(OutgoingEmailEntity.Stage)}\" = '{nameof(OutgoingEmailStage.Recorded)}'");
         });
 
     /// <summary>Declares the people one outgoing email is offered to, and what the server said about each.</summary>

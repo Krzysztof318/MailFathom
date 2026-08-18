@@ -697,6 +697,40 @@ configured and writing nothing.
 The one tag is MailFathom's own closed set. No address, name, display name, folder, or message identity reaches an
 instrument from collection: the outcome is a decision about a person and never the person, and nothing here logs at all.
 
+### What delivering the outbox emits
+
+Sending is the other direction of the same absence: the mail library publishes nothing of its own here either, and a
+message that fails to leave is invisible in a way an unsynchronized mailbox is not — nobody refreshes an outbox waiting
+for it. Two questions are worth answering, and each has one signal.
+
+**Is mail leaving?** `mailfathom.mail.delivery.attempts` counts every attempt that ended, tagged with the account alias
+and `mailfathom.mail.delivery.outcome`, whose values are `sent`, `refused`, `deferred`, `outcome-unknown`, `released`,
+and `lease-lost`. One measurement per send rather than per pass, because a pass routinely ends in several of them.
+
+`outcome-unknown` is a dimension of that counter rather than a counter of its own, deliberately: a send whose server
+never answered is neither a success nor a failure, and giving it an instrument would let a dashboard summing successes
+and failures report a total that quietly omits it. **It is the one value worth alerting on at any rate above zero** —
+each measurement is a message that may or may not have reached somebody and that nothing will attempt again until a
+person decides. `refused` is a terminal failure and worth watching as a rate; `deferred` is the ordinary answer to a
+provider that is briefly busy and is only interesting when it stops turning into `sent`. `released` is shutdown and
+`lease-lost` is an attempt that had already been taken over, so neither counts against a deployment's health.
+
+**Is one submission the slow part?** Each opens **`submit_outgoing_email`** as a client span, tagged with the account
+alias, and `mailfathom.mail.delivery.submission.duration` records how long it took. Both cover the exchange with the
+server and nothing else: the claim, the record movements, and the backoff are local work, and including them would blur
+the one thing the span exists to attribute. A span that ends without the server having answered is marked as an error,
+which is what makes the trace and the `outcome-unknown` measurement the same event read two ways.
+
+There is deliberately no span or instrument per recipient. A message is offered per address, so one apiece would open a
+time series per person this deployment writes to; what each recipient was told is on the send's own record, where it is
+reached by identity rather than exported.
+
+Nothing here is derived from a message. The dimensions are the account's configured alias and a closed set of
+MailFathom's own words — no address, no subject, no message identifier, no recipient count, and no line of what a
+submission server wrote, since a server's refusal text routinely repeats the address it is refusing. As with reading,
+every SMTP client this deployment opens is constructed without a protocol logger, so the commands and responses of a
+submission are written nowhere that a log level could expose.
+
 ### Answering spend
 
 Answering a question sends mail to a model provider on demand, so what it costs is published while it is being spent

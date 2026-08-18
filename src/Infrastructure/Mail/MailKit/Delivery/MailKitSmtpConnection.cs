@@ -5,8 +5,11 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Sockets;
 using System.Runtime.ExceptionServices;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using MailFathom.Application.Mail.Delivery;
+using MailFathom.Application.Mail.Delivery.Transmission;
 using MailFathom.Application.Resilience;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Transport;
@@ -14,6 +17,7 @@ using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Resilience;
 using MailKit.Net.Smtp;
 using Microsoft.Extensions.Logging;
+using MimeKit;
 
 namespace MailFathom.Infrastructure.Mail.MailKit.Delivery;
 
@@ -45,7 +49,7 @@ internal sealed partial class MailKitSmtpConnection : IAsyncDisposable
     /// <summary>Names the delivery session in resilience telemetry, where a connection has no folder to name instead.</summary>
     private const string DeliverySessionOperationKey = "delivery-session";
 
-    private readonly Func<ISmtpClient> clientFactory;
+    private readonly Func<ISubmissionClient> clientFactory;
     private readonly Func<string, int, CancellationToken, Task<Socket>> socketConnector;
     private readonly ISmtpAccountSettingsProvider settingsProvider;
     private readonly IMailAccessTokenSource accessTokenSource;
@@ -57,7 +61,7 @@ internal sealed partial class MailKitSmtpConnection : IAsyncDisposable
     private readonly TimeProvider timeProvider;
     private readonly ILogger<MailKitSmtpConnection> logger;
 
-    private ISmtpClient? client;
+    private ISubmissionClient? client;
 
     /// <summary>Creates a connection that has not reached its server yet.</summary>
     /// <param name="clientFactory">Creates the SMTP client the session is spoken over.</param>
@@ -73,7 +77,7 @@ internal sealed partial class MailKitSmtpConnection : IAsyncDisposable
     /// <param name="logger">Records what a refusal was, as codes rather than as the server's own words.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     internal MailKitSmtpConnection(
-        Func<ISmtpClient> clientFactory,
+        Func<ISubmissionClient> clientFactory,
         Func<string, int, CancellationToken, Task<Socket>> socketConnector,
         ISmtpAccountSettingsProvider settingsProvider,
         IMailAccessTokenSource accessTokenSource,
@@ -144,6 +148,98 @@ internal sealed partial class MailKitSmtpConnection : IAsyncDisposable
         }
     }
 
+    /// <summary>Offers the envelope and transmits the message over the established session.</summary>
+    /// <param name="request">Who the message is from, who is still owed it, and the bytes to transmit.</param>
+    /// <param name="envelope">Filled with what the server answers about each address, whether or not this call returns.</param>
+    /// <param name="cancellationToken">Cancels the submission.</param>
+    /// <returns>What the server answered about the message.</returns>
+    /// <exception cref="InvalidOperationException">Thrown before the connection has been established.</exception>
+    /// <exception cref="MailDeliveryUnavailableException">Thrown when the exchange failed without the server stating anything.</exception>
+    /// <exception cref="TimeoutException">Thrown when the submission outlived its budget, which says nothing about what the server received.</exception>
+    /// <remarks>
+    /// <para>
+    /// It runs outside the delivery resilience pipeline, alone among the operations of this connection, and that is the
+    /// single most important line in this type. The pipeline repeats a submission server's explicit temporary
+    /// rejection, which is right for establishing a session and catastrophic here: the same message offered twice is a
+    /// second copy in the mailbox of everybody the first envelope reached. One attempt reaches the server once, and
+    /// when the next attempt happens is written onto the durable record instead.
+    /// </para>
+    /// <para>
+    /// The stored bytes are parsed back into a message because the library submits messages rather than octets. What
+    /// they are not is recomposed: the headers, the identity, and the encoding are the ones the composer wrote, so the
+    /// message a retry transmits is the one an earlier attempt may already have begun transmitting.
+    /// </para>
+    /// <para>
+    /// The blind recipients are hidden again on the way out. The stored bytes already omit them, and asking for it a
+    /// second time costs nothing and means no stored message can put a blind address into the copy every other
+    /// recipient reads.
+    /// </para>
+    /// </remarks>
+    internal async Task<MailTransmission> TransmitAsync(
+        MailTransmissionRequest request,
+        MailEnvelopeLedger envelope,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(envelope);
+
+        var submissionClient = this.client
+            ?? throw new InvalidOperationException("The delivery connection has not been established yet.");
+
+        using var storedMime = AsStream(request.RawMime);
+        using var message = await MimeMessage.LoadAsync(storedMime, cancellationToken);
+
+        var sender = new MailboxAddress(name: null, request.Sender.Address);
+        var recipients = request.Recipients
+            .Select(recipient => new MailboxAddress(name: null, recipient.Address.Address))
+            .ToArray();
+
+        submissionClient.Envelope = new SmtpEnvelopeObserver(request.Recipients, envelope);
+
+        try
+        {
+            await this.RunPhaseAsync(
+                MailDeliveryPhase.Transmission,
+                phaseToken => submissionClient.SendAsync(
+                    FormatFor(request),
+                    message,
+                    sender,
+                    recipients,
+                    phaseToken),
+                cancellationToken);
+
+            return new MailTransmission(MailTransmissionOutcome.Accepted, ReplyCode: null);
+        }
+        catch (SmtpNoRecipientsAcceptedException)
+        {
+            this.LogSubmissionEnvelopeRefused(this.accountId.Value, envelope.Replies.Count);
+
+            return new MailTransmission(OutcomeOf(envelope), ReplyCode: null);
+        }
+        catch (SmtpCommandException refusal)
+        {
+            this.ReportRefusal(refusal);
+
+            var classification = SmtpReplyClassifier.Classify(refusal);
+
+            return new MailTransmission(
+                classification.Disposition == SmtpRejectionDisposition.Transient
+                    ? MailTransmissionOutcome.RefusedTemporarily
+                    : MailTransmissionOutcome.RefusedPermanently,
+                classification.ReplyCode);
+        }
+        catch (Exception failure) when (failure is SmtpProtocolException or IOException or SocketException)
+        {
+            // The server stated nothing, so nothing here may say what the recipients received. The record the caller
+            // holds decides that, from the envelope this exchange had already settled.
+            throw new MailDeliveryUnavailableException(this.accountId, failure);
+        }
+        finally
+        {
+            submissionClient.Envelope = null;
+        }
+    }
+
     /// <summary>Closes and releases the connection, reporting the first cleanup failure.</summary>
     public async ValueTask DisposeAsync()
     {
@@ -157,7 +253,7 @@ internal sealed partial class MailKitSmtpConnection : IAsyncDisposable
     }
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The socket's ownership passes to the client once the greeting succeeds, and the client is abandoned with it on every failure path; a socket the client never took is disposed where the greeting fails.")]
-    private async Task<ISmtpClient> ConnectAuthenticateAndReadCapabilitiesAsync(CancellationToken cancellationToken)
+    private async Task<ISubmissionClient> ConnectAuthenticateAndReadCapabilitiesAsync(CancellationToken cancellationToken)
     {
         var settings = await this.settingsProvider.GetSettingsAsync(this.accountId.Value, cancellationToken);
 
@@ -321,6 +417,49 @@ internal sealed partial class MailKitSmtpConnection : IAsyncDisposable
             },
             cancellationToken);
 
+    /// <summary>Reads an envelope that accepted nobody as the refusal it amounts to.</summary>
+    /// <remarks>
+    /// One address a server refused for now is worth returning for, so a mixed answer is temporary; an envelope
+    /// refused for good throughout is settled and nothing offers the message again. An envelope with no reply at all
+    /// is treated as settled for the reason every unrecognized refusal is.
+    /// </remarks>
+    private static MailTransmissionOutcome OutcomeOf(MailEnvelopeLedger envelope) =>
+        envelope.Replies.Any(reply => reply.Acceptance == MailRecipientAcceptance.RefusedTemporarily)
+            ? MailTransmissionOutcome.RefusedTemporarily
+            : MailTransmissionOutcome.RefusedPermanently;
+
+    /// <summary>States how the stored message is written onto the wire.</summary>
+    /// <remarks>
+    /// The line ending is the one SMTP requires rather than the platform's, and the international format is asked for
+    /// only where an address needs it — a message whose addresses are all ASCII is written the way every server
+    /// understands. The composer already refused an internationalized address the server cannot carry, so this is the
+    /// same decision restated over the addresses this attempt is actually offering.
+    /// </remarks>
+    private static FormatOptions FormatFor(MailTransmissionRequest request)
+    {
+        var format = FormatOptions.Default.Clone();
+
+        format.NewLineFormat = NewLineFormat.Dos;
+        format.EnsureNewLine = true;
+        format.International = !Ascii.IsValid(request.Sender.Address)
+            || request.Recipients.Any(recipient => !Ascii.IsValid(recipient.Address.Address));
+        format.HiddenHeaders.Add(HeaderId.Bcc);
+        format.HiddenHeaders.Add(HeaderId.ResentBcc);
+
+        return format;
+    }
+
+    /// <summary>Reads the stored bytes without copying them where the buffer allows it.</summary>
+    /// <remarks>
+    /// A composed message runs to the deployment's whole size bound, so a copy per attempt would be a large-object
+    /// allocation for every send and every retry of one. The fallback exists because a memory that is not array-backed
+    /// has no other way to be read as a stream.
+    /// </remarks>
+    private static MemoryStream AsStream(ReadOnlyMemory<byte> rawMime) =>
+        MemoryMarshal.TryGetArray(rawMime, out var segment) && segment.Array is not null
+            ? new MemoryStream(segment.Array, segment.Offset, segment.Count, writable: false)
+            : new MemoryStream(rawMime.ToArray(), writable: false);
+
     /// <summary>Records what the server refused with, as the numbers it stated rather than the sentence it wrote.</summary>
     private void ReportRefusal(SmtpCommandException refusal)
     {
@@ -405,6 +544,11 @@ internal sealed partial class MailKitSmtpConnection : IAsyncDisposable
             ExceptionDispatchInfo.Capture(firstCleanupException).Throw();
         }
     }
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The submission server for account {AccountId} accepted none of the {AnsweredRecipientCount} recipient(s) offered, so the message was not transmitted. What it said about each is on the send's own record.")]
+    private partial void LogSubmissionEnvelopeRefused(string accountId, int answeredRecipientCount);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
