@@ -6,7 +6,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 
-namespace MailFathom.Host.UnitTests.TestDoubles;
+namespace MailFathom.IntegrationTests.Hosting;
 
 /// <summary>Notes which scheme each authentication went to, and otherwise does what the framework's own service does.</summary>
 /// <remarks>

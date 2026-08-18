@@ -4,9 +4,8 @@
 
 using System.Text;
 using MailFathom.Host.Security.Transport;
-using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.IntegrationTests.Orchestration;
 using MailFathom.Mcp;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -14,7 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Net.Http.Headers;
 using Xunit;
 
-namespace MailFathom.Host.UnitTests;
+namespace MailFathom.IntegrationTests.Hosting;
 
 /// <summary>Drives requests through the pipeline a started host actually serves them through.</summary>
 /// <remarks>
@@ -23,7 +22,13 @@ namespace MailFathom.Host.UnitTests;
 /// composed — routing runs first, endpoint execution last, and an authentication or authorization middleware of the
 /// framework's own is inserted ahead of everything the application added unless the application added that one itself,
 /// on the application rather than inside a branch. So the only place the real order exists is a host that has started,
-/// which is what <see cref="ComposedHostPipeline" /> reaches without opening a socket.
+/// which is what <see cref="InProcessComposedHost" /> reaches without opening a socket.
+/// </para>
+/// <para>
+/// The class joins the composed-host collection for the reason every other host-starting class does: what it starts is
+/// a whole MailFathom, and this suite runs those after the tests that own the orchestrated database and mailbox
+/// exclusively. It reaches neither of them itself — the workers that would are removed before the container is built —
+/// so it needs no fixture, only the ordering.
 /// </para>
 /// <para>
 /// What that costs is the defect these tests were written for. Authentication placed in a branch left the framework
@@ -31,7 +36,8 @@ namespace MailFathom.Host.UnitTests;
 /// authenticated while its scheme still read <c>http</c> and every access token was refused unread.
 /// </para>
 /// </remarks>
-public sealed class HostPipelineTests
+[Collection(ComposedHostCollectionDefinition.Name)]
+public sealed class ComposedPipelineOrderTests
 {
     private const int McpPort = 8080;
 
@@ -86,7 +92,7 @@ public sealed class HostPipelineTests
         // Arrange
         ForwardedRequestState? observed = null;
 
-        await using var host = await ComposedHostPipeline.StartAsync(
+        await using var host = await InProcessComposedHost.StartAsync(
             McpServedWithOAuth(),
             TestContext.Current.CancellationToken,
             builder => builder.Services.PostConfigure<JwtBearerOptions>(
@@ -135,7 +141,7 @@ public sealed class HostPipelineTests
         // Arrange
         ForwardedRequestState? observed = null;
 
-        await using var host = await ComposedHostPipeline.StartAsync(
+        await using var host = await InProcessComposedHost.StartAsync(
             McpServedWithOAuth(),
             TestContext.Current.CancellationToken,
             builder => builder.Services.PostConfigure<JwtBearerOptions>(
@@ -178,7 +184,7 @@ public sealed class HostPipelineTests
     public async Task Compose_AnMcpRequest_ReachesNoAdministrativeScheme(bool mcpAuthenticates, bool adminAuthenticates)
     {
         // Arrange
-        await using var host = await ComposedHostPipeline.StartAsync(
+        await using var host = await InProcessComposedHost.StartAsync(
             BothSurfacesServed(mcpAuthenticates, adminAuthenticates),
             TestContext.Current.CancellationToken);
 
@@ -201,7 +207,7 @@ public sealed class HostPipelineTests
     public async Task Compose_AnAdministrativeRequest_ReachesNoMcpScheme(bool mcpAuthenticates, bool adminAuthenticates)
     {
         // Arrange
-        await using var host = await ComposedHostPipeline.StartAsync(
+        await using var host = await InProcessComposedHost.StartAsync(
             BothSurfacesServed(mcpAuthenticates, adminAuthenticates),
             TestContext.Current.CancellationToken);
 
@@ -229,7 +235,7 @@ public sealed class HostPipelineTests
     public async Task Compose_AProtectedMcpRequest_IsPreAuthenticatedThroughTheApplicationDefault(bool adminAuthenticates)
     {
         // Arrange
-        await using var host = await ComposedHostPipeline.StartAsync(
+        await using var host = await InProcessComposedHost.StartAsync(
             BothSurfacesServed(mcpAuthenticates: true, adminAuthenticates),
             TestContext.Current.CancellationToken);
 
@@ -256,7 +262,7 @@ public sealed class HostPipelineTests
     public async Task Compose_AnAdministrativeRequest_IsNotPreAuthenticatedByTheApplicationDefault(bool mcpAuthenticates)
     {
         // Arrange
-        await using var host = await ComposedHostPipeline.StartAsync(
+        await using var host = await InProcessComposedHost.StartAsync(
             BothSurfacesServed(mcpAuthenticates, adminAuthenticates: true),
             TestContext.Current.CancellationToken);
 
@@ -279,35 +285,6 @@ public sealed class HostPipelineTests
     }
 
     /// <summary>
-    /// A surface that authenticates nothing registers no scheme for it, so nothing exists that could compare a
-    /// credential the deployment never configured.
-    /// </summary>
-    [Theory]
-    [MemberData(nameof(AuthenticationCombinations))]
-    public async Task Compose_ASurfaceWithoutAuthentication_RegistersNoSchemeOfItsOwn(
-        bool mcpAuthenticates,
-        bool adminAuthenticates)
-    {
-        // Arrange
-        await using var host = await ComposedHostPipeline.StartAsync(
-            BothSurfacesServed(mcpAuthenticates, adminAuthenticates),
-            TestContext.Current.CancellationToken);
-
-        // Act
-        var schemes = host.Services.GetService<IAuthenticationSchemeProvider>() is { } provider
-            ? (await provider.GetAllSchemesAsync()).Select(scheme => scheme.Name).ToArray()
-            : [];
-
-        // Assert
-        Assert.Equal(
-            mcpAuthenticates,
-            Array.Exists(schemes, scheme => scheme.StartsWith($"MailFathom:{TransportSurface.Mcp.Name}:", StringComparison.Ordinal)));
-        Assert.Equal(
-            adminAuthenticates,
-            Array.Exists(schemes, scheme => scheme.StartsWith($"MailFathom:{TransportSurface.Admin.Name}:", StringComparison.Ordinal)));
-    }
-
-    /// <summary>
     /// The administrative endpoint alone authenticating is the case the root call exists for beyond the MCP surface:
     /// the authentication services are registered, so minimal hosting would insert a middleware of its own ahead of
     /// forwarded-header processing unless the application added one. The scheme that one runs must still authenticate
@@ -317,7 +294,7 @@ public sealed class HostPipelineTests
     public async Task Compose_AdministrativeAuthenticationAlone_StillRunsTheApplicationDefaultAtTheRoot()
     {
         // Arrange
-        await using var host = await ComposedHostPipeline.StartAsync(
+        await using var host = await InProcessComposedHost.StartAsync(
             BothSurfacesServed(mcpAuthenticates: false, adminAuthenticates: true),
             TestContext.Current.CancellationToken);
 
@@ -334,7 +311,7 @@ public sealed class HostPipelineTests
     public async Task Compose_NeitherSurfaceAuthenticating_ComposesNoAuthenticationAtAll()
     {
         // Arrange
-        await using var host = await ComposedHostPipeline.StartAsync(
+        await using var host = await InProcessComposedHost.StartAsync(
             BothSurfacesServed(mcpAuthenticates: false, adminAuthenticates: false),
             TestContext.Current.CancellationToken);
 
@@ -342,7 +319,6 @@ public sealed class HostPipelineTests
         var response = await host.SendAsync(HttpMethods.Post, McpEndpointRoute.Path, McpPort);
 
         // Assert
-        Assert.Null(host.Services.GetService<IAuthenticationSchemeProvider>());
         Assert.NotEqual(StatusCodes.Status401Unauthorized, response.StatusCode);
         Assert.Empty(host.AuthenticatedSchemes.Asked);
     }
@@ -361,7 +337,7 @@ public sealed class HostPipelineTests
     public async Task Compose_AnAnonymousRoute_IsNeitherChallengedNorGivenATransportIdentity(string path, int localPort)
     {
         // Arrange
-        await using var host = await ComposedHostPipeline.StartAsync(
+        await using var host = await InProcessComposedHost.StartAsync(
             BothSurfacesServedWithOAuth(),
             TestContext.Current.CancellationToken);
 
@@ -390,7 +366,7 @@ public sealed class HostPipelineTests
     public async Task Compose_TheMcpProtectedResourceMetadataDocument_IsStillPublishedByItsAuthenticationScheme()
     {
         // Arrange
-        await using var host = await ComposedHostPipeline.StartAsync(
+        await using var host = await InProcessComposedHost.StartAsync(
             McpServedWithOAuth(),
             TestContext.Current.CancellationToken);
 
@@ -415,7 +391,7 @@ public sealed class HostPipelineTests
     public async Task Compose_TheAdministrativeProtectedResourceMetadataDocument_IsStillServedToACallerHoldingNothing()
     {
         // Arrange
-        await using var host = await ComposedHostPipeline.StartAsync(
+        await using var host = await InProcessComposedHost.StartAsync(
             BothSurfacesServedWithOAuth(),
             TestContext.Current.CancellationToken);
 
@@ -439,7 +415,7 @@ public sealed class HostPipelineTests
     public async Task Compose_TwoAuthenticatedMcpCallers_SpendSeparateRateLimitPartitions()
     {
         // Arrange
-        await using var host = await ComposedHostPipeline.StartAsync(
+        await using var host = await InProcessComposedHost.StartAsync(
             [.. BothSurfacesServed(mcpAuthenticates: true, adminAuthenticates: true), .. OneRequestPerCaller],
             TestContext.Current.CancellationToken);
 
@@ -478,7 +454,7 @@ public sealed class HostPipelineTests
     public async Task Compose_TwoAuthenticatedAdministrativeCallers_ShareOneRateLimitPartition()
     {
         // Arrange
-        await using var host = await ComposedHostPipeline.StartAsync(
+        await using var host = await InProcessComposedHost.StartAsync(
             [.. BothSurfacesServed(mcpAuthenticates: true, adminAuthenticates: true), .. OneRequestPerCaller],
             TestContext.Current.CancellationToken);
 

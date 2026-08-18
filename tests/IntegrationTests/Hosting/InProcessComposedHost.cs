@@ -4,9 +4,12 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
+using System.Xml.Linq;
+using MailFathom.Host;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
@@ -15,9 +18,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace MailFathom.Host.UnitTests.TestDoubles;
+namespace MailFathom.IntegrationTests.Hosting;
 
-/// <summary>The real host, started, with the pipeline reachable and nothing outside the process touched.</summary>
+/// <summary>The real host, started inside the test process, with the pipeline reachable and nothing outside it touched.</summary>
 /// <remarks>
 /// <para>
 /// It composes the service graph the deployment composes, fills in the pipeline
@@ -27,16 +30,26 @@ namespace MailFathom.Host.UnitTests.TestDoubles;
 /// exists: it is decided while the host starts and is invisible to anything that only inspects the application.
 /// </para>
 /// <para>
-/// Three things are taken out so that starting the host stays inside what a unit test may do.
-/// <see cref="PipelineCapturingServer" /> replaces Kestrel, so no socket is bound and no port is contended for with a
-/// parallel session. Every hosted service the composition added is removed, because those are the workers that reach a
-/// database, a mail server, and a model endpoint the moment they start. And the data protection key ring is held in
-/// memory rather than under whoever ran the suite.
+/// It is in this suite rather than in <c>Host.UnitTests</c> because building and starting a
+/// <see cref="WebApplication" /> is what separates the two, whatever the started host then turns out to reach. What it
+/// is not is a second orchestrated host: the resources <see cref="Orchestration.MailFathomOrchestrationFixture" />
+/// starts are whole MailFathom processes the app model configures, and the shapes below are configured per test,
+/// several per run, which is the only way to drive a deployment shape a running process would have to be restarted to
+/// take.
+/// </para>
+/// <para>
+/// Three things are taken out so that what starts is a pipeline rather than a deployment.
+/// <see cref="PipelineCapturingServer" /> replaces Kestrel, so no socket is bound and no port is contended for with
+/// the orchestrated hosts this suite already runs. Every hosted service the composition added is removed, because those
+/// are the workers that reach a database, a mail server, and a model endpoint the moment they start — this host is
+/// composed for its request pipeline and shares neither the orchestrated database nor the orchestrated mailbox. And the
+/// data protection key ring is held in memory rather than under whoever ran the suite.
 /// </para>
 /// </remarks>
-internal sealed class ComposedHostPipeline : IAsyncDisposable
+internal sealed class InProcessComposedHost : IAsyncDisposable
 {
     /// <summary>The one setting every shape carries, because a deployment reaching no database is not one worth composing.</summary>
+    /// <remarks>Nothing dials it: the workers that would are removed before the container is built, and the address names no host this suite started.</remarks>
     private static readonly KeyValuePair<string, string?>[] Database =
     [
         new("ConnectionStrings:mailfathom", "Host=localhost;Database=mailfathom;Username=mailfathom"),
@@ -45,7 +58,7 @@ internal sealed class ComposedHostPipeline : IAsyncDisposable
     private readonly WebApplication app;
     private readonly PipelineCapturingServer server;
 
-    private ComposedHostPipeline(WebApplication app, PipelineCapturingServer server, AuthenticationSchemeLog authenticatedSchemes)
+    private InProcessComposedHost(WebApplication app, PipelineCapturingServer server, AuthenticationSchemeLog authenticatedSchemes)
     {
         this.app = app;
         this.server = server;
@@ -64,7 +77,7 @@ internal sealed class ComposedHostPipeline : IAsyncDisposable
     /// <param name="beyondComposition">Anything a test has to register after the composition has run and before the container is built.</param>
     /// <returns>The started host.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
-    internal static async Task<ComposedHostPipeline> StartAsync(
+    internal static async Task<InProcessComposedHost> StartAsync(
         IReadOnlyList<KeyValuePair<string, string?>> configuration,
         CancellationToken cancellationToken,
         Action<WebApplicationBuilder>? beyondComposition = null)
@@ -77,9 +90,9 @@ internal sealed class ComposedHostPipeline : IAsyncDisposable
             ContentRootPath = AppContext.BaseDirectory,
         });
 
-        // Cleared for the reason HostCompositionTests clears them: the framework's sources are this machine's, and the
-        // host's own appsettings.json travels into the test output through the project reference. What the shape states
-        // is then the whole of what the composition reads.
+        // Cleared because the framework's sources are this machine's, and an environment variable set for a developer's
+        // run would otherwise decide what a shape composes. What the shape states is then the whole of what the
+        // composition reads.
         builder.Configuration.Sources.Clear();
         builder.Configuration.AddInMemoryCollection([.. Database, .. configuration]);
         builder.Logging.ClearProviders();
@@ -106,7 +119,7 @@ internal sealed class ComposedHostPipeline : IAsyncDisposable
         builder.Services.AddSingleton<IServer>(server);
 
         // The console lifetime registers process-wide signal handlers and writes to standard output. Neither belongs in
-        // a suite running several hosts in parallel.
+        // a suite that starts several hosts of its own.
         builder.Services.AddSingleton<IHostLifetime, UnattendedHostLifetime>();
 
         var authenticatedSchemes = new AuthenticationSchemeLog();
@@ -129,7 +142,7 @@ internal sealed class ComposedHostPipeline : IAsyncDisposable
 
         await app.StartAsync(cancellationToken);
 
-        return new ComposedHostPipeline(app, server, authenticatedSchemes);
+        return new InProcessComposedHost(app, server, authenticatedSchemes);
     }
 
     /// <summary>Runs one request through the started pipeline.</summary>
@@ -205,5 +218,18 @@ internal sealed class ComposedHostPipeline : IAsyncDisposable
 
         /// <inheritdoc />
         public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    /// <summary>Where the framework's data protection keys go while a pipeline is being driven.</summary>
+    /// <remarks>Nothing here protects anything, so the repository is never read from and never written to; it exists so the key manager settles on something that is not a directory in somebody's home.</remarks>
+    private sealed class KeysHeldInMemory : IXmlRepository
+    {
+        private readonly List<XElement> elements = [];
+
+        /// <inheritdoc />
+        public IReadOnlyCollection<XElement> GetAllElements() => this.elements.AsReadOnly();
+
+        /// <inheritdoc />
+        public void StoreElement(XElement element, string friendlyName) => this.elements.Add(element);
     }
 }

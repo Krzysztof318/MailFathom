@@ -3,13 +3,15 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using System.Xml.Linq;
 using MailFathom.Application.Access;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Security.Transport;
-using MailFathom.Host.UnitTests.TestDoubles;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -247,6 +249,60 @@ public sealed class HostCompositionTests
     }
 
     /// <summary>
+    /// Which authentication schemes exist is decided here rather than by either surface, and the four shapes below are
+    /// every combination a deployment can be configured into. A surface that authenticates nothing registers nothing,
+    /// so no handler exists that could compare a credential the operator never configured; and wherever either of them
+    /// does authenticate, the application's default is MailFathom's own scheme rather than a surface's, because a
+    /// surface claiming the default would authenticate every request the process serves with its own credentials.
+    /// </summary>
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void Compose_WithASurfaceAuthenticating_RegistersThatSurfacesSchemesBehindTheApplicationDefault(
+        bool mcpAuthenticates,
+        bool adminAuthenticates)
+    {
+        // Arrange
+        var builder = ConfiguredBuilder(
+            "probes only",
+            BothSurfacesServed(mcpAuthenticates, adminAuthenticates));
+
+        // Act
+        HostComposition.Compose(builder);
+
+        // Assert
+        using var composed = builder.Services.BuildServiceProvider();
+        var authentication = composed.GetRequiredService<IOptions<AuthenticationOptions>>().Value;
+
+        Assert.Equal(DefaultTransportAuthentication.SchemeName, authentication.DefaultScheme);
+        Assert.Equal(mcpAuthenticates, authentication.SchemeMap.Keys.Any(IsMcpScheme));
+        Assert.Equal(adminAuthenticates, authentication.SchemeMap.Keys.Any(IsAdminScheme));
+    }
+
+    /// <summary>
+    /// The fourth shape, where neither surface authenticates. Nothing registers the authentication services at all,
+    /// which is what the pipeline reads to decide that it has no authentication middleware to run — a deployment
+    /// serving only anonymous surfaces must not gain one.
+    /// </summary>
+    [Fact]
+    public void Compose_WithNeitherSurfaceAuthenticating_RegistersNoAuthenticationAtAll()
+    {
+        // Arrange
+        var builder = ConfiguredBuilder(
+            "probes only",
+            BothSurfacesServed(mcpAuthenticates: false, adminAuthenticates: false));
+
+        // Act
+        HostComposition.Compose(builder);
+
+        // Assert
+        Assert.DoesNotContain(
+            builder.Services,
+            descriptor => descriptor.ServiceType == typeof(IAuthenticationSchemeProvider));
+    }
+
+    /// <summary>
     /// A process serving none of its surfaces would let Kestrel bind an address no section describes, so composition
     /// refuses it. Asserted here because the refusal happens while the services are being registered, which is the one
     /// place no options validator can reach.
@@ -332,6 +388,36 @@ public sealed class HostCompositionTests
     }
 
     /// <summary>Composes one shape and hands back what it registered.</summary>
+    /// <summary>Both surfaces served, each authenticating or not, which is the matrix the schemes are asserted across.</summary>
+    private static IReadOnlyList<KeyValuePair<string, string?>> BothSurfacesServed(
+        bool mcpAuthenticates,
+        bool adminAuthenticates) =>
+    [
+        new("McpEndpoint:Enabled", "true"),
+        new("AdminEndpoint:Enabled", "true"),
+        new("AdminEndpoint:Port", "8082"),
+        .. mcpAuthenticates
+            ?
+            [
+                new("McpEndpoint:Authentication:0:ApiKey:Name", "workstation"),
+                new KeyValuePair<string, string?>("McpEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key"),
+            ]
+            : Array.Empty<KeyValuePair<string, string?>>(),
+        .. adminAuthenticates
+            ?
+            [
+                new("AdminEndpoint:Authentication:0:ApiKey:Name", "operator"),
+                new KeyValuePair<string, string?>("AdminEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key-either"),
+            ]
+            : Array.Empty<KeyValuePair<string, string?>>(),
+    ];
+
+    private static bool IsMcpScheme(string schemeName) =>
+        schemeName.StartsWith($"MailFathom:{TransportSurface.Mcp.Name}:", StringComparison.Ordinal);
+
+    private static bool IsAdminScheme(string schemeName) =>
+        schemeName.StartsWith($"MailFathom:{TransportSurface.Admin.Name}:", StringComparison.Ordinal);
+
     private static IServiceCollection ComposeServices(string shape)
     {
         var builder = ConfiguredBuilder(shape);
@@ -439,4 +525,17 @@ public sealed class HostCompositionTests
     private static bool IsOwned(Type type) =>
         type.Assembly.GetName().Name?.StartsWith("MailFathom.", StringComparison.Ordinal) is true
         || (type.IsGenericType && type.GetGenericArguments().Any(IsOwned));
+
+    /// <summary>Where the framework's data protection keys go while a composition is being asserted.</summary>
+    /// <remarks>Nothing here protects anything, so the repository is never read from and never written to; it exists so the key manager settles on something that is not a directory in somebody's home.</remarks>
+    private sealed class KeysHeldInMemory : IXmlRepository
+    {
+        private readonly List<XElement> elements = [];
+
+        /// <inheritdoc />
+        public IReadOnlyCollection<XElement> GetAllElements() => this.elements.AsReadOnly();
+
+        /// <inheritdoc />
+        public void StoreElement(XElement element, string friendlyName) => this.elements.Add(element);
+    }
 }

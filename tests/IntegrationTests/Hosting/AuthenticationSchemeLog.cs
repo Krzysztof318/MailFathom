@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-namespace MailFathom.Host.UnitTests.TestDoubles;
+namespace MailFathom.IntegrationTests.Hosting;
 
 /// <summary>Every authentication scheme the pipeline asked to judge a request, in the order it asked.</summary>
 /// <remarks>

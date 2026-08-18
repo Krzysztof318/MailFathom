@@ -5,7 +5,7 @@
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http.Features;
 
-namespace MailFathom.Host.UnitTests.TestDoubles;
+namespace MailFathom.IntegrationTests.Hosting;
 
 /// <summary>Stands where Kestrel does and keeps the pipeline the host handed it, without binding a socket.</summary>
 /// <remarks>
@@ -19,8 +19,8 @@ namespace MailFathom.Host.UnitTests.TestDoubles;
 /// <para>
 /// Starting the host is exactly what the server abstraction lets a test do without a listener: the host builds the
 /// pipeline, hands it here, and this keeps it instead of accepting connections. A request is then a feature collection
-/// the test composes, which is what a request is by the time it reaches the first middleware anyway — so no socket, no
-/// port to contend over with a parallel session, and no clock.
+/// the test composes, which is what a request is by the time it reaches the first middleware anyway — so no port is
+/// bound, and this suite's own orchestrated hosts keep the ones they were given.
 /// </para>
 /// </remarks>
 internal sealed class PipelineCapturingServer : IServer
