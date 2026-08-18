@@ -387,7 +387,6 @@ public sealed class HostCompositionTests
         Assert.Same(stated, read);
     }
 
-    /// <summary>Composes one shape and hands back what it registered.</summary>
     /// <summary>Both surfaces served, each authenticating or not, which is the matrix the schemes are asserted across.</summary>
     private static IReadOnlyList<KeyValuePair<string, string?>> BothSurfacesServed(
         bool mcpAuthenticates,
@@ -418,6 +417,7 @@ public sealed class HostCompositionTests
     private static bool IsAdminScheme(string schemeName) =>
         schemeName.StartsWith($"MailFathom:{TransportSurface.Admin.Name}:", StringComparison.Ordinal);
 
+    /// <summary>Composes one shape and hands back what it registered.</summary>
     private static IServiceCollection ComposeServices(string shape)
     {
         var builder = ConfiguredBuilder(shape);
