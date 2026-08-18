@@ -25,9 +25,14 @@ internal sealed record MailboxRefreshTokenRequest(
 
 /// <summary>What a deployment says when it refuses a request, read from the problem document it answers with.</summary>
 /// <param name="Detail">The sentence written for the operator, which is the whole of what the command reports back.</param>
+/// <param name="Permission">The one permission that would have sufficed, which a refusal for want of a grant carries and no other refusal does.</param>
 /// <remarks>
-/// One field of RFC 9457, because one is what the command uses. The rest of the document — the type, the title, the
+/// Two fields of RFC 9457, because two are what the command uses. The rest of the document — the type, the title, the
 /// status — restates either the status line the command already read or a URI it would have nothing to do with, and a
-/// contract that named them would have to keep agreeing with a service that never sends anything else.
+/// contract that named them would have to keep agreeing with a service that never sends anything else. The permission
+/// is read as its own member rather than out of the sentence, so what the command tells an operator to grant does not
+/// depend on how the deployment happened to word the refusal.
 /// </remarks>
-internal sealed record AdminProblem([property: JsonPropertyName("detail")] string? Detail);
+internal sealed record AdminProblem(
+    [property: JsonPropertyName("detail")] string? Detail,
+    [property: JsonPropertyName("permission")] string? Permission);

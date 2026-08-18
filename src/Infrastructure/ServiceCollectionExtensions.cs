@@ -369,8 +369,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IStoredEmailReconciliationStore, StoredEmailReconciliationStore>();
         services.AddScoped<IMailRuleEvaluationStore, MailRuleEvaluationStore>();
         services.AddScoped<IMailRuleEvaluationRunStore, MailRuleEvaluationRunStore>();
+        // What the administrative surface asks of the two rule stores. Each is a use case rather than a second port,
+        // because the grant a reader has to hold is decided where the reading happens rather than at the route.
+        services.AddScoped<MailRuleEvaluationRunReader>();
         services.AddSingleton<MailRuleHistoryTelemetry>();
         services.AddScoped<IMailRuleExecutionStore, MailRuleExecutionStore>();
+        services.AddScoped<MailRuleHistory>();
         // Scoped like every other store, and deliberately not registered beside a worker: nothing here runs a job. It
         // takes no persistence session either, so a caller cannot enlist an enqueue in the transaction that stored the
         // message the work is about.
@@ -379,6 +383,7 @@ public static class ServiceCollectionExtensions
         // acts under a lease it holds, and these two answer an operator who holds none.
         services.AddScoped<IJobQueueDepthReader, JobQueueDepthReader>();
         services.AddScoped<IDeadLetteredJobStore, DeadLetteredJobStore>();
+        services.AddScoped<DeadLetteredJobs>();
         // What each recurring dispatch has already done. Scoped and sessionless like the queue itself, because a
         // schedule is advanced against work that is already enqueued.
         services.AddScoped<IJobScheduleStore, JobScheduleStore>();
@@ -394,6 +399,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISpamActionOccurrenceReader, SpamActionOccurrenceReader>();
         services.AddScoped<ISpamClassificationRunStore, SpamClassificationRunStore>();
         services.AddScoped<ISpamClassificationHistoryReader, SpamClassificationHistoryReader>();
+        services.AddScoped<SpamClassificationRunReader>();
+        services.AddScoped<SpamClassificationHistory>();
 
         // The read side takes no persistence session and joins no transaction, so its ports are registered beside the
         // write repositories rather than through one of them.
@@ -581,6 +588,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<MailAnsweringAuditTelemetry>();
         services.AddSingleton<IMailAnsweringRunTelemetry, MailAnsweringRunTelemetry>();
         services.AddScoped<IMailAnsweringAuditEntryStore, MailAnsweringAuditEntryStore>();
+        services.AddScoped<MailAnsweringAuditTrailReader>();
         services.AddScoped<IMailAnsweringAuditTrail, MailAnsweringAuditTrail>();
         services.AddScoped<MailAnsweringAuditTrailRetention>();
         // Beside the retrieval bounds above and registered for every deployment for the same reason: what they bound is
@@ -679,6 +687,7 @@ public static class ServiceCollectionExtensions
         // the operational record above: that one ends with the mutation, and this one is kept for as long as the
         // account's retention says and is erased by the pass beside it.
         services.AddScoped<IMailboxMutationAuditEntryStore, MailboxMutationAuditEntryStore>();
+        services.AddScoped<MailboxMutationAuditTrailReader>();
         services.AddSingleton<MailboxMutationAuditTelemetry>();
         services.AddScoped<IMailboxMutationAuditTrail, MailboxMutationAuditTrail>();
         services.AddScoped<MailboxMutationAuditTrailRetention>();

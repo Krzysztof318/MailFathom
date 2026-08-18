@@ -4,8 +4,10 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Retrieval.AskMail.Audit;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
+using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -20,9 +22,9 @@ namespace MailFathom.Host.Api;
 /// are MailFathom's own names for things, and the messages are named rather than quoted.
 /// </para>
 /// <para>
-/// <strong>Every authenticated caller may perform every administrative operation.</strong> The endpoint has no
-/// permission model, which <see cref="MailboxRefreshTokenEndpoint" /> states in full and which an operator provisions
-/// keys against; a credential that can read a session can read this.
+/// <strong>The route is published under <c>mailfathom.admin.audit.read</c></strong>, beside the mutation trail and for
+/// the same reason: the two together are what an operator answers "why is this message here" and "why did it answer
+/// that" from, so one grant provisions and revokes both.
 /// </para>
 /// <para>
 /// The page is bounded and keyset-paginated. A caller walks the record by presenting the cursor the previous page
@@ -42,7 +44,8 @@ internal static class MailAnsweringAuditEndpoint
     {
         ArgumentNullException.ThrowIfNull(api);
 
-        api.MapGet(Route, ReadAsync);
+        api.MapGet(Route, ReadAsync)
+            .RequirePermission(MailFathomPermission.AdminAuditRead);
     }
 
     /// <summary>Serves one page of an account's answering record, or reports what was wrong with the request.</summary>
@@ -52,7 +55,7 @@ internal static class MailAnsweringAuditEndpoint
     /// <param name="pageSize">How many entries the page may hold, or <see langword="null" /> for the default.</param>
     /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
-    /// <param name="store">Reads the page.</param>
+    /// <param name="trail">Reads the page, for a caller the record's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the page, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -68,11 +71,11 @@ internal static class MailAnsweringAuditEndpoint
         [FromQuery] int? pageSize,
         [FromQuery] string? cursor,
         [FromServices] IMailAccountCatalog accounts,
-        [FromServices] IMailAnsweringAuditEntryStore store,
+        [FromServices] MailAnsweringAuditTrailReader trail,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
-        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(trail);
 
         if (string.IsNullOrWhiteSpace(account))
         {
@@ -111,7 +114,7 @@ internal static class MailAnsweringAuditEndpoint
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        var page = await store.ReadPageAsync(query, cancellationToken);
+        var page = await trail.ReadPageAsync(query, cancellationToken);
 
         return TypedResults.Ok(MailAnsweringAuditPageResponse.For(page));
     }

@@ -2,12 +2,15 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Administration;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -160,7 +163,24 @@ public sealed class EmbeddingStatusReaderTests
             EmbeddingDistanceMetric.Cosine,
             EmbeddingInputPreparation.Create(2_000, passageInstruction: null, normalizesVector: true));
 
-    private static StatusWorld CreateWorld(long maxInputCharactersPerPeriod = 1_000_000)
+    /// <summary>The grant is the authority here rather than at the transport, so an entrypoint that passed no filter meets the same refusal.</summary>
+    [Fact]
+    public async Task ReadAsync_ACallerGrantedOnlyTheSpend_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var world = CreateWorld(authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminSpend));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            world.Reader.ReadAsync(CreateIdentity("a-model"), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminRead, refusal.RequiredPermission);
+    }
+
+    private static StatusWorld CreateWorld(
+        long maxInputCharactersPerPeriod = 1_000_000,
+        AccessAuthorization? authorization = null)
     {
         var generationStore = new InMemoryEmbeddingGenerationStore(new InMemoryEmailEmbeddingStore());
         var workloadReader = new InMemoryEmbeddingWorkloadReader();
@@ -178,7 +198,8 @@ public sealed class EmbeddingStatusReaderTests
                 EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod, TimeSpan.FromDays(1)),
                 new FakeTimeProvider(Now)),
             providerHealth,
-            backfillSchedule);
+            backfillSchedule,
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
 
         return new StatusWorld(generationStore, workloadReader, ledger, providerHealth, backfillSchedule, reader);
     }

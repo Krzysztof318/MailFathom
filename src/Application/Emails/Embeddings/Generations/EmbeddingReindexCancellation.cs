@@ -2,9 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Emails.Embeddings.Generations;
 
@@ -20,28 +22,33 @@ public sealed class EmbeddingReindexCancellation
     private readonly IEmbeddingProfileVectorIndex vectorIndex;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly EmbeddingBackfillSchedule backfillSchedule;
+    private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes a new cancellation.</summary>
     /// <param name="generationStore">Reads which generation is being built and abandons it.</param>
     /// <param name="vectorIndex">Removes the approximate index the abandoned generation would have been searched through.</param>
     /// <param name="concurrencyRetryPolicy">Commits the transition, retrying a conflict with a competing writer.</param>
     /// <param name="backfillSchedule">Brings the next upkeep pass forward, which is the pass that removes what the abandoned generation holds.</param>
+    /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public EmbeddingReindexCancellation(
         IEmbeddingGenerationStore generationStore,
         IEmbeddingProfileVectorIndex vectorIndex,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
-        EmbeddingBackfillSchedule backfillSchedule)
+        EmbeddingBackfillSchedule backfillSchedule,
+        AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(generationStore);
         ArgumentNullException.ThrowIfNull(vectorIndex);
         ArgumentNullException.ThrowIfNull(concurrencyRetryPolicy);
         ArgumentNullException.ThrowIfNull(backfillSchedule);
+        ArgumentNullException.ThrowIfNull(authorization);
 
         this.generationStore = generationStore;
         this.vectorIndex = vectorIndex;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.backfillSchedule = backfillSchedule;
+        this.authorization = authorization;
     }
 
     /// <summary>Abandons the generation being built, if one is.</summary>
@@ -53,9 +60,13 @@ public sealed class EmbeddingReindexCancellation
     /// removal of its vectors reaches the end and drops it.
     /// </exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when a competing writer wins a race the bounded retries could not resolve.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminOperate" />.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
+    /// <remarks>Stopping a run is asking the deployment to do something it can already do, which is the operating grant rather than the one that started the spend.</remarks>
     public async Task<EmbeddingReindexCancellationOutcome> CancelAsync(CancellationToken cancellationToken)
     {
+        this.authorization.RequirePermission(MailFathomPermission.AdminOperate);
+
         var generations = await this.generationStore.ReadGenerationsAsync(cancellationToken);
         if (generations.Building is not { } building)
         {

@@ -2,16 +2,19 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Contacts;
+using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Contacts;
 
-/// <summary>The acts a contact book supports: record a person, amend one, promote one, erase one, and export one.</summary>
+/// <summary>The acts a contact book supports: read it — a page of it, one person, or whoever holds an address — record a person, amend one, promote one, erase one, and export one.</summary>
 /// <remarks>
 /// <para>
 /// Every surface over the book — the administration tool, the MCP tools, and collection from arriving mail — performs
-/// these five acts and no others, which is what keeps the origin rule from being a convention each of them remembers.
+/// these six acts and no others, which is what keeps the origin rule from being a convention each of them remembers.
 /// A writer names the origin it acts under, and a contact is amendable only by a writer of its own: collection never
 /// touches what an owner wrote down, and an owner promotes a collected contact rather than editing it in place.
 /// Promotion names the writer for the same reason, so the act of taking a record on is the owner's rather than something
@@ -28,6 +31,16 @@ namespace MailFathom.Application.Contacts;
 /// produces are what a surface reports; a log line about a write would put the whole book into a log within a week of
 /// somebody using it.
 /// </para>
+/// <para>
+/// Every act states the grant it is reached under, because the administrative endpoint is the surface that performs them
+/// today and a check that lived only in its routes would be one a second entrypoint forgets. Reading the book is
+/// <see cref="MailFathomPermission.AdminAuditRead" />, since a collected contact is somebody this deployment learned
+/// about from correspondence rather than a report of its own state; writing one is
+/// <see cref="MailFathomPermission.AdminOperate" />; and erasing a person is
+/// <see cref="MailFathomPermission.AdminErase" />, beside the erasure of stored mail. Collection from arriving mail is
+/// work no caller requests, so when it reaches this book the act it uses states that kind of principal beside the grant;
+/// nothing here decides that in advance.
+/// </para>
 /// </remarks>
 public sealed class ContactBook
 {
@@ -35,28 +48,74 @@ public sealed class ContactBook
     private readonly IContactDirectory directory;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly TimeProvider timeProvider;
+    private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the book over the store it writes to and the directory it reads from.</summary>
     /// <param name="store">Keeps the records.</param>
     /// <param name="directory">Answers what the book already holds.</param>
     /// <param name="commitPolicy">Commits each write, retrying a lost race from a fresh read.</param>
     /// <param name="timeProvider">Stamps when a contact was recorded, amended, promoted, or exported.</param>
+    /// <param name="authorization">Answers which principal reached each act.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
     public ContactBook(
         IContactStore store,
         IContactDirectory directory,
         OptimisticConcurrencyRetryPolicy commitPolicy,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(directory);
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(authorization);
 
         this.store = store;
         this.directory = directory;
         this.commitPolicy = commitPolicy;
         this.timeProvider = timeProvider;
+        this.authorization = authorization;
+    }
+
+    /// <summary>Reads one bounded page of the book.</summary>
+    /// <param name="query">Which part of the book, how large a page, and where to continue from.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The page, and the cursor the following one is asked with.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="query" /> is <see langword="null" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the read was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" />.</exception>
+    /// <remarks>The page is bounded by the query the caller composed, which is where the ceiling on how much of a person's correspondents leaves the database at once already lives.</remarks>
+    public Task<ContactPage> ReadPageAsync(ContactQuery query, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
+
+        return this.directory.ReadPageAsync(query, cancellationToken);
+    }
+
+    /// <summary>Reads one contact by the identity the book gave it.</summary>
+    /// <param name="contactId">The contact to read.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The contact, or <see langword="null" /> where the book holds no such person.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the read was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" />.</exception>
+    public Task<Contact?> FindAsync(ContactId contactId, CancellationToken cancellationToken)
+    {
+        this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
+
+        return this.directory.FindAsync(contactId, cancellationToken);
+    }
+
+    /// <summary>Reads the person who uses one address.</summary>
+    /// <param name="address">The address to resolve, in its comparison form.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The contact, or <see langword="null" /> where nobody in the book holds it.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the read was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" />.</exception>
+    /// <remarks>Resolving an address to a person is the most pointed read the book answers, which is why it asks for the same grant the listing does rather than a weaker one.</remarks>
+    public Task<Contact?> FindByAddressAsync(EmailAddress address, CancellationToken cancellationToken)
+    {
+        this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
+
+        return this.directory.FindByAddressAsync(address, cancellationToken);
     }
 
     /// <summary>Records a person the book does not yet hold.</summary>
@@ -66,6 +125,7 @@ public sealed class ContactBook
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="newContact" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when the supplied addresses do not form a contact the domain admits.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when every allowed attempt lost the race.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the write was reached by anything but a caller granted <see cref="MailFathomPermission.AdminOperate" />.</exception>
     /// <remarks>
     /// The identity is minted here, from a UUID version 7 over the instant of the write, so the book's own identifiers
     /// order the way the records were created without a caller being able to choose one.
@@ -73,6 +133,8 @@ public sealed class ContactBook
     public Task<ContactWriteResult> RecordAsync(NewContact newContact, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(newContact);
+
+        this.authorization.RequirePermission(MailFathomPermission.AdminOperate);
 
         var recordedAt = this.timeProvider.GetUtcNow();
         var contact = Contact.Create(
@@ -107,9 +169,13 @@ public sealed class ContactBook
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="amendment" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when the amendment does not form a contact the domain admits.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when every allowed attempt lost the race.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the write was reached by anything but a caller granted <see cref="MailFathomPermission.AdminOperate" />.</exception>
+    /// <remarks>The grant is asked for before the book is read, so a caller who may not write cannot learn from the refusal whether the book holds the person they named.</remarks>
     public Task<ContactWriteResult> AmendAsync(ContactAmendment amendment, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(amendment);
+
+        this.authorization.RequirePermission(MailFathomPermission.AdminOperate);
 
         return this.commitPolicy.CommitAsync(
             async (session, token) =>
@@ -151,17 +217,25 @@ public sealed class ContactBook
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The promoted record, or the refusal naming what stopped it.</returns>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when every allowed attempt lost the race.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the write was reached by anything but a caller granted <see cref="MailFathomPermission.AdminOperate" />.</exception>
     /// <remarks>
     /// The one act that changes an origin, and it runs one way. It is gated on the writer for the reason an amendment is:
     /// promotion is the owner taking a record on, so collection asking for it is refused rather than granted the authority
     /// it was about to award itself. A contact that is already asserted is answered as such rather than written again, so
     /// an owner repeating the request learns that nothing was left to do.
+    /// <para>
+    /// The writer and the grant answer different questions and both are asked: the grant says whether this caller may
+    /// write to the book at all, and the writer says whether the record's own origin admits what it is about to do.
+    /// </para>
     /// </remarks>
     public Task<ContactWriteResult> PromoteAsync(
         ContactId contactId,
         ContactOrigin writer,
-        CancellationToken cancellationToken) =>
-        this.commitPolicy.CommitAsync(
+        CancellationToken cancellationToken)
+    {
+        this.authorization.RequirePermission(MailFathomPermission.AdminOperate);
+
+        return this.commitPolicy.CommitAsync(
             async (session, token) =>
             {
                 var held = await this.directory.FindAsync(contactId, token);
@@ -188,26 +262,40 @@ public sealed class ContactBook
                     : ContactWriteResult.NotFound();
             },
             cancellationToken);
+    }
 
     /// <summary>Erases one person and everything the book derived from them.</summary>
     /// <param name="contactId">The contact to erase.</param>
     /// <param name="cancellationToken">Cancels the erasure.</param>
     /// <returns>What the erasure removed.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the erasure was reached by anything but a caller granted <see cref="MailFathomPermission.AdminErase" />.</exception>
     /// <remarks>
     /// Erasure is not a write a writer's origin gates. It is the data-subject path, and a person asking to be removed
     /// from somebody's contact book is not answered with which half of the book they happen to be in.
+    /// <para>
+    /// It asks for the erasing grant rather than the writing one, beside the erasure of stored mail, because what it
+    /// destroys cannot be written back and a credential provisioned to correct a record should not be able to remove one.
+    /// </para>
     /// </remarks>
-    public Task<ContactErasure> EraseAsync(ContactId contactId, CancellationToken cancellationToken) =>
-        this.commitPolicy.CommitAsync(
+    public Task<ContactErasure> EraseAsync(ContactId contactId, CancellationToken cancellationToken)
+    {
+        this.authorization.RequirePermission(MailFathomPermission.AdminErase);
+
+        return this.commitPolicy.CommitAsync(
             (session, token) => this.store.EraseAsync(session, contactId, token),
             cancellationToken);
+    }
 
     /// <summary>Produces everything the book holds about one person.</summary>
     /// <param name="contactId">The contact to export.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The export, or <see langword="null" /> when the book holds no such contact.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the export was reached by anything but a caller granted <see cref="MailFathomPermission.AdminAuditRead" />.</exception>
+    /// <remarks>It is what a data-subject access request is answered from, which is reading what this deployment derived about a person rather than a report of its own state.</remarks>
     public async Task<ContactExport?> ExportAsync(ContactId contactId, CancellationToken cancellationToken)
     {
+        this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
+
         var held = await this.directory.FindAsync(contactId, cancellationToken);
 
         return held is null ? null : new ContactExport(held, this.timeProvider.GetUtcNow());

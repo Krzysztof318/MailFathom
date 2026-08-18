@@ -4,7 +4,9 @@
 
 using MailFathom.Application.Emails.Embeddings.Administration;
 using MailFathom.Application.Emails.Embeddings.Generations;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Embeddings;
+using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -21,9 +23,11 @@ namespace MailFathom.Host.Api;
 /// </para>
 /// <para>
 /// They are here rather than on the MCP surface because none of them is anything a model reasons over, and because what
-/// bounds administrative access is what should bound the ability to start a provider bill.
-/// <strong>Every authenticated caller may perform every administrative operation</strong>, which
-/// <see cref="MailboxRefreshTokenEndpoint" /> states in full; a credential that can read a session can activate.
+/// bounds administrative access is what should bound the ability to start a provider bill. <strong>Activating is
+/// published under <c>mailfathom.admin.spend</c> and nothing else is</strong>, because it is the one operation on this
+/// surface that begins spending somebody's money: reading the same assessment requires only
+/// <c>mailfathom.admin.read</c>, so an operator can provision a credential that reports what an activation would cost
+/// and cannot perform one.
 /// </para>
 /// <para>
 /// Nothing any of them answers with is mail. Model names, counts, character totals, timestamps, and a profile
@@ -48,26 +52,32 @@ internal static class EmbeddingProfileEndpoints
     {
         ArgumentNullException.ThrowIfNull(api);
 
-        api.MapGet(StatusRoute, ReadStatusAsync);
+        api.MapGet(StatusRoute, ReadStatusAsync)
+            .RequirePermission(MailFathomPermission.AdminRead);
 
         // One path and two verbs, because they are one operation read and then performed: what the reading answers is
         // exactly what the write will weigh, so an operator confirming a figure and a deployment refusing one are
-        // talking about the same thing rather than about two endpoints that happen to count alike.
-        api.MapGet(ActivationRoute, ReadActivationAsync);
-        api.MapPost(ActivationRoute, ActivateAsync);
+        // talking about the same thing rather than about two endpoints that happen to count alike. The two grants
+        // differ for the same reason, since only one of them starts a bill.
+        api.MapGet(ActivationRoute, ReadActivationAsync)
+            .RequirePermission(MailFathomPermission.AdminRead);
 
-        api.MapPost(ReindexCancellationRoute, CancelReindexAsync);
+        api.MapPost(ActivationRoute, ActivateAsync)
+            .RequirePermission(MailFathomPermission.AdminSpend);
+
+        api.MapPost(ReindexCancellationRoute, CancelReindexAsync)
+            .RequirePermission(MailFathomPermission.AdminOperate);
     }
 
     /// <summary>Reports whether semantic search is working on this instance, and how far behind it is.</summary>
     /// <param name="declared">What this deployment declares it embeds with, which may be nothing.</param>
     /// <param name="reader">Composes the answer from the generations, the counts, the provider, and the budget.</param>
     /// <param name="cancellationToken">Cancels the reads when the client disconnects.</param>
-    /// <returns><c>200</c> with the state, on every instance including one that declared no provider.</returns>
+    /// <returns><c>200</c> with the state on every instance including one that declared no provider, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.admin.read</c>.</returns>
     /// <remarks>
-    /// It never refuses. An instance with no declaration, no activation, and no provider is a supported deployment
-    /// serving lexical search, and it is also the instance whose operator is most likely to be asking this question —
-    /// so the absence of every part is the answer rather than an error.
+    /// The grant is the only thing it refuses over. An instance with no declaration, no activation, and no provider is a
+    /// supported deployment serving lexical search, and it is also the instance whose operator is most likely to be
+    /// asking this question — so the absence of every part is the answer rather than an error.
     /// </remarks>
     internal static async Task<Ok<EmbeddingStatusResponse>> ReadStatusAsync(
         [FromServices] DeclaredEmbeddingGeometry declared,

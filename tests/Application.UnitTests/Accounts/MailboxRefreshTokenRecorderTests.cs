@@ -2,7 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.TestSupport;
 using NSubstitute;
@@ -103,11 +105,56 @@ public sealed class MailboxRefreshTokenRecorderTests
             () => recorder.RecordAsync(Workspace, refreshToken: null!, TestContext.Current.CancellationToken));
     }
 
-    private MailboxRefreshTokenRecorder RecorderServing(params MailAccountId[] servedAccountIds)
+    /// <summary>The grant is the authority here rather than at the transport, so an entrypoint that passed no filter meets the same refusal.</summary>
+    [Fact]
+    public async Task RecordAsync_ACallerGrantedOnlyTheAdministrativeRead_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var recorder = this.RecorderServing(
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead),
+            Workspace);
+        using var refreshToken = MailboxRefreshToken.FromText("a-refresh-token");
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            recorder.RecordAsync(Workspace, refreshToken, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminCredentialsWrite, refusal.RequiredPermission);
+        await this.store.DidNotReceive().SaveTokenAsync(
+            Arg.Any<MailAccountId>(),
+            Arg.Any<MailboxRefreshToken>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>The grant is asked before the account is, so a refused caller learns nothing about which accounts this deployment serves.</summary>
+    [Fact]
+    public async Task RecordAsync_ACallerHoldingNothing_IsRefusedBeforeTheAccountIsResolved()
+    {
+        // Arrange
+        var recorder = this.RecorderServing(AccessAuthorizations.ForCallerGranted());
+        using var refreshToken = MailboxRefreshToken.FromText("a-refresh-token");
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            recorder.RecordAsync(Workspace, refreshToken, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminCredentialsWrite, refusal.RequiredPermission);
+    }
+
+    private MailboxRefreshTokenRecorder RecorderServing(params MailAccountId[] servedAccountIds) =>
+        this.RecorderServing(
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminCredentialsWrite),
+            servedAccountIds);
+
+    private MailboxRefreshTokenRecorder RecorderServing(
+        AccessAuthorization authorization,
+        params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<IMailAccountCatalog>();
         catalog.ServedAccounts.Returns([.. servedAccountIds.Select(SyntheticServedAccount.Of)]);
 
-        return new MailboxRefreshTokenRecorder(catalog, this.store);
+        return new MailboxRefreshTokenRecorder(catalog, this.store, authorization);
     }
 }

@@ -37,6 +37,14 @@ namespace MailFathom.Cli.Administration;
 /// </remarks>
 internal sealed class AdminApiClient
 {
+    /// <summary>What the operator is told when the deployment would not accept the credential at all.</summary>
+    /// <remarks>
+    /// Distinct from being admitted and then refused an operation, which names a permission instead. Conflating the two
+    /// would send an operator to rotate a key that is working when what they have to do is widen its grant.
+    /// </remarks>
+    private const string CredentialRefused =
+        "The deployment refused the credential. Check that it is one the administrative endpoint is configured with, and that it has not expired.";
+
     private static readonly string CommandVersion =
         StampedAssemblyVersion.ReadFrom(typeof(AdminApiClient).Assembly).Version;
 
@@ -79,8 +87,7 @@ internal sealed class AdminApiClient
 
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {
-            throw new CliFailure(
-                "The deployment refused the credential. Check that it is one the administrative endpoint is configured with, and that it has not expired.");
+            throw new CliFailure(CredentialRefused);
         }
 
         if (response.StatusCode is HttpStatusCode.NotFound)
@@ -136,10 +143,14 @@ internal sealed class AdminApiClient
 
         using var response = await this.SendAsync(request, cancellationToken);
 
-        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        if (response.StatusCode is HttpStatusCode.Unauthorized)
         {
-            throw new CliFailure(
-                "The deployment refused the credential. Check that it is one the administrative endpoint is configured with, and that it has not expired.");
+            throw new CliFailure(CredentialRefused);
+        }
+
+        if (response.StatusCode is HttpStatusCode.Forbidden)
+        {
+            throw new CliFailure(await DescribeForbiddenAsync(response, cancellationToken));
         }
 
         if (response.StatusCode is HttpStatusCode.NotFound)
@@ -831,10 +842,14 @@ internal sealed class AdminApiClient
 
         using var response = await this.SendAsync(request, cancellationToken);
 
-        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        if (response.StatusCode is HttpStatusCode.Unauthorized)
         {
-            throw new CliFailure(
-                "The deployment refused the credential. Check that it is one the administrative endpoint is configured with, and that it has not expired.");
+            throw new CliFailure(CredentialRefused);
+        }
+
+        if (response.StatusCode is HttpStatusCode.Forbidden)
+        {
+            throw new CliFailure(await DescribeForbiddenAsync(response, cancellationToken));
         }
 
         if (response.StatusCode is HttpStatusCode.NotFound)
@@ -935,21 +950,61 @@ internal sealed class AdminApiClient
     /// <summary>Reads the sentence a refusal carries, when it carries one.</summary>
     /// <remarks>
     /// A deployment states what was wrong with the request — an account it does not configure, a field the body omitted
-    /// — and repeating that is more use than any wording invented here. Anything that is not a problem document is read
-    /// as no reason rather than as a failure of its own, because the request was already refused and how the refusal
-    /// was phrased is not the operator's problem to solve.
+    /// — and repeating that is more use than any wording invented here.
     /// </remarks>
     private static async Task<string?> ReadRefusalAsync(
         HttpResponseMessage response,
         CancellationToken cancellationToken)
     {
+        var problem = await ReadProblemAsync(response, cancellationToken);
+
+        return problem?.Detail is { Length: > 0 } stated ? stated : null;
+    }
+
+    /// <summary>Turns a refusal for want of a grant into the sentence an operator acts on.</summary>
+    /// <remarks>
+    /// <para>
+    /// The deployment names the one permission that would have sufficed, and this is what turns that into an
+    /// instruction: which permission, where it is written, and what the alternative is. The command never says which
+    /// entry — it holds one credential and no view of the deployment's configuration — so it names the section and
+    /// leaves the entry to whoever edits it.
+    /// </para>
+    /// <para>
+    /// A refusal carrying no permission is repeated as it was written. That is the deployment saying something other
+    /// than "grant this", and inventing an instruction from it would send an operator to widen a grant that was never
+    /// what stopped them.
+    /// </para>
+    /// </remarks>
+    private static async Task<string> DescribeForbiddenAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        var problem = await ReadProblemAsync(response, cancellationToken);
+
+        if (problem?.Permission is { Length: > 0 } permission)
+        {
+            return $"The deployment refused the operation: this credential does not hold '{permission}'. Add that permission to the credential's entry under AdminEndpoint:Authentication, or sign in with one that already holds it.";
+        }
+
+        return problem?.Detail is { Length: > 0 } stated
+            ? $"The deployment refused the operation: {stated}"
+            : CredentialRefused;
+    }
+
+    /// <summary>Reads the problem document a refusal carries, treating anything else as none.</summary>
+    /// <remarks>
+    /// Anything that is not a problem document is read as no document rather than as a failure of its own, because the
+    /// request was already refused and how the refusal was phrased is not the operator's problem to solve.
+    /// </remarks>
+    private static async Task<AdminProblem?> ReadProblemAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
         try
         {
-            var problem = await response.Content.ReadFromJsonAsync(
+            return await response.Content.ReadFromJsonAsync(
                 CliJsonContext.Default.AdminProblem,
                 cancellationToken);
-
-            return problem?.Detail is { Length: > 0 } stated ? stated : null;
         }
         catch (Exception failure) when (failure is JsonException or NotSupportedException)
         {

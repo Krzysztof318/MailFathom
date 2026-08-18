@@ -558,11 +558,16 @@ public sealed class ContactCommandTests : IDisposable
     }
 
     /// <summary>Promoting is a write of its own, sent to a path of its own rather than carried as a field.</summary>
+    /// <remarks>
+    /// It is also the one write the deployment answers without a record, because the command stated none and the grant
+    /// that writes the book does not admit reading it. So what the command reports is the identity it was given, and an
+    /// operator who wants the record reads it with <c>contact show</c>.
+    /// </remarks>
     [Fact]
-    public async Task Promote_ACollectedContact_AsksThePromotionPathAndPrintsTheRecordItTookOn()
+    public async Task Promote_ACollectedContact_AsksThePromotionPathAndReportsItWithoutTheRecord()
     {
         // Arrange
-        using var deployment = FakeContactDeployment.Holding(write: FakeContactDeployment.Written());
+        using var deployment = FakeContactDeployment.Holding(write: FakeContactDeployment.Promoted());
 
         // Act
         var exitCode = await this.RunAsync(deployment, "contact", "promote", "--id", Identity, "--endpoint", Endpoint);
@@ -572,6 +577,8 @@ public sealed class ContactCommandTests : IDisposable
         Assert.Contains(
             deployment.RecordedRequests,
             request => request.RequestUri?.AbsolutePath.EndsWith("/promotion", StringComparison.Ordinal) == true);
+        Assert.Contains(this.console.Lines, line => line.Contains($"Took on contact {Identity}", StringComparison.Ordinal));
+        Assert.DoesNotContain(this.console.Lines, line => line.Contains("Anna Kowalska", StringComparison.Ordinal));
     }
 
     /// <summary>Erasing cannot be undone, so the record is shown and the question asked before anything is removed.</summary>

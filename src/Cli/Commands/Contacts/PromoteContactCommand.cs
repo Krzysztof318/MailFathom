@@ -53,6 +53,6 @@ internal static class PromoteContactCommand
         var promoted = await new AdminApiClient(transport, context.Console)
             .PromoteContactAsync(profile.Token, contactId, cancellationToken);
 
-        return ContactOutput.ReportWrite(context, promoted, "Took on");
+        return ContactOutput.ReportOutcome(context, promoted, contactId, "Took on");
     }
 }

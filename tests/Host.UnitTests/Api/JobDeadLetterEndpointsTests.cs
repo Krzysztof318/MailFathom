@@ -184,7 +184,7 @@ public sealed class JobDeadLetterEndpointsTests
         // Act
         var result = await JobDeadLetterEndpoints.RetryAsync(
             new JobRecoveryRequest(job.Value),
-            this.deadLetters,
+            this.DeadLetterOperations(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -210,7 +210,7 @@ public sealed class JobDeadLetterEndpointsTests
         // Act
         var result = await JobDeadLetterEndpoints.DropAsync(
             new JobRecoveryRequest(job.Value),
-            this.deadLetters,
+            this.DeadLetterOperations(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -230,7 +230,7 @@ public sealed class JobDeadLetterEndpointsTests
         // Act
         var result = await JobDeadLetterEndpoints.RetryAsync(
             request,
-            this.deadLetters,
+            this.DeadLetterOperations(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -266,8 +266,11 @@ public sealed class JobDeadLetterEndpointsTests
             pageSize,
             cursor,
             CatalogServing(Account),
-            this.deadLetters,
+            this.DeadLetterOperations(),
             TestContext.Current.CancellationToken);
+
+    /// <summary>The use case the routes reach, over the store this suite arranges and with the grant granted.</summary>
+    private DeadLetteredJobs DeadLetterOperations() => new(this.deadLetters, AdministrativeGrant.WholeSurface);
 
     private static IMailAccountCatalog CatalogServing(params MailAccountId[] accounts)
     {

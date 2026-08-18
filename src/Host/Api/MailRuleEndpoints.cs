@@ -6,10 +6,12 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Rules;
+using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -26,9 +28,10 @@ namespace MailFathom.Host.Api;
 /// </para>
 /// <para>
 /// They are here rather than on the MCP surface because none of them is anything a model reasons over, and because what
-/// bounds administrative access is what should bound the ability to start a pass over a whole mailbox.
-/// <strong>Every authenticated caller may perform every administrative operation</strong>, which
-/// <see cref="MailboxRefreshTokenEndpoint" /> states in full.
+/// bounds administrative access is what should bound the ability to start a pass over a whole mailbox. The three grants
+/// differ accordingly: reading the loaded set and a run's progress is <c>mailfathom.admin.read</c>, asking for a pass is
+/// <c>mailfathom.admin.operate</c>, and the history is <c>mailfathom.admin.audit.read</c>, because what a rule concluded
+/// about somebody's mail is derived from that mail rather than a report of this deployment's own state.
 /// </para>
 /// <para>
 /// Nothing any of them answers with is mail. Rule names, folder aliases, mutation names, fact names, counts, instants,
@@ -67,17 +70,21 @@ internal static class MailRuleEndpoints
     {
         ArgumentNullException.ThrowIfNull(api);
 
-        api.MapGet(RulesRoute, ReadRules);
+        api.MapGet(RulesRoute, ReadRules)
+            .RequirePermission(MailFathomPermission.AdminRead);
 
         // The attribute is reached for its metadata rather than as an MVC filter, exactly as the write route beside it
         // reaches it: it implements IRequestSizeLimitMetadata, which the routing pipeline applies to the request body
         // feature, so a body over the bound is answered 413 before the handler is reached.
         api.MapPost(RunsRoute, StartRunAsync)
-            .WithMetadata(new RequestSizeLimitAttribute(MaxRunRequestBytes));
+            .WithMetadata(new RequestSizeLimitAttribute(MaxRunRequestBytes))
+            .RequirePermission(MailFathomPermission.AdminOperate);
 
-        api.MapGet(RunsRoute, ReadRunAsync);
+        api.MapGet(RunsRoute, ReadRunAsync)
+            .RequirePermission(MailFathomPermission.AdminRead);
 
-        api.MapGet(HistoryRoute, ReadHistoryAsync);
+        api.MapGet(HistoryRoute, ReadHistoryAsync)
+            .RequirePermission(MailFathomPermission.AdminAuditRead);
     }
 
     /// <summary>Reports the rule set in force, and whether the configuration on disk is the one it was read from.</summary>
@@ -98,14 +105,14 @@ internal static class MailRuleEndpoints
     /// </para>
     /// </remarks>
     internal static Ok<MailRuleSetResponse> ReadRules(
-        [FromServices] IMailRuleSetSource ruleSets,
+        [FromServices] MailRuleSetReader ruleSets,
         [FromServices] ValidatedSettingsSnapshot<MailRulesOptions> settings)
     {
         ArgumentNullException.ThrowIfNull(ruleSets);
         ArgumentNullException.ThrowIfNull(settings);
 
         return TypedResults.Ok(MailRuleSetResponse.For(
-            ruleSets.Current,
+            ruleSets.Read(),
             settings.LatestReloadRefused,
             settings.RefusedSettingCount));
     }
@@ -150,7 +157,7 @@ internal static class MailRuleEndpoints
     /// <summary>Reports where one account's whole-mailbox run has got to, or how the last one ended.</summary>
     /// <param name="account">The configured identifier of the account whose run is read.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
-    /// <param name="runs">Holds the one run an account may have outstanding, and the ending of the last one.</param>
+    /// <param name="runs">Reads the one run an account may have outstanding, or the ending of the last one.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the run, <c>200</c> with none where the account has never been asked for one, or <c>400</c>.</returns>
     /// <remarks>
@@ -161,7 +168,7 @@ internal static class MailRuleEndpoints
     internal static async Task<Results<Ok<MailRuleRunStateResponse>, ProblemHttpResult>> ReadRunAsync(
         [FromQuery] string? account,
         [FromServices] IMailAccountCatalog accounts,
-        [FromServices] IMailRuleEvaluationRunStore runs,
+        [FromServices] MailRuleEvaluationRunReader runs,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
@@ -205,7 +212,7 @@ internal static class MailRuleEndpoints
         [FromQuery] int? pageSize,
         [FromQuery] string? cursor,
         [FromServices] IMailAccountCatalog accounts,
-        [FromServices] IMailRuleExecutionStore history,
+        [FromServices] MailRuleHistory history,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);

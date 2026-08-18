@@ -436,6 +436,9 @@ internal static class HostComposition
         builder.Services.AddSingleton<IMailRuleConditionCompiler>(mailRuleConditionCompiler);
         builder.Services.AddSingleton<MailRuleSetEvaluator>();
         builder.Services.AddSingleton<IMailRuleSetSource, ConfiguredMailRuleSetSource>();
+        // The reading the administrative surface performs over that source. Scoped rather than singleton like the source
+        // itself, because what it asks before it reads is which principal reached it, and that is a fact about one request.
+        builder.Services.AddScoped<MailRuleSetReader>();
         // The rule section validates itself on reload instead of letting the options framework drop an invalid candidate in
         // silence. That default is the wrong behavior here above everywhere else: an owner who mistypes a fact name would
         // get an instance that goes on acting on mail under the previous rules while their file says otherwise. A refused

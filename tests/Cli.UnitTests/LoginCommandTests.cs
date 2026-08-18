@@ -360,6 +360,54 @@ public sealed class LoginCommandTests : IDisposable
     }
 
     /// <summary>
+    /// What the credential may do decides whether any other command will work, so it is reported here rather than
+    /// discovered one refusal at a time.
+    /// </summary>
+    [Fact]
+    public async Task Status_ADeploymentReportingAGrant_NamesEveryPermissionTheCredentialHolds()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
+        using var handler = FakeAdminEndpoint.AcceptingWithGrant(
+            "workstation",
+            "mailfathom.admin.read",
+            "mailfathom.admin.operate");
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "status");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Contains(
+            this.console.Lines,
+            line => line.Contains("mailfathom.admin.read", StringComparison.Ordinal)
+                && line.Contains("mailfathom.admin.operate", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A credential granted nothing signs in exactly as one granted everything does, so saying so is the difference
+    /// between an operator understanding what they hold and meeting a refusal on the next command.
+    /// </summary>
+    [Fact]
+    public async Task Status_ACredentialGrantedNothing_SaysSoRatherThanReportingAnEmptyLine()
+    {
+        // Arrange
+        var store = this.CreateStore();
+        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
+        using var handler = FakeAdminEndpoint.AcceptingWithGrant("workstation");
+
+        // Act
+        var exitCode = await RunAsync(this.Context(store, handler), "status");
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        Assert.Contains(
+            this.console.Lines,
+            line => line.Contains("no administrative permission", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// The command that tells an operator what they are administering is also where they learn where to read about it,
     /// and the version that decides which pages those are is the deployment's rather than this command's.
     /// </summary>

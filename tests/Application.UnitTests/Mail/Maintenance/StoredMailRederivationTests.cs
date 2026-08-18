@@ -3,15 +3,18 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Security.Cryptography;
+using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -296,10 +299,32 @@ public sealed class StoredMailRederivationTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => rederivation.RunAsync(WholeAccount, cancellation.Token));
     }
 
+    /// <summary>The grant is the authority here rather than at the transport, so an entrypoint that passed no filter meets the same refusal.</summary>
+    [Fact]
+    public async Task RunAsync_ACallerGrantedOnlyTheAdministrativeRead_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var store = new FakeRederivationStore(StoredMail(1));
+        var rederivation = RederivationOver(
+            store,
+            ContentStoreWithReadableMime(),
+            ReaderThatReadsEverything(),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            rederivation.RunAsync(WholeAccount, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminOperate, refusal.RequiredPermission);
+        Assert.Empty(store.Applied);
+    }
+
     private static StoredMailRederivation RederivationOver(
         IStoredMailRederivationStore store,
         IEmailContentStore contentStore,
-        IEmailMimeReader mimeReader)
+        IEmailMimeReader mimeReader,
+        AccessAuthorization? authorization = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
@@ -311,7 +336,8 @@ public sealed class StoredMailRederivationTests
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions { MaximumCommitAttempts = 2 },
-                new FakeTimeProvider(new DateTimeOffset(2026, 8, 16, 12, 0, 0, TimeSpan.Zero))));
+                new FakeTimeProvider(new DateTimeOffset(2026, 8, 16, 12, 0, 0, TimeSpan.Zero))),
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate));
     }
 
     /// <summary>Builds stored mail whose identifiers increase in the order the walk visits it.</summary>

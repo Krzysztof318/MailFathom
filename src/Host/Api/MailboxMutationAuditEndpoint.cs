@@ -4,9 +4,11 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Mail.Mutations.Audit;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Mutations.Audit;
+using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -21,9 +23,10 @@ namespace MailFathom.Host.Api;
 /// own or MailFathom's own names for things.
 /// </para>
 /// <para>
-/// <strong>Every authenticated caller may perform every administrative operation.</strong> The endpoint has no
-/// permission model, which <see cref="MailboxRefreshTokenEndpoint" /> states in full and which an operator provisions
-/// keys against; a credential that can read a session can read this.
+/// <strong>The route is published under <c>mailfathom.admin.audit.read</c></strong>, which is the grant covering what
+/// this deployment derived from somebody's mail rather than what it knows about itself. Somebody answering a
+/// data-subject request holds it; a credential provisioned to retry a job or to place a mailbox token does not, unless
+/// its entry was never narrowed.
 /// </para>
 /// <para>
 /// The page is bounded and keyset-paginated. A caller walks the trail by presenting the cursor the previous page
@@ -43,7 +46,8 @@ internal static class MailboxMutationAuditEndpoint
     {
         ArgumentNullException.ThrowIfNull(api);
 
-        api.MapGet(Route, ReadAsync);
+        api.MapGet(Route, ReadAsync)
+            .RequirePermission(MailFathomPermission.AdminAuditRead);
     }
 
     /// <summary>Serves one page of an account's audit trail, or reports what was wrong with the request.</summary>
@@ -54,7 +58,7 @@ internal static class MailboxMutationAuditEndpoint
     /// <param name="pageSize">How many entries the page may hold, or <see langword="null" /> for the default.</param>
     /// <param name="cursor">The cursor the previous page returned, or <see langword="null" /> for the first page.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
-    /// <param name="store">Reads the page.</param>
+    /// <param name="trail">Reads the page, for a caller the trail's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the page, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -71,11 +75,11 @@ internal static class MailboxMutationAuditEndpoint
         [FromQuery] int? pageSize,
         [FromQuery] string? cursor,
         [FromServices] IMailAccountCatalog accounts,
-        [FromServices] IMailboxMutationAuditEntryStore store,
+        [FromServices] MailboxMutationAuditTrailReader trail,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(accounts);
-        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(trail);
 
         if (string.IsNullOrWhiteSpace(account))
         {
@@ -131,7 +135,7 @@ internal static class MailboxMutationAuditEndpoint
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        var page = await store.ReadPageAsync(query, cancellationToken);
+        var page = await trail.ReadPageAsync(query, cancellationToken);
 
         return TypedResults.Ok(MailboxMutationAuditPageResponse.For(page));
     }

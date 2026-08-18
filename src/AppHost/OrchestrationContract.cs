@@ -247,6 +247,17 @@ public static class OrchestrationContract
     /// </remarks>
     public const string AdminApiKey = "integration-tests-only-admin-api-key";
 
+    /// <summary>The name of a second administrative key, whose entry grants one permission rather than the surface.</summary>
+    /// <remarks>The key above writes no grant and therefore reaches everything administrative, so a suite holding only that one could never observe a route refusing a caller over what it holds.</remarks>
+    public const string AdminNarrowedApiKeyName = "integration-tests-admin-read-only";
+
+    /// <summary>A second administrative API key, admitted by an entry granting <see cref="AdminNarrowedPermission" /> and nothing else.</summary>
+    /// <remarks>A literal under the same restriction as <see cref="AdminApiKey" />, and deliberately a different value: what it exists to make observable is that two credentials on one surface reach different routes.</remarks>
+    public const string AdminNarrowedApiKey = "integration-tests-only-admin-read-only-api-key";
+
+    /// <summary>The one permission the entry above grants, which is what its key holds and the whole of what it reaches.</summary>
+    public const string AdminNarrowedPermission = "mailfathom.admin.read";
+
     /// <summary>The EF Core migration tool resource.</summary>
     public const string MigrationsResourceName = "mailfathom-migrations";
 

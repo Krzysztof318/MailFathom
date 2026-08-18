@@ -104,8 +104,19 @@ does not exist: the same error, the same code, and nothing about the caller, the
 refusal never reaches a client in a form it could read;
 [the MCP tools page](../features/mcp-tools.md#what-a-caller-is-offered) states which tool requires which permission.
 
-**The administrative surface has no mapping yet**, so no route there requires a permission and none can produce this
-refusal. The other requirement in force is the download route's, which admits a signed capability and nothing else.
+**The administrative surface answers it by naming the permission and nothing else.** Every route there publishes the one
+permission it requires as endpoint metadata, decided beside the route rather than in a list a new route could be added
+without joining, and a group filter reads that metadata ahead of the handler: a caller the grant does not admit is
+refused `403` in the endpoint's ordinary problem shape, stating the permission that would have sufficed and carrying it
+as a `permission` member so `mfctl` can say what to grant. A route publishing no decision is refused to everyone, which
+is what makes the omission a visible failure rather than an open route. The use case behind the route asks the same
+question again and raises this refusal on its own, and the filter answers that exception in the same shape — so the
+transport is a cheap first reading rather than the authority. `GET /session` is the one route that requires no
+permission, because reporting what the credential is and what it may do is what a caller holding nothing needs in order
+to learn that it holds nothing.
+[The administrative endpoint page](../operations/admin-endpoint.md#what-the-endpoint-serves) carries the whole mapping.
+
+The other requirement in force is the download route's, which admits a signed capability and nothing else.
 
 The transport's own reading of the grant goes through the same `AccessAuthorization` the use cases ask, which reports a
 verdict instead of raising where a boundary has to compose an answer rather than perform an operation. One definition of

@@ -2,8 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.History;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Rules.Evaluation;
@@ -34,24 +36,29 @@ public sealed class MailRuleEvaluationRunRequests
     private readonly IMailRuleEvaluationRunStore runStore;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly TimeProvider timeProvider;
+    private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the request intake.</summary>
     /// <param name="runStore">Reads whether a run is outstanding and records the one this request asks for.</param>
     /// <param name="commitPolicy">Makes the read and the write one decision, and resolves a race with a competing request.</param>
     /// <param name="timeProvider">Stamps the request.</param>
+    /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public MailRuleEvaluationRunRequests(
         IMailRuleEvaluationRunStore runStore,
         OptimisticConcurrencyRetryPolicy commitPolicy,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(runStore);
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(authorization);
 
         this.runStore = runStore;
         this.commitPolicy = commitPolicy;
         this.timeProvider = timeProvider;
+        this.authorization = authorization;
     }
 
     /// <summary>Asks for the account's rules to be run over every message stored for it.</summary>
@@ -59,6 +66,7 @@ public sealed class MailRuleEvaluationRunRequests
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The run the account now has outstanding, and whether this request is what put it there.</returns>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when two requests raced past the bounded retries.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminOperate" />.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     /// <remarks>
     /// Whether the account is free is decided at the write rather than by a check in front of it, because two requests
@@ -68,11 +76,20 @@ public sealed class MailRuleEvaluationRunRequests
     /// A scheduled run in front of the account is replaced rather than answered with, because this request reaches every
     /// rule and that one reaches only the rules declaring a schedule.
     /// </para>
+    /// <para>
+    /// This is the operator's own request, so it asks for the grant that covers making the deployment do work — a pass
+    /// over a whole mailbox changes mail on the server. <see cref="SubmitScheduledAsync" /> asks for no permission and
+    /// for the process itself instead, because what reaches it is this process on a rule's own declared occasion rather
+    /// than a caller.
+    /// </para>
     /// </remarks>
     public Task<MailRuleEvaluationRunRequest> SubmitAsync(
         MailAccountId accountId,
-        CancellationToken cancellationToken) =>
-        this.commitPolicy.CommitAsync(
+        CancellationToken cancellationToken)
+    {
+        this.authorization.RequirePermission(MailFathomPermission.AdminOperate);
+
+        return this.commitPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
                 var requested = new MailRuleEvaluationRun
@@ -85,6 +102,7 @@ public sealed class MailRuleEvaluationRunRequests
                 return await this.StartAsync(session, requested, attemptCancellationToken);
             },
             cancellationToken);
+    }
 
     /// <summary>Asks, on a rule's own declared occasion, for the account's scheduled rules to be run over its mailbox.</summary>
     /// <param name="accountId">The account to run the scheduled rules over.</param>
@@ -97,11 +115,22 @@ public sealed class MailRuleEvaluationRunRequests
     /// occasion wanted and more, and a scheduled run is the same walk arriving early, so both make a second walk of one
     /// mailbox work nobody needs — which is the guarantee the mechanism dispatching this occasion also makes about the
     /// job it enqueued.
+    /// <para>
+    /// It asks for no permission, deliberately, and requires the process itself instead. What reaches it is a job this
+    /// deployment enqueued from a rule's own declared schedule, so there is no caller to hold a grant, and requiring an
+    /// administrative one here would mean the schedule ran under a credential nobody presented. Requiring the process
+    /// identity is what makes that an admitted case rather than an unasked question: a caller reaching this method from
+    /// an entrypoint added later is refused instead of starting a mailbox-wide pass under no grant at all.
+    /// </para>
     /// </remarks>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when anything but this deployment's own process reached the use case.</exception>
     public Task<MailRuleEvaluationRunRequest> SubmitScheduledAsync(
         MailAccountId accountId,
-        CancellationToken cancellationToken) =>
-        this.commitPolicy.CommitAsync(
+        CancellationToken cancellationToken)
+    {
+        this.authorization.RequireProcessIdentity();
+
+        return this.commitPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
                 var scheduled = new MailRuleEvaluationRun
@@ -114,6 +143,7 @@ public sealed class MailRuleEvaluationRunRequests
                 return await this.StartAsync(session, scheduled, attemptCancellationToken);
             },
             cancellationToken);
+    }
 
     /// <summary>Starts the run unless the account's row already holds one this request must not replace.</summary>
     /// <param name="session">The session the write is staged in.</param>

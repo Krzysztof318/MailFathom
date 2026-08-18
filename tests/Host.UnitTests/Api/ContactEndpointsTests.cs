@@ -7,6 +7,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.Host.Api;
+using MailFathom.Host.UnitTests.TestDoubles;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Time.Testing;
@@ -98,6 +99,50 @@ public sealed class ContactEndpointsTests
             Arg.Any<IPersistenceSession>(),
             Arg.Any<Contact>(),
             Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Writing is published under the operating grant and reading the book under the audit one, so a refused write hands back no record.</summary>
+    /// <remarks>
+    /// The record the book had to read in order to refuse the write is the whole of what the answer could leak here: a
+    /// caller granted only <c>mailfathom.admin.operate</c> would otherwise read any collected contact in full by asking
+    /// to amend it, which is a read of somebody's correspondents through the one route nobody watches for one.
+    /// </remarks>
+    [Fact]
+    public async Task AmendAsync_AWriteAnOriginRefuses_AnswersWithTheOutcomeAndNoRecord()
+    {
+        // Arrange
+        this.Holds(Collected("Anna Kowalska", "anna@example.test"));
+
+        // Act
+        var result = await ContactEndpoints.AmendAsync(
+            Identity,
+            new ContactRecordRequest("Anna Nowak", ["anna@example.test"], "anna@example.test", Note: null),
+            this.Book(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var amended = Assert.IsType<Ok<ContactWriteResponse>>(result.Result);
+        Assert.Null(amended.Value!.Contact);
+        Assert.Null(amended.Value.AddressHolder);
+    }
+
+    /// <summary>A promotion of somebody already asserted wrote nothing either, so it echoes nothing back.</summary>
+    [Fact]
+    public async Task PromoteAsync_AContactAlreadyAsserted_AnswersWithTheOutcomeAndNoRecord()
+    {
+        // Arrange
+        this.Holds(Asserted("Anna Kowalska", "anna@example.test"));
+
+        // Act
+        var result = await ContactEndpoints.PromoteAsync(
+            Identity,
+            this.Book(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var promoted = Assert.IsType<Ok<ContactWriteResponse>>(result.Result);
+        Assert.Equal(nameof(ContactWriteOutcome.AlreadyAsserted), promoted.Value!.Outcome);
+        Assert.Null(promoted.Value.Contact);
     }
 
     /// <summary>Each rule a record can break is named, and none of the answers repeats what broke it.</summary>
@@ -221,7 +266,7 @@ public sealed class ContactEndpointsTests
         // Act
         var result = await ContactEndpoints.FindAsync(
             Identity,
-            this.directory,
+            this.Book(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -236,7 +281,7 @@ public sealed class ContactEndpointsTests
         // Act
         var result = await ContactEndpoints.FindAsync(
             Guid.Empty,
-            this.directory,
+            this.Book(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -256,7 +301,7 @@ public sealed class ContactEndpointsTests
         // Act
         var result = await ContactEndpoints.FindByAddressAsync(
             address,
-            this.directory,
+            this.Book(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -280,7 +325,7 @@ public sealed class ContactEndpointsTests
             origin: null,
             pageSize: null,
             cursor: null,
-            this.directory,
+            this.Book(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -302,7 +347,7 @@ public sealed class ContactEndpointsTests
             "collected",
             pageSize: null,
             cursor: null,
-            this.directory,
+            this.Book(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -328,7 +373,7 @@ public sealed class ContactEndpointsTests
             origin,
             pageSize,
             cursor,
-            this.directory,
+            this.Book(),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -466,7 +511,8 @@ public sealed class ContactEndpointsTests
             this.store,
             this.directory,
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), this.clock),
-            this.clock);
+            this.clock,
+            AdministrativeGrant.WholeSurface);
     }
 
     /// <summary>A session that commits whatever was staged in it, which is what a write's ordinary path needs.</summary>

@@ -2,12 +2,14 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -88,7 +90,11 @@ public sealed class ScheduledMailRuleRunHandlerTests
         return new ScheduledMailRuleRunHandler(new MailRuleEvaluationRunRequests(
             this.runStore,
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), timeProvider),
-            timeProvider));
+            timeProvider,
+            // The occasion runs under the process rather than a caller, which is the arrangement the scheduled path is
+            // written for and requires: it asks for no permission and for the process itself, which is what the host
+            // reports outside a request.
+            AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process)));
     }
 
     private sealed class CommittingSession : IPersistenceSession

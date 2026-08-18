@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/Admin*.cs, src/Host/Api/Contact*.cs, src/Host/Api/Embedding*.cs, src/Host/Api/Job*.cs, src/Host/Api/Mail*.cs, src/Host/Api/Spam*.cs, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, src/Domain/Access/MailFathomPermission.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/**, scripts/install-mfctl.sh -->
+<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/Admin*.cs, src/Host/Api/Contact*.cs, src/Host/Api/Embedding*.cs, src/Host/Api/Job*.cs, src/Host/Api/Mail*.cs, src/Host/Api/Spam*.cs, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, src/Domain/Access/MailFathomPermission.cs, src/Host/Security/Endpoints/AdminRouteAuthorization.cs, src/Host/Security/Endpoints/AdminRoutePermission.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/**, scripts/install-mfctl.sh -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -57,16 +57,16 @@ location exactly when the resource names the same one. A deployment whose resour
 document nothing could find, and OAuth sign-in would be unreachable for a reason no refusal would explain. Behind a
 reverse proxy, write the public URL and keep the path: `https://mail.example.test/api/admin`.
 
-> **Every authenticated caller may still perform every administrative operation.** A grant can now be written on an
-> entry — see below — and nothing on this surface varies by it yet, so the credential remains what bounds access.
-> Provision one per client and rotate it like any other secret.
+> **An entry that writes no grant reaches every administrative operation.** The grant is what bounds a credential here,
+> and an entry that never narrowed one holds the whole surface — so provision one per client, narrow it to what that
+> client does, and rotate it like any other secret.
 >
 > Weigh that against what the operations are. The endpoint serves reads — who a credential makes the caller, two
 > records of what a mailbox has had done to it and what has been read from it, where semantic search stands, and what
 > synchronization is doing — and
-> writes that store a mailbox refresh token, start a provider bill, and erase what a folder has stored. Any credential
-> that can do the first can therefore do all of them, so an administrative key is as sensitive as the mailbox
-> credentials it can place, the histories it can read, the spend it can begin, and the mail it can dispose of.
+> writes that store a mailbox refresh token, start a provider bill, and erase what a folder has stored. An unnarrowed
+> credential can do all of them, so it is as sensitive as the mailbox credentials it can place, the histories it can
+> read, the spend it can begin, and the mail it can dispose of.
 
 ## What a credential may do
 
@@ -75,22 +75,45 @@ six names, allocated so that the separations an operator would plausibly want to
 
 | Permission | What it covers |
 | --- | --- |
-| `mailfathom.admin.read` | The reads reporting the deployment's own state and no mail: what synchronization is doing per account and per folder, embedding status and the activation preview, the loaded rules, a run's progress, the stopped-job list |
-| `mailfathom.admin.audit.read` | The per-account records derived from mail: the mailbox-mutation audit, the answering audit, the rules history, the spam classifications |
-| `mailfathom.admin.operate` | Asking the deployment to do work it can already do: running rules over an account, classifying an account, retrying or dropping a stopped job, cancelling a reindex |
+| `mailfathom.admin.read` | The reads reporting the deployment's own state and no mail: what synchronization is doing per account and per folder, embedding status and the activation preview, the loaded rules, a run's progress, what a rewind would cost, the stopped-job list |
+| `mailfathom.admin.audit.read` | Everything derived from somebody's mail: the mailbox-mutation audit, the answering audit, the rules history, the spam classifications, and reading the contact book — a listing, one person, or their export |
+| `mailfathom.admin.operate` | Asking the deployment to do work it can already do: running rules over an account, classifying an account, retrying or dropping a stopped job, cancelling a reindex, rewinding synchronization, re-deriving stored mail, and writing to the contact book |
 | `mailfathom.admin.credentials.write` | Storing a mailbox refresh token |
 | `mailfathom.admin.spend` | Activating the declared embedding model, which is the one operation that starts a provider bill |
-| `mailfathom.admin.erase` | Erasing the mail stored for a folder an account no longer mirrors |
+| `mailfathom.admin.erase` | Disposing of what this deployment holds: the mail stored for a folder an account no longer mirrors, and one person and everything the contact book derived from them |
 
 No permission implies another, so a credential that needs to read state and to run rules is granted both names. A name
 nothing publishes fails startup, naming the entry and the position in the list, so a misspelling is refused rather than
 read as a narrower grant than you meant; so is a name the same grant already carries. A `mailfathom.mail.*` name is
 refused for a second reason as well — it belongs to the MCP surface and would grant nothing on this one.
 
+**Six `mfctl` commands make two requests and therefore need two permissions.** The table below publishes one permission
+per route, and a command that reads before it writes reaches two routes — because what it read is what it puts in front
+of you, or what it amends from:
+
+| Command | Needs |
+| --- | --- |
+| `mfctl contact update`, `mfctl contact add-address`, `mfctl contact remove-address` | `mailfathom.admin.audit.read` beside `mailfathom.admin.operate`, because each reads the record it is about to amend from |
+| `mfctl contact delete` | `mailfathom.admin.audit.read` beside `mailfathom.admin.erase`, because it shows you the person before erasing them |
+| `mfctl mailbox rewind` | `mailfathom.admin.read` beside `mailfathom.admin.operate`, because it always reads what the rewind would cost, including under `--yes` |
+| `mfctl embedding activate` | `mailfathom.admin.read` beside `mailfathom.admin.spend`, because it always reads what activating would spend before it spends it |
+
+A credential granted only the permission the operation itself is published under meets the refusal at the first request
+and nothing is done — which is the safe half of it, and still not what the operator intended.
+
 `GET /api/admin/session` sits outside the model and needs no permission. It reports the credential the caller already
-presented and the version this deployment already publishes, so it discloses nothing a caller did not bring — and it is
-what every command reads first, `mfctl login` included. Requiring a permission for it would make that permission a
-component of every administrative grant.
+presented, the version this deployment already publishes, and the permissions that credential holds — all of which it
+brought or could ask about itself — and it is what every command reads first, `mfctl login` included. Requiring a
+permission for it would make that permission a component of every administrative grant, so a credential granted only
+the spend permission could not sign in to use it. **A credential granted nothing therefore still answers here and
+nowhere else**; an operator who wants nothing answered at all removes the entry.
+
+`mfctl status` prints what that route reports, which is how an operator reads their own grant back:
+
+```text
+'production' (https://mail.example.test:8443) accepts the stored credential as 'workstation' (MailFathom 0.2.0).
+It holds mailfathom.admin.read, mailfathom.admin.operate.
+```
 
 The rest of the reading is the same on both surfaces and is written once, under
 [what a credential may do](mcp-endpoint.md#what-a-credential-may-do): the grant belongs to the entry rather than to the
@@ -103,59 +126,89 @@ Startup records what every entry resolved to, one line per entry, and names the 
 ```text
 info: MailFathom.Host.Hosting.Warnings.TransportGrantStartupReport
       The administrative endpoint entry AdminEndpoint:Authentication:0 grants mailfathom.admin.read,
-      mailfathom.admin.operate to every credential it admits. No route here consults a permission yet, so a grant on
-      this surface states what a credential is meant to reach rather than what it currently reaches.
+      mailfathom.admin.operate to every credential it admits. A route here is served only to a caller whose grant holds
+      the one permission that route publishes, and every other caller is refused with that permission named.
 ```
 
-Every line closes with what a grant on that surface does, which is not the same on both: the MCP endpoint's lines say
-that a caller is served only the tools its grant permits, because there it is enforced. Nothing in those lines names a
-key, a public key, a token, an authorization server, or a subject: a grant is what the deployment wrote, never who
-presented something.
+Every line closes with what a grant on that surface does, which differs in what a refusal looks like rather than in
+whether the grant is enforced: the MCP endpoint answers a call naming a tool the grant omits as a tool that does not
+exist, and this one names the permission. Nothing in those lines names a key, a public key, a token, an authorization
+server, or a subject: a grant is what the deployment wrote, never who presented something.
 
-**No name covers the contact book.** The six above were allocated against the routes that existed when they were, and
-the book's own routes — reading it, writing to it, exporting a person, erasing one — fall under none of them. Nothing
-follows from that today, because of the paragraph below; what it means is that a grant narrowing this surface does not
-narrow the book, and allocating names for it is a decision about the published permission set rather than about these
-routes.
+**The contact book falls under the six above rather than under names of its own.** Reading the book, reading one person
+and exporting them are `mailfathom.admin.audit.read`, because what the book holds is derived from mail; recording,
+amending and promoting are `mailfathom.admin.operate`; erasing somebody is `mailfathom.admin.erase`. Nothing about the
+book needed a seventh name — what it needed was for each of its routes to be placed against the separations the six
+already draw.
 
-**Nothing on this surface varies by the grant today.** The permissions are read, validated, carried on the authenticated
-caller, and reported at startup; every route still serves any authenticated caller, which is what the note above says.
+### What a refusal says
+
+A caller the endpoint admitted and a route then refuses is answered `403` with a problem document, and that document
+names **the one permission that would have sufficed and nothing else**: no inventory of the other routes, nothing about
+which credential would have worked, and nothing about how this deployment is configured.
+
+```json
+{
+  "status": 403,
+  "detail": "The credential is not granted 'mailfathom.admin.read'.",
+  "permission": "mailfathom.admin.read"
+}
+```
+
+The `permission` member carries the same name on its own, so a client reads what to grant instead of parsing the
+sentence. `mfctl` does exactly that, and reports it as the operator's next action rather than as a credential to
+replace:
+
+```text
+The deployment refused the operation: this credential does not hold 'mailfathom.admin.read'. Add that permission to the
+credential's entry under AdminEndpoint:Authentication, or sign in with one that already holds it.
+```
+
+Naming the permission is a deliberate difference from the MCP surface, which discloses nothing to a refused caller.
+[ADR 0012](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0012-authorization-model-named-permissions-and-where-they-are-enforced.md)
+records why: the caller here is an operator at their own terminal, and a refusal they can act on is worth more than a
+refusal that says nothing.
+
+The transport is not the authority. Each route's use case asks for the same permission itself, so an entrypoint added
+later cannot widen the surface by forgetting a filter, and a use case's own refusal is answered in the shape above
+rather than reaching the caller as a fault in the deployment. A route mapped without deciding a permission is refused
+outright — nobody reaches it — so forgetting to decide costs a route rather than opening one.
 
 ## What the endpoint serves
 
-| Route | What it does |
-| --- | --- |
-| `GET /api/admin/session` | Reports the credential that authenticated and the running version. `login` and `status` report what it answers; every other command reads it first to [check the two versions against each other](#take-the-command-from-the-deployments-own-release-line). |
-| `POST /api/admin/mailbox/refresh-token` | Stores a mailbox refresh token for one configured account, sealed under the deployment's data-encryption key. This is what [`mfctl mailbox authorize --account`](mailbox-oauth.md#sending-the-token-to-the-deployment) sends. |
-| `GET /api/admin/mailbox/synchronization` | Reports what synchronization is doing, per account and per mapped folder. This is what [`mfctl mailbox status`](#reading-what-synchronization-is-doing) asks. |
-| `GET /api/admin/mailbox/rewind` | Reports how much mail discarding an account's synchronization progress would have fetched again, discarding nothing. |
-| `POST /api/admin/mailbox/rewind` | Discards it, so the next runs read the scope's folders from the start of the account's window. **This is the one route that makes a deployment pull a mailbox over IMAP again.** |
-| `POST /api/admin/mailbox/rederivation` | Re-reads one bounded pass of the raw MIME already stored, into the properties a newer release records from it. Opens no mailbox session. |
-| `GET /api/admin/mailbox/mutations/audit` | Reads one account's record of the changes MailFathom made to its mailbox, where that account [keeps one](../features/imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default). |
-| `GET /api/admin/answering/audit` | Reads one account's record of the questions answered from its mailbox, where that account [keeps one](../features/mail-answering.md#an-account-can-keep-a-record-of-what-a-question-read-and-none-does-by-default). |
-| `GET /api/admin/embeddings` | Reports whether semantic search is working and how far behind it is. This is what [`mfctl embedding status`](#administering-the-embedding-profile) asks. |
-| `GET /api/admin/embeddings/activation` | Reports what activating the declared model would do and what it would cost, writing nothing. |
-| `POST /api/admin/embeddings/activation` | Takes up the declared model and begins embedding under it. **This is the one route that starts a provider bill.** |
-| `POST /api/admin/embeddings/reindex/cancellation` | Stops the reindex under way, leaving the generation that is serving where it is. |
-| `GET /api/admin/rules` | Reports the [mail rules](../features/mail-rules.md) this deployment has loaded, in the order they run, and whether the configuration as it now stands is the one they were read from. |
-| `POST /api/admin/rules/runs` | Asks for one account's rules to be run over every message already stored for it, and answers with the run already under way where there is one. |
-| `GET /api/admin/rules/runs` | Reports where that run has got to, or how the last one ended. |
-| `GET /api/admin/rules/history` | Reads one account's record of what its rules concluded and what those conclusions asked for. |
-| `POST /api/admin/spam/runs` | Asks for every message already stored for one account to be [classified](../features/spam-classification.md), and answers with the run already under way where there is one. It is a dry run unless the body asks to apply. |
-| `GET /api/admin/spam/runs` | Reports where that run has got to, or how the last one ended. |
-| `GET /api/admin/spam/classifications` | Reads one account's classifications, newest first, and the changes each verdict asked the mailbox for. |
-| `GET /api/admin/jobs/dead-letters` | Reads the background work that stopped and will not be attempted again, newest first, with what ended each piece of it. |
-| `POST /api/admin/jobs/dead-letters/retry` | Returns one stopped job to the queue under the identity it was enqueued with. |
-| `POST /api/admin/jobs/dead-letters/drop` | Decides one stopped job will never run, keeping the record of it. |
-| `POST /api/admin/folders/erasure` | Erases one bounded pass of the mail stored for a folder the account no longer mirrors. **This is the one route that disposes of mail.** |
-| `GET /api/admin/contacts` | Reads one bounded, keyset-paginated page of the [contact book](../features/contacts.md), optionally narrowed to one origin. |
-| `POST /api/admin/contacts` | Records a person the book does not yet hold, as a contact this deployment's owner asserted. |
-| `GET /api/admin/contacts/by-address` | Reads whoever uses one address, in whichever casing the book recorded it. |
-| `GET /api/admin/contacts/{id}` | Reads one contact by the identity the book gave it. |
-| `PUT /api/admin/contacts/{id}` | Amends one contact to the whole record the body states. |
-| `POST /api/admin/contacts/{id}/promotion` | Takes on a contact the deployment collected, so it becomes one the owner asserted. |
-| `DELETE /api/admin/contacts/{id}` | Erases one person and everything the book derived from them. **This is the one route that disposes of a contact, and it cannot be undone.** |
-| `GET /api/admin/contacts/{id}/export` | Produces everything the book holds about one person, as of the instant it was taken. |
+| Route | Permission | What it does |
+| --- | --- | --- |
+| `GET /api/admin/session` | none | Reports the credential that authenticated and the running version. `login` and `status` report what it answers; every other command reads it first to [check the two versions against each other](#take-the-command-from-the-deployments-own-release-line). |
+| `POST /api/admin/mailbox/refresh-token` | `mailfathom.admin.credentials.write` | Stores a mailbox refresh token for one configured account, sealed under the deployment's data-encryption key. This is what [`mfctl mailbox authorize --account`](mailbox-oauth.md#sending-the-token-to-the-deployment) sends. |
+| `GET /api/admin/mailbox/synchronization` | `mailfathom.admin.read` | Reports what synchronization is doing, per account and per mapped folder. This is what [`mfctl mailbox status`](#reading-what-synchronization-is-doing) asks. |
+| `GET /api/admin/mailbox/rewind` | `mailfathom.admin.read` | Reports how much mail discarding an account's synchronization progress would have fetched again, discarding nothing. |
+| `POST /api/admin/mailbox/rewind` | `mailfathom.admin.operate` | Discards it, so the next runs read the scope's folders from the start of the account's window. **This is the one route that makes a deployment pull a mailbox over IMAP again.** |
+| `POST /api/admin/mailbox/rederivation` | `mailfathom.admin.operate` | Re-reads one bounded pass of the raw MIME already stored, into the properties a newer release records from it. Opens no mailbox session. |
+| `GET /api/admin/mailbox/mutations/audit` | `mailfathom.admin.audit.read` | Reads one account's record of the changes MailFathom made to its mailbox, where that account [keeps one](../features/imap-synchronization.md#an-account-can-keep-a-record-of-what-was-done-to-it-and-none-does-by-default). |
+| `GET /api/admin/answering/audit` | `mailfathom.admin.audit.read` | Reads one account's record of the questions answered from its mailbox, where that account [keeps one](../features/mail-answering.md#an-account-can-keep-a-record-of-what-a-question-read-and-none-does-by-default). |
+| `GET /api/admin/embeddings` | `mailfathom.admin.read` | Reports whether semantic search is working and how far behind it is. This is what [`mfctl embedding status`](#administering-the-embedding-profile) asks. |
+| `GET /api/admin/embeddings/activation` | `mailfathom.admin.read` | Reports what activating the declared model would do and what it would cost, writing nothing. |
+| `POST /api/admin/embeddings/activation` | `mailfathom.admin.spend` | Takes up the declared model and begins embedding under it. **This is the one route that starts a provider bill.** |
+| `POST /api/admin/embeddings/reindex/cancellation` | `mailfathom.admin.operate` | Stops the reindex under way, leaving the generation that is serving where it is. |
+| `GET /api/admin/rules` | `mailfathom.admin.read` | Reports the [mail rules](../features/mail-rules.md) this deployment has loaded, in the order they run, and whether the configuration as it now stands is the one they were read from. |
+| `POST /api/admin/rules/runs` | `mailfathom.admin.operate` | Asks for one account's rules to be run over every message already stored for it, and answers with the run already under way where there is one. |
+| `GET /api/admin/rules/runs` | `mailfathom.admin.read` | Reports where that run has got to, or how the last one ended. |
+| `GET /api/admin/rules/history` | `mailfathom.admin.audit.read` | Reads one account's record of what its rules concluded and what those conclusions asked for. |
+| `POST /api/admin/spam/runs` | `mailfathom.admin.operate` | Asks for every message already stored for one account to be [classified](../features/spam-classification.md), and answers with the run already under way where there is one. It is a dry run unless the body asks to apply. |
+| `GET /api/admin/spam/runs` | `mailfathom.admin.read` | Reports where that run has got to, or how the last one ended. |
+| `GET /api/admin/spam/classifications` | `mailfathom.admin.audit.read` | Reads one account's classifications, newest first, and the changes each verdict asked the mailbox for. |
+| `GET /api/admin/jobs/dead-letters` | `mailfathom.admin.read` | Reads the background work that stopped and will not be attempted again, newest first, with what ended each piece of it. |
+| `POST /api/admin/jobs/dead-letters/retry` | `mailfathom.admin.operate` | Returns one stopped job to the queue under the identity it was enqueued with. |
+| `POST /api/admin/jobs/dead-letters/drop` | `mailfathom.admin.operate` | Decides one stopped job will never run, keeping the record of it. |
+| `POST /api/admin/folders/erasure` | `mailfathom.admin.erase` | Erases one bounded pass of the mail stored for a folder the account no longer mirrors. **This is the one route that disposes of mail.** |
+| `GET /api/admin/contacts` | `mailfathom.admin.audit.read` | Reads one bounded, keyset-paginated page of the [contact book](../features/contacts.md), optionally narrowed to one origin. |
+| `POST /api/admin/contacts` | `mailfathom.admin.operate` | Records a person the book does not yet hold, as a contact this deployment's owner asserted. |
+| `GET /api/admin/contacts/by-address` | `mailfathom.admin.audit.read` | Reads whoever uses one address, in whichever casing the book recorded it. |
+| `GET /api/admin/contacts/{id}` | `mailfathom.admin.audit.read` | Reads one contact by the identity the book gave it. |
+| `PUT /api/admin/contacts/{id}` | `mailfathom.admin.operate` | Amends one contact to the whole record the body states. |
+| `POST /api/admin/contacts/{id}/promotion` | `mailfathom.admin.operate` | Takes on a contact the deployment collected, so it becomes one the owner asserted. |
+| `DELETE /api/admin/contacts/{id}` | `mailfathom.admin.erase` | Erases one person and everything the book derived from them. **This is the one route that disposes of a contact, and it cannot be undone.** |
+| `GET /api/admin/contacts/{id}/export` | `mailfathom.admin.audit.read` | Produces everything the book holds about one person, as of the instant it was taken. |
 
 The write route's body carries a long-lived credential for a named mailbox owner, which is what makes the clear-text
 warning below matter more here than it does for a session probe. It refuses, with `400` and a sentence naming what was
@@ -725,7 +778,7 @@ Amended:    2026-08-16 09:00:00Z
 | `contact update` | Corrects `--name`, `--note`, `--preferred`, or the whole `--address` set. What you do not name is kept; `--clear-note` holds no note afterwards |
 | `contact add-address` | Adds one address, keeping the rest. `--preferred` names which address to use by default afterwards |
 | `contact remove-address` | Takes one address off. `--preferred` is required when the one being removed is the default |
-| `contact promote` | Takes on a contact the deployment collected, so it becomes one you asserted |
+| `contact promote` | Takes on a contact the deployment collected, so it becomes one you asserted. It reports that the promotion happened rather than the record, because it sent none and reading the book is a permission of its own; `contact show` is how you look at the person afterwards |
 | `contact delete` | Erases the person. **This cannot be undone**; see below |
 | `contact export` | Writes everything held about the person to standard output, as JSON |
 
@@ -1236,6 +1289,7 @@ address:
 ```console
 $ mfctl status --endpoint production
 'production' (https://mail.example.test:8443) accepts the stored credential as 'workstation' (MailFathom 0.2.0).
+It holds mailfathom.admin.read, mailfathom.admin.operate.
 Documentation for that version: https://krzysztof318.github.io/MailFathom/v0.2.0/
 ```
 
@@ -1386,6 +1440,8 @@ removing the log is a way to start a new one rather than a way to turn it off.
 | `There is no profile named …` | A typo, or a profile that was never created. The message lists the ones that exist. |
 | `Not signed in to https://…` | `--endpoint` named an address no profile serves. Sign in to it, or name a profile instead. |
 | `The deployment refused the credential.` | The key is not one this endpoint is configured with, or its lifetime has ended. Note that an MCP API key is not one of them. |
+| `this credential does not hold …` | The credential was accepted and the operation was not: its entry's `Permissions` omits the name the message states. Add that name to the entry, or run the command with a credential that already holds it. `mfctl status` prints what the one in use holds. |
+| `The deployment refused the operation: …` | The endpoint refused for a reason other than a missing permission, and the sentence is the deployment's own. A deployment publishing no permission for the route is a defect worth reporting, because no grant makes such a route reachable. |
 | `answered 429` | The endpoint refused the request for its rate limit rather than for its credential. `Retry-After` on the response says when capacity returns where the limiter can compute one. The whole endpoint shares one bucket, so another caller's burst — including somebody guessing keys — is enough to cause this. |
 | `serves no administrative endpoint at /api/admin/…` | The address answered, but on a listener that serves something else. Check the port, and check that `AdminEndpoint:Enabled` is true. |
 | `This deployment configures no mail account named …` | `mailbox authorize --account` named an identifier no `MailSynchronization:Accounts` entry carries, or you are signed in to the wrong deployment. Nothing was stored. |

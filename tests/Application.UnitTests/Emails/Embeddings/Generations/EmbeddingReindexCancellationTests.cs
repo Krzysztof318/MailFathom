@@ -2,12 +2,15 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -134,7 +137,8 @@ public sealed class EmbeddingReindexCancellationTests
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
                 new FakeTimeProvider()),
-            new EmbeddingBackfillSchedule(new FakeTimeProvider(Now)));
+            new EmbeddingBackfillSchedule(new FakeTimeProvider(Now)),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate));
 
         // Act
         var outcome = await cancellation.CancelAsync(TestContext.Current.CancellationToken);
@@ -153,7 +157,22 @@ public sealed class EmbeddingReindexCancellationTests
             EmbeddingDistanceMetric.Cosine,
             EmbeddingInputPreparation.Create(2_000, passageInstruction: null, normalizesVector: true));
 
-    private static CancellationWorld CreateWorld()
+    /// <summary>The grant is the authority here rather than at the transport, so an entrypoint that passed no filter meets the same refusal.</summary>
+    [Fact]
+    public async Task CancelAsync_ACallerGrantedOnlyTheAdministrativeRead_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var world = CreateWorld(AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            world.Cancellation.CancelAsync(TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminOperate, refusal.RequiredPermission);
+    }
+
+    private static CancellationWorld CreateWorld(AccessAuthorization? authorization = null)
     {
         var generationStore = new InMemoryEmbeddingGenerationStore(new InMemoryEmailEmbeddingStore());
         var vectorIndex = Substitute.For<IEmbeddingProfileVectorIndex>();
@@ -170,7 +189,8 @@ public sealed class EmbeddingReindexCancellationTests
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
                 new FakeTimeProvider()),
-            backfillSchedule);
+            backfillSchedule,
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate));
 
         return new CancellationWorld(generationStore, vectorIndex, backfillSchedule, cancellation);
     }

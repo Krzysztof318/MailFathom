@@ -2,11 +2,14 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -305,7 +308,63 @@ public sealed class ContactBookTests
         Assert.Null(export);
     }
 
-    private static ContactBook BookOver(InMemoryContactBookStore book, FakeTimeProvider? clock = null)
+    /// <summary>Reading the book is reading what was derived from somebody's mail, so it asks for the audit grant rather than the administrative read.</summary>
+    [Fact]
+    public async Task ReadPageAsync_ACallerGrantedOnlyTheAdministrativeRead_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var book = BookOver(
+            new InMemoryContactBookStore(),
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            book.ReadPageAsync(ContactQuery.Create(origin: null, pageSize: null, cursor: null), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminAuditRead, refusal.RequiredPermission);
+    }
+
+    /// <summary>Writing to the book is causing work rather than reading it, so reading grants nothing towards it.</summary>
+    [Fact]
+    public async Task RecordAsync_ACallerGrantedOnlyTheAuditRead_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var store = new InMemoryContactBookStore();
+        var book = BookOver(
+            store,
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminAuditRead));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => book.RecordAsync(
+            NewContactOf("Ada Lovelace", ["ada@example.test"]),
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminOperate, refusal.RequiredPermission);
+    }
+
+    /// <summary>Taking somebody out of the book is destroying, which is the one grant allocated to that.</summary>
+    [Fact]
+    public async Task EraseAsync_ACallerGrantedOnlyTheAdministrativeOperate_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var book = BookOver(
+            new InMemoryContactBookStore(),
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            book.EraseAsync(ContactId.Create(Guid.CreateVersion7(Now)), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminErase, refusal.RequiredPermission);
+    }
+
+    private static ContactBook BookOver(
+        InMemoryContactBookStore book,
+        FakeTimeProvider? clock = null,
+        AccessAuthorization? authorization = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
@@ -316,7 +375,11 @@ public sealed class ContactBookTests
             book,
             book,
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), timeProvider),
-            timeProvider);
+            timeProvider,
+            authorization ?? AccessAuthorizations.ForCallerGranted(
+                MailFathomPermission.AdminAuditRead,
+                MailFathomPermission.AdminOperate,
+                MailFathomPermission.AdminErase));
     }
 
     private static NewContact NewContactOf(string displayName, IReadOnlyList<string> addresses) =>

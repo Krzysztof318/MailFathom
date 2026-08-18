@@ -150,8 +150,8 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
     /// <remarks>
     /// Carried on every line rather than reported once per endpoint, because these lines are read by searching for the
     /// entry path somebody edited: a posture stated on a line of its own is one a filtered log leaves out, which costs
-    /// the operator the same thing as not stating it. The two surfaces differ because the MCP one enforces a grant and
-    /// the administrative one does not yet, so a single wording would be wrong about one of them.
+    /// the operator the same thing as not stating it. The two surfaces differ in what a refusal looks like rather than
+    /// in whether the grant is enforced, so a single wording would be wrong about one of them.
     /// </remarks>
     private static string EnforcementOn(ProtectedSurface surface) => surface switch
     {
@@ -159,8 +159,8 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
             "A caller here is served only the tools its grant permits, and a call naming any other is answered as a "
             + "tool that does not exist.",
         ProtectedSurface.Administration =>
-            "No route here consults a permission yet, so a grant on this surface states what a credential is meant to "
-            + "reach rather than what it currently reaches.",
+            "A route here is served only to a caller whose grant holds the one permission that route publishes, and "
+            + "every other caller is refused with that permission named.",
         _ => throw new ArgumentOutOfRangeException(nameof(surface)),
     };
 

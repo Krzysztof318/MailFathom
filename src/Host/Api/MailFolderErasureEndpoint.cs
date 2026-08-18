@@ -4,8 +4,10 @@
 
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Folders;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
+using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -21,8 +23,9 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// It is here rather than on the MCP surface for the reason every administrative route is: erasing a mailbox's worth of
 /// mail is not something a model reasons over, and what bounds administrative access is what should bound it.
-/// <strong>Every authenticated caller may perform every administrative operation</strong>, which
-/// <see cref="MailboxRefreshTokenEndpoint" /> states in full.
+/// <strong>It is published under <c>mailfathom.admin.erase</c></strong>, the grant this deployment allocates to
+/// disposing of what it holds — this route and the erasure of one person from the contact book — so a credential that
+/// reads, operates, or spends does not reach it.
 /// </para>
 /// <para>
 /// One request is one bounded pass, and the command repeats it. The bound is the one the backward pass over stored mail
@@ -55,7 +58,8 @@ internal static class MailFolderErasureEndpoint
         // it: it implements IRequestSizeLimitMetadata, which the routing pipeline applies to the request body feature,
         // so a body over the bound is answered 413 before the handler is reached.
         api.MapPost(ErasureRoute, EraseAsync)
-            .WithMetadata(new RequestSizeLimitAttribute(MaxErasureRequestBytes));
+            .WithMetadata(new RequestSizeLimitAttribute(MaxErasureRequestBytes))
+            .RequirePermission(MailFathomPermission.AdminErase);
     }
 
     /// <summary>Erases one bounded pass of what is stored for a folder this deployment no longer mirrors.</summary>

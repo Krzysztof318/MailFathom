@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Net;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Credentials;
 using MailFathom.TestSupport;
@@ -213,6 +214,51 @@ public sealed class JobCommandTests : IDisposable
         Assert.Contains(
             this.console.Errors,
             line => line.Contains("holds no job", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A credential the deployment admitted and then refused the operation to is a grant to widen rather than a key to
+    /// rotate, so the refusal names the permission and where it is written instead of saying the credential was refused.
+    /// </summary>
+    [Fact]
+    public async Task DeadLetters_ADeploymentRefusingTheOperationForWantOfAGrant_SaysWhatToGrant()
+    {
+        // Arrange
+        using var deployment = FakeJobDeployment.Serving(
+            deadLetters: (
+                HttpStatusCode.Forbidden,
+                """{"detail":"The credential is not granted 'mailfathom.admin.read'.","permission":"mailfathom.admin.read"}"""));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "jobs", "dead-letters", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(
+            this.console.Errors,
+            line => line.Contains("mailfathom.admin.read", StringComparison.Ordinal)
+                && line.Contains("AdminEndpoint:Authentication", StringComparison.Ordinal));
+    }
+
+    /// <summary>A refusal naming no permission is repeated as it was written, because widening a grant would not have helped.</summary>
+    [Fact]
+    public async Task DeadLetters_ADeploymentRefusingWithoutNamingAPermission_RepeatsWhatItSaid()
+    {
+        // Arrange
+        using var deployment = FakeJobDeployment.Serving(
+            deadLetters: (
+                HttpStatusCode.Forbidden,
+                """{"detail":"The credential was not admitted to this operation."}"""));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "jobs", "dead-letters", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(
+            this.console.Errors,
+            line => line.Contains("was not admitted to this operation", StringComparison.Ordinal)
+                && !line.Contains("AdminEndpoint:Authentication", StringComparison.Ordinal));
     }
 
     /// <summary>A job something else already dealt with is named as that rather than as a job nobody has.</summary>

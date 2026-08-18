@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Synchronization.Administration;
+using MailFathom.Domain.Access;
+using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -19,9 +21,10 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// It is here rather than on the MCP surface for the reason every administrative route is: what it reports is the state
 /// of the service rather than anything a model reasons over, and the credential that bounds administrative access is
-/// what should bound reading how a deployment's workers are faring.
-/// <strong>Every authenticated caller may perform every administrative operation</strong>, which
-/// <see cref="MailboxRefreshTokenEndpoint" /> states in full.
+/// what should bound reading how a deployment's workers are faring. It is published under
+/// <c>mailfathom.admin.read</c>, which is the grant for what a deployment reports about itself: this route postdates
+/// ADR 0012's table and is allocated there by that rule, because what it answers with is the deployment's own state and
+/// no mail.
 /// </para>
 /// <para>
 /// Nothing it answers with is mail. Configured account identifiers and folder aliases, a phase, counts, UIDs, and
@@ -40,17 +43,18 @@ internal static class MailboxSynchronizationStatusEndpoint
     {
         ArgumentNullException.ThrowIfNull(api);
 
-        api.MapGet(StatusRoute, ReadStatusAsync);
+        api.MapGet(StatusRoute, ReadStatusAsync)
+            .RequirePermission(MailFathomPermission.AdminRead);
     }
 
     /// <summary>Reports where each configured account's synchronization stands.</summary>
     /// <param name="reader">Composes the answer from configuration, the running process, and the durable checkpoints.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the state, on every deployment including one that synchronizes nothing.</returns>
+    /// <returns><c>200</c> with the state on every deployment including one that synchronizes nothing, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.admin.read</c>.</returns>
     /// <remarks>
-    /// It never refuses. A deployment configuring no account, one that has switched synchronization off, and one whose
-    /// process has only just started are supported states rather than errors, and the last of them is the reading an
-    /// operator most needs to be given rather than left to infer from an empty answer.
+    /// The grant is the only thing it refuses over. A deployment configuring no account, one that has switched
+    /// synchronization off, and one whose process has only just started are supported states rather than errors, and the
+    /// last of them is the reading an operator most needs to be given rather than left to infer from an empty answer.
     /// </remarks>
     internal static async Task<Ok<MailSynchronizationStatusResponse>> ReadStatusAsync(
         [FromServices] MailSynchronizationStatusReader reader,

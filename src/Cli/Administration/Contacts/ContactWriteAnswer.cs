@@ -8,12 +8,19 @@ namespace MailFathom.Cli.Administration.Contacts;
 
 /// <summary>What one write to a deployment's contact book produced.</summary>
 /// <param name="Outcome">How the write ended, by the name the deployment's own outcome carries.</param>
-/// <param name="Contact">The record the outcome is about, or <see langword="null" /> where the book held none.</param>
+/// <param name="Contact">The record as the deployment settled it, present only where this command stated one and the write was performed.</param>
 /// <param name="AddressHolder">The contact already holding an address the write claimed, present exactly when that is what refused it.</param>
 /// <remarks>
+/// <para>
 /// A refusal arrives as a named outcome with a success status rather than as an error, because each one is something the
 /// operator acts on and continues from: correcting a record whose address somebody else holds, promoting a collected
 /// contact before amending it, or discovering the person was erased meanwhile.
+/// </para>
+/// <para>
+/// A promotion answers with no record, because the deployment's grant to write the book does not admit reading it and
+/// the command stated no record to read back. That is why one is absent rather than a deployment that failed to send
+/// one, and why the command reports the identity it was given instead.
+/// </para>
 /// </remarks>
 internal sealed record ContactWriteAnswer(
     [property: JsonPropertyName("outcome")] string? Outcome,

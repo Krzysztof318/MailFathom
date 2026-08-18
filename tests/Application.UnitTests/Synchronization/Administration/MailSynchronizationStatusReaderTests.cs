@@ -2,8 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Synchronization.Administration;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -167,11 +169,29 @@ public sealed class MailSynchronizationStatusReaderTests
         new(folder, ImapUidValidity.Create(1), ImapUid.Create(lastSeenUid), Start);
 
     /// <summary>Builds the reader over one account mapping two folders, which is the arrangement every test above narrows.</summary>
+    /// <summary>The grant is the authority here rather than at the transport, so an entrypoint that passed no filter meets the same refusal.</summary>
+    [Fact]
+    public async Task ReadAsync_ACallerGrantedOnlyTheAdministrativeOperate_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var reader = Reader(
+            new MailSynchronizationRunLedger(new FakeTimeProvider(Start)),
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            reader.ReadAsync(TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminRead, refusal.RequiredPermission);
+    }
+
     private static MailSynchronizationStatusReader Reader(
         MailSynchronizationRunLedger ledger,
         bool enabled = true,
         StubMailFolderParticipation? participation = null,
-        IReadOnlyList<MailFolderSynchronizationProgress>? progress = null)
+        IReadOnlyList<MailFolderSynchronizationProgress>? progress = null,
+        AccessAuthorization? authorization = null)
     {
         var accounts = Substitute.For<IMailAccountCatalog>();
         accounts.SynchronizationEnabled.Returns(enabled);
@@ -184,6 +204,7 @@ public sealed class MailSynchronizationStatusReaderTests
             accounts,
             participation ?? StubMailFolderParticipation.Mapping(Inbox, Archive),
             ledger,
-            progressReader);
+            progressReader,
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
     }
 }

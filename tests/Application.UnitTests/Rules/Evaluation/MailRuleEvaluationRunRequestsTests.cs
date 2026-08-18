@@ -2,11 +2,14 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -18,6 +21,10 @@ public sealed class MailRuleEvaluationRunRequestsTests
 {
     private static readonly DateTimeOffset RequestedAt = new(2026, 4, 2, 11, 0, 0, TimeSpan.Zero);
     private static readonly MailAccountId Account = MailAccountId.Create("work");
+
+    /// <summary>What a scheduled occasion is dispatched under, which is what the deployment's own process reaches this with.</summary>
+    private static readonly AccessAuthorization ProcessItself =
+        AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process);
 
     private readonly InMemoryMailRuleEvaluationRunStore runStore = new();
     private readonly FakeTimeProvider timeProvider = new(RequestedAt);
@@ -81,7 +88,8 @@ public sealed class MailRuleEvaluationRunRequestsTests
     public async Task SubmitScheduledAsync_AccountWithNoRunOutstanding_RecordsAScheduledRun()
     {
         // Act
-        var request = await this.CreateRequests().SubmitScheduledAsync(Account, TestContext.Current.CancellationToken);
+        var request = await this.CreateRequests(ProcessItself)
+            .SubmitScheduledAsync(Account, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(request.Accepted);
@@ -105,7 +113,8 @@ public sealed class MailRuleEvaluationRunRequestsTests
         });
 
         // Act
-        var request = await this.CreateRequests().SubmitScheduledAsync(Account, TestContext.Current.CancellationToken);
+        var request = await this.CreateRequests(ProcessItself)
+            .SubmitScheduledAsync(Account, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(request.Accepted);
@@ -149,7 +158,8 @@ public sealed class MailRuleEvaluationRunRequestsTests
         });
 
         // Act
-        var request = await this.CreateRequests().SubmitScheduledAsync(Account, TestContext.Current.CancellationToken);
+        var request = await this.CreateRequests(ProcessItself)
+            .SubmitScheduledAsync(Account, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(request.Accepted);
@@ -181,7 +191,74 @@ public sealed class MailRuleEvaluationRunRequestsTests
         Assert.Empty(this.runStore.Saves);
     }
 
-    private MailRuleEvaluationRunRequests CreateRequests()
+    /// <summary>The grant is the authority here rather than at the transport, so an entrypoint that passed no filter meets the same refusal.</summary>
+    [Fact]
+    public async Task SubmitAsync_ACallerGrantedOnlyTheAdministrativeRead_IsRefusedWithTheTransportAbsent()
+    {
+        // Arrange
+        var requests = this.CreateRequests(AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            requests.SubmitAsync(Account, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.AdminOperate, refusal.RequiredPermission);
+        Assert.Null(this.runStore.Find(Account));
+    }
+
+    /// <summary>The scheduled path is the process's own dispatch rather than a caller's request, so it asks for no grant and holds none.</summary>
+    [Fact]
+    public async Task SubmitScheduledAsync_TheProcessItself_RecordsARunWithoutHoldingAnyPermission()
+    {
+        // Arrange
+        var requests = this.CreateRequests(ProcessItself);
+
+        // Act
+        var request = await requests.SubmitScheduledAsync(Account, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(request.Accepted);
+        Assert.Empty(AuthorizedPrincipal.Process.Permissions);
+    }
+
+    /// <summary>Holding no grant is not what admits the scheduled path, so a caller reaching it is refused rather than starting a mailbox-wide walk.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SubmitScheduledAsync_ACallerRatherThanTheProcess_IsRefusedWhateverItWasGranted(bool grantedEverything)
+    {
+        // Arrange
+        MailFathomPermission[] granted = grantedEverything
+            ? [.. MailFathomPermission.All.Where(permission => permission.Surface == ProtectedSurface.Administration)]
+            : [];
+        var requests = this.CreateRequests(AccessAuthorizations.ForCallerGranted(granted));
+
+        // Act
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            requests.SubmitScheduledAsync(Account, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Null(this.runStore.Find(Account));
+        Assert.Empty(this.runStore.Saves);
+    }
+
+    /// <summary>An entrypoint that stated nothing about what admitted the work is the case the check exists to fail on.</summary>
+    [Fact]
+    public async Task SubmitScheduledAsync_AnEntrypointThatStatedNoPrincipal_IsRefusedRatherThanTreatedAsTheProcess()
+    {
+        // Arrange
+        var requests = this.CreateRequests(AccessAuthorizations.ForPrincipal(principal: null));
+
+        // Act
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            requests.SubmitScheduledAsync(Account, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Null(this.runStore.Find(Account));
+    }
+
+    private MailRuleEvaluationRunRequests CreateRequests(AccessAuthorization? authorization = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
@@ -192,7 +269,8 @@ public sealed class MailRuleEvaluationRunRequestsTests
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
                 this.timeProvider),
-            this.timeProvider);
+            this.timeProvider,
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate));
     }
 
     private sealed class CommittingSession : IPersistenceSession
