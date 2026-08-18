@@ -1898,6 +1898,12 @@ public sealed class MailboxSynchronizerTests
             new FakeTimeProvider(new DateTimeOffset(2026, 8, 18, 12, 0, 0, TimeSpan.Zero)));
     }
 
+    /// <summary>Builds a resolver whose alias is already bound to the folder the server advertises, so no run rebinds it.</summary>
+    /// <remarks>
+    /// These tests are about what synchronization does once a folder is known. Resolution has tests of its own, and
+    /// leaving it unbound here would make every run write a binding and consume a persistence session the assertions
+    /// about checkpoint commits are counting.
+    /// </remarks>
     private static MailFolderResolver CreateFolderResolverBoundToInbox(
         IPersistenceSessionFactory persistenceSessionFactory,
         TimeProvider timeProvider)
