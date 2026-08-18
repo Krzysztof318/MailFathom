@@ -117,6 +117,11 @@ no grant makes a capability the deployment does not have appear. A caller grante
 The check runs twice. The endpoint refuses before a use case is reached, and the use case behind each tool asks for the
 same permission on its own — so an entrypoint added later reaches the same refusal without passing any of this.
 
+Either of them refusing is recorded, which on this surface is the only place the decision is visible at all: the caller
+is told nothing it could report, so a client that stopped working is diagnosed from the deployment's own counter and
+warning rather than from what it received. A tool merely withheld from a listing is not recorded, because nothing was
+refused. [Telemetry](../operations/telemetry.md#what-an-authorization-refusal-records) holds what each channel carries.
+
 ## Descriptor conventions
 
 Every tool is declared with the same deliberate metadata, because a client decides whether a tool is safe to call before

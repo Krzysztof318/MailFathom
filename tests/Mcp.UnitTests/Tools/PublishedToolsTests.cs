@@ -151,4 +151,24 @@ public sealed class PublishedToolsTests
         // Act, Assert
         Assert.False(PublishedTools.Contains(toolName));
     }
+
+    /// <summary>A published name is what a signal about the call carries, because the closed set bounds the series it opens.</summary>
+    [Fact]
+    public void MeasurableName_APublishedTool_IsTheNameItself()
+    {
+        // Act, Assert
+        Assert.Equal(SearchEmailsTool.ToolName, PublishedTools.MeasurableName(SearchEmailsTool.ToolName));
+    }
+
+    /// <summary>Anything else is one fixed value, so a client looping over names it invented mints no series apiece.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("List_Accounts")]
+    [InlineData("delete_everything")]
+    public void MeasurableName_ANameNoToolAnswersTo_IsTheOnePlaceholder(string? toolName)
+    {
+        // Act, Assert
+        Assert.Equal(PublishedTools.UnpublishedToolName, PublishedTools.MeasurableName(toolName));
+    }
 }

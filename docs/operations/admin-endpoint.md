@@ -183,6 +183,12 @@ later cannot widen the surface by forgetting a filter, and a use case's own refu
 rather than reaching the caller as a fault in the deployment. A route mapped without deciding a permission is refused
 outright — nobody reaches it — so forgetting to decide costs a route rather than opening one.
 
+Whichever of the two refused it, the deployment records it once: `mailfathom.authorization.refusals` counts it by
+surface, route, and the permission that was missing, and a warning beside it names the credential the caller was
+admitted as. One operator reading one `403` is not a rate anybody can watch, and a credential that starts asking for
+what it was never granted is what the record exists to make visible.
+[Telemetry](telemetry.md#what-an-authorization-refusal-records) says what it carries and what it deliberately does not.
+
 ## What the endpoint serves
 
 | Route | Permission | What it does |

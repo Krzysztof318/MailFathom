@@ -53,9 +53,6 @@ internal sealed class McpToolCallTelemetry
     /// <summary>Names a call that ended in a way nothing anticipated and was answered with the generic code.</summary>
     internal const string FailedOutcomeName = "failed";
 
-    /// <summary>The one name a tool nothing publishes is measured under.</summary>
-    internal const string UnpublishedToolName = "(unpublished)";
-
     private readonly Counter<long> calls;
     private readonly Histogram<double> callDuration;
 
@@ -113,15 +110,11 @@ internal sealed class McpToolCallTelemetry
     public void RecordUnexpectedFailure(string? requestedToolName, TimeSpan duration) =>
         this.Record(requestedToolName, FailedOutcomeName, duration);
 
-    /// <summary>Reduces the name a caller sent to one of the names this surface publishes.</summary>
-    private static string MeasurableToolName(string? requestedToolName) =>
-        PublishedTools.Contains(requestedToolName) ? requestedToolName! : UnpublishedToolName;
-
     private void Record(string? requestedToolName, string outcome, TimeSpan duration)
     {
         var tags = new TagList
         {
-            { ToolTagName, MeasurableToolName(requestedToolName) },
+            { ToolTagName, PublishedTools.MeasurableName(requestedToolName) },
             { OutcomeTagName, outcome },
         };
 

@@ -21,6 +21,7 @@ using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
 using MailFathom.Domain.Emails;
@@ -75,6 +76,9 @@ public sealed class TelemetrySurfaceContractTests
     private static readonly AiProviderHealthTracker ProviderHealth =
         new(Clock, NullLogger<AiProviderHealthTracker>.Instance);
 
+    private static readonly AuthorizationRefusalTelemetry AuthorizationRefusals =
+        new(NullLogger<AuthorizationRefusalTelemetry>.Instance);
+
     private static readonly DerivedWorkGateTelemetry DerivedWorkGate = new();
     private static readonly EmailEmbeddingBackfillTelemetry EmbeddingBackfill = new();
     private static readonly EmailEmbeddingTelemetry Embedding = new();
@@ -117,6 +121,7 @@ public sealed class TelemetrySurfaceContractTests
     private static readonly Type[] DrivenPublishers =
     [
         typeof(AiProviderHealthTracker),
+        typeof(AuthorizationRefusalTelemetry),
         typeof(BoundedEmailEmbeddingBacklog),
         typeof(DerivedWorkGateTelemetry),
         typeof(EmailEmbeddingBackfillTelemetry),
@@ -243,6 +248,7 @@ public sealed class TelemetrySurfaceContractTests
         var surface = new EmittedTelemetrySurface();
 
         DriveProviderHealth();
+        DriveAuthorizationRefusals();
         DriveDerivedWorkGate();
         DriveEmbedding();
         DriveJobQueue();
@@ -267,6 +273,31 @@ public sealed class TelemetrySurfaceContractTests
         ProviderHealth.RecordServed(AiProviderRole.Embedding);
         ProviderHealth.RecordUnavailable(AiProviderRole.Chat);
         ProviderHealth.RecordMisconfigured(AiProviderRole.Chat);
+    }
+
+    /// <summary>Drives every refusal shape, with the identity poisoned and the operation left as one this repository publishes.</summary>
+    /// <remarks>
+    /// The identity is the string a caller could influence here — a token brings its own issuer and subject — so it is
+    /// a sentinel, and the contract then says it reached no dimension. The operation is not one: the port's contract is
+    /// that a boundary reduces the name a request carried to a name this repository publishes before it records one,
+    /// and each boundary's own suite asserts that reduction over a name a caller chose.
+    /// </remarks>
+    private static void DriveAuthorizationRefusals()
+    {
+        foreach (var surface in Enum.GetValues<ProtectedSurface>())
+        {
+            AuthorizationRefusals.RecordRefusal(
+                surface,
+                "list_emails",
+                MailFathomPermission.PublishedFor(surface)[0],
+                TelemetryRedactionContract.CallerSuppliedSentinel);
+        }
+
+        AuthorizationRefusals.RecordRefusal(
+            ProtectedSurface.Administration,
+            "/api/admin/session",
+            default,
+            refusedIdentity: null);
     }
 
     private static void DriveDerivedWorkGate()

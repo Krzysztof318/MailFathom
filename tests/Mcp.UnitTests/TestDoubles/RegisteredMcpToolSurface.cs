@@ -123,6 +123,7 @@ internal static class RegisteredMcpToolSurface
         services.AddSingleton<IMailAccountCatalog>(new StubMailAccountCatalog("personal"));
         services.AddSingleton<MailboxScopeResolver>();
         services.AddSingleton(Substitute.For<IMailboxReadTelemetry>());
+        services.AddSingleton(Substitute.For<IAuthorizationRefusalTelemetry>());
         services.AddSingleton<MailAccountDirectoryReader>();
         services.AddSingleton<MailboxTimelineReader>();
         services.AddSingleton<EmailContentReader>();

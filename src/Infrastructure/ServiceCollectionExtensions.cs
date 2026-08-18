@@ -239,6 +239,11 @@ public static class ServiceCollectionExtensions
         // arrived first.
         services.AddScoped<AccessAuthorization>();
 
+        // The record a refused caller is never told about. A singleton for the reason every other publisher here is
+        // one: the counter it holds is a fact about the process, and a scoped instance would create an instrument per
+        // request.
+        services.AddSingleton<IAuthorizationRefusalTelemetry, AuthorizationRefusalTelemetry>();
+
         // A value rather than an accessor, unlike the connection settings beside it: this one is compiled into the
         // search vector's column definition, so it is fixed for a deployment's schema and a reload cannot adopt a new
         // one without reindexing. Changing it is a migration, not a configuration reload.
