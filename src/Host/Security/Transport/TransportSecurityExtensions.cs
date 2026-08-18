@@ -195,23 +195,22 @@ internal static partial class TransportSecurityExtensions
         if (context.Request.Headers.Authorization.Count > 0)
         {
             var forwardedProtocol = context.Request.Headers[ForwardedHeadersDefaults.XForwardedProtoHeaderName].ToString();
-
-            var originalProtocol = context.Request.Headers["X-Original-Proto"].ToString();
+            var originalProtocol = context.Request.Headers[ForwardedHeadersDefaults.XOriginalProtoHeaderName].ToString();
 
             LogTokenRefusedOnAClearTextHop(
-            context.HttpContext.RequestServices
-                .GetRequiredService<ILoggerFactory>()
-                .CreateLogger(typeof(TransportSecurityExtensions)),
-            context.Scheme.Name,
-            context.HttpContext.TraceIdentifier,
-            context.Request.Method,
-            context.Request.Path.Value ?? string.Empty,
-            context.Request.Host.Value ?? string.Empty,
-            context.Request.Scheme,
-            string.IsNullOrEmpty(forwardedProtocol) ? "none" : forwardedProtocol,
-            string.IsNullOrEmpty(originalProtocol) ? "none" : originalProtocol,
-            context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            context.HttpContext.Connection.LocalPort);
+                context.HttpContext.RequestServices
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger(typeof(TransportSecurityExtensions)),
+                context.Scheme.Name,
+                context.HttpContext.TraceIdentifier,
+                context.Request.Method,
+                context.Request.Path.Value ?? string.Empty,
+                context.Request.Host.Value ?? string.Empty,
+                context.Request.Scheme,
+                string.IsNullOrEmpty(forwardedProtocol) ? "none" : forwardedProtocol,
+                string.IsNullOrEmpty(originalProtocol) ? "none" : originalProtocol,
+                context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                context.HttpContext.Connection.LocalPort);
         }
 
         context.NoResult();
@@ -220,18 +219,18 @@ internal static partial class TransportSecurityExtensions
     }
 
     [LoggerMessage(
-    Level = LogLevel.Warning,
-    Message =
-        "An access token presented to {AuthenticationScheme} arrived over a request this process currently sees as "
-        + "clear text, so it was refused without being read. "
-        + "Request: TraceIdentifier={TraceIdentifier}, Method={Method}, Path={Path}, Host={Host}, "
-        + "Scheme={Scheme}, RemoteIp={RemoteIp}, LocalPort={LocalPort}. "
-        + "Forwarded protocol state after forwarded-header processing: "
-        + "X-Forwarded-Proto={ForwardedProtocol}, X-Original-Proto={OriginalProtocol}. "
-        + "A remaining X-Forwarded-Proto value may be an unprocessed value or the unconsumed remainder of a forwarded "
-        + "header chain; X-Original-Proto indicates that forwarded-header processing changed the request scheme at least "
-        + "once. Correlate this request by TraceIdentifier with forwarded-header diagnostics to determine where the "
-        + "request scheme became clear text.")]
+        Level = LogLevel.Warning,
+        Message =
+            "An access token presented to {AuthenticationScheme} arrived over a request this process currently sees as "
+            + "clear text, so it was refused without being read. "
+            + "Request: TraceIdentifier={TraceIdentifier}, Method={Method}, Path={Path}, Host={Host}, "
+            + "Scheme={Scheme}, RemoteIp={RemoteIp}, LocalPort={LocalPort}. "
+            + "Forwarded protocol state after forwarded-header processing: "
+            + "X-Forwarded-Proto={ForwardedProtocol}, X-Original-Proto={OriginalProtocol}. "
+            + "A remaining X-Forwarded-Proto value may be an unprocessed value or the unconsumed remainder of a forwarded "
+            + "header chain; X-Original-Proto indicates that forwarded-header processing changed the request scheme at least "
+            + "once. Correlate this request by TraceIdentifier with forwarded-header diagnostics to determine where the "
+            + "request scheme became clear text.")]
     private static partial void LogTokenRefusedOnAClearTextHop(
         ILogger logger,
         string authenticationScheme,
