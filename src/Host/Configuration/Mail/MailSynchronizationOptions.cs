@@ -6,6 +6,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography.X509Certificates;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Composition;
@@ -17,6 +18,7 @@ using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Contacts.Collection;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Emails.Authorship;
@@ -47,7 +49,8 @@ internal sealed class MailSynchronizationOptions
         IOutgoingSenderIdentityReader,
         IMailFolderParticipationReader,
         IJunkMailFolderCatalog,
-        IMailFolderMappingReader
+        IMailFolderMappingReader,
+        IContactCollectionSettingsReader
 {
     /// <summary>The shutdown budget the .NET Generic Host applies when nothing configures one.</summary>
     private static readonly TimeSpan DefaultHostShutdownTimeout = TimeSpan.FromSeconds(30);
@@ -58,6 +61,8 @@ internal sealed class MailSynchronizationOptions
     private readonly Lazy<IReadOnlyDictionary<string, IReadOnlyList<MailFolderMapping>>> mappingsByAccount;
 
     private readonly Lazy<IReadOnlyDictionary<string, SenderTrustPolicy>> senderTrustPolicies;
+
+    private readonly Lazy<IReadOnlyDictionary<string, ContactCollectionSettings>> contactCollectionSettings;
 
     /// <summary>Initializes the options the binder is about to write into.</summary>
     /// <remarks>
@@ -72,6 +77,9 @@ internal sealed class MailSynchronizationOptions
         this.mappingsByAccount = new(this.ReadMappingsByAccount, LazyThreadSafetyMode.ExecutionAndPublication);
         this.senderTrustPolicies = new(
             this.ReadSenderTrustPolicies,
+            LazyThreadSafetyMode.ExecutionAndPublication);
+        this.contactCollectionSettings = new(
+            this.ReadContactCollectionSettings,
             LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
@@ -612,6 +620,68 @@ internal sealed class MailSynchronizationOptions
                 StringComparer.Ordinal);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Answered from the cache below, because every message of a switched-on account asks for it and building the
+    /// policy reads every account's own mailbox address. An account this snapshot no longer names collects nothing,
+    /// which is the honest answer as well as the safe one: an account nobody configures has no owner to have asked for
+    /// a book.
+    /// </remarks>
+    public ContactCollectionSettings SettingsFor(MailAccountId accountId) =>
+        this.contactCollectionSettings.Value.TryGetValue(accountId.Value, out var settings)
+            ? settings
+            : ContactCollectionSettings.CollectingNothing;
+
+    /// <summary>Builds every account's collection settings once, keyed by the account identifier the lookups arrive with.</summary>
+    /// <remarks>
+    /// The own addresses are read once for the whole deployment and handed to every account's policy, because an owner
+    /// writing from one of their mailboxes to another is not a correspondent of themselves. An entry whose text is
+    /// unusable is skipped and two accounts configured under one identifier keep the first, both for the reason the
+    /// trust policies above do: startup validation refuses each of those, and a reload being rejected must not make an
+    /// arriving message throw.
+    /// </remarks>
+    private Dictionary<string, ContactCollectionSettings> ReadContactCollectionSettings()
+    {
+        var ownAddresses = this.ReadOwnAccountAddresses();
+
+        return (this.Accounts ?? [])
+            .Select(static account => (Id: TryReadAccountId(account.AccountId), account.ContactCollection))
+            .Where(static account => account.Id is not null && account.ContactCollection is not null)
+            .GroupBy(static account => account.Id!, StringComparer.Ordinal)
+            .ToDictionary(
+                static account => account.Key,
+                account => ReadContactCollection(account.First().ContactCollection!, ownAddresses),
+                StringComparer.Ordinal);
+    }
+
+    /// <summary>Reads one account's configured block as the settings collection runs under.</summary>
+    private static ContactCollectionSettings ReadContactCollection(
+        ContactCollectionOptions configured,
+        IReadOnlyCollection<EmailAddress> ownAddresses) => new()
+        {
+            IsEnabled = configured.Enabled,
+            MinimumMessagesFromSender = configured.MinimumMessagesFromSender,
+            MaxContactsPerRun = configured.MaxContactsPerRun,
+            Policy = ContactCollectionPolicy.Create(configured.ConfiguredExclusions, ownAddresses),
+        };
+
+    /// <summary>Reads the mailboxes this deployment reads on its owner's behalf.</summary>
+    /// <remarks>
+    /// Derived from each account's user name for the reason the own domains below are: it is the only mailbox identity
+    /// an IMAP account states. An account whose user name is a bare login contributes nothing, which costs one address
+    /// that would have been excluded — and the two headers collection reads leave the owner out of both directions
+    /// anyway, since an ordinary folder's author is a correspondent and a sent folder's recipients are.
+    /// </remarks>
+    private IReadOnlyList<EmailAddress> ReadOwnAccountAddresses() =>
+    [
+        .. (this.Accounts ?? [])
+            .Select(static account => EmailAddress.TryCreate(displayName: null, account.UserName, out var address)
+                ? address
+                : (EmailAddress?)null)
+            .OfType<EmailAddress>()
+            .Distinct(),
+    ];
+
     /// <summary>Reads the domains the configured accounts themselves send and receive under.</summary>
     /// <remarks>
     /// Derived from each account's user name, which is the only mailbox identity an IMAP account states: a server is
@@ -1067,6 +1137,14 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             .OfType<TrustedSenderEntry>(),
     ];
 
+    /// <summary>Gets or sets whether this account records the people it corresponds with, and under what bounds.</summary>
+    /// <remarks>
+    /// Per account rather than deployment-wide, because what it produces is a record about third parties and the
+    /// decision to build one belongs to whoever owns the correspondence. An account that omits the block collects
+    /// nothing, which is what every account does until somebody writes <c>Enabled</c> into it.
+    /// </remarks>
+    public ContactCollectionOptions ContactCollection { get; set; } = new();
+
     /// <summary>Gets or sets the earliest date the mail server may have received an email on for it to be synchronized.</summary>
     /// <remarks>
     /// Omitting it synchronizes every email the server still holds, which is the default. It binds as a plain date such
@@ -1228,6 +1306,11 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             yield return result;
         }
 
+        foreach (var result in this.ValidateContactCollection())
+        {
+            yield return result;
+        }
+
         // Checked here rather than through a data annotation because nothing binds the block as an options graph of its
         // own, so an annotation on it would be read by nothing. The window decides when personal data is destroyed, so
         // a typo in it fails startup instead of quietly selecting a period nobody wrote.
@@ -1328,6 +1411,69 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
             foreach (var result in this.ValidateAuthenticationCredentials())
             {
                 yield return result;
+            }
+        }
+    }
+
+    /// <summary>Reports a contact collection block this account could not run under.</summary>
+    /// <returns>One result per unusable value or entry, empty when the whole block is one this account can run under.</returns>
+    /// <remarks>
+    /// <para>
+    /// Checked here rather than through data annotations because nothing binds the block as an options graph of its own,
+    /// so an annotation on it would be read by nothing. It is checked whether or not collection is switched on: a typo
+    /// in a block somebody has not enabled yet is a typo they meet on the day they enable it.
+    /// </para>
+    /// <para>
+    /// An unusable exclusion fails startup rather than being dropped, because the two are not indistinguishable in the
+    /// safe direction — an entry nobody could read excludes nobody, so a deployment would go on recording exactly the
+    /// people the entry was written to keep out. The message names the account and the entry's position and never the
+    /// value it holds, because a domain and a pattern over an address are both personal data and a validation failure is
+    /// written to a log.
+    /// </para>
+    /// </remarks>
+    private IEnumerable<ValidationResult> ValidateContactCollection()
+    {
+        if (this.ContactCollection is null)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the contact collection configuration must be a block.",
+                [nameof(this.ContactCollection)]);
+
+            yield break;
+        }
+
+        if (this.ContactCollection.MinimumMessagesFromSender < ContactCollectionOptions.MinimumMessageThreshold
+            || this.ContactCollection.MinimumMessagesFromSender > ContactCollectionOptions.MaximumMessageThreshold)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': contact collection must ask for between {ContactCollectionOptions.MinimumMessageThreshold} and {ContactCollectionOptions.MaximumMessageThreshold} messages from a sender.",
+                [nameof(this.ContactCollection)]);
+        }
+
+        if (this.ContactCollection.MaxContactsPerRun < 0
+            || this.ContactCollection.MaxContactsPerRun > ContactCollectionOptions.MaximumContactsPerRun)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': contact collection must record between 0 and {ContactCollectionOptions.MaximumContactsPerRun} contacts per run.",
+                [nameof(this.ContactCollection)]);
+        }
+
+        if (this.ContactCollection.Exclusions is null)
+        {
+            yield return new ValidationResult(
+                $"Account '{this.AccountId}': the contact collection exclusions must be a list.",
+                [nameof(this.ContactCollection)]);
+
+            yield break;
+        }
+
+        foreach (var (entry, position) in this.ContactCollection.Exclusions.Select(static (entry, index) => (Entry: entry, Position: index)))
+        {
+            if (entry is null || !entry.TryCreateExclusion(out _))
+            {
+                yield return new ValidationResult(
+                    $"Account '{this.AccountId}': contact collection exclusion {position} must name exactly one of a usable domain or a usable address pattern, may ask to include subdomains only where it names a domain, and may not write a pattern that matches every address.",
+                    [nameof(this.ContactCollection)]);
             }
         }
     }

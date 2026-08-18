@@ -4,6 +4,7 @@
 
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
+using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
@@ -79,6 +80,7 @@ public sealed class TelemetrySurfaceContractTests
     private static readonly AuthorizationRefusalTelemetry AuthorizationRefusals =
         new(NullLogger<AuthorizationRefusalTelemetry>.Instance);
 
+    private static readonly ContactCollectionTelemetry ContactCollection = new();
     private static readonly DerivedWorkGateTelemetry DerivedWorkGate = new();
     private static readonly EmailEmbeddingBackfillTelemetry EmbeddingBackfill = new();
     private static readonly EmailEmbeddingTelemetry Embedding = new();
@@ -123,6 +125,7 @@ public sealed class TelemetrySurfaceContractTests
         typeof(AiProviderHealthTracker),
         typeof(AuthorizationRefusalTelemetry),
         typeof(BoundedEmailEmbeddingBacklog),
+        typeof(ContactCollectionTelemetry),
         typeof(DerivedWorkGateTelemetry),
         typeof(EmailEmbeddingBackfillTelemetry),
         typeof(EmailEmbeddingTelemetry),
@@ -249,6 +252,7 @@ public sealed class TelemetrySurfaceContractTests
 
         DriveProviderHealth();
         DriveAuthorizationRefusals();
+        DriveContactCollection();
         DriveDerivedWorkGate();
         DriveEmbedding();
         DriveJobQueue();
@@ -298,6 +302,14 @@ public sealed class TelemetrySurfaceContractTests
             "/api/admin/session",
             default,
             refusedIdentity: null);
+    }
+
+    private static void DriveContactCollection()
+    {
+        foreach (var outcome in Enum.GetValues<ContactCollectionOutcome>())
+        {
+            ContactCollection.RecordOutcome(outcome);
+        }
     }
 
     private static void DriveDerivedWorkGate()

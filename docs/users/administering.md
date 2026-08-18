@@ -475,6 +475,13 @@ of it in one go. `mfctl contact list` reads a page and prints the cursor for the
 book](../operations/admin-endpoint.md#administering-the-contact-book) is the operator's reference for every command,
 option, and refusal.
 
+**The book can also fill itself, and it does not until you say so.** Switching
+[contact collection](../features/contacts.md#collecting-contacts-from-arriving-mail) on for an account records the
+people that account corresponds with as its mail is synchronized. Those records are the deployment's rather than yours:
+`mfctl contact promote` is how you take one on, and every other command works on it afterwards. If you change your mind
+about the whole thing, `mfctl contact delete-collected` erases everything it collected and keeps everything you entered
+— and switching collection off in configuration is the separate act that stops the book filling again.
+
 ## Where to go next
 
 - [Administering a deployment](../operations/admin-endpoint.md) — the operator's reference for everything above

@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts;
+using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
@@ -738,6 +739,14 @@ public static class ServiceCollectionExtensions
         // and the bounds every request is checked against before the store is reached.
         services.AddScoped<ContactBookReader>();
         services.AddScoped<ContactBookWriter>();
+
+        // Collection from arriving mail, registered whatever any account's settings say, for the reason the arrival
+        // trigger beside classification is: with collection off it reads one property per stored message and reaches
+        // neither the book nor the tally. The tally is scoped beside the read context it queries, and the instrument is
+        // a singleton because what it counts is a fact about the process rather than about one run.
+        services.AddScoped<IAuthoredMailTally, AuthoredMailTally>();
+        services.AddSingleton<IContactCollectionTelemetry, ContactCollectionTelemetry>();
+        services.AddScoped<MailContactCollector>();
 
         return services;
     }

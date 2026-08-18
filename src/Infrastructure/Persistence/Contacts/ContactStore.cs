@@ -107,6 +107,29 @@ internal sealed class ContactStore : IContactStore
         return new ContactErasure(contactId, erasedContacts > 0, erasedAddresses);
     }
 
+    /// <inheritdoc />
+    public async Task<CollectedContactErasure> EraseCollectedAsync(
+        IPersistenceSession session,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+
+        // The addresses go first, and by their contact's origin rather than by a list of identifiers this method read:
+        // a set-based delete keeps a book of collected people out of memory, and taking the rows in the same order and
+        // the same transaction the single-contact erasure does means the counts reported are the rows removed.
+        var collected = writeContext.Contacts.Where(record => record.Origin == ContactOrigin.Collected);
+
+        var erasedAddresses = await writeContext.ContactAddresses
+            .Where(address => collected.Any(record => record.Id == address.ContactId))
+            .ExecuteDeleteAsync(cancellationToken);
+
+        var erasedContacts = await collected.ExecuteDeleteAsync(cancellationToken);
+
+        return new CollectedContactErasure(erasedContacts, erasedAddresses);
+    }
+
     /// <summary>Brings the stored address rows to exactly the set the amended contact names.</summary>
     /// <remarks>
     /// An address the record still names keeps its row, so the identifier a future derived record could hang on survives

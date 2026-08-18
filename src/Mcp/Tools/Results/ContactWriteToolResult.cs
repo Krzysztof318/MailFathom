@@ -8,11 +8,12 @@ using MailFathom.Mcp.Tools.Contacts;
 
 namespace MailFathom.Mcp.Tools.Results;
 
-/// <summary>Publishes what recording or amending one contact produced.</summary>
+/// <summary>Publishes what recording, amending, or promoting one contact produced.</summary>
 /// <remarks>
 /// <para>
-/// One shape for both writes, because both state the whole record and both can end the same four ways. A caller reads
-/// <see cref="State" /> first and everything else from what that state admits.
+/// One shape for every write, because each of them either leaves the book holding a record or does not, and the reasons
+/// it does not are the same set. A caller reads <see cref="State" /> first and everything else from what that state
+/// admits.
 /// </para>
 /// <para>
 /// <strong>A refusal publishes an identity and never a record.</strong> Reading the book and writing to it are separate
@@ -26,7 +27,7 @@ namespace MailFathom.Mcp.Tools.Results;
 internal sealed record ContactWriteToolResult
 {
     /// <summary>Gets how the write ended.</summary>
-    [Description("How the write ended. written means the book holds the record; notFound means no contact of that identifier is in the book; addressHeldByAnotherContact means one of the addresses already belongs to somebody else, named by addressHolderContactId; contactWasCollected means the record came from mail that arrived rather than from somebody writing it down, and only the deployment's operator can take it on.")]
+    [Description("How the write ended. written means the book holds the record; notFound means no contact of that identifier is in the book; addressHeldByAnotherContact means one of the addresses already belongs to somebody else, named by addressHolderContactId; contactWasCollected means the record came from mail that arrived rather than from somebody writing it down, so promote_contact it before amending it; alreadyAsserted means a promotion had nothing left to do.")]
     public required ContactWriteState State { get; init; }
 
     /// <summary>Gets the record as it now stands, or <see langword="null" /> when the write did not happen.</summary>
@@ -41,7 +42,7 @@ internal sealed record ContactWriteToolResult
     /// <param name="result">The outcome to publish.</param>
     /// <returns>The wire representation of <paramref name="result" />.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="result" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when the outcome is one this surface cannot produce, which is the promotion outcome no tool here performs.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when a written outcome carries no record, which is a defect in the use case rather than a refusal a caller can act on.</exception>
     public static ContactWriteToolResult From(ContactWriteResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
@@ -62,6 +63,10 @@ internal sealed record ContactWriteToolResult
             ContactWriteOutcome.OriginRefusesWriter => new ContactWriteToolResult
             {
                 State = ContactWriteState.ContactWasCollected,
+            },
+            ContactWriteOutcome.AlreadyAsserted => new ContactWriteToolResult
+            {
+                State = ContactWriteState.AlreadyAsserted,
             },
             _ => throw new ArgumentOutOfRangeException(
                 nameof(result),

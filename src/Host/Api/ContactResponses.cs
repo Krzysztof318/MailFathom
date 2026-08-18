@@ -153,6 +153,17 @@ internal sealed record ContactWriteResponse(string Outcome, ContactResponse? Con
 /// </remarks>
 internal sealed record ContactErasureResponse(Guid Contact, bool WasHeld, int AddressesErased);
 
+/// <summary>What erasing the collected half of the book removed.</summary>
+/// <param name="ContactsErased">How many contacts of the collected origin went.</param>
+/// <param name="AddressesErased">How many addresses went with them.</param>
+/// <remarks>
+/// Two counts and nobody's identity, for the reason the single erasure above carries none: what a disposal reports is
+/// how much of a record about other people this deployment had built and no longer has. A book that had collected
+/// nobody answers with two zeroes rather than with a failure, because the state the owner asked for is the state the
+/// book is in.
+/// </remarks>
+internal sealed record CollectedContactErasureResponse(int ContactsErased, int AddressesErased);
+
 /// <summary>Everything the deployment holds about one person, as of the instant it was taken.</summary>
 /// <param name="Contact">The complete record, or nothing when the book holds no such contact.</param>
 /// <param name="ProducedAt">When the export was produced, absent together with the contact.</param>

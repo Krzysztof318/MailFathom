@@ -1,6 +1,6 @@
 # Contacts
 
-<!-- describes: src/Domain/Contacts/**, src/Application/Contacts/**, src/Infrastructure/Persistence/Contacts/**, src/Infrastructure/Persistence/Entities/ContactEntity.cs, src/Infrastructure/Persistence/Entities/ContactAddressEntity.cs, src/Host/Api/Contact*.cs, src/Cli/Commands/Contacts/**, src/Cli/Administration/Contacts/**, src/Mcp/Tools/Contacts/** -->
+<!-- describes: src/Domain/Contacts/**, src/Application/Contacts/**, src/Infrastructure/Persistence/Contacts/**, src/Infrastructure/Persistence/Entities/ContactEntity.cs, src/Infrastructure/Persistence/Entities/ContactAddressEntity.cs, src/Host/Api/Contact*.cs, src/Cli/Commands/Contacts/**, src/Cli/Administration/Contacts/**, src/Mcp/Tools/Contacts/**, src/Host/Configuration/Mail/ContactCollection*.cs, src/Infrastructure/Mail/Mime/MailAutomationReading.cs -->
 
 MailFathom holds a contact book of its own: people, the addresses they use, and what an owner recorded about them, in
 the same PostgreSQL database the mail is in. This page describes the record and the rules every writer of it obeys —
@@ -10,9 +10,10 @@ removes.
 **Two surfaces reach the book.** `mfctl contact` maintains it over the deployment's administrative endpoint;
 [administering a deployment](../operations/admin-endpoint.md#administering-the-contact-book) holds the command group in
 full. An agent reads and writes it over the MCP endpoint, under two grants of its own; [MCP tools §
-`list_contacts`](mcp-tools.md#list_contacts) holds those five tools and what each of them answers. Collection from
-arriving mail is a separate change, so nothing writes to the book on its own and an instance nobody has written to holds
-no contacts at all.
+`list_contacts`](mcp-tools.md#list_contacts) holds those six tools and what each of them answers. A third writer is the
+deployment itself: [§ Collecting contacts from arriving mail](#collecting-contacts-from-arriving-mail) describes what an
+account records on its own, and it is off until an owner switches it on, so an instance nobody has written to and nobody
+switched collection on for holds no contacts at all.
 
 ## A contact is a person, not an address
 
@@ -88,12 +89,96 @@ What the difference decides is who may change the record without anybody asking:
 - Origin is recorded when the contact is created and is never changed by an amendment.
 
 Both surfaces a caller reaches the book through write as **asserted**, because both are somebody writing a person down:
-`mfctl` is the owner at a terminal, and an agent over MCP is acting for them. What follows is that an agent cannot amend
-a collected record in place — the call is answered `contactWasCollected` rather than refused — and promotion stays the
-operator's act through `mfctl`, which is the point of the origin rule rather than a limitation of the tool.
+`mfctl` is the owner at a terminal, and an agent over MCP is acting for them. What follows is that neither amends a
+collected record in place — an agent's call is answered `contactWasCollected` rather than refused — and what either does
+instead is promote it. Both reach that act: `mfctl contact promote` and the `promote_contact` tool, under the same
+writing grant each surface already holds. A promotion reachable from only one of the two would leave an amendment
+permanently refused on the other for every record collection produced.
 
 Erasure is deliberately outside that rule. It is the data-subject path, and somebody asking to be removed from a contact
 book is not answered with which half of the book they happen to be in.
+
+## Collecting contacts from arriving mail
+
+An account can record the people it corresponds with as its mail is synchronized. It is **off unless an owner switched
+it on, and switched on per account**, because what it produces is derived personal data about people who never dealt
+with MailFathom: an instance nobody asked never accumulates one, and a deployment reading a work mailbox and a personal
+one decides separately for each. [Configuration §
+`MailSynchronization:Accounts[].ContactCollection`](../operations/configuration-reference.md#contact-collection) holds
+the keys and their bounds.
+
+Collection runs inside the synchronization pass that stored the message, after the transaction that stored it committed.
+It owns no worker, no timer, and no queue, and it reaches the mail server for nothing at all: the headers it reads were
+already read to store the message, so what one message costs is a bounded number of indexed reads and, rarely, one
+insert.
+
+**The folder decides which header is read, and nothing else is ever read.**
+
+| Folder | What it contributes |
+| --- | --- |
+| The folder mapped as `Sent` | The primary recipients — the `To` header. The owner writing to somebody. |
+| `Drafts`, `Junk`, `Trash` | Nothing. A draft is unsent, and the other two say the opposite of what a book is for. |
+| Every other folder | The author — the `From` header. Somebody writing to the owner. |
+
+`Cc` and `Bcc` are the copied recipients of somebody else's thread; `Sender` and `Reply-To` name where a message was
+submitted from and where a reply is to go rather than who the correspondent is. None of the four is read.
+
+**The two directions are held to different evidence.** An address that wrote to the owner is recorded once it has
+written `MinimumMessagesFromSender` messages to that account — two by default, because one message from a stranger is
+not correspondence. An address the owner wrote to is recorded on first sight, because the owner having addressed
+somebody is exactly the evidence a count of their messages stands in for. The count is answered from the mail the
+account has already stored, on the same indexed sender column a mailbox query uses, and it stops counting at the
+threshold rather than counting the whole mailbox. Nothing is written down to answer it, so collection derives no record
+of its own beside the contacts it produces.
+
+**A message the owner sent to more than 16 primary recipients contributes none of them.** A letter is addressed to the
+few people it concerns and an announcement to everybody, and the count tells them apart without reading a word of
+either. Past the bound the message contributes nothing rather than its first few recipients, because a truncation would
+record whoever the sender happened to write first.
+
+Four things are never collected, and none of them can be switched off:
+
+- **A message a machine sent.** A mailing list stamps `List-Id`, `List-Post`, or `List-Unsubscribe` on what it
+  distributes (RFC 2919 and RFC 2369); an automatic responder states `Auto-Submitted` with any keyword but `no`
+  (RFC 3834); and `Precedence: bulk`, `list`, or `junk` is the oldest way of saying a message went to many rather than
+  to one. Each is a claim the sender made in a header defined for that purpose rather than something inferred, which
+  matters most for a mailing list: a list posting carries the real address of the person who wrote it, and no rule about
+  mailbox names could tell one from ordinary correspondence.
+- **A role mailbox**, by the names RFC 2142 reserves — `postmaster`, `abuse`, `info`, `support`, `sales`, and the rest —
+  together with the `no-reply` family and the `-request`, `-bounces`, `-owner`, `-admin`, `-subscribe`, and
+  `-unsubscribe` list-administration suffixes.
+- **The account's own mailboxes**, derived from every configured account's user name, so an owner writing from one of
+  their mailboxes to another is not recorded as a correspondent of themselves.
+- **An address the book already holds**, under either origin. That is a refusal rather than a merge: an address that
+  belongs to somebody the owner asserted is already answered for by that record, and adding it there would be collection
+  editing what an owner wrote down. An owner who wants the address on that person puts it there themselves.
+
+On top of those an owner writes their own exclusions per account, each naming either a domain — optionally reaching the
+names beneath it — or a pattern over the whole address, where `*` stands for any run of characters and `?` for exactly
+one. An entry that names both, or neither, or a pattern matching every address, is refused at startup rather than
+silently excluding nobody.
+
+**A run records at most `MaxContactsPerRun` contacts**, 50 by default, counted across every folder of one account
+synchronizing at once. What that paces is the first synchronization of a mailbox holding years of mail, where every
+message is new and the book would otherwise gain thousands of people in one pass before anybody had seen one of them. A
+run that reaches the bound stops recording and leaves the rest for the next run, which reads the same senders again and
+finds the evidence they need still standing. Zero records nobody while leaving collection on, which is a way to see what
+a policy would do without writing anything.
+
+**A collected record is named by what the message offered** — the display name the header wrote, or else the address
+itself where the header wrote nothing usable. A sender's spelling of somebody's name is exactly what a collected claim
+is: weaker than a name the owner wrote down, and replaced by one the moment they promote the record.
+
+What collection reports is one measurement per address considered, tagged with which of six conclusions was reached, so
+a book filling too fast, a policy excluding everything, and a run repeatedly stopping at its bound are readable apart
+from each other. No address, name, folder, or message identity reaches an instrument; [telemetry §
+`mailfathom.contacts.collection.decisions`](../operations/telemetry.md#contact-collection) holds the counter.
+
+**An owner who changes their mind takes the whole of it back.** Everything collection built is a contact of its own
+origin, so `mfctl contact delete-collected` erases exactly that and leaves every record the owner entered. It cannot be
+undone: switching collection on again rebuilds the book from the mail that arrives afterwards rather than restoring what
+went. Switching it off is a separate act in configuration, and one worth making — with it still on, the book fills again
+from the next message.
 
 ## Amending a contact states the whole record
 

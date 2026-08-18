@@ -112,6 +112,25 @@ public sealed class ContactBookWriter
             cancellationToken);
     }
 
+    /// <summary>Takes on a contact this deployment collected, so it becomes one the owner asserted.</summary>
+    /// <param name="contactId">The contact to promote.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>The promoted record, or the refusal naming what stopped it.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the writing grant.</exception>
+    /// <remarks>
+    /// The act that turns a record nobody wrote down into one somebody did, and the only crossing between the origins.
+    /// It is what unlocks amending a collected contact: a caller refused an amendment is told the record was collected,
+    /// promotes it, and then amends it like any other. It acts under <see cref="CallerWriter" /> for the same reason
+    /// every other write here does — a caller granted this permission is writing for the owner — which is also what
+    /// keeps collection from performing it on its own output.
+    /// </remarks>
+    public Task<ContactWriteResult> PromoteAsync(ContactId contactId, CancellationToken cancellationToken)
+    {
+        this.authorization.RequirePermission(MailFathomPermission.MailContactsWrite);
+
+        return this.book.PromoteAsync(contactId, CallerWriter, cancellationToken);
+    }
+
     /// <summary>Erases one person and everything the book derived from them.</summary>
     /// <param name="contactId">The contact to erase.</param>
     /// <param name="cancellationToken">Cancels the erasure.</param>

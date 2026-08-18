@@ -8,14 +8,13 @@ namespace MailFathom.Mcp.Tools.Contacts;
 /// <remarks>
 /// <para>
 /// The transport carries its own enumeration rather than the application's, so the published wire values are decided
-/// here. It publishes the outcomes this surface can actually produce and no others: promoting a collected contact is the
-/// owner's own act through the administrative surface, so the outcome that reports a promotion nothing was left to do is
-/// not a state a tool can answer with.
+/// here. It publishes the outcomes this surface can actually produce and no others.
 /// </para>
 /// <para>
 /// A refusal is a state rather than a failed call, because each one is something the caller acts on and continues from:
-/// somebody else already holds the address, the book holds nobody of that identity, or the record was collected rather
-/// than written down. None of the three says the request was malformed, which is what a failed call means here.
+/// somebody else already holds the address, the book holds nobody of that identity, the record was collected rather than
+/// written down, or it was already asserted and a promotion had nothing left to do. None of the four says the request
+/// was malformed, which is what a failed call means here.
 /// </para>
 /// </remarks>
 internal enum ContactWriteState
@@ -31,4 +30,7 @@ internal enum ContactWriteState
 
     /// <summary>The contact was collected from mail rather than written down, so a caller may not amend it in place.</summary>
     ContactWasCollected = 3,
+
+    /// <summary>The contact is already one somebody wrote down, so a promotion had nothing left to do.</summary>
+    AlreadyAsserted = 4,
 }

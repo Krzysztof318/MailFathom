@@ -51,14 +51,14 @@ MailFathom also resolves in [Context7](https://context7.com/krzysztof318/mailfat
 
 ## What exists today
 
-What is implemented is read-only mail retrieval, ten tools, and the rules and spam actions your own configuration turns on, and this README is split on that line: this section and [What it does well](https://github.com/Krzysztof318/MailFathom#what-it-does-well) describe the code as it stands, while [Where it is going](https://github.com/Krzysztof318/MailFathom#where-it-is-going) is the roadmap.
+What is implemented is read-only mail retrieval, eleven tools, and the rules and spam actions your own configuration turns on, and this README is split on that line: this section and [What it does well](https://github.com/Krzysztof318/MailFathom#what-it-does-well) describe the code as it stands, while [Where it is going](https://github.com/Krzysztof318/MailFathom#where-it-is-going) is the roadmap.
 
 Two properties hold everywhere, and much of the rest of the design follows from them:
 
 - **Reading is local.** A tool call answers from your copy and never contacts a mail server, so it is fast, it works while the server is down, and it cannot change anything remotely. Every result states how fresh the local copy is.
 - **Retrieval never writes to your mailbox.** Fetching mail never sets the remote `\Seen` flag, so mail MailFathom has copied still shows as unread in your own mail client until you read it there. What can write is what you configured to: a `MailRules` rule whose action moves, copies, deletes, or marks a message read, and `SpamClassification:Actions`, which files junk and marks it read. Both are off until you turn them on, and each account states which of the four actions a rule may ask of it.
 
-What an agent gets is ten tools, and they are the whole surface. Five of them read your mail:
+What an agent gets is eleven tools, and they are the whole surface. Five of them read your mail:
 
 | Tool | What it answers |
 | --- | --- |
@@ -70,7 +70,9 @@ What an agent gets is ten tools, and they are the whole surface. Five of them re
 
 The first four are always there. `ask_mail` needs a chat model and an embedding model you configure and point at, so a deployment with neither does not advertise it at all rather than offering a tool that would fail on first use.
 
-The other five are MailFathom's own contact book — `list_contacts`, `get_contact`, `create_contact`, `update_contact`, and `delete_contact`. It holds the people you write down and every address each of them uses, which is what lets an agent answer who a message is from for somebody who writes from three addresses. Three of the five change that book, and they are the only tools on the surface that change anything: they reach MailFathom's own database and no mail server, and two of them announce themselves as destructive: `delete_contact`, because an erasure removes a person and every address recorded with them for good, and `update_contact`, because an amendment states the whole record and drops whatever it leaves out. They are offered to a credential granted them, which every credential is until you narrow its entry.
+The other six are MailFathom's own contact book — `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact`, and `promote_contact`. It holds the people you write down and every address each of them uses, which is what lets an agent answer who a message is from for somebody who writes from three addresses. Four of the six change that book, and they are the only tools on the surface that change anything: they reach MailFathom's own database and no mail server, and two of them announce themselves as destructive: `delete_contact`, because an erasure removes a person and every address recorded with them for good, and `update_contact`, because an amendment states the whole record and drops whatever it leaves out. `promote_contact` is neither: it takes on a person MailFathom collected from arriving mail, so the record becomes one you asserted and every other tool may amend it. They are offered to a credential granted them, which every credential is until you narrow its entry.
+
+The book can also fill itself. Switch [contact collection](https://krzysztof318.github.io/MailFathom/features/contacts.html#collecting-contacts-from-arriving-mail) on for an account and it records the people that account corresponds with as its mail is synchronized — the author of mail that arrives, the recipients of mail you sent, held to a threshold you set and never a mailing list, a role mailbox, or an address you excluded. It is off until you switch it on, per account, and one command takes back everything it collected.
 
 The screenshot at the top of this page is `list_emails`. Two of the other tools, answering the same client over the same mailbox:
 

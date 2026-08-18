@@ -677,6 +677,25 @@ itself reaches none of it either: every IMAP client this deployment opens is con
 the commands, responses, and payloads of a session are written nowhere for a log level or a setting to expose, and no
 configuration key exists that could attach one.
 
+### Contact collection
+
+An account that [collects contacts](../features/contacts.md#collecting-contacts-from-arriving-mail) writes personal data
+about third parties without anybody asking it to, so an owner who switched it on is owed a way to see what it is doing.
+`mailfathom.contacts.collection.decisions` is that way: one measurement per address considered, tagged with
+`mailfathom.contacts.collection.outcome`, which carries one of six words — `recorded`, `already_held`,
+`below_threshold`, `excluded`, `not_correspondence`, and `run_bound_reached`.
+
+The six are what make the readings distinguishable. `recorded` rising is the book filling; a deployment where it is
+almost all of the traffic is one whose threshold is too low. `already_held` becoming almost everything is the ordinary
+state of a book that has filled. `excluded` at nearly the whole volume is a policy excluding everybody, which usually
+means one pattern is wider than its author meant. `run_bound_reached` appearing repeatedly says runs are stopping at
+`MaxContactsPerRun` rather than at the end of the mail, which is expected during a first synchronization and worth
+looking at afterwards. `below_threshold` and `not_correspondence` are the two that mean collection is working as
+configured and writing nothing.
+
+The one tag is MailFathom's own closed set. No address, name, display name, folder, or message identity reaches an
+instrument from collection: the outcome is a decision about a person and never the person, and nothing here logs at all.
+
 ### Answering spend
 
 Answering a question sends mail to a model provider on demand, so what it costs is published while it is being spent

@@ -82,6 +82,7 @@ public static class McpServiceCollectionExtensions
             .WithTools<GetContactTool>(McpToolContractSerialization.Options)
             .WithTools<CreateContactTool>(McpToolContractSerialization.Options)
             .WithTools<UpdateContactTool>(McpToolContractSerialization.Options)
+            .WithTools<PromoteContactTool>(McpToolContractSerialization.Options)
             .WithTools<DeleteContactTool>(McpToolContractSerialization.Options);
     }
 

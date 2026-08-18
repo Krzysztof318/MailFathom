@@ -67,4 +67,21 @@ public interface IContactStore
         IPersistenceSession session,
         ContactId contactId,
         CancellationToken cancellationToken);
+
+    /// <summary>Erases every contact of the collected origin, and everything derived from them.</summary>
+    /// <param name="session">The session the erasure joins.</param>
+    /// <param name="cancellationToken">Cancels the erasure.</param>
+    /// <returns>What the erasure removed.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when the session cannot supply this store's persistence context.</exception>
+    /// <remarks>
+    /// The asserted half is untouched, which is the whole point of the act: an owner who changed their mind about
+    /// collection is undoing what their instance inferred rather than what they wrote. It is a set-based delete rather
+    /// than a walk, because the alternative is loading a book of collected people into memory to remove it, and both
+    /// counts are read in the same transaction that removes the rows so the answer is a fact rather than a number that
+    /// was true a moment earlier.
+    /// </remarks>
+    Task<CollectedContactErasure> EraseCollectedAsync(
+        IPersistenceSession session,
+        CancellationToken cancellationToken);
 }

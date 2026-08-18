@@ -2,6 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
+using MailFathom.Application.Contacts;
+using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
@@ -1898,6 +1901,35 @@ public sealed class MailboxSynchronizerTests
             new FakeTimeProvider(new DateTimeOffset(2026, 8, 18, 12, 0, 0, TimeSpan.Zero)));
     }
 
+    /// <summary>Builds the collector a run reaches on a deployment whose accounts never switched collection on.</summary>
+    /// <remarks>
+    /// Which is every account here but the ones testing collection itself: the settings reader answers that nothing is
+    /// collected, so the collector reads one property per stored message and reaches neither the book nor the tally.
+    /// </remarks>
+    private static MailContactCollector CreateCollectorThatCollectsNothing(
+        IPersistenceSessionFactory persistenceSessionFactory,
+        TimeProvider timeProvider)
+    {
+        var principals = Substitute.For<IAuthorizedPrincipalSource>();
+        principals.Current.Returns(AuthorizedPrincipal.Process);
+
+        var book = new InMemoryContactBookStore();
+
+        return new MailContactCollector(
+            new ContactBook(
+                book,
+                book,
+                new OptimisticConcurrencyRetryPolicy(
+                    persistenceSessionFactory,
+                    new PersistenceConcurrencyOptions(),
+                    timeProvider),
+                timeProvider,
+                new AccessAuthorization(principals)),
+            StubContactCollectionSettingsReader.CollectingNothing,
+            StubAuthoredMailTally.NobodyHasWritten,
+            new RecordingContactCollectionTelemetry());
+    }
+
     /// <summary>Builds a resolver whose alias is already bound to the folder the server advertises, so no run rebinds it.</summary>
     /// <remarks>
     /// These tests are about what synchronization does once a folder is known. Resolution has tests of its own, and
@@ -2454,7 +2486,8 @@ public sealed class MailboxSynchronizerTests
         IJunkMailFolderCatalog? junkFolders = null,
         IDerivedWorkGateTelemetry? gateTelemetry = null,
         IMailSynchronizationPhaseTelemetry? phaseTelemetry = null,
-        IJobStore? jobStore = null)
+        IJobStore? jobStore = null,
+        MailContactCollector? contactCollector = null)
     {
         var concurrencyRetryPolicy = new OptimisticConcurrencyRetryPolicy(
             persistenceSessionFactory,
@@ -2494,6 +2527,7 @@ public sealed class MailboxSynchronizerTests
                 jobStore ?? Substitute.For<IJobStore>(),
                 new StubSpamClassificationSettingsReader(
                     classificationSettings ?? SpamClassificationSettings.Disabled)),
+            contactCollector ?? CreateCollectorThatCollectsNothing(persistenceSessionFactory, timeProvider),
             concurrencyRetryPolicy,
             timeProvider,
             options);

@@ -116,6 +116,7 @@ public sealed class PublishedToolsTests
     [InlineData(CreateContactTool.ToolName)]
     [InlineData(UpdateContactTool.ToolName)]
     [InlineData(DeleteContactTool.ToolName)]
+    [InlineData(PromoteContactTool.ToolName)]
     public void TryGetRequiredPermission_AToolThatWritesTheContactBook_RequiresTheContactWritingGrant(string toolName)
     {
         // Act

@@ -66,6 +66,7 @@ namespace MailFathom.Cli;
 [JsonSerializable(typeof(ContactPage))]
 [JsonSerializable(typeof(ContactWriteAnswer))]
 [JsonSerializable(typeof(ContactErasure))]
+[JsonSerializable(typeof(CollectedContactErasure))]
 [JsonSerializable(typeof(ContactExport))]
 [JsonSerializable(typeof(StoredCredentials))]
 [JsonSerializable(typeof(ProtectedResourceMetadata))]

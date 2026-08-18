@@ -9,7 +9,7 @@ using Xunit;
 
 namespace MailFathom.Mcp.UnitTests.Tools.Contacts;
 
-/// <summary>Covers the descriptors MailFathom advertises for the five contact tools.</summary>
+/// <summary>Covers the descriptors MailFathom advertises for the six contact tools.</summary>
 /// <remarks>
 /// The annotations carry more weight here than anywhere else on this surface, because these are the first tools that
 /// change state: a client decides from them whether it may call one unattended, and <c>delete_contact</c> is the clearest
@@ -24,6 +24,7 @@ public sealed class ContactToolMetadataTests
     [InlineData(CreateContactTool.ToolName, "Create contact")]
     [InlineData(UpdateContactTool.ToolName, "Update contact")]
     [InlineData(DeleteContactTool.ToolName, "Delete contact")]
+    [InlineData(PromoteContactTool.ToolName, "Promote contact")]
     public void AddMailFathomServer_AdvertisesEachContactToolUnderItsProtocolNameAndTitle(
         string toolName,
         string expectedTitle)
@@ -61,6 +62,7 @@ public sealed class ContactToolMetadataTests
     [InlineData(CreateContactTool.ToolName)]
     [InlineData(UpdateContactTool.ToolName)]
     [InlineData(DeleteContactTool.ToolName)]
+    [InlineData(PromoteContactTool.ToolName)]
     public void AddMailFathomServer_AdvertisesTheWriteToolsAsClosedWorldStateChanges(string toolName)
     {
         // Arrange, Act
@@ -76,12 +78,14 @@ public sealed class ContactToolMetadataTests
     /// <remarks>
     /// A creation is the one write that removes nothing: it mints a record where none was held, so nothing a caller
     /// omitted was there to be lost. An amendment replaces the addresses and the note outright, which is the same loss
-    /// as an erasure over the part of the record the caller did not restate.
+    /// as an erasure over the part of the record the caller did not restate. A promotion rewrites nothing about the
+    /// person, so it removes nothing either.
     /// </remarks>
     [Theory]
     [InlineData(CreateContactTool.ToolName, false)]
     [InlineData(UpdateContactTool.ToolName, true)]
     [InlineData(DeleteContactTool.ToolName, true)]
+    [InlineData(PromoteContactTool.ToolName, false)]
     public void AddMailFathomServer_AdvertisesDestructivenessOnTheWritesThatDropWhatTheyReplace(
         string toolName,
         bool expectedHint)
@@ -102,6 +106,7 @@ public sealed class ContactToolMetadataTests
     [InlineData(CreateContactTool.ToolName, false)]
     [InlineData(UpdateContactTool.ToolName, true)]
     [InlineData(DeleteContactTool.ToolName, true)]
+    [InlineData(PromoteContactTool.ToolName, true)]
     public void AddMailFathomServer_AdvertisesIdempotencyPerWhatTheToolRepeats(string toolName, bool expectedHint)
     {
         // Arrange, Act
@@ -119,6 +124,7 @@ public sealed class ContactToolMetadataTests
     [InlineData(CreateContactTool.ToolName, "contact book")]
     [InlineData(UpdateContactTool.ToolName, "whole record")]
     [InlineData(DeleteContactTool.ToolName, "cannot be undone")]
+    [InlineData(PromoteContactTool.ToolName, "collected from arriving mail")]
     public void AddMailFathomServer_AdvertisesADescriptionStatingWhatTheToolDoes(string toolName, string expectedPhrase)
     {
         // Arrange, Act
@@ -144,6 +150,7 @@ public sealed class ContactToolMetadataTests
     [InlineData(UpdateContactTool.ToolName, "contactId")]
     [InlineData(UpdateContactTool.ToolName, "addresses")]
     [InlineData(DeleteContactTool.ToolName, "contactId")]
+    [InlineData(PromoteContactTool.ToolName, "contactId")]
     public void AddMailFathomServer_AdvertisesEachArgumentAsANamedInputProperty(string toolName, string argumentName)
     {
         // Arrange, Act
@@ -165,6 +172,8 @@ public sealed class ContactToolMetadataTests
     [InlineData(UpdateContactTool.ToolName, "state")]
     [InlineData(DeleteContactTool.ToolName, "wasHeld")]
     [InlineData(DeleteContactTool.ToolName, "addressesErased")]
+    [InlineData(PromoteContactTool.ToolName, "state")]
+    [InlineData(PromoteContactTool.ToolName, "contact")]
     public void AddMailFathomServer_AdvertisesTheAnswerShapeInItsOutputSchema(string toolName, string expectedProperty)
     {
         // Arrange, Act
@@ -183,6 +192,7 @@ public sealed class ContactToolMetadataTests
     [InlineData(CreateContactTool.ToolName, "notFound")]
     [InlineData(CreateContactTool.ToolName, "addressHeldByAnotherContact")]
     [InlineData(CreateContactTool.ToolName, "contactWasCollected")]
+    [InlineData(PromoteContactTool.ToolName, "alreadyAsserted")]
     public void AddMailFathomServer_AdvertisesTheEnumerationsAsNames(string toolName, string expectedValue)
     {
         // Arrange, Act

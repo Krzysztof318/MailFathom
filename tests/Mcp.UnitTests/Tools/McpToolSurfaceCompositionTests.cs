@@ -73,6 +73,30 @@ public sealed class McpToolSurfaceCompositionTests
         Assert.Equal([GetContactTool.ToolName, ListContactsTool.ToolName], listed);
     }
 
+    /// <summary>Taking on a collected record is a write to the book, so the writing grant is what is offered it.</summary>
+    [Fact]
+    public async Task AddMailFathomServer_ACallerGrantedOnlyTheContactWritingGrant_IsListedThePromotionBesideTheOtherWriters()
+    {
+        // Arrange
+        await using var provider = RegisteredMcpToolSurface.ComposedForCallerGranted(
+            MailFathomPermission.MailContactsWrite);
+
+        // Act
+        var listing = await ListedToolsAsync(provider);
+
+        // Assert
+        var listed = listing.Tools.Select(static tool => tool.Name).Order(StringComparer.Ordinal).ToArray();
+
+        Assert.Equal(
+            [
+                CreateContactTool.ToolName,
+                DeleteContactTool.ToolName,
+                PromoteContactTool.ToolName,
+                UpdateContactTool.ToolName,
+            ],
+            listed);
+    }
+
     /// <summary>Erasing a person is behind the writing grant, so a reader asking for it is answered as it is about any tool it was not offered.</summary>
     [Fact]
     public async Task AddMailFathomServer_TheErasingToolCalledWithTheContactReadingGrant_IsAnsweredAsAnUnknownTool()

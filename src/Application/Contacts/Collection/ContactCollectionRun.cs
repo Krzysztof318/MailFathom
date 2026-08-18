@@ -1,0 +1,18 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Domain.Folders;
+
+namespace MailFathom.Application.Contacts.Collection;
+
+/// <summary>What one synchronization run of one folder collects under.</summary>
+/// <param name="FolderRole">The role the folder plays, or <see langword="null" /> when configuration gave it none.</param>
+/// <param name="Budget">How many contacts this run may still record.</param>
+/// <remarks>
+/// The two are carried together because neither answers anything on its own: the role decides which header of a message
+/// is read and the budget decides how much of what is read may be written, and both are properties of the run rather
+/// than of the message that reached it. Opening one per run is also what makes the bound the run's — a value built per
+/// message would bound nothing.
+/// </remarks>
+public sealed record ContactCollectionRun(MailFolderSpecialUse? FolderRole, ContactCollectionBudget Budget);

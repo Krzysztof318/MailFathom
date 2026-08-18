@@ -106,6 +106,14 @@ internal static class AdminEndpointRoutes
     /// </remarks>
     internal const string ContactByAddressPath = $"{ContactsPath}/by-address";
 
+    /// <summary>Where the whole collected half of a deployment's book is erased.</summary>
+    /// <remarks>
+    /// A literal segment where the single-contact path takes an identifier, which a deployment's routing prefers over a
+    /// parameter, so the two cannot be confused. It names the origin rather than an action because what is being
+    /// disposed of is the half of the book the owner did not write.
+    /// </remarks>
+    internal const string CollectedContactsPath = $"{ContactsPath}/collected";
+
     /// <summary>Where one contact is read, amended, and erased.</summary>
     /// <param name="contactId">The contact the path names.</param>
     /// <returns>The path, with the identity written the way a deployment's route constraint reads one.</returns>

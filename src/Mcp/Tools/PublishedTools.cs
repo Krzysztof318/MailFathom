@@ -45,6 +45,7 @@ internal static class PublishedTools
             [GetContactTool.ToolName] = GetContactTool.RequiredPermission,
             [CreateContactTool.ToolName] = CreateContactTool.RequiredPermission,
             [UpdateContactTool.ToolName] = UpdateContactTool.RequiredPermission,
+            [PromoteContactTool.ToolName] = PromoteContactTool.RequiredPermission,
             [DeleteContactTool.ToolName] = DeleteContactTool.RequiredPermission,
         }.ToFrozenDictionary(StringComparer.Ordinal);
 

@@ -44,6 +44,7 @@ public sealed class RegisteredToolSurfaceTests
                 ListAccountsTool.ToolName,
                 ListContactsTool.ToolName,
                 ListEmailsTool.ToolName,
+                PromoteContactTool.ToolName,
                 SearchEmailsTool.ToolName,
                 UpdateContactTool.ToolName,
             ],

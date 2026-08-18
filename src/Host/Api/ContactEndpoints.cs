@@ -65,6 +65,14 @@ internal static class ContactEndpoints
     /// <summary>The route a collected contact is promoted at, relative to the administrative prefix.</summary>
     internal const string ContactPromotionRoute = "/contacts/{contactId:guid}/promotion";
 
+    /// <summary>The route the whole collected half of the book is erased at, relative to the administrative prefix.</summary>
+    /// <remarks>
+    /// A literal segment where the single-contact route takes an identifier, which routing prefers over a parameter, so
+    /// the two cannot be confused. It is also why the segment names the origin rather than an action: what the owner is
+    /// disposing of is the half of the book they did not write.
+    /// </remarks>
+    internal const string CollectedContactsRoute = "/contacts/collected";
+
     /// <summary>The route everything held about one person is exported from, relative to the administrative prefix.</summary>
     internal const string ContactExportRoute = "/contacts/{contactId:guid}/export";
 
@@ -112,6 +120,9 @@ internal static class ContactEndpoints
             .RequirePermission(MailFathomPermission.AdminOperate);
 
         api.MapDelete(ContactRoute, EraseAsync)
+            .RequirePermission(MailFathomPermission.AdminErase);
+
+        api.MapDelete(CollectedContactsRoute, EraseCollectedAsync)
             .RequirePermission(MailFathomPermission.AdminErase);
 
         api.MapPost(ContactPromotionRoute, PromoteAsync)
@@ -354,6 +365,30 @@ internal static class ContactEndpoints
         return TypedResults.Ok(new ContactErasureResponse(
             erasure.ContactId.Value,
             erasure.WasHeld,
+            erasure.AddressesErased));
+    }
+
+    /// <summary>Erases every contact this deployment collected, leaving the ones the owner asserted where they are.</summary>
+    /// <param name="book">Performs the erasure.</param>
+    /// <param name="cancellationToken">Cancels the erasure when the client disconnects.</param>
+    /// <returns><c>200</c> with what was removed, including a book that had collected nobody.</returns>
+    /// <remarks>
+    /// The answer to an owner who changed their mind about collection. Everything collection produced is a contact of
+    /// its own origin, so taking that origin out is taking out the whole of what it built and nothing of what the owner
+    /// entered. It is behind the erasing grant rather than the operating one, because what it removes cannot be written
+    /// back: switching collection on again rebuilds the book from mail that arrives afterwards rather than restoring
+    /// what went.
+    /// </remarks>
+    internal static async Task<Results<Ok<CollectedContactErasureResponse>, ProblemHttpResult>> EraseCollectedAsync(
+        [FromServices] ContactBook book,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(book);
+
+        var erasure = await book.EraseCollectedAsync(cancellationToken);
+
+        return TypedResults.Ok(new CollectedContactErasureResponse(
+            erasure.ContactsErased,
             erasure.AddressesErased));
     }
 

@@ -1,6 +1,6 @@
 # The arrival pipeline
 
-<!-- describes: src/Application/Synchronization/MailboxSynchronizer.cs, src/Application/Emails/Chunking/MailChunkingPass.cs, src/Infrastructure/Persistence/Emails/StoredEmailChunkingStore.cs, src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, src/Application/Emails/Extraction/SenderTrustEvaluatingEmailMimeReader.cs, src/Application/Emails/Extraction/MachineAuthorshipEvaluatingEmailMimeReader.cs, src/Application/Emails/Threads/EmailThreadAssembly.cs, src/Application/Spam/Gating/**, src/Application/Spam/Runs/SpamClassificationPass.cs, src/Application/Spam/SpamClassificationArrivals.cs, src/Application/Spam/EmailSpamClassificationHandler.cs, src/Application/Rules/Evaluation/MailRuleEvaluationPass.cs, src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, src/Host/Hosting/Workers/MailEmbeddingWorker.cs -->
+<!-- describes: src/Application/Synchronization/MailboxSynchronizer.cs, src/Application/Emails/Chunking/MailChunkingPass.cs, src/Infrastructure/Persistence/Emails/StoredEmailChunkingStore.cs, src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, src/Application/Emails/Extraction/SenderTrustEvaluatingEmailMimeReader.cs, src/Application/Emails/Extraction/MachineAuthorshipEvaluatingEmailMimeReader.cs, src/Application/Emails/Threads/EmailThreadAssembly.cs, src/Application/Spam/Gating/**, src/Application/Spam/Runs/SpamClassificationPass.cs, src/Application/Spam/SpamClassificationArrivals.cs, src/Application/Contacts/Collection/MailContactCollector.cs, src/Application/Spam/EmailSpamClassificationHandler.cs, src/Application/Rules/Evaluation/MailRuleEvaluationPass.cs, src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, src/Host/Hosting/Workers/MailEmbeddingWorker.cs -->
 
 Eight features decide what happens to a message between the moment synchronization fetches it and the moment
 everything derived from it exists. Each of them documents its own half, and none of them can state the order, because
@@ -23,6 +23,7 @@ flowchart TD
         judge["Judge the author, and read how machine written the message's own text is"]
         commit[("Commit: metadata, the conversation it joins, raw MIME, search document")]
         ask(["Ask for the message to be classified"])
+        collect["Record the correspondent — only where the account collects contacts"]
         classify["Classification pass — only when somebody asked for a run over the whole mailbox"]
         rules["Rule evaluation pass"]
         cut["Cut the passages"]
@@ -46,6 +47,7 @@ flowchart TD
     presidio -. "placeholders replace every finding" .-> judge
     judge --> commit
     commit --> ask
+    commit --> collect
     ask -. "one job per occurrence; a full queue refuses rather than waits" .-> job
     ask --> classify
     job -. "one scan per message" .-> spamd
@@ -111,6 +113,15 @@ of that type as the deployment accepts refuses the row rather than growing, and 
 message nobody classifies is released by the wait a verdict is allowed, which is the property that keeps a classification
 backlog a degraded signal instead of a stalled mailbox. A message stored without its content is not asked for at all,
 because a message whose payload is not stored is reported unclassifiable rather than fetched.
+
+**Contact collection is the third thing that happens after the commit, and it is neither a hand-off nor a stage the run
+waits on the way it waits on a pass.** It runs inline, on the message the pass has just committed, and only where the
+account [switched it on](../features/contacts.md#collecting-contacts-from-arriving-mail) — an account that did not pays
+one property read per stored message. It reaches no mail server, no queue, and no worker: the headers it reads were
+already read to store the message, so what it costs is a bounded number of indexed reads and, rarely, one insert. It is
+drawn from the commit rather than from `ask` because the two are independent of each other, and nothing downstream reads
+what it wrote: no gate consults it, and a failure in it would fail the folder rather than corrupt anything, which is why
+it is the last thing the message's own pass does.
 
 Nothing else about the pipeline crosses a process boundary while a transaction is open. The two sidecar calls happen
 outside the commit that follows them, and the embedding provider is reached only by the worker, which consumes committed
@@ -244,6 +255,7 @@ has a scanner switched on.
 | How machine written a message's own text reads | [Machine authorship](../features/machine-authorship.md) |
 | The conversation a message is placed in | [The stored email](stored-email-schema.md#the-conversation-a-message-belongs-to) |
 | Classification, its verdicts, and the gate | [Spam classification](../features/spam-classification.md) |
+| Recording the people an account corresponds with | [Contacts](../features/contacts.md#collecting-contacts-from-arriving-mail) |
 | The owner's rules and what a match asks for | [Mail rules](../features/mail-rules.md) |
 | Redaction, the stamp, and the egress guard | [Sensitive-content scanning](../features/sensitive-content-scanning.md) |
 | The boundary rules a cut obeys | [Message chunks](../features/message-chunks.md) |

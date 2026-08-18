@@ -699,6 +699,94 @@ public sealed class ContactCommandTests : IDisposable
         Assert.Equal(0, deployment.ContactRequestCount(HttpMethod.Delete));
     }
 
+    /// <summary>The way out for an owner who changed their mind, so what it removed is stated in both figures.</summary>
+    [Fact]
+    public async Task DeleteCollected_WithTheFlag_ErasesWhatTheDeploymentCollectedWithoutAsking()
+    {
+        // Arrange
+        using var deployment = FakeContactDeployment.Holding(
+            erasure: FakeContactDeployment.CollectedErasure(contactsErased: 12, addressesErased: 17));
+        this.console.AnswersQuestions = false;
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--yes", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Empty(this.console.Questions);
+        Assert.Equal(1, deployment.ContactRequestCount(HttpMethod.Delete));
+        Assert.Contains(this.console.Lines, line => line.Contains("12 contacts", StringComparison.Ordinal));
+        Assert.Contains(this.console.Lines, line => line.Contains("17 addresses", StringComparison.Ordinal));
+    }
+
+    /// <summary>It cannot be undone, so it asks first, and what it asks names nobody it is about to erase.</summary>
+    [Fact]
+    public async Task DeleteCollected_WithoutTheFlag_AsksBeforeErasingAndNamesNobody()
+    {
+        // Arrange
+        using var deployment = FakeContactDeployment.Holding(
+            erasure: FakeContactDeployment.CollectedErasure(contactsErased: 1, addressesErased: 1));
+        this.console.AnswerToGive = true;
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.DoesNotContain("@", Assert.Single(this.console.Questions), StringComparison.Ordinal);
+        Assert.Contains(this.console.Lines, line => line.Contains("1 contact ", StringComparison.Ordinal));
+    }
+
+    /// <summary>A question answered no erases nothing, and says so where a scripted run captures failures.</summary>
+    [Fact]
+    public async Task DeleteCollected_TheQuestionDeclined_ErasesNothing()
+    {
+        // Arrange
+        using var deployment = FakeContactDeployment.Holding();
+        this.console.AnswerToGive = false;
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Equal(0, deployment.ContactRequestCount(HttpMethod.Delete));
+        Assert.Contains("Nothing was erased.", this.console.Errors);
+    }
+
+    /// <summary>Reading agreement out of whatever was piped in would turn a stray line into an agreement to erase people.</summary>
+    [Fact]
+    public async Task DeleteCollected_WithNobodyAtTheTerminalAndNoFlag_RefusesRatherThanAssuming()
+    {
+        // Arrange
+        using var deployment = FakeContactDeployment.Holding();
+        this.console.AnswersQuestions = false;
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Equal(0, deployment.ContactRequestCount(HttpMethod.Delete));
+        Assert.Contains(this.console.Errors, line => line.Contains("--yes", StringComparison.Ordinal));
+    }
+
+    /// <summary>A deployment that collected nobody is the state the operator asked for rather than a failure.</summary>
+    [Fact]
+    public async Task DeleteCollected_ADeploymentThatCollectedNobody_SaysSoAndSucceeds()
+    {
+        // Arrange
+        using var deployment = FakeContactDeployment.Holding(
+            erasure: FakeContactDeployment.CollectedErasure(contactsErased: 0, addressesErased: 0));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--yes", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(this.console.Lines, line => line.Contains("collected nobody", StringComparison.Ordinal));
+    }
+
     /// <summary>
     /// The export is one document on standard output, so redirecting the command produces the file an owner hands to
     /// the person who asked, with nothing of the command's own mixed into it.
