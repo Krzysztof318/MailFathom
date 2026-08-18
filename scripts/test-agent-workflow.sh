@@ -2846,28 +2846,46 @@ fathom_review_refuses_findings_that_carry_a_credential() {
 }
 
 # The coverage step is the one place a review is measured against the change rather than read on its
-# own terms. It takes the reviewer's `covered` ledger and the collected `files.json` and writes the
-# difference, which the submission step then publishes; what these contracts fix is that the
-# difference is composed from the collection and never from the answer, because the answer is model
-# text derived from an untrusted diff and this is a path into a published review body.
+# own terms. It gathers what every reader reported opening, compares it against the collected
+# `files.json`, and writes the difference, which the submission step then publishes. What these
+# contracts fix is that the difference is composed from the collection and never from a report,
+# because a report is model text derived from an untrusted diff and this is a path into a published
+# review body — and that a group whose reader never reported is stated as such rather than folded
+# into the file count, since the two have different causes and only one of them is the model's.
+#
+# The reports arrive as the reader jobs leave them: one `group-<n>.json` per group that finished,
+# under `candidates/` inside the collected inputs. A group that failed simply has no file, which is
+# what the contracts below write by passing fewer reports than groups.
 run_fathom_review_coverage() {
-  local findings="$1"
+  local reports="$1"
   local changed_files="$2"
   local output_file="$3"
   local coverage_file="$4"
+  local group_count="${5:-}"
   local step_script="$test_directory/fathom-review-coverage.sh"
   local review_directory="$test_directory/fathom-review-coverage-review"
+  local index=0
+  local report
 
   extract_fathom_review_step 'coverage' "$step_script"
-  mkdir -p "$review_directory"
+  rm -rf "$review_directory"
+  mkdir -p "$review_directory/candidates"
   printf '%s\n' "$changed_files" > "$review_directory/files.json"
   rm -f "$coverage_file"
 
+  # Each argument is one reader's answer, and an empty one is a reader that published nothing.
+  while IFS= read -r report; do
+    index=$(( index + 1 ))
+    [[ -n "$report" ]] || continue
+    printf '%s\n' "$report" > "$review_directory/candidates/group-${index}.json"
+  done <<< "$reports"
+
   set +e
   (
-    export FINDINGS="$findings"
     export REVIEW_DIRECTORY="$review_directory"
     export COVERAGE_FILE="$coverage_file"
+    export GROUP_COUNT="${group_count:-$index}"
+    export GITHUB_OUTPUT="$test_directory/fathom-review-coverage-step-output"
     export NAME_CEILING='10'
     bash "$step_script"
   ) > "$output_file" 2>&1
@@ -2880,16 +2898,16 @@ fathom_review_reports_the_files_a_review_never_named() {
   local coverage_file="$test_directory/fathom-review-coverage-gap"
 
   run_fathom_review_coverage \
-    '{"summary":"Read part of it.","covered":["src/Sample.cs"],"findings":[]}' \
+    '{"covered":["src/Sample.cs"],"candidates":[],"notes":""}' \
     '[{"filename":"src/Sample.cs"},{"filename":"src/Other.cs"},{"filename":"docs/features/sample.md"}]' \
     "$output_file" "$coverage_file"
 
   ((coverage_status == 0))
-  assert_contains 'names 1 of the 3 changed files as read' "$coverage_file"
+  assert_contains 'opened 1 of the 3 changed files' "$coverage_file"
   # The whole list, not each path in turn. Asserting them individually passed while the paths were
   # joined by alternating delimiters — `paste -d` reads its argument as a list of them — so what the
   # author read was ``a`,`b` `c``.
-  assert_contains 'Not named: `docs/features/sample.md`, `src/Other.cs`.' "$coverage_file"
+  assert_contains 'Not opened: `docs/features/sample.md`, `src/Other.cs`.' "$coverage_file"
 }
 
 fathom_review_reports_no_gap_when_the_review_named_every_file() {
@@ -2899,13 +2917,14 @@ fathom_review_reports_no_gap_when_the_review_named_every_file() {
   # A file named twice counts once, so a ledger that repeats itself is complete rather than
   # over-complete, and the reviewer is not asked to deduplicate what `jq` can.
   run_fathom_review_coverage \
-    '{"summary":"Read all of it.","covered":["src/Sample.cs","src/Other.cs","src/Sample.cs"],"findings":[]}' \
+    '{"covered":["src/Sample.cs","src/Sample.cs"],"candidates":[],"notes":""}
+{"covered":["src/Other.cs"],"candidates":[],"notes":""}' \
     '[{"filename":"src/Sample.cs"},{"filename":"src/Other.cs"}]' \
     "$output_file" "$coverage_file"
 
   ((coverage_status == 0))
   [[ ! -s "$coverage_file" ]]
-  assert_contains 'names every one of the 2 changed files' "$output_file"
+  assert_contains 'opened every one of the 2 changed files' "$output_file"
 }
 
 fathom_review_counts_a_named_path_the_change_does_not_contain() {
@@ -2916,12 +2935,12 @@ fathom_review_counts_a_named_path_the_change_does_not_contain() {
   # what this step writes is published into a review body, so an invented name reaches the author as
   # a count of names and not as the names.
   run_fathom_review_coverage \
-    '{"summary":"Read it.","covered":["src/Sample.cs","src/Invented.cs"],"findings":[]}' \
+    '{"covered":["src/Sample.cs","src/Invented.cs"],"candidates":[],"notes":""}' \
     '[{"filename":"src/Sample.cs"}]' \
     "$output_file" "$coverage_file"
 
   ((coverage_status == 0))
-  assert_contains 'names 1 path(s) that the collected change does not contain' "$coverage_file"
+  assert_contains 'named 1 path(s) that the collected change does not contain' "$coverage_file"
   assert_excludes 'src/Invented.cs' "$coverage_file"
 }
 
@@ -2939,11 +2958,11 @@ fathom_review_bounds_how_many_unread_files_it_names() {
   done
 
   run_fathom_review_coverage \
-    '{"summary":"Read none of it.","covered":[],"findings":[]}' \
+    '{"covered":[],"candidates":[],"notes":""}' \
     "$changed_files" "$output_file" "$coverage_file"
 
   ((coverage_status == 0))
-  assert_contains 'names 0 of the 13 changed files as read' "$coverage_file"
+  assert_contains 'opened 0 of the 13 changed files' "$coverage_file"
   assert_contains 'and 3 more' "$coverage_file"
   assert_excludes 'src/File11.cs' "$coverage_file"
 }
@@ -2957,26 +2976,46 @@ fathom_review_reads_a_ledger_of_the_wrong_shape_as_an_empty_one() {
   # model and a published review: a ledger of the wrong shape reports the change as unnamed rather
   # than turning a review that was ready to post into a red job.
   run_fathom_review_coverage \
-    '{"summary":"Read it.","covered":12,"findings":[]}' \
+    '{"covered":12,"candidates":[],"notes":""}' \
     '[{"filename":"src/Sample.cs"}]' \
     "$output_file" "$coverage_file"
 
   ((coverage_status == 0))
-  assert_contains 'names 0 of the 1 changed files as read' "$coverage_file"
+  assert_contains 'opened 0 of the 1 changed files' "$coverage_file"
 }
 
-fathom_review_compares_no_coverage_when_the_reviewer_returned_no_answer() {
+# A reader that failed published nothing, and that is a part of the change no session opened. The
+# review is still submitted — the owner chose a published verdict that states the gap over a run
+# that ends with nothing — so what this fixes is that the gap is said in two registers: how many
+# readers came back, and which files that left unopened.
+fathom_review_says_when_a_reader_never_reported() {
+  local output_file="$test_directory/fathom-review-coverage-missing-reader-output"
+  local coverage_file="$test_directory/fathom-review-coverage-missing-reader"
+
+  run_fathom_review_coverage \
+    '{"covered":["src/Sample.cs"],"candidates":[],"notes":""}
+' \
+    '[{"filename":"src/Sample.cs"},{"filename":"src/Other.cs"}]' \
+    "$output_file" "$coverage_file" '2'
+
+  ((coverage_status == 0))
+  assert_contains 'split between 2 readers and 1 reported back' "$coverage_file"
+  assert_contains 'opened 1 of the 2 changed files' "$coverage_file"
+}
+
+# Every reader failed, which is the shape a subscription outage takes. The step still writes what it
+# knows rather than dying: the review that follows says the whole change went unread, which is a
+# verdict a reader can act on and a red job with no review is not.
+fathom_review_reports_the_whole_change_when_no_reader_returned() {
   local output_file="$test_directory/fathom-review-coverage-silent-output"
   local coverage_file="$test_directory/fathom-review-coverage-silent"
 
-  # A reviewer that never answered has already failed and said why. A gap line here would report the
-  # whole change as unread and bury that cause under a consequence.
   run_fathom_review_coverage \
-    '' '[{"filename":"src/Sample.cs"}]' "$output_file" "$coverage_file"
+    '' '[{"filename":"src/Sample.cs"}]' "$output_file" "$coverage_file" '1'
 
   ((coverage_status == 0))
-  [[ ! -s "$coverage_file" ]]
-  assert_contains 'no coverage ledger to compare' "$output_file"
+  assert_contains 'split between 1 readers and 0 reported back' "$coverage_file"
+  assert_contains 'opened 0 of the 1 changed files' "$coverage_file"
 }
 
 # The board step turns a published verdict into the one field the owner's views group by. Its inputs
@@ -4820,6 +4859,237 @@ obligation_index_leaves_migrations_out() {
   assert_json '0' '.tests | length' "$output_file"
 }
 
+# The split is what makes coverage a property of the run rather than of the model. Every contract
+# below is about one of the two things that must hold whatever the shape of the change: no file is
+# lost, and no reader is given so much more than another that the run waits on it.
+run_group_split() {
+  local files_json="$1"
+  local groups_json="$2"
+  local max_groups="${3:-6}"
+  local target_group_size="${4:-12}"
+
+  bash "$source_repository_root/.github/fathom-review/group-changed-files.sh" \
+    "$files_json" "$groups_json" "$max_groups" "$target_group_size" > /dev/null
+}
+
+# The files of a change, as `files.json` carries them, spread over the directories a real one
+# touches. The count is what each contract varies.
+write_split_fixture() {
+  local files_json="$1"
+  local count="$2"
+  local directories=('src/Domain/Emails' 'src/Application/Contacts' 'src/Infrastructure/Persistence'
+                     'src/Mcp/Tools' 'tests/Domain.UnitTests' 'docs/features'
+                     'deploy/helm/mailfathom/templates')
+  local index
+
+  {
+    printf '['
+    for (( index = 0; index < count; index++ )); do
+      (( index > 0 )) && printf ','
+      printf '{"filename":"%s/File%03d.cs"}' "${directories[$(( index % ${#directories[@]} ))]}" "$index"
+    done
+    printf ']\n'
+  } > "$files_json"
+}
+
+# The one property nothing else can recover from. A file in no group is read by nobody, and the
+# coverage line would report it as unread without anything saying why — so the script refuses a
+# split that loses one, and this is what fixes that it counts.
+group_split_gives_every_changed_file_exactly_one_reader() {
+  local files_json="$test_directory/split-exhaustive-files.json"
+  local groups_json="$test_directory/split-exhaustive-groups.json"
+
+  write_split_fixture "$files_json" 47
+  run_group_split "$files_json" "$groups_json"
+
+  assert_json '47' '[.[].files[]] | length' "$groups_json"
+  assert_json '47' '[.[].files[]] | unique | length' "$groups_json"
+  assert_json 'true' '([.[].files[]] | sort) == ([.[].files[]] | unique)' "$groups_json"
+}
+
+# The concurrency is a decision about the owner's subscription, so the ceiling binds however large
+# the change is — a hundred files is the collection's own limit and still six readers.
+group_split_never_exceeds_the_reader_ceiling() {
+  local files_json="$test_directory/split-ceiling-files.json"
+  local groups_json="$test_directory/split-ceiling-groups.json"
+
+  write_split_fixture "$files_json" 100
+  run_group_split "$files_json" "$groups_json"
+
+  assert_json 'true' 'length <= 6' "$groups_json"
+  assert_json '100' '[.[].files[]] | length' "$groups_json"
+}
+
+# The run is exactly as long as its slowest reader, so a split that is exhaustive and lopsided has
+# spent the concurrency and kept the duration. Twice the mean is the bound: it leaves room for a
+# cut pulled to a directory boundary and refuses the shape this replaced, where one group of 38
+# stood beside five of 10.
+group_split_balances_what_each_reader_is_given() {
+  local files_json="$test_directory/split-balance-files.json"
+  local groups_json="$test_directory/split-balance-groups.json"
+
+  write_split_fixture "$files_json" 88
+  run_group_split "$files_json" "$groups_json"
+
+  assert_json 'true' '([.[].files | length] | max) <= (([.[].files[]] | length) / length * 2 | floor)' \
+    "$groups_json"
+}
+
+# Below the ceiling the group size is what binds, so a small change is one reader rather than six
+# sessions of two files each — the fan-out costs a runner and a session per group, and a change this
+# size is read faster than the split saves.
+group_split_keeps_a_small_change_whole() {
+  local files_json="$test_directory/split-small-files.json"
+  local groups_json="$test_directory/split-small-groups.json"
+
+  write_split_fixture "$files_json" 7
+  run_group_split "$files_json" "$groups_json"
+
+  assert_json '1' 'length' "$groups_json"
+  assert_json '7' '.[0].files | length' "$groups_json"
+}
+
+# A collection that returned nothing still has to reach the judge, which is what publishes the
+# review that says so. An empty split is the shape that carries it: no reader runs, and the matrix
+# the workflow builds from this is empty rather than malformed.
+group_split_accepts_a_change_it_was_given_no_files_for() {
+  local files_json="$test_directory/split-empty-files.json"
+  local groups_json="$test_directory/split-empty-groups.json"
+
+  printf '[]\n' > "$files_json"
+  run_group_split "$files_json" "$groups_json"
+
+  assert_json '0' 'length' "$groups_json"
+}
+
+# The reader's prompt is composed by the step below rather than handed over whole: the group's file
+# list and the shared rubrics are read out of two files and inserted, and everything else is
+# substituted. What this runs is that step, against a real `groups.json` and the committed prompt, so
+# a template or an insertion that stopped working is caught here rather than by a reader opening
+# nothing.
+fathom_review_composes_a_reader_prompt_naming_only_its_group() {
+  local step_script="$test_directory/fathom-review-reader-prompt.sh"
+  local review_directory="$test_directory/fathom-review-reader-prompt-review"
+  local prompt_file="$test_directory/fathom-review-reader-prompt.md"
+  local output_file="$test_directory/fathom-review-reader-prompt-output"
+  local step_output_file="$test_directory/fathom-review-reader-prompt-step-output"
+  local status
+
+  extract_fathom_review_step 'reader_prompt' "$step_script"
+  rm -rf "$review_directory"
+  mkdir -p "$review_directory"
+  printf '%s\n' \
+    '[{"index":1,"files":["src/Domain/Emails/Email.cs","src/Domain/Emails/EmailAddress.cs"]},{"index":2,"files":["docs/features/mail.md"]}]' \
+    > "$review_directory/groups.json"
+  : > "$step_output_file"
+
+  set +e
+  (
+    export REPOSITORY='Krzysztof318/MailFathom'
+    export PULL_REQUEST_NUMBER='930'
+    export HEAD_SHA='0123456789abcdef'
+    export SNAPSHOT_TAKEN='2026-08-18T09:00:00Z'
+    export GROUP_INDEX='1'
+    export GROUP_COUNT='2'
+    export REVIEW_DIRECTORY="$review_directory"
+    export TEMPLATE_FILE="$source_repository_root/.github/fathom-review/reader-prompt.md"
+    export RUBRICS_FILE="$source_repository_root/.github/fathom-review/review-rubrics.md"
+    export SCHEMA_FILE="$source_repository_root/.github/fathom-review/candidates-schema.json"
+    export PROMPT_FILE="$prompt_file"
+    export GITHUB_OUTPUT="$step_output_file"
+    bash "$step_script"
+  ) > "$output_file" 2>&1
+  status=$?
+  set -e
+
+  # The step froze the collected inputs the way it does on a runner, where the directory dies with
+  # the job. Here it outlives the step, so the modes are restored or the suite cannot clean up after
+  # itself.
+  chmod -R u+w "$review_directory"
+
+  (( status == 0 ))
+  # Its own group and nothing else. A reader given another group's paths reviews a file somebody
+  # else is already reading, and the coverage the run publishes then counts it twice.
+  assert_contains '- `src/Domain/Emails/Email.cs`' "$prompt_file"
+  assert_contains '- `src/Domain/Emails/EmailAddress.cs`' "$prompt_file"
+  assert_excludes 'docs/features/mail.md' "$prompt_file"
+  # The rubrics arrive whole rather than as the placeholder that stands for them.
+  assert_contains '### The repository' "$prompt_file"
+  assert_contains 'Security and privacy' "$prompt_file"
+  assert_excludes '{{' "$prompt_file"
+  assert_contains 'GROUP: 1 of 2' "$prompt_file"
+}
+
+# A group index the split never produced means the matrix and `groups.json` have come apart, and a
+# session given no files answers with an empty coverage list that reads exactly like a clean group.
+fathom_review_refuses_a_reader_group_that_holds_no_files() {
+  local step_script="$test_directory/fathom-review-reader-prompt-empty.sh"
+  local review_directory="$test_directory/fathom-review-reader-prompt-empty-review"
+  local output_file="$test_directory/fathom-review-reader-prompt-empty-output"
+  local status
+
+  extract_fathom_review_step 'reader_prompt' "$step_script"
+  rm -rf "$review_directory"
+  mkdir -p "$review_directory"
+  printf '%s\n' '[{"index":1,"files":["src/Domain/Emails/Email.cs"]}]' > "$review_directory/groups.json"
+
+  set +e
+  (
+    export REPOSITORY='Krzysztof318/MailFathom'
+    export PULL_REQUEST_NUMBER='930'
+    export HEAD_SHA='0123456789abcdef'
+    export SNAPSHOT_TAKEN='2026-08-18T09:00:00Z'
+    export GROUP_INDEX='4'
+    export GROUP_COUNT='1'
+    export REVIEW_DIRECTORY="$review_directory"
+    export TEMPLATE_FILE="$source_repository_root/.github/fathom-review/reader-prompt.md"
+    export RUBRICS_FILE="$source_repository_root/.github/fathom-review/review-rubrics.md"
+    export SCHEMA_FILE="$source_repository_root/.github/fathom-review/candidates-schema.json"
+    export PROMPT_FILE="$test_directory/fathom-review-reader-prompt-empty.md"
+    export GITHUB_OUTPUT="$test_directory/fathom-review-reader-prompt-empty-step-output"
+    bash "$step_script"
+  ) > "$output_file" 2>&1
+  status=$?
+  set -e
+
+  chmod -R u+w "$review_directory"
+
+  (( status == 1 ))
+  assert_contains 'the split and the matrix disagree' "$output_file"
+}
+
+# The prompts are templates the workflow substitutes into, and a placeholder nobody substitutes
+# reaches the model as literal text — a reader told to open `{{GROUP_FILES}}`. Both composing steps
+# refuse that at runtime; this refuses it at the point somebody adds a placeholder to a prompt and
+# not to the step, which is where the mistake is actually made.
+fathom_review_substitutes_every_placeholder_its_prompts_carry() {
+  local workflow_file="$source_repository_root/.github/workflows/fathom-review.yml"
+  local prompt_file placeholder
+
+  for prompt_file in "$source_repository_root/.github/fathom-review/reader-prompt.md" \
+                     "$source_repository_root/.github/fathom-review/reviewer-prompt.md"; do
+    while IFS= read -r placeholder; do
+      # The rubrics and the file list are inserted whole rather than substituted into a line, so the
+      # workflow names them in `awk` rather than in the `sed` script beside it. Either spelling is
+      # the step handling the placeholder, which is what this asserts.
+      grep -q "{{${placeholder}}}" "$workflow_file"
+    done < <(grep -ohE '\{\{[A-Z_]+\}\}' "$prompt_file" | tr -d '{}' | sort -u)
+  done
+}
+
+# The reader answers with a coverage list and the judge does not, and that split is the whole of why
+# coverage stopped being a claim a reviewer makes about itself. A schema that drifted back would put
+# the property in the model's hands with every contract above still green.
+fathom_review_schemas_keep_coverage_with_the_readers() {
+  local candidates_schema="$source_repository_root/.github/fathom-review/candidates-schema.json"
+  local findings_schema="$source_repository_root/.github/fathom-review/findings-schema.json"
+
+  assert_json 'true' '.required | index("covered") != null' "$candidates_schema"
+  assert_json 'true' '.required | index("candidates") != null' "$candidates_schema"
+  assert_json 'true' '.required | index("covered") == null' "$findings_schema"
+  assert_json 'true' '.properties | has("covered") | not' "$findings_schema"
+}
+
 # `Publish container image` resolves the repository an image belongs to, and both callers hand it tags alone.
 # Qualifying those tags is therefore part of the same step, and nightly run 30725904948 is what leaving them bare
 # costs: an unqualified name is not a tag to a registry client but an image on the default registry, so the push asked
@@ -5988,8 +6258,12 @@ the_reviewer_resolves_one_claude_credential_everywhere() {
 
   selecting_reads="$(grep -cF "$value_expression" "$reviewer_workflow" || true)"
 
-  if [[ "$selecting_reads" != '3' ]]; then
-    printf 'fathom-review.yml resolves the Claude credential through the profile in %s place(s), expected 3: the action input and both leak checks\n' \
+  # Four: the reader action's input, the judge action's input, and the two leak checks that refuse
+  # to print or publish anything matching the credential the run actually spent. The readers made it
+  # four — a session per group is a second holder of the same secret — and the number is asserted
+  # rather than left open because a fifth would be a step nobody argued holding it.
+  if [[ "$selecting_reads" != '4' ]]; then
+    printf 'fathom-review.yml resolves the Claude credential through the profile in %s place(s), expected 4: both action inputs and both leak checks\n' \
       "$selecting_reads" >&2
     return 1
   fi
@@ -6068,6 +6342,7 @@ workflow_scripts_use_flat_manual_layout() {
   # `Fathom review` invokes this one directly rather than through `bash`, so the mode git records is
   # part of the contract. The tests above run it through `bash` and would pass without it.
   [[ -x "$source_repository_root/.github/fathom-review/index-obligations.sh" ]]
+  [[ -x "$source_repository_root/.github/fathom-review/group-changed-files.sh" ]]
   [[ -x "$source_repository_root/.github/pull-request/collect-closing-issues.sh" ]]
   [[ -x "$source_repository_root/.github/pull-request/write-board-status.sh" ]]
   [[ -x "$source_repository_root/.github/pull-request/select-labels.sh" ]]
@@ -6330,7 +6605,8 @@ run_test fathom_review_reports_no_gap_when_the_review_named_every_file
 run_test fathom_review_counts_a_named_path_the_change_does_not_contain
 run_test fathom_review_bounds_how_many_unread_files_it_names
 run_test fathom_review_reads_a_ledger_of_the_wrong_shape_as_an_empty_one
-run_test fathom_review_compares_no_coverage_when_the_reviewer_returned_no_answer
+run_test fathom_review_says_when_a_reader_never_reported
+run_test fathom_review_reports_the_whole_change_when_no_reader_returned
 run_test fathom_review_marks_a_review_with_what_started_it
 run_test fathom_review_publishes_the_coverage_gap_beside_its_findings
 run_test fathom_review_publishes_the_coverage_gap_under_an_approval
@@ -6403,6 +6679,15 @@ run_test review_obligations_reports_a_source_the_working_tree_leaves_untested
 run_test review_obligations_names_the_untracked_paths_no_diff_contains
 run_test review_obligations_reports_without_gating
 run_test obligation_index_leaves_migrations_out
+run_test group_split_gives_every_changed_file_exactly_one_reader
+run_test group_split_never_exceeds_the_reader_ceiling
+run_test group_split_balances_what_each_reader_is_given
+run_test group_split_keeps_a_small_change_whole
+run_test group_split_accepts_a_change_it_was_given_no_files_for
+run_test fathom_review_composes_a_reader_prompt_naming_only_its_group
+run_test fathom_review_refuses_a_reader_group_that_holds_no_files
+run_test fathom_review_substitutes_every_placeholder_its_prompts_carry
+run_test fathom_review_schemas_keep_coverage_with_the_readers
 run_test publish_qualifies_every_nightly_tag_with_the_repository_it_resolves
 run_test publish_qualifies_the_release_tags_and_ignores_a_blank_line
 run_test publish_folds_the_owner_login_into_the_docker_hub_namespace
