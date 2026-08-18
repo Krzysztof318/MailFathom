@@ -128,8 +128,10 @@ mapper.
 decide per subject what an admitted caller may do rather than the deployment granting every token the same thing. Create
 one further client scope per permission you intend a token to bring, named exactly as MailFathom publishes it —
 `mailfathom.mail.read`, `mailfathom.mail.ask`, `mailfathom.mail.contacts.read`, `mailfathom.mail.contacts.write`, or on
-the administrative endpoint one of the `mailfathom.admin.*` names
-[the published set](permissions.md#the-published-set) lists. The spelling is compared byte
+the administrative endpoint one of the administrative names
+[the published set](permissions.md#the-published-set) lists. A scope is one published name and never the trailing-wildcard
+shorthand a grant accepts, which MailFathom refuses in `RequiredScopes` and `AdvertisedScopes` for the same reason no
+authorization server could mint one. The spelling is compared byte
 for byte, so a differently cased or padded name is a different scope and grants nothing. Leave **Include in token scope**
 on, as above, and assign each to the client in [step 4](#4-register-an-application-for-the-client) — a scope the client
 never receives is a permission the caller never holds. Step 8's metadata document lists exactly the ones to create: an
@@ -137,11 +139,11 @@ entry that narrows by token scopes publishes its whole ceiling in `scopes_suppor
 configuration publishes none of its permissions, because no client can ask for one. Skip this whole paragraph if you
 write the grant in configuration instead, which is the only form available where your server cannot mint custom scopes.
 
-**A `mailfathom.mail.*` scope is in force on an entry that sets `PermissionsFromTokenScopes`, and narrows nothing on
-one that does not.** Where the entry opted in, a client that never received the scope is listed only the tools its
+**A scope naming a mail permission is in force on an entry that sets `PermissionsFromTokenScopes`, and narrows nothing
+on one that does not.** Where the entry opted in, a client that never received the scope is listed only the tools its
 remaining scopes permit and is answered about the rest as though they did not exist; where it did not, every token the
 entry admits holds the entry's whole grant whatever scopes it carries, because the deployment wrote that grant and the
-authorization server was never asked. A `mailfathom.admin.*` scope narrows the administrative surface the same way, on an
+authorization server was never asked. A scope naming an administrative permission narrows that surface the same way, on an
 entry that opted in: a token that never received the scope is refused every route published under it, and told which
 permission that was. An entry that narrows by them publishes them in `scopes_supported`, which is what a client reads to
 know what it may ask for.
@@ -288,7 +290,7 @@ from the issuer, and takes the key set address out of it.
 The entry writes down no grant, so every token it admits reaches everything the MCP surface publishes. To state a bound,
 add `Permissions` beside `OAuth` — and add `"PermissionsFromTokenScopes": true` as well where the scopes you created in
 step 2 should narrow the list per subject. On this surface that is a bound rather than a statement, for the reason
-[step 2](#2-register-mailfathom-as-a-resource-in-the-provider) gives: a token admitted without a `mailfathom.mail.*`
+[step 2](#2-register-mailfathom-as-a-resource-in-the-provider) gives: a token admitted without a mail
 permission is listed fewer tools and is answered about the rest as though they did not exist. The example below
 therefore withholds all six contact tools from every token this entry admits — write the contact permissions in beside
 `mailfathom.mail.read` where they should reach the book.

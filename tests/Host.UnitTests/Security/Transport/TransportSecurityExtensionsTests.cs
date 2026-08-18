@@ -560,6 +560,28 @@ public sealed class TransportSecurityExtensionsTests
         Assert.Empty(TransportGrant.PermissionsCarriedBy(context.Principal!));
     }
 
+    /// <summary>A scope is compared byte for byte, so the shorthand a deployment may write in its own configuration grants nothing when a token brings it instead.</summary>
+    [Fact]
+    public async Task OnTokenValidated_ATokenCarryingASubtreePattern_HoldsNoneOfIt()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions
+        {
+            OAuth = AnAuthorizationServer(),
+            PermissionsFromTokenScopes = true,
+        };
+
+        entry.Permissions.Add("mailfathom.mail.*");
+
+        var context = TokenValidatedFor(entry, tokenScopes: "mailfathom.mail.*");
+
+        // Act
+        await ValidatedTokenEventOf(entry).Invoke(context);
+
+        // Assert
+        Assert.Empty(TransportGrant.PermissionsCarriedBy(context.Principal!));
+    }
+
     /// <summary>Reads the registered event that reduces a validated token to the identity this host keeps and writes the grant onto it.</summary>
     /// <remarks>Reached through the registration rather than called directly, because what is under test is that the entry's grant was captured where the scheme was configured.</remarks>
     private static Func<TokenValidatedContext, Task> ValidatedTokenEventOf(TransportAuthenticationOptions entry)

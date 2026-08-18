@@ -164,6 +164,10 @@ internal sealed class OAuthValidationOptions
             {
                 yield return $"{settingPath} — '{configuredScope}' is a MailFathom permission, and requiring one would turn a smaller grant into a closed door: a caller the deployment meant to serve less would be refused at the entrance instead. Write it in '{nameof(TransportAuthenticationOptions.Permissions)}' on this entry, which is what decides what an admitted caller may do.";
             }
+            else if (NamesMailFathomPermissions(configuredScope))
+            {
+                yield return $"{settingPath} — '{configuredScope}' is shorthand for MailFathom permissions, and a scope is compared byte for byte at the authorization server, so no token could ever carry it. Write the subtree in '{nameof(TransportAuthenticationOptions.Permissions)}' on this entry, which is what decides what an admitted caller may do.";
+            }
             else if (!claimedScopes.Add(configuredScope))
             {
                 yield return $"{settingPath} — '{configuredScope}' repeats a scope the list already carries.";
@@ -197,6 +201,10 @@ internal sealed class OAuthValidationOptions
             else if (MailFathomPermission.TryParse(configuredScope, out _))
             {
                 yield return $"{settingPath} — '{configuredScope}' is a MailFathom permission, and the grant that reads one already advertises it; an entry granting none would be telling a client to ask for something nothing here grants. Write it in '{nameof(TransportAuthenticationOptions.Permissions)}' on this entry and set '{nameof(TransportAuthenticationOptions.PermissionsFromTokenScopes)}'.";
+            }
+            else if (NamesMailFathomPermissions(configuredScope))
+            {
+                yield return $"{settingPath} — '{configuredScope}' is shorthand for MailFathom permissions, and what a client asks its authorization server for is a scope compared byte for byte, so no token could ever carry it. Write the subtree in '{nameof(TransportAuthenticationOptions.Permissions)}' on this entry and set '{nameof(TransportAuthenticationOptions.PermissionsFromTokenScopes)}', which publishes the names it resolves to.";
             }
             else if (!claimedScopes.Add(configuredScope))
             {
@@ -243,6 +251,15 @@ internal sealed class OAuthValidationOptions
             }
         }
     }
+
+    /// <summary>Reports whether a written scope is the wildcard shorthand a grant accepts for several permissions.</summary>
+    /// <remarks>
+    /// It asks what the value resolves to rather than only how it is spelled, because an asterisk is a perfectly good
+    /// scope character and a value such as <c>files.read.*</c> may be exactly what an authorization server issues. What
+    /// is refused is the value that would have granted something had it been written where a grant belongs.
+    /// </remarks>
+    private static bool NamesMailFathomPermissions(string configuredScope) =>
+        PermissionSubtree.TryParse(configuredScope, out var subtree) && subtree.CoveredPermissions().Count > 0;
 
     private static bool IsScopeToken(string? configuredScope) =>
         !string.IsNullOrEmpty(configuredScope)
