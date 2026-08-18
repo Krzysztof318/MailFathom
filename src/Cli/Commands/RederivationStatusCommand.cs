@@ -66,7 +66,7 @@ internal static class RederivationStatusCommand
         if (state.Run is not { } run)
         {
             context.Console.WriteLine(
-                $"No re-derivation has ever been asked for over {scope}. Start one with '{CliRootCommand.CommandName} mailbox rederive --account {account}'.");
+                $"No re-derivation has ever been asked for over {scope}. Start one with '{CliRootCommand.CommandName} mailbox rederive --account {account}{RederiveMailboxCommand.FolderArgument(folder)}'.");
 
             return CliExitCode.Success;
         }

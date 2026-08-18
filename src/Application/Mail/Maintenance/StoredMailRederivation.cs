@@ -70,35 +70,45 @@ public sealed class StoredMailRederivation
     private const long MaximumRawBytesPerPass = 64L * 1024 * 1024;
 
     private readonly IStoredMailRederivationStore rederivationStore;
+    private readonly IStoredMailRederivationRunStore runStore;
     private readonly IEmailContentStore contentStore;
     private readonly IEmailMimeReader mimeReader;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
+    private readonly TimeProvider timeProvider;
     private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the re-derivation.</summary>
     /// <param name="rederivationStore">Reads what the walk has left and writes what one email's re-reading produced.</param>
+    /// <param name="runStore">Holds the run this walk is advancing, which each batch adds what it read to.</param>
     /// <param name="contentStore">Reads back the raw MIME an earlier run stored.</param>
     /// <param name="mimeReader">Turns that raw MIME into normalized metadata.</param>
     /// <param name="concurrencyRetryPolicy">Commits a batch, retrying a conflict with a competing writer.</param>
+    /// <param name="timeProvider">Stamps the instant the walk reached the end of its scope.</param>
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public StoredMailRederivation(
         IStoredMailRederivationStore rederivationStore,
+        IStoredMailRederivationRunStore runStore,
         IEmailContentStore contentStore,
         IEmailMimeReader mimeReader,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
+        TimeProvider timeProvider,
         AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(rederivationStore);
+        ArgumentNullException.ThrowIfNull(runStore);
         ArgumentNullException.ThrowIfNull(contentStore);
         ArgumentNullException.ThrowIfNull(mimeReader);
         ArgumentNullException.ThrowIfNull(concurrencyRetryPolicy);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(authorization);
 
         this.rederivationStore = rederivationStore;
+        this.runStore = runStore;
         this.contentStore = contentStore;
         this.mimeReader = mimeReader;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
+        this.timeProvider = timeProvider;
         this.authorization = authorization;
     }
 
@@ -266,7 +276,18 @@ public sealed class StoredMailRederivation
     private static int RetainedCharacterCount(ExtractedEmailMetadata metadata) =>
         (metadata.Text.OriginalText?.Length ?? 0) + (metadata.Text.TrimmedText?.Length ?? 0);
 
-    /// <summary>Commits one batch's re-readings together with the position they reached.</summary>
+    /// <summary>Commits one batch's re-readings, the position they reached, and what the run has now re-read.</summary>
+    /// <remarks>
+    /// The three are one transaction because the position is what the next attempt resumes past: counts written
+    /// afterwards would be lost by a process killed in between, and the mail behind them would never be walked again
+    /// either, so the figure an operator reads would be permanently short of what was really done. An attempt is
+    /// stopped mid-pass as a matter of course rather than exceptionally — the execution timeout is what ends most of
+    /// them — so that gap would be the ordinary case rather than a rare one.
+    /// <para>
+    /// The run is re-read inside the commit and added to, never written back from a reading taken before the batch,
+    /// because two attempts of one run can overlap for as long as it takes a lost lease to be noticed.
+    /// </para>
+    /// </remarks>
     private Task CommitBatchAsync(
         StoredMailScope scope,
         BatchReadOutcome outcome,
@@ -288,16 +309,50 @@ public sealed class StoredMailRederivation
                     scope,
                     outcome.LastProcessedEmailId,
                     attemptCancellationToken);
+
+                if (await this.runStore.FindAsync(scope, attemptCancellationToken) is not { IsOutstanding: true } run)
+                {
+                    return;
+                }
+
+                await this.runStore.SaveAsync(
+                    persistenceSession,
+                    run with
+                    {
+                        RederivedEmailCount = run.RederivedEmailCount + outcome.Rederivations.Count,
+                        UnreadableEmailCount = run.UnreadableEmailCount + outcome.UnreadableEmailCount,
+                        MissingContentEmailCount = run.MissingContentEmailCount + outcome.MissingContentEmailCount,
+                    },
+                    attemptCancellationToken);
             },
             cancellationToken);
 
     /// <summary>Records that this scope's walk is over, so asking for it again starts at the beginning.</summary>
+    /// <remarks>
+    /// The cursor is removed and the run is ended in one transaction, for the reason the batch commits its counts with
+    /// its position: a walk whose cursor is gone while its run is still outstanding reads as a run nothing is carrying,
+    /// and one whose run ended while its cursor stands would have the next request resume behind where this one
+    /// finished.
+    /// </remarks>
     private Task FinishAsync(StoredMailScope scope, CancellationToken cancellationToken) =>
         this.concurrencyRetryPolicy.CommitAsync(
-            (persistenceSession, attemptCancellationToken) => this.rederivationStore.ClearResumePositionAsync(
-                persistenceSession,
-                scope,
-                attemptCancellationToken),
+            async (persistenceSession, attemptCancellationToken) =>
+            {
+                await this.rederivationStore.ClearResumePositionAsync(
+                    persistenceSession,
+                    scope,
+                    attemptCancellationToken);
+
+                if (await this.runStore.FindAsync(scope, attemptCancellationToken) is not { IsOutstanding: true } run)
+                {
+                    return;
+                }
+
+                await this.runStore.SaveAsync(
+                    persistenceSession,
+                    run with { EndedAt = this.timeProvider.GetUtcNow() },
+                    attemptCancellationToken);
+            },
             cancellationToken);
 
     /// <summary>Pairs one email with what re-reading its MIME produced.</summary>

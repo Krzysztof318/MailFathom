@@ -176,11 +176,39 @@ public sealed class MailboxMaintenanceEndpointsTests
 
         // Assert
         var started = Assert.IsType<Ok<MailboxRederivationStartResponse>>(result.Result);
-        Assert.Equal((true, true), (started.Value!.Started, started.Value.Queued));
+        Assert.Equal((true, "carried"), (started.Value!.Started, started.Value.Carriage));
         Assert.Equal(("work", null, true), (
             started.Value.Run.Account,
             started.Value.Run.Folder,
             started.Value.Run.IsOutstanding));
+    }
+
+    /// <summary>
+    /// A segment already in the queue is answered with itself whatever state it is in, so the enqueue's own outcome
+    /// cannot tell one being worked from one nothing will attempt again. Reporting the second as carried would leave
+    /// an operator waiting on a run that will never move, which is the one failure nothing else here would surface.
+    /// </summary>
+    [Theory]
+    [InlineData(JobState.Claimed, "carried")]
+    [InlineData(JobState.DeadLettered, "stopped")]
+    [InlineData(JobState.Dropped, "stopped")]
+    public async Task RederiveAsync_ARunWhoseSegmentIsAlreadyEnqueued_AnswersWithWhatThatSegmentIsDoing(
+        JobState segmentState,
+        string expectedCarriage)
+    {
+        // Arrange
+        var runs = new FakeRederivationRunStore();
+
+        // Act
+        var result = await MailboxMaintenanceEndpoints.RederiveAsync(
+            new MailboxMaintenanceRequest("work", null),
+            CatalogServing(Account),
+            RequestsOver(runs, segmentState),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var started = Assert.IsType<Ok<MailboxRederivationStartResponse>>(result.Result);
+        Assert.Equal(expectedCarriage, started.Value!.Carriage);
     }
 
     /// <summary>The run outlives the request that asked for it, so the same path answers how far it has come.</summary>
@@ -326,12 +354,21 @@ public sealed class MailboxMaintenanceEndpointsTests
         new(checkpoints, new FixedCounter(storedEmailCount), RetryPolicy(), AdministrativeGrant.WholeSurface);
 
     /// <summary>Builds the intake the route asks for a run through, over a queue that accepts whatever it is handed.</summary>
-    private static StoredMailRederivationRequests RequestsOver(IStoredMailRederivationRunStore runs)
+    private static StoredMailRederivationRequests RequestsOver(
+        IStoredMailRederivationRunStore runs,
+        JobState? segmentState = null)
     {
+        var segment = JobId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000003"));
+
         var jobs = Substitute.For<IJobStore>();
         jobs
             .EnqueueAsync(Arg.Any<JobEnqueueRequest>(), Arg.Any<CancellationToken>())
-            .Returns(JobEnqueueResult.Created(JobId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000003"))));
+            .Returns(segmentState is null
+                ? JobEnqueueResult.Created(segment)
+                : JobEnqueueResult.AlreadyEnqueued(segment));
+        jobs
+            .FindStateAsync(segment, Arg.Any<CancellationToken>())
+            .Returns(segmentState);
 
         return new StoredMailRederivationRequests(
             runs,

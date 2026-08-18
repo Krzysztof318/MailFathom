@@ -56,11 +56,11 @@ internal static class FakeMaintenanceDeployment
     /// <summary>Writes the body asking for a re-derivation answers with.</summary>
     /// <param name="run">The run the scope now has.</param>
     /// <param name="started">Whether this request is what put it there.</param>
-    /// <param name="queued">Whether the segment it is on is waiting in the deployment's queue.</param>
+    /// <param name="carriage">What the deployment says is carrying the segment it is on.</param>
     /// <returns>The response body.</returns>
-    internal static string Start(string run, bool started = true, bool queued = true) => string.Create(
+    internal static string Start(string run, bool started = true, string carriage = "carried") => string.Create(
         CultureInfo.InvariantCulture,
-        $$"""{"started":{{Written(started)}},"queued":{{Written(queued)}},"run":{{run}}}""");
+        $$"""{"started":{{Written(started)}},"carriage":"{{carriage}}","run":{{run}}}""");
 
     /// <summary>Writes the body reading a scope's re-derivation answers with.</summary>
     /// <param name="run">The run, or nothing where the scope has never been asked for one.</param>

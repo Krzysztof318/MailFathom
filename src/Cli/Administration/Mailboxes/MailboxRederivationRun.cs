@@ -9,17 +9,25 @@ namespace MailFathom.Cli.Administration.Mailboxes;
 
 /// <summary>What asking for a re-derivation did.</summary>
 /// <param name="Started">Whether this request is what put the run in front of the scope.</param>
-/// <param name="Queued">Whether the work carrying the run is waiting in the deployment's queue.</param>
+/// <param name="Carriage">What the deployment says is carrying the run, which decides what the operator does next.</param>
 /// <param name="Run">The run the scope now has, which is the one already going when nothing started.</param>
 /// <remarks>
 /// A request that started nothing is an answer rather than a refusal: the mail is going to be re-read, and the run
-/// reported is the one doing it. A request that started one but reports nothing queued met a full queue, which is
-/// backpressure rather than a failure — the run stands and asking again is what carries it.
+/// reported is the one doing it. What the carriage adds is the case neither of the other two reaches — a run recorded
+/// with nothing advancing it, which is a full queue to ask again past or a stopped segment to return through
+/// <c>jobs retry</c>, and the two need opposite things from the operator.
 /// </remarks>
 internal sealed record MailboxRederivationStart(
     [property: JsonPropertyName("started")] bool Started,
-    [property: JsonPropertyName("queued")] bool Queued,
-    [property: JsonPropertyName("run")] MailboxRederivationRun? Run);
+    [property: JsonPropertyName("carriage")] string? Carriage,
+    [property: JsonPropertyName("run")] MailboxRederivationRun? Run)
+{
+    /// <summary>The deployment's name for a run its queue is holding or working.</summary>
+    internal const string CarriedName = "carried";
+
+    /// <summary>The deployment's name for a queue that already held as much of this work as it accepts.</summary>
+    internal const string QueueAtCapacityName = "queue-at-capacity";
+}
 
 /// <summary>Where a scope's re-derivation stands.</summary>
 /// <param name="Account">The account the answer is about.</param>

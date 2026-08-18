@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
-using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -173,7 +172,7 @@ internal static class MailboxMaintenanceEndpoints
     /// walk of their mailbox, and what makes this answer immediately however large the mailbox is.
     /// <para>
     /// A second request while one is outstanding is answered with the run already under way rather than refused, and it
-    /// starts no second walk. The answer says which of the two happened, and whether the work is in the queue.
+    /// starts no second walk. The answer says which of the two happened, and what is carrying the run.
     /// </para>
     /// </remarks>
     internal static async Task<Results<Ok<MailboxRederivationStartResponse>, ProblemHttpResult>> RederiveAsync(
@@ -192,10 +191,7 @@ internal static class MailboxMaintenanceEndpoints
 
         var submitted = await requests.SubmitAsync(resolution, cancellationToken);
 
-        return TypedResults.Ok(new MailboxRederivationStartResponse(
-            submitted.Accepted,
-            submitted.QueueOutcome is not JobEnqueueOutcome.RefusedAtCapacity,
-            MailboxRederivationRunResponse.For(submitted.Run)));
+        return TypedResults.Ok(MailboxRederivationStartResponse.For(submitted));
     }
 
     /// <summary>Reports where one scope's re-derivation has got to, or how the last one ended.</summary>

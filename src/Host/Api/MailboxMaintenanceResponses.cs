@@ -40,18 +40,51 @@ internal sealed record MailboxRewindResponse(string Account, string? Folder, IRe
 
 /// <summary>What asking for a re-derivation did, as the administrative endpoint serves it.</summary>
 /// <param name="Started">Whether this request is what put the run in front of the scope.</param>
-/// <param name="Queued">Whether the segment the run is on is waiting in the queue, whoever put it there.</param>
+/// <param name="Carriage">What is carrying the segment the run is on, as one of the three names below.</param>
 /// <param name="Run">The run the scope now has, which is the one already under way when nothing started.</param>
 /// <remarks>
 /// The three are reported together because a caller that asked twice needs all of them: the run is the answer either
-/// way, whether this request started it tells "I have just begun a walk" from "one was already going", and whether the
-/// work is queued is the one thing neither of the other two says — a deployment whose queue was full at that moment has
-/// recorded the run and carried nothing, and asking again is what puts it in motion.
+/// way, whether this request started it tells "I have just begun a walk" from "one was already going", and what is
+/// carrying it is the one thing neither of the other two says.
+/// <para>
+/// The carriage is served as a name rather than as a flag because there are three answers and only one of them means
+/// "watch it". A deployment whose queue was full has recorded the run and carried nothing, and asking again is what
+/// puts it in motion; a run whose segment will never be attempted again is one for the queue's own commands, and a
+/// caller told only that the work was not queued would wait on the first advice for a run the second one describes.
+/// </para>
 /// </remarks>
 internal sealed record MailboxRederivationStartResponse(
     bool Started,
-    bool Queued,
-    MailboxRederivationRunResponse Run);
+    string Carriage,
+    MailboxRederivationRunResponse Run)
+{
+    /// <summary>Describes what one request did for the wire.</summary>
+    /// <param name="request">What the use case answered.</param>
+    /// <returns>The response body.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
+    internal static MailboxRederivationStartResponse For(StoredMailRederivationRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return new MailboxRederivationStartResponse(
+            request.Accepted,
+            NameOf(request.Carriage),
+            MailboxRederivationRunResponse.For(request.Run));
+    }
+
+    /// <summary>Names one carriage on the wire, so a client reads a value rather than an ordinal.</summary>
+    /// <remarks>
+    /// Written out here rather than serialized from the enum, because the enum's members are the application's to
+    /// rename and these names are a published contract; keeping the two apart is what lets one move without the other.
+    /// </remarks>
+    private static string NameOf(StoredMailRederivationCarriage carriage) => carriage switch
+    {
+        StoredMailRederivationCarriage.Carried => "carried",
+        StoredMailRederivationCarriage.QueueAtCapacity => "queue-at-capacity",
+        StoredMailRederivationCarriage.Stopped => "stopped",
+        _ => throw new ArgumentOutOfRangeException(nameof(carriage), carriage, "The carriage is not one this endpoint serves."),
+    };
+}
 
 /// <summary>Where a scope's re-derivation stands, as the administrative endpoint serves it.</summary>
 /// <param name="Account">The account the answer is about.</param>

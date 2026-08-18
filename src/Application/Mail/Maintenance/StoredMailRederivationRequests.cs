@@ -29,7 +29,7 @@ namespace MailFathom.Application.Mail.Maintenance;
 /// was written down but whose job never reached the queue, because the process stopped between the two writes or the
 /// queue was full when it was asked. A job that is there is answered with itself and nothing is duplicated, and one
 /// that was dead-lettered still holds its key — which is <c>mfctl jobs retry</c>'s to return rather than this one's to
-/// enqueue past.
+/// enqueue past, so the answer names it as a run nothing is carrying instead of reporting the enqueue as a success.
 /// </para>
 /// </remarks>
 public sealed class StoredMailRederivationRequests
@@ -92,7 +92,7 @@ public sealed class StoredMailRederivationRequests
     /// <summary>Asks for every stored message of the scope to have its metadata re-read from the MIME already held.</summary>
     /// <param name="scope">The account, and the one folder of it, to re-read.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>The run the scope now has, whether this request started it, and what the queue did.</returns>
+    /// <returns>The run the scope now has, whether this request started it, and what is carrying it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="scope" /> is <see langword="null" />.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when two requests raced past the bounded retries.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminOperate" />.</exception>
@@ -147,6 +147,41 @@ public sealed class StoredMailRederivationRequests
                 scope.Account),
             cancellationToken);
 
-        return new StoredMailRederivationRequest(requested.Run, requested.Accepted, enqueued.Outcome);
+        return new StoredMailRederivationRequest(
+            requested.Run,
+            requested.Accepted,
+            await this.CarriageOfAsync(enqueued, cancellationToken));
+    }
+
+    /// <summary>Reads what the enqueue leaves carrying the segment, which the outcome alone does not say.</summary>
+    /// <remarks>
+    /// A job that is already there is answered with itself whatever state it is in, so an enqueue meeting a segment
+    /// that dead-lettered reports exactly what one meeting a segment waiting in the queue reports. Reading the state is
+    /// what separates them, and the separation is the point: an operator told the work is queued waits, and a run whose
+    /// segment nothing will attempt again is one they would wait on forever.
+    /// <para>
+    /// The reading can go stale the instant it is taken, which is what makes it safe to take here — the answer sends
+    /// somebody to look at a queue rather than excluding anything, and asking again re-reads it.
+    /// </para>
+    /// </remarks>
+    private async Task<StoredMailRederivationCarriage> CarriageOfAsync(
+        JobEnqueueResult enqueued,
+        CancellationToken cancellationToken)
+    {
+        if (enqueued.Outcome is JobEnqueueOutcome.RefusedAtCapacity)
+        {
+            return StoredMailRederivationCarriage.QueueAtCapacity;
+        }
+
+        if (enqueued.Outcome is JobEnqueueOutcome.Created || enqueued.JobId is not { } jobId)
+        {
+            return StoredMailRederivationCarriage.Carried;
+        }
+
+        return await this.jobs.FindStateAsync(jobId, cancellationToken) switch
+        {
+            JobState.Pending or JobState.Claimed => StoredMailRederivationCarriage.Carried,
+            _ => StoredMailRederivationCarriage.Stopped,
+        };
     }
 }

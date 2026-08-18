@@ -428,8 +428,8 @@ Both take a while on a large mailbox. `rewind` prints how far it has got as it g
 it; `rederive` returns at once and `rederive-status` is where its progress is read. Neither loses what it has already
 done: a deployment restarted mid-re-derivation picks the run up where it stopped, and mail it had already re-read is not
 re-read again. [Bringing stored mail up to a later
-release](../operations/admin-endpoint.md#bringing-stored-mail-up-to-a-later-release) is the operator's reference for
-both.
+release](../operations/admin-endpoint.md#bringing-stored-mail-up-to-a-later-release) is the operator's reference for all
+three.
 
 ## Background work that stopped
 

@@ -72,6 +72,13 @@ internal static class PersistenceConcurrencyConflicts
     /// than ending on a unique violation the caller can do nothing about.
     /// </para>
     /// <para>
+    /// The next is the re-derivation run beside that cursor, and it is the whole-mailbox rule run's case for a scope
+    /// rather than for an account: two requests to re-read a scope that has never had a run reach the database
+    /// together, and the retry reads back the run the winner asked for. That is what makes asking twice an answer —
+    /// the second caller is told the walk is already under way instead of meeting a violation of a key it could not
+    /// have known was about to exist.
+    /// </para>
+    /// <para>
     /// The next is one address claimed by two contacts. Both writers read that nobody holds it, both insert, and the
     /// loser violates the index — which is what makes the retry the answer rather than a repair: it re-reads, finds
     /// the winner's contact holding the address, and reports which contact that is instead of the second caller
@@ -107,6 +114,7 @@ internal static class PersistenceConcurrencyConflicts
                 or MailFathomDbContext.EmailChunkOrdinalUniqueIndexName
                 or MailFathomDbContext.EmailEmbeddingPrimaryKeyConstraintName
                 or MailFathomDbContext.MailRederivationPositionPrimaryKeyConstraintName
+                or MailFathomDbContext.MailRederivationRunPrimaryKeyConstraintName
                 or MailFathomDbContext.ContactAddressUniqueIndexName
                 or MailFathomDbContext.OutgoingEmailIdentityUniqueIndexName
                 or MailFathomDbContext.EmailThreadIdentifierPrimaryKeyConstraintName,

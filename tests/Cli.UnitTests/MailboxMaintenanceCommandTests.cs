@@ -282,7 +282,7 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         // Arrange
         using var deployment = FakeMaintenanceDeployment.Rederiving(FakeMaintenanceDeployment.Start(
             FakeMaintenanceDeployment.Run(),
-            queued: false));
+            carriage: "queue-at-capacity"));
 
         // Act
         var exitCode = await this.RederiveAsync(deployment);
@@ -290,6 +290,34 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
+            this.console.Errors,
+            line => line.Contains("queue is full", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A segment nothing will attempt again leaves the run exactly as stalled as a full queue does, and the two are
+    /// undone by opposite acts: one by asking again, the other only through the queue's own commands. An operator sent
+    /// to drain a queue that was never full would wait on a run nobody is going to advance.
+    /// </summary>
+    [Fact]
+    public async Task Rederive_ASegmentNothingWillAttemptAgain_SendsTheOperatorToTheQueueRatherThanBackHere()
+    {
+        // Arrange
+        using var deployment = FakeMaintenanceDeployment.Rederiving(FakeMaintenanceDeployment.Start(
+            FakeMaintenanceDeployment.Run(),
+            started: false,
+            carriage: "stopped"));
+
+        // Act
+        var exitCode = await this.RederiveAsync(deployment);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(
+            this.console.Errors,
+            line => line.Contains("jobs dead-letters", StringComparison.Ordinal)
+                && line.Contains("jobs retry", StringComparison.Ordinal));
+        Assert.DoesNotContain(
             this.console.Errors,
             line => line.Contains("queue is full", StringComparison.Ordinal));
     }
@@ -381,6 +409,36 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
             this.console.Lines,
             line => line.Contains("No re-derivation has ever been asked for", StringComparison.Ordinal));
         Assert.Empty(this.console.Errors);
+    }
+
+    /// <summary>
+    /// Two scopes are two runs, so the command it suggests has to name the folder the operator narrowed to. Dropping
+    /// it would start a walk of the whole account, which is neither what was asked about nor what the answer described.
+    /// </summary>
+    [Fact]
+    public async Task RederiveStatus_ANarrowedScopeWithNoRun_SuggestsStartingOneOverThatFolder()
+    {
+        // Arrange
+        using var deployment = FakeMaintenanceDeployment.Rederiving(
+            FakeMaintenanceDeployment.Start(FakeMaintenanceDeployment.Run()));
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "mailbox",
+            "rederive-status",
+            "--account",
+            Account,
+            "--folder",
+            "archive",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            this.console.Lines,
+            line => line.Contains("mailbox rederive --account work --folder archive", StringComparison.Ordinal));
     }
 
     /// <summary>The account is required by each of them, because guessing it would be guessing whose mail is meant.</summary>

@@ -732,10 +732,12 @@ hands the rest of the scope to the next segment, which resumes past the stored p
 over.
 
 **Asking again while a run is outstanding is answered with that run**, because the idempotency key carries the scope
-and the run it is on. `started` says which of the two happened and `queued` says whether the work is actually waiting —
-a deployment whose queue was at its bound has recorded the run and is carrying nothing, and the same request is what
-puts it in motion once the queue has drained. That is the one outcome the command reports as a failure, since an
-operator watching a run nothing is walking would wait forever.
+and the run it is on. `started` says which of the two happened, and `carriage` says what is actually advancing the run:
+`carried` for a segment waiting in the queue or being worked, `queue-at-capacity` for a deployment whose queue was at
+its bound, which has recorded the run and is carrying nothing until the same request is made again, and `stopped` for a
+segment the deployment will not attempt again — read it with `mfctl jobs dead-letters` and return it with `mfctl jobs
+retry`. The command reports both of the latter as a failure and names which one it met, since an operator watching a run
+nothing is walking would wait forever, and the two are undone by different commands.
 
 **A second command reads it**, on the same path with `GET` and the scope in the query string:
 

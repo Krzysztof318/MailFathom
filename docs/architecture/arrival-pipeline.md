@@ -229,9 +229,8 @@ and, through them, the vectors the replacement cascades away.
   admits it.
 
 **A fourth path re-reads stored mail and produces none of that.** The re-derivation `mfctl mailbox rederive` asks for
-walks stored messages as background work and
-reads each one's raw MIME back through the same reader the run uses, so the parse, both judgements, and redaction reach
-it exactly as they reach an arriving message; what it writes is the row's own columns and the conversation the message
+walks stored messages as background work, reading each one's raw MIME back through the same reader the run uses, so the
+parse, both judgements, and redaction reach it exactly as they reach an arriving message; what it writes is the row's own columns and the conversation the message
 belongs to. It cuts no passages, embeds nothing, opens no mailbox session, and never reaches the classification gate, so
 it is the cheap way to fill in a column a later release added rather than a fourth way to derive from mail. State only a
 mailbox holds — flags, keywords, the internal date — is outside it, because nothing local can produce that. [Bringing

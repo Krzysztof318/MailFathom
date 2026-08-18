@@ -31,8 +31,11 @@ namespace MailFathom.Application.UnitTests.Mail.Maintenance;
 /// </remarks>
 public sealed class StoredMailRederivationHandlerTests
 {
+    /// <summary>How many emails one batch of a pass reads and commits together.</summary>
+    private const int BatchSize = 50;
+
     /// <summary>What one bounded pass covers: the pass's batch size times its batch budget.</summary>
-    private const int EmailsPerPass = 50 * 10;
+    private const int EmailsPerPass = BatchSize * 10;
 
     private static readonly DateTimeOffset Now = new(2026, 8, 18, 12, 0, 0, TimeSpan.Zero);
 
@@ -153,15 +156,15 @@ public sealed class StoredMailRederivationHandlerTests
         Assert.Equal(2, this.runs.Find(WholeAccount)!.SegmentCount);
     }
 
-    /// <summary>An attempt stopped inside a pass still hands the rest on, and counts only what a pass reported.</summary>
+    /// <summary>An attempt stopped inside a pass keeps what its committed batches re-read, not only what a whole pass reported.</summary>
     /// <remarks>
-    /// A pass raises the cancellation rather than reporting half of itself, so the batches it had already committed are
-    /// durable and their position is what the next segment resumes past — but they are not in the run's counts, because
-    /// nothing reported them. The figure an operator reads is therefore what completed passes re-read, which is what
-    /// the record says it is.
+    /// This is the ordinary way an attempt ends rather than a rare one: the execution timeout is what stops most of
+    /// them, and it lands inside a pass far more often than between two. Each batch therefore commits its counts with
+    /// the position it reached, so the two can never disagree — a figure short of the mail that was really re-read
+    /// would be permanent, because the next segment resumes past that position and never walks it again.
     /// </remarks>
     [Fact]
-    public async Task RunAsync_AnAttemptStoppedInsideAPass_HandsTheRestOnAndCountsWhatWasReported()
+    public async Task RunAsync_AnAttemptStoppedInsideAPass_KeepsWhatItsCommittedBatchesReRead()
     {
         // Arrange
         this.runs.Arrange(RunOf(segmentCount: 1));
@@ -176,7 +179,7 @@ public sealed class StoredMailRederivationHandlerTests
         var run = this.runs.Find(WholeAccount)!;
 
         Assert.True(run.IsOutstanding);
-        Assert.Equal(0, run.RederivedEmailCount);
+        Assert.Equal(BatchSize * 2, run.RederivedEmailCount);
         Assert.Equal(2, run.SegmentCount);
         Assert.Single(this.EnqueuedRequests());
     }
@@ -271,15 +274,16 @@ public sealed class StoredMailRederivationHandlerTests
         return new StoredMailRederivationHandler(
             new StoredMailRederivation(
                 store,
+                this.runs,
                 contentStore,
                 mimeReader,
                 commitPolicy,
+                this.timeProvider,
                 AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process)),
             this.runs,
             this.jobs,
             commitPolicy,
-            this.telemetry,
-            this.timeProvider);
+            this.telemetry);
     }
 
     private static ExtractedEmailMetadata MetadataOf(EmailOccurrenceId occurrenceId) =>

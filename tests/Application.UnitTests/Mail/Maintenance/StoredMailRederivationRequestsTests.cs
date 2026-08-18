@@ -46,7 +46,7 @@ public sealed class StoredMailRederivationRequestsTests
 
         // Assert
         Assert.True(submitted.Accepted);
-        Assert.Equal(JobEnqueueOutcome.Created, submitted.QueueOutcome);
+        Assert.Equal(StoredMailRederivationCarriage.Carried, submitted.Carriage);
         Assert.Equal(Now, submitted.Run.RequestedAt);
         Assert.True(submitted.Run.IsOutstanding);
         Assert.Equal(1, submitted.Run.SegmentCount);
@@ -182,7 +182,7 @@ public sealed class StoredMailRederivationRequestsTests
 
         // Assert
         Assert.True(submitted.Accepted);
-        Assert.Equal(JobEnqueueOutcome.RefusedAtCapacity, submitted.QueueOutcome);
+        Assert.Equal(StoredMailRederivationCarriage.QueueAtCapacity, submitted.Carriage);
         Assert.NotNull(this.runs.Find(WholeAccount));
     }
 

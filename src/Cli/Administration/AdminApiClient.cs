@@ -291,16 +291,9 @@ internal sealed class AdminApiClient
     {
         ArgumentNullException.ThrowIfNull(account);
 
-        var scope = $"account={Uri.EscapeDataString(account)}";
-
-        if (folder is { Length: > 0 } narrowed)
-        {
-            scope += $"&folder={Uri.EscapeDataString(narrowed)}";
-        }
-
         return this.RequestAsync(
             HttpMethod.Get,
-            $"{AdminEndpointRoutes.MailboxRederivationPath}?{scope}",
+            AdminEndpointRoutes.MailboxRederivationPath + ScopeQuery(account, folder),
             token,
             CliJsonContext.Default.MailboxRederivationState,
             cancellationToken);

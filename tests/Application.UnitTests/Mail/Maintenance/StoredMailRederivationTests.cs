@@ -9,6 +9,7 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -334,14 +335,18 @@ public sealed class StoredMailRederivationTests
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
 
+        FakeTimeProvider timeProvider = new(new DateTimeOffset(2026, 8, 16, 12, 0, 0, TimeSpan.Zero));
+
         return new StoredMailRederivation(
             store,
+            new InMemoryStoredMailRederivationRunStore(),
             contentStore,
             mimeReader,
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions { MaximumCommitAttempts = 2 },
-                new FakeTimeProvider(new DateTimeOffset(2026, 8, 16, 12, 0, 0, TimeSpan.Zero))),
+                timeProvider),
+            timeProvider,
             authorization ?? AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
     }
 

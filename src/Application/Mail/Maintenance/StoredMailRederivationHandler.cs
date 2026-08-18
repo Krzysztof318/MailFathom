@@ -25,9 +25,9 @@ namespace MailFathom.Application.Mail.Maintenance;
 /// </para>
 /// <para>
 /// Running it twice with one payload is the same as running it once, which is what the queue asks of every handler. The
-/// pass writes the same reading of the same immutable bytes, the position is committed with the work it accounts for,
-/// and the counts are added to a record that is re-read inside the commit that advances it — so a second attempt that
-/// overlapped the first neither loses its progress nor counts it twice.
+/// pass writes the same reading of the same immutable bytes, and each batch commits the position it reached together
+/// with what it read into the run — so a second attempt that overlapped the first neither loses its progress nor counts
+/// it twice, and one killed between two batches leaves the run reporting exactly the mail that was really re-read.
 /// </para>
 /// </remarks>
 public sealed class StoredMailRederivationHandler : IJobHandler
@@ -37,37 +37,32 @@ public sealed class StoredMailRederivationHandler : IJobHandler
     private readonly IJobStore jobs;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly IStoredMailRederivationTelemetry telemetry;
-    private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes the handler from the walk it drives and the record it keeps.</summary>
-    /// <param name="rederivation">Runs one bounded pass over the scope's stored mail.</param>
-    /// <param name="runStore">Holds the run the segments are carrying, and how far it has come.</param>
+    /// <param name="rederivation">Runs one bounded pass over the scope's stored mail, advancing the run as it commits.</param>
+    /// <param name="runStore">Reads whether the scope still has a run to carry, and moves it on to its next segment.</param>
     /// <param name="jobs">Enqueues the segment that carries whatever this attempt did not reach.</param>
-    /// <param name="commitPolicy">Advances the run from a fresh read, resolving a race with an overlapping attempt.</param>
+    /// <param name="commitPolicy">Advances the segment from a fresh read, resolving a race with an overlapping attempt.</param>
     /// <param name="telemetry">Publishes the segment and the passes beneath it.</param>
-    /// <param name="timeProvider">Stamps the instant the run reached the end of its scope.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public StoredMailRederivationHandler(
         StoredMailRederivation rederivation,
         IStoredMailRederivationRunStore runStore,
         IJobStore jobs,
         OptimisticConcurrencyRetryPolicy commitPolicy,
-        IStoredMailRederivationTelemetry telemetry,
-        TimeProvider timeProvider)
+        IStoredMailRederivationTelemetry telemetry)
     {
         ArgumentNullException.ThrowIfNull(rederivation);
         ArgumentNullException.ThrowIfNull(runStore);
         ArgumentNullException.ThrowIfNull(jobs);
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(telemetry);
-        ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.rederivation = rederivation;
         this.runStore = runStore;
         this.jobs = jobs;
         this.commitPolicy = commitPolicy;
         this.telemetry = telemetry;
-        this.timeProvider = timeProvider;
     }
 
     /// <inheritdoc />
@@ -134,11 +129,14 @@ public sealed class StoredMailRederivationHandler : IJobHandler
                     passScope.Completed(pass);
                 }
 
-                var run = await this.RecordAsync(scope, pass, !pass.EmailsRemain);
+                if (!pass.EmailsRemain)
+                {
+                    return true;
+                }
 
                 // The run is gone from under this attempt when an overlapping one reached the end of the scope first.
                 // There is nothing left to carry and nothing to hand on, so the attempt ends as the one that finished.
-                if (run is null || !pass.EmailsRemain)
+                if (await this.runStore.FindAsync(scope, cancellationToken) is not { IsOutstanding: true })
                 {
                     return true;
                 }
@@ -152,40 +150,6 @@ public sealed class StoredMailRederivationHandler : IJobHandler
 
         return false;
     }
-
-    /// <summary>Adds what one pass committed to the run, and ends the run when that pass reached the end of the scope.</summary>
-    /// <returns>The run as it now stands, or <see langword="null" /> when the scope no longer has one outstanding.</returns>
-    /// <remarks>
-    /// The record is re-read inside the commit rather than advanced from what this attempt last saw, because two
-    /// attempts can overlap for as long as it takes a lost lease to be noticed. Writing back a whole record read before
-    /// the pass would drop whatever the other attempt committed in between, and a count that goes backwards is exactly
-    /// what an operator watching a walk would read as work being lost.
-    /// </remarks>
-    private Task<StoredMailRederivationRun?> RecordAsync(
-        StoredMailScope scope,
-        StoredMailRederivationPass pass,
-        bool reachedEndOfScope) =>
-        this.commitPolicy.CommitAsync(
-            async (session, attemptCancellationToken) =>
-            {
-                if (await this.runStore.FindAsync(scope, attemptCancellationToken) is not { IsOutstanding: true } run)
-                {
-                    return null;
-                }
-
-                var advanced = run with
-                {
-                    RederivedEmailCount = run.RederivedEmailCount + pass.RederivedEmailCount,
-                    UnreadableEmailCount = run.UnreadableEmailCount + pass.UnreadableEmailCount,
-                    MissingContentEmailCount = run.MissingContentEmailCount + pass.MissingContentEmailCount,
-                    EndedAt = reachedEndOfScope ? this.timeProvider.GetUtcNow() : run.EndedAt,
-                };
-
-                await this.runStore.SaveAsync(session, advanced, attemptCancellationToken);
-
-                return advanced;
-            },
-            CancellationToken.None);
 
     /// <summary>Moves the run on to its next segment and enqueues the job that carries it.</summary>
     /// <remarks>

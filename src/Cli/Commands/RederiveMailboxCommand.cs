@@ -4,6 +4,7 @@
 
 using System.CommandLine;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Administration.Mailboxes;
 using MailFathom.Cli.Output;
 
 namespace MailFathom.Cli.Commands;
@@ -92,12 +93,18 @@ internal static class RederiveMailboxCommand
             context.Console.Write(details);
         }
 
-        // The queue refusing the work is backpressure rather than a failure: the run is recorded and nothing was lost,
-        // and the same command is what puts it in motion once the deployment has drained what is in front of it.
-        if (!started.Queued)
+        // A queue refusing the work is backpressure rather than a failure: the run is recorded and nothing was lost, and
+        // the same command is what puts it in motion once the deployment has drained what is in front of it. Anything
+        // else that leaves nothing carrying the run is a segment the deployment will not attempt again on its own,
+        // which the queue's own commands are what reverse — so the two endings send the operator to different places.
+        if (!string.Equals(started.Carriage, MailboxRederivationStart.CarriedName, StringComparison.Ordinal))
         {
-            context.Console.WriteError(
-                "The deployment's queue is full, so nothing is carrying the run yet. Run this command again once it has drained.");
+            context.Console.WriteError(string.Equals(
+                started.Carriage,
+                MailboxRederivationStart.QueueAtCapacityName,
+                StringComparison.Ordinal)
+                ? "The deployment's queue is full, so nothing is carrying the run yet. Run this command again once it has drained."
+                : $"Nothing is carrying the run: the work that would advance it stopped. Find it with '{CliRootCommand.CommandName} jobs dead-letters' and return it with '{CliRootCommand.CommandName} jobs retry'.");
 
             return CliExitCode.Failure;
         }
@@ -110,6 +117,6 @@ internal static class RederiveMailboxCommand
 
     /// <summary>Repeats the folder the operator narrowed to, so the suggested command watches the run they started.</summary>
     /// <remarks>Two scopes are two runs, so a suggestion that dropped the folder would point at a walk of the whole account that nobody asked for.</remarks>
-    private static string FolderArgument(string? folder) =>
+    internal static string FolderArgument(string? folder) =>
         folder is { Length: > 0 } narrowed ? $" --folder {narrowed}" : string.Empty;
 }
