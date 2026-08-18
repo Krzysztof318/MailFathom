@@ -82,7 +82,68 @@ try
     // scheme or host the proxy already corrected. Discovery, the challenge, and any address composed from a request
     // then agree with the name the client used, and a request from a peer this deployment does not trust passes
     // through with the scheme and host it arrived under.
+
+    var forwardedHeadersLogger = app.Services
+        .GetRequiredService<ILoggerFactory>()
+        .CreateLogger("ForwardedHeadersDiagnostics");
+
+    app.Use(async (context, next) =>
+    {
+        var options = context.RequestServices
+            .GetRequiredService<IOptions<ForwardedHeadersOptions>>()
+            .Value;
+
+        forwardedHeadersLogger.LogDebug(
+            """
+            BEFORE ForwardedHeaders
+            Scheme: {Scheme}
+            IsHttps: {IsHttps}
+            X-Forwarded-Proto: {ForwardedProto}
+            X-Forwarded-Host: {ForwardedHost}
+            RemoteIp: {RemoteIp}
+            ForwardedHeaders: {ForwardedHeaders}
+            ForwardLimit: {ForwardLimit}
+            KnownProxies: {KnownProxies}
+            KnownIPNetworks: {KnownIPNetworks}
+            """,
+            context.Request.Scheme,
+            context.Request.IsHttps,
+            context.Request.Headers["X-Forwarded-Proto"].ToString(),
+            context.Request.Headers["X-Forwarded-Host"].ToString(),
+            context.Connection.RemoteIpAddress,
+            options.ForwardedHeaders,
+            options.ForwardLimit,
+            string.Join(", ", options.KnownProxies),
+            string.Join(", ", options.KnownIPNetworks));
+
+        await next();
+    });
+
     app.UseForwardedHeaders();
+
+    app.Use(async (context, next) =>
+    {
+        forwardedHeadersLogger.LogDebug(
+            """
+            AFTER ForwardedHeaders
+            Scheme: {Scheme}
+            IsHttps: {IsHttps}
+            X-Forwarded-Proto: {ForwardedProto}
+            X-Original-Proto: {OriginalProto}
+            X-Forwarded-Host: {ForwardedHost}
+            X-Original-Host: {OriginalHost}
+            RemoteIp: {RemoteIp}
+            """,
+            context.Request.Scheme,
+            context.Request.IsHttps,
+            context.Request.Headers["X-Forwarded-Proto"].ToString(),
+            context.Request.Headers["X-Original-Proto"].ToString(),
+            context.Request.Headers["X-Forwarded-Host"].ToString(),
+            context.Request.Headers["X-Original-Host"].ToString(),
+            context.Connection.RemoteIpAddress);
+
+        await next();
+    });
 
     app.UseExceptionHandler();
 
