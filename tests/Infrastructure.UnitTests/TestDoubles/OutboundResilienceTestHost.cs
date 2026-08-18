@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics;
 using MailFathom.Application.Resilience;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.TestSupport;
@@ -9,20 +10,25 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Time.Testing;
 
 namespace MailFathom.Infrastructure.UnitTests.TestDoubles;
 
 /// <summary>Builds a container holding the real pipelines over a clock the test controls.</summary>
 internal sealed class OutboundResilienceTestHost : IDisposable
 {
-    /// <summary>How many times the pumping loop offers the scheduler a turn before it moves the clock again.</summary>
+    /// <summary>How many times the pumping loop offers the scheduler a turn before it waits on the real clock instead.</summary>
     /// <remarks>
     /// One yield is not enough. An abandoned attempt resumes through a cancellation callback several thread-pool hops
-    /// away, and a loop that yields once per advance keeps requeueing itself ahead of that chain and runs the clock
-    /// past every remaining limit. Offering a batch of turns lets the chain finish while the clock stands still.
+    /// away, and a loop that yields once per advance keeps requeueing itself ahead of that chain. A batch of turns
+    /// settles the common case without leaving the pumping thread parked, which is why it comes before the waits.
     /// </remarks>
-    private const int SchedulerTurnsPerAdvance = 32;
+    private const int SchedulerTurnsPerObservation = 32;
+
+    /// <summary>How often the loop looks again once its scheduler turns are spent.</summary>
+    private static readonly TimeSpan ObservationPollInterval = TimeSpan.FromMilliseconds(2);
+
+    /// <summary>How long the work of one step may take to surface before the execution is reported as hung.</summary>
+    private static readonly TimeSpan ObservationBound = TimeSpan.FromSeconds(30);
 
     private readonly ServiceProvider services;
     private readonly IConfigurationRoot configuration;
@@ -45,7 +51,7 @@ internal sealed class OutboundResilienceTestHost : IDisposable
         this.services = serviceCollection.BuildServiceProvider();
     }
 
-    internal FakeTimeProvider TimeProvider { get; } = new();
+    internal WaitRecordingTimeProvider TimeProvider { get; } = new();
 
     internal RecordingLoggerProvider Logs { get; } = new();
 
@@ -75,11 +81,20 @@ internal sealed class OutboundResilienceTestHost : IDisposable
     /// therefore also sets how precisely a recorded delay can be measured.
     /// </para>
     /// <para>
-    /// Nothing here waits on the real clock. Between advances the loop only offers the scheduler turns, so a test
-    /// costs what its continuations cost and never a fixed delay per step. Both bounds are escapes from a hang rather
-    /// than part of any behavior a test asserts on.
+    /// A step that brought a wait due is not taken as observed until the execution has answered it, by finishing or by
+    /// arming the wait it will sit on next. The work a due wait starts runs on the thread pool, so a loaded runner
+    /// answers later rather than differently: the loop holds the clock and waits on the real one instead of running
+    /// ahead into a later budget and letting that expire first. What a step guarantees is therefore the answer to the
+    /// step before it, never a fixed amount of scheduling.
+    /// </para>
+    /// <para>
+    /// Both bounds are escapes from a hang rather than part of any behavior a test asserts on, and both end an
+    /// execution that stops answering as a failure naming what it was doing rather than as a suite that times out.
     /// </para>
     /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the execution stops answering the clock, or does not complete within <paramref name="maximumAdvances" />.
+    /// </exception>
     internal async Task CompleteOnVirtualTimeAsync(
         Task execution,
         TimeSpan advanceStep,
@@ -87,12 +102,30 @@ internal sealed class OutboundResilienceTestHost : IDisposable
     {
         for (var advance = 0; advance < maximumAdvances && !execution.IsCompleted; advance++)
         {
-            for (var turn = 0; turn < SchedulerTurnsPerAdvance && !execution.IsCompleted; turn++)
+            for (var turn = 0;
+                turn < SchedulerTurnsPerObservation
+                    && !execution.IsCompleted
+                    && this.TimeProvider.OutstandingWaits == 0;
+                turn++)
             {
                 await Task.Yield();
             }
 
+            var waitsArmedBeforeTheStep = this.TimeProvider.ScheduledWaits;
+            var waitsElapsedBeforeTheStep = this.TimeProvider.ElapsedWaits;
+
             this.TimeProvider.Advance(advanceStep);
+
+            if (this.TimeProvider.ElapsedWaits != waitsElapsedBeforeTheStep)
+            {
+                await this.ObserveTheStepAsync(execution, waitsArmedBeforeTheStep, advanceStep);
+            }
+        }
+
+        if (!execution.IsCompleted)
+        {
+            throw new InvalidOperationException(
+                $"The execution did not complete within {maximumAdvances} advances of {advanceStep} on virtual time.");
         }
 
         await execution;
@@ -107,6 +140,38 @@ internal sealed class OutboundResilienceTestHost : IDisposable
         await this.CompleteOnVirtualTimeAsync((Task)execution, advanceStep, maximumAdvances);
 
         return await execution;
+    }
+
+    /// <summary>Holds the clock until the execution has answered the wait that just came due.</summary>
+    /// <remarks>
+    /// An answer is the execution finishing or a new wait being armed, which is every way a pipeline reacts to a
+    /// budget expiring. Scheduler turns come first because a thread pool with room answers within a few of them; the
+    /// polling that follows is what a saturated pool needs, and it parks the pumping thread rather than competing with
+    /// the chain it is waiting for.
+    /// </remarks>
+    private async Task ObserveTheStepAsync(Task execution, long waitsArmedBeforeTheStep, TimeSpan advanceStep)
+    {
+        var startedWaiting = Stopwatch.GetTimestamp();
+
+        bool Answered() =>
+            execution.IsCompleted || this.TimeProvider.ScheduledWaits != waitsArmedBeforeTheStep;
+
+        for (var turn = 0; turn < SchedulerTurnsPerObservation && !Answered(); turn++)
+        {
+            await Task.Yield();
+        }
+
+        while (!Answered())
+        {
+            if (Stopwatch.GetElapsedTime(startedWaiting) > ObservationBound)
+            {
+                throw new InvalidOperationException(
+                    $"The execution did not answer a wait that came due within {ObservationBound}, so the clock was "
+                    + $"held at {this.TimeProvider.GetUtcNow():O} rather than advanced by another {advanceStep}.");
+            }
+
+            await Task.Delay(ObservationPollInterval);
+        }
     }
 
     public void Dispose()
