@@ -254,6 +254,15 @@ internal sealed class InMemoryOutgoingEmailStore(
     {
         var row = this.RequireLeased(lease, outgoingEmailId);
 
+        // The real store reaches this stage from one stage only, which is what makes the pessimistic write a
+        // transition rather than a stamp: a second one, or one over a send already transmitting, is a caller that
+        // skipped a step.
+        if (row.Record.Stage != OutgoingEmailStage.Recorded)
+        {
+            throw new InvalidOperationException(
+                $"Outgoing email record {outgoingEmailId} is at stage {row.Record.Stage} rather than {OutgoingEmailStage.Recorded}.");
+        }
+
         row.Record = row.Record with
         {
             Stage = OutgoingEmailStage.TransmissionBegun,
@@ -271,7 +280,36 @@ internal sealed class InMemoryOutgoingEmailStore(
         int? replyCode,
         CancellationToken cancellationToken)
     {
+        if (stage is not (OutgoingEmailStage.Sent or OutgoingEmailStage.Refused or OutgoingEmailStage.Cancelled))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(stage),
+                stage,
+                "An outgoing email is advanced to a terminal stage; every other stage has a transition of its own.");
+        }
+
+        if (replyCode is not null and (< 100 or > 599))
+        {
+            throw new ArgumentOutOfRangeException(nameof(replyCode), replyCode, "An SMTP reply code is a three-digit number.");
+        }
+
         var row = this.RequireLeased(lease, outgoingEmailId);
+
+        // Two of the three follow one stage only, and that is the unknown window read from either end: nothing claims
+        // a delivery it never recorded a transmission for, and nothing claims a withdrawal after bytes that may
+        // already have reached somebody.
+        var isReachable = stage switch
+        {
+            OutgoingEmailStage.Sent => row.Record.Stage == OutgoingEmailStage.TransmissionBegun,
+            OutgoingEmailStage.Cancelled => row.Record.Stage == OutgoingEmailStage.Recorded,
+            _ => true,
+        };
+
+        if (!isReachable)
+        {
+            throw new InvalidOperationException(
+                $"Outgoing email record {outgoingEmailId} is at stage {row.Record.Stage} and cannot be moved to {stage}.");
+        }
 
         row.Record = row.Record with
         {

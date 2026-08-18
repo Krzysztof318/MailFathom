@@ -154,6 +154,7 @@ internal sealed partial class MailKitSmtpConnection : IAsyncDisposable
     /// <param name="cancellationToken">Cancels the submission.</param>
     /// <returns>What the server answered about the message.</returns>
     /// <exception cref="InvalidOperationException">Thrown before the connection has been established.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> or <paramref name="envelope" /> is <see langword="null" />.</exception>
     /// <exception cref="MailDeliveryUnavailableException">Thrown when the exchange failed without the server stating anything.</exception>
     /// <exception cref="TimeoutException">Thrown when the submission outlived its budget, which says nothing about what the server received.</exception>
     /// <remarks>

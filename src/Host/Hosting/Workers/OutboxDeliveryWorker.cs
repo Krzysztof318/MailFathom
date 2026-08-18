@@ -135,6 +135,10 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
     /// A pass that delivered nothing says nothing at all, because an empty outbox is the ordinary state of an account
     /// and a line per signal would be the whole log. What is reported is each send that ended, and the one ending that
     /// waits for a person is reported at the level that reaches an operator.
+    /// <para>
+    /// Every outcome is named and nothing falls through, for the same reason the metric's own mapping names every one:
+    /// an ending nobody wrote a line for is an ending that leaves the log describing a pass that did less than it did.
+    /// </para>
     /// </remarks>
     private void Report(MailAccountId accountId, MailOutboxPassReport report)
     {
@@ -181,8 +185,16 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
 
                     break;
 
-                default:
+                case MailOutboxDeliveryOutcome.ReleasedForShutdown:
+                    this.LogSendReleasedForShutdown(accountId.Value, result.AttemptCount);
+
                     break;
+
+                default:
+                    throw new ArgumentOutOfRangeException(
+                        nameof(report),
+                        result.Outcome,
+                        "No log line is defined for this delivery outcome.");
             }
         }
     }
@@ -221,6 +233,12 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
         Level = LogLevel.Warning,
         Message = "A message queued for account {AccountId} had moved to another attempt by the time attempt {AttemptCount} finished, so nothing was recorded for it. The attempt that holds it now is the one whose outcome counts.")]
     private partial void LogSendLeaseLost(string accountId, int attemptCount);
+
+    /// <summary>Reports a send handed back untouched, which costs it nothing and is worth one ordinary line.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "A message queued for account {AccountId} was given back before attempt {AttemptCount} transmitted anything, because the host is stopping. It holds no attempt against it and is claimable at once.")]
+    private partial void LogSendReleasedForShutdown(string accountId, int attemptCount);
 
     /// <summary>Reports a send whose attempt ended with the store unable to take the answer.</summary>
     [LoggerMessage(

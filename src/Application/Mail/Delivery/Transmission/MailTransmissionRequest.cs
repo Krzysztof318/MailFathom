@@ -74,4 +74,14 @@ public sealed record MailTransmissionRequest
 
         return new MailTransmissionRequest(sender, [.. recipients], rawMime);
     }
+
+    /// <summary>Describes the submission by its size, and never by the people it is between.</summary>
+    /// <returns>How many recipients it offers and how many bytes it transmits.</returns>
+    /// <remarks>
+    /// The override exists to suppress the one a record would synthesize, which prints every property and would
+    /// therefore put the sending address, every recipient, and the whole message into any interpolated string, log
+    /// template, or exception message that mentions a submission.
+    /// </remarks>
+    public override string ToString() =>
+        $"{this.Recipients.Count} recipient(s), {this.RawMime.Length} byte(s)";
 }

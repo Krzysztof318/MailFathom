@@ -388,7 +388,9 @@ how long it holds it, and how patient this deployment is with a submission serve
 | `MailDelivery:RetryMaxDelay` | TimeSpan | `01:00:00` | 1 s – 24 h, and never below `RetryBaseDelay` | restart |
 | `MailDelivery:SignalQueueCapacity` | int | `64` | 1 – 1000 | restart |
 
-**`AttemptTimeout` below `LeaseDuration` is the one ordering startup refuses rather than warns about.** The lease is
+**`AttemptTimeout` below `LeaseDuration` is one of the two orderings startup refuses rather than warns about**, the
+other being `RetryMaxDelay` at or above `RetryBaseDelay`, which the table above states as a constraint of its own. The
+first is the one worth the paragraph, because what it protects is a message rather than a schedule. The lease is
 what lets a crashed process's send be attempted again without anything being told the process died, and an attempt
 still transmitting when its own lease expires is a second attempt taking a message the first may already have sent. So
 the attempt is cancelled first, by a margin the operator chooses, and a configuration stating otherwise fails startup

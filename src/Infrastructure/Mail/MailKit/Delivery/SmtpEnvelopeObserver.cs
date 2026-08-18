@@ -50,7 +50,7 @@ internal sealed class SmtpEnvelopeObserver
     /// <summary>Writes down what the server said about one address.</summary>
     /// <param name="mailbox">The mailbox the <c>RCPT TO</c> command named.</param>
     /// <param name="response">The reply it answered with.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="mailbox" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="mailbox" /> or <paramref name="response" /> is <see langword="null" />.</exception>
     internal void RecipientAnswered(MailboxAddress mailbox, SmtpResponse response)
     {
         ArgumentNullException.ThrowIfNull(mailbox);
