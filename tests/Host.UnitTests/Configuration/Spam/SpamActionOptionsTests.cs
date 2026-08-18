@@ -31,17 +31,17 @@ public sealed class SpamActionOptionsTests
     [Theory]
     [InlineData(true, false)]
     [InlineData(false, true)]
-    public void FindErrors_AnActionAskedForWhileClassificationIsOff_IsRefused(bool fileInJunkFolder, bool markAsRead)
+    public void FindErrors_AnActionAskedForWhileClassificationIsOff_IsRefused(bool moveToJunkFolder, bool markAsRead)
     {
         // Arrange
-        var options = new SpamActionOptions { FileInJunkFolder = fileInJunkFolder, MarkAsRead = markAsRead };
+        var options = new SpamActionOptions { MoveToJunkFolder = moveToJunkFolder, MarkAsRead = markAsRead };
 
         // Act
         var error = Assert.Single(options.FindErrors(classificationEnabled: false));
 
         // Assert
         Assert.Equal(
-            [nameof(SpamActionOptions.FileInJunkFolder), nameof(SpamActionOptions.MarkAsRead)],
+            [nameof(SpamActionOptions.MoveToJunkFolder), nameof(SpamActionOptions.MarkAsRead)],
             error.MemberNames);
     }
 
@@ -51,7 +51,7 @@ public sealed class SpamActionOptionsTests
     public void FindErrors_AJunkFolderNamingNeitherAnAliasNorARole_IsRefused(string junkFolder)
     {
         // Arrange
-        var options = new SpamActionOptions { FileInJunkFolder = true, JunkFolder = junkFolder };
+        var options = new SpamActionOptions { MoveToJunkFolder = true, JunkFolder = junkFolder };
 
         // Act
         var error = Assert.Single(options.FindErrors(classificationEnabled: true));
@@ -80,7 +80,7 @@ public sealed class SpamActionOptionsTests
     public void Destination_NoJunkFolderNamed_ReadsAsTheJunkRole()
     {
         // Arrange
-        var options = new SpamActionOptions { FileInJunkFolder = true };
+        var options = new SpamActionOptions { MoveToJunkFolder = true };
 
         // Act
         var destination = options.Destination;
@@ -93,7 +93,7 @@ public sealed class SpamActionOptionsTests
     public void Destination_AnAliasNamed_ReadsAsThatFolderRatherThanARole()
     {
         // Arrange
-        var options = new SpamActionOptions { FileInJunkFolder = true, JunkFolder = "quarantine" };
+        var options = new SpamActionOptions { MoveToJunkFolder = true, JunkFolder = "quarantine" };
 
         // Act
         var destination = options.Destination;
@@ -109,7 +109,7 @@ public sealed class SpamActionOptionsTests
         // Arrange
         var options = new SpamActionOptions
         {
-            FileInJunkFolder = true,
+            MoveToJunkFolder = true,
             MarkAsRead = true,
             JunkFolder = $"{MailFolderReference.RoleScheme}{MailFolderSpecialUse.Junk}",
             Threshold = 8,

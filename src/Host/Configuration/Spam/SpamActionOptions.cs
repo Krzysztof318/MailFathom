@@ -33,7 +33,7 @@ internal sealed class SpamActionOptions
     /// carried out by the account's convergence pass. MailFathom never creates the folder, so an account with none is
     /// refused at startup rather than at the first spam message.
     /// </remarks>
-    public bool FileInJunkFolder { get; set; }
+    public bool MoveToJunkFolder { get; set; }
 
     /// <summary>Gets or sets whether junk has its remote <c>\Seen</c> flag set.</summary>
     /// <remarks>
@@ -61,7 +61,7 @@ internal sealed class SpamActionOptions
     public double? Threshold { get; set; }
 
     /// <summary>Gets whether either switch asks for anything.</summary>
-    internal bool IsAnyActionEnabled => this.FileInJunkFolder || this.MarkAsRead;
+    internal bool IsAnyActionEnabled => this.MoveToJunkFolder || this.MarkAsRead;
 
     /// <summary>Gets the folder junk is filed into, with the junk role standing in for a destination nobody named.</summary>
     /// <remarks>
@@ -76,7 +76,7 @@ internal sealed class SpamActionOptions
     /// <summary>Builds the settings these keys describe.</summary>
     /// <returns>The settings the recorder reads.</returns>
     internal SpamActionSettings ToSettings() => SpamActionSettings.Create(
-        this.FileInJunkFolder,
+        this.MoveToJunkFolder,
         this.MarkAsRead,
         this.Destination,
         this.Threshold);
@@ -90,7 +90,7 @@ internal sealed class SpamActionOptions
         {
             yield return new ValidationResult(
                 $"{SpamClassificationOptions.SectionName} asks for junk to be acted on while classification is disabled, and there is no verdict to act on. Set Enabled to true, or remove the switches under Actions.",
-                [nameof(this.FileInJunkFolder), nameof(this.MarkAsRead)]);
+                [nameof(this.MoveToJunkFolder), nameof(this.MarkAsRead)]);
         }
 
         if (this.JunkFolder is not null && !MailFolderReference.TryCreate(this.JunkFolder, out _))

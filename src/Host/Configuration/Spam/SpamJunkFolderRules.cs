@@ -45,7 +45,7 @@ internal static class SpamJunkFolderRules
 
         // Nothing is judged unless filing is actually switched on. A destination written beside switches that are off is
         // an operator preparing a configuration, and refusing it would make staging the change impossible.
-        if (!options.Enabled || !actions.FileInJunkFolder)
+        if (!options.Enabled || !actions.MoveToJunkFolder)
         {
             return [];
         }
