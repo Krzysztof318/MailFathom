@@ -7,10 +7,10 @@ using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Contacts;
 
-/// <summary>Reads the contact book: one person by identity, the person behind an address, and a page of the whole.</summary>
+/// <summary>Reads the contact book: one person by identity, by name, or by an address they use, and a page of the whole.</summary>
 /// <remarks>
 /// Every read joins no transaction and returns complete contacts rather than an entity graph, which is why it is a port
-/// of its own beside <see cref="IContactStore" /> rather than a set of methods on it. Both lookups are answered from an
+/// of its own beside <see cref="IContactStore" /> rather than a set of methods on it. Every lookup is answered from an
 /// index rather than from a scan, and the page is bounded and ordered so a walk of the book terminates.
 /// </remarks>
 public interface IContactDirectory
@@ -30,6 +30,26 @@ public interface IContactDirectory
     /// recorded. At most one contact can answer, which is a property of the store rather than of this method.
     /// </remarks>
     Task<Contact?> FindByAddressAsync(EmailAddress address, CancellationToken cancellationToken);
+
+    /// <summary>Reads who one name resolves to, by the whole of that name rather than by part of it.</summary>
+    /// <param name="displayName">The name to resolve.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The one contact carrying the name, or how many carry it when that is not one.</returns>
+    /// <remarks>
+    /// <para>
+    /// The comparison is on the name's whole comparison form, which is what separates this from the contained match a
+    /// page's search performs: a lookup that addresses a message resolves to one person or to nobody, and text that
+    /// merely appears inside somebody's name is not that person being named. Both are answered from the listing index
+    /// the book is ordered by.
+    /// </para>
+    /// <para>
+    /// The count is exact and the addresses of the people it counted are never read, so an ambiguous name costs one
+    /// number rather than a page of somebody else's correspondents.
+    /// </para>
+    /// </remarks>
+    Task<ContactMatch> MatchDisplayNameAsync(
+        ContactDisplayName displayName,
+        CancellationToken cancellationToken);
 
     /// <summary>Reads which contacts already hold each of the given addresses.</summary>
     /// <param name="addresses">The addresses to look up, at most as many as one contact may hold.</param>

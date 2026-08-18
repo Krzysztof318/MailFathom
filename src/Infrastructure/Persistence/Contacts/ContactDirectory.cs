@@ -15,8 +15,9 @@ namespace MailFathom.Infrastructure.Persistence.Contacts;
 /// <remarks>
 /// <para>
 /// Every read uses the scoped context and joins no transaction, and every one of them is bounded: a contact carries at
-/// most the addresses the domain admits, and a page carries at most what the query asked for. Both lookups are answered
-/// from an index — the primary key and the unique index over the address comparison form — rather than from a scan.
+/// most the addresses the domain admits, and a page carries at most what the query asked for. Every lookup is answered
+/// from an index — the primary key, the unique index over the address comparison form, and the listing index the name's
+/// comparison form leads — rather than from a scan.
 /// </para>
 /// <para>
 /// A page narrowed by a search is the one read no index answers, because a contained match has no prefix to seek on. It
@@ -54,6 +55,38 @@ internal sealed class ContactDirectory(MailFathomDbContext readContext) : IConta
                 cancellationToken);
 
         return entity is null ? null : ContactMapping.ToContact(entity);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The count comes back from the database rather than from a page this read would otherwise have to hold, which is
+    /// what keeps a name a hundred collected contacts happen to share from costing a hundred records to answer with one
+    /// number. The one contact is read only where there is exactly one, so the addresses of people a shared name matched
+    /// are never loaded at all.
+    /// </remarks>
+    public async Task<ContactMatch> MatchDisplayNameAsync(
+        ContactDisplayName displayName,
+        CancellationToken cancellationToken)
+    {
+        var sortKey = displayName.SortKey;
+
+        var matchCount = await readContext.Contacts
+            .AsNoTracking()
+            .CountAsync(record => record.DisplayNameSortKey == sortKey, cancellationToken);
+
+        if (matchCount != 1)
+        {
+            return matchCount == 0 ? ContactMatch.None : ContactMatch.Several(matchCount);
+        }
+
+        var entity = await readContext.Contacts
+            .AsNoTracking()
+            .Include(record => record.Addresses)
+            .FirstOrDefaultAsync(record => record.DisplayNameSortKey == sortKey, cancellationToken);
+
+        // A contact renamed or erased between the two reads leaves the name matching nobody, which is the same answer as
+        // a name nobody carried when the count was taken. Reporting it as unique would answer with no contact at all.
+        return entity is null ? ContactMatch.None : ContactMatch.Unique(ContactMapping.ToContact(entity));
     }
 
     /// <inheritdoc />

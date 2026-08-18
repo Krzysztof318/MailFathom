@@ -17,12 +17,14 @@ namespace MailFathom.IntegrationTests.Persistence;
 /// <summary>Proves the contact book against real PostgreSQL, where its constraints, its order, and its erasure live.</summary>
 /// <remarks>
 /// <para>
-/// Four claims, none of which a substitute can settle. That erasing a person removes every row derived from them runs
+/// Five claims, none of which a substitute can settle. That erasing a person removes every row derived from them runs
 /// along a foreign key the schema declares. That one address stays in one person's hands is a unique index, and losing
 /// that race has to reach a caller as a conflict rather than as a provider failure. That a walk of the book serves every
 /// contact once depends on PostgreSQL comparing the same two columns the index is ordered by, which is also the one part
-/// of the read that has to survive being translated into SQL at all. And that an amendment which drops an address frees
-/// it is the interaction between the replacement's deletes and that same index.
+/// of the read that has to survive being translated into SQL at all. That resolving a whole name answers with one person
+/// or with an exact count turns on that same collation and on a count the database takes rather than a page this read
+/// holds. And that an amendment which drops an address frees it is the interaction between the replacement's deletes and
+/// that same index.
 /// </para>
 /// <para>
 /// Every test owns its own domain of addresses, because the index they turn on is unique across the whole book and the
@@ -285,6 +287,58 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         Assert.Null(matchedNothing.NextCursor);
     }
 
+    /// <summary>
+    /// Addressing a message by naming somebody turns on this lookup answering with one person or with a count, and both
+    /// halves of it are PostgreSQL's: the equality is on a column pinned to the <c>C</c> collation, and the count is the
+    /// database's own rather than the length of a page this read never holds.
+    /// </summary>
+    [Fact]
+    public async Task MatchDisplayNameAsync_ANameOnePersonCarriesAndOneSeveralDo_AnswersWithThePersonAndWithTheCount()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+
+        var unique = await RecordAsync(
+            services,
+            "Solveig Lindqvist",
+            ["solveig@named.contacts.test"],
+            ContactOrigin.Asserted,
+            cancellationToken);
+
+        await RecordAsync(
+            services,
+            "Namesake Halvorsen",
+            ["namesake.one@named.contacts.test"],
+            ContactOrigin.Asserted,
+            cancellationToken);
+
+        await RecordAsync(
+            services,
+            "Namesake Halvorsen",
+            ["namesake.two@named.contacts.test"],
+            ContactOrigin.Asserted,
+            cancellationToken);
+
+        // Act
+        // The casing is the author's rather than the book's, which is the whole reason the comparison form is stored.
+        var byName = await MatchDisplayNameAsync(services, "solveig lindqvist", cancellationToken);
+        var shared = await MatchDisplayNameAsync(services, "Namesake Halvorsen", cancellationToken);
+        var carriedByNobody = await MatchDisplayNameAsync(services, "Solveig", cancellationToken);
+
+        // Assert
+        Assert.Equal(1, byName.MatchCount);
+        Assert.Equal(unique.Contact!.Id, byName.OnlyMatch?.Id);
+        Assert.Equal("solveig@named.contacts.test", byName.OnlyMatch?.PreferredAddress.Address);
+
+        Assert.Equal(2, shared.MatchCount);
+        Assert.Null(shared.OnlyMatch);
+
+        // Part of a name is not a person being named, which is what separates this lookup from a search.
+        Assert.Equal(0, carriedByNobody.MatchCount);
+        Assert.Null(carriedByNobody.OnlyMatch);
+    }
+
     /// <summary>An amendment is the whole record: what it stops naming is removed, and the address it releases is free.</summary>
     [Fact]
     public async Task AmendAsync_DroppingAnAddress_RemovesItsRowAndReleasesItToAnotherContact()
@@ -396,6 +450,15 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IContactDirectory>().ReadPageAsync(
                 ContactQuery.Create(ContactOrigin.Collected, search: null, pageSize, cursor),
+                token),
+            cancellationToken);
+
+    private static Task<ContactMatch> MatchDisplayNameAsync(
+        OrchestratedMailFathomServices services,
+        string displayName,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IContactDirectory>().MatchDisplayNameAsync(
+                ContactDisplayName.Create(displayName),
                 token),
             cancellationToken);
 

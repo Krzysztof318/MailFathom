@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Contacts;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
@@ -14,12 +15,14 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
@@ -169,7 +172,7 @@ public sealed class StoredEmailResponseAuthoringTests
         var authoring = AuthoringOver(Rendering(participants: ExchangeNamingTheAccount()));
         var request = Request(AuthoredResponseAct.Forward) with
         {
-            Recipients = [new AuthoredEmailRecipient(OutgoingRecipientRole.To, "elsewhere@example.test")],
+            Recipients = [NamedRecipient.AtAddress(OutgoingRecipientRole.To, "elsewhere@example.test")],
         };
 
         // Act
@@ -177,6 +180,66 @@ public sealed class StoredEmailResponseAuthoringTests
 
         // Assert
         Assert.Equal(["elsewhere@example.test"], Addressed(response, OutgoingRecipientRole.To));
+    }
+
+    /// <summary>
+    /// Somebody the author copies in may be named out of the contact book, and is an ordinary address by the time the
+    /// answer is composed — with the contact recorded beside it.
+    /// </summary>
+    [Fact]
+    public async Task AuthorAsync_AuthorCopiesInAContact_AddressesTheAddressThatContactPrefers()
+    {
+        // Arrange
+        var book = new InMemoryContactBookStore();
+        var anna = ContactHeldBy(book, "Anna Kowalska", "anna@example.test");
+        var authoring = AuthoringOver(Rendering(), contacts: book);
+        var request = Request() with
+        {
+            Recipients = [NamedRecipient.ByContact(OutgoingRecipientRole.Cc, anna.Id)],
+        };
+
+        // Act
+        var response = await authoring.AuthorAsync(request, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(["anna@example.test"], Addressed(response, OutgoingRecipientRole.Cc));
+        Assert.Equal(
+            anna.Id,
+            Assert.Single(response.Email!.Recipients, recipient => recipient.Contact is not null).Contact);
+    }
+
+    /// <summary>
+    /// A name several people carry addresses nobody, and the answer is refused as a whole rather than sent to the
+    /// people whose names were unambiguous.
+    /// </summary>
+    [Fact]
+    public async Task AuthorAsync_AuthorNamesAContactSeveralPeopleCarry_IsRefusedNamingHowManyMatched()
+    {
+        // Arrange
+        var book = new InMemoryContactBookStore();
+        ContactHeldBy(book, "Anna Kowalska", "anna@example.test");
+        ContactHeldBy(book, "Anna Kowalska", "anna.k@example.test");
+        var authoring = AuthoringOver(Rendering(), contacts: book);
+        var request = Request() with
+        {
+            Recipients =
+            [
+                NamedRecipient.ByContactName(
+                    OutgoingRecipientRole.Cc,
+                    ContactDisplayName.Create("Anna Kowalska")),
+            ],
+        };
+
+        // Act
+        var response = await authoring.AuthorAsync(request, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(response.IsAuthored);
+        Assert.Equal(
+            AuthoredResponseRefusalReason.RecipientContactNameAmbiguous,
+            response.Refusal?.Reason);
+        Assert.Equal(2, response.Refusal?.MatchedContactCount);
+        Assert.Equal(MailFathomErrorCode.OutgoingEmailContactNameAmbiguous, response.Refusal?.Failure);
     }
 
     /// <summary>
@@ -875,6 +938,26 @@ public sealed class StoredEmailResponseAuthoringTests
         return new EmailParticipant(role, emailAddress);
     }
 
+    /// <summary>Puts one person into the book and answers with them, so a test names the contact it just held.</summary>
+    private static Contact ContactHeldBy(InMemoryContactBookStore book, string displayName, string address)
+    {
+        Assert.True(EmailAddress.TryCreate(displayName: null, address, out var emailAddress));
+
+        var contact = Contact.Create(
+            ContactId.Create(Guid.CreateVersion7()),
+            ContactDisplayName.Create(displayName),
+            [emailAddress],
+            emailAddress,
+            note: null,
+            ContactOrigin.Asserted,
+            SentAt,
+            SentAt);
+
+        book.Hold(contact);
+
+        return contact;
+    }
+
     private static AuthoredResponseRequest Request(AuthoredResponseAct act = AuthoredResponseAct.Reply) => new()
     {
         AnsweredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
@@ -927,6 +1010,7 @@ public sealed class StoredEmailResponseAuthoringTests
         IEmailContentRepairRequestStore? repairRequestStore = null,
         IMailFolderParticipationReader? folderParticipation = null,
         IOutgoingSenderIdentityReader? senderIdentities = null,
+        IContactDirectory? contacts = null,
         OutgoingEmailBounds? bounds = null,
         AccessAuthorization? authorization = null)
     {
@@ -945,6 +1029,7 @@ public sealed class StoredEmailResponseAuthoringTests
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             senderIdentities ?? SenderIdentitiesFor(answered.AccountId),
+            new NamedRecipientResolver(contacts ?? new InMemoryContactBookStore()),
             bounds ?? Bounds(),
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
     }

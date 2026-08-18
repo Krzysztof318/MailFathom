@@ -99,6 +99,26 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
         Task.FromResult(this.contactsById.Values.FirstOrDefault(contact => contact.Holds(address)));
 
     /// <inheritdoc />
+    public Task<ContactMatch> MatchDisplayNameAsync(
+        ContactDisplayName displayName,
+        CancellationToken cancellationToken)
+    {
+        var carrying = this.contactsById.Values
+            .Where(contact => string.Equals(
+                contact.DisplayName.SortKey,
+                displayName.SortKey,
+                StringComparison.Ordinal))
+            .ToArray();
+
+        return Task.FromResult(carrying.Length switch
+        {
+            0 => ContactMatch.None,
+            1 => ContactMatch.Unique(carrying[0]),
+            _ => ContactMatch.Several(carrying.Length),
+        });
+    }
+
+    /// <inheritdoc />
     public Task<IReadOnlyDictionary<EmailAddress, ContactId>> FindHoldersOfAsync(
         IReadOnlyCollection<EmailAddress> addresses,
         CancellationToken cancellationToken)

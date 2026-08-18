@@ -1419,6 +1419,11 @@ internal sealed class MailFathomDbContext : DbContext
                 .HasMaxLength(OutgoingRecipient.MaximumAddressLength)
                 .IsRequired();
 
+            // The contact the address was resolved from is deliberately left with no relationship, no constraint, and no
+            // index of its own. It records which person this message was addressed by naming, so a contact amended or
+            // erased afterwards must not change what was sent, and nothing ever looks a send up by it: the column is read
+            // back with the record it belongs to, exactly as the address beside it is.
+
             // Stored as text for the reason every other enum on this feature is, and required on both: a row whose text
             // names no declared value fails the read rather than being taken as a neighbouring one by elimination.
             entity.Property(recipient => recipient.Role).HasConversion<string>().HasMaxLength(64).IsRequired();

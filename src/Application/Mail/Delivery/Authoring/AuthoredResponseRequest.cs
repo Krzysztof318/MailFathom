@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Mail.Delivery.Authoring;
@@ -40,9 +40,17 @@ public sealed record AuthoredResponseRequest
 
     /// <summary>Gets the people the author named themselves, which is everybody a forward goes to.</summary>
     /// <remarks>
+    /// <para>
     /// They are added to whoever the act itself addresses rather than replacing them, so naming somebody on a reply
     /// copies them in without dropping the person being answered. A forward addresses nobody of its own, so this is the
     /// whole of where it goes and a forward naming nobody is refused when it is composed.
+    /// </para>
+    /// <para>
+    /// Each of them is named by an address or by somebody the contact book holds, exactly as they are on a message
+    /// answering nothing. What the answer itself derives — whoever asked for answers, and everybody a reply to all keeps
+    /// in the conversation — is read out of the stored copy's own headers and is an address by the time it is read, so
+    /// the book is asked about what an author added and about nothing else.
+    /// </para>
     /// </remarks>
-    public IReadOnlyList<AuthoredEmailRecipient> Recipients { get; init; } = [];
+    public IReadOnlyList<NamedRecipient> Recipients { get; init; } = [];
 }

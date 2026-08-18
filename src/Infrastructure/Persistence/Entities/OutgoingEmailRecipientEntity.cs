@@ -31,6 +31,15 @@ internal sealed class OutgoingEmailRecipientEntity
     /// </remarks>
     public required string Address { get; set; }
 
+    /// <summary>Gets or sets the contact the address was resolved from, and <see langword="null" /> when the author supplied the address.</summary>
+    /// <remarks>
+    /// No foreign key stands behind it, which is the point rather than an omission: the row states which person this
+    /// message was addressed by naming, and a contact the owner amends, promotes, or erases afterwards does not change
+    /// what was sent. A cascade or a null-out would rewrite that answer, and nothing reads the value to address anybody
+    /// again — the address beside it is what an attempt offers.
+    /// </remarks>
+    public Guid? ContactId { get; set; }
+
     public OutgoingRecipientRole Role { get; set; }
 
     public OutgoingRecipientStatus Status { get; set; }

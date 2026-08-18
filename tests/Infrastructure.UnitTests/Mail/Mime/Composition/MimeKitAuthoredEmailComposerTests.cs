@@ -6,6 +6,7 @@ using System.Text;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
@@ -30,6 +31,10 @@ public sealed class MimeKitAuthoredEmailComposerTests
     private static readonly MailAccountId Account = MailAccountId.Create("primary");
 
     private static readonly DateTimeOffset ComposedAt = new(2026, 8, 17, 9, 30, 0, TimeSpan.Zero);
+
+    /// <summary>The contact a resolved recipient came from, which the composition carries and never reads.</summary>
+    private static readonly ContactId Contact =
+        ContactId.Create(Guid.Parse("0198f0a0-4444-7000-8000-000000000001"));
 
     /// <summary>The account's own address is what a message is written from, and there is no input path that names one.</summary>
     [Fact]
@@ -142,6 +147,92 @@ public sealed class MimeKitAuthoredEmailComposerTests
         var message = Parse(composition);
         Assert.Equal("anna@example.test", Assert.IsType<MailboxAddress>(Assert.Single(message.To)).Address);
         Assert.Empty(message.Bcc);
+    }
+
+    /// <summary>
+    /// A recipient whose address came out of the contact book is recorded with the contact beside the address, so what
+    /// was sent stays answerable after the book changes.
+    /// </summary>
+    [Fact]
+    public void Compose_RecipientResolvedFromAContact_RecordsTheContactBesideTheAddress()
+    {
+        // Arrange
+        var composer = CreateComposer();
+        var authored = Authored() with
+        {
+            Recipients =
+            [
+                new AuthoredEmailRecipient(OutgoingRecipientRole.To, "anna@example.test", "Anna Kowalska", Contact),
+            ],
+        };
+
+        // Act
+        var composition = composer.Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        var recipient = Assert.Single(composition.Email!.Request.Recipients);
+        Assert.Equal("anna@example.test", recipient.Address.Address);
+        Assert.Equal(Contact, recipient.Contact);
+        Assert.Equal(
+            "Anna Kowalska",
+            Assert.IsType<MailboxAddress>(Assert.Single(Parse(composition).To)).Name);
+    }
+
+    /// <summary>
+    /// An address the book supplied is an ordinary address from that moment on, so every refusal a written-down address
+    /// meets it meets as well. Naming a contact is therefore no way to reach a mailbox naming an address could not.
+    /// </summary>
+    [Fact]
+    public void Compose_ContactResolvedAddressTheServerCannotCarry_IsRefusedLikeAnyOther()
+    {
+        // Arrange
+        var composer = CreateComposer();
+        var authored = Authored() with
+        {
+            Recipients = [new AuthoredEmailRecipient(OutgoingRecipientRole.To, "zoë@example.test", null, Contact)],
+        };
+
+        // Act
+        var composition = composer.Compose(
+            Account,
+            Requester(),
+            authored,
+            Capabilities(acceptsInternationalizedAddresses: false));
+
+        // Assert
+        AssertRefused(
+            composition,
+            AuthoredEmailRefusalReason.InternationalizationUnsupported,
+            AuthoredEmailField.To,
+            MailFathomErrorCode.OutgoingEmailInternationalizationUnsupported);
+    }
+
+    /// <summary>
+    /// One mailbox is offered once whether it was named as a person or written down, because the envelope compares the
+    /// address and knows nothing about the book.
+    /// </summary>
+    [Fact]
+    public void Compose_AContactAndAWrittenAddressNamingOneMailbox_OffersItOnce()
+    {
+        // Arrange
+        var composer = CreateComposer();
+        var authored = Authored() with
+        {
+            Recipients =
+            [
+                new AuthoredEmailRecipient(OutgoingRecipientRole.To, "anna@example.test", "Anna Kowalska", Contact),
+                new AuthoredEmailRecipient(OutgoingRecipientRole.Cc, "Anna@Example.test"),
+            ],
+        };
+
+        // Act
+        var composition = composer.Compose(Account, Requester(), authored, Capabilities());
+
+        // Assert
+        var recipient = Assert.Single(composition.Email!.Request.Recipients);
+        Assert.Equal(OutgoingRecipientRole.To, recipient.Role);
+        Assert.Equal(Contact, recipient.Contact);
+        Assert.Empty(Parse(composition).Cc);
     }
 
     /// <summary>A blind recipient is offered exactly as any other is, and the transmitted headers do not name them.</summary>

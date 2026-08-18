@@ -45,4 +45,19 @@ public enum AuthoredResponseRefusalReason
     /// message.
     /// </remarks>
     BoundExceeded = 3,
+
+    /// <summary>A recipient the author added named a contact the book does not hold.</summary>
+    /// <remarks>
+    /// The three reasons below are the resolution's own, restated here because an author of an answer meets them exactly
+    /// as an author of a message answering nothing does. Which of the three it is decides what the author changes, which
+    /// is why one reason for all of them would not do.
+    /// </remarks>
+    RecipientContactUnknown = 4,
+
+    /// <summary>A recipient the author added named a contact by a name more than one contact carries.</summary>
+    /// <remarks>The refusal carries how many matched, so the author knows the name is shared rather than wrong.</remarks>
+    RecipientContactNameAmbiguous = 5,
+
+    /// <summary>A recipient the author added chose an address the named contact does not hold.</summary>
+    RecipientContactAddressNotHeld = 6,
 }

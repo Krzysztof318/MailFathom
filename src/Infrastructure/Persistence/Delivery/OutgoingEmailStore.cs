@@ -89,6 +89,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
                 OutgoingEmail = entity,
                 Ordinal = ordinal,
                 Address = recipient.Address.Address,
+                ContactId = recipient.Contact?.Value,
                 Role = recipient.Role,
                 Status = OutgoingRecipientStatus.Pending,
             });

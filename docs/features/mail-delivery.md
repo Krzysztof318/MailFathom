@@ -4,7 +4,8 @@
 
 Reading a mailbox and submitting to one are two capabilities against two servers, and MailFathom holds them apart. The
 submission half is whole: an account declares where its mail is submitted, a **delivery session** is opened against that
-server — connected, encrypted, authenticated, and asked what it will accept — an authored message is **composed into
+server — connected, encrypted, authenticated, and asked what it will accept — a recipient named as a person is
+**resolved against the contact book**, an authored message is **composed into
 MIME**, a **reply or a forward is authored** from mail this deployment already holds, the send is written down durably
 before anything acts on it, and it is then **claimed, transmitted, and settled** against the record it was written as. A
 deployment that configures a submission endpoint sends mail.
@@ -225,6 +226,46 @@ are `28001` for an account configuring no address to send from, `28002` for an i
 message can be composed from, `28004` for an internationalized address the server cannot carry, and `28005` for any
 bound.
 
+## Addressing a message by naming a contact
+
+An author names each recipient either by an address or by somebody [the contact book](contacts.md) holds, and
+`NamedRecipientResolver` is the single place the second becomes the first. It sits between authoring and composition on
+the way to the outgoing record, which is what makes naming a person a convenience of addressing rather than a second way
+out of the deployment: what it produces is an ordinary address, indistinguishable from one an author typed, so every
+bound, refusal, and check a written-down address meets it meets as well. Naming a contact can therefore reach no mailbox
+that naming an address could not.
+
+**A contact is named by the identity the book gave it or by the whole name the owner recorded**, and a name addresses a
+message only where exactly one contact carries it. Nothing ranks candidates, nothing prefers the most recently written
+down, and nothing falls back to a near match: a recipient chosen that way is a message delivered to somebody nobody
+named. The name is compared on the form the book compares its own values in, so the casing an author wrote is immaterial,
+and it is the whole name rather than part of one — text that merely appears inside somebody's name is not that person
+being named, which is what separates addressing from the contained match a search of the book performs.
+
+**The address used is the one the owner made preferred**, unless the authored act names another address of that same
+contact — and an address that contact does not hold is refused rather than sent to and rather than quietly replaced by
+the preferred one. The value that reaches the message is the book's own spelling of it. The name written beside it in the
+header is the name the owner recorded, which is the point of addressing somebody by it: the message reads as one to a
+person rather than to a mailbox.
+
+**One unresolved recipient refuses the whole message.** Sending to everybody else would tell an author their message went
+out while the person they cared about never receives it.
+
+**The record keeps both facts.** A recipient resolved from the book is written down with the address the send was offered
+to and the contact it came from, so what was sent stays answerable after the contact is amended, promoted, or erased. The
+addresses in the composed message are the ones that were resolved; nothing re-reads the book to resume a send.
+
+**A refusal names how many contacts matched and nothing else about them.** The codes are `28013` for a contact the book
+does not hold — an identity nothing answers to and a name nobody carries are one answer, because the remedy is the same —
+`28014` for a name several contacts carry, which carries the count, and `28015` for an address the named contact does not
+hold, which text naming no mailbox at all also produces. No refusal, result, or log line reveals an address the caller
+did not supply, and none of them names anybody who was counted.
+
+**The resolution asks for no permission of its own.** Every use case above it runs under a principal, and only a caller
+can hold a grant at all — the process identity that runs work nobody requested holds none — so a grant demanded there
+would refuse a rule addressing a contact rather than authorize anything. Whether a caller may name people out of the book
+is decided at the boundary the caller reached, beside the grant that lets it send.
+
 ## Replying and forwarding from mail this deployment already holds
 
 A reply and a forward are the two sends that begin from a message rather than from a blank one, and everything that makes
@@ -256,7 +297,11 @@ reaches what a reply to all *adds* and nothing else: whoever asked for answers i
 is this account's own address, which is what a message somebody sent themselves and a shared mailbox two colleagues both
 send as both look like, and leaving it out would resolve the reply to nobody and refuse it. One mailbox is offered once and in the more visible header, as it is for any
 authored list. A forward addresses nobody of its own: the people it goes to are people the original never named, so its
-author names all of them. Which act it is, is explicit; there is no default that quietly becomes the other.
+author names all of them. Which act it is, is explicit; there is no default that quietly becomes the other. Whoever the
+author names themselves may be named as a person out of the contact book, resolved exactly as on a message answering
+nothing, while everybody the act itself derives is an address already by the time it is read out of the stored copy's own
+headers — so an answer can reach no mailbox a new message could not, and a name several contacts carry refuses the answer
+rather than addressing one of them.
 
 **The subject takes the conventional prefix only where there is not one already.** `Re:` and `Fwd:` are what this system
 writes, and the comparison that decides whether to write one recognizes the prefixes actually in use — `Aw`, `Sv`,
@@ -507,6 +552,16 @@ in two headers becoming one offer in the more visible one, a blind recipient app
 the transmitted bytes, an eight-bit body transfer-encoded when the server takes none, the two threading headers written
 together or not at all, and the line ending a stored message carries — which matters precisely because the bytes are
 transmitted verbatim rather than re-serialized.
+
+Resolving a recipient named as a person is settled in the unit suite too, against an in-memory book rather than a
+substitute, because every claim is about what a lookup of the book can answer: a name one person carries whatever casing
+it was written in, a name several carry refusing and naming how many, an identity and a name nobody answers to producing
+one refusal, an act naming another of the contact's addresses and an act naming one they do not hold, an address the
+author wrote reaching the composition unparsed and naming no contact, and one recipient nobody can be found for refusing
+the whole message. That a resolved address is then an ordinary address is proven where it would stop being one — in the
+composition, where a contact-resolved address refused for internationalization is refused exactly as a written-down one
+is, and where a contact and a typed address naming one mailbox become one offer. That the record keeps the contact beside
+the address is the integration suite's, since only a real column can round-trip it.
 
 Authoring a reply or a forward is settled in the unit suite for the same reason, since it reaches no server either. What
 the tests establish there is the threading of an answer to a message with and without a `References` header and to one

@@ -761,7 +761,14 @@ send being attempted, and it would be worth nothing if it also stopped the send 
 in its recipient list. A message is offered per address and answered per address, so a mistyped address among five must
 not stop the other four, and the four the message reached must not be offered it again when the fifth is retried. Each
 row carries the `Address`, the `Role` the composed message names them in — `To`, `Cc`, or `Bcc`, which reach `RCPT TO`
-identically — the `Status`, and the `LastReplyCode` and `AnsweredAt` of the last answer about them. It carries an `xmin`
+identically — the `Status`, and the `LastReplyCode` and `AnsweredAt` of the last answer about them. It also carries a
+nullable `ContactId` where the address came out of the contact book rather than from an author's own typing, which the
+`AddOutgoingRecipientContact` migration adds. Both are kept because they answer different questions: the address is what
+a resumed attempt offers, and the contact is which person the message was addressed by naming — a record holding only the
+person would answer the wrong question a year later, since a message sent to somebody whose address changed afterwards
+was sent to the address they had. It carries no foreign key onto `contacts` and no index, deliberately in both cases: a
+contact amended, promoted, or erased later must not rewrite what was sent, and nothing ever looks a send up by contact.
+It carries an `xmin`
 token of its own rather than relying on the record's, because an attempt answers about one address without touching the
 record above it: without one, two attempts settling the same recipient would be a last writer winning silently, and
 settling a recipient is what decides whether anybody is offered the message again.
@@ -929,9 +936,11 @@ them, and why the record carries no subject, no body, and no header of its own. 
 `outgoing_email_contents` and is reached by identifier, so listing the outbox, advancing a stage, or answering about a
 recipient never loads it. The two cascades from `outgoing_emails` are what make erasure structural: deleting the
 record destroys the recipients and the stored message with it, so an outgoing message cannot outlive the record that
-says who it was for. Nothing in any of the three reaches a log, a metric, a trace, or an exception message — an
-exception about a recipient names the record, and the position where the row it was reading has one, rather than the
-address.
+says who it was for. A recipient's `ContactId` does not widen any of that: it is the one column of the three that is not
+personal data, it is the same identifier a failure is allowed to name, and it points at `contacts` without a constraint
+so erasing a contact leaves the send saying who it went to rather than rewriting it. Nothing in any of the three reaches
+a log, a metric, a trace, or an exception message — an exception about a recipient names the record, and the position
+where the row it was reading has one, rather than the address.
 
 `embedding_profiles` is the exception on this page: it holds no personal data at all. It describes a model, and the credential that reaches that model is configuration rather than a column here, so nothing in this table is a secret or is derived from anybody's mail.
 
