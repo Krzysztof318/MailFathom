@@ -2,12 +2,16 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
 using MailFathom.Application.Synchronization;
+using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.Extensions.DependencyInjection;
@@ -55,6 +59,9 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
     /// <summary>An identity of the shape the compiler derives, restored rather than computed so the column is what is under test.</summary>
     private static readonly MailRuleSetRevision Revision = MailRuleSetRevision.Restore("0a1b2c3d4e5f");
 
+    /// <summary>The domain every message this test stores authenticated as, and is recognized by name for.</summary>
+    private static readonly SenderDomain AuthenticatedDomain = CreateDomain("mailfathom.test");
+
     /// <summary>
     /// The whole arrival path over a real schema: mail nobody has evaluated is what the queue holds, the fact surface
     /// comes back projected from the row rather than loaded from it, and recording an evaluation is what takes an email
@@ -69,6 +76,7 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
         await DrainArrivalQueueAsync(services, cancellationToken);
         var evaluated = await StoreOneMessageAsync(services, uid: 9401, cancellationToken);
         var awaiting = await StoreOneMessageAsync(services, uid: 9402, cancellationToken);
+        await ObserveKeywordsAsync(services, evaluated, ["$Invoice", "$Todo"], cancellationToken);
 
         // Act
         var queued = await ReadArrivalQueueAsync(services, resumeAfter: null, DrainBatchSize, cancellationToken);
@@ -94,6 +102,16 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
         Assert.Contains(NormalizedAddress(RecipientAddress), arrival.Facts.RecipientAddresses);
         Assert.Equal(SyntheticEmail.ReceivedAt, arrival.Facts.ReceivedAt);
         Assert.True(arrival.Facts.HasExtractedContent);
+
+        // The three verdicts and the keywords are columns of the row rather than anything a pass computes, so what
+        // proves them is a projection that reads them back as they were written — a fact left out of the projection
+        // would answer with its enumeration's default on every message and no condition naming it would ever match.
+        Assert.Equal(AuthorAuthenticationOutcome.Authenticated, arrival.Facts.AuthorAuthentication);
+        Assert.Equal(SenderTrustLevel.Trusted, arrival.Facts.SenderTrust);
+        Assert.Equal(MachineAuthorshipBand.Likely, arrival.Facts.MachineAuthorship);
+        // The keywords in their normalized form for the same reason as the alias and the addresses: RemoteEmailKeywords
+        // folds what a server wrote to upper case, and the fact surface publishes what the row holds.
+        Assert.Equal(["$INVOICE", "$TODO"], arrival.Facts.Keywords.Order(StringComparer.Ordinal));
 
         // Text was extracted, so nothing about this message is still expected and a body-text condition reads it now.
         Assert.False(arrival.AwaitsExtraction);
@@ -388,6 +406,74 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
     }
 
     /// <summary>Stores one synthetic message, whose extraction the same session derives its search document from.</summary>
+    private static SenderDomain CreateDomain(string name)
+    {
+        Assert.True(SenderDomain.TryCreate(name, out var domain));
+
+        return domain;
+    }
+
+    /// <summary>Builds the extraction of a message every stored verdict was reached for.</summary>
+    /// <remarks>
+    /// Every message this test stores carries them, because what is under test is the projection rather than the
+    /// derivation: a value that differs from the enumeration's own default is what tells a column read from the row
+    /// apart from a fact left out of the projection.
+    /// </remarks>
+    private static ExtractedEmailMetadata JudgedExtractionOf(EmailOccurrenceId occurrenceId, string subject) =>
+        SyntheticEmail.ExtractionOf(
+            occurrenceId,
+            subject,
+            SyntheticEmail.BodyTextContaining(subject, wordCount: 40),
+            RecipientAddress) with
+        {
+            SenderAuthentication = SenderAuthentication.Authenticated(
+                [AuthenticatedDomain],
+                spfDomains: [],
+                AuthenticatedDomain,
+                DmarcOutcome.Pass),
+            SenderTrust = SenderTrust.Trusted(
+                SenderTrustSource.ConfiguredTrustedSender,
+                SenderTrustPolicyRevision.FromStoredValue("0a1b2c3d4e5f0a1b")),
+            MachineAuthorship = MachineAuthorshipAssessment.Assessed(
+                MachineAuthorshipBand.Likely,
+                likelihood: 0.9,
+                MachineAuthorshipSignals.FormulaicFraming,
+                MachineAuthorshipProfileRevision.FromStoredValue("0a1b2c3d4e5f0a1b")),
+        };
+
+    /// <summary>Records the keywords a server reported for one stored email, through the reconciliation write.</summary>
+    private static async Task ObserveKeywordsAsync(
+        OrchestratedMailFathomServices services,
+        StoredEmailId storedEmailId,
+        IReadOnlyList<string> keywords,
+        CancellationToken cancellationToken)
+    {
+        var commitResult = await services.CommitAsync(
+            async (scope, session, token) => await scope
+                .GetRequiredService<IStoredEmailReconciliationStore>()
+                .ApplyReconciliationOutcomeAsync(
+                    session,
+                    new ReconciledFolderOutcome(
+                        [
+                            new ObservedEmailFlags(
+                                storedEmailId,
+                                RemoteEmailFlagSnapshot.NeverObserved with
+                                {
+                                    ObservedAt = EvaluatedAt,
+                                    Keywords = RemoteEmailKeywords.Create(keywords),
+                                }),
+                        ],
+                        ConfirmedUnchanged: [],
+                        Disappeared: [],
+                        RemovedByOwnMutation: [],
+                        RemotelyDeletedEmailDisposition.RetainTombstone,
+                        EvaluatedAt),
+                    token),
+            cancellationToken);
+
+        Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+    }
+
     private static async Task<StoredEmailId> StoreOneMessageAsync(
         OrchestratedMailFathomServices services,
         uint uid,
@@ -405,11 +491,7 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
                 .UpsertMetadataAsync(
                     session,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
-                    SyntheticEmail.ExtractionOf(
-                        occurrenceId,
-                        subject,
-                        SyntheticEmail.BodyTextContaining(subject, wordCount: 40),
-                        RecipientAddress),
+                    JudgedExtractionOf(occurrenceId, subject),
                     StoredEmailContentAvailability.Available,
                     token),
             cancellationToken);

@@ -23,8 +23,8 @@ namespace MailFathom.Infrastructure.Persistence.Rules;
 /// <summary>EF Core state for the rule passes that run inside an account's synchronization run.</summary>
 /// <remarks>
 /// <para>
-/// Both walks project straight into the fact surface rather than loading rows, because a condition reads twenty of its
-/// twenty-two facts from metadata and none of them is the raw MIME sitting beside it in the same aggregate. Of the
+/// Both walks project straight into the fact surface rather than loading rows, because a condition reads twenty-four of its
+/// twenty-six facts from metadata and none of them is the raw MIME sitting beside it in the same aggregate. Of the
 /// other two, <c>folderRole</c> is read from configuration rather than from any row, and <c>bodyText</c> is read one
 /// email at a time and only when a condition names it, which is what keeps a rule set that mentions no body text free
 /// of a content read.
@@ -195,6 +195,10 @@ internal sealed class MailRuleEvaluationStore(
                 email.IsRemotelyAnswered,
                 email.IsRemotelyFlagged,
                 email.IsRemotelyDraft,
+                email.RemoteKeywords,
+                email.AuthorAuthenticationOutcome,
+                email.SenderTrustLevel,
+                email.MachineAuthorshipBand,
                 HasExtractedContent = email.SearchDocument != null
                     && email.SearchDocument.TextSource != ExtractedEmailTextSource.BodyNotExtracted,
                 AwaitsExtraction =
@@ -233,6 +237,10 @@ internal sealed class MailRuleEvaluationStore(
                     IsAnswered = candidate.IsRemotelyAnswered,
                     IsFlagged = candidate.IsRemotelyFlagged,
                     IsDraft = candidate.IsRemotelyDraft,
+                    Keywords = candidate.RemoteKeywords,
+                    AuthorAuthentication = candidate.AuthorAuthenticationOutcome,
+                    SenderTrust = candidate.SenderTrustLevel,
+                    MachineAuthorship = candidate.MachineAuthorshipBand,
                     HasExtractedContent = candidate.HasExtractedContent,
                 },
                 candidate.AwaitsExtraction)),

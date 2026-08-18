@@ -4,6 +4,8 @@
 
 using MailFathom.Application.Rules.Facts;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Xunit;
@@ -253,6 +255,99 @@ public sealed class MailRuleFactsTests
         Assert.Null(value);
     }
 
+    /// <summary>The three stored verdicts are compared as the words a condition writes, not as member names.</summary>
+    [Theory]
+    [InlineData(AuthorAuthenticationOutcome.Authenticated, "authenticated")]
+    [InlineData(AuthorAuthenticationOutcome.Failed, "failed")]
+    [InlineData(AuthorAuthenticationOutcome.NotEstablished, "notEstablished")]
+    public async Task ResolveAsync_AuthorAuthentication_AnswersWithItsAuthoringName(
+        AuthorAuthenticationOutcome stored,
+        string expected)
+    {
+        // Arrange
+        var facts = CreateFacts(email: EmailCarrying(email => email with { AuthorAuthentication = stored }));
+
+        // Act
+        var value = await facts.ResolveAsync(
+            MailRuleFact.AuthorAuthentication,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(expected, value);
+    }
+
+    [Theory]
+    [InlineData(SenderTrustLevel.Trusted, "trusted")]
+    [InlineData(SenderTrustLevel.Unknown, "unknown")]
+    public async Task ResolveAsync_SenderTrust_AnswersWithItsAuthoringName(SenderTrustLevel stored, string expected)
+    {
+        // Arrange
+        var facts = CreateFacts(email: EmailCarrying(email => email with { SenderTrust = stored }));
+
+        // Act
+        var value = await facts.ResolveAsync(MailRuleFact.SenderTrust, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(expected, value);
+    }
+
+    [Theory]
+    [InlineData(MachineAuthorshipBand.Likely, "likely")]
+    [InlineData(MachineAuthorshipBand.Possible, "possible")]
+    [InlineData(MachineAuthorshipBand.Unlikely, "unlikely")]
+    [InlineData(MachineAuthorshipBand.NotAssessed, "notAssessed")]
+    public async Task ResolveAsync_MachineAuthorship_AnswersWithItsAuthoringName(
+        MachineAuthorshipBand stored,
+        string expected)
+    {
+        // Arrange
+        var facts = CreateFacts(email: EmailCarrying(email => email with { MachineAuthorship = stored }));
+
+        // Act
+        var value = await facts.ResolveAsync(MailRuleFact.MachineAuthorship, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(expected, value);
+    }
+
+    /// <summary>An email nothing derived any of the three for reads as the state that says so, never as absence.</summary>
+    [Fact]
+    public async Task ResolveAsync_EmailNothingJudged_AnswersWithTheStatesThatSayNothingWasEstablished()
+    {
+        // Arrange
+        var facts = new MailRuleFacts(
+            new MailRuleEmailFacts { Account = "work", Folder = "inbox" },
+            new RecordingMailRuleBodyTextReader(),
+            StubMailFolderMappings.Nothing,
+            EvaluatedAt);
+
+        // Act
+        var authentication = await facts.ResolveAsync(
+            MailRuleFact.AuthorAuthentication,
+            TestContext.Current.CancellationToken);
+        var trust = await facts.ResolveAsync(MailRuleFact.SenderTrust, TestContext.Current.CancellationToken);
+        var authorship = await facts.ResolveAsync(
+            MailRuleFact.MachineAuthorship,
+            TestContext.Current.CancellationToken);
+        var keywords = await facts.ResolveAsync(MailRuleFact.Keywords, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("notEstablished", authentication);
+        Assert.Equal("unknown", trust);
+        Assert.Equal("notAssessed", authorship);
+        Assert.Empty(Assert.IsAssignableFrom<IReadOnlyList<string>>(keywords));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_Keywords_AnswerWithTheSetTheServerReports()
+    {
+        // Act
+        var value = await CreateFacts().ResolveAsync(MailRuleFact.Keywords, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(["$Invoice", "$Todo"], Assert.IsAssignableFrom<IReadOnlyList<string>>(value));
+    }
+
     [Fact]
     public async Task ResolveAsync_UnspecifiedFact_IsRefused()
     {
@@ -263,23 +358,35 @@ public sealed class MailRuleFactsTests
 
     private static MailRuleFacts CreateFacts(
         RecordingMailRuleBodyTextReader? bodyTextReader = null,
-        StubMailFolderMappings? folderMappings = null) =>
+        StubMailFolderMappings? folderMappings = null,
+        MailRuleEmailFacts? email = null) =>
         new(
-            new MailRuleEmailFacts
-            {
-                Account = "work",
-                Folder = "inbox",
-                Subject = "March invoice 2026",
-                SenderAddress = "billing@supplier.test",
-                RecipientAddresses = ["owner@example.test", "accounts@example.test", "billing@supplier.test"],
-                ReceivedAt = ReceivedAt,
-                SentAt = ReceivedAt.AddMinutes(-5),
-                SizeInBytes = 250_000,
-                AttachmentCount = 2,
-                AttachmentTotalBytes = 200_000,
-                HasExtractedContent = true,
-            },
+            email ?? EmailCarrying(),
             bodyTextReader ?? new RecordingMailRuleBodyTextReader("Amount due on receipt."),
             folderMappings ?? StubMailFolderMappings.Nothing,
             EvaluatedAt);
+
+    private static MailRuleEmailFacts EmailCarrying(Func<MailRuleEmailFacts, MailRuleEmailFacts>? change = null)
+    {
+        var email = new MailRuleEmailFacts
+        {
+            Account = "work",
+            Folder = "inbox",
+            Subject = "March invoice 2026",
+            SenderAddress = "billing@supplier.test",
+            RecipientAddresses = ["owner@example.test", "accounts@example.test", "billing@supplier.test"],
+            ReceivedAt = ReceivedAt,
+            SentAt = ReceivedAt.AddMinutes(-5),
+            SizeInBytes = 250_000,
+            AttachmentCount = 2,
+            AttachmentTotalBytes = 200_000,
+            Keywords = ["$Invoice", "$Todo"],
+            AuthorAuthentication = AuthorAuthenticationOutcome.Authenticated,
+            SenderTrust = SenderTrustLevel.Trusted,
+            MachineAuthorship = MachineAuthorshipBand.Possible,
+            HasExtractedContent = true,
+        };
+
+        return change is null ? email : change(email);
+    }
 }

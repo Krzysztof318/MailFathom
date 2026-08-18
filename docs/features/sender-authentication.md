@@ -218,8 +218,8 @@ every author unknown, and an operator would meet the difference as mail whose au
 
 ### The verdict outlives the list
 
-The answer is stored on the message rather than decided when the message is read, so a reader — and later a rule — can
-ask whether an author is trusted without re-evaluating a policy that may since have changed. What makes that legible is
+The answer is stored on the message rather than decided when the message is read, so a reader and a rule can ask
+whether an author is trusted without re-evaluating a policy that may since have changed. What makes that legible is
 the **policy revision** recorded beside it: a digest of the effective list, so two verdicts carrying different revisions
 were reached under different lists, and one carrying none was never put to a policy at all. Reordering a list is not a
 change to it and produces the same revision; adding an entry to it produces a different one.
@@ -286,9 +286,11 @@ of them characterizes the message or the sender's intent. A failed authenticatio
   domain and consults no public suffix list, so it never reconstructs DMARC's relaxed alignment for itself. Everything
   recorded was read back out of one header.
 - It does not reason from the `Received` chain beyond identifying the trusted header.
-- It never acts on either verdict. Nothing here files, flags, or hides a message, and no rule reads them yet. Publishing
-  them through the read tools is not acting on them: what a caller is handed is the stored conclusion, and what to make
-  of it is the caller's.
+- It acts on neither verdict by itself. Nothing here files, flags, or hides a message, and publishing the pair through
+  the read tools is not acting on it: what a caller is handed is the stored conclusion, and what to make of it is the
+  caller's. What can act on it is a rule the owner wrote — `authorAuthentication` and `senderTrust` are
+  [facts a condition can read](mail-rules.md#the-facts-a-condition-can-read), so filing mail on a verdict is something
+  an owner declares rather than something this feature does.
 - It does not let a caller filter or sort a listing or a search by either verdict. That is a question about what may be
   asked for rather than about what a result carries, and it is a decision of its own.
 

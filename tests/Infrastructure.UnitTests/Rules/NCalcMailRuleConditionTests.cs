@@ -4,6 +4,8 @@
 
 using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Facts;
+using MailFathom.Domain.Emails.Authentication;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Infrastructure.Rules;
 using MailFathom.TestSupport;
 using Xunit;
@@ -45,6 +47,14 @@ public sealed class NCalcMailRuleConditionTests
     [InlineData("isFlagged and not isDraft", true)]
     [InlineData("isEncrypted or carriesUnverifiedSignature", true)]
     [InlineData("hasExtractedContent", true)]
+    [InlineData("contains(keywords, '$Invoice')", true)]
+    [InlineData("contains(keywords, '$Waiting')", false)]
+    [InlineData("senderTrust == 'trusted'", true)]
+    [InlineData("senderTrust == 'unknown'", false)]
+    [InlineData("authorAuthentication == 'authenticated'", true)]
+    [InlineData("authorAuthentication in ('failed', 'notEstablished')", false)]
+    [InlineData("machineAuthorship == 'possible'", true)]
+    [InlineData("machineAuthorship != 'likely'", true)]
     [InlineData("contains(bodyText, 'due on receipt')", true)]
     [InlineData("if(isSeen, 0, attachmentCount) > 1", true)]
     [InlineData("isFlagged ? attachmentCount > 1 : false", true)]
@@ -70,6 +80,8 @@ public sealed class NCalcMailRuleConditionTests
     [InlineData("startsWith(subject, 'march')")]
     [InlineData("contains(recipientDomains, 'EXAMPLE.TEST')")]
     [InlineData("folder in ('INBOX', 'ARCHIVE')")]
+    [InlineData("contains(keywords, '$invoice')")]
+    [InlineData("senderTrust == 'TRUSTED'")]
     public async Task EvaluateAsync_TextDifferingOnlyByCase_StillMatches(string conditionText)
     {
         // Arrange
@@ -210,6 +222,10 @@ public sealed class NCalcMailRuleConditionTests
                 IsAnswered = false,
                 IsFlagged = true,
                 IsDraft = false,
+                Keywords = ["$Invoice", "$Todo"],
+                AuthorAuthentication = AuthorAuthenticationOutcome.Authenticated,
+                SenderTrust = SenderTrustLevel.Trusted,
+                MachineAuthorship = MachineAuthorshipBand.Possible,
                 HasExtractedContent = true,
             },
             bodyTextReader ?? new RecordingMailRuleBodyTextReader("Amount due on receipt."),

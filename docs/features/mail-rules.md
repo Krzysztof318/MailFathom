@@ -272,6 +272,15 @@ spelling you wrote is the one sent to the server.
 `AddKeywords: []` and `RemoveKeywords: []` are refused at startup, because a list naming nothing asks the server for
 nothing and is a mistyped list far more often than an intent. `SetKeywords: []` is the one that means something.
 
+**A condition reads keywords as well as writing them.** [`keywords`](#the-facts-a-condition-can-read) is a fact, so a
+rule can select on a label an earlier run put on a message, under the same case-insensitive comparison.
+
+What it reads is what the server last reported, never what a rule asked for. A keyword a rule declares in this pass is
+a change written down: the account's next run carries it to the server, and the fact carries it once
+[reconciliation](imap-synchronization.md#reconciling-against-the-server) has read the message's flags back. So a rule
+below one that adds `$Invoice` does not see `$Invoice` on that message in the same pass, which is deliberate — a fact
+that answered from a change nobody had performed yet would report labels the mailbox does not carry.
+
 **A server may refuse to keep a keyword**, and that is the one refusal that cannot be reported at startup. A folder
 tells MailFathom which flags it keeps permanently when it is opened, so a server that keeps no arbitrary keyword — some
 do not — is discovered as the change is issued, and `AddKeywords` and `SetKeywords` then fail with
@@ -418,7 +427,7 @@ metric, or a span.
 
 ## The facts a condition can read
 
-A condition reaches these twenty-two names and nothing else. Each carries one shape of value, which is what the
+A condition reaches these twenty-six names and nothing else. Each carries one shape of value, which is what the
 comparison, operator, and function checks below are made against.
 
 | Fact | Type | What it holds |
@@ -431,6 +440,8 @@ comparison, operator, and function checks below are made against.
 | `senderDomain` | text | The part of the sender's address after the at sign; absent when there is no sender |
 | `recipientAddresses` | text set | The addresses the email was sent to and copied to, in their comparison form |
 | `recipientDomains` | text set | The distinct domains of every recipient address |
+| `authorAuthentication` | text | What the receiving server established about the author the email displays — `authenticated`, `failed`, or `notEstablished` |
+| `senderTrust` | text | Whether this deployment recognizes that author — `trusted` or `unknown` |
 | `receivedAt` | timestamp | When the last receiving hop recorded the email; absent when no hop recorded one |
 | `sentAt` | timestamp | When the sender's client stamped the email; absent when it carries no such header |
 | `ageInDays` | number | Days since the email was received; absent when nothing recorded that |
@@ -443,15 +454,17 @@ comparison, operator, and function checks below are made against.
 | `isAnswered` | boolean | Whether the server reports the email as answered |
 | `isFlagged` | boolean | Whether the server reports the email as flagged |
 | `isDraft` | boolean | Whether the server reports the email as a draft |
+| `keywords` | text set | The keywords the server reports the email as carrying; empty when it carries none |
 | `hasExtractedContent` | boolean | Whether text has been extracted from the email's body |
 | `bodyText` | text | The text extracted from the email's body, after quoted history and signatures were removed; absent while no extraction has run for it |
+| `machineAuthorship` | text | How much the email's own text reads as machine written — `likely`, `possible`, `unlikely`, or `notAssessed` |
 
 Names are case-sensitive. `senderDomain` is a fact and `SenderDomain` is not, so the surface documented here and the
 surface accepted are the same one.
 
-**Every fact resolves only if the condition names it, and once per email however many rules name it.** Twenty of the
-twenty-two come from metadata a pass already holds, so they cost nothing to read. `folderRole` is read from configuration,
-which costs no read either. `bodyText` is the exception: it reads
+**Every fact resolves only if the condition names it, and once per email however many rules name it.** Twenty-four of
+the twenty-six come from metadata a pass already holds, so they cost nothing to read. `folderRole` is read from
+configuration, which costs no read either. `bodyText` is the exception: it reads
 stored content, which is why a rule set naming it nowhere pays for no read at all, and one naming it in five conditions
 pays for one. The boolean operators short-circuit, so a condition whose first half already decides it never resolves
 what its second half would have named.
@@ -464,7 +477,26 @@ never a requirement.
 `receivedAt >= #2026/01/01#` means the start of that day in UTC.
 
 **Text comparison ignores case and is ordinal.** `senderDomain == 'Supplier.TEST'` matches `supplier.test`, and it does
-so identically on every instance whatever locale its host is set to.
+so identically on every instance whatever locale its host is set to. That is what makes `keywords` symmetrical with the
+keyword actions: a rule that put `$Todo` on a message is selected by a later rule naming `contains(keywords, '$todo')`.
+
+**Three of the facts are verdicts this deployment stored when the email was extracted**, and reading one re-evaluates
+nothing: no DNS is resolved, no header is re-read, and no text is re-assessed. So a condition names what was concluded
+at the time rather than what the same policy would conclude now, and mail stored before a verdict existed reads as the
+value that says nothing was established — `notEstablished`, `unknown`, and `notAssessed` — until
+[`mfctl mailbox rederive`](imap-synchronization.md#bringing-stored-mail-up-to-a-later-release) fills it in.
+[Sender authentication](sender-authentication.md) and [machine authorship](machine-authorship.md) state what each value
+means and what it is worth.
+
+**`senderTrust` says little on its own and is written beside `authorAuthentication`.** `unknown` is the ordinary state
+of legitimate mail from a correspondent nobody has named, so a rule acting on it alone acts on most of a mailbox; what
+carries a real statement is `authorAuthentication == 'failed'`, which is a receiving server reporting that the
+displayed author did not satisfy their own domain's published policy.
+
+**`machineAuthorship` publishes the band and not the number behind it.** The likelihood a reader is shown is a
+heuristic comparable only within one weighting, so a rule written against a threshold would change meaning the next
+time that weighting moved. `likely` is not an accusation and warrants no action on its own — a rule acting on it is
+filing mail, not judging anybody.
 
 ## Operators
 
@@ -541,7 +573,7 @@ Every condition is read while the host composes itself, before any mail is seen.
 each is refused with a message naming the rule, what was wrong, and where:
 
 - **Syntax.** The condition parses, and a failure reports the position it failed at.
-- **The names.** Every identifier is one of the twenty-two facts and every call is one of the seven functions.
+- **The names.** Every identifier is one of the twenty-six facts and every call is one of the seven functions.
 - **The types.** Every comparison, operator, and argument holds between shapes that could match. `subject == 1`,
   `sizeInBytes > 'large'`, `recipientDomains == 'example.test'`, and `contains(subject, 3)` are each refused here.
 - **The result.** The condition produces a boolean. A condition producing text or a number is refused rather than read
@@ -844,6 +876,30 @@ Size measured in a unit an owner thinks in:
 
 ```text
 sizeInBytes / 1048576 > 25
+```
+
+Mail a rule of your own already labelled, which is what makes a keyword worth writing:
+
+```text
+contains(keywords, '$Invoice') and not isSeen
+```
+
+Mail whose displayed author failed their own domain's published policy:
+
+```text
+authorAuthentication == 'failed'
+```
+
+Mail from nobody this deployment recognizes, whose author nothing established either:
+
+```text
+senderTrust == 'unknown' and authorAuthentication != 'authenticated'
+```
+
+Bulk-generated mail from outside, filed without asking a model anything:
+
+```text
+machineAuthorship == 'likely' and senderTrust == 'unknown'
 ```
 
 ## Worked rules

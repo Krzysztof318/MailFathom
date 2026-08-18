@@ -76,6 +76,22 @@ public readonly record struct MailRuleFact
     /// <summary>Gets the distinct domains of every recipient address.</summary>
     public static MailRuleFact RecipientDomains { get; } = new("recipientDomains", MailRuleFactType.TextSet);
 
+    /// <summary>Gets what the receiving server established about the author the email displays.</summary>
+    /// <remarks>
+    /// The conclusion rather than the evidence behind it: <c>authenticated</c>, <c>failed</c>, or
+    /// <c>notEstablished</c>. What a condition reads was stored when the email was extracted, so a rule judges what a
+    /// receiving server reported at the time rather than re-evaluating a policy now.
+    /// </remarks>
+    public static MailRuleFact AuthorAuthentication { get; } = new("authorAuthentication", MailRuleFactType.Text);
+
+    /// <summary>Gets whether this deployment recognizes the author the email authenticated as.</summary>
+    /// <remarks>
+    /// <c>trusted</c> or <c>unknown</c>, and a classification this deployment made rather than an authentication
+    /// result. <c>unknown</c> is the ordinary state of legitimate mail from a correspondent nobody has named, which is
+    /// why a rule acting on it usually names <see cref="AuthorAuthentication" /> beside it.
+    /// </remarks>
+    public static MailRuleFact SenderTrust { get; } = new("senderTrust", MailRuleFactType.Text);
+
     #endregion
 
     #region When it arrived and how large it is
@@ -124,6 +140,14 @@ public readonly record struct MailRuleFact
     /// <summary>Gets whether the server reports the email as a draft.</summary>
     public static MailRuleFact IsDraft { get; } = new("isDraft", MailRuleFactType.Boolean);
 
+    /// <summary>Gets the keywords the server reports the email as carrying.</summary>
+    /// <remarks>
+    /// The set a rule's own keyword actions write to, read back under the case-insensitive comparison those actions
+    /// are declared under, so a rule adding <c>$Todo</c> is selected by a later rule naming <c>$todo</c>. An email
+    /// carrying none, and one whose folder keeps no keywords at all, both read as the empty set.
+    /// </remarks>
+    public static MailRuleFact Keywords { get; } = new("keywords", MailRuleFactType.TextSet);
+
     #endregion
 
     #region What was extracted from it
@@ -139,6 +163,16 @@ public readonly record struct MailRuleFact
     /// </remarks>
     public static MailRuleFact BodyText { get; } = new("bodyText", MailRuleFactType.Text, readsStoredContent: true);
 
+    /// <summary>Gets how much the email's own text reads as machine written.</summary>
+    /// <remarks>
+    /// The band rather than the number behind it: <c>likely</c>, <c>possible</c>, <c>unlikely</c>, or
+    /// <c>notAssessed</c>. The number is a heuristic comparable only within one weighting, so a rule written against a
+    /// threshold would change meaning the next time that weighting moved, while a band survives it. <c>notAssessed</c>
+    /// is what an email with no readable body carries, what a deployment assessing nothing records, and what mail
+    /// stored before the assessment existed carries until it is re-read.
+    /// </remarks>
+    public static MailRuleFact MachineAuthorship { get; } = new("machineAuthorship", MailRuleFactType.Text);
+
     #endregion
 
     /// <summary>Gets every declared fact.</summary>
@@ -153,6 +187,8 @@ public readonly record struct MailRuleFact
         SenderDomain,
         RecipientAddresses,
         RecipientDomains,
+        AuthorAuthentication,
+        SenderTrust,
         ReceivedAt,
         SentAt,
         AgeInDays,
@@ -165,8 +201,10 @@ public readonly record struct MailRuleFact
         IsAnswered,
         IsFlagged,
         IsDraft,
+        Keywords,
         HasExtractedContent,
         BodyText,
+        MachineAuthorship,
     ];
 
     /// <summary>Gets whether this value names a declared fact rather than the unusable struct default.</summary>
