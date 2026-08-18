@@ -1,10 +1,10 @@
 # The arrival pipeline
 
-<!-- describes: src/Application/Synchronization/MailboxSynchronizer.cs, src/Application/Emails/Chunking/MailChunkingPass.cs, src/Infrastructure/Persistence/Emails/StoredEmailChunkingStore.cs, src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, src/Application/Spam/Gating/**, src/Application/Spam/Runs/SpamClassificationPass.cs, src/Application/Spam/SpamClassificationArrivals.cs, src/Application/Spam/EmailSpamClassificationHandler.cs, src/Application/Rules/Evaluation/MailRuleEvaluationPass.cs, src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, src/Host/Hosting/Workers/MailEmbeddingWorker.cs -->
+<!-- describes: src/Application/Synchronization/MailboxSynchronizer.cs, src/Application/Emails/Chunking/MailChunkingPass.cs, src/Infrastructure/Persistence/Emails/StoredEmailChunkingStore.cs, src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, src/Application/Emails/Extraction/SenderTrustEvaluatingEmailMimeReader.cs, src/Application/Emails/Extraction/MachineAuthorshipEvaluatingEmailMimeReader.cs, src/Application/Emails/Threads/EmailThreadAssembly.cs, src/Application/Spam/Gating/**, src/Application/Spam/Runs/SpamClassificationPass.cs, src/Application/Spam/SpamClassificationArrivals.cs, src/Application/Spam/EmailSpamClassificationHandler.cs, src/Application/Rules/Evaluation/MailRuleEvaluationPass.cs, src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, src/Host/Hosting/Workers/MailEmbeddingWorker.cs -->
 
-Six features decide what happens to a message between the moment synchronization commits it and the moment everything
-derived from it exists. Each of them documents its own half, and none of them can state the order, because the order is
-what they have between them. This page is that order, drawn once.
+Eight features decide what happens to a message between the moment synchronization fetches it and the moment
+everything derived from it exists. Each of them documents its own half, and none of them can state the order, because
+the order is what they have between them. This page is that order, drawn once.
 
 It is a graph rather than a list. A message branches at its classification verdict, two of the stages are calls into
 sidecars, and one of them — redaction — is a guard on the way into a derived store rather than a stage every message
@@ -20,7 +20,8 @@ flowchart TD
         converge["Converge the previous run's mutations"]
         fetch["Fetch raw MIME, without setting the remote Seen flag"]
         extract["Extract the body text"]
-        commit[("Commit: metadata, raw MIME, search document")]
+        judge["Judge the author, and read how machine written the message's own text is"]
+        commit[("Commit: metadata, the conversation it joins, raw MIME, search document")]
         ask(["Ask for the message to be classified"])
         classify["Classification pass — only when somebody asked for a run over the whole mailbox"]
         rules["Rule evaluation pass"]
@@ -40,10 +41,10 @@ flowchart TD
         sweeps["Extraction and embedding backfills"]
     end
 
-    converge --> fetch --> extract
-    extract -. "redaction, fails closed" .-> presidio
-    presidio -. "placeholders replace every finding" .-> extract
-    extract --> commit
+    converge --> fetch --> extract --> judge
+    judge -. "redaction, fails closed" .-> presidio
+    presidio -. "placeholders replace every finding" .-> judge
+    judge --> commit
     commit --> ask
     ask -. "one job per occurrence; a full queue refuses rather than waits" .-> job
     ask --> classify
@@ -61,6 +62,15 @@ flowchart TD
     sweeps --> cut
     sweeps --> worker
 ```
+
+**Two judgements sit between the parse and the commit.** Whether the author a receiving server established is one the
+account recognizes, and how much the message's own text reads as machine written, are decisions this deployment makes
+rather than facts read out of the message's bytes — so each is a decorator over the reader that parses raw MIME rather
+than a step inside it, which is what puts them on every path that produces a reading rather than only on this one. Both
+run *before* redaction, deliberately: redaction replaces the words a scanner recognized, and a reading taken afterwards
+would judge a message partly by what the scanner rewrote in it. Neither carries any of the text out — what each writes
+is a verdict, a set of signals, a number, and the revision of the policy or profile it was reached under, none of which
+can hold a fragment of the message — so taking them ahead of the guard costs the guard nothing.
 
 Classification happens in two places and the drawing separates them deliberately. **A message is classified because it
 arrived**: the run asks for one as soon as it has committed the message and its content, and the work runs as an
@@ -147,11 +157,17 @@ behind classification would otherwise read exactly like a mailbox with no mail i
 
 ## Why the cut is not part of the commit
 
-The transaction that stores a message contains its metadata, its raw MIME, and its search document — and deliberately
-not its passages. Two stages run after that commit and before the cut, and both can change what the cut should produce:
-classification can decide the message is not derived from at all, and the owner's rules can file it into a folder mapped
-differently from the one it arrived in. Passages are not undone by a message moving afterwards, so cutting inside the
-commit would write passages of a placement and a verdict that had not been settled yet.
+The transaction that stores a message contains its metadata, the two judgements above, the conversation its own
+identifiers place it in, its raw MIME, and its search document — and deliberately not its passages. Two stages run after
+that commit and before the cut, and both can change what the cut should produce: classification can decide the message
+is not derived from at all, and the owner's rules can file it into a folder mapped differently from the one it arrived
+in. Passages are not undone by a message moving afterwards, so cutting inside the commit would write passages of a
+placement and a verdict that had not been settled yet.
+
+**The conversation is inside the commit for the opposite reason.** It is decided from the message's own identifiers and
+from nothing a later stage can change, and it is recorded as a relation other rows share rather than as a column — so
+committing it with the columns it was decided from is what keeps a message from ever being readable while belonging to
+nothing.
 
 The rules are the slower of the two, because a rule declares a move rather than performing one: the record is durable
 when the pass ends and the account's **next** run carries it to the mail server. So waiting for the pass is not enough
@@ -193,6 +209,15 @@ and, through them, the vectors the replacement cascades away.
   sweep to be released either: the account's own next run asks the gate again and cuts it in the same run the verdict
   admits it.
 
+**A fourth path re-reads stored mail and produces none of that.** `mfctl mailbox rederive` walks stored messages and
+reads each one's raw MIME back through the same reader the run uses, so the parse, both judgements, and redaction reach
+it exactly as they reach an arriving message; what it writes is the row's own columns and the conversation the message
+belongs to. It cuts no passages, embeds nothing, opens no mailbox session, and never reaches the classification gate, so
+it is the cheap way to fill in a column a later release added rather than a fourth way to derive from mail. State only a
+mailbox holds — flags, keywords, the internal date — is outside it, because nothing local can produce that. [Bringing
+stored mail up to a later release](../features/imap-synchronization.md#bringing-stored-mail-up-to-a-later-release)
+states its bounds and what it leaves behind.
+
 ## What the two folder switches decide
 
 `GenerateEmbeddings` and `VisibleToTools` are set per folder mapping;
@@ -215,6 +240,9 @@ has a scanner switched on.
 | Stage | Page |
 | --- | --- |
 | Fetching and committing a message | [IMAP synchronization](../features/imap-synchronization.md) |
+| Whether the displayed author authenticated, and whether the account recognizes them | [Sender authentication](../features/sender-authentication.md) |
+| How machine written a message's own text reads | [Machine authorship](../features/machine-authorship.md) |
+| The conversation a message is placed in | [The stored email](stored-email-schema.md#the-conversation-a-message-belongs-to) |
 | Classification, its verdicts, and the gate | [Spam classification](../features/spam-classification.md) |
 | The owner's rules and what a match asks for | [Mail rules](../features/mail-rules.md) |
 | Redaction, the stamp, and the egress guard | [Sensitive-content scanning](../features/sensitive-content-scanning.md) |

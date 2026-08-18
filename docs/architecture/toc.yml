@@ -13,7 +13,7 @@
   description: The three kinds of principal the application layer models, how each one reaches it, and why the use case checks a grant as well as the transport.
 - name: The arrival pipeline
   href: arrival-pipeline.md
-  description: The order a newly arrived message passes through — classification, rules, redaction, chunking, embedding — drawn once, with what each stage waits for and what each classification outcome permits.
+  description: The order a newly arrived message passes through — the judgements taken while it is read, redaction, the conversation it joins, classification, rules, chunking, embedding — drawn once, with what each stage waits for and what each classification outcome permits.
 - name: The stored email schema
   href: stored-email-schema.md
   description: The columns, constraints, and indexes the mail timeline is read from, and why raw MIME and search text live in tables of their own.
