@@ -6,7 +6,6 @@ using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
-using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Mail.Maintenance;
@@ -28,23 +27,24 @@ namespace MailFathom.Application.Mail.Maintenance;
 /// One invocation is one bounded pass, and it reports whether the scope still holds mail it has not reached. A batch
 /// commits its re-readings together with the position they reached, so an interrupted pass resumes at the next email
 /// rather than repeating or stepping over one, and re-running over an email this pass already reached simply writes the
-/// same reading of the same immutable bytes.
+/// same reading of the same immutable bytes. Repeating the pass until the scope is exhausted belongs to
+/// <see cref="StoredMailRederivationHandler" />, which is the durable work an operator's request enqueues.
 /// </para>
 /// </remarks>
 public sealed class StoredMailRederivation
 {
     /// <summary>How many stored emails one batch re-reads before it commits.</summary>
     /// <remarks>
-    /// A constant rather than a setting, because it bounds one request's memory and one interrupted batch's lost work
-    /// rather than describing a deployment. The pass runs because an operator asked for it and ends when the command
-    /// stops asking, so there is no interval, no queue depth, and no host health for a number here to be tuned against.
+    /// A constant rather than a setting, because it bounds one pass's memory and one interrupted batch's lost work
+    /// rather than describing a deployment. What decides how long the walk runs is the attempt carrying it, so there is
+    /// no interval and no host health for a number here to be tuned against.
     /// </remarks>
     private const int BatchSize = 50;
 
     /// <summary>How many batches one pass commits before it answers that mail remains.</summary>
     /// <remarks>
-    /// What keeps one request bounded, so an interrupted command loses at most a batch and the deployment answers often
-    /// enough for the command to report progress between passes.
+    /// What keeps one pass bounded, so an interrupted pass loses at most a batch and the attempt carrying the walk
+    /// records its progress and renews its lease often enough to hold the work it is doing.
     /// </remarks>
     private const int MaxBatchesPerPass = 10;
 
@@ -60,8 +60,9 @@ public sealed class StoredMailRederivation
     /// <remarks>
     /// The batch count bounds how many messages a pass reads and says nothing about how large they are, and the two are
     /// not related: a scope of one-kilobyte notifications and a scope of messages carrying a video attachment differ by
-    /// three orders of magnitude for the same five hundred rows. What the caller is waiting on is one HTTP request, so
-    /// the pass ends on whichever ceiling it reaches first and the messages it left behind are the next pass's. It is
+    /// three orders of magnitude for the same five hundred rows. What a pass owes is a committed position often enough
+    /// for the attempt to be stoppable, so it ends on whichever ceiling it reaches first and the messages it left behind
+    /// are the next pass's. It is
     /// read against what the pass has read so far rather than against one batch, and checked before each email rather
     /// than between batches, because a batch is fifty messages and a ceiling only a batch boundary enforces is one a
     /// batch of large messages passes fifty times over before anything looks.
@@ -69,39 +70,50 @@ public sealed class StoredMailRederivation
     private const long MaximumRawBytesPerPass = 64L * 1024 * 1024;
 
     private readonly IStoredMailRederivationStore rederivationStore;
+    private readonly IStoredMailRederivationRunStore runStore;
     private readonly IEmailContentStore contentStore;
     private readonly IEmailMimeReader mimeReader;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
+    private readonly TimeProvider timeProvider;
     private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the re-derivation.</summary>
     /// <param name="rederivationStore">Reads what the walk has left and writes what one email's re-reading produced.</param>
+    /// <param name="runStore">Holds the run this walk is advancing, which each batch adds what it read to.</param>
     /// <param name="contentStore">Reads back the raw MIME an earlier run stored.</param>
     /// <param name="mimeReader">Turns that raw MIME into normalized metadata.</param>
     /// <param name="concurrencyRetryPolicy">Commits a batch, retrying a conflict with a competing writer.</param>
+    /// <param name="timeProvider">Stamps the instant the walk reached the end of its scope.</param>
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public StoredMailRederivation(
         IStoredMailRederivationStore rederivationStore,
+        IStoredMailRederivationRunStore runStore,
         IEmailContentStore contentStore,
         IEmailMimeReader mimeReader,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
+        TimeProvider timeProvider,
         AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(rederivationStore);
+        ArgumentNullException.ThrowIfNull(runStore);
         ArgumentNullException.ThrowIfNull(contentStore);
         ArgumentNullException.ThrowIfNull(mimeReader);
         ArgumentNullException.ThrowIfNull(concurrencyRetryPolicy);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(authorization);
 
         this.rederivationStore = rederivationStore;
+        this.runStore = runStore;
         this.contentStore = contentStore;
         this.mimeReader = mimeReader;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
+        this.timeProvider = timeProvider;
         this.authorization = authorization;
     }
 
-    /// <summary>Runs one bounded pass over the scope's stored mail.</summary>
+    /// <summary>Runs one bounded pass over the scope's stored mail, for the run that asked for it.</summary>
+    /// <param name="runId">The run this pass advances, which every write it makes is conditional on still being the scope's.</param>
     /// <param name="scope">The account, and the one folder of it, whose stored mail is re-read.</param>
     /// <param name="cancellationToken">Cancels the pass between batches and between emails.</param>
     /// <returns>What this pass re-derived, and whether the scope still holds mail a further pass would reach.</returns>
@@ -110,16 +122,30 @@ public sealed class StoredMailRederivation
     /// Thrown when a competing writer wins a race that the bounded retries could not resolve. Batches already committed
     /// stay durable, and the next pass resumes from the committed position.
     /// </exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminOperate" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when anything but this deployment's own process reached the use case.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels. Committed batches stay durable.</exception>
-    /// <remarks>A pass is work the deployment performs on the operator's asking, which is the grant it asks for.</remarks>
+    /// <remarks>
+    /// It asks for no permission, deliberately, and requires the process itself instead. What reaches it is a job this
+    /// deployment enqueued when an operator asked for the run, so there is no caller to hold a grant, and requiring an
+    /// administrative one here would mean the walk ran under a credential nobody presented. The operator's grant is
+    /// asked for where the operator is — <see cref="StoredMailRederivationRequests" /> — and requiring the process
+    /// identity here is what makes a caller reaching this method from an entrypoint added later a refusal rather than a
+    /// mailbox-wide pass under no grant at all.
+    /// <para>
+    /// A pass whose run is over reports nothing remaining and commits nothing further. That is what an attempt whose
+    /// lease was believed lost looks like from here — another attempt reached the end of the scope while this one was
+    /// still reading — and there is nothing left for this pass to do, because the scope belongs to whatever run the
+    /// operator asks for next rather than to this one.
+    /// </para>
+    /// </remarks>
     public async Task<StoredMailRederivationPass> RunAsync(
+        StoredMailRederivationRunId runId,
         StoredMailScope scope,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        this.authorization.RequirePermission(MailFathomPermission.AdminOperate);
+        this.authorization.RequireProcessIdentity();
 
         var position = await this.rederivationStore.FindResumePositionAsync(scope, cancellationToken);
         var rederivedCount = 0;
@@ -137,7 +163,7 @@ public sealed class StoredMailRederivation
 
             if (batch.Count == 0)
             {
-                await this.FinishAsync(scope, cancellationToken);
+                await this.FinishAsync(runId, scope, cancellationToken);
 
                 return new StoredMailRederivationPass(
                     rederivedCount,
@@ -148,7 +174,14 @@ public sealed class StoredMailRederivation
 
             var outcome = await this.ReadBatchAsync(batch, readByteCount, cancellationToken);
 
-            await this.CommitBatchAsync(scope, outcome, cancellationToken);
+            if (!await this.CommitBatchAsync(runId, scope, outcome, cancellationToken))
+            {
+                return new StoredMailRederivationPass(
+                    rederivedCount,
+                    unreadableCount,
+                    missingContentCount,
+                    EmailsRemain: false);
+            }
 
             position = outcome.LastProcessedEmailId;
             rederivedCount += outcome.Rederivations.Count;
@@ -162,7 +195,7 @@ public sealed class StoredMailRederivation
             // finished before anything has looked behind it.
             if (batch.Count < BatchSize && outcome.ProcessedEmailCount == batch.Count)
             {
-                await this.FinishAsync(scope, cancellationToken);
+                await this.FinishAsync(runId, scope, cancellationToken);
 
                 return new StoredMailRederivationPass(
                     rederivedCount,
@@ -258,14 +291,40 @@ public sealed class StoredMailRederivation
     private static int RetainedCharacterCount(ExtractedEmailMetadata metadata) =>
         (metadata.Text.OriginalText?.Length ?? 0) + (metadata.Text.TrimmedText?.Length ?? 0);
 
-    /// <summary>Commits one batch's re-readings together with the position they reached.</summary>
-    private Task CommitBatchAsync(
+    /// <summary>Commits one batch's re-readings, the position they reached, and what the run has now re-read.</summary>
+    /// <returns><see langword="false" /> when the run this pass advances is over, in which case nothing was written.</returns>
+    /// <remarks>
+    /// The three writes are one transaction because the position is what the next attempt resumes past: counts written
+    /// afterwards would be lost by a process killed in between, and the mail behind them would never be walked again
+    /// either, so the figure an operator reads would be permanently short of what was really done. An attempt is
+    /// stopped mid-pass as a matter of course rather than exceptionally — the execution timeout is what ends most of
+    /// them — so that gap would be the ordinary case rather than a rare one.
+    /// <para>
+    /// The run is re-read inside the commit and added to, never written back from a reading taken before the batch,
+    /// because two attempts of one run can overlap for as long as it takes a lost lease to be noticed.
+    /// </para>
+    /// <para>
+    /// That same overlap is why a run that is no longer the scope's outstanding one abandons the whole batch rather
+    /// than part of it. Writing the position without the counts would report less than was really re-read, and writing
+    /// either against a scope this pass no longer walks is worse than losing the batch: a position left behind for a
+    /// run that has ended is one the next run resumes from, so the mail in front of it would silently never be
+    /// re-read. Nothing is lost by dropping the batch, because re-deriving is a reading of bytes that do not change and
+    /// whoever walks the scope next takes it again.
+    /// </para>
+    /// </remarks>
+    private Task<bool> CommitBatchAsync(
+        StoredMailRederivationRunId runId,
         StoredMailScope scope,
         BatchReadOutcome outcome,
         CancellationToken cancellationToken) =>
         this.concurrencyRetryPolicy.CommitAsync(
             async (persistenceSession, attemptCancellationToken) =>
             {
+                if (await this.FindAdvancingRunAsync(runId, scope, attemptCancellationToken) is not { } run)
+                {
+                    return false;
+                }
+
                 foreach (var rederivation in outcome.Rederivations)
                 {
                     await this.rederivationStore.ApplyRederivedMetadataAsync(
@@ -280,17 +339,69 @@ public sealed class StoredMailRederivation
                     scope,
                     outcome.LastProcessedEmailId,
                     attemptCancellationToken);
+
+                await this.runStore.SaveAsync(
+                    persistenceSession,
+                    run with
+                    {
+                        RederivedEmailCount = run.RederivedEmailCount + outcome.Rederivations.Count,
+                        UnreadableEmailCount = run.UnreadableEmailCount + outcome.UnreadableEmailCount,
+                        MissingContentEmailCount = run.MissingContentEmailCount + outcome.MissingContentEmailCount,
+                    },
+                    attemptCancellationToken);
+
+                return true;
             },
             cancellationToken);
 
     /// <summary>Records that this scope's walk is over, so asking for it again starts at the beginning.</summary>
-    private Task FinishAsync(StoredMailScope scope, CancellationToken cancellationToken) =>
+    /// <remarks>
+    /// The cursor is removed and the run is ended in one transaction, for the reason the batch commits its counts with
+    /// its position: a walk whose cursor is gone while its run is still outstanding reads as a run nothing is carrying,
+    /// and one whose run ended while its cursor stands would have the next request resume behind where this one
+    /// finished. A run that is no longer the scope's outstanding one ends nothing and clears nothing, because both
+    /// belong to whichever run the scope has now.
+    /// </remarks>
+    private Task FinishAsync(
+        StoredMailRederivationRunId runId,
+        StoredMailScope scope,
+        CancellationToken cancellationToken) =>
         this.concurrencyRetryPolicy.CommitAsync(
-            (persistenceSession, attemptCancellationToken) => this.rederivationStore.ClearResumePositionAsync(
-                persistenceSession,
-                scope,
-                attemptCancellationToken),
+            async (persistenceSession, attemptCancellationToken) =>
+            {
+                if (await this.FindAdvancingRunAsync(runId, scope, attemptCancellationToken) is not { } run)
+                {
+                    return;
+                }
+
+                await this.rederivationStore.ClearResumePositionAsync(
+                    persistenceSession,
+                    scope,
+                    attemptCancellationToken);
+
+                await this.runStore.SaveAsync(
+                    persistenceSession,
+                    run with { EndedAt = this.timeProvider.GetUtcNow() },
+                    attemptCancellationToken);
+            },
             cancellationToken);
+
+    /// <summary>Reads the scope's run back, and answers with it only while it is still the one this pass advances.</summary>
+    /// <returns>The run as it now stands, or <see langword="null" /> when the pass no longer has one to write to.</returns>
+    /// <remarks>
+    /// Two things make the answer null and they are the same thing at different distances: the run ended, or it ended
+    /// and the operator has since asked for another over the same scope. Neither is a failure — both mean the mail this
+    /// pass was reading for is somebody else's to account for now.
+    /// </remarks>
+    private async Task<StoredMailRederivationRun?> FindAdvancingRunAsync(
+        StoredMailRederivationRunId runId,
+        StoredMailScope scope,
+        CancellationToken cancellationToken)
+    {
+        var run = await this.runStore.FindAsync(scope, cancellationToken);
+
+        return run is { IsOutstanding: true } && run.RunId == runId ? run : null;
+    }
 
     /// <summary>Pairs one email with what re-reading its MIME produced.</summary>
     private sealed record CompletedRederivation(StoredEmailId StoredEmailId, ExtractedEmailMetadata Metadata);

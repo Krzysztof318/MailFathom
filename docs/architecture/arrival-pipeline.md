@@ -228,11 +228,12 @@ and, through them, the vectors the replacement cascades away.
   sweep to be released either: the account's own next run asks the gate again and cuts it in the same run the verdict
   admits it.
 
-**A fourth path re-reads stored mail and produces none of that.** `mfctl mailbox rederive` walks stored messages and
-reads each one's raw MIME back through the same reader the run uses, so the parse, both judgements, and redaction reach
-it exactly as they reach an arriving message; what it writes is the row's own columns and the conversation the message
-belongs to. It cuts no passages, embeds nothing, opens no mailbox session, and never reaches the classification gate, so
-it is the cheap way to fill in a column a later release added rather than a fourth way to derive from mail. State only a
+**A fourth path re-reads stored mail and produces none of that.** `mfctl mailbox rederive` asks for stored messages to
+be walked as background work, reading each one's raw MIME back through the same reader the run uses, so the parse, both
+judgements, and redaction reach it exactly as they reach an arriving message; what it writes is the row's own columns
+and the conversation the message belongs to. It cuts no passages, embeds nothing, opens no mailbox session, and never
+reaches the classification gate, so it is the cheap way to fill in a column a later release added rather than a fourth
+way to derive from mail. State only a
 mailbox holds — flags, keywords, the internal date — is outside it, because nothing local can produce that. [Bringing
 stored mail up to a later release](../features/imap-synchronization.md#bringing-stored-mail-up-to-a-later-release)
 states its bounds and what it leaves behind.

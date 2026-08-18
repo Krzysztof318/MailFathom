@@ -739,6 +739,41 @@ submission server wrote, since a server's refusal text routinely repeats the add
 every SMTP client this deployment opens is constructed without a protocol logger, so the commands and responses of a
 submission are written nowhere that a log level could expose.
 
+### Re-reading stored mail
+
+A re-derivation is a walk of a whole mailbox that nobody is watching, so what it publishes has to answer *is it still
+moving* from a dashboard rather than from a terminal. Two spans and four instruments do that, and everything they carry
+is a count, a duration, or one of the two configured aliases.
+
+One segment of a run opens **`rederive_stored_mail`**, and each bounded pass beneath it opens
+**`rederive_stored_mail_pass`**. The nesting is what the pair is for: a walk that got slower is attributable to a pass
+rather than to an attempt whose length is decided by the execution timeout. Both carry `mailfathom.mail.account` and
+`mailfathom.mail.folder`, and a run over the whole account reports `(every folder)` there rather than leaving the
+dimension out, because a series missing a dimension and one carrying a folder are two shapes a dashboard sums
+differently. It is not an alias and no folder can collide with it, since an alias is validated non-blank.
+
+**How a segment ends is its status.** The one that reached the end of the scope ends `Ok`. One that handed the rest of
+the walk to a segment of its own ends unset and publishes a `handed_on` event carrying
+`mailfathom.mail.rederivation.queued`, which says whether the queue took the remainder. A hand-on the queue refused
+ends the span in **error**, and that is the reading worth alerting on: the run stays outstanding, nothing is carrying
+it, and no dead letter records it either, so the next request for the same scope is what puts it back in motion.
+
+`mailfathom.mail.rederivation.rederived` counts the messages a pass re-read and wrote metadata for.
+`mailfathom.mail.rederivation.unreadable` counts those whose stored MIME no reader could parse, which keep whatever an
+earlier release read from them, and `mailfathom.mail.rederivation.missing_content` those whose raw MIME is no longer
+stored, which only a fetch could reach. The two rejections are separate instruments because they ask an operator
+different questions, and each is added to only when it moved: a stream of zeroes would make a mailbox that reads
+cleanly indistinguishable from one nobody is walking.
+
+`mailfathom.mail.rederivation.pass.duration` records how long one pass took, in seconds, under the same two dimensions.
+A pass an attempt stopped part way through records nothing at all — what it committed is durable but is not a pass
+comparable to another, and a truncated duration would read as a mailbox that had got faster.
+
+The counters are what the run is watched by across segments, since a span covers one attempt and a mailbox takes many.
+What an operator reads as a total is [`mfctl mailbox
+rederive-status`](admin-endpoint.md#bringing-stored-mail-up-to-a-later-release), which reads the run's own record
+rather than a metric.
+
 ### Answering spend
 
 Answering a question sends mail to a model provider on demand, so what it costs is published while it is being spent

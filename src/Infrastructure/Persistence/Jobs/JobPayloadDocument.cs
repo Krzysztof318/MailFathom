@@ -53,6 +53,8 @@ internal static class JobPayloadDocument
                 JsonSerializer.Serialize(occurrence, JobPayloadJsonContext.Default.EmailOccurrenceJobPayload),
             MailAccountJobPayload account =>
                 JsonSerializer.Serialize(account, JobPayloadJsonContext.Default.MailAccountJobPayload),
+            StoredMailScopeJobPayload scope =>
+                JsonSerializer.Serialize(scope, JobPayloadJsonContext.Default.StoredMailScopeJobPayload),
             _ => throw new ArgumentException(
                 $"A '{payload.JobType}' job payload has no serialization contract in this store.",
                 nameof(payload)),
@@ -97,6 +99,10 @@ internal static class JobPayloadDocument
                             $"A '{jobType}' job carries a document that describes no payload."),
                 _ when jobType == JobType.RunScheduledMailRules =>
                     JsonSerializer.Deserialize(document, JobPayloadJsonContext.Default.MailAccountJobPayload)
+                        ?? throw new InvalidOperationException(
+                            $"A '{jobType}' job carries a document that describes no payload."),
+                _ when jobType == JobType.RederiveStoredMail =>
+                    JsonSerializer.Deserialize(document, JobPayloadJsonContext.Default.StoredMailScopeJobPayload)
                         ?? throw new InvalidOperationException(
                             $"A '{jobType}' job carries a document that describes no payload."),
                 _ => throw new InvalidOperationException(

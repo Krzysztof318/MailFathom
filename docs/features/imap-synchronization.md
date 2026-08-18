@@ -1514,20 +1514,35 @@ the headers a receiving server wrote — is re-derivable from the MIME on this d
 — the [remote flags and keywords](#reconciling-against-the-server), the internal date, anything a later release starts
 recording from the envelope — exists nowhere locally, so nothing short of fetching the message again produces it.
 
-**`mfctl mailbox rederive --account <id> [--folder <alias>]` re-reads what is already stored.** It walks the scope's
-stored emails in the order of their local identity, reads each one's raw MIME back through
+**`mfctl mailbox rederive --account <id> [--folder <alias>]` asks for what is already stored to be re-read.** The walk
+itself takes the scope's stored emails in the order of their local identity, reads each one's raw MIME back through
 [`IEmailMimeReader`](#mime-metadata-extraction), and writes the row's own columns. It opens no mailbox session at all,
-so it cannot touch a remote `\Seen` flag however long it runs, and it rewrites no stored content. One request is one
-bounded pass — fifty messages a batch, ten batches, and no more than sixty-four mebibytes of raw MIME read, whichever
-comes first, because a scope of messages carrying attachments reaches the second ceiling long before the first — and
-the command repeats it until the deployment reports nothing
-left, so an interrupted invocation resumes rather than starting the scope over: the position each batch commits is
-stored beside the batch's writes in one transaction, in `mail_rederivation_positions`, keyed by the scope. A walk that
-reaches the end of its scope removes its row, so asking again after the next release starts at the beginning.
+so it cannot touch a remote `\Seen` flag however long it runs, and it rewrites no stored content.
+
+**The request records the run and returns; the deployment carries it.** The command writes one row in
+`mail_rederivation_runs` — one per scope, holding the run's identity, when it was asked for, how much it has re-read,
+and when it ended — and enqueues a `rederive-stored-mail` job against the account. The walk is therefore durable
+background work under the [job store](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0009-durable-job-store-and-execution-identity.md), which is what
+lets it outlive the operator's terminal and survive a restart of the deployment.
+
+**One attempt of that job is several bounded passes with its lease renewed between them.** A pass is fifty messages a
+batch, ten batches, and no more than sixty-four mebibytes of raw MIME read, whichever comes first, because a scope of
+messages carrying attachments reaches the second ceiling long before the first. Each batch commits its position beside
+its writes in one transaction, in `mail_rederivation_positions`, keyed by the scope; each pass adds what it re-read to
+the run. An attempt that ends before the scope does — a shutdown, the execution timeout — leaves everything its passes
+committed and enqueues the run's next segment, which resumes past the stored position rather than starting the scope
+over. A walk that reaches the end of its scope removes its position row and ends the run, so asking again after the
+next release starts at the beginning.
+
+**Asking again while a run is outstanding is answered with that run.** The job's idempotency key carries the scope, the
+run, and the segment it is on, so a second request finds the segment already queued rather than starting a second walk
+over the same mail — and where the run was written down but its work never reached the queue, the same request is what
+repairs it. `mfctl mailbox rederive-status` reads the run from the row.
 
 A message no reader can parse keeps whatever an earlier release read from it and the walk moves past it; a row whose
 raw MIME is no longer stored is counted apart, because only a fetch could bring that message back. Neither is a failure
-and the command reports both.
+and the run counts both. A segment that fails permanently dead-letters like any other job, which is where a run that
+stopped moving is read and put back.
 
 **The conversation assignment is the one write this pass makes outside the row's own columns, and it is deliberate.**
 A [conversation](../architecture/stored-email-schema.md#the-conversation-a-message-belongs-to) cannot be a column: it is
@@ -1578,7 +1593,7 @@ deployment no longer runs is the one derived value a refresh does not correct, a
 backfill's rebuild](sensitive-content-scanning.md#derived-data-is-written-redacted-and-stamped) already owns it.
 
 [Administering a deployment](../operations/admin-endpoint.md#bringing-stored-mail-up-to-a-later-release) is the
-operator's reference for both routes.
+operator's reference for all three routes.
 
 ## Configuration
 

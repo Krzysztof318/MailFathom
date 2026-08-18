@@ -371,6 +371,12 @@ public static class ServiceCollectionExtensions
         // that re-reads what a rewind would otherwise fetch again.
         services.AddScoped<IStoredMailCounter, StoredMailCounter>();
         services.AddScoped<IStoredMailRederivationStore, StoredMailRederivationStore>();
+        // The run beside the walk: the cursor says where the passes got to and this says what the operator asked for
+        // and what has come of it, which is the question a terminal that no longer drives the walk has to be able to ask.
+        services.AddScoped<IStoredMailRederivationRunStore, StoredMailRederivationRunStore>();
+        // A singleton because the instruments are the instance's, not a scope's: a per-request meter registration
+        // publishes a second set of series that nothing collects.
+        services.AddSingleton<IStoredMailRederivationTelemetry, StoredMailRederivationTelemetry>();
         // A singleton for the reason the embedding backfill's is: the backlog it publishes is one figure about the whole
         // instance, and a gauge answering per scope would report whichever scope last ran a pass.
         services.AddSingleton<MailExtractionBackfillTelemetry>();
@@ -505,6 +511,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<UnmirroredMailFolderEraser>();
         services.AddScoped<MailSynchronizationRewind>();
         services.AddScoped<StoredMailRederivation>();
+        // The two halves an operator reaches the re-derivation through: asking for a run, which writes it down and
+        // enqueues the work, and reading where the run has got to. Both are use cases rather than second ports, because
+        // the grant each asks for is decided where the work happens rather than at the route.
+        services.AddScoped<StoredMailRederivationRequests>();
+        services.AddScoped<StoredMailRederivationRunReader>();
         services.AddScoped<MailboxSynchronizer>();
         services.AddScoped<MailboxReconciler>();
         services.AddScoped<StoredEmailExtractionBackfill>();

@@ -113,8 +113,9 @@ public sealed class AdminApiEndpointsTests
             .Select(endpoint => $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}")
             .Order(StringComparer.Ordinal);
 
-        // The activation path, the rule-run path, the classification-run path, and the rewind path each appear twice,
-        // because each is one resource read with a get and performed with a post, and both verbs are mapped separately.
+        // The activation path, the rule-run path, the classification-run path, the rewind path, and the re-derivation
+        // path each appear twice, because each is one resource read with a get and asked for with a post, and both
+        // verbs are mapped separately.
         // The contact-book paths appear twice and three times for the same reason: the book is listed and written to at
         // one path, and one contact is read, amended, and erased at another. The collected half is erased at a path of
         // its own, because what it names is every record of one origin rather than a resource anybody can read.
@@ -139,6 +140,7 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{JobDeadLetterEndpoints.DropRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{JobDeadLetterEndpoints.RetryRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxMutationAuditEndpoint.Route}",
+                $"{AdminEndpointOptions.RoutePrefix}{MailboxMaintenanceEndpoints.RederivationRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxMaintenanceEndpoints.RederivationRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxRefreshTokenEndpoint.Route}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailboxMaintenanceEndpoints.RewindRoute}",
@@ -201,6 +203,7 @@ public sealed class AdminApiEndpointsTests
                 $"GET {prefix}{MailboxMaintenanceEndpoints.RewindRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{MailboxMaintenanceEndpoints.RewindRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"POST {prefix}{MailboxMaintenanceEndpoints.RederivationRoute} -> {MailFathomPermission.AdminOperate.Name}",
+                $"GET {prefix}{MailboxMaintenanceEndpoints.RederivationRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"GET {prefix}{MailboxMutationAuditEndpoint.Route} -> {MailFathomPermission.AdminAuditRead.Name}",
                 $"GET {prefix}{MailAnsweringAuditEndpoint.Route} -> {MailFathomPermission.AdminAuditRead.Name}",
                 $"GET {prefix}{EmbeddingProfileEndpoints.StatusRoute} -> {MailFathomPermission.AdminRead.Name}",

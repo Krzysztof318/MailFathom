@@ -3,6 +3,7 @@ using System;
 using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    partial class MailFathomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260818150010_AddMailRederivationRuns")]
+    partial class AddMailRederivationRuns
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1239,9 +1242,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<int>("AttemptCount")
                         .HasColumnType("integer");
 
-                    b.Property<DateTimeOffset>("AvailableAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<uint>("ConcurrencyVersion")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -1253,12 +1253,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.Property<int?>("LastReplyCode")
                         .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset?>("LeaseExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("LeaseOwner")
-                        .HasColumnType("uuid");
 
                     b.Property<string>("MailboxAccountId")
                         .IsRequired()
@@ -1294,10 +1288,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.HasIndex("MailboxAccountId", "RecordedAt")
                         .HasDatabaseName("ix_outgoing_emails_outstanding")
                         .HasFilter("\"Stage\" NOT IN ('Sent', 'Refused', 'Cancelled')");
-
-                    b.HasIndex("MailboxAccountId", "AvailableAt", "Id")
-                        .HasDatabaseName("ix_outgoing_emails_claimable")
-                        .HasFilter("\"Stage\" = 'Recorded'");
 
                     b.HasIndex("MailboxAccountId", "RequesterOrigin", "RequesterIdentity")
                         .IsUnique()

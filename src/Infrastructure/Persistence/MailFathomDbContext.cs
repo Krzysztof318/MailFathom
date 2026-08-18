@@ -150,6 +150,14 @@ internal sealed class MailFathomDbContext : DbContext
     /// </remarks>
     internal const string MailRederivationPositionPrimaryKeyConstraintName = "pk_mail_rederivation_positions";
 
+    /// <summary>The key that keeps one re-derivation run per scope, and which a second request for it is recognized by.</summary>
+    /// <remarks>
+    /// Named for the reason the classification run's key is: two requests for one scope's first run reach the database
+    /// together, one of them violates this key, and the retry reads back the run the winner asked for — which is how
+    /// asking twice produces one walk of one mailbox rather than two.
+    /// </remarks>
+    internal const string MailRederivationRunPrimaryKeyConstraintName = "pk_mail_rederivation_runs";
+
     /// <summary>The constraint a mutation's idempotency identity is enforced by, and which a losing writer is recognized from.</summary>
     /// <remarks>
     /// Named because the name is how the same request arriving twice is told apart from a genuine failure. Two callers
@@ -308,6 +316,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<MailRederivationPositionEntity> MailRederivationPositions =>
         this.Set<MailRederivationPositionEntity>();
+
+    internal DbSet<MailRederivationRunEntity> MailRederivationRuns => this.Set<MailRederivationRunEntity>();
 
     internal DbSet<MailRuleEvaluationRunEntity> MailRuleEvaluationRuns => this.Set<MailRuleEvaluationRunEntity>();
 
@@ -658,6 +668,21 @@ internal sealed class MailFathomDbContext : DbContext
 
             // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
             entity.Property(position => position.ConcurrencyVersion).IsRowVersion();
+        });
+
+        // Keyed by the scope an operator named, exactly as the cursor beside it is, so a whole-account run and a run over
+        // one folder of the same account are two rows. The run outlives its own ending, which is what lets a request be
+        // answered with "the previous run finished and here is what it found" rather than with silence.
+        modelBuilder.Entity<MailRederivationRunEntity>(entity =>
+        {
+            entity.ToTable("mail_rederivation_runs");
+            entity.HasKey(run => new { run.MailboxAccountId, run.FolderAlias })
+                .HasName(MailRederivationRunPrimaryKeyConstraintName);
+            entity.Property(run => run.MailboxAccountId).HasMaxLength(128);
+            entity.Property(run => run.FolderAlias).HasMaxLength(128);
+
+            // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
+            entity.Property(run => run.ConcurrencyVersion).IsRowVersion();
         });
 
         modelBuilder.Entity<SynchronizationCheckpointEntity>(entity =>

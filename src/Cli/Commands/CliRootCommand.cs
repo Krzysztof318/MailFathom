@@ -45,13 +45,16 @@ internal static class CliRootCommand
         // folder, and because what they are about is the mail the account holds rather than the storage one folder
         // occupies. They are two commands rather than one switch for the reason the endpoint serves two routes: the
         // properties have two sources, one of them costs a mailbox over IMAP and the other costs a local read, and a
-        // flag deciding which would make a typo the difference between them.
+        // flag deciding which would make a typo the difference between them. The re-derivation is asked for and then
+        // watched, so it is two commands again: the deployment carries the walk in the background, and "rederive-status"
+        // is the second half — where an operator who walked away comes back to an answer rather than to a scrollback.
         Command mailboxCommand = new("mailbox", "Administer a configured mailbox account.")
         {
             MailboxStatusCommand.Create(context),
             AuthorizeMailboxCommand.Create(context),
             RewindMailboxCommand.Create(context),
             RederiveMailboxCommand.Create(context),
+            RederivationStatusCommand.Create(context),
         };
 
         // A group of its own rather than three commands at the root, because "status" already means something here:

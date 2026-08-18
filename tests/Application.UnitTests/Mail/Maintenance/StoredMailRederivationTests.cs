@@ -9,6 +9,7 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -52,16 +53,19 @@ public sealed class StoredMailRederivationTests
 
     private static readonly StoredMailScope WholeAccount = new(MailAccountId.Create("work"), null);
 
+    private readonly InMemoryStoredMailRederivationRunStore runs = new();
+    private int arrangedRunCount;
+
     /// <summary>A scope holding less than one invocation covers is finished by that invocation.</summary>
     [Fact]
     public async Task RunAsync_FewerEmailsThanOnePassCovers_RederivesThemAndReportsNoRemainingWork()
     {
         // Arrange
         var store = new FakeRederivationStore(StoredMail(3));
-        var rederivation = RederivationOver(store, ContentStoreWithReadableMime(), ReaderThatReadsEverything());
+        var rederivation = this.RederivationOver(store, ContentStoreWithReadableMime(), ReaderThatReadsEverything());
 
         // Act
-        var pass = await rederivation.RunAsync(WholeAccount, TestContext.Current.CancellationToken);
+        var pass = await this.PassAsync(rederivation, WholeAccount, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(3, pass.RederivedEmailCount);
@@ -75,10 +79,10 @@ public sealed class StoredMailRederivationTests
     {
         // Arrange
         var store = new FakeRederivationStore(StoredMail(EmailsPerPass + 1));
-        var rederivation = RederivationOver(store, ContentStoreWithReadableMime(), ReaderThatReadsEverything());
+        var rederivation = this.RederivationOver(store, ContentStoreWithReadableMime(), ReaderThatReadsEverything());
 
         // Act
-        var pass = await rederivation.RunAsync(WholeAccount, TestContext.Current.CancellationToken);
+        var pass = await this.PassAsync(rederivation, WholeAccount, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(EmailsPerPass, pass.RederivedEmailCount);
@@ -92,12 +96,12 @@ public sealed class StoredMailRederivationTests
         // Arrange
         var mail = StoredMail(EmailsPerPass + 4);
         var store = new FakeRederivationStore(mail);
-        var rederivation = RederivationOver(store, ContentStoreWithReadableMime(), ReaderThatReadsEverything());
+        var rederivation = this.RederivationOver(store, ContentStoreWithReadableMime(), ReaderThatReadsEverything());
 
         // Act
-        var first = await rederivation.RunAsync(WholeAccount, TestContext.Current.CancellationToken);
+        var first = await this.PassAsync(rederivation, WholeAccount, TestContext.Current.CancellationToken);
         var resumedFrom = store.SavedPositions[^1];
-        var second = await rederivation.RunAsync(WholeAccount, TestContext.Current.CancellationToken);
+        var second = await this.PassAsync(rederivation, WholeAccount, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(first.EmailsRemain);
@@ -118,16 +122,45 @@ public sealed class StoredMailRederivationTests
         // Arrange
         var mail = StoredMail(2);
         var store = new FakeRederivationStore(mail);
-        var rederivation = RederivationOver(store, ContentStoreWithReadableMime(), ReaderThatReadsEverything());
+        var rederivation = this.RederivationOver(store, ContentStoreWithReadableMime(), ReaderThatReadsEverything());
 
         // Act
-        await rederivation.RunAsync(WholeAccount, TestContext.Current.CancellationToken);
-        var secondPass = await rederivation.RunAsync(WholeAccount, TestContext.Current.CancellationToken);
+        await this.PassAsync(rederivation, WholeAccount, TestContext.Current.CancellationToken);
+        var secondPass = await this.PassAsync(rederivation, WholeAccount, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([WholeAccount, WholeAccount], store.Cleared);
         Assert.Equal(2, secondPass.RederivedEmailCount);
         Assert.Equal(4, store.Applied.Count);
+    }
+
+    /// <summary>
+    /// An attempt whose run ended beneath it writes nothing further at all: not the re-readings, not the position, not
+    /// the counts. Two attempts of one run overlap for as long as it takes a lost lease to be noticed, so the other one
+    /// reaching the end of the scope is what this looks like — and a position left behind for a run that is over is the
+    /// one a later run resumes from, which would silently leave the mail in front of it never re-read. Dropping the
+    /// batch costs a re-reading of bytes that do not change.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_ARunThatEndedBeneathThePass_CommitsNothingFurtherAndReportsNothingRemaining()
+    {
+        // Arrange
+        var store = new FakeRederivationStore(
+            StoredMail(EmailsPerPass),
+            beforeSecondBatch: () => this.EndTheRunOver(WholeAccount));
+
+        var rederivation = this.RederivationOver(store, ContentStoreWithReadableMime(), ReaderThatReadsEverything());
+
+        // Act
+        var pass = await this.PassAsync(rederivation, WholeAccount, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(pass.EmailsRemain);
+        Assert.Equal(EmailsPerBatch, pass.RederivedEmailCount);
+        Assert.Equal(EmailsPerBatch, store.Applied.Count);
+        Assert.Single(store.SavedPositions);
+        Assert.Empty(store.Cleared);
+        Assert.Equal(EmailsPerBatch, this.runs.Find(WholeAccount)!.RederivedEmailCount);
     }
 
     /// <summary>
@@ -141,12 +174,12 @@ public sealed class StoredMailRederivationTests
     {
         // Arrange
         var store = new FakeRederivationStore(StoredMail(EmailsPerPass + 1));
-        var rederivation = RederivationOver(store, ContentStoreWithReadableMime(), ReaderThatReadsEverything());
+        var rederivation = this.RederivationOver(store, ContentStoreWithReadableMime(), ReaderThatReadsEverything());
         var otherFolder = new StoredMailScope(WholeAccount.Account, MailFolderAlias.Create("archive"));
 
         // Act
-        await rederivation.RunAsync(WholeAccount, TestContext.Current.CancellationToken);
-        var narrowed = await rederivation.RunAsync(otherFolder, TestContext.Current.CancellationToken);
+        await this.PassAsync(rederivation, WholeAccount, TestContext.Current.CancellationToken);
+        var narrowed = await this.PassAsync(rederivation, otherFolder, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(EmailsPerPass, narrowed.RederivedEmailCount);
@@ -161,13 +194,13 @@ public sealed class StoredMailRederivationTests
         // Arrange
         var mail = StoredMail(2);
         var store = new FakeRederivationStore(mail);
-        var rederivation = RederivationOver(
+        var rederivation = this.RederivationOver(
             store,
             ContentStoreWithReadableMime(),
             ReaderThatFails(mail[0].StoredEmailId, mail));
 
         // Act
-        var pass = await rederivation.RunAsync(WholeAccount, TestContext.Current.CancellationToken);
+        var pass = await this.PassAsync(rederivation, WholeAccount, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(1, pass.RederivedEmailCount);
@@ -187,10 +220,10 @@ public sealed class StoredMailRederivationTests
             .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<StoredEmailContent?>(null));
 
-        var rederivation = RederivationOver(store, contentStore, ReaderThatReadsEverything());
+        var rederivation = this.RederivationOver(store, contentStore, ReaderThatReadsEverything());
 
         // Act
-        var pass = await rederivation.RunAsync(WholeAccount, TestContext.Current.CancellationToken);
+        var pass = await this.PassAsync(rederivation, WholeAccount, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(0, pass.RederivedEmailCount);
@@ -206,10 +239,10 @@ public sealed class StoredMailRederivationTests
         // Arrange
         var mail = StoredMail(3);
         var store = new FakeRederivationStore(mail);
-        var rederivation = RederivationOver(store, ContentStoreWithReadableMime(), ReaderThatReadsEverything());
+        var rederivation = this.RederivationOver(store, ContentStoreWithReadableMime(), ReaderThatReadsEverything());
 
         // Act
-        await rederivation.RunAsync(WholeAccount, TestContext.Current.CancellationToken);
+        await this.PassAsync(rederivation, WholeAccount, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(mail[^1].StoredEmailId, store.SavedPositions[0]);
@@ -227,13 +260,13 @@ public sealed class StoredMailRederivationTests
         // Arrange
         var mail = StoredMail(2);
         var store = new FakeRederivationStore(mail);
-        var rederivation = RederivationOver(
+        var rederivation = this.RederivationOver(
             store,
             ContentStoreWithReadableMime(),
             ReaderThatReadsEverything(bodyText: new string('a', 2_000_001)));
 
         // Act
-        var pass = await rederivation.RunAsync(WholeAccount, TestContext.Current.CancellationToken);
+        var pass = await this.PassAsync(rederivation, WholeAccount, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(2, pass.RederivedEmailCount);
@@ -246,13 +279,13 @@ public sealed class StoredMailRederivationTests
     {
         // Arrange
         var store = new FakeRederivationStore(StoredMail(1));
-        var rederivation = RederivationOver(
+        var rederivation = this.RederivationOver(
             store,
             ContentStoreWithReadableMime(),
             ReaderThatReadsEverything(bodyText: new string('a', 4_000_001)));
 
         // Act
-        var pass = await rederivation.RunAsync(WholeAccount, TestContext.Current.CancellationToken);
+        var pass = await this.PassAsync(rederivation, WholeAccount, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(1, pass.RederivedEmailCount);
@@ -271,13 +304,13 @@ public sealed class StoredMailRederivationTests
         // Arrange
         var mail = StoredMail(EmailsPerPass);
         var store = new FakeRederivationStore(mail);
-        var rederivation = RederivationOver(
+        var rederivation = this.RederivationOver(
             store,
             ContentStoreWithMimeOf(new byte[BytesPerEmail]),
             ReaderThatReadsEverything());
 
         // Act
-        var pass = await rederivation.RunAsync(WholeAccount, TestContext.Current.CancellationToken);
+        var pass = await this.PassAsync(rederivation, WholeAccount, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(EmailsReachingTheByteCeiling, pass.RederivedEmailCount);
@@ -291,36 +324,87 @@ public sealed class StoredMailRederivationTests
     {
         // Arrange
         var store = new FakeRederivationStore(StoredMail(20));
-        var rederivation = RederivationOver(store, ContentStoreWithReadableMime(), ReaderThatReadsEverything());
+        var rederivation = this.RederivationOver(store, ContentStoreWithReadableMime(), ReaderThatReadsEverything());
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
         // Act, Assert
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => rederivation.RunAsync(WholeAccount, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => this.PassAsync(rederivation, WholeAccount, cancellation.Token));
     }
 
-    /// <summary>The grant is the authority here rather than at the transport, so an entrypoint that passed no filter meets the same refusal.</summary>
+    /// <summary>The walk is this deployment's own work, so a caller reaching it is refused however broadly they were granted.</summary>
+    /// <remarks>
+    /// The operator's grant is asked for where the operator is, which is the request that enqueues the run. A caller
+    /// arriving here instead would be walking a whole mailbox under a credential the entrypoint never checked for that
+    /// act, so the refusal is about which principal reached the use case rather than about what it holds.
+    /// </remarks>
     [Fact]
-    public async Task RunAsync_ACallerGrantedOnlyTheAdministrativeRead_IsRefusedWithTheTransportAbsent()
+    public async Task RunAsync_ACallerRatherThanTheProcess_IsRefusedWhateverItWasGranted()
     {
         // Arrange
         var store = new FakeRederivationStore(StoredMail(1));
-        var rederivation = RederivationOver(
+        var rederivation = this.RederivationOver(
             store,
             ContentStoreWithReadableMime(),
             ReaderThatReadsEverything(),
-            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate, MailFathomPermission.AdminRead));
 
         // Act
         var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
-            rederivation.RunAsync(WholeAccount, TestContext.Current.CancellationToken));
+            this.PassAsync(rederivation, WholeAccount, TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(MailFathomPermission.AdminOperate, refusal.RequiredPermission);
+        Assert.False(refusal.RequiredPermission.IsSpecified);
         Assert.Empty(store.Applied);
     }
 
-    private static StoredMailRederivation RederivationOver(
+    /// <summary>Asks the walk for one pass of the run the scope has, recording one where the test arranged none.</summary>
+    /// <remarks>
+    /// Every pass belongs to a run, because that is what each of its writes is conditional on: a batch commits nothing
+    /// once the run it was reading for is over. A test about the walk itself is not a test about which run it walks
+    /// for, so the run is arranged here rather than in each one.
+    /// </remarks>
+    private Task<StoredMailRederivationPass> PassAsync(
+        StoredMailRederivation rederivation,
+        StoredMailScope scope,
+        CancellationToken cancellationToken) =>
+        rederivation.RunAsync(this.RunOver(scope).RunId, scope, cancellationToken);
+
+    /// <summary>Ends the scope's run where an overlapping attempt would have, without a second walk to run it.</summary>
+    private void EndTheRunOver(StoredMailScope scope) => this.runs.Arrange(this.runs.Find(scope)! with
+    {
+        EndedAt = new DateTimeOffset(2026, 8, 16, 11, 30, 0, TimeSpan.Zero),
+    });
+
+    /// <summary>Records an outstanding run over a scope, or answers with the one already carrying it.</summary>
+    /// <remarks>
+    /// A scope whose run has ended is given a new one, exactly as the request path gives it one: the previous run is
+    /// over, and a walk asked for after it is a second run rather than a continuation of the first.
+    /// </remarks>
+    private StoredMailRederivationRun RunOver(StoredMailScope scope)
+    {
+        if (this.runs.Find(scope) is { IsOutstanding: true } existing)
+        {
+            return existing;
+        }
+
+        this.arrangedRunCount++;
+
+        StoredMailRederivationRun arranged = new()
+        {
+            RunId = StoredMailRederivationRunId.Create(
+                Guid.Parse($"0199a0c0-0000-7000-8000-{this.arrangedRunCount:D12}")),
+            Scope = scope,
+            RequestedAt = new DateTimeOffset(2026, 8, 16, 11, 0, 0, TimeSpan.Zero),
+            SegmentCount = 1,
+        };
+
+        this.runs.Arrange(arranged);
+
+        return arranged;
+    }
+
+    private StoredMailRederivation RederivationOver(
         IStoredMailRederivationStore store,
         IEmailContentStore contentStore,
         IEmailMimeReader mimeReader,
@@ -329,15 +413,19 @@ public sealed class StoredMailRederivationTests
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
 
+        FakeTimeProvider timeProvider = new(new DateTimeOffset(2026, 8, 16, 12, 0, 0, TimeSpan.Zero));
+
         return new StoredMailRederivation(
             store,
+            this.runs,
             contentStore,
             mimeReader,
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions { MaximumCommitAttempts = 2 },
-                new FakeTimeProvider(new DateTimeOffset(2026, 8, 16, 12, 0, 0, TimeSpan.Zero))),
-            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate));
+                timeProvider),
+            timeProvider,
+            authorization ?? AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
     }
 
     /// <summary>Builds stored mail whose identifiers increase in the order the walk visits it.</summary>
@@ -415,7 +503,11 @@ public sealed class StoredMailRederivationTests
             SenderAuthentication.NotEstablished());
 
     /// <summary>Stands in for the persisted walk state, keyed the way the real store's ordering and scope are.</summary>
-    private sealed class FakeRederivationStore(IReadOnlyList<StoredMailAwaitingRederivation> mail)
+    /// <param name="mail">The stored mail the walk finds, in the order it visits it.</param>
+    /// <param name="beforeSecondBatch">Runs once, where the walk asks for its second batch, so a test can move the world under it.</param>
+    private sealed class FakeRederivationStore(
+        IReadOnlyList<StoredMailAwaitingRederivation> mail,
+        Action? beforeSecondBatch = null)
         : IStoredMailRederivationStore
     {
         private readonly Dictionary<StoredMailScope, StoredEmailId> positions = [];
@@ -443,6 +535,11 @@ public sealed class StoredMailRederivationTests
             CancellationToken cancellationToken)
         {
             this.CandidateScopes.Add(scope);
+
+            if (this.CandidateScopes.Count == 2)
+            {
+                beforeSecondBatch?.Invoke();
+            }
 
             IReadOnlyList<StoredMailAwaitingRederivation> batch =
             [

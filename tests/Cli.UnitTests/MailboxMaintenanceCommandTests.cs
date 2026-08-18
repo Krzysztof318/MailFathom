@@ -224,13 +224,13 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
             Compact(deployment.LastRequestTo(AdminEndpointRoutes.MailboxRewindPath)));
     }
 
-    /// <summary>A scope small enough for one pass is one request, and the command says what it re-read.</summary>
+    /// <summary>Asking is one request that returns, and the command says where the run is watched from.</summary>
     [Fact]
-    public async Task Rederive_AScopeOnePassCovers_ReadsItInOneRequestAndReportsTheCount()
+    public async Task Rederive_AScopeWithNoRunYet_AsksOnceAndSaysWhereToWatchIt()
     {
         // Arrange
         using var deployment = FakeMaintenanceDeployment.Rederiving(
-            FakeMaintenanceDeployment.Pass(rederivedEmailCount: 12, emailsRemain: false));
+            FakeMaintenanceDeployment.Start(FakeMaintenanceDeployment.Run()));
 
         // Act
         var exitCode = await this.RederiveAsync(deployment);
@@ -240,93 +240,217 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         Assert.Equal(1, deployment.RederivationRequestCount());
         Assert.Contains(
             this.console.Lines,
-            line => line.Contains("12 stored emails re-read", StringComparison.Ordinal));
+            line => line.Contains("has been asked for", StringComparison.Ordinal));
+        Assert.Contains(
+            this.console.Lines,
+            line => line.Contains("mailbox rederive-status --account work", StringComparison.Ordinal));
     }
 
     /// <summary>
-    /// The bounding and the repetition together. One pass is a handful of transactions rather than a mailbox, so a
-    /// larger scope is refreshed by asking again — and a command that stopped after the first would report a refreshed
-    /// mailbox that still carried the old shape.
+    /// Asking twice is asking once, and which of the two happened is what the command says. An operator who cannot
+    /// tell "I have just started a walk" from "one was already going" would keep asking for a run that is under way.
     /// </summary>
     [Fact]
-    public async Task Rederive_AScopeLargerThanOnePass_KeepsAskingUntilTheDeploymentSaysNothingIsLeft()
+    public async Task Rederive_AScopeAlreadyBeingWalked_SaysNothingNewWasStarted()
     {
         // Arrange
-        using var deployment = FakeMaintenanceDeployment.Rederiving(
-            FakeMaintenanceDeployment.Pass(rederivedEmailCount: 500, emailsRemain: true),
-            FakeMaintenanceDeployment.Pass(rederivedEmailCount: 500, emailsRemain: true),
-            FakeMaintenanceDeployment.Pass(rederivedEmailCount: 43, emailsRemain: false));
+        using var deployment = FakeMaintenanceDeployment.Rederiving(FakeMaintenanceDeployment.Start(
+            FakeMaintenanceDeployment.Run(rederivedEmailCount: 500),
+            started: false));
 
         // Act
         var exitCode = await this.RederiveAsync(deployment);
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Equal(3, deployment.RederivationRequestCount());
         Assert.Contains(
             this.console.Lines,
-            line => line.Contains("1,043 stored emails re-read", StringComparison.Ordinal));
+            line => line.Contains("was already under way", StringComparison.Ordinal));
         Assert.Contains(
             this.console.Lines,
-            line => line.Contains("500 stored emails re-read so far", StringComparison.Ordinal));
+            line => line.Contains("500 re-read", StringComparison.Ordinal));
     }
 
     /// <summary>
-    /// The command repeats until the deployment says nothing is left, so an answer that read nothing while claiming
-    /// more remains would repeat forever. Nothing this deployment's own walk can produce says that, which is why it is
-    /// reported rather than retried.
+    /// A deployment whose queue was full recorded the run and is carrying nothing, which is the one outcome neither
+    /// the run nor the started flag states. Reporting it as a success would leave an operator watching a walk that
+    /// nothing is walking.
     /// </summary>
     [Fact]
-    public async Task Rederive_APassThatReadNothingWhileClaimingMoreRemains_StopsRatherThanAskingForever()
+    public async Task Rederive_AQueueAtItsBound_ReportsThatNothingIsCarryingTheRun()
     {
         // Arrange
-        using var deployment = FakeMaintenanceDeployment.Rederiving(
-            FakeMaintenanceDeployment.Pass(rederivedEmailCount: 0, emailsRemain: true));
+        using var deployment = FakeMaintenanceDeployment.Rederiving(FakeMaintenanceDeployment.Start(
+            FakeMaintenanceDeployment.Run(),
+            carriage: "queue-at-capacity"));
 
         // Act
         var exitCode = await this.RederiveAsync(deployment);
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
-        Assert.Equal(1, deployment.RederivationRequestCount());
         Assert.Contains(
             this.console.Errors,
-            line => line.Contains("would not make progress", StringComparison.Ordinal));
+            line => line.Contains("queue is full", StringComparison.Ordinal));
     }
 
-    /// <summary>The two ways a message is stepped over are different answers, and the operator is told which happened.</summary>
+    /// <summary>
+    /// A segment nothing will attempt again leaves the run exactly as stalled as a full queue does, and the two are
+    /// undone by opposite acts: one by asking again, the other only through the queue's own commands. An operator sent
+    /// to drain a queue that was never full would wait on a run nobody is going to advance.
+    /// </summary>
     [Fact]
-    public async Task Rederive_MessagesItCouldNotRead_ReportsTheTwoReasonsApart()
+    public async Task Rederive_ASegmentNothingWillAttemptAgain_SendsTheOperatorToTheQueueRatherThanBackHere()
     {
         // Arrange
-        using var deployment = FakeMaintenanceDeployment.Rederiving(FakeMaintenanceDeployment.Pass(
-            rederivedEmailCount: 5,
-            emailsRemain: false,
-            unreadableEmailCount: 2,
-            missingContentEmailCount: 3));
+        using var deployment = FakeMaintenanceDeployment.Rederiving(FakeMaintenanceDeployment.Start(
+            FakeMaintenanceDeployment.Run(),
+            started: false,
+            carriage: "stopped"));
 
         // Act
-        await this.RederiveAsync(deployment);
+        var exitCode = await this.RederiveAsync(deployment);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(
+            this.console.Errors,
+            line => line.Contains("jobs dead-letters", StringComparison.Ordinal)
+                && line.Contains("jobs retry", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            this.console.Errors,
+            line => line.Contains("queue is full", StringComparison.Ordinal));
+    }
+
+    /// <summary>The run is read on the same path the request was written to, with the scope in the query.</summary>
+    [Fact]
+    public async Task RederiveStatus_AScopeWithARun_ReportsHowFarItHasComeWithoutAskingForAnother()
+    {
+        // Arrange
+        using var deployment = FakeMaintenanceDeployment.Rederiving(
+            FakeMaintenanceDeployment.Start(FakeMaintenanceDeployment.Run()),
+            FakeMaintenanceDeployment.State(FakeMaintenanceDeployment.Run(rederivedEmailCount: 1_043)));
+
+        // Act
+        var exitCode = await this.RederiveStatusAsync(deployment);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Equal(0, deployment.RederivationRequestCount());
+        Assert.Equal("?account=work", deployment.LastRederivationQuery());
+        Assert.Contains(
+            this.console.Lines,
+            line => line.Contains("1,043 re-read", StringComparison.Ordinal));
+    }
+
+    /// <summary>A run that reached the end of its scope says so, so an operator knows there is nothing left to watch.</summary>
+    [Fact]
+    public async Task RederiveStatus_ARunThatReachedTheEndOfItsScope_ReportsWhenItFinished()
+    {
+        // Arrange
+        using var deployment = FakeMaintenanceDeployment.Rederiving(
+            FakeMaintenanceDeployment.Start(FakeMaintenanceDeployment.Run()),
+            FakeMaintenanceDeployment.State(FakeMaintenanceDeployment.Run(
+                rederivedEmailCount: 22_500,
+                isOutstanding: false)));
+
+        // Act
+        await this.RederiveStatusAsync(deployment);
 
         // Assert
         Assert.Contains(
             this.console.Lines,
-            line => line.Contains("2 stored emails carried MIME no reader could parse", StringComparison.Ordinal));
+            line => line.Contains("finished at 2026-08-18 12:41:00Z", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            this.console.Lines,
+            line => line.Contains("jobs dead-letters", StringComparison.Ordinal));
+    }
+
+    /// <summary>The two ways a message is stepped over are different answers, and the operator is told which happened.</summary>
+    [Fact]
+    public async Task RederiveStatus_MailTheRunCouldNotReRead_ReportsTheTwoReasonsApart()
+    {
+        // Arrange
+        using var deployment = FakeMaintenanceDeployment.Rederiving(
+            FakeMaintenanceDeployment.Start(FakeMaintenanceDeployment.Run()),
+            FakeMaintenanceDeployment.State(FakeMaintenanceDeployment.Run(
+                rederivedEmailCount: 5,
+                unreadableEmailCount: 2,
+                missingContentEmailCount: 3,
+                isOutstanding: false)));
+
+        // Act
+        await this.RederiveStatusAsync(deployment);
+
+        // Assert
         Assert.Contains(
             this.console.Lines,
-            line => line.Contains("3 stored emails no longer had stored MIME", StringComparison.Ordinal)
+            line => line.Contains("MIME no reader could parse", StringComparison.Ordinal));
+        Assert.Contains(
+            this.console.Lines,
+            line => line.Contains("stored MIME is gone", StringComparison.Ordinal)
                 && line.Contains("mailbox rewind", StringComparison.Ordinal));
     }
 
-    /// <summary>The account is required for both, because guessing it would be guessing whose mail is re-read.</summary>
+    /// <summary>A scope nobody has ever asked about is an answer rather than an error, and it says how to start one.</summary>
+    [Fact]
+    public async Task RederiveStatus_AScopeWithNoRun_SaysNoneHasEverBeenAskedFor()
+    {
+        // Arrange
+        using var deployment = FakeMaintenanceDeployment.Rederiving(
+            FakeMaintenanceDeployment.Start(FakeMaintenanceDeployment.Run()));
+
+        // Act
+        var exitCode = await this.RederiveStatusAsync(deployment);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            this.console.Lines,
+            line => line.Contains("No re-derivation has ever been asked for", StringComparison.Ordinal));
+        Assert.Empty(this.console.Errors);
+    }
+
+    /// <summary>
+    /// Two scopes are two runs, so the command it suggests has to name the folder the operator narrowed to. Dropping
+    /// it would start a walk of the whole account, which is neither what was asked about nor what the answer described.
+    /// </summary>
+    [Fact]
+    public async Task RederiveStatus_ANarrowedScopeWithNoRun_SuggestsStartingOneOverThatFolder()
+    {
+        // Arrange
+        using var deployment = FakeMaintenanceDeployment.Rederiving(
+            FakeMaintenanceDeployment.Start(FakeMaintenanceDeployment.Run()));
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "mailbox",
+            "rederive-status",
+            "--account",
+            Account,
+            "--folder",
+            "archive",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            this.console.Lines,
+            line => line.Contains("mailbox rederive --account work --folder archive", StringComparison.Ordinal));
+    }
+
+    /// <summary>The account is required by each of them, because guessing it would be guessing whose mail is meant.</summary>
     [Theory]
     [InlineData("rewind")]
     [InlineData("rederive")]
+    [InlineData("rederive-status")]
     public async Task MaintenanceCommand_NoAccountNamed_RefusesWithoutReachingTheDeployment(string verb)
     {
         // Arrange
         using var deployment = FakeMaintenanceDeployment.Rederiving(
-            FakeMaintenanceDeployment.Pass(rederivedEmailCount: 0, emailsRemain: false));
+            FakeMaintenanceDeployment.Start(FakeMaintenanceDeployment.Run()));
 
         // Act
         var exitCode = await this.RunAsync(deployment, "mailbox", verb, "--endpoint", Endpoint);
@@ -347,6 +471,9 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
 
     private Task<int> RederiveAsync(FakeHttpMessageHandler deployment) =>
         this.RunAsync(deployment, "mailbox", "rederive", "--account", Account, "--endpoint", Endpoint);
+
+    private Task<int> RederiveStatusAsync(FakeHttpMessageHandler deployment) =>
+        this.RunAsync(deployment, "mailbox", "rederive-status", "--account", Account, "--endpoint", Endpoint);
 
     private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args)
     {
