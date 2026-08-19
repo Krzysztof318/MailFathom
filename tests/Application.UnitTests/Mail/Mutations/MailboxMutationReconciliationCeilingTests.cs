@@ -8,48 +8,26 @@ using Xunit;
 
 namespace MailFathom.Application.UnitTests.Mail.Mutations;
 
-/// <summary>Covers the ceiling the attribution read applies, which follows the window rather than a constant.</summary>
+/// <summary>Covers the budget the attribution read applies, which belongs to one occurrence rather than to a window.</summary>
 /// <remarks>
-/// A record dropped by this ceiling is a change MailFathom made that reconciliation then credits to the mailbox owner
-/// and reacts to, which is the loop the read exists to prevent. So what the number has to guarantee is room for every
-/// value the window's occurrences could carry; a constant would have had to be right for a window of ten and for the
-/// ten thousand the configuration permits.
+/// A record this budget drops is a change MailFathom made that reconciliation then credits to the mailbox owner and
+/// reacts to, which is the loop the read exists to prevent. What it has to guarantee is therefore room for every value
+/// one occurrence could carry — and that the number says nothing about the window, since a budget spent across one
+/// lets a message somebody starred and unstarred repeatedly take every slot from the message beside it.
+/// <see cref="Synchronization.Reconciliation.MailboxReconcilerTests" /> covers that
+/// consequence against a whole window; what is stated here is the number itself.
 /// </remarks>
 public sealed class MailboxMutationReconciliationCeilingTests
 {
+    /// <summary>An attribution settles each value against the newest store of it, so one per value is what it can use.</summary>
     [Fact]
-    public void MaximumFlagChangeRecordsFor_AWindowOfOneOccurrence_LeavesRoomForEveryValueItCouldCarry()
+    public void MaximumFlagChangeRecordsPerOccurrence_LeavesRoomForEveryValueAnOccurrenceCouldCarry()
     {
         // Act
-        var ceiling = IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsFor(1);
+        var perOccurrence = IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsPerOccurrence;
 
         // Assert
-        Assert.Equal(MailboxMutation.FlagWriting.Count, ceiling);
-    }
-
-    /// <summary>The largest window an account may be configured with still gets one record per value per occurrence.</summary>
-    [Theory]
-    [InlineData(1)]
-    [InlineData(500)]
-    [InlineData(10000)]
-    public void MaximumFlagChangeRecordsFor_AnyPermittedWindow_ScalesWithIt(int changedOccurrenceCount)
-    {
-        // Act
-        var ceiling = IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsFor(changedOccurrenceCount);
-
-        // Assert
-        Assert.Equal(changedOccurrenceCount * MailboxMutation.FlagWriting.Count, ceiling);
-        Assert.True(ceiling >= changedOccurrenceCount);
-    }
-
-    /// <summary>A window that found nothing moved asks nothing, so the ceiling it would apply is nothing too.</summary>
-    [Fact]
-    public void MaximumFlagChangeRecordsFor_AWindowWhereNothingMoved_IsZero()
-    {
-        // Act
-        var ceiling = IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsFor(0);
-
-        // Assert
-        Assert.Equal(0, ceiling);
+        Assert.Equal(MailboxMutation.FlagWriting.Count, perOccurrence);
+        Assert.True(perOccurrence > 0);
     }
 }

@@ -114,11 +114,15 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
                     && record.Request.Occurrence.UidValidity == uidValidity
                     && uids.Contains(record.Request.Occurrence.Uid)
                     && FlagWritingMutations.Contains(record.Request.Mutation)
+                    && record.Stage != MailboxMutationStage.Recorded
                     && record.StageChangedAt > issuedAfter)
-                .OrderByDescending(record => record.StageChangedAt)
-                .ThenByDescending(record => record.Id.Value)
-                .Take(IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsFor(uids.Count))
-                .Reverse(),
+                .GroupBy(record => record.Request.Occurrence.Uid)
+                .SelectMany(occurrence => occurrence
+                    .OrderByDescending(record => record.StageChangedAt)
+                    .ThenByDescending(record => record.Id.Value)
+                    .Take(IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsPerOccurrence))
+                .OrderBy(record => record.StageChangedAt)
+                .ThenBy(record => record.Id.Value),
         ];
 
         return Task.FromResult(writing);

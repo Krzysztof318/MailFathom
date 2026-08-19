@@ -115,12 +115,15 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
     /// A run reading the flags of a window has to tell a <c>\Seen</c> this instance set from one a person set in their
     /// client, and the mutation's name is the whole of that distinction. The relocation seeded beside it is what makes
     /// the narrowing decidable: it shares the folder and the UIDVALIDITY, so a read that ignored the name would return
-    /// it. The age bound is asserted in the same test, because it is the other half of what this query excludes and it
-    /// is a comparison against a timestamp column that only a database performs: a bound at the record's own stage
-    /// change must return nothing, which is what keeps an occurrence's accumulated stores off every later window.
+    /// it. Two more halves of what this query excludes are asserted here for the same reason — both are comparisons
+    /// against columns only a database performs. A bound at the record's own stage change must return nothing, which is
+    /// what keeps an occurrence's accumulated stores off every later window; and a store still at
+    /// <see cref="MailboxMutationStage.Recorded" /> must return nothing either, because it explains no reading and
+    /// carries the newest stage change in the table, so a read that admitted it would spend an occurrence's budget on
+    /// rows that account for nothing.
     /// </summary>
     [Fact]
-    public async Task ReadSeenStateChangesOnAsync_AWindowHoldingBothKindsOfMutation_ReturnsOnlyTheSeenStoresIssuedAfterTheBound()
+    public async Task ReadSeenStateChangesOnAsync_AWindowHoldingBothKindsOfMutation_ReturnsOnlyTheIssuedSeenStoresAfterTheBound()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -129,10 +132,12 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
 
         var seenOccurrence = SyntheticEmail.OccurrenceIn(binding, uid: 5002);
         var relocatedOccurrence = SyntheticEmail.OccurrenceIn(binding, uid: 5003);
+        var writtenDownOccurrence = SyntheticEmail.OccurrenceIn(binding, uid: 5004);
         var seenEmailId = await StoreMetadataAsync(services, seenOccurrence, "flagged", cancellationToken);
         var relocatedEmailId = await StoreMetadataAsync(services, relocatedOccurrence, "moved", cancellationToken);
+        var writtenDownEmailId = await StoreMetadataAsync(services, writtenDownOccurrence, "pending", cancellationToken);
 
-        var seenRecordId = await OpenAsync(
+        var seenRecordId = await CompletedSeenStoreAsync(
             services,
             MailboxMutationRequest.SetSeen(seenEmailId, seenOccurrence, Requester, isSeen: true),
             cancellationToken);
@@ -141,25 +146,32 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
             MailboxMutationRequest.Relocate(relocatedEmailId, relocatedOccurrence, Requester, DestinationPath),
             cancellationToken);
 
+        // Opened and left where the tool leaves it, which is the state every change is in until the account's next run
+        // issues it. It is written down last, so it also carries the newest stage change of the three.
+        await OpenAsync(
+            services,
+            MailboxMutationRequest.SetSeen(writtenDownEmailId, writtenDownOccurrence, Requester, isSeen: true),
+            cancellationToken);
+
         // Act
         var seenStateChanges = await ReadFlagChangesAsync(
             services,
             binding.Id,
             seenOccurrence.UidValidity,
-            [seenOccurrence.Uid, relocatedOccurrence.Uid],
+            [seenOccurrence.Uid, relocatedOccurrence.Uid, writtenDownOccurrence.Uid],
             BeforeEveryRecord,
             cancellationToken);
-        var afterTheStoreWasWrittenDown = await ReadFlagChangesAsync(
+        var afterTheStoreWasIssued = await ReadFlagChangesAsync(
             services,
             binding.Id,
             seenOccurrence.UidValidity,
-            [seenOccurrence.Uid, relocatedOccurrence.Uid],
+            [seenOccurrence.Uid, relocatedOccurrence.Uid, writtenDownOccurrence.Uid],
             seenStateChanges[0].StageChangedAt,
             cancellationToken);
 
         // Assert
         Assert.Equal(seenRecordId, Assert.Single(seenStateChanges).Id);
-        Assert.Empty(afterTheStoreWasWrittenDown);
+        Assert.Empty(afterTheStoreWasIssued);
     }
 
     private static Task<IReadOnlyList<MailboxMutationRecord>> ReadFlagChangesAsync(
@@ -220,6 +232,29 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
                         token);
                     await store.AdvanceAsync(session, recordId, MailboxMutationStage.Completed, placement: null, token);
                 },
+                cancellationToken));
+
+        return recordId;
+    }
+
+    /// <summary>Drives one <c>\Seen</c> store to the state a finished flag mutation leaves, through the production store.</summary>
+    /// <remarks>
+    /// A flag store reaches <see cref="MailboxMutationStage.Completed" /> from
+    /// <see cref="MailboxMutationStage.Recorded" /> directly, since nothing about it is placed anywhere, and the stage
+    /// is written by the store rather than onto the row so the record a read meets is the one a performer produces.
+    /// </remarks>
+    private static async Task<MailboxMutationRecordId> CompletedSeenStoreAsync(
+        OrchestratedMailFathomServices services,
+        MailboxMutationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var recordId = await OpenAsync(services, request, cancellationToken);
+
+        Assert.Equal(
+            PersistenceCommitResult.Committed,
+            await services.CommitAsync(
+                (scope, session, token) => scope.GetRequiredService<IMailboxMutationRecordStore>()
+                    .AdvanceAsync(session, recordId, MailboxMutationStage.Completed, placement: null, token),
                 cancellationToken));
 
         return recordId;

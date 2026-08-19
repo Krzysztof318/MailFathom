@@ -104,11 +104,19 @@ internal sealed partial class MailboxMutationReconciliationStore(
         var generation = folderResolutionId.Generation.Value;
         var uidValidityValue = uidValidity.Value;
         uint[] changedUids = [.. uids.Select(static uid => uid.Value)];
-        var ceiling = IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsFor(uids.Count);
+        var perOccurrence = IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsPerOccurrence;
+
+        // One row past the budget, so an occurrence whose tail was cut is told apart from one that exactly fills it.
+        // Without the extra row the count alone cannot say which happened, and the warning below would report a
+        // misattribution that could not have occurred.
+        var probed = perOccurrence + 1;
 
         // Reached through the prefix of the identity index — folder, UIDVALIDITY, UID — which is why this question needs
-        // no index of its own, exactly as reading a disappearance back does not.
-        var entities = await readContext.MailboxMutations
+        // no index of its own, exactly as reading a disappearance back does not. The stage is excluded here rather than
+        // left to the caller because a record written down and not yet issued explains no reading, and it carries the
+        // newest stage change in the table: against an occurrence a caller has just triaged, those rows would otherwise
+        // fill the budget and drop the completed record that does explain what the server reported.
+        var occurrences = await readContext.MailboxMutations
             .AsNoTracking()
             .Include(mutation => mutation.MailFolder)
             .Where(mutation => mutation.MailboxAccountId == accountValue
@@ -117,26 +125,41 @@ internal sealed partial class MailboxMutationReconciliationStore(
                 && mutation.UidValidity == uidValidityValue
                 && changedUids.Contains(mutation.Uid)
                 && FlagWritingMutationNames.Contains(mutation.Mutation)
+                && mutation.Stage != MailboxMutationStage.Recorded
                 && mutation.StageChangedAt > issuedAfter)
-            .OrderByDescending(mutation => mutation.StageChangedAt)
-            .ThenByDescending(mutation => mutation.Id)
-            .Take(ceiling)
+            .GroupBy(mutation => mutation.Uid)
+            .Select(occurrence => new
+            {
+                // Ranked within the UID rather than across the answer, so no occurrence can spend another's budget.
+                // Ranked by the stage change rather than by when the record was written, because that is the column the
+                // filter above and every comparison the caller makes are about: a store recorded early and completed
+                // late accounts for a later reading than one recorded after it and staged before it.
+                Newest = occurrence
+                    .OrderByDescending(mutation => mutation.StageChangedAt)
+                    .ThenByDescending(mutation => mutation.Id)
+                    .Take(probed),
+            })
             .ToArrayAsync(cancellationToken);
 
-        if (entities.Length == ceiling)
+        var truncatedOccurrenceCount = occurrences.Count(occurrence => occurrence.Newest.Count() > perOccurrence);
+
+        if (truncatedOccurrenceCount > 0)
         {
-            LogFlagChangeCeilingReached(logger, ceiling, uids.Count, accountValue, alias);
+            LogFlagChangeCeilingReached(logger, perOccurrence, truncatedOccurrenceCount, accountValue, alias);
         }
 
-        // Ranked by the stage change rather than by when the record was written, because that is the column the filter
-        // above and every comparison the caller makes are about: a store recorded early and completed late accounts for
-        // a later reading than one recorded after it and staged before it. Read newest first so the ceiling drops the
-        // records least able to account for anything, and handed back oldest first because that is the order the caller
-        // credits a value to the earliest store that explains it.
+        // Handed back oldest first, because that is the order the caller credits a value to the earliest store that
+        // explains it. The ordering is restated here rather than trusted from the answer's shape, since a grouped read
+        // guarantees the order within a group and nothing about the order between them.
         return
         [
-            .. entities
-                .Reverse()
+            .. occurrences
+                .SelectMany(occurrence => occurrence.Newest
+                    .OrderByDescending(entity => entity.StageChangedAt)
+                    .ThenByDescending(entity => entity.Id)
+                    .Take(perOccurrence))
+                .OrderBy(entity => entity.StageChangedAt)
+                .ThenBy(entity => entity.Id)
                 .Select(static entity => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder)),
         ];
     }
@@ -228,14 +251,14 @@ internal sealed partial class MailboxMutationReconciliationStore(
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "The attribution of a reconciliation window read its whole ceiling of {Ceiling} flag and keyword "
-            + "stores across {ChangedOccurrenceCount} changed occurrences of account {AccountId} in folder "
-            + "{FolderAlias}, so an older store that could still explain a value went unread and that value may be "
-            + "attributed to the mailbox owner.")]
+        Message = "{TruncatedOccurrenceCount} changed occurrences of account {AccountId} in folder {FolderAlias} carry "
+            + "more than the {Ceiling} flag and keyword stores an attribution reads for one occurrence, so an older "
+            + "store that could still explain a value went unread and that value may be attributed to the mailbox "
+            + "owner.")]
     private static partial void LogFlagChangeCeilingReached(
         ILogger logger,
         int ceiling,
-        int changedOccurrenceCount,
+        int truncatedOccurrenceCount,
         string accountId,
         string folderAlias);
 }

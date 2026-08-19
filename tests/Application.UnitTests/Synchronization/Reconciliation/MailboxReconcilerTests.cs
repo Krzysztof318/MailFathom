@@ -670,6 +670,75 @@ public sealed class MailboxReconcilerTests
         Assert.Equal(readThreeHoursAgo, mutationStore.LastFlagChangeReadIssuedAfter);
     }
 
+    /// <summary>An occurrence carrying a pile of stores cannot crowd out the record that explains the message beside it.</summary>
+    /// <remarks>
+    /// The attribution read is capped, and where that cap is spent decides what a truncation costs. Spent across the
+    /// window, a message an agent marked and unmarked repeatedly takes every slot and the single record explaining the
+    /// message next to it is dropped — so that message's <c>\Seen</c> flag is credited to the mailbox owner and the
+    /// rule that set it re-fires on the mail it just acted on. Spent within each occurrence, neither can reach the
+    /// other's room. The pile is deliberately larger than the whole window's worth, and the record it would have
+    /// displaced is the oldest of the lot, which is the one a newest-first truncation drops first.
+    /// </remarks>
+    [Fact]
+    public async Task ReconcileAsync_OneOccurrenceCarryingAPileOfStoresBesideAnotherCarryingOne_WithholdsBothChanges()
+    {
+        // Arrange
+        var readAnHourAgo = RunInstant.AddHours(-1);
+        var store = new FakeReconciliationStore(
+        [
+            new StoredOccurrence(
+                StoredEmailId.Create(Guid.CreateVersion7(RunInstant.AddSeconds(10))),
+                10,
+                PreviouslyObservedSeenState: false,
+                PreviouslyObservedAt: readAnHourAgo),
+            new StoredOccurrence(
+                StoredEmailId.Create(Guid.CreateVersion7(RunInstant.AddSeconds(11))),
+                11,
+                PreviouslyObservedSeenState: false,
+                PreviouslyObservedAt: readAnHourAgo),
+        ]);
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        var explainsTheSecond = MutationSettingSeen(
+            store.StoredEmailIdOf(11),
+            uid: 11,
+            isSeen: true,
+            stagedAt: RunInstant.AddMinutes(1));
+
+        mutationStore.Add(explainsTheSecond);
+
+        foreach (var minute in Enumerable.Range(2, 20))
+        {
+            mutationStore.Add(MutationSettingSeen(
+                store.StoredEmailIdOf(10),
+                uid: 10,
+                isSeen: true,
+                stagedAt: RunInstant.AddMinutes(minute)));
+        }
+
+        await using var mailboxSession = CreateSessionReportingSeenState(isSeen: true, 10, 11);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.SeenStateChangedEmailCount);
+        Assert.Equal(2, result.SuppressedChanges.Count);
+        Assert.Contains(
+            result.SuppressedChanges,
+            suppressed => suppressed.MutationRecordId == explainsTheSecond.Id
+                && suppressed.StoredEmailId == store.StoredEmailIdOf(11));
+    }
+
     /// <summary>Marking mail read by hand is the mailbox owner's act, and it stays a change to react to.</summary>
     [Fact]
     public async Task ReconcileAsync_OwnerMarkedMailReadThemselves_RaisesTheChange()
@@ -1463,13 +1532,15 @@ public sealed class MailboxReconcilerTests
         StoredEmailId storedEmailId,
         uint uid,
         bool isSeen,
-        MailboxMutationStage stage = MailboxMutationStage.Completed)
+        MailboxMutationStage stage = MailboxMutationStage.Completed,
+        DateTimeOffset? stagedAt = null)
     {
         var occurrence = EmailOccurrenceId.Create(Account, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid));
+        var staged = stagedAt ?? RunInstant;
 
         return new MailboxMutationRecord
         {
-            Id = MailboxMutationRecordId.Create(Guid.CreateVersion7(RunInstant)),
+            Id = MailboxMutationRecordId.Create(Guid.CreateVersion7(staged)),
             Request = MailboxMutationRequest.SetSeen(
                 storedEmailId,
                 occurrence,
@@ -1480,8 +1551,8 @@ public sealed class MailboxReconcilerTests
             RequiresSourceRemoval = false,
             Placement = RemoteEmailPlacement.NotReported(),
             AttemptCount = 1,
-            RecordedAt = RunInstant,
-            StageChangedAt = RunInstant,
+            RecordedAt = staged,
+            StageChangedAt = staged,
             LastFailure = null,
             PlacementObservedAt = null,
             SourceRemovalObservedAt = null,

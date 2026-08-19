@@ -54,25 +54,24 @@ public interface IMailboxMutationReconciliationStore
         IReadOnlyCollection<ImapUid> uids,
         CancellationToken cancellationToken);
 
-    /// <summary>The greatest number of flag and keyword stores the attribution of one window reads.</summary>
-    /// <param name="changedOccurrenceCount">How many occurrences the window found standing somewhere new.</param>
-    /// <returns>One record per value each of those occurrences could carry.</returns>
+    /// <summary>The greatest number of flag and keyword stores the attribution reads for any one changed occurrence.</summary>
     /// <remarks>
-    /// It is a ceiling rather than a page, and it is derived from the window rather than fixed, because the window is
-    /// what decides how many records can account for something: a run reconciles up to as many occurrences as the
-    /// account's configured window holds, and each of them can carry a store of every value a <c>FLAGS</c> response
-    /// reports. A constant would have had to be right for both a window of ten and a window of ten thousand, and being
-    /// wrong at the top end drops records that explain a change — which is the one failure this read exists to prevent,
-    /// since a value nothing explains is credited to the mailbox owner and reacted to as their act.
     /// <para>
-    /// What it still bounds is duplication under one value: a caller-authored requester is per invocation, so an agent
-    /// that stars and unstars one message leaves a record per call, and only the newest of those can account for the
-    /// current reading. Reaching the number therefore means one window's occurrences carry more unspent stores than any
-    /// attribution has a use for, and the adapter says so in a log line rather than truncating in silence.
+    /// The budget belongs to the occurrence rather than to the window, which is the whole of what it has to guarantee:
+    /// one occurrence cannot spend another's. A window-wide number of the same size would let a message an agent
+    /// starred and unstarred a dozen times take every slot, and the record explaining the message beside it would be
+    /// dropped — that value is then credited to the mailbox owner and reacted to as their act, which is the loop this
+    /// read exists to prevent. The read therefore ranks within each UID rather than across the answer.
+    /// </para>
+    /// <para>
+    /// One record per value a <c>FLAGS</c> response reports is what an attribution can use, because the comparisons
+    /// below settle each value against the newest store of it. What the number bounds is duplication under one value:
+    /// a caller-authored requester is per invocation, so an agent that stars and unstars one message leaves a record
+    /// per call and nothing deletes one. Reaching it means one occurrence carries more unspent stores of a single value
+    /// than any attribution has a use for, and the adapter says so in a log line rather than truncating in silence.
     /// </para>
     /// </remarks>
-    static int MaximumFlagChangeRecordsFor(int changedOccurrenceCount) =>
-        changedOccurrenceCount * MailboxMutation.FlagWriting.Count;
+    static int MaximumFlagChangeRecordsPerOccurrence => MailboxMutation.FlagWriting.Count;
 
     /// <summary>Reads the flag and keyword stores issued against any of the occurrences a reconciliation window found moved.</summary>
     /// <param name="accountId">The account whose mutations are read.</param>
@@ -101,12 +100,14 @@ public interface IMailboxMutationReconciliationStore
     /// — which is most windows — asks nothing. The idempotency identity no longer bounds what one occurrence can carry:
     /// the requester of a caller-authored change is the invocation, so an agent that stars and unstars one message
     /// leaves a record per call and nothing ever deletes one. What bounds the answer instead is stated rather than
-    /// assumed — the UIDs and <paramref name="issuedAfter" />, which drops only records that could account for nothing,
-    /// since all three comparisons require a record whose stage moved after the occurrence was last read. What survives
-    /// both is capped at <see cref="MaximumFlagChangeRecordsFor" /> of the occurrences asked about.
+    /// assumed — the UIDs, <paramref name="issuedAfter" />, and the stage. Each drops only records that could account
+    /// for nothing, because all three comparisons below require a record past <see cref="MailboxMutationStage.Recorded" />
+    /// whose stage moved after the occurrence was last read; a change written down and not yet issued explains no
+    /// reading, and against a freshly triaged occurrence those are the newest rows in the table. What survives is then
+    /// capped per occurrence at <see cref="MaximumFlagChangeRecordsPerOccurrence" />.
     /// </para>
     /// <para>
-    /// Every such record is returned, spent or not, because whether one still accounts for anything is settled against
+    /// Every surviving record is returned, spent or not, because whether one still accounts for anything is settled against
     /// the occurrence's own last observation rather than against a mark on the row. That comparison belongs to
     /// <see cref="MailboxMutationRecord.AccountsForSeenStateOf" />,
     /// <see cref="MailboxMutationRecord.AccountsForFlaggedStateOf" />, and
