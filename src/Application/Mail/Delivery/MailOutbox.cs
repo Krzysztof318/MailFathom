@@ -119,7 +119,7 @@ public sealed class MailOutbox(
         // an idempotency key a way to carry a permission forward.
         await governor.RequirePermittedAsync(request, cancellationToken);
 
-        var opened = await retryPolicy.CommitAsync(
+        var committed = await retryPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
                 var opened = await outgoingEmails.OpenAsync(
@@ -139,19 +139,19 @@ public sealed class MailOutbox(
             },
             cancellationToken);
 
-        if (opened.Record.IsWaitingAt(timeProvider.GetUtcNow()))
+        if (committed.Record.IsWaitingAt(timeProvider.GetUtcNow()))
         {
-            await this.DispatchWhenDueAsync(opened.Record, cancellationToken);
+            await this.DispatchWhenDueAsync(committed.Record, cancellationToken);
 
-            return opened;
+            return committed;
         }
 
         // A record already delivered by an earlier identical request is signalled all the same. The pass reads the
         // outbox rather than this call, so an account with nothing outstanding costs it one claim that takes nothing —
         // which is cheaper than working out here whether the record this call read back still needs sending.
-        signal.Signal(opened.Record.AccountId);
+        signal.Signal(committed.Record.AccountId);
 
-        return opened;
+        return committed;
     }
 
     /// <summary>Withdraws a message that has not begun to leave, and says what became of the request.</summary>

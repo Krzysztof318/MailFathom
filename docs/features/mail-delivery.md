@@ -172,7 +172,8 @@ every time is the loop being bounded.
 
 **An address the caller named and nothing here vouches for is the signal.** A recipient of an authored send is one of
 two things: somebody this deployment derived — whoever a reply answers, whoever a reply-to-all keeps, an address
-resolved from a contact named by identity — or an address the caller wrote out itself. Only the second is judged.
+resolved from a contact the caller named, by the identity the book gave it or by the whole name the owner recorded —
+or an address the caller wrote out itself. Only the second is judged.
 Against it stands what this installation already holds a record of: the contact book, and the addresses its own
 accounts send as. An address that is neither is what an injected instruction looks like, and
 [`MailDelivery:UnvouchedRecipients`](../operations/configuration-mail.md#a-recipient-nothing-here-vouches-for--maildeliveryunvouchedrecipients)
