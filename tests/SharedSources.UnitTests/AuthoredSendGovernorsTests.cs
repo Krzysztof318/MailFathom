@@ -91,12 +91,15 @@ public sealed class AuthoredSendGovernorsTests
         var ledger = new AuthoredSendUsageLedger(
             AuthoredSendCeilings.Create(TimeSpan.FromDays(1), maxMessagesPerCaller: 1, maxRecipientsPerCaller: 0),
             clock);
-        ledger.Charge("test-caller", OutgoingEmailId.Create(Guid.CreateVersion7(clock.GetUtcNow())), 1);
         var governor = AuthoredSendGovernors.Governing(ledger: ledger, timeProvider: clock);
+        await governor.RequirePermittedAsync(Authored(), Request(), CancellationToken.None);
 
         // Act
         var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
-            () => governor.RequirePermittedAsync(Authored(), Request(), CancellationToken.None));
+            () => governor.RequirePermittedAsync(
+                Authored("bruno@example.test"),
+                Request("bruno@example.test", requesterIdentity: "mfctl-9c31"),
+                CancellationToken.None));
 
         // Assert
         Assert.Contains("one caller in a period", refusal.Message, StringComparison.Ordinal);
@@ -105,13 +108,15 @@ public sealed class AuthoredSendGovernorsTests
     private static IReadOnlyList<AuthoredEmailRecipient> Authored(string recipientAddress = "anna@example.test") =>
         [new AuthoredEmailRecipient(OutgoingRecipientRole.To, recipientAddress)];
 
-    private static OutgoingEmailRequest Request(string recipientAddress = "anna@example.test")
+    private static OutgoingEmailRequest Request(
+        string recipientAddress = "anna@example.test",
+        string requesterIdentity = "mfctl-4f2a")
     {
         Assert.True(EmailAddress.TryCreate(displayName: null, recipientAddress, out var address));
 
         return OutgoingEmailRequest.Create(
             MailAccountId.Create("work"),
-            OutgoingEmailRequester.Command("mfctl-4f2a"),
+            OutgoingEmailRequester.Command(requesterIdentity),
             [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]);
     }
 }

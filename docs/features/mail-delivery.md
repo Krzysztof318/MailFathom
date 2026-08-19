@@ -162,6 +162,14 @@ ceilings use and separately from them. An agent in a loop is then a refusal afte
 after a provider notices. The refusal names which of the two was reached and says the period has to roll over first; it
 never names the number, which is the operator's configuration and nothing a caller could have influenced.
 
+**Admitting a send is charging for it**, in one operation, which is what makes the bound hold against a client that
+dispatches sends rather than waiting for each: a count read and charged either side of a durable write would be a
+ceiling two concurrent calls both passed. What a send is counted under is its own idempotency identity, so a retry
+under the key a caller first asked under spends one message however many times the call is repeated. The consequence is
+that a send the deployment's own bounds refuse *after* this ceiling admitted it has still spent the caller's
+allowance — which is the right answer rather than a leak, since a client asking repeatedly for a send that is refused
+every time is the loop being bounded.
+
 **An address the caller named and nothing here vouches for is the signal.** A recipient of an authored send is one of
 two things: somebody this deployment derived — whoever a reply answers, whoever a reply-to-all keeps, an address
 resolved from a contact named by identity — or an address the caller wrote out itself. Only the second is judged.

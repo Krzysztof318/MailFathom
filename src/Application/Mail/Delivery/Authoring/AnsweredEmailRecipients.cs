@@ -94,7 +94,7 @@ internal static class AnsweredEmailRecipients
         address.Address,
         address.DisplayName,
         Contact: null,
-        AuthoredRecipientProvenance.DerivedFromAnsweredEmail);
+        Provenance: AuthoredRecipientProvenance.DerivedFromAnsweredEmail);
 
     /// <summary>Reads whoever the answered message asked for answers to, which every reply is addressed to.</summary>
     /// <remarks>

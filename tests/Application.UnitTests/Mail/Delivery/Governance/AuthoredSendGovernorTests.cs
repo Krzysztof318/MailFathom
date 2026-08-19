@@ -57,8 +57,11 @@ public sealed class AuthoredSendGovernorTests
         var ledger = new AuthoredSendUsageLedger(
             AuthoredSendCeilings.Create(TimeSpan.FromDays(1), maxMessagesPerCaller: 1, maxRecipientsPerCaller: 0),
             new FakeTimeProvider(Recorded));
-        ledger.Charge(CallerIdentity, RecordNumber(1), recipientCount: 1);
         var governor = AuthoredSendGovernors.Governing(ledger: ledger);
+        await governor.RequirePermittedAsync(
+            [NamedByCaller("anna@example.test")],
+            AskedAs("send-0", "anna@example.test"),
+            CancellationToken.None);
 
         // Act
         var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
@@ -175,27 +178,28 @@ public sealed class AuthoredSendGovernorTests
         Assert.DoesNotContain("anna@example.test", recorded.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>The charge follows the record rather than the call, so a retry of one send spends one message.</summary>
+    /// <summary>A retried call asks for the send it first asked for, so one message of the caller's allowance is spent.</summary>
     [Fact]
-    public async Task RecordAsync_SameRecordTwice_SpendsOneMessageOfTheCallersAllowance()
+    public async Task RequirePermittedAsync_SameSendTwice_SpendsOneMessageOfTheCallersAllowance()
     {
         // Arrange
         var ledger = new AuthoredSendUsageLedger(
-            AuthoredSendCeilings.Create(TimeSpan.FromDays(1), maxMessagesPerCaller: 2, maxRecipientsPerCaller: 0),
+            AuthoredSendCeilings.Create(TimeSpan.FromDays(1), maxMessagesPerCaller: 1, maxRecipientsPerCaller: 0),
             new FakeTimeProvider(Recorded));
         var governor = AuthoredSendGovernors.Governing(ledger: ledger);
-        var record = RecordOf("anna@example.test");
-        var permit = await governor.RequirePermittedAsync(
+
+        // Act
+        var first = await governor.RequirePermittedAsync(
+            [NamedByCaller("anna@example.test")],
+            RequestTo("anna@example.test"),
+            CancellationToken.None);
+        var retried = await governor.RequirePermittedAsync(
             [NamedByCaller("anna@example.test")],
             RequestTo("anna@example.test"),
             CancellationToken.None);
 
-        // Act
-        await governor.RecordAsync(permit, AuthoredSendAct.NewMessage, record, CancellationToken.None);
-        await governor.RecordAsync(permit, AuthoredSendAct.NewMessage, record, CancellationToken.None);
-
         // Assert
-        Assert.Null(ledger.FindReachedCeiling(CallerIdentity, recipientCount: 1));
+        Assert.Equal(first.Caller, retried.Caller);
     }
 
     /// <summary>A send governed under no principal at all is a use case that never established who asked.</summary>
@@ -233,10 +237,13 @@ public sealed class AuthoredSendGovernorTests
         Contact: null,
         AuthoredRecipientProvenance.DerivedFromAnsweredEmail);
 
-    private static OutgoingEmailRequest RequestTo(params string[] addresses) => OutgoingEmailRequest.Create(
-        Account,
-        OutgoingEmailRequester.Command("send-1"),
-        [.. addresses.Select(address => OutgoingRecipient.Create(Address(address), OutgoingRecipientRole.To))]);
+    private static OutgoingEmailRequest RequestTo(params string[] addresses) => AskedAs("send-1", addresses);
+
+    private static OutgoingEmailRequest AskedAs(string requesterIdentity, params string[] addresses) =>
+        OutgoingEmailRequest.Create(
+            Account,
+            OutgoingEmailRequester.Command(requesterIdentity),
+            [.. addresses.Select(address => OutgoingRecipient.Create(Address(address), OutgoingRecipientRole.To))]);
 
     private static OutgoingEmailRecord RecordOf(params string[] addresses) => new()
     {

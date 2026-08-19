@@ -24,12 +24,18 @@ namespace MailFathom.Application.Mail.Delivery.Governance;
 /// refusals without re-implementing any of them, and a tool that forgot to ask would be a tool that could not send.
 /// </para>
 /// <para>
-/// The three are asked in the order of what they cost. The deployment's recipient policy is decided in memory and is
+/// The deployment's recipient policy is asked first, because it is decided in memory and refuses outright. It is
 /// re-evaluated here rather than trusted from the outbox beneath — not because the outbox might not ask, but because a
 /// caller refused for naming somebody this installation never writes to should learn that before its message is written
-/// down, and because a bound with one implementation is a bound with one place to get wrong. The caller's own ceilings
-/// are counted in this process. Only a send that has passed both asks the contact book whether anybody here can vouch
-/// for the people the caller wrote down.
+/// down, and because a bound with one implementation is a bound with one place to get wrong.
+/// </para>
+/// <para>
+/// The caller's own ceilings are asked <b>last</b>, after the contact book has answered, and that ordering is the
+/// ledger's rather than a preference. Asking it is what charges it: a ceiling read here and charged after the record
+/// was written would be a ceiling two concurrent sends from one caller both passed, which is the loop this bound
+/// exists to stop. So nothing may refuse a send after the ledger has admitted it, and the read of the book — the one
+/// step here that awaits anything — happens in front of it. The cost is one indexed lookup on a send the ceiling then
+/// refuses, which is the cheaper half of the trade.
 /// </para>
 /// <para>
 /// The book is asked even where the posture admits an unvouched recipient, and that is a read this deployment pays for
@@ -41,7 +47,7 @@ namespace MailFathom.Application.Mail.Delivery.Governance;
 /// <param name="recipientPolicy">Says who this deployment may write to.</param>
 /// <param name="settings">Says what to do about a recipient nothing here vouches for.</param>
 /// <param name="vouching">Counts the addresses the caller wrote down that nothing here vouches for.</param>
-/// <param name="ledger">Counts what this caller has already been admitted to send in the period.</param>
+/// <param name="ledger">Weighs the send against what this caller has already been admitted for, and charges it.</param>
 /// <param name="auditor">Records the send once it is durable.</param>
 /// <param name="authorization">Names the caller the work is running for.</param>
 /// <param name="timeProvider">Stamps the record with when the send was admitted.</param>
@@ -82,11 +88,6 @@ public sealed class AuthoredSendGovernor(
             }
         }
 
-        if (ledger.FindReachedCeiling(caller, request.Recipients.Count) is { } reached)
-        {
-            throw OutgoingMailRefusedException.CallerCeilingReached(reached);
-        }
-
         var unvouchedCount = await vouching.CountUnvouchedAsync(authored, cancellationToken);
 
         if (unvouchedCount > 0 && settings.UnvouchedRecipients is UnvouchedRecipientPosture.Refuse)
@@ -94,20 +95,27 @@ public sealed class AuthoredSendGovernor(
             throw OutgoingMailRefusedException.RecipientUnvouched();
         }
 
+        // Last, because admitting is charging: nothing after this line may refuse the send without the caller having
+        // spent it, which is what keeps the ceiling true of a client dispatching sends rather than waiting for each.
+        if (ledger.Admit(caller, request) is { } reached)
+        {
+            throw OutgoingMailRefusedException.CallerCeilingReached(reached);
+        }
+
         return new AuthoredSendPermit(caller, unvouchedCount);
     }
 
-    /// <summary>Charges the send to its caller and records that it was asked for, once its record is durable.</summary>
+    /// <summary>Records that the send was asked for, once its record is durable.</summary>
     /// <param name="permit">What <see cref="RequirePermittedAsync" /> admitted the send as.</param>
     /// <param name="act">What the caller asked for.</param>
     /// <param name="record">The durable record the message was written down as.</param>
     /// <param name="cancellationToken">Cancels writing the audit record.</param>
-    /// <returns>A task that completes once the send is charged and recorded.</returns>
+    /// <returns>A task that completes once the send is recorded.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="permit" /> or <paramref name="record" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// The charge follows the write rather than preceding it, so a send refused by the deployment's own bounds beneath
-    /// this one spends nothing of the caller's allowance. It is keyed by the record, which is what makes a retry of one
-    /// send one charge: the outbox answers a repeated request with the record the first one wrote.
+    /// It follows the write because a record is what the audit is about: an owner reading it back asks what was sent
+    /// and under whose grant, which is answerable only once the send has an identity. The caller was charged where it
+    /// was admitted, so nothing here decides whether the period has room.
     /// </remarks>
     public Task RecordAsync(
         AuthoredSendPermit permit,
@@ -117,8 +125,6 @@ public sealed class AuthoredSendGovernor(
     {
         ArgumentNullException.ThrowIfNull(permit);
         ArgumentNullException.ThrowIfNull(record);
-
-        ledger.Charge(permit.Caller, record.Id, record.Recipients.Count);
 
         return auditor.RecordAuthoredSendAsync(
             new AuthoredSend(

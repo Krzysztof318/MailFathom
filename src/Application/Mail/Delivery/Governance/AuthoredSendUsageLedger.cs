@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Governance;
 
@@ -21,11 +22,24 @@ namespace MailFathom.Application.Mail.Delivery.Governance;
 /// bound it serves.
 /// </para>
 /// <para>
-/// A send is charged once by the record it produced, so a caller retrying under the key it first asked under is
-/// charged for one message however many times the call is repeated — the outbox answers a repeat with the record the
-/// first one wrote, and this ledger recognizes it. What is judged before the write is the present count, so a period
-/// that has filled up can refuse a retry of a send already recorded; that costs nothing, exactly as it costs nothing
-/// against the deployment's own ceilings, because the record stands and its message is still delivered.
+/// <b>Judging and charging are one operation, under one lock.</b> A ceiling read and then charged after an awaited
+/// write is a ceiling two concurrent sends from one caller both pass, which is exactly the client this bound exists to
+/// stop: a loop that dispatches rather than waits would exceed it by however many calls it had in flight. So a send is
+/// weighed and counted in the same breath, and what a caller may still ask for is never a number read before an await.
+/// </para>
+/// <para>
+/// What it is counted under is the send's own idempotency identity — the account it is sent as and the requester that
+/// asked — which is the same pair the outbox writes one record per. So a caller retrying under the key it first asked
+/// under is charged for one message however many times the call is repeated, and it is charged without waiting to see
+/// which record the retry produced.
+/// </para>
+/// <para>
+/// The charge therefore stands whether or not a record follows it. A send this deployment's own bounds refuse after
+/// this ledger admitted it has spent the caller's allowance, and that is the honest answer rather than a leak: a client
+/// asking repeatedly for a send that is refused every time is the loop being bounded, and the period rolls over. What
+/// is judged is always the present count, so a period that has filled up can refuse a retry of a send already
+/// recorded — which costs nothing, exactly as it costs nothing against the deployment's own ceilings, because that
+/// record stands and its message is still delivered.
 /// </para>
 /// <para>
 /// Everything the ledger holds belongs to one period. The roll-over is not swept on a timer: the first caller to arrive
@@ -50,57 +64,28 @@ public sealed class AuthoredSendUsageLedger(AuthoredSendCeilings ceilings, TimeP
     private readonly Dictionary<string, CallerCounts> countsByCaller = new(StringComparer.Ordinal);
     private DateTimeOffset periodStart = DateTimeOffset.MinValue;
 
-    /// <summary>Finds the ceiling one further message would carry a caller's period past.</summary>
+    /// <summary>Weighs one send against the caller's period and charges it to that caller in the same operation.</summary>
     /// <param name="caller">The identity the calling principal was admitted under.</param>
-    /// <param name="recipientCount">The people the message being asked for names.</param>
-    /// <returns>The ceiling reached, or <see langword="null" /> when the message is within both of them.</returns>
+    /// <param name="request">The send being asked for, which carries both its idempotency identity and its recipients.</param>
+    /// <returns>The ceiling the send reached, which is when nothing was charged, or <see langword="null" /> when it was admitted.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="caller" /> is empty or white space, which is a principal nothing can be counted against.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="recipientCount" /> is not positive.</exception>
-    public AuthoredSendCeiling? FindReachedCeiling(string caller, int recipientCount)
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// A caller arriving in a period that is already counting the greatest number of them is refused rather than
+    /// admitted uncounted: the ledger reports what it can hold rather than growing to hold whatever it is handed.
+    /// </remarks>
+    public AuthoredSendCeiling? Admit(string caller, OutgoingEmailRequest request)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(caller);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(recipientCount);
+        ArgumentNullException.ThrowIfNull(request);
 
         if (ceilings.IsUnbounded)
         {
             return null;
         }
 
-        lock (this.gate)
-        {
-            this.OpenPeriodOf(timeProvider.GetUtcNow());
-
-            if (this.countsByCaller.TryGetValue(caller, out var counts))
-            {
-                return ceilings.FindReachedCeiling(counts.Usage, recipientCount);
-            }
-
-            return this.countsByCaller.Count >= MaximumCallersPerPeriod
-                ? AuthoredSendCeiling.CallerMessages
-                : ceilings.FindReachedCeiling(AuthoredSendUsage.None, recipientCount);
-        }
-    }
-
-    /// <summary>Charges one send to the caller that asked for it, and charges a repeat of it to nobody.</summary>
-    /// <param name="caller">The identity the calling principal was admitted under.</param>
-    /// <param name="outgoingEmailId">The record the send was written down as, which is what makes a repeat recognizable.</param>
-    /// <param name="recipientCount">The people that record is addressed to.</param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="caller" /> is empty or white space.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="recipientCount" /> is not positive.</exception>
-    /// <remarks>
-    /// A caller arriving in a period that is already counting the greatest number of them is not recorded, which is the
-    /// same posture the judgement above takes: the ledger reports what it can hold rather than growing to hold whatever
-    /// it is handed.
-    /// </remarks>
-    public void Charge(string caller, OutgoingEmailId outgoingEmailId, int recipientCount)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(caller);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(recipientCount);
-
-        if (ceilings.IsUnbounded)
-        {
-            return;
-        }
+        var send = new SendIdentity(request.AccountId, request.Requester.Origin, request.Requester.Identity);
+        var recipientCount = request.Recipients.Count;
 
         lock (this.gate)
         {
@@ -110,19 +95,31 @@ public sealed class AuthoredSendUsageLedger(AuthoredSendCeilings ceilings, TimeP
             {
                 if (this.countsByCaller.Count >= MaximumCallersPerPeriod)
                 {
-                    return;
+                    return AuthoredSendCeiling.CallerMessages;
                 }
 
                 counts = new CallerCounts();
                 this.countsByCaller[caller] = counts;
             }
 
-            counts.Charge(outgoingEmailId, recipientCount);
+            if (counts.AlreadyCharged(send))
+            {
+                return null;
+            }
+
+            if (ceilings.FindReachedCeiling(counts.Usage, recipientCount) is { } reached)
+            {
+                return reached;
+            }
+
+            counts.Charge(send, recipientCount);
+
+            return null;
         }
     }
 
     /// <summary>Discards everything counted for an earlier period, which is what a roll-over does.</summary>
-    /// <remarks>Called under the gate by both members, so a period never changes underneath a judgement and the charge that follows it.</remarks>
+    /// <remarks>Called under the gate, so a period never changes between a judgement and the charge it is part of.</remarks>
     private void OpenPeriodOf(DateTimeOffset instant)
     {
         var current = ceilings.PeriodStartAt(instant);
@@ -136,23 +133,30 @@ public sealed class AuthoredSendUsageLedger(AuthoredSendCeilings ceilings, TimeP
         this.countsByCaller.Clear();
     }
 
+    /// <summary>What one send is counted under, which is the pair the outbox writes one record per.</summary>
+    /// <remarks>
+    /// The account and the requester together are an outgoing email's idempotency identity, so two calls that would
+    /// produce one record are one charge here without this ledger having to see either record.
+    /// </remarks>
+    private readonly record struct SendIdentity(MailAccountId AccountId, OutgoingEmailOrigin Origin, string Identity);
+
     /// <summary>What one caller has been charged inside the period the ledger is in.</summary>
     /// <remarks>
-    /// The records are held rather than only counted, because that is what tells a retry of one send from a second send:
-    /// the outbox answers both with a record, and only the second one carries an identity this caller has not been
-    /// charged for. The set is bounded by the ceilings themselves, since a caller past them is refused before anything
-    /// is written down.
+    /// The identities are held rather than only counted, because that is what tells a retry of one send from a second
+    /// send. The set is bounded by the ceilings themselves, since a caller past them is charged nothing further.
     /// </remarks>
     private sealed class CallerCounts
     {
-        private readonly HashSet<OutgoingEmailId> chargedRecords = [];
+        private readonly HashSet<SendIdentity> chargedSends = [];
         private long recipientCount;
 
-        public AuthoredSendUsage Usage => new(this.chargedRecords.Count, this.recipientCount);
+        public AuthoredSendUsage Usage => new(this.chargedSends.Count, this.recipientCount);
 
-        public void Charge(OutgoingEmailId outgoingEmailId, int recipients)
+        public bool AlreadyCharged(SendIdentity send) => this.chargedSends.Contains(send);
+
+        public void Charge(SendIdentity send, int recipients)
         {
-            if (this.chargedRecords.Add(outgoingEmailId))
+            if (this.chargedSends.Add(send))
             {
                 this.recipientCount += recipients;
             }

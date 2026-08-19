@@ -485,6 +485,12 @@ handful of messages instead of after the provider notices. What a caller is coun
 it authenticated with resolves to, and a caller reaching one of these is told which ceiling and that the period has to
 roll over, exactly as one reaching the deployment's own is.
 
+A send is weighed and counted in one operation, so a client dispatching several at once cannot have them all pass the
+same remaining slot. It is counted under its own idempotency identity, which makes a retry one message. What follows
+is that a send refused *below* this ceiling — by an account's own switch, by the deployment's ceilings, by the
+read-only posture — has still spent the caller's allowance; a client asking repeatedly for a send this deployment
+refuses is exactly the loop these two bound.
+
 Two properties follow from the counting being per process and in memory. The count is **not durable**: a restart begins
 the period's counting again, which the account and deployment ceilings — counted from the outgoing records themselves —
 do not. And one period counts at most a few thousand distinct callers, past which a caller it is not already counting
