@@ -9,6 +9,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Mail.Delivery.Scheduling;
@@ -37,6 +38,29 @@ public sealed class RecurringSendScheduleSourceTests
         Assert.Equal($"recurring-send:{declaration.Id}", schedule.Id.Value);
         Assert.Equal(Account, schedule.AccountId);
         Assert.Equal(JobType.SendRecurringOccurrence, schedule.Payload.JobType);
+    }
+
+    /// <summary>The pass reads a bounded page rather than everything that repeats, which is what keeps every pass proportionate.</summary>
+    /// <remarks>
+    /// A deployment holding more repetitions than one pass can carry is a deployment with something wrong with it, so
+    /// the bound is a ceiling rather than a page an unbounded read would eventually reach the end of. It is asserted
+    /// here because nothing else names it: the store is handed a number, and which number is the decision.
+    /// </remarks>
+    [Fact]
+    public async Task ReadSchedulesAsync_AnyPass_ReadsNoMoreDeclarationsThanTheBoundAllows()
+    {
+        // Arrange
+        var store = Substitute.For<IRecurringSendStore>();
+        store.ReadActiveAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
+        var source = new RecurringSendScheduleSource(store);
+
+        // Act
+        await source.ReadSchedulesAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        await store.Received(1).ReadActiveAsync(
+            RecurringSendBounds.MaximumActiveDeclarations,
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>A stopped declaration declares nothing at all, including the occasion it would have produced next.</summary>
