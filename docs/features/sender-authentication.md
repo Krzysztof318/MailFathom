@@ -104,20 +104,25 @@ the verdict above, beside the identity it was reached from.
 Two things establish the author, and neither believes the header on its own.
 
 - **A trusted `dmarc=pass`** is the receiving server's own statement that the displayed domain passed under the
-  sender's published policy. That policy may permit a signing subdomain, which is exactly why the result is read back
-  rather than reconstructed: nothing here resolves DNS, computes an organizational domain, or consults a public suffix
-  list, so this answer is not one MailFathom could reach for itself.
-- **An authenticated identity whose domain is exactly the displayed one**, where no usable DMARC result was reported.
-  Exactly, because `mail.example.test` and `example.test` are two names and only the sender's own policy says whether
-  the first may speak for the second. Every identity the trusted header reported as passing is compared, DKIM and SPF
-  alike, so a delivery provider's signature listed first cannot hide the author's own listed after it.
+  sender's published policy. That is the whole of what the policy answers and it is why the result is read back rather
+  than reconstructed: nothing here resolves a DMARC record, computes an organizational domain, or consults a public
+  suffix list, so this answer is not one MailFathom could reach for itself.
+- **An authenticated identity that is the displayed domain, or lies with it on one branch of the naming tree**, where
+  no usable DMARC result was reported. One of the two names has to be a suffix of the other at a label boundary —
+  `p1.mail.example.test` signing `@example.test`, or `example.test` signing `@notice.example.test` — because whoever
+  publishes a key under such a name was delegated that zone by the displayed domain or delegated the displayed domain
+  themselves. The relation rests on DNS control flowing down the tree rather than on a policy nobody read. Two names
+  that merely share a parent are unrelated: `a.example.test` does not speak for `b.example.test`, so DMARC's relaxed
+  alignment stays unreconstructed. Every identity the trusted header reported as passing is compared, DKIM and SPF
+  alike, so a delivery provider's signature listed first cannot hide the author's own listed after it, and the domain
+  the author is established as is the **displayed** one rather than whichever name signed.
 
 **`dmarc=fail` is the only route to a failure**, and it ends the question rather than falling through to the second
 route: the receiving server reached it with the displayed domain's own policy in hand, which is more than a comparison
-made here without one. Everything else that establishes nothing is *not established* instead — a signing subdomain with
-no DMARC result to interpret it, an identity belonging to somebody else, a message displaying no usable domain, a
-header nothing trusted could be read from. A DKIM signature that did not verify is among them: it says nothing about
-the author, because the signature may never have been theirs.
+made here without one. Everything else that establishes nothing is *not established* instead — an identity belonging to
+somebody else, a sibling under a shared parent, a message displaying no usable domain, a header nothing trusted could
+be read from. A DKIM signature that did not verify is among them: it says nothing about the author, because the
+signature may never have been theirs.
 
 So a message may hold a passing DKIM identity, a passing SPF identity, and a failed author all at once, and it may hold
 `dmarc=pass` while the domain that signed it is not the domain it displays. Both are ordinary readings rather than
@@ -181,9 +186,10 @@ What such a verdict reaches is the same three outcomes as any other, decided by 
   nothing whatever about the sender, and a verdict calling that a failure would turn this deployment's own network
   trouble into a statement against somebody's mail.
 
-The author conclusion follows [the same rule](#whether-the-displayed-author-authenticated) and is not relaxed for
-running here. With no DMARC result to interpret a signing subdomain, an author is established only by a verified
-signature whose domain is exactly the displayed one.
+The author conclusion follows [the same rule](#whether-the-displayed-author-authenticated) and is neither relaxed nor
+tightened for running here. An author is established by a verified signature whose domain is the displayed one or lies
+with it on one branch of the naming tree, and by nothing else — no DMARC result is ever reported on this path, so the
+only route left is the comparison, and a signer outside that branch establishes nothing.
 
 **The recorded verdict says which of the two reached it**, and that is the whole reason the column exists: a
 cryptographic signature check and a verdict taken with network context nobody has any more are worth different amounts,
@@ -372,7 +378,15 @@ of them characterizes the message or the sender's intent. A failed authenticatio
 
 - It evaluates no SPF policy and no DMARC policy, ever, whichever reading produced the verdict. It computes no
   organizational domain and consults no public suffix list, so it never reconstructs DMARC's relaxed alignment for
-  itself. The only DNS it resolves is a published DKIM key, and only on the fallback path above.
+  itself: two names under one parent stay unrelated here, which is the case relaxed alignment exists to accept. What it
+  does accept is one name within the other at a label boundary, which is a delegation readable from the two names alone
+  rather than a policy. The only DNS it resolves is a published DKIM key, and only on the fallback path above.
+- **The residual risk of accepting that delegation is stated rather than mitigated.** A subdomain delegated to a third
+  party — a marketing platform holding `mail.example.test`, a tenant holding a name under somebody's zone — can
+  establish the author of mail displaying the parent domain, and MailFathom does not read the DMARC record that would
+  say whether the parent permits it. That record's own default, `adkim=r`, permits considerably more than this, so the
+  assumption is the one nearly every sender publishes; it is an assumption nonetheless, and a domain owner who
+  delegates a subdomain delegates this with it.
 - It does not reason from the `Received` chain beyond identifying the trusted header.
 - It does not validate an ARC chain. An intact chain says an upstream relay signed a claim about what *it* saw, which
   establishes no author and decides nothing about trust.

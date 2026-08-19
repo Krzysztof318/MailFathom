@@ -15,14 +15,16 @@ namespace MailFathom.Domain.Emails.Authentication;
 /// <para>
 /// The <c>From</c> header takes no part in reaching it. It is attacker-controlled message content, so it says who the
 /// message <em>claims</em> to be from and never who it is from; what establishes the author is the trusted receiving
-/// server's own DMARC result, or an authenticated identity whose domain is exactly the displayed one.
+/// server's own DMARC result, or an authenticated identity whose domain is the displayed one or lies with it on one
+/// branch of the naming tree.
 /// </para>
 /// </remarks>
 public enum AuthorAuthenticationOutcome
 {
     /// <summary>The trusted evidence is not enough to conclude either way about the displayed author.</summary>
     /// <remarks>
-    /// It is deliberately not <see cref="Failed" />. A message signed by a subdomain of the displayed domain, with no
+    /// It is deliberately not <see cref="Failed" />. A message signed by a domain unrelated to the displayed one — a
+    /// tenant's default signing domain, a delivery provider's own name, a sibling under a shared parent — with no
     /// usable DMARC result to say whether the sender's own policy permits that, is the ordinary case here: MailFathom
     /// evaluates no policy, so it does not know, and a verdict that said the author failed would be inventing a refusal
     /// the receiving server never made.
