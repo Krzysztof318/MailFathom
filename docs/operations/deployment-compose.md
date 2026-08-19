@@ -1,6 +1,6 @@
 # Deploying with Docker Compose
 
-<!-- describes: deploy/compose/** -->
+<!-- describes: deploy/compose/**, scripts/quick-start-compose.sh -->
 
 `deploy/compose/` is the supported Compose deployment: MailFathom and PostgreSQL, with the schema applied as an explicit
 operator action that nothing in the deployment performs. It is the shape to use for self-hosting on one machine.
@@ -19,6 +19,42 @@ knowing before you start, because neither announces itself:
 - Rootless Podman publishes no port below 1024 until `net.ipv4.ip_unprivileged_port_start` allows it. This deployment
   publishes 8080 and 8081, so what meets that limit is a reverse proxy terminating TLS on 443 in front of MailFathom
   rather than MailFathom itself.
+
+## Trying it first, with one command
+
+`scripts/quick-start-compose.sh` performs everything on this page that is typed rather than decided: it asks where the
+mailbox lives, generates the credentials, writes the configuration, sets the modes, starts the stack, offers the schema
+step, and reports the two probes.
+
+```bash
+scripts/quick-start-compose.sh
+```
+
+**It prepares a deployment to evaluate MailFathom with, and that is not the recommended way to run one.** What it
+produces serves this machine over plain HTTP, keeps its credentials in files under the checkout, narrows no grant, and
+backs nothing up — enough to find out what the product does, and less than a deployment anybody depends on should have.
+It prints that list when it finishes, and [installing MailFathom](../users/installation.md) is where the shape of a real
+installation is chosen. The rest of this page is that path, and it stays the one this deployment is documented by: the
+script writes the same files with the same values, so a deployment it prepared is read, changed, and upgraded exactly as
+one prepared by hand.
+
+Four things it will not decide for you, because each is a decision rather than a step:
+
+- **It publishes nothing beyond loopback**, and offers no answer that would.
+- **It configures no chat or embedding model**, so `ask_mail` is absent from what it prepares.
+- **It applies the schema only to an empty database**, after asking, and against a database that already carries
+  migrations it stops and hands the step back — that is an upgrade, and an upgrade takes a backup first.
+- **It overwrites nothing.** An existing `.env`, configuration file, or secret stops the run naming the file, so it
+  cannot replace the credentials of a deployment already prepared here.
+
+The two answers it does ask for are the ones with a cost worth stating before they are given. The MCP endpoint takes a
+generated API key unless you ask for none, which is legal, announced with a startup warning, and the only shape the
+chat clients with no field for a static header can connect to. The administrative endpoint is off unless you ask for it,
+and enabling it publishes port 8090 through a generated `compose.override.yaml` — its own default port is 8080, which is
+the socket the MCP endpoint is already served on, and `compose.yaml` publishes nothing for it.
+
+`--non-interactive` takes every answer as an argument instead, with `--password-file` for the credential, and
+`--no-start` writes the files and stops. `scripts/quick-start-compose.sh --help` lists all of them.
 
 ## Before the first start
 

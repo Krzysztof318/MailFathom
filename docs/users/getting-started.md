@@ -8,6 +8,12 @@ from [installing MailFathom](installation.md); a developer evaluating from the c
 [Aspire orchestration](../operations/local-development.md#running-locally-with-aspire) instead, which provisions
 PostgreSQL and applies the schema on its own.
 
+**Somebody evaluating MailFathom on the Compose shape can have steps 1 to 6 performed for them.**
+`scripts/quick-start-compose.sh` asks the same questions this page does, writes the same values, and ends by printing
+the two a client needs in step 7 — [trying it first, with one
+command](../operations/deployment-compose.md#trying-it-first-with-one-command) is that path, including what a deployment
+it prepares is missing before anybody depends on it. Read this page anyway, for what each answer means.
+
 The examples write configuration as JSON. Every setting can arrive as an environment variable instead — `:` becomes
 `__`, so `MailSynchronization:Enabled` is `MailSynchronization__Enabled` — and the
 [configuration reference](../operations/configuration-reference.md) maps every key used below to the page that

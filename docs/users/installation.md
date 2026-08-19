@@ -38,6 +38,13 @@ git clone https://github.com/Krzysztof318/MailFathom.git
 cd MailFathom
 ```
 
+**To try MailFathom before choosing any of this, `scripts/quick-start-compose.sh` prepares the Compose shape for you** —
+it asks where the mailbox lives and performs every step
+[deploying with Docker Compose](../operations/deployment-compose.md#trying-it-first-with-one-command) otherwise asks you
+to type. What it produces is a deployment to evaluate with rather than one to depend on: it serves the machine it runs
+on over plain HTTP, keeps its credentials in files under the checkout, and backs nothing up. The choice below is the one
+it does not make for you, and it stays yours to make afterwards.
+
 ## Choosing a shape
 
 | Shape | Choose it when | Guide |

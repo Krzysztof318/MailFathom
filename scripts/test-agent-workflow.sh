@@ -5908,6 +5908,266 @@ install_script_refuses_a_platform_no_release_publishes() {
   assert_contains 'linux-x64, linux-arm64, win-x64, and win-arm64' "$output_file"
 }
 
+# The guided Compose setup, which is the one script here that writes a deployment's credentials. Every contract below
+# runs the committed script against a checkout of its own — a fixture carrying `deploy/compose/`, never this
+# repository's own — because what it writes is exactly what must never be written over somebody's prepared deployment.
+#
+# None of them reaches the network or a Docker daemon: `--version` is what the release resolution would otherwise ask
+# GitHub for, and `--no-start` stops before the stack, the schema step, and the probes. What that leaves asserted is
+# the half a reader cannot check by eye — the modes, the two postures, and the refusals.
+stage_quick_start_checkout() {
+  local case_name="$1"
+  local checkout_root="$test_directory/$case_name-checkout"
+
+  mkdir -p "$checkout_root/deploy/compose/config" "$checkout_root/deploy/compose/secrets/mailfathom"
+
+  # Only its existence is read, which is what says this checkout carries the Compose deployment at all.
+  printf 'name: mailfathom\n' > "$checkout_root/deploy/compose/compose.yaml"
+
+  # A clone made under a strict umask is what leaves `config/` unlistable by the container's account, so the fixture
+  # starts from one rather than from whatever the runner's umask happens to be.
+  chmod 700 "$checkout_root/deploy/compose/config" "$checkout_root/deploy/compose/secrets/mailfathom"
+  printf 'the mailbox password\n' > "$checkout_root/password"
+
+  git -C "$checkout_root" init --initial-branch=main --quiet
+
+  printf '%s\n' "$checkout_root"
+}
+
+run_quick_start() {
+  local checkout_root="$1"
+  shift
+
+  (
+    cd "$checkout_root/deploy/compose"
+    bash "$source_repository_root/scripts/quick-start-compose.sh" \
+      --user-name 'you@example.test' --display-name 'Personal mail' \
+      --password-file "$checkout_root/password" --version 9.9.9 --no-start --non-interactive "$@"
+  )
+}
+
+# The whole of the manual preparation, asserted where it is invisible: a mode nobody sees is what makes a secret
+# reference resolve, and getting one wrong reports itself at startup as material that could not be found.
+quick_start_prepares_the_deployment_the_documentation_describes() {
+  local checkout_root compose_directory
+  local output_file="$test_directory/quick-start-prepared-log"
+
+  checkout_root="$(stage_quick_start_checkout 'quick-start-prepared')"
+  compose_directory="$checkout_root/deploy/compose"
+
+  run_quick_start "$checkout_root" --provider fastmail > "$output_file" 2>&1
+
+  assert_contains 'MAILFATHOM_IMAGE=ghcr.io/krzysztof318/mailfathom:9.9.9' "$compose_directory/.env"
+  # The image and how it is obtained are one decision: a release tag with the build policy left in place would build
+  # the checkout and ignore the pin.
+  assert_contains 'MAILFATHOM_PULL_POLICY=missing' "$compose_directory/.env"
+
+  assert_file_content 'the mailbox password' "$compose_directory/secrets/mailfathom/imap-primary-password"
+  assert_contains '"Host": "imap.fastmail.com"' "$compose_directory/config/10-mailfathom.json"
+  assert_contains '"SecretReference": "file:/etc/mailfathom/secrets/imap-primary-password"' \
+    "$compose_directory/config/10-mailfathom.json"
+
+  local expected_modes='700 secrets
+711 secrets/mailfathom
+755 config
+444 secrets/postgres-superuser-password
+444 secrets/mailfathom-database-password
+444 secrets/mailfathom/imap-primary-password
+644 config/10-mailfathom.json'
+  local actual_modes
+
+  actual_modes="$(
+    cd "$compose_directory"
+    stat --format '%a %n' \
+      secrets secrets/mailfathom config \
+      secrets/postgres-superuser-password secrets/mailfathom-database-password \
+      secrets/mailfathom/imap-primary-password config/10-mailfathom.json
+  )"
+
+  if [[ "$actual_modes" != "$expected_modes" ]]; then
+    printf 'The prepared deployment carries modes the container cannot read:\nExpected:\n%s\nActual:\n%s\n' \
+      "$expected_modes" "$actual_modes" >&2
+    return 1
+  fi
+
+  # Two database passwords generated independently. Equal ones would mean a single generation reused, which is what a
+  # refactor of the generation would silently produce.
+  if [[ "$(cat "$compose_directory/secrets/postgres-superuser-password")" == \
+    "$(cat "$compose_directory/secrets/mailfathom-database-password")" ]]; then
+    printf 'The superuser and the service share one database password.\n' >&2
+    return 1
+  fi
+}
+
+# The credential is in a file, and the point of that is which places it is therefore not in.
+quick_start_keeps_the_mailbox_password_out_of_everything_but_its_own_file() {
+  local checkout_root compose_directory
+  local output_file="$test_directory/quick-start-password-log"
+
+  checkout_root="$(stage_quick_start_checkout 'quick-start-password')"
+  compose_directory="$checkout_root/deploy/compose"
+
+  run_quick_start "$checkout_root" --provider gmail > "$output_file" 2>&1
+
+  assert_excludes 'the mailbox password' "$compose_directory/config/10-mailfathom.json"
+  assert_excludes 'the mailbox password' "$compose_directory/.env"
+  assert_excludes 'the mailbox password' "$output_file"
+}
+
+# A prepared deployment is somebody's running instance. Replacing its credentials because a script was run twice is the
+# one failure this must not have, so the refusal comes before anything is written rather than after.
+quick_start_refuses_to_overwrite_a_prepared_deployment() {
+  local checkout_root compose_directory
+  local first_run="$test_directory/quick-start-overwrite-first"
+  local second_run="$test_directory/quick-start-overwrite-second"
+
+  checkout_root="$(stage_quick_start_checkout 'quick-start-overwrite')"
+  compose_directory="$checkout_root/deploy/compose"
+
+  run_quick_start "$checkout_root" --provider zoho > "$first_run" 2>&1
+
+  local original_key
+  original_key="$(cat "$compose_directory/secrets/mailfathom/mcp-workstation-key")"
+
+  if run_quick_start "$checkout_root" --provider zoho > "$second_run" 2>&1; then
+    printf 'A second run replaced a prepared deployment instead of refusing.\n' >&2
+    return 1
+  fi
+
+  assert_contains 'deploy/compose/.env already exists' "$second_run"
+  assert_file_content "$original_key" "$compose_directory/secrets/mailfathom/mcp-workstation-key"
+}
+
+# A mailbox whose provider accepts no password cannot be prepared by a script that asks for one, and a configuration
+# written anyway fails at the first synchronization with an authentication error that says nothing about why.
+quick_start_refuses_a_mailbox_that_accepts_no_password() {
+  local checkout_root compose_directory
+  local output_file="$test_directory/quick-start-oauth-log"
+
+  checkout_root="$(stage_quick_start_checkout 'quick-start-oauth')"
+  compose_directory="$checkout_root/deploy/compose"
+
+  if run_quick_start "$checkout_root" --provider outlook > "$output_file" 2>&1; then
+    printf 'A mailbox that accepts no password was prepared with one.\n' >&2
+    return 1
+  fi
+
+  assert_contains 'accepts no password' "$output_file"
+  assert_contains 'mailbox-oauth' "$output_file"
+
+  if [[ -e "$compose_directory/.env" || -e "$compose_directory/config/10-mailfathom.json" ]]; then
+    printf 'The refusal left a prepared deployment behind.\n' >&2
+    return 1
+  fi
+}
+
+# The unauthenticated posture is legal and is never what a run that did not ask for it produces.
+quick_start_authenticates_the_mcp_endpoint_unless_asked_otherwise() {
+  local guarded_root open_root
+  local guarded_log="$test_directory/quick-start-guarded-log"
+  local open_log="$test_directory/quick-start-open-log"
+
+  guarded_root="$(stage_quick_start_checkout 'quick-start-guarded')"
+  run_quick_start "$guarded_root" --provider icloud > "$guarded_log" 2>&1
+
+  assert_contains '"SecretReference": "file:/etc/mailfathom/secrets/mcp-workstation-key"' \
+    "$guarded_root/deploy/compose/config/10-mailfathom.json"
+
+  if [[ ! -s "$guarded_root/deploy/compose/secrets/mailfathom/mcp-workstation-key" ]]; then
+    printf 'The default posture wrote no MCP credential.\n' >&2
+    return 1
+  fi
+
+  open_root="$(stage_quick_start_checkout 'quick-start-open')"
+  run_quick_start "$open_root" --provider icloud --mcp-authentication none > "$open_log" 2>&1
+
+  assert_contains '"Authentication": [],' "$open_root/deploy/compose/config/10-mailfathom.json"
+
+  if [[ -e "$open_root/deploy/compose/secrets/mailfathom/mcp-workstation-key" ]]; then
+    printf 'An endpoint asked to serve without authentication was given a key anyway.\n' >&2
+    return 1
+  fi
+}
+
+# A value carrying a control character would reach the configuration file as broken JSON, and the deployment would then
+# fail to start on a file nobody edited. The check that prevents it cannot live in the function that writes the string,
+# because that runs inside a command substitution whose exit the heredoc calling it does not propagate.
+quick_start_refuses_a_value_that_would_write_broken_configuration() {
+  local checkout_root
+  local output_file="$test_directory/quick-start-control-character-log"
+
+  checkout_root="$(stage_quick_start_checkout 'quick-start-control-character')"
+
+  if run_quick_start "$checkout_root" --provider fastmail --display-name "$(printf 'Personal\tmail')" \
+    > "$output_file" 2>&1; then
+    printf 'A control character was written into the configuration instead of stopping the run.\n' >&2
+    return 1
+  fi
+
+  assert_contains 'control character' "$output_file"
+
+  if [[ -e "$checkout_root/deploy/compose/config/10-mailfathom.json" ]]; then
+    printf 'The refusal left a configuration file behind.\n' >&2
+    return 1
+  fi
+}
+
+# What this script produces is a deployment to find out what the product does, and the difference between that and one
+# somebody depends on is four decisions nobody has taken yet. A convenience path that stopped saying so would be read as
+# the recommended installation, which is the one thing it must never become — so the framing is asserted rather than
+# left to whoever edits the text next.
+quick_start_says_it_is_an_evaluation_rather_than_a_recommended_deployment() {
+  local checkout_root
+  local output_file="$test_directory/quick-start-framing-log"
+  local help_file="$test_directory/quick-start-help-log"
+
+  bash "$source_repository_root/scripts/quick-start-compose.sh" --help > "$help_file" 2>&1
+
+  checkout_root="$(stage_quick_start_checkout 'quick-start-framing')"
+  run_quick_start "$checkout_root" --provider fastmail > "$output_file" 2>&1
+
+  assert_contains 'Not the recommended way to run one' "$help_file"
+  assert_contains 'evaluate MailFathom with' "$output_file"
+
+  local missing_decision
+  for missing_decision in 'Transport' 'Credentials' 'Grants' 'Backups'; do
+    assert_contains "  $missing_decision " "$output_file"
+  done
+
+  assert_contains 'users/installation.html' "$output_file"
+}
+
+# The administrative endpoint's own default port is the socket the MCP endpoint is served on, and compose.yaml
+# publishes nothing for it. So enabling it means a port of its own, published from an override rather than by editing a
+# tracked file — and on loopback, like every other port this deployment publishes.
+quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own() {
+  local checkout_root compose_directory
+  local off_root
+  local output_file="$test_directory/quick-start-admin-log"
+
+  checkout_root="$(stage_quick_start_checkout 'quick-start-admin')"
+  compose_directory="$checkout_root/deploy/compose"
+
+  run_quick_start "$checkout_root" --provider yahoo --admin-endpoint api-key > "$output_file" 2>&1
+
+  assert_contains '"Port": 8090' "$compose_directory/config/10-mailfathom.json"
+  assert_contains '"SecretReference": "file:/etc/mailfathom/secrets/admin-workstation-key"' \
+    "$compose_directory/config/10-mailfathom.json"
+  assert_contains '"127.0.0.1:8090:8090"' "$compose_directory/compose.override.yaml"
+
+  # Off unless it is asked for, which is the product's own default and what makes the override file the marker of a
+  # deliberate answer rather than of a run having happened.
+  off_root="$(stage_quick_start_checkout 'quick-start-admin-off')"
+  run_quick_start "$off_root" --provider yahoo > /dev/null 2>&1
+
+  assert_excludes 'AdminEndpoint' "$off_root/deploy/compose/config/10-mailfathom.json"
+
+  if [[ -e "$off_root/deploy/compose/compose.override.yaml" ]]; then
+    printf 'An administrative endpoint nobody asked for was published.\n' >&2
+    return 1
+  fi
+}
+
 # The Actions policy, as far as a committed file can state it. Half of that policy lives in GitHub's
 # repository settings — which action owners are allowed at all, whether a mutable `uses:` is
 # accepted, how long an artifact is kept — and settings do not fail a pull request. These five
@@ -6796,6 +7056,14 @@ run_test winget_manifests_refuse_a_missing_windows_binary
 run_test install_script_installs_the_binary_the_release_published
 run_test install_script_refuses_a_binary_the_checksum_file_disowns
 run_test install_script_refuses_a_platform_no_release_publishes
+run_test quick_start_prepares_the_deployment_the_documentation_describes
+run_test quick_start_keeps_the_mailbox_password_out_of_everything_but_its_own_file
+run_test quick_start_refuses_to_overwrite_a_prepared_deployment
+run_test quick_start_refuses_a_mailbox_that_accepts_no_password
+run_test quick_start_authenticates_the_mcp_endpoint_unless_asked_otherwise
+run_test quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own
+run_test quick_start_refuses_a_value_that_would_write_broken_configuration
+run_test quick_start_says_it_is_an_evaluation_rather_than_a_recommended_deployment
 run_test every_external_action_names_an_approved_owner
 run_test every_workflow_job_declares_its_permissions
 run_test every_write_scope_is_one_the_policy_records
