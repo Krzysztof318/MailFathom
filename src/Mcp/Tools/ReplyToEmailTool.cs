@@ -90,7 +90,9 @@ internal sealed class ReplyToEmailTool(AuthoredResponseSubmission submission)
         + "and CANNOT be recalled, edited, or deleted once it has left — treat every call as final, and ask the person "
         + "you are acting for before replying on their behalf. The call itself transmits nothing: the reply is written "
         + "down durably and a delivery pass offers it to a mail server seconds later, so the result says queued and "
-        + "never that anything was delivered. audience is required and decides who receives the reply: senderOnly "
+        + "never that anything was delivered. Call get_outgoing_email with the outgoingEmailId it answers to learn what "
+        + "became of the message, and cancel_outgoing_email to stop it while it is still waiting. audience is "
+        + "required and decides who receives the reply: senderOnly "
         + "answers one person, everyone answers every participant of the original — there is no default, and picking "
         + "the wrong one publishes a private answer or drops the rest of the conversation. Everything else is read "
         + "from the stored email rather than supplied: who the reply goes to, the subject, the threading headers that "
@@ -100,7 +102,8 @@ internal sealed class ReplyToEmailTool(AuthoredResponseSubmission submission)
         + "is required and is what makes a retry safe: send the same value again for the same reply and one message "
         + "goes out; a new value is a new message. An email this deployment cannot answer — no such identifier, a "
         + "folder withheld from tools, or content it no longer holds — is refused the same way in every case, so the "
-        + "refusal never tells you which. Nothing here can be undone by another call.")]
+        + "refusal never tells you which. Once the message has been transmitted nothing "
+        + "undoes it; while it is still waiting, cancel_outgoing_email is the one call that does.")]
     public async Task<SendEmailToolResult> ReplyToEmailAsync(
         [Description("The storedEmailId a listing, a search, a read, or an answer returned for the email you are replying to. A UUID that does not change when the mail server renumbers or moves the message.")]
         string storedEmailId,

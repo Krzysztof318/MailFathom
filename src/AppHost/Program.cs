@@ -298,6 +298,11 @@ if (runsIntegrationTests)
         // the delivery pass here finds a host that does not resolve, retries it under its own bounded budget, and
         // changes nothing a tool call answered. The port and the connection security are left at their defaults, which
         // name implicit TLS on the submission port and therefore need no opt-in from the account's transport policy.
+        // Sending is off for every account until an operator turns it on, so a composed host that only declared a
+        // submission endpoint would refuse every sending tool with the coded refusal that says so — and, with no record
+        // ever written, would leave the tools over a queued send nothing to be asked about. Turning it on here is what
+        // makes those suites exercise the contract they are about rather than the switch in front of it.
+        .WithEnvironment("MailSynchronization__Accounts__0__Delivery__Enabled", "true")
         .WithEnvironment(
             "MailSynchronization__Accounts__0__Delivery__Host",
             OrchestrationContract.ComposedHostSubmissionHost)

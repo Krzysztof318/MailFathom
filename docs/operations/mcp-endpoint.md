@@ -623,7 +623,10 @@ The operational consequences are the ones that always applied to an unauthentica
   recalled: through `send_email` it lets anyone who can reach the port send mail from the owner's own address to
   anybody, and through `reply_to_email` and `forward_email` — which such an endpoint also grants the reading half those
   two need — it lets them answer the owner's correspondents and pass the owner's mail and its attachments on to
-  strangers. Nothing takes any of it back. Narrow the entry, or keep the port unreachable.
+  strangers. It carries `get_outgoing_email` and `cancel_outgoing_email` with it, so the same reach reads back what the
+  sends it made were answered with and stops one before it leaves; those two are confined to what the calling principal
+  queued, which on an endpoint that admits everybody as one identity confines nothing. Nothing takes any of it back.
+  Narrow the entry, or keep the port unreachable.
 
 ### What a credential may do
 

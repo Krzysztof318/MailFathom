@@ -194,6 +194,54 @@ public sealed class MailOutboxTests
         Assert.Equal(0, signal.Depth);
     }
 
+    /// <summary>Nobody states who asked for a send: the record remembers what this deployment admitted.</summary>
+    /// <remarks>
+    /// It is what confines reading a send back and withdrawing one to the caller that queued it, so a request able to
+    /// state it would be a request able to claim somebody else's sends.
+    /// </remarks>
+    [Fact]
+    public async Task EnqueueAsync_ACallerGrantedSending_RecordsThePrincipalItWasAdmittedUnder()
+    {
+        // Arrange
+        var outbox = CreateOutbox(
+            new InMemoryOutgoingEmailStore(),
+            Substitute.For<IEmailContentStore>(),
+            authorization: AccessAuthorizations.ForPrincipal(
+                AuthorizedPrincipal.Caller("agent-key", [MailFathomPermission.MailSend])));
+
+        // Act
+        var record = await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(OutgoingEmailPrincipal.Of("agent-key"), record.Principal);
+    }
+
+    /// <summary>A rule's send is recorded under this process rather than under any caller, which is what keeps it out of every caller's reach.</summary>
+    [Fact]
+    public async Task EnqueueAsync_ARuleSend_RecordsThePrincipalOfThisProcess()
+    {
+        // Arrange
+        var outbox = CreateOutbox(
+            new InMemoryOutgoingEmailStore(),
+            Substitute.For<IEmailContentStore>(),
+            authorization: AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
+
+        Assert.True(EmailAddress.TryCreate(displayName: null, "anna@example.test", out var address));
+
+        var request = OutgoingEmailRequest.Create(
+            Account,
+            OutgoingEmailRequester.Rule("archive", "r1", StoredEmailId.Create(Guid.CreateVersion7())),
+            [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]);
+
+        // Act
+        var record = await outbox.EnqueueAsync(request, RawMime, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(
+            OutgoingEmailPrincipal.Of(AuthorizedPrincipal.ProcessIdentityName),
+            record.Principal);
+    }
+
     /// <summary>
     /// The transport is not the authority: a caller whose grant omits sending is refused by the outbox itself, before a
     /// record or a message is written, so an entrypoint that never passed a filter reaches the same answer.

@@ -24,7 +24,7 @@ surfaces draw from disjoint halves, and the prefix after `mailfathom.` says whic
 | `mailfathom.mail.read` | MCP | The tools that read the local mailbox copy: `list_accounts`, `list_emails`, `get_email_content`, `search_emails`. Where semantic retrieval is configured, searching places the caller's own query text with the embedding provider, so this is not an egress-free grant |
 | `mailfathom.mail.ask` | MCP | `ask_mail`, which answers from mail content by sending it to a model provider. It does not imply `mailfathom.mail.read`, and granting it is granting access to mail |
 | `mailfathom.mail.flags.write` | MCP | `set_mail_flags`, which marks mail read or unread, stars or unstars it, and writes its keywords. It is the one MCP grant whose effect reaches the owner's mail server, and it does not follow from reading mail: a deployment that lets an agent read has not thereby let it change anything |
-| `mailfathom.mail.send` | MCP | Asking this deployment to send mail from an account it holds. It is the one grant here whose effect leaves the deployment and cannot be recalled, which is why it follows from nothing: reading a mailbox is not writing from it, and marking mail reaches the owner's own server rather than a stranger's. It covers `send_email`, which queues a message for a mailbox this deployment holds, and `reply_to_email` and `forward_email`, which queue one anchored to mail it already holds — those two also need `mailfathom.mail.read`, because an answer is derived from the message it answers. It is asked for again by the use cases behind all three and by the outbox beneath them, so it governs the act rather than only the tool |
+| `mailfathom.mail.send` | MCP | Asking this deployment to send mail from an account it holds. It is the one grant here whose effect leaves the deployment and cannot be recalled, which is why it follows from nothing: reading a mailbox is not writing from it, and marking mail reaches the owner's own server rather than a stranger's. It covers `send_email`, which queues a message for a mailbox this deployment holds, and `reply_to_email` and `forward_email`, which queue one anchored to mail it already holds — those two also need `mailfathom.mail.read`, because an answer is derived from the message it answers. It covers `get_outgoing_email` and `cancel_outgoing_email` as well, which report what became of a queued send and stop one that is still waiting: a caller may read back and withdraw exactly what it was allowed to queue, and what this mailbox has written to whom is not something the reading grant confers. It is asked for again by the use cases behind all five and by the outbox beneath the three that send, so it governs the act rather than only the tool |
 | `mailfathom.mail.contacts.read` | MCP | `list_contacts` and `get_contact`, which read the deployment's own contact book: names, addresses, and the notes an owner wrote about identified third parties |
 | `mailfathom.mail.contacts.write` | MCP | `create_contact`, `update_contact`, `delete_contact`, and `promote_contact`, which record, amend, erase, and take on a person in that book. The erasure is here rather than apart, because a grant that cannot edit the book cannot be trusted to take somebody out of it |
 | `mailfathom.admin.read` | administrative | The reads reporting the deployment's own state and no mail: what synchronization is doing per account and per folder, embedding status and the activation preview, the loaded rules, a run's progress, what a rewind would cost, where a re-derivation has got to, the stopped-job list, and the outbox counted by stage and listed without naming anybody |
@@ -86,6 +86,8 @@ call.
 | `send_email` | `mailfathom.mail.send` |
 | `reply_to_email` | `mailfathom.mail.send`, and `mailfathom.mail.read` beneath it |
 | `forward_email` | `mailfathom.mail.send`, and `mailfathom.mail.read` beneath it |
+| `get_outgoing_email` | `mailfathom.mail.send` |
+| `cancel_outgoing_email` | `mailfathom.mail.send` |
 | `ask_mail` | `mailfathom.mail.ask` |
 | `list_contacts` | `mailfathom.mail.contacts.read` |
 | `get_contact` | `mailfathom.mail.contacts.read` |
@@ -94,11 +96,21 @@ call.
 | `delete_contact` | `mailfathom.mail.contacts.write` |
 | `promote_contact` | `mailfathom.mail.contacts.write` |
 
-The three sending rows are the ones worth reading twice. `mailfathom.mail.send` is the only grant here whose effect
+The five rows naming `mailfathom.mail.send` are the ones worth reading twice. It is the only grant here whose effect
 leaves this deployment and cannot be recalled, and the mapping is what withholds those tools from every other
 credential: a caller without the name is not offered the descriptor and is answered as if the tool did not exist. Two
 further checks stand behind it — the use case, and the outbox it writes through — so an entrypoint added later meets the
 same refusal without passing this table.
+
+**`get_outgoing_email` and `cancel_outgoing_email` take the sending grant rather than the reading one, and that is the
+disclosure decision rather than a convenience.** What a read of a queued send answers is who this mailbox wrote to and
+when a server accepted or refused each of them, which is a fact about the mailbox's outgoing correspondence rather than
+about mail it received — so a credential given a mailbox to read is not thereby one that learns it, and there is no
+listing on that surface to reach it through in bulk either. Withdrawing takes the same name from the other direction:
+what a caller may stop is exactly what it was allowed to start, so no grant of its own is minted for taking back what
+one grant already permitted. Both are additionally confined to what the calling principal queued, which is a scope
+rather than a permission: a send another caller queued is answered exactly as one nobody queued, and no grant widens
+that.
 
 **`reply_to_email` and `forward_email` are the two rows that name a second grant, and it is a requirement rather than a
 note.** The sending grant is what the descriptor declares and what narrows the listing, because sending is the effect
