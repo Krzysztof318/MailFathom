@@ -98,7 +98,9 @@ means in the one place the decision is taken.
 **The MCP surface answers it by saying nothing.** The use cases behind its tools each require a permission —
 `mailfathom.mail.read` for the four that read the local mailbox copy, `mailfathom.mail.ask` for the one that answers
 from it, `mailfathom.mail.flags.write` for the one that changes a mailbox, and the two contact names for the book — and
-the endpoint asks the same question ahead of them, from the grant the caller was admitted under. A tool
+the endpoint asks the same question ahead of them, from the grant the caller was admitted under. `mailfathom.mail.send`
+is asked for the same way by the outbox a send is written down in, and is the case that shows which of the two checks is
+the authority: no tool reaches it yet, so the use case is the only place it is asked at all. A tool
 the grant does not permit is absent from `tools/list`, and a call naming one is answered as a call naming a tool that
 does not exist: the same error, the same code, and nothing about the caller, the credential, or the permission. So this
 refusal never reaches a client in a form it could read;

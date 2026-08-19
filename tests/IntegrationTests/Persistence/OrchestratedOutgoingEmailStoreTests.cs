@@ -3,10 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
+using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Delivery;
@@ -82,14 +84,10 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
         var firstMime = MimeOf("duplicate-enqueue-first");
         var recomposedMime = MimeOf("duplicate-enqueue-second");
 
-        var first = await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<MailOutbox>().EnqueueAsync(request, firstMime, token),
-            cancellationToken);
+        var first = await EnqueueAsync(services, request, firstMime, cancellationToken);
 
         // Act
-        var retried = await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<MailOutbox>().EnqueueAsync(request, recomposedMime, token),
-            cancellationToken);
+        var retried = await EnqueueAsync(services, request, recomposedMime, cancellationToken);
 
         // Assert
         Assert.Equal(first.Id, retried.Id);
@@ -107,6 +105,30 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
             "The stored outgoing message is not the one the first enqueue wrote.");
         Assert.Null(storedContent.FindIntegrityDefect());
         Assert.Equal(firstMime.Length, retried.MimeByteLength);
+    }
+
+    /// <summary>
+    /// The send grant is enforced by the composed graph rather than by whatever a unit test hands the outbox. What this
+    /// settles is the wiring: the principal a scope reports reaches the outbox, and a scope reporting no caller — which
+    /// is every worker in this process — writes nothing into the account's outbox for a send somebody asked for.
+    /// </summary>
+    [Fact]
+    public async Task EnqueueAsync_UnderTheProcessIdentity_IsRefusedAndLeavesNoRecord()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var request = CreateRequest("outbox-ungranted-command", "fiona@example.test");
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<MailOutbox>()
+                .EnqueueAsync(request, MimeOf("ungranted-command"), token),
+            cancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.PrincipalNotAuthorized, refusal.ErrorCode);
+        Assert.Empty(await ReadOutstandingAsync(services, request, cancellationToken));
     }
 
     /// <summary>
@@ -130,10 +152,7 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
             ]);
 
         // Act
-        await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<MailOutbox>()
-                .EnqueueAsync(request, MimeOf("contact-recipient"), token),
-            cancellationToken);
+        await EnqueueAsync(services, request, MimeOf("contact-recipient"), cancellationToken);
 
         // Assert
         var record = Assert.Single(await ReadOutstandingAsync(services, request, cancellationToken));
@@ -158,10 +177,7 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var request = CreateRequest("outbox-unknown-outcome", "clara@example.test");
-        var enqueued = await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<MailOutbox>()
-                .EnqueueAsync(request, MimeOf("unknown-outcome"), token),
-            cancellationToken);
+        var enqueued = await EnqueueAsync(services, request, MimeOf("unknown-outcome"), cancellationToken);
 
         // The claim is what counts the attempt and takes the lease, in one statement and its own transaction, exactly
         // as a delivery pass reaches this record.
@@ -253,10 +269,7 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
             "anna@example.test",
             "bruno@example.invalid",
             "clara@example.test");
-        var enqueued = await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<MailOutbox>()
-                .EnqueueAsync(request, MimeOf("partial-acceptance"), token),
-            cancellationToken);
+        var enqueued = await EnqueueAsync(services, request, MimeOf("partial-acceptance"), cancellationToken);
         var answeredAt = DateTimeOffset.UnixEpoch.AddMinutes(1);
         var claimed = await ClaimAsync(services, enqueued.Id, cancellationToken);
 
@@ -313,9 +326,7 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var request = CreateRequest("outbox-erasure", "anna@example.test");
-        var enqueued = await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<MailOutbox>().EnqueueAsync(request, MimeOf("erasure"), token),
-            cancellationToken);
+        var enqueued = await EnqueueAsync(services, request, MimeOf("erasure"), cancellationToken);
 
         // Act
         await services.InScopeAsync(
@@ -351,6 +362,21 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
 
         return Assert.Single(claimed, entry => entry.Record.Id == outgoingEmailId);
     }
+
+    /// <summary>Writes a send down as the agent that asked for it, which is the principal the outbox admits a command from.</summary>
+    /// <remarks>
+    /// The permission is stated rather than assumed away. This suite drives the production graph directly, so a scope it
+    /// composes reports the process identity — correct for a rule and refused for a command — and a test about the
+    /// record has to arrive as what a tool call arrives as.
+    /// </remarks>
+    private static Task<OutgoingEmailRecord> EnqueueAsync(
+        OrchestratedMailFathomServices services,
+        OutgoingEmailRequest request,
+        ReadOnlyMemory<byte> rawMime,
+        CancellationToken cancellationToken) => services.AsCallerInScopeAsync(
+            (scope, token) => scope.GetRequiredService<MailOutbox>().EnqueueAsync(request, rawMime, token),
+            [MailFathomPermission.MailSend],
+            cancellationToken);
 
     /// <summary>Claims whatever the account has due, which is what a pass reads and what a test asserts an absence over.</summary>
     /// <remarks>

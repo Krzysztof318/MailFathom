@@ -614,18 +614,21 @@ The operational consequences are the ones that always applied to an unauthentica
   authenticating reverse proxy are all outside MailFathom and all appropriate.
 - **What can be read here can also be marked, and the contact book can be erased.** An endpoint with no
   `Authentication` entry grants every permission this surface publishes, so anyone who can reach the port holds the
-  reading half — where the exposure is disclosure of a mailbox, which is enough on its own — and both writing halves
+  reading half — where the exposure is disclosure of a mailbox, which is enough on its own — and every writing half
   with it. `mailfathom.mail.flags.write` lets them mark, star, and relabel the owner's mail on the real mail server
   through `set_mail_flags`, and the change converges out over the account's own write connection; nothing there sends,
   deletes, or moves mail, but a message somebody else marked read is a message the owner never saw arrive.
   `mailfathom.mail.contacts.write` lets them record, amend, and irreversibly erase the deployment's records about
-  identified third parties. Narrow the entry, or keep the port unreachable.
+  identified third parties. `mailfathom.mail.send` is the third writing half and the one whose effect could not be
+  recalled; on this release it reaches no tool, so an unauthenticated endpoint hands it out without handing out
+  anything a client can call with it. Narrow the entry, or keep the port unreachable.
 
 ### What a credential may do
 
 Every entry in `McpEndpoint:Authentication` states what the credentials it admits may do, as `Permissions`. This
-surface's half of the published set is five names — `mailfathom.mail.read`, `mailfathom.mail.ask`,
-`mailfathom.mail.contacts.read`, `mailfathom.mail.contacts.write`, and `mailfathom.mail.flags.write` — and
+surface's half of the published set is six names — `mailfathom.mail.read`, `mailfathom.mail.ask`,
+`mailfathom.mail.contacts.read`, `mailfathom.mail.contacts.write`, `mailfathom.mail.flags.write`, and
+`mailfathom.mail.send`, the last of which no tool requires yet — and
 [what a credential may do](permissions.md) holds the model behind them in full: what each name reaches, which tool each
 one covers, how a grant is written, what an absent `Permissions` key and an empty list mean, what
 `PermissionsFromTokenScopes` turns the list into, and what fails startup.
@@ -653,9 +656,9 @@ chosen what it holds:
 info: MailFathom.Host.Hosting.Warnings.TransportGrantStartupReport
       The MCP endpoint entry McpEndpoint:Authentication:0 writes down no grant, so every credential it admits holds
       mailfathom.mail.read, mailfathom.mail.ask, mailfathom.mail.contacts.read, mailfathom.mail.contacts.write,
-      mailfathom.mail.flags.write — everything this surface publishes. Write a 'Permissions' list on the entry to
-      narrow it, or an empty one to grant nothing. A caller here is served only the tools its grant permits, and a call
-      naming any other is answered as a tool that does not exist.
+      mailfathom.mail.flags.write, mailfathom.mail.send — everything this surface publishes. Write a 'Permissions' list
+      on the entry to narrow it, or an empty one to grant nothing. A caller here is served only the tools its grant
+      permits, and a call naming any other is answered as a tool that does not exist.
 ```
 
 Every line closes with what a grant on that surface does, so an operator reading back the one entry they edited learns
@@ -668,10 +671,11 @@ section a grant would be written under.
 
 **The endpoint asks whether this is a caller the deployment serves, and of a token also which person it names.** What an
 admitted caller may then do is the grant its entry carries, and that decides one thing: which of this surface's tools it
-is offered and may call. Which tool each of the five names covers is
+is offered and may call. Which tool each of the six names covers is
 [what a credential may do](permissions.md#which-tool-each-name-covers); an entry narrowed to the contact half therefore
-reaches the contact book and nothing else, and one granted none of the five is served an empty tool list and refused
-every call it makes.
+reaches the contact book and nothing else, and one granted none of the six is served an empty tool list and refused
+every call it makes. `mailfathom.mail.send` is the one name that decides nothing here yet, because no tool on this
+surface requires it.
 
 **A refused caller is told nothing**, for the reason
 [what a refused caller is told](permissions.md#what-a-refused-caller-is-told) gives: a message a client could tell apart

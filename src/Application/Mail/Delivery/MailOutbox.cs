@@ -2,9 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Delivery;
 
 namespace MailFathom.Application.Mail.Delivery;
@@ -16,6 +18,11 @@ namespace MailFathom.Application.Mail.Delivery;
 /// whose message was never stored describes a send with nothing to transmit; a message stored under no record is bytes
 /// nothing will ever read. Both cross the same transaction here, so a crash between them leaves neither rather than
 /// half of a send.
+/// </para>
+/// <para>
+/// Being the one way in is also what makes it the place the send grant is asked for a second time. A tool call was
+/// already refused at the transport if it could be, and the same question is put here with no transport in the
+/// picture, so nothing that reaches the outbox by another route reaches it ungoverned.
 /// </para>
 /// <para>
 /// Enqueuing is idempotent by the identity the request carries. The same authored request arriving twice — a rule that
@@ -38,11 +45,13 @@ namespace MailFathom.Application.Mail.Delivery;
 /// <param name="contentStore">Holds the composed MIME the record points at.</param>
 /// <param name="retryPolicy">Commits both writes together and resolves a lost race for the same identity.</param>
 /// <param name="signal">Tells the delivery loop that this account has something to send.</param>
+/// <param name="authorization">Answers whether whoever reached this is admitted to ask for the send the request states it is.</param>
 public sealed class MailOutbox(
     IOutgoingEmailStore outgoingEmails,
     IEmailContentStore contentStore,
     OptimisticConcurrencyRetryPolicy retryPolicy,
-    MailOutboxSignal signal)
+    MailOutboxSignal signal,
+    AccessAuthorization authorization)
 {
     /// <summary>Writes down a message to be sent, or answers with the record an identical request already left.</summary>
     /// <param name="request">The send that was asked for.</param>
@@ -51,6 +60,7 @@ public sealed class MailOutbox(
     /// <returns>The durable record for this request, whether this call created it or an earlier one did.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="rawMime" /> is empty.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the act the request names as its origin is not what reached this: a caller granted <see cref="MailFathomPermission.MailSend" /> for a command, and MailFathom's own identity for a rule.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when the write lost its race for the same identity on every allowed attempt.</exception>
     /// <remarks>
     /// The message is not recomposed for a request that already has a record, and the bytes supplied here are then
@@ -63,6 +73,8 @@ public sealed class MailOutbox(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        this.RequireAdmittedToSend(request.Requester.Origin);
 
         if (rawMime.IsEmpty)
         {
@@ -96,5 +108,46 @@ public sealed class MailOutbox(
         signal.Signal(record.AccountId);
 
         return record;
+    }
+
+    /// <summary>Requires that whatever reached this outbox is the kind of act the request says asked for the send.</summary>
+    /// <param name="origin">What the request states asked.</param>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when it is not.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the origin is one this method was never taught, which is a defect here rather than a refusal.</exception>
+    /// <remarks>
+    /// <para>
+    /// The transport already refused what it could refuse cheaply, and this is the authority: the outbox is the one way
+    /// in, so a rule action, a command, a worker, or a protocol added later meets the same question without passing any
+    /// middleware. Nothing has been written down when it is asked, which is what makes the refusal cost a caller
+    /// nothing but the refusal.
+    /// </para>
+    /// <para>
+    /// The origin is checked rather than trusted, which is what keeps it a fact instead of a label. It is already the
+    /// half of the record's identity that says who asked, so admitting each origin under exactly the principal that can
+    /// legitimately produce it means neither can be worn by the other: a caller cannot enqueue as a rule and so cannot
+    /// borrow a rule's idempotency identity, and work no caller requested cannot enqueue as a command however the grant
+    /// is written, because the process identity holds no permission at all.
+    /// </para>
+    /// </remarks>
+    private void RequireAdmittedToSend(OutgoingEmailOrigin origin)
+    {
+        switch (origin)
+        {
+            case OutgoingEmailOrigin.Command:
+                authorization.RequirePermission(MailFathomPermission.MailSend);
+
+                break;
+
+            case OutgoingEmailOrigin.Rule:
+                authorization.RequireProcessIdentity();
+
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(origin),
+                    origin,
+                    "The outgoing email origin names no act this outbox admits.");
+        }
     }
 }

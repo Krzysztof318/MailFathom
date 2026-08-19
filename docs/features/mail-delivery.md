@@ -376,6 +376,16 @@ found in that stage on restart is recognizable and is never blindly re-sent. Wha
 transaction: a record whose message was never stored has nothing to transmit, and a message stored under no record is
 bytes nothing will ever read.
 
+**Being the one way in is also where the send grant is asked for.** The record already names the kind of act that asked
+— a rule, or somebody present — and the outbox admits each origin under exactly the principal that can produce it: a
+command needs a caller granted `mailfathom.mail.send`, and a rule needs MailFathom's own identity, which holds no
+permission at all. So a caller cannot enqueue as a rule and borrow a rule's idempotency identity, and work nobody
+requested cannot enqueue as a command however a grant is written. The question is put here with no transport in the
+picture, which is what makes it hold for an entrypoint added later — a command, a gateway, a second protocol — rather
+than only for a request that passed a filter. Nothing has been written down when it is asked, so a refusal leaves no
+record and no stored message behind. [What a credential may do](../operations/permissions.md#the-published-set) is the
+grant, and no MCP tool reaches this yet.
+
 **The same authored request arriving twice delivers once.** The identity is the sending account together with the act
 that asked — a rule with its name, its revision, and the email it acted on; or a caller with a key of their own — and it
 is enforced by a unique index rather than by any check. Two callers asking together both reach the database, the second
@@ -594,6 +604,11 @@ record. What only PostgreSQL can settle is in the integration suite: the index r
 reached without seeing the other, the second enqueue leaving the first message in place, a record left mid-transmission
 being found and read as such by a later scope, a claim holding a record against the next claim, and the cascade erasing
 the message and the recipients with the record.
+
+The grant the outbox asks for is split the same way again. Which principal each origin admits, and that a refusal
+signals no delivery pass, are unit tests over the outbox; that the principal a scope reports actually reaches it through
+the composed graph is the integration suite's, where a scope reporting no caller — every worker in the process — is
+refused a command and leaves the account's outbox as it found it.
 
 Delivery is where the two halves meet, so it is proven from both ends.
 
