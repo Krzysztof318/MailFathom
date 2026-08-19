@@ -1,0 +1,271 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Application.Mail.Delivery.Drafts;
+using MailFathom.Application.Persistence;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Drafts;
+using MailFathom.Domain.Delivery.Filing;
+using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
+
+namespace MailFathom.Application.UnitTests.TestDoubles;
+
+/// <summary>Holds drafts and their copies in memory, with the movements the durable store makes and no others.</summary>
+/// <remarks>
+/// The records are immutable and every write replaces one, so a record a test read earlier goes on saying what it said
+/// — which is exactly how a caller holding a record it read before a mail server answered behaves against the real
+/// store, and is what makes a resumed-after-a-crash test express a crash by simply not calling the next write.
+/// </remarks>
+internal sealed class InMemoryMailDraftStore : IMailDraftStore
+{
+    private readonly Dictionary<MailDraftId, MailDraftRecord> drafts = [];
+
+    /// <summary>Gets every draft still held, which is what a deletion is asserted against.</summary>
+    internal IReadOnlyCollection<MailDraftRecord> Drafts => [.. this.drafts.Values];
+
+    /// <summary>Reads one draft as it now stands, without going through the port.</summary>
+    internal MailDraftRecord? Peek(MailDraftId draftId) =>
+        this.drafts.TryGetValue(draftId, out var draft) ? draft : null;
+
+    /// <inheritdoc />
+    public Task<MailDraftRecord> OpenAsync(
+        IPersistenceSession session,
+        MailAccountId accountId,
+        OutgoingEmailRequester author,
+        IReadOnlyList<OutgoingRecipient> recipients,
+        long mimeByteLength,
+        DateTimeOffset composedAt,
+        CancellationToken cancellationToken)
+    {
+        var draft = new MailDraftRecord
+        {
+            Id = MailDraftId.Create(Guid.CreateVersion7(composedAt)),
+            AccountId = accountId,
+            Author = author,
+            Recipients = [.. recipients],
+            MimeByteLength = mimeByteLength,
+            Revision = 1,
+            ComposedAt = composedAt,
+            RevisedAt = composedAt,
+            DiscardedAt = null,
+            PromotedTo = null,
+            Copies = [],
+            Divergence = null,
+            LastFailure = null,
+        };
+
+        this.drafts[draft.Id] = draft;
+
+        return Task.FromResult(draft);
+    }
+
+    /// <inheritdoc />
+    public Task<MailDraftRecord> ReviseAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        IReadOnlyList<OutgoingRecipient> recipients,
+        long mimeByteLength,
+        DateTimeOffset revisedAt,
+        CancellationToken cancellationToken)
+    {
+        var revised = this.Require(draftId) with
+        {
+            Recipients = [.. recipients],
+            MimeByteLength = mimeByteLength,
+            RevisedAt = revisedAt,
+        };
+
+        revised = revised with { Revision = revised.Revision + 1 };
+        this.drafts[draftId] = revised;
+
+        return Task.FromResult(revised);
+    }
+
+    /// <inheritdoc />
+    public Task<MailDraftRecord?> FindAsync(MailDraftId draftId, CancellationToken cancellationToken) =>
+        Task.FromResult(this.Peek(draftId));
+
+    /// <inheritdoc />
+    public Task<MailDraftRecord?> FindPromotedToAsync(
+        OutgoingEmailId outgoingEmailId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(this.drafts.Values.FirstOrDefault(draft => draft.PromotedTo == outgoingEmailId));
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<MailDraftRecord>> ReadOutstandingAsync(
+        MailAccountId accountId,
+        int maxCount,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<MailDraftRecord>>(
+        [
+            .. this.drafts.Values
+                .Where(draft => draft.AccountId == accountId && draft.HasOutstandingServerWork)
+                .OrderBy(draft => draft.RevisedAt)
+                .ThenBy(draft => draft.Id.Value)
+                .Take(maxCount),
+        ]);
+
+    /// <inheritdoc />
+    public Task RecordAppendIssuedAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        MailFolderResolution destination,
+        DateTimeOffset appendedAt,
+        CancellationToken cancellationToken)
+    {
+        var draft = this.Require(draftId);
+
+        if (draft.FindCopy(draft.Revision) is not null)
+        {
+            throw new InvalidOperationException("That revision has already been appended.");
+        }
+
+        this.drafts[draftId] = draft with
+        {
+            Copies =
+            [
+                new MailDraftServerCopy
+                {
+                    Revision = draft.Revision,
+                    FolderAlias = destination.Alias,
+                    FolderPath = destination.RemotePath,
+                    Stage = MailDraftCopyStage.Issued,
+                    Placement = RemoteEmailPlacement.NotReported(),
+                    InternetMessageId = null,
+                    AppendedAt = appendedAt,
+                    SettledAt = null,
+                },
+                .. draft.Copies,
+            ],
+        };
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task RecordAppendConfirmedAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        AppendedMailCopy copy,
+        CancellationToken cancellationToken)
+    {
+        var draft = this.Require(draftId);
+
+        this.Replace(
+            draft,
+            draft.Revision,
+            appended => appended with
+            {
+                Stage = MailDraftCopyStage.Standing,
+                Placement = copy.Placement,
+                InternetMessageId = copy.InternetMessageId,
+            });
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task RecordCopySettledAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        int revision,
+        MailDraftCopyStage stage,
+        DateTimeOffset settledAt,
+        CancellationToken cancellationToken)
+    {
+        this.Replace(
+            this.Require(draftId),
+            revision,
+            copy => copy with { Stage = stage, SettledAt = copy.SettledAt ?? settledAt });
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task RecordDiscardedAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        DateTimeOffset discardedAt,
+        CancellationToken cancellationToken)
+    {
+        var draft = this.Require(draftId);
+
+        this.drafts[draftId] = draft with { DiscardedAt = draft.DiscardedAt ?? discardedAt };
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task RecordPromotedAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        OutgoingEmailId outgoingEmailId,
+        CancellationToken cancellationToken)
+    {
+        var draft = this.Require(draftId);
+
+        this.drafts[draftId] = draft with { PromotedTo = draft.PromotedTo ?? outgoingEmailId };
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task RemoveAsync(IPersistenceSession session, MailDraftId draftId, CancellationToken cancellationToken)
+    {
+        this.drafts.Remove(draftId);
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task RecordDivergenceAsync(
+        MailDraftId draftId,
+        MailDraftDivergenceReason reason,
+        DateTimeOffset observedAt,
+        CancellationToken cancellationToken)
+    {
+        if (this.drafts.TryGetValue(draftId, out var draft))
+        {
+            this.drafts[draftId] = draft with { Divergence = new MailDraftDivergence(reason, observedAt) };
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task RecordFailureAsync(
+        MailDraftId draftId,
+        MailFathomErrorCode failure,
+        CancellationToken cancellationToken)
+    {
+        if (this.drafts.TryGetValue(draftId, out var draft))
+        {
+            this.drafts[draftId] = draft with { LastFailure = failure };
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void Replace(
+        MailDraftRecord draft,
+        int revision,
+        Func<MailDraftServerCopy, MailDraftServerCopy> change)
+    {
+        if (draft.FindCopy(revision) is null)
+        {
+            throw new InvalidOperationException($"No copy of revision {revision} is held.");
+        }
+
+        this.drafts[draft.Id] = draft with
+        {
+            Copies = [.. draft.Copies.Select(copy => copy.Revision == revision ? change(copy) : copy)],
+        };
+    }
+
+    private MailDraftRecord Require(MailDraftId draftId) =>
+        this.Peek(draftId) ?? throw new InvalidOperationException($"No draft is held under {draftId}.");
+}

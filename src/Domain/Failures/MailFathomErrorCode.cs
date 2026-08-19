@@ -277,6 +277,15 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode OutgoingEmailDueTimeMissed { get; } = new(28016);
 
+    /// <summary>Gets subcategory 8, message composition: a draft was asked to be sent and states nobody to send it to.</summary>
+    /// <remarks>
+    /// A draft addressed to nobody is an ordinary draft rather than a defective one — writing the message before
+    /// deciding who reads it is what a draft is for — so the absence is refused where the send would be written down
+    /// rather than where the draft is saved. It is allocated here rather than beside the recipient refusals above
+    /// because nothing about a contact or an address decided it: there is no recipient at all.
+    /// </remarks>
+    public static MailFathomErrorCode MailDraftNotAddressed { get; } = new(28017);
+
     /// <summary>Gets subcategory 9, message filing: there is no folder to put a copy of an outgoing message into.</summary>
     /// <remarks>
     /// It covers a role the account maps no folder to, a mapped folder the server does not advertise, and a mapping
@@ -535,6 +544,16 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode OutgoingEmailNotFound { get; } = new(53007);
 
+    /// <summary>Gets subcategory 3, access: no draft this deployment holds is kept under the identifier a caller named.</summary>
+    /// <remarks>
+    /// A draft nobody holds, a draft belonging to an account this deployment no longer serves, and a draft already
+    /// promoted and delivered are one answer, for the reason every not-found answer in this category is one: telling
+    /// them apart would let a caller learn which drafts exist by asking to revise them. It is also what a caller asking
+    /// to delete a draft this system did not create meets, because a draft somebody wrote in their own mail client is
+    /// held under no identifier of MailFathom's at all.
+    /// </remarks>
+    public static MailFathomErrorCode MailDraftNotFound { get; } = new(53008);
+
     /// <summary>Gets subcategory 4, undiagnosed failure: a tool call failed for a reason the boundary deliberately does not describe.</summary>
     /// <remarks>
     /// This is the one code every failure that is not already an allocated one collapses into, so a client learns that
@@ -740,6 +759,7 @@ public readonly record struct MailFathomErrorCode
         OutgoingEmailContactNameAmbiguous,
         OutgoingEmailContactAddressNotHeld,
         OutgoingEmailDueTimeMissed,
+        MailDraftNotAddressed,
         OutgoingEmailFilingDestinationUnavailable,
         OutgoingEmailFilingOutcomeUnknown,
         OutgoingEmailFilingFailedUnexpectedly,
@@ -776,6 +796,7 @@ public readonly record struct MailFathomErrorCode
         AnsweredEmailUnavailable,
         OutgoingRecipientRefusedByPolicy,
         OutgoingEmailNotFound,
+        MailDraftNotFound,
         McpToolFailedUnexpectedly,
         EmailContentUnavailable,
         MailAnsweringUnavailable,

@@ -50,7 +50,8 @@ internal sealed class SyntheticMailAccount(
     IReadOnlyList<MailFolderIdentity>? foldersWithoutEmbeddings = null,
     IReadOnlyList<MailFolderIdentity>? foldersHiddenFromTools = null,
     IReadOnlyList<MailFolderIdentity>? foldersNotMirrored = null,
-    bool filesSentCopies = false)
+    bool filesSentCopies = false,
+    bool keepsDrafts = false)
     : IImapAccountSettingsProvider,
     IMailTransportSecurityPolicyReader,
     IMailSynchronizationWindowReader,
@@ -113,6 +114,7 @@ internal sealed class SyntheticMailAccount(
         "mutation-reconciliation",
         "mutation-record-inbox",
         "occurrence-identity",
+        DraftCopyFolderAlias,
         OutgoingCopyFolderAlias,
         "persistence-session",
         "persistence-session-race",
@@ -157,6 +159,12 @@ internal sealed class SyntheticMailAccount(
     /// <summary>The path that alias names on the orchestrated server, which the same class creates before it sends.</summary>
     internal const string OutgoingCopyFolderPath = "OutgoingCopy";
 
+    /// <summary>The alias the one class that keeps drafts maps the drafts role onto.</summary>
+    internal const string DraftCopyFolderAlias = "draft-copy";
+
+    /// <summary>The path that alias names on the orchestrated server, which the same class creates before it drafts.</summary>
+    internal const string DraftCopyFolderPath = "DraftCopy";
+
     private static readonly MailFolderMapping Inbox = MailFolderMapping.ToSpecialUse(
         MailFolderAlias.Create(nameof(MailFolderSpecialUse.Inbox)),
         MailFolderSpecialUse.Inbox);
@@ -171,6 +179,17 @@ internal sealed class SyntheticMailAccount(
         MailFolderAlias.Create(OutgoingCopyFolderAlias),
         RemoteFolderPath.Create(OutgoingCopyFolderPath, hierarchyDelimiter: '.'),
         specialUse: MailFolderSpecialUse.Sent);
+
+    /// <summary>The folder a draft of this account is kept in, mapped only where a test asks.</summary>
+    /// <remarks>
+    /// A path carrying the role, for the reason the sent folder above is one: no server advertises a folder for the
+    /// drafts role here, so a role-only mapping would name nothing and every draft would report its destination as
+    /// unavailable.
+    /// </remarks>
+    private static readonly MailFolderMapping DraftCopyFolder = MailFolderMapping.ToRemotePath(
+        MailFolderAlias.Create(DraftCopyFolderAlias),
+        RemoteFolderPath.Create(DraftCopyFolderPath, hierarchyDelimiter: '.'),
+        specialUse: MailFolderSpecialUse.Drafts);
 
     private static readonly IReadOnlyList<MailFolderIdentity> MappedFolders =
     [
@@ -340,9 +359,13 @@ internal sealed class SyntheticMailAccount(
         ? null
         : OutgoingSendRefusalReason.AccountNotEnabled;
 
-    /// <summary>The folders this account's configuration names, which is the inbox and, where a test asked, the sent folder.</summary>
+    /// <summary>The folders this account's configuration names: the inbox, and whichever of the two role folders a test asked for.</summary>
     private IReadOnlyList<MailFolderMapping> ConfiguredFolders =>
-        filesSentCopies ? [Inbox, OutgoingCopyFolder] : [Inbox];
+    [
+        Inbox,
+        .. filesSentCopies ? (MailFolderMapping[])[OutgoingCopyFolder] : [],
+        .. keepsDrafts ? (MailFolderMapping[])[DraftCopyFolder] : [],
+    ];
 
     /// <inheritdoc />
     /// <remarks>

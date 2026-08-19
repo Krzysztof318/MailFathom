@@ -38,6 +38,7 @@ using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Application.Mail.Delivery.Operations;
@@ -760,6 +761,13 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IOutgoingMailFilingStore, OutgoingMailFilingStore>();
         services.AddScoped<OutgoingMailFiler>();
         services.AddScoped<OutgoingMailFilingPass>();
+        // The drafts a mailbox holds, registered beside the filing they reuse rather than with it: a draft is appended
+        // through the same write session and into a folder named the same way, and everything that separates the two is
+        // that a draft is replaced whenever its author edits it. Scoped for the reason every other work unit is.
+        services.AddScoped<IMailDraftStore, MailDraftStore>();
+        services.AddScoped<MailDraftFiler>();
+        services.AddScoped<MailDraftBook>();
+        services.AddScoped<MailDraftPass>();
         services.AddScoped<MailOutboxPass>();
         // Scoped beside the outbox and beside the sending identities it reads, which are the account snapshot's and
         // therefore belong to one work unit. The composer itself holds nothing across a call.
@@ -790,6 +798,15 @@ public static class ServiceCollectionExtensions
         // occasion into a message is the handler below, reached through the job model like every other recurring
         // dispatch this deployment has.
         services.AddScoped<RecurringMailSubmission>();
+        // The same two authors again, ending in the draft book instead of the outbox. They are separate use cases
+        // rather than a mode of the two above, because what they produce is a message that is never sent: neither holds
+        // a delivery session, and neither leaves anything a delivery pass will claim.
+        services.AddScoped<AuthoredMailDrafting>();
+        services.AddScoped<AuthoredResponseDrafting>();
+        // Where a draft stops being one. It writes an ordinary outgoing record through the outbox registered above, so
+        // every bound this deployment sets is asked again at the moment the message would leave rather than only when
+        // it was written.
+        services.AddScoped<MailDraftPromotion>();
         // Read by synchronization rather than by the performer, so that a relocation coming back through an ordinary
         // run is recognized as MailFathom's own instead of being stored as a second email.
         services.AddScoped<IMailboxMutationReconciliationStore, MailboxMutationReconciliationStore>();

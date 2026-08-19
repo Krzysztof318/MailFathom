@@ -175,6 +175,11 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// role. Off everywhere but the class proving that the copy is appended once and comes back recognized, because a
     /// deployment that files one appends a message on every send the collection makes.
     /// </param>
+    /// <param name="keepsDrafts">
+    /// Whether this account keeps drafts in a folder of its own, and therefore maps one to the drafts role. Off
+    /// everywhere but the class proving that an edit leaves one draft and a promotion leaves none, because a deployment
+    /// that maps the role would let any other class's draft reach a folder nothing else here maps.
+    /// </param>
     /// <returns>The composed services, which the caller owns and must dispose.</returns>
     internal static async Task<OrchestratedMailFathomServices> StartAsync(
         MailFathomOrchestrationFixture orchestration,
@@ -190,7 +195,8 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         SpamClassificationSettings? spamClassification = null,
         SpamAssassinScannerProfile? spamScanner = null,
         ContactCollectionSettings? contactCollection = null,
-        bool filesSentCopies = false)
+        bool filesSentCopies = false,
+        bool keepsDrafts = false)
     {
         var builder = new HostApplicationBuilder();
         var account = new SyntheticMailAccount(
@@ -201,7 +207,8 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             foldersWithoutEmbeddings,
             foldersHiddenFromTools,
             foldersNotMirrored,
-            filesSentCopies);
+            filesSentCopies,
+            keepsDrafts);
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
@@ -230,6 +237,17 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         builder.Services.AddSingleton<IOutgoingSendPermissionReader>(account);
         builder.Services.AddSingleton(OutgoingRecipientPolicy.Unrestricted);
         builder.Services.AddSingleton(OutgoingMailCeilings.Unbounded);
+        // How large a message this deployment composes, which a composition root reads from the same section and
+        // registers per scope. The shipped defaults, because nothing here is written to reach one of them: what a
+        // refused bound does is decided without a database and is covered where that decision is.
+        builder.Services.AddScoped(_ => new OutgoingEmailBounds
+        {
+            MaxRecipientCount = 50,
+            MaxBodyCharacters = 100_000,
+            MaxAttachmentCount = 10,
+            MaxAttachmentBytes = 10L * 1024 * 1024,
+            MaxMessageBytes = 25L * 1024 * 1024,
+        });
         // What one pass over an account's outbox is allowed to do, which a composition root validates out of the
         // MailDelivery section. The values are the deployed defaults with the two the suite has to be able to reach
         // narrowed: a batch small enough for a test to fill, and a retry ceiling a test can exhaust without waiting.

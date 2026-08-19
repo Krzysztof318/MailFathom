@@ -9,6 +9,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Observability;
@@ -320,6 +321,98 @@ internal sealed class EmailContentStore(
                 storedDraft.RawMime.AsMemory(),
                 storedDraft.MimeByteLength,
                 storedDraft.Sha256Hash.AsMemory());
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The one raw-MIME write here that overwrites, and the difference from the outgoing one is deliberate: what an
+    /// author is editing is one message, so the row is rewritten in place rather than kept per revision. The revision
+    /// number is written in the same session by the draft store, which is what keeps the bytes and the number the row
+    /// beside them carries from disagreeing.
+    /// </para>
+    /// <para>
+    /// Unlike the incoming write, this publishes no measurement, for the reason the outgoing write publishes none: what
+    /// synchronization stored for a mailbox is a different quantity from what this deployment composed.
+    /// </para>
+    /// </remarks>
+    public async Task SaveMailDraftContentAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        ReadOnlyMemory<byte> rawMime,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        if (rawMime.IsEmpty)
+        {
+            throw new ArgumentException("A draft is stored with the MIME it is held as.", nameof(rawMime));
+        }
+
+        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+
+        // The draft is added earlier in this same uncommitted session on the save path, so FindAsync resolves it from
+        // the change tracker without a query there and falls back to the database otherwise.
+        var draft = await writeContext.MailDrafts.FindAsync([draftId.Value], cancellationToken)
+            ?? throw new InvalidOperationException(
+                "Raw MIME cannot be stored without the draft record it is a revision of.");
+
+        var bytes = GetCompleteArray(rawMime);
+        var storedAt = timeProvider.GetUtcNow();
+
+        // A draft still being inserted can carry no persisted message, so the database pass is skipped for one — the
+        // change-tracker pass is the whole answer there.
+        var isDraftPending = writeContext.Entry(draft).State == EntityState.Added;
+
+        var stored = writeContext.MailDraftContents.Local.FirstOrDefault(
+                candidate => candidate.MailDraftId == draft.Id)
+            ?? (isDraftPending
+                ? null
+                : await writeContext.MailDraftContents
+                    .FirstOrDefaultAsync(candidate => candidate.MailDraftId == draft.Id, cancellationToken));
+
+        if (stored is not null)
+        {
+            stored.RawMime = bytes;
+            stored.MimeByteLength = bytes.LongLength;
+            stored.Sha256Hash = SHA256.HashData(rawMime.Span);
+            stored.StoredAt = storedAt;
+
+            return;
+        }
+
+        writeContext.MailDraftContents.Add(new MailDraftContentEntity
+        {
+            MailDraftId = draft.Id,
+            MailDraft = draft,
+            RawMime = bytes,
+            MimeByteLength = bytes.LongLength,
+            Sha256Hash = SHA256.HashData(rawMime.Span),
+            StoredAt = storedAt,
+        });
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Projected to the three columns for the reason the other two reads are, and spanned for none: a draft's message
+    /// is read when it is appended or promoted rather than once per request meeting a whole mailbox.
+    /// </remarks>
+    public async Task<StoredEmailContent?> FindMailDraftContentAsync(
+        MailDraftId draftId,
+        CancellationToken cancellationToken)
+    {
+        var storedContent = await dbContext.MailDraftContents
+            .AsNoTracking()
+            .Where(content => content.MailDraftId == draftId.Value)
+            .Select(content => new StoredEmailContentRow(content.RawMime, content.MimeByteLength, content.Sha256Hash))
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return storedContent is null
+            ? null
+            : new StoredEmailContent(
+                storedContent.RawMime.AsMemory(),
+                storedContent.MimeByteLength,
+                storedContent.Sha256Hash.AsMemory());
     }
 
     private static void EnsureOccurrenceMatches(

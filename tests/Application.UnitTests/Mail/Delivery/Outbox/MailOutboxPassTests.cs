@@ -363,6 +363,7 @@ public sealed class MailOutboxPassTests
             policyReader.GetDeliveryPolicy(Account).Returns(submits ? TransportSecurityPolicy() : null);
 
             this.Filing = new OutgoingMailFilingHarness(this.Store, contentStore, settings, this.clock);
+            this.DraftSide = new MailDraftHarness(this.clock, this.Store, settings);
 
             this.pass = new MailOutboxPass(
                 this.Store,
@@ -378,6 +379,7 @@ public sealed class MailOutboxPassTests
                     settings,
                     this.clock),
                 this.Filing.Pass,
+                this.DraftSide.Pass,
                 policyReader,
                 settings);
         }
@@ -386,6 +388,9 @@ public sealed class MailOutboxPassTests
 
         /// <summary>Gets the filing side of the pass, which files nothing until a test asks it to.</summary>
         internal OutgoingMailFilingHarness Filing { get; }
+
+        /// <summary>Gets the draft side of the pass, which holds nothing until a test writes a draft.</summary>
+        internal MailDraftHarness DraftSide { get; }
 
         internal ScriptedMailDeliverySession Session { get; }
 

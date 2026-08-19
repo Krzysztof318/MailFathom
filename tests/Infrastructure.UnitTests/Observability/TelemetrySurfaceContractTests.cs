@@ -14,6 +14,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Scheduling;
+using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
@@ -30,6 +31,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
@@ -559,6 +561,13 @@ public sealed class TelemetrySurfaceContractTests
                         OutgoingMailFiling.Sent,
                         outcome,
                         MailFathomErrorCode.OutgoingEmailFilingFailedUnexpectedly)),
+                ],
+                [
+                    .. Enum.GetValues<MailDraftFilingOutcome>().Select(outcome => new MailDraftFilingResult(
+                        MailDraftId.Create(Guid.CreateVersion7()),
+                        outcome,
+                        MailFathomErrorCode.OutgoingEmailFilingFailedUnexpectedly,
+                        MailDraftDivergenceReason.DestinationChanged)),
                 ],
                 MarkedUnknownCount: 1,
                 BatchFilled: true,

@@ -28,6 +28,12 @@ namespace MailFathom.Infrastructure.Mail.Mime.Composition;
 /// nothing to compose; and the size of the assembled message is last, because it is the only bound that cannot be known
 /// before the message exists.
 /// </para>
+/// <para>
+/// A send and a draft run through that same sequence, which is the point of composing both here. The one thing that
+/// differs is whether a message addressed to nobody is refused: a draft is written before its author has decided who
+/// reads it, and a send is not. Everything else — the sending address, the minted identity, the injection refusals, and
+/// every bound — is one answer, so a draft that is promoted is a message this deployment had already agreed to compose.
+/// </para>
 /// </remarks>
 /// <param name="senderIdentities">Resolves who the sending account writes as, which no caller supplies.</param>
 /// <param name="bounds">What this deployment is willing to compose.</param>
@@ -65,44 +71,74 @@ internal sealed class MimeKitAuthoredEmailComposer(
         ArgumentNullException.ThrowIfNull(authored);
         ArgumentNullException.ThrowIfNull(capabilities);
 
+        return AsOutgoing(
+            accountId,
+            requester,
+            this.ComposeMessage(accountId, authored, capabilities, requireRecipients: true));
+    }
+
+    /// <inheritdoc />
+    public MailDraftComposition ComposeDraft(
+        MailAccountId accountId,
+        AuthoredEmail authored,
+        MailDeliveryCapabilities capabilities)
+    {
+        ArgumentNullException.ThrowIfNull(authored);
+        ArgumentNullException.ThrowIfNull(capabilities);
+
+        return this.ComposeMessage(accountId, authored, capabilities, requireRecipients: false);
+    }
+
+    /// <summary>Runs the whole composition, from the refusals that need nothing built to the bytes that were built.</summary>
+    /// <param name="accountId">The account the message is composed as.</param>
+    /// <param name="authored">What somebody wrote.</param>
+    /// <param name="capabilities">What the servers involved are known to support.</param>
+    /// <param name="requireRecipients">Whether a message addressed to nobody is refused, which a send is and a draft is not.</param>
+    private MailDraftComposition ComposeMessage(
+        MailAccountId accountId,
+        AuthoredEmail authored,
+        MailDeliveryCapabilities capabilities,
+        bool requireRecipients)
+    {
         if (senderIdentities.FindSenderIdentity(accountId) is not { } sender)
         {
-            return AuthoredEmailComposition.Refused(
-                AuthoredEmailRefusalReason.SenderUnconfigured,
-                AuthoredEmailField.Sender);
+            return Refused(AuthoredEmailRefusalReason.SenderUnconfigured, AuthoredEmailField.Sender);
         }
 
         if (RefuseInternationalizedSender(sender, capabilities) is { } senderRefusal)
         {
-            return senderRefusal;
+            return MailDraftComposition.Refused(senderRefusal);
         }
 
         if (RefuseInjectedHeaders(authored) is { } injectionRefusal)
         {
-            return injectionRefusal;
+            return MailDraftComposition.Refused(injectionRefusal);
         }
 
         if (RefuseBodiesNobodyWrote(authored) is { } emptyBodyRefusal)
         {
-            return emptyBodyRefusal;
+            return MailDraftComposition.Refused(emptyBodyRefusal);
         }
 
         if (this.RefuseBodiesBeyondBounds(authored) is { } bodyRefusal)
         {
-            return bodyRefusal;
+            return MailDraftComposition.Refused(bodyRefusal);
         }
 
         if (this.RefuseAttachmentsBeyondBounds(authored) is { } attachmentRefusal)
         {
-            return attachmentRefusal;
+            return MailDraftComposition.Refused(attachmentRefusal);
         }
 
-        if (this.ResolveRecipients(authored.Recipients, capabilities, out var placements) is { } recipientRefusal)
-        {
-            return recipientRefusal;
-        }
+        var recipientRefusal = this.ResolveRecipients(
+            authored.Recipients,
+            capabilities,
+            requireRecipients,
+            out var placements);
 
-        return this.Build(accountId, requester, authored, sender, placements, capabilities);
+        return recipientRefusal is { } refusal
+            ? MailDraftComposition.Refused(refusal)
+            : this.Build(authored, sender, placements, capabilities);
     }
 
     /// <inheritdoc />
@@ -131,7 +167,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
 
         if (RefuseInternationalizedSender(sender, capabilities) is { } senderRefusal)
         {
-            return senderRefusal;
+            return AuthoredEmailComposition.Refused(senderRefusal);
         }
 
         using var draft = new MemoryStream(draftMime.ToArray(), writable: false);
@@ -166,7 +202,10 @@ internal sealed class MimeKitAuthoredEmailComposer(
             message.Date = timeProvider.GetUtcNow();
             message.MessageId = messageId.Value;
 
-            return this.Serialize(accountId, requester, message, messageId, sender, recipients, capabilities);
+            return AsOutgoing(
+                accountId,
+                requester,
+                this.Serialize(message, messageId, sender, recipients, capabilities));
         }
     }
 
@@ -176,12 +215,12 @@ internal sealed class MimeKitAuthoredEmailComposer(
     /// configure an internationalized mailbox and reach a relay that carries none. The refusal names the sender so the
     /// operator reads it as their configuration meeting that server, not as an author's mistake.
     /// </remarks>
-    private static AuthoredEmailComposition? RefuseInternationalizedSender(
+    private static AuthoredEmailRefusal? RefuseInternationalizedSender(
         OutgoingSenderIdentity sender,
         MailDeliveryCapabilities capabilities) =>
         CarriesInternationalizedAddresses(capabilities) || Ascii.IsValid(sender.Address.Address)
             ? null
-            : AuthoredEmailComposition.Refused(
+            : new AuthoredEmailRefusal(
                 AuthoredEmailRefusalReason.InternationalizationUnsupported,
                 AuthoredEmailField.Sender);
 
@@ -202,11 +241,11 @@ internal sealed class MimeKitAuthoredEmailComposer(
     /// as content rather than as a header. Everything else an author writes becomes one — the subject, the name beside
     /// each address, and the name and media type of each file.
     /// </remarks>
-    private static AuthoredEmailComposition? RefuseInjectedHeaders(AuthoredEmail authored)
+    private static AuthoredEmailRefusal? RefuseInjectedHeaders(AuthoredEmail authored)
     {
         if (CarriesLineBreak(authored.Subject))
         {
-            return AuthoredEmailComposition.Refused(
+            return new AuthoredEmailRefusal(
                 AuthoredEmailRefusalReason.HeaderInjected,
                 AuthoredEmailField.Subject);
         }
@@ -215,14 +254,14 @@ internal sealed class MimeKitAuthoredEmailComposer(
             static recipient => CarriesLineBreak(recipient.Address) || CarriesLineBreak(recipient.DisplayName));
         if (injectedRecipient is not null)
         {
-            return AuthoredEmailComposition.Refused(
+            return new AuthoredEmailRefusal(
                 AuthoredEmailRefusalReason.HeaderInjected,
                 FieldOf(injectedRecipient.Role));
         }
 
         return authored.Attachments.Any(
             static attachment => CarriesLineBreak(attachment.FileName) || CarriesLineBreak(attachment.MediaType))
-            ? AuthoredEmailComposition.Refused(
+            ? new AuthoredEmailRefusal(
                 AuthoredEmailRefusalReason.HeaderInjected,
                 AuthoredEmailField.Attachment)
             : null;
@@ -253,35 +292,35 @@ internal sealed class MimeKitAuthoredEmailComposer(
     /// what this system refuses to invent for them. An alternative present but blank is the same failure read from the
     /// other side, so it is refused rather than offered to the clients that would choose it.
     /// </remarks>
-    private static AuthoredEmailComposition? RefuseBodiesNobodyWrote(AuthoredEmail authored)
+    private static AuthoredEmailRefusal? RefuseBodiesNobodyWrote(AuthoredEmail authored)
     {
         if (string.IsNullOrWhiteSpace(authored.PlainTextBody))
         {
-            return AuthoredEmailComposition.Refused(
+            return new AuthoredEmailRefusal(
                 AuthoredEmailRefusalReason.FieldUnusable,
                 AuthoredEmailField.PlainTextBody);
         }
 
         return authored.HtmlBody is { } htmlBody && string.IsNullOrWhiteSpace(htmlBody)
-            ? AuthoredEmailComposition.Refused(
+            ? new AuthoredEmailRefusal(
                 AuthoredEmailRefusalReason.FieldUnusable,
                 AuthoredEmailField.HtmlBody)
             : null;
     }
 
     /// <summary>Refuses a body larger than this deployment composes.</summary>
-    private AuthoredEmailComposition? RefuseBodiesBeyondBounds(AuthoredEmail authored)
+    private AuthoredEmailRefusal? RefuseBodiesBeyondBounds(AuthoredEmail authored)
     {
         if (authored.PlainTextBody.Length > bounds.MaxBodyCharacters)
         {
-            return AuthoredEmailComposition.Refused(
+            return new AuthoredEmailRefusal(
                 AuthoredEmailRefusalReason.BoundExceeded,
                 AuthoredEmailField.PlainTextBody,
                 bounds.MaxBodyCharacters);
         }
 
         return authored.HtmlBody is { } htmlBody && htmlBody.Length > bounds.MaxBodyCharacters
-            ? AuthoredEmailComposition.Refused(
+            ? new AuthoredEmailRefusal(
                 AuthoredEmailRefusalReason.BoundExceeded,
                 AuthoredEmailField.HtmlBody,
                 bounds.MaxBodyCharacters)
@@ -289,11 +328,11 @@ internal sealed class MimeKitAuthoredEmailComposer(
     }
 
     /// <summary>Refuses more files, or a larger one, than this deployment composes, and a file declared as no media type.</summary>
-    private AuthoredEmailComposition? RefuseAttachmentsBeyondBounds(AuthoredEmail authored)
+    private AuthoredEmailRefusal? RefuseAttachmentsBeyondBounds(AuthoredEmail authored)
     {
         if (authored.Attachments.Count > bounds.MaxAttachmentCount)
         {
-            return AuthoredEmailComposition.Refused(
+            return new AuthoredEmailRefusal(
                 AuthoredEmailRefusalReason.BoundExceeded,
                 AuthoredEmailField.Attachment,
                 bounds.MaxAttachmentCount);
@@ -301,7 +340,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
 
         if (authored.Attachments.Any(attachment => attachment.Content.Length > bounds.MaxAttachmentBytes))
         {
-            return AuthoredEmailComposition.Refused(
+            return new AuthoredEmailRefusal(
                 AuthoredEmailRefusalReason.BoundExceeded,
                 AuthoredEmailField.Attachment,
                 bounds.MaxAttachmentBytes);
@@ -312,7 +351,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
         // because encoding only ever makes the octets more numerous, never fewer.
         if (authored.Attachments.Sum(static attachment => (long)attachment.Content.Length) > bounds.MaxMessageBytes)
         {
-            return AuthoredEmailComposition.Refused(
+            return new AuthoredEmailRefusal(
                 AuthoredEmailRefusalReason.BoundExceeded,
                 AuthoredEmailField.Message,
                 bounds.MaxMessageBytes);
@@ -320,7 +359,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
 
         return authored.Attachments.Any(static attachment =>
             string.IsNullOrWhiteSpace(attachment.FileName) || !ContentType.TryParse(attachment.MediaType, out _))
-            ? AuthoredEmailComposition.Refused(
+            ? new AuthoredEmailRefusal(
                 AuthoredEmailRefusalReason.FieldUnusable,
                 AuthoredEmailField.Attachment)
             : null;
@@ -341,17 +380,22 @@ internal sealed class MimeKitAuthoredEmailComposer(
     /// <see cref="AddressableHeaderCount"/> times that bound before any of it is parsed, so the parsing itself stays
     /// bounded by the deployment's own number rather than by whatever the author supplied.
     /// </para>
+    /// <para>
+    /// An empty result is refused only where a message is being sent. A draft addressed to nobody is composed, because
+    /// it is offered to nobody either; what refuses it is the promotion that would put it on its way.
+    /// </para>
     /// </remarks>
-    private AuthoredEmailComposition? ResolveRecipients(
+    private AuthoredEmailRefusal? ResolveRecipients(
         IReadOnlyList<AuthoredEmailRecipient> authoredRecipients,
         MailDeliveryCapabilities capabilities,
+        bool requireRecipients,
         out IReadOnlyList<PlacedRecipient> placements)
     {
         placements = [];
 
         if (authoredRecipients.Count > bounds.MaxRecipientCount * AddressableHeaderCount)
         {
-            return AuthoredEmailComposition.Refused(
+            return new AuthoredEmailRefusal(
                 AuthoredEmailRefusalReason.BoundExceeded,
                 AuthoredEmailField.Recipients,
                 bounds.MaxRecipientCount);
@@ -367,12 +411,12 @@ internal sealed class MimeKitAuthoredEmailComposer(
             if (!EmailAddress.TryCreate(authoredRecipient.DisplayName, authoredRecipient.Address, out var address)
                 || address.Address.Length > OutgoingRecipient.MaximumAddressLength)
             {
-                return AuthoredEmailComposition.Refused(AuthoredEmailRefusalReason.FieldUnusable, field);
+                return new AuthoredEmailRefusal(AuthoredEmailRefusalReason.FieldUnusable, field);
             }
 
             if (!CarriesInternationalizedAddresses(capabilities) && !Ascii.IsValid(address.Address))
             {
-                return AuthoredEmailComposition.Refused(
+                return new AuthoredEmailRefusal(
                     AuthoredEmailRefusalReason.InternationalizationUnsupported,
                     field);
             }
@@ -385,16 +429,16 @@ internal sealed class MimeKitAuthoredEmailComposer(
             }
         }
 
-        if (placed.Count == 0)
+        if (requireRecipients && placed.Count == 0)
         {
-            return AuthoredEmailComposition.Refused(
+            return new AuthoredEmailRefusal(
                 AuthoredEmailRefusalReason.FieldUnusable,
                 AuthoredEmailField.Recipients);
         }
 
         if (placed.Count > bounds.MaxRecipientCount)
         {
-            return AuthoredEmailComposition.Refused(
+            return new AuthoredEmailRefusal(
                 AuthoredEmailRefusalReason.BoundExceeded,
                 AuthoredEmailField.Recipients,
                 bounds.MaxRecipientCount);
@@ -406,9 +450,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
     }
 
     /// <summary>Assembles the message and measures what it became.</summary>
-    private AuthoredEmailComposition Build(
-        MailAccountId accountId,
-        OutgoingEmailRequester requester,
+    private MailDraftComposition Build(
         AuthoredEmail authored,
         OutgoingSenderIdentity sender,
         IReadOnlyList<PlacedRecipient> placements,
@@ -432,8 +474,6 @@ internal sealed class MimeKitAuthoredEmailComposer(
         message.Body = BuildBody(authored);
 
         return this.Serialize(
-            accountId,
-            requester,
             message,
             messageId,
             sender,
@@ -448,9 +488,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
     /// the message came from, and a second copy of these decisions would be a second set of answers about blind
     /// recipients, line endings, and transfer encoding.
     /// </remarks>
-    private AuthoredEmailComposition Serialize(
-        MailAccountId accountId,
-        OutgoingEmailRequester requester,
+    private MailDraftComposition Serialize(
         MimeMessage message,
         InternetMessageId messageId,
         OutgoingSenderIdentity sender,
@@ -483,7 +521,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
 
         if (composed.Length > bounds.MaxMessageBytes)
         {
-            return AuthoredEmailComposition.Refused(
+            return Refused(
                 AuthoredEmailRefusalReason.BoundExceeded,
                 AuthoredEmailField.Message,
                 bounds.MaxMessageBytes);
@@ -491,15 +529,14 @@ internal sealed class MimeKitAuthoredEmailComposer(
 
         if (!capabilities.PermitsMessageOfSize(composed.Length))
         {
-            return AuthoredEmailComposition.Refused(
+            return Refused(
                 AuthoredEmailRefusalReason.BoundExceeded,
                 AuthoredEmailField.Message,
                 capabilities.MaxMessageBytes);
         }
 
-        var request = OutgoingEmailRequest.Create(accountId, requester, recipients);
-
-        return AuthoredEmailComposition.Composed(new ComposedOutgoingEmail(request, messageId, composed.ToArray()));
+        return MailDraftComposition.Composed(
+            new ComposedMailDraft(recipients, messageId, composed.ToArray()));
     }
 
     /// <summary>Writes the two headers a receiving client threads the message by, for a message that answers another.</summary>
@@ -566,6 +603,34 @@ internal sealed class MimeKitAuthoredEmailComposer(
             role,
             "An outgoing recipient is named in one of the declared headers."),
     };
+
+    /// <summary>Turns a composed message into the send it will be transmitted as, or carries its refusal through.</summary>
+    /// <remarks>
+    /// The request is built here rather than inside the composition, because it is the one part of a send a draft has
+    /// no counterpart for: it carries the idempotency identity a delivery is protected by, and a draft has none.
+    /// </remarks>
+    private static AuthoredEmailComposition AsOutgoing(
+        MailAccountId accountId,
+        OutgoingEmailRequester requester,
+        MailDraftComposition composition)
+    {
+        if (composition.Draft is not { } message)
+        {
+            return AuthoredEmailComposition.Refused(composition.Refusal!);
+        }
+
+        var request = OutgoingEmailRequest.Create(accountId, requester, message.Recipients);
+
+        return AuthoredEmailComposition.Composed(
+            new ComposedOutgoingEmail(request, message.MessageId, message.RawMime));
+    }
+
+    /// <summary>Writes one refusal in the shape the whole composition answers with.</summary>
+    private static MailDraftComposition Refused(
+        AuthoredEmailRefusalReason reason,
+        AuthoredEmailField field,
+        long? bound = null) =>
+        MailDraftComposition.Refused(new AuthoredEmailRefusal(reason, field, bound));
 
     /// <summary>Holds one recipient the envelope will offer, with the name the composed message writes beside them.</summary>
     /// <remarks>

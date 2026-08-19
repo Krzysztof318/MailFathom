@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
 
@@ -127,4 +128,42 @@ public interface IEmailContentStore
     Task<StoredEmailContent?> FindRecurringSendDraftAsync(
         RecurringSendId recurringSendId,
         CancellationToken cancellationToken);
+
+    /// <summary>Saves the raw MIME one revision of a draft is held as, replacing whatever the previous revision stored.</summary>
+    /// <param name="session">The explicit persistence session this content write participates in.</param>
+    /// <param name="draftId">The draft this message is the current revision of.</param>
+    /// <param name="rawMime">The composed RFC 822 bytes.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>A task that completes after durable storage.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="rawMime" /> is empty.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no draft is held under <paramref name="draftId" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// This is the one raw-MIME write in this system that overwrites, and the difference from the outgoing one is the
+    /// whole reason a draft is not an outgoing record. A send's payload is written once because a retry has to transmit
+    /// the bytes an earlier attempt may already have begun transmitting; a draft's payload is what its author is still
+    /// editing, and holding every version of it would keep a message per keystroke for as long as the draft lives.
+    /// </para>
+    /// <para>
+    /// It joins the caller's session because the payload and the revision it belongs to are one decision: a draft whose
+    /// row says revision three and whose bytes are revision two is a draft that would be appended wrongly and promoted
+    /// wrongly, so the two commit together or neither does.
+    /// </para>
+    /// </remarks>
+    Task SaveMailDraftContentAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        ReadOnlyMemory<byte> rawMime,
+        CancellationToken cancellationToken);
+
+    /// <summary>Reads back the raw MIME stored for the current revision of one draft.</summary>
+    /// <param name="draftId">The draft to read.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>The stored content, or <see langword="null" /> when no draft content is stored under that identifier.</returns>
+    /// <remarks>
+    /// It is what the drafts folder is appended from and what a promotion transmits, which is what keeps the message an
+    /// owner reads in their own mail client and the message their correspondent receives the same bytes.
+    /// </remarks>
+    Task<StoredEmailContent?> FindMailDraftContentAsync(MailDraftId draftId, CancellationToken cancellationToken);
 }

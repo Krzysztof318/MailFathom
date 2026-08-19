@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Reflection;
+using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Mutations;
 using Xunit;
@@ -25,20 +26,26 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations;
 /// provider and never names it in a signature.
 /// </para>
 /// <para>
-/// The expected set is the list of tiers the decision record names and nothing else, so growing it is an amendment to
-/// that record rather than an edit here. It has grown once: filing a copy of a message MailFathom composed is a write
-/// no mutation of the owner's own mail can express, because the message it appends does not exist on the server yet.
+/// The expected set is the list of tiers the decision record names and nothing else, so growing it by a *tier* is an
+/// amendment to that record rather than an edit here. It has grown once that way: filing a copy of a message MailFathom
+/// composed is a write no mutation of the owner's own mail can express, because the message it appends does not exist
+/// on the server yet. It has grown once more without a tier being added — a draft's copies are filed by a type of their
+/// own, under the same tier, which that record decided in advance when it said the drafts role is decided by the filing
+/// tier and filed by nothing yet.
 /// </para>
 /// </remarks>
 public sealed class MailboxWriteCapabilityBoundaryTests
 {
-    /// <summary>Two application types can obtain a session that writes, and both are tiers the decision record names.</summary>
+    /// <summary>Three application types can obtain a session that writes, and each acts within a tier the decision record names.</summary>
     /// <remarks>
     /// Failing here is not a reason to extend the expected set. A read path that needs to write is a read path that has
     /// acquired something
     /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
     /// refuses it, and a change to the owner's own mail belongs behind <see cref="IMailboxMutationPerformer" /> instead.
-    /// A third name here is a third tier, which that record reopens for or refuses.
+    /// A further name is admissible only where the act it performs is one that record already decided — which is what
+    /// the draft filer is, since the copies it appends and withdraws are messages MailFathom composed and stored itself,
+    /// in the folder the drafts role names, carrying the flag that tier assigns. A name performing anything else is a
+    /// tier that record reopens for or refuses.
     /// </remarks>
     [Fact]
     public void ApplicationAssembly_HoldsTheWriteCapabilityInTheTiersTheDecisionRecordNames()
@@ -59,7 +66,9 @@ public sealed class MailboxWriteCapabilityBoundaryTests
             .ToArray();
 
         // Assert
-        Assert.Equal([nameof(MailboxMutationPerformer), nameof(OutgoingMailFiler)], holders);
+        Assert.Equal(
+            [nameof(MailDraftFiler), nameof(MailboxMutationPerformer), nameof(OutgoingMailFiler)],
+            holders);
     }
 
     /// <summary>Every type a member of <paramref name="type" /> names, with generic arguments unwrapped.</summary>

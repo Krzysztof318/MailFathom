@@ -70,4 +70,29 @@ public interface IAuthoredEmailComposer
         IReadOnlyList<OutgoingRecipient> recipients,
         ReadOnlyMemory<byte> draftMime,
         MailDeliveryCapabilities capabilities);
+
+    /// <summary>Composes one authored message as a draft, or refuses it naming the field that stopped it.</summary>
+    /// <param name="accountId">The account the draft belongs to, which decides the <c>From</c> address it would be sent under.</param>
+    /// <param name="authored">What the author wrote.</param>
+    /// <param name="capabilities">What a submission server would accept, which for a draft is what holds before any server has spoken.</param>
+    /// <returns>The composed draft, or the refusal that stopped it.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="authored" /> or <paramref name="capabilities" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when a recipient names a role this system does not declare, which is a boundary that mapped its input wrongly rather than an author who wrote something wrong.</exception>
+    /// <remarks>
+    /// <para>
+    /// It is the same composition with one difference, and the difference is the only one a draft earns: a draft
+    /// addressed to nobody is composed rather than refused. Writing the message before deciding who reads it is what a
+    /// draft is for, and the absence is refused where the send would be written down instead.
+    /// </para>
+    /// <para>
+    /// There is no requester, because a draft is not written down under an idempotency identity: asking twice for a
+    /// draft leaves two drafts, and neither of them can reach anybody. Every other decision this composition owns — the
+    /// sending address, the minted identity, the date, the refusal of an injected header, and every bound — is the same
+    /// one a send meets, so a draft that is promoted is a message this deployment had already agreed to compose.
+    /// </para>
+    /// </remarks>
+    MailDraftComposition ComposeDraft(
+        MailAccountId accountId,
+        AuthoredEmail authored,
+        MailDeliveryCapabilities capabilities);
 }

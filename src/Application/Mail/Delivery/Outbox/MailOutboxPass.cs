@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Domain.Accounts;
@@ -46,6 +47,7 @@ public sealed class MailOutboxPass
     private readonly IOutgoingEmailStore outgoingEmails;
     private readonly MailOutboxDelivery delivery;
     private readonly OutgoingMailFilingPass filings;
+    private readonly MailDraftPass drafts;
     private readonly IMailTransportSecurityPolicyReader transportSecurityPolicyReader;
     private readonly MailOutboxSettings settings;
 
@@ -53,25 +55,35 @@ public sealed class MailOutboxPass
     /// <param name="outgoingEmails">Claims the batch this pass settles.</param>
     /// <param name="delivery">Attempts one claimed send.</param>
     /// <param name="filings">Keeps the mailbox's own copies of these messages in step with what the pass does.</param>
+    /// <param name="drafts">Finishes whatever a draft still owes the mailbox, including the one a delivered send was promoted from.</param>
     /// <param name="transportSecurityPolicyReader">Supplies the policy every submission obeys, and says whether the account submits at all.</param>
     /// <param name="settings">Bounds how much one pass claims and how long it holds it.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The drafts ride this pass rather than one of their own, because what they need is exactly what it already
+    /// provides: a bounded run per account, on the cadence a signal and an account's synchronization both reach. A
+    /// second pass would be a second thing to schedule for work that is finished in the same breath as the send it
+    /// belongs to.
+    /// </remarks>
     public MailOutboxPass(
         IOutgoingEmailStore outgoingEmails,
         MailOutboxDelivery delivery,
         OutgoingMailFilingPass filings,
+        MailDraftPass drafts,
         IMailTransportSecurityPolicyReader transportSecurityPolicyReader,
         MailOutboxSettings settings)
     {
         ArgumentNullException.ThrowIfNull(outgoingEmails);
         ArgumentNullException.ThrowIfNull(delivery);
         ArgumentNullException.ThrowIfNull(filings);
+        ArgumentNullException.ThrowIfNull(drafts);
         ArgumentNullException.ThrowIfNull(transportSecurityPolicyReader);
         ArgumentNullException.ThrowIfNull(settings);
 
         this.outgoingEmails = outgoingEmails;
         this.delivery = delivery;
         this.filings = filings;
+        this.drafts = drafts;
         this.transportSecurityPolicyReader = transportSecurityPolicyReader;
         this.settings = settings;
     }
@@ -102,6 +114,11 @@ public sealed class MailOutboxPass
         var filingResults = new List<OutgoingMailFilingResult>(
             await this.filings.MirrorWaitingSendsAsync(accountId, stoppingToken));
 
+        // Beside the mirroring and for the same reason: a replacement whose process died mid-way, and a draft whose
+        // folder was briefly unreachable, are finished before anything new is claimed rather than behind it.
+        var draftResults = new List<MailDraftFilingResult>(
+            await this.SettleDraftsAsync(accountId, stoppingToken));
+
         var claimed = await this.outgoingEmails.ClaimAsync(
             OutgoingEmailClaimRequest.Create(accountId, this.settings.MaxDeliveriesPerPass, this.settings.LeaseDuration),
             stoppingToken);
@@ -113,6 +130,10 @@ public sealed class MailOutboxPass
             results.Add(result);
 
             filingResults.AddRange(await this.FileCopiesOfAsync(result, stoppingToken));
+
+            // After the copy of the sent message is filed rather than before it, so a draft is given up only once the
+            // message it became is somewhere the owner can read it.
+            draftResults.AddRange(await this.SettlePromotedDraftAsync(result, stoppingToken));
         }
 
         var outstandingByStage = await this.MeasureOutstandingAsync(accountId, stoppingToken);
@@ -120,6 +141,7 @@ public sealed class MailOutboxPass
         return new MailOutboxPassReport(
             results,
             filingResults,
+            draftResults,
             markedUnknownCount,
             claimed.Count >= this.settings.MaxDeliveriesPerPass,
             outstandingByStage);
@@ -192,6 +214,58 @@ public sealed class MailOutboxPass
                     (failure as MailFathomException)?.ErrorCode
                         ?? MailFathomErrorCode.OutgoingEmailFilingFailedUnexpectedly),
             ];
+        }
+    }
+
+    /// <summary>Finishes what the account's drafts still owe the mailbox, and never lets that end the pass.</summary>
+    /// <remarks>
+    /// A draft that could not be settled says nothing about any send, so it must not stop the batch that is about to be
+    /// claimed. Every failure the filer itself classifies is already a result, so what is caught here is the read of the
+    /// drafts, and the records stand exactly as they did for the next pass to reach again.
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A draft the mailbox could not be brought into step with must not stop the sends this pass was about to claim; the records are unchanged and the next pass reads them again.")]
+    private async Task<IReadOnlyList<MailDraftFilingResult>> SettleDraftsAsync(
+        MailAccountId accountId,
+        CancellationToken stoppingToken)
+    {
+        try
+        {
+            return await this.drafts.SettleOutstandingAsync(accountId, stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return [];
+        }
+        catch (Exception)
+        {
+            // No draft is named, because none was chosen: what fails past the filer's own catches is the read that
+            // decides which drafts to reach at all.
+            return [];
+        }
+    }
+
+    /// <summary>Gives up the draft one settled send was promoted from, and never lets that end the pass.</summary>
+    /// <remarks>
+    /// It is asked of every settled send rather than only of a delivered one, because whether the send actually left is
+    /// the draft pass's question and answering it here would be the same read twice. A send that came from no draft
+    /// answers nothing.
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A draft whose copy could not be taken out of the folder must not end the pass; the message was delivered either way, and the draft stands for the next pass to reach.")]
+    private async Task<IReadOnlyList<MailDraftFilingResult>> SettlePromotedDraftAsync(
+        MailOutboxDeliveryResult result,
+        CancellationToken stoppingToken)
+    {
+        try
+        {
+            return await this.drafts.SettlePromotedAsync(result.OutgoingEmailId, stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return [];
+        }
+        catch (Exception)
+        {
+            return [];
         }
     }
 
