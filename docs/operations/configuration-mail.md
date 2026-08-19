@@ -510,7 +510,12 @@ refuses the whole message, under `53007`, which names neither the address nor ho
 
 Only what the caller named is judged. A recipient this deployment derived — whoever a reply answers, whoever a
 reply-to-all keeps, an address resolved from a contact the caller named by identity — is this system's own answer rather
-than the caller's word, so replying and forwarding go on working under `Refuse` exactly as they did.
+than the caller's word.
+
+That does not divide neatly by tool. A plain reply is untouched, since everybody it reaches was read out of the message
+being answered; a `cc` the caller adds to that reply is judged; and a **forward is judged in full**, because a forward
+addresses nobody of its own and every address on it came from the call. So under `Refuse` a forward to somebody not yet
+in the contact book is refused — which is the setting doing its work, and the thing to know before turning it on.
 
 `Admit` is the default because refusing by default would refuse the first message of every installation whose contact
 book is still empty. It is not the same as not judging: a send reaching somebody nothing vouches for is recorded as

@@ -176,14 +176,20 @@ resolved from a contact named by identity — or an address the caller wrote out
 Against it stands what this installation already holds a record of: the contact book, and the addresses its own
 accounts send as. An address that is neither is what an injected instruction looks like, and
 [`MailDelivery:UnvouchedRecipients`](../operations/configuration-mail.md#a-recipient-nothing-here-vouches-for--maildeliveryunvouchedrecipients)
-is the deployment's choice of what to do about one: `Admit` records it, `Refuse` refuses the whole message. Because
-only what the caller named is judged, `reply_to_email` and `forward_email` keep working under `Refuse` — a reply
-addresses whoever asked for answers, which the caller never wrote down.
+is the deployment's choice of what to do about one: `Admit` records it, `Refuse` refuses the whole message.
+
+**Which tool is affected follows from that, and it is not the same answer for all three.** A plain `reply_to_email` is
+untouched under `Refuse`, because everybody it reaches was read out of the message being answered. A `cc` or `bcc` the
+caller adds to that reply is its own word and is judged. And **`forward_email` is judged in full**: a forward addresses
+nobody of its own, so every address on it came from the call, and forwarding to somebody this deployment holds no
+record of is refused under `Refuse`. That is the setting working rather than a gap in it — *forward this thread to the
+address below* is the archetype of the instruction this bound exists to refuse — but it is also what an operator has to
+know before turning it on, because forwarding to a new correspondent stops working until that person is in the book.
 
 | Code | Raised when | What resolves it |
 | --- | --- | --- |
 | `53007` `OutgoingRecipientUnvouched` | A caller-named recipient is one this deployment holds no record of, under `Refuse` | Writing to somebody the contact book holds, or admitting unvouched recipients |
-| `57002` `OutgoingMailCeilingReached` | This caller's own period has no room for this message | Waiting for the period to roll over, or raising the per-caller ceiling |
+| `57002` `OutgoingMailCeilingReached` | This caller's own period has no room for this message, or the period is already counting as many distinct callers as this deployment holds counts for | Waiting for the period to roll over, or raising the per-caller ceiling; the second case names itself rather than a setting, because it is not one an operator wrote |
 
 **Every send from this surface is recorded**: the calling principal, the grant it held, which of the four acts was
 asked for, the account, the identity of the outgoing record, how many people it names, and how many of those nothing

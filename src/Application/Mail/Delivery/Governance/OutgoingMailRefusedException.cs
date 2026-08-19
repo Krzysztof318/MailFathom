@@ -116,6 +116,11 @@ public sealed class OutgoingMailRefusedException : MailFathomException
     /// roll over first, and nothing the caller rewrites reaches an answer before it does. What the message adds is that
     /// the bound reached is this caller's rather than the installation's, which is the difference an operator reading a
     /// refusal needs — one says a client is looping and the other says the deployment is busy.
+    /// <para>
+    /// The third is neither: it says the period is counting as many callers as this system holds counts for, which is
+    /// not a number an operator wrote and may be reached on a deployment that configured no per-caller ceiling at all.
+    /// So it says so, rather than sending somebody to read a setting that had nothing to do with it.
+    /// </para>
     /// </remarks>
     public static OutgoingMailRefusedException CallerCeilingReached(AuthoredSendCeiling ceiling) => ceiling switch
     {
@@ -125,6 +130,9 @@ public sealed class OutgoingMailRefusedException : MailFathomException
         AuthoredSendCeiling.CallerRecipients => new OutgoingMailRefusedException(
             MailFathomErrorCode.OutgoingMailCeilingReached,
             "This caller has reached the recipients this deployment permits one caller to write to in a period."),
+        AuthoredSendCeiling.CallerCount => new OutgoingMailRefusedException(
+            MailFathomErrorCode.OutgoingMailCeilingReached,
+            "This deployment is already counting as many callers in this period as it holds counts for, so a caller it is not already counting is refused until the period rolls over."),
         _ => throw new ArgumentOutOfRangeException(
             nameof(ceiling),
             ceiling,

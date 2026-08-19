@@ -193,7 +193,7 @@ public sealed class AuthoredSendUsageLedgerTests
         var reached = ledger.Admit("one-caller-too-many", Send(1, recipientCount: 1));
 
         // Assert
-        Assert.Equal(AuthoredSendCeiling.CallerMessages, reached);
+        Assert.Equal(AuthoredSendCeiling.CallerCount, reached);
         Assert.Null(ledger.Admit("caller-0", Send(90_001, recipientCount: 1)));
     }
 

@@ -566,6 +566,33 @@ public sealed class AuthoredResponseSubmissionTests
         Assert.DoesNotContain("elsewhere.test", refusal.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A forward addresses nobody of its own, so every address on it is the caller's word and is judged — which is the
+    /// instruction the strict posture exists to refuse and the thing an operator has to know before adopting it.
+    /// </summary>
+    [Fact]
+    public async Task SubmitAsync_AForwardToSomebodyNothingVouchesFor_IsRefused()
+    {
+        // Arrange
+        var submission = SubmissionOver(
+            Rendering(participants: Exchange()),
+            out _,
+            governor: AuthoredSendGovernors.Governing(
+                settings: new AuthoredSendSettings(UnvouchedRecipientPosture.Refuse)));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
+            () => submission.SubmitAsync(
+                Request(AuthoredResponseAct.Forward) with
+                {
+                    Recipients = [NamedRecipient.AtAddress(OutgoingRecipientRole.To, "accomplice@elsewhere.test")],
+                },
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.OutgoingRecipientUnvouched, refusal.ErrorCode);
+    }
+
     /// <summary>What a test varies about the email being answered, so the theory above states one case per row.</summary>
     /// <remarks>
     /// It is public because a theory's data crosses the xUnit serialization boundary, and every member is optional

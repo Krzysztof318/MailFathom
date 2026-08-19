@@ -36,10 +36,10 @@ namespace MailFathom.Application.Mail.Delivery.Governance;
 /// <para>
 /// The charge therefore stands whether or not a record follows it. A send this deployment's own bounds refuse after
 /// this ledger admitted it has spent the caller's allowance, and that is the honest answer rather than a leak: a client
-/// asking repeatedly for a send that is refused every time is the loop being bounded, and the period rolls over. What
-/// is judged is always the present count, so a period that has filled up can refuse a retry of a send already
-/// recorded — which costs nothing, exactly as it costs nothing against the deployment's own ceilings, because that
-/// record stands and its message is still delivered.
+/// asking repeatedly for a send that is refused every time is the loop being bounded, and the period rolls over. A send
+/// already charged is admitted again without the ceiling being consulted at all, however full the period has become
+/// since — the charge stands, so asking again buys the caller nothing and refusing it would only strand a client
+/// retrying the message it was already admitted for.
 /// </para>
 /// <para>
 /// Everything the ledger holds belongs to one period. The roll-over is not swept on a timer: the first caller to arrive
@@ -56,7 +56,9 @@ public sealed class AuthoredSendUsageLedger(AuthoredSendCeilings ceilings, TimeP
     /// Far above the credentials any installation issues, and present because the key is a caller's own identity rather
     /// than anything this deployment allocates: an authorization surface admitting a subject per person could otherwise
     /// grow this without bound. A period that reaches it refuses the sends of callers it is not already counting, which
-    /// is the answer a bound has to give — one that admitted everything once it ran out of room would be no bound.
+    /// is the answer a bound has to give — one that admitted everything once it ran out of room would be no bound. The
+    /// refusal says that rather than naming a configured ceiling, because this number is not one an operator wrote and
+    /// is reached on a deployment that declared no per-caller ceiling at all.
     /// </remarks>
     public const int MaximumCallersPerPeriod = 4096;
 
@@ -95,7 +97,7 @@ public sealed class AuthoredSendUsageLedger(AuthoredSendCeilings ceilings, TimeP
             {
                 if (this.countsByCaller.Count >= MaximumCallersPerPeriod)
                 {
-                    return AuthoredSendCeiling.CallerMessages;
+                    return AuthoredSendCeiling.CallerCount;
                 }
 
                 counts = new CallerCounts();

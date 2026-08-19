@@ -178,6 +178,46 @@ public sealed class AuthoredSendGovernorTests
         Assert.DoesNotContain("anna@example.test", recorded.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// The ledger is asked last so that a send refused before it spends nothing, which is what stops a stream of
+    /// refused calls from exhausting a legitimate caller's period on its behalf.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RequirePermittedAsync_SendRefusedBeforeTheLedger_LeavesTheCallersAllowanceUnspent(
+        bool refusedByThePolicy)
+    {
+        // Arrange
+        Assert.True(OutgoingRecipientRule.TryCreateForDomain("elsewhere.test", out var denied));
+        var book = new InMemoryContactBookStore();
+        book.Hold(ContactOf("Anna", "anna@example.test"));
+        var ledger = new AuthoredSendUsageLedger(
+            AuthoredSendCeilings.Create(TimeSpan.FromDays(1), maxMessagesPerCaller: 1, maxRecipientsPerCaller: 0),
+            new FakeTimeProvider(Recorded));
+        var governor = AuthoredSendGovernors.Governing(
+            recipientPolicy: refusedByThePolicy
+                ? OutgoingRecipientPolicy.Create([], [denied])
+                : OutgoingRecipientPolicy.Unrestricted,
+            settings: new AuthoredSendSettings(UnvouchedRecipientPosture.Refuse),
+            ledger: ledger,
+            contacts: book);
+
+        // Act
+        await Assert.ThrowsAsync<OutgoingMailRefusedException>(
+            () => governor.RequirePermittedAsync(
+                [NamedByCaller("stranger@elsewhere.test")],
+                AskedAs("send-refused", "stranger@elsewhere.test"),
+                CancellationToken.None));
+
+        // Assert
+        var admitted = await governor.RequirePermittedAsync(
+            [NamedByCaller("anna@example.test")],
+            AskedAs("send-after", "anna@example.test"),
+            CancellationToken.None);
+        Assert.Equal(CallerIdentity, admitted.Caller);
+    }
+
     /// <summary>A retried call asks for the send it first asked for, so one message of the caller's allowance is spent.</summary>
     [Fact]
     public async Task RequirePermittedAsync_SameSendTwice_SpendsOneMessageOfTheCallersAllowance()
