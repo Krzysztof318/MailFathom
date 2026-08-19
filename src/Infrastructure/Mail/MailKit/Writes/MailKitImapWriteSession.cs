@@ -118,7 +118,7 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
                 RequireCapability(
                     client,
                     ImapCapabilities.UidPlus,
-                    MailboxMutation.Delete,
+                    MailboxMutation.Delete.Name,
                     UidPlusCapabilityName,
                     this.SessionAccountId,
                     this.folder.Alias);
@@ -408,10 +408,13 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
                         ImapUidValidity.Create(openFolder.UidValidity));
                 }
 
+                // Named as the withdrawal it is rather than as a delete: the copy being removed is one MailFathom
+                // filed, which the mutation boundary deliberately holds outside the closed set, so a refusal reported
+                // as a delete would name a mutation nobody asked for.
                 RequireCapability(
                     client,
                     ImapCapabilities.UidPlus,
-                    MailboxMutation.Delete,
+                    WithdrawOperationName,
                     UidPlusCapabilityName,
                     this.SessionAccountId,
                     this.folder.Alias);
@@ -570,7 +573,7 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
         throw new MailboxMutationUnsupportedException(
             this.SessionAccountId,
             this.folder.Alias,
-            mutation,
+            mutation.Name,
             PermanentKeywordsCapabilityName);
     }
 
@@ -635,14 +638,14 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
     private static void RequireCapability(
         IImapClient client,
         ImapCapabilities capability,
-        MailboxMutation mutation,
+        string operation,
         string capabilityName,
         MailAccountId accountId,
         MailFolderAlias folderAlias)
     {
         if (!client.Capabilities.HasFlag(capability))
         {
-            throw new MailboxMutationUnsupportedException(accountId, folderAlias, mutation, capabilityName);
+            throw new MailboxMutationUnsupportedException(accountId, folderAlias, operation, capabilityName);
         }
     }
 
@@ -688,7 +691,7 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
             RequireCapability(
                 client,
                 ImapCapabilities.UidPlus,
-                MailboxMutation.Relocate,
+                MailboxMutation.Relocate.Name,
                 UidPlusCapabilityName,
                 this.SessionAccountId,
                 this.folder.Alias);
@@ -728,7 +731,7 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
         RequireCapability(
             client,
             ImapCapabilities.UidPlus,
-            MailboxMutation.Relocate,
+            MailboxMutation.Relocate.Name,
             UidPlusCapabilityName,
             this.SessionAccountId,
             this.folder.Alias);

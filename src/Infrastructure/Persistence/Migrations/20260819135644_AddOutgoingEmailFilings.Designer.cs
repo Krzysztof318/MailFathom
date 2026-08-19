@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260819102250_AddOutgoingEmailFilings")]
+    [Migration("20260819135644_AddOutgoingEmailFilings")]
     partial class AddOutgoingEmailFilings
     {
         /// <inheritdoc />
@@ -1366,7 +1366,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("WithdrawnAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("OutgoingEmailId", "Filing");
+                    b.HasKey("OutgoingEmailId", "Filing")
+                        .HasName("pk_outgoing_email_filings");
 
                     b.HasIndex("MailboxAccountId", "InternetMessageId")
                         .HasDatabaseName("ix_outgoing_email_filings_message_id")

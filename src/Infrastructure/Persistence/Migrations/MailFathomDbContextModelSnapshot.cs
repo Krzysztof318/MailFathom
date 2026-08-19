@@ -1363,7 +1363,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("WithdrawnAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("OutgoingEmailId", "Filing");
+                    b.HasKey("OutgoingEmailId", "Filing")
+                        .HasName("pk_outgoing_email_filings");
 
                     b.HasIndex("MailboxAccountId", "InternetMessageId")
                         .HasDatabaseName("ix_outgoing_email_filings_message_id")

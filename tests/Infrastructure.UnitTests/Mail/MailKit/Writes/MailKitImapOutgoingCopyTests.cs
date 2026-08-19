@@ -8,6 +8,7 @@ using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
+using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
 using MailKit;
 using MailKit.Net.Imap;
@@ -190,6 +191,11 @@ public sealed class MailKitImapOutgoingCopyTests
                 TestContext.Current.CancellationToken));
 
         Assert.Equal(MailFathomErrorCode.MailboxMutationUnsupported, refusal.ErrorCode);
+
+        // Withdrawing a copy this deployment filed is not one of the mutations, so the refusal names the withdrawal
+        // rather than a delete an operator reading it would go looking for a rule or a request behind.
+        Assert.Equal("withdraw-outgoing-copy", refusal.Operation);
+        Assert.DoesNotContain(MailboxMutation.Delete.Name, refusal.Message, StringComparison.Ordinal);
         await openFolder.DidNotReceiveWithAnyArgs().ExpungeAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<CancellationToken>());
         await openFolder.DidNotReceive().ExpungeAsync(Arg.Any<CancellationToken>());
     }

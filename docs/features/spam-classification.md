@@ -387,7 +387,9 @@ own send into their junk folder.
 **Two messages are deliberately not asked for.** One whose folder the configured scope does not cover, and one stored
 without its content — a message above the fetch size limit, or one waiting for storage headroom — because a message
 whose payload is not stored is reported unclassifiable rather than fetched. The second becomes classifiable the moment a
-later run stores its content, without the message being fetched a second time for classification's sake. With
+later run stores its content, without the message being fetched a second time for classification's sake — unless it is a
+copy this deployment filed, which the run completing it recognizes from the join on the row and leaves unasked for, the
+same answer its first discovery gave. With
 classification switched off, nothing is asked for at all: the switch and the scope are read before the queue is touched,
 which is the same shape every other path here has when it is off.
 

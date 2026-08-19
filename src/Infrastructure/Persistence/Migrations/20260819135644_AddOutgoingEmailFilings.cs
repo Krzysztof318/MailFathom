@@ -51,7 +51,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_outgoing_email_filings", x => new { x.OutgoingEmailId, x.Filing });
+                    table.PrimaryKey("pk_outgoing_email_filings", x => new { x.OutgoingEmailId, x.Filing });
                     table.ForeignKey(
                         name: "fk_outgoing_email_filings_emails",
                         column: x => x.OutgoingEmailId,

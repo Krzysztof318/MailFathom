@@ -44,9 +44,10 @@ internal sealed class StoredEmailContentInventory(MailFathomDbContext dbContext)
     /// A tombstoned occurrence is left out, because fetching content for mail no query may serve would spend a mailbox
     /// round trip and storage on a message that has left the folder. The projection rebuilds exactly what the row was
     /// recorded from, so the run that fetches the payload commits it under the same metadata as the discovery that
-    /// deferred it.
+    /// deferred it, and it reads the join to the outgoing send beside it rather than the send itself, because what the
+    /// caller decides from it is whether the message is offered for a spam verdict.
     /// </remarks>
-    public async Task<IReadOnlyList<RemoteEmailMetadata>> GetEmailsAwaitingContentAsync(
+    public async Task<IReadOnlyList<EmailAwaitingContent>> GetEmailsAwaitingContentAsync(
         MailAccountId accountId,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
@@ -77,17 +78,20 @@ internal sealed class StoredEmailContentInventory(MailFathomDbContext dbContext)
                 email.Subject,
                 email.SentAt,
                 email.SizeOctets,
+                email.FiledFromOutgoingEmailId,
             })
             .ToArrayAsync(cancellationToken);
 
         return
         [
-            .. candidates.Select(candidate => new RemoteEmailMetadata(
-                EmailOccurrenceId.Create(accountId, folderResolutionId, uidValidity, ImapUid.Create(candidate.Uid)),
-                candidate.InternetMessageId,
-                candidate.Subject,
-                candidate.SentAt,
-                candidate.SizeOctets)),
+            .. candidates.Select(candidate => new EmailAwaitingContent(
+                new RemoteEmailMetadata(
+                    EmailOccurrenceId.Create(accountId, folderResolutionId, uidValidity, ImapUid.Create(candidate.Uid)),
+                    candidate.InternetMessageId,
+                    candidate.Subject,
+                    candidate.SentAt,
+                    candidate.SizeOctets),
+                candidate.FiledFromOutgoingEmailId is not null)),
         ];
     }
 }

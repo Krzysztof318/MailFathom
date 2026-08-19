@@ -264,7 +264,7 @@ public sealed class MailboxMutationPerformerTests
         context.FailRelocationWith(new MailboxMutationUnsupportedException(
             Account,
             InboxFolder.Alias,
-            MailboxMutation.Relocate,
+            MailboxMutation.Relocate.Name,
             "UIDPLUS extension (RFC 4315)"));
 
         // Act

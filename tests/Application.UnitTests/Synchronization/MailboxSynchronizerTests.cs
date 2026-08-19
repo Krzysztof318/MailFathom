@@ -2850,6 +2850,45 @@ public sealed class MailboxSynchronizerTests
             CancellationToken.None);
     }
 
+    /// <summary>A copy this deployment filed is not offered for scoring when a later run completes it either.</summary>
+    /// <remarks>
+    /// The suppression is written down on the stored row at the discovery that met the filing, and the filing is
+    /// settled there, so nothing is left for this pass to meet. Deciding from the filing alone would therefore offer
+    /// the owner's own outgoing message for a spam verdict every time storage headroom deferred its content — and a
+    /// verdict calling it spam would withhold everything derived from a message the owner wrote.
+    /// </remarks>
+    [Theory]
+    [InlineData(true, 0)]
+    [InlineData(false, 1)]
+    public async Task SynchronizeAsync_RefillsAnOccurrenceStoredWithoutContent_AsksForAClassificationOnlyWhereNothingFiledIt(
+        bool isFiledCopy,
+        int expectedClassificationCount)
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var deferred = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(11));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var inventory = new InMemoryStoredEmailContentInventory { StoredContentBytes = 900 };
+        inventory.AddAwaitingContent(MetadataOf(deferred, 600), isFiledCopy);
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [],
+            inspectedThroughUid: null,
+            inventory: inventory,
+            storedContentCeiling: new StoredContentCeiling(100_000),
+            classificationSettings: ClassifyingTheInbox());
+        StubRetrievedContent(arrangement.Session, options, deferred, 600);
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.ContentVolume.RefilledEmailCount);
+        Assert.Equal(expectedClassificationCount, EnqueuedJobs(arrangement.JobStore).Count);
+    }
+
     /// <summary>Once storage has room again, a run fetches the content earlier runs left unstored.</summary>
     /// <remarks>
     /// It is the same store a first discovery makes, onto the row that already names the occurrence, so nothing is
@@ -3070,7 +3109,8 @@ public sealed class MailboxSynchronizerTests
         SynchronizationCheckpoint? storedCheckpoint = null,
         InMemoryStoredEmailContentInventory? inventory = null,
         RawMimeMemoryBudget? rawMimeMemoryBudget = null,
-        StoredContentCeiling? storedContentCeiling = null)
+        StoredContentCeiling? storedContentCeiling = null,
+        SpamClassificationSettings? classificationSettings = null)
     {
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
         var metadataRepository = Substitute.For<IEmailMetadataRepository>();
@@ -3100,6 +3140,7 @@ public sealed class MailboxSynchronizerTests
                 _ => new RemoteEmailMetadataBatch([], InspectedThroughUid: null, HasMore: false));
 
         var contentInventory = inventory ?? new InMemoryStoredEmailContentInventory();
+        var jobStore = Substitute.For<IJobStore>();
         var synchronizer = CreateSynchronizer(
             sessionFactory,
             checkpointStore,
@@ -3110,7 +3151,9 @@ public sealed class MailboxSynchronizerTests
             options,
             contentInventory: contentInventory,
             rawMimeMemoryBudget: rawMimeMemoryBudget,
-            storedContentCeiling: storedContentCeiling);
+            storedContentCeiling: storedContentCeiling,
+            classificationSettings: classificationSettings,
+            jobStore: jobStore);
 
         return new ContentRunArrangement(
             synchronizer,
@@ -3118,7 +3161,8 @@ public sealed class MailboxSynchronizerTests
             checkpointStore,
             metadataRepository,
             contentStore,
-            contentInventory);
+            contentInventory,
+            jobStore);
     }
 
     /// <summary>The parts of a byte-budget run its assertions read back.</summary>
@@ -3128,7 +3172,8 @@ public sealed class MailboxSynchronizerTests
         ISynchronizationCheckpointStore CheckpointStore,
         IEmailMetadataRepository MetadataRepository,
         IEmailContentStore ContentStore,
-        InMemoryStoredEmailContentInventory ContentInventory);
+        InMemoryStoredEmailContentInventory ContentInventory,
+        IJobStore JobStore);
 
     private sealed class TrackingSession : IPersistenceSession
     {

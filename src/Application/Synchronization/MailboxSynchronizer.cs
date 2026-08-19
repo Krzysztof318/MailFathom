@@ -297,6 +297,7 @@ public sealed class MailboxSynchronizer
                         metadata,
                         copy,
                         filing,
+                        isFiledCopy: filing is not null,
                         budget,
                         collection,
                         cancellationToken);
@@ -552,6 +553,14 @@ public sealed class MailboxSynchronizer
     /// forward pass already moved past these occurrences, and this pass closes the gap it left behind rather than
     /// walking the folder again.
     /// </para>
+    /// <para>
+    /// A row this pass completes may be a copy this deployment filed, and the inventory reports that beside the
+    /// metadata so this pass does not have to assume a message which waited for storage headroom is somebody else's.
+    /// What the answer decides is whether a spam verdict is asked for, and asking for one about the owner's own
+    /// outgoing message is exactly what the join exists to prevent. The filing itself is not re-read here: the
+    /// discovery that recorded this occurrence already met it and settled it, so the durable join on the stored email
+    /// is what is left to read and what this pass carries forward.
+    /// </para>
     /// </remarks>
     private async Task<DeferredContentRefill> RefillDeferredContentAsync(
         IMailboxSession mailboxSession,
@@ -573,7 +582,7 @@ public sealed class MailboxSynchronizer
         var unreadableMimeCount = 0;
         var stoppedForContentBudget = false;
 
-        foreach (var metadata in awaiting)
+        foreach (var (metadata, isFiledCopy) in awaiting)
         {
             if (!budget.HasRunBudgetFor(this.AssumedContentCostOf(metadata)))
             {
@@ -587,6 +596,7 @@ public sealed class MailboxSynchronizer
                 metadata,
                 placement: null,
                 filing: null,
+                isFiledCopy,
                 budget,
                 collection,
                 cancellationToken);
@@ -807,6 +817,7 @@ public sealed class MailboxSynchronizer
         RemoteEmailMetadata metadata,
         MailboxMutationRecord? placement,
         OutgoingMailFilingRecord? filing,
+        bool isFiledCopy,
         SynchronizationContentBudget budget,
         ContactCollectionRun collection,
         CancellationToken cancellationToken)
@@ -919,8 +930,10 @@ public sealed class MailboxSynchronizer
         // A copy MailFathom filed of this deployment's own outgoing message is skipped too, which is the one place
         // scoring is decided by where a message came from rather than by what it holds: nothing this system composed
         // and sent needs a verdict about whether somebody sent it unsolicited, and a spam verdict on it would withhold
-        // everything derived from a message the owner wrote and could file their own send into their junk folder.
-        if (filing is null)
+        // everything derived from a message the owner wrote and could file their own send into their junk folder. The
+        // answer comes from the caller rather than from the filing beside it, because a run completing an occurrence a
+        // previous one deferred meets no filing to settle and still stores the same copy.
+        if (!isFiledCopy)
         {
             await this.classificationArrivals.ScheduleAsync(
                 storedEmailId,

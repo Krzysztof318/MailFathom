@@ -236,6 +236,9 @@ internal sealed class MailFathomDbContext : DbContext
     /// <remarks>Named for the reason above: the composed name would be truncated and permanent.</remarks>
     internal const string OutgoingEmailFilingForeignKeyName = "fk_outgoing_email_filings_emails";
 
+    /// <summary>The composite key one filing row is refused a duplicate of, named so a lost race is recognized as one.</summary>
+    internal const string OutgoingEmailFilingPrimaryKeyConstraintName = "pk_outgoing_email_filings";
+
     /// <summary>The index a batch of discovered mail is joined to the copies this deployment filed through.</summary>
     /// <remarks>
     /// Filtered to the filings synchronization has not met yet, which is what keeps it proportional to what is in
@@ -1524,7 +1527,8 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.Entity<OutgoingEmailFilingEntity>(entity =>
         {
             entity.ToTable("outgoing_email_filings");
-            entity.HasKey(filing => new { filing.OutgoingEmailId, filing.Filing });
+            entity.HasKey(filing => new { filing.OutgoingEmailId, filing.Filing })
+                .HasName(OutgoingEmailFilingPrimaryKeyConstraintName);
 
             // The filing's own published name, which is what the closed enumeration is; stored as itself for the reason
             // the mutation name is, and bounded rather than free so a row can never name something longer than a value.

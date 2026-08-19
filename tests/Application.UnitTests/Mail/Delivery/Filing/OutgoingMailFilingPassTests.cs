@@ -116,7 +116,7 @@ public sealed class OutgoingMailFilingPassTests
             .ThrowsAsync(new MailboxMutationUnsupportedException(
                 Account,
                 MailFolderAlias.Create("sent"),
-                MailboxMutation.Delete,
+                "withdraw-outgoing-copy",
                 "UIDPLUS"));
         var delivered = await context.DeliverAsync();
 
@@ -166,6 +166,48 @@ public sealed class OutgoingMailFilingPassTests
         Assert.Equal(MailFathomErrorCode.OutgoingEmailFilingDestinationUnavailable, record.LastFilingFailure);
         Assert.Empty(record.Filings);
         Assert.Equal(1, record.AttemptCount);
+    }
+
+    /// <summary>
+    /// A host that stopped says nothing about the copy. The filing never reached the mail server, so the shutdown is
+    /// raised for the caller that already tells one from a failure rather than written onto the record as one — which
+    /// would leave a delivered send permanently recorded as one whose copy could not be filed.
+    /// </summary>
+    [Fact]
+    public async Task SettleFiledCopiesAsync_TheHostStopsBeforeTheAppendIsIssued_RecordsNoFilingFailure()
+    {
+        // Arrange
+        var context = new FilingContext();
+        context.Filing.Map(Account, MailFolderSpecialUse.Sent, "sent", "INBOX.Sent");
+        context.Filing.FileSentCopies(Account);
+        var delivered = await context.DeliverAsync();
+
+        using var shutdown = new CancellationTokenSource();
+        context.Content
+            .FindOutgoingContentAsync(Arg.Any<OutgoingEmailId>(), Arg.Any<CancellationToken>())
+            .Returns<StoredEmailContent?>(_ =>
+            {
+                shutdown.Cancel();
+
+                throw new OperationCanceledException(shutdown.Token);
+            });
+
+        // Act
+        var stopped = await Assert.ThrowsAsync<OperationCanceledException>(
+            () => context.Filing.Pass.SettleFiledCopiesAsync(delivered, shutdown.Token));
+
+        // Assert
+        Assert.Equal(shutdown.Token, stopped.CancellationToken);
+
+        var record = context.Store.Read(delivered);
+        Assert.Equal(OutgoingEmailStage.Sent, record.Stage);
+        Assert.Null(record.LastFilingFailure);
+        Assert.Empty(record.Filings);
+        await context.Filing.WriteSession.DidNotReceiveWithAnyArgs().AppendAsync(
+            Arg.Any<ReadOnlyMemory<byte>>(),
+            Arg.Any<AppendedMailFlags>(),
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>A deployment that mapped no outbox folder mirrors nothing, which is every deployment that says nothing.</summary>
@@ -330,8 +372,8 @@ public sealed class OutgoingMailFilingPassTests
         {
             this.Store = new InMemoryOutgoingEmailStore(timeProvider: this.clock);
 
-            var contentStore = Substitute.For<IEmailContentStore>();
-            contentStore
+            this.Content = Substitute.For<IEmailContentStore>();
+            this.Content
                 .FindOutgoingContentAsync(Arg.Any<OutgoingEmailId>(), Arg.Any<CancellationToken>())
                 .Returns(new StoredEmailContent(RawMime, RawMime.Length, SHA256.HashData(RawMime.Span)));
 
@@ -343,10 +385,13 @@ public sealed class OutgoingMailFilingPassTests
                 TimeSpan.FromMinutes(1),
                 TimeSpan.FromHours(1));
 
-            this.Filing = new OutgoingMailFilingHarness(this.Store, contentStore, settings, this.clock);
+            this.Filing = new OutgoingMailFilingHarness(this.Store, this.Content, settings, this.clock);
         }
 
         internal InMemoryOutgoingEmailStore Store { get; }
+
+        /// <summary>Gets the store the appended bytes come from, which is the last step before anything is written down.</summary>
+        internal IEmailContentStore Content { get; }
 
         internal OutgoingMailFilingHarness Filing { get; }
 

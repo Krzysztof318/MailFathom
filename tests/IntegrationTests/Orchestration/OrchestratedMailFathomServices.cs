@@ -163,15 +163,15 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// no scanner. Absent everywhere but the class that scores, exactly as a deployment which never switched the scanner
     /// on registers no implementation of the port.
     /// </param>
-    /// <param name="filesSentCopies">
-    /// Whether this account files a copy of what it sends into a folder of its own, and therefore maps one to the sent
-    /// role. Off everywhere but the class proving that the copy is appended once and comes back recognized, because a
-    /// deployment that files one appends a message on every send the collection makes.
-    /// </param>
     /// <param name="contactCollection">
     /// What this deployment decided about collecting contacts from arriving mail, or <see langword="null" /> for the
     /// shipped default of collecting nobody. Stated only by the class that collects, because every other class stores
     /// mail whose senders must not end up in the book it reads.
+    /// </param>
+    /// <param name="filesSentCopies">
+    /// Whether this account files a copy of what it sends into a folder of its own, and therefore maps one to the sent
+    /// role. Off everywhere but the class proving that the copy is appended once and comes back recognized, because a
+    /// deployment that files one appends a message on every send the collection makes.
     /// </param>
     /// <returns>The composed services, which the caller owns and must dispose.</returns>
     internal static async Task<OrchestratedMailFathomServices> StartAsync(

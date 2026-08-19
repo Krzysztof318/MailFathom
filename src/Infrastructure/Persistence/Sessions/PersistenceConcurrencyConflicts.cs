@@ -92,6 +92,22 @@ internal static class PersistenceConcurrencyConflicts
     /// a second delivery is the one duplication in this system that cannot be withdrawn afterwards.
     /// </para>
     /// <para>
+    /// The next is one copy of one outgoing message filed into one role by two passes. Filing guards the key with a
+    /// read before it writes, so two passes reading the same record before either commits both find nothing and both
+    /// insert; the loser violates the key. Recognizing it is what makes that guard sound rather than decorative — the
+    /// retry re-reads, finds the row the winner issued, and files nothing — and leaving it unrecognized would put a
+    /// second copy of the owner's own send in front of them, which is the one duplication no local correction can
+    /// withdraw.
+    /// </para>
+    /// <para>
+    /// The next is one copy of one outgoing message filed into one role by two passes. Filing guards the key with a
+    /// read before it writes, so two passes reading the same record before either commits both find nothing and both
+    /// insert; the loser violates the key. Recognizing it is what makes that guard sound rather than decorative — the
+    /// retry re-reads, finds the row the winner issued, and files nothing — and leaving it unrecognized would put a
+    /// second copy of the owner's own send in front of them, which is the one duplication no local correction can
+    /// withdraw.
+    /// </para>
+    /// <para>
     /// The last is one message identifier bound to a thread by two arrivals. Two runs storing two messages of one
     /// conversation read that nothing binds the identifier yet, and each assembles a thread and binds it; the loser
     /// violates the key. The retry is what converges them: it re-reads, finds the winner's thread bound to the
@@ -117,6 +133,7 @@ internal static class PersistenceConcurrencyConflicts
                 or MailFathomDbContext.MailRederivationRunPrimaryKeyConstraintName
                 or MailFathomDbContext.ContactAddressUniqueIndexName
                 or MailFathomDbContext.OutgoingEmailIdentityUniqueIndexName
+                or MailFathomDbContext.OutgoingEmailFilingPrimaryKeyConstraintName
                 or MailFathomDbContext.EmailThreadIdentifierPrimaryKeyConstraintName,
         };
 }

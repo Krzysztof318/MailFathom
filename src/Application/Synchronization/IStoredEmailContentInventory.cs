@@ -40,13 +40,20 @@ public interface IStoredEmailContentInventory
     /// <param name="uidValidity">The UID space the caller's open session is selected under.</param>
     /// <param name="maxEmailCount">The greatest number of occurrences to report, oldest UID first.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>What each waiting occurrence was stored with, which is what a fetch of it has to be recorded under.</returns>
+    /// <returns>Each waiting occurrence, with what a run completing it has to know about it.</returns>
     /// <remarks>
+    /// <para>
     /// Only occurrences of the supplied UID space are reported. A folder the server recreated is a different UID
     /// space whose stored occurrences name emails the current one says nothing about, so fetching one by its recorded
     /// UID would retrieve a different message.
+    /// </para>
+    /// <para>
+    /// Whether the occurrence is a copy this deployment filed is reported beside it rather than left to a second query,
+    /// because the row already carries the join and the read is the same one. A caller that had to ask separately would
+    /// pay a query per refill for an answer this one already holds.
+    /// </para>
     /// </remarks>
-    Task<IReadOnlyList<RemoteEmailMetadata>> GetEmailsAwaitingContentAsync(
+    Task<IReadOnlyList<EmailAwaitingContent>> GetEmailsAwaitingContentAsync(
         MailAccountId accountId,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,

@@ -116,6 +116,14 @@ public sealed class OutgoingMailFiler
         {
             return await this.AppendAsync(record, filing, cancellationToken);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The caller stopping is not something that happened to the copy. Everything past the issued write is
+            // caught where it happens, so a cancellation reaching here left the mail server untouched and the next
+            // pass files the copy as though this attempt had never started — which is what a caller that already
+            // sorts a shutdown from a failure is waiting to be told.
+            throw;
+        }
         catch (Exception failure)
         {
             // Nothing reached the mail server: everything past the issued write is caught where it happens, and the
@@ -182,6 +190,12 @@ public sealed class OutgoingMailFiler
                 CancellationToken.None);
 
             return Result(record, filing, OutgoingMailFilingOutcome.Withdrawn, failure: null);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Raised for the reason it is in the filing above: the copy is still standing and still withdrawable, so
+            // the next pass asks again rather than a shutdown being written onto the record as a failure.
+            throw;
         }
         catch (Exception failure)
         {
