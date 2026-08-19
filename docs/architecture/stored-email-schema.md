@@ -869,7 +869,7 @@ so one Monday's provider outage is not the next Monday's and a message refused f
 the declaration behind it.
 
 It is a table rather than a section of the deployment's configuration for the reason [configuration is
-read-only](../decisions/0002-configuration-reading-mapping-and-reload-boundary.md): what repeats is a message somebody
+read-only](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md): what repeats is a message somebody
 wrote, at a moment they chose, and it is stopped by them.
 
 | Column | What it records |
