@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using MailFathom.Application.Mail.Delivery.Addressing;
+using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
@@ -79,13 +80,10 @@ public sealed class MailSubmissionRefusedException : MailFathomException
 
         var described = refusal.Reason switch
         {
-            RecipientResolutionRefusalReason.ContactUnknown =>
-                "One recipient names a contact this deployment's contact book does not hold.",
-            RecipientResolutionRefusalReason.ContactNameAmbiguous => string.Create(
-                CultureInfo.InvariantCulture,
-                $"One recipient names a contact by a name {refusal.MatchedContactCount} contacts carry, so it names nobody."),
-            RecipientResolutionRefusalReason.ContactAddressNotHeld =>
-                "One recipient chooses an address the contact it names does not hold.",
+            RecipientResolutionRefusalReason.ContactUnknown => UnknownContactMessage,
+            RecipientResolutionRefusalReason.ContactNameAmbiguous =>
+                AmbiguousContactMessage(refusal.MatchedContactCount),
+            RecipientResolutionRefusalReason.ContactAddressNotHeld => ContactAddressNotHeldMessage,
             _ => throw new InvalidOperationException(
                 "The recipient resolution refusal reason is not one this system declares."),
         };
@@ -93,6 +91,48 @@ public sealed class MailSubmissionRefusedException : MailFathomException
         return new MailSubmissionRefusedException(
             MailFathomErrorCode.AuthoredMailRecipientUnresolved,
             described);
+    }
+
+    /// <summary>Reports an answer to a stored email that was not authored at all, in the terms the caller can act on.</summary>
+    /// <param name="refusal">What the authoring refused.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="refusal" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the refusal names a reason this system does not declare, which a refusal built from a cast integer is.</exception>
+    /// <remarks>
+    /// The email that cannot be found and the email whose content cannot be read arrive as one answer on purpose, and
+    /// this is where the two are joined: the authoring tells them apart because it records a repair request for the
+    /// second, and a caller that could tell them apart would learn which mail exists by asking to reply to it. Whether
+    /// the local copy is being repaired is the deployment's business rather than the sender's.
+    /// </remarks>
+    public static MailSubmissionRefusedException From(AuthoredResponseRefusal refusal)
+    {
+        ArgumentNullException.ThrowIfNull(refusal);
+
+        return refusal.Reason switch
+        {
+            AuthoredResponseRefusalReason.AnsweredEmailNotFound
+                or AuthoredResponseRefusalReason.AnsweredEmailContentUnavailable =>
+                new MailSubmissionRefusedException(
+                    MailFathomErrorCode.AnsweredEmailUnavailable,
+                    "No email this deployment can answer is held under that identifier."),
+            AuthoredResponseRefusalReason.SenderUnconfigured => new MailSubmissionRefusedException(
+                MailFathomErrorCode.MailSendingUnavailable,
+                "The account the answered email was stored from configures no address to send from, so this deployment cannot answer mail in it."),
+            AuthoredResponseRefusalReason.BoundExceeded => new MailSubmissionRefusedException(
+                MailFathomErrorCode.AuthoredMailBoundExceeded,
+                CarriedFileBoundMessage(refusal.Bound)),
+            AuthoredResponseRefusalReason.RecipientContactUnknown => new MailSubmissionRefusedException(
+                MailFathomErrorCode.AuthoredMailRecipientUnresolved,
+                UnknownContactMessage),
+            AuthoredResponseRefusalReason.RecipientContactNameAmbiguous => new MailSubmissionRefusedException(
+                MailFathomErrorCode.AuthoredMailRecipientUnresolved,
+                AmbiguousContactMessage(refusal.MatchedContactCount)),
+            AuthoredResponseRefusalReason.RecipientContactAddressNotHeld => new MailSubmissionRefusedException(
+                MailFathomErrorCode.AuthoredMailRecipientUnresolved,
+                ContactAddressNotHeldMessage),
+            _ => throw new InvalidOperationException(
+                "The authoring refusal reason is not one this system declares."),
+        };
     }
 
     /// <summary>Reports a list of recipients longer than any outgoing record could be written for.</summary>
@@ -132,6 +172,49 @@ public sealed class MailSubmissionRefusedException : MailFathomException
         string.Create(
             CultureInfo.InvariantCulture,
             $"The idempotency key a send is asked under carries 1 to {OutgoingEmailRequester.MaximumIdentityLength} characters and no control character."));
+
+    /// <summary>Reports a reply whose audience names neither of the two acts a reply may be.</summary>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// It is unreachable from a client that sent a name the schema declares, because the protocol library refuses an
+    /// unknown one before a boundary is entered. What reaches it is a numeric value outside the set, which is the
+    /// caller's own input and therefore an argument to state a rule about rather than an internal fault to collapse.
+    /// </remarks>
+    public static MailSubmissionRefusedException ReplyAudienceUnknown() => new(
+        MailFathomErrorCode.AuthoredMailFieldRefused,
+        "A reply states whether it answers the sender alone or everybody the message was between, and it named neither.");
+
+    /// <summary>The answer a contact nobody holds produces, written once because both authored acts meet it.</summary>
+    /// <remarks>
+    /// The three contact refusals read identically whether the author was writing a new message or answering one, and
+    /// they say so from one text apiece rather than from two that could drift: what the author does about a name the
+    /// book cannot settle is the same in both.
+    /// </remarks>
+    private const string UnknownContactMessage =
+        "One recipient names a contact this deployment's contact book does not hold.";
+
+    /// <summary>The answer an address the named contact does not use produces.</summary>
+    private const string ContactAddressNotHeldMessage =
+        "One recipient chooses an address the contact it names does not hold.";
+
+    /// <summary>Writes the ambiguous-name refusal, which names how many contacts carried the name and nothing about any of them.</summary>
+    private static string AmbiguousContactMessage(int? matchedContactCount) => string.Create(
+        CultureInfo.InvariantCulture,
+        $"One recipient names a contact by a name {matchedContactCount} contacts carry, so it names nobody.");
+
+    /// <summary>Writes the refusal a forward carrying more than this deployment composes produces.</summary>
+    /// <remarks>
+    /// The files belong to the message being forwarded rather than to whoever is forwarding it, so the field a
+    /// composition refusal would name says nothing the author can act on and the number is the whole of the remedy:
+    /// the message is too large to forward from here, and forwarding fewer of somebody else's files is not something a
+    /// caller can do. Which of the three bounds it was — the count, one file, or the whole message — is deliberately
+    /// unstated, because stating it would describe the message being forwarded.
+    /// </remarks>
+    private static string CarriedFileBoundMessage(long? bound) => bound is { } declared
+        ? string.Create(
+            CultureInfo.InvariantCulture,
+            $"The files the answered message carries exceed a bound this deployment composes, which is {declared}.")
+        : "The files the answered message carries exceed a bound this deployment composes.";
 
     /// <summary>Writes the bound refusal, which names a number only where the refusal carried one.</summary>
     /// <remarks>

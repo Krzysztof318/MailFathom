@@ -4,12 +4,9 @@
 
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using MailFathom.Application.Mail.Delivery.Addressing;
-using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
-using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Failures;
 using MailFathom.Mcp.Tools.Results;
 using ModelContextProtocol.Server;
@@ -120,11 +117,11 @@ internal sealed class SendEmailTool(AuthoredMailSubmission submission)
         var request = new MailSubmissionRequest
         {
             Account = NamedAccount(account),
-            Recipients = NamedRecipients(to, cc, bcc),
+            Recipients = AuthoredMailArguments.NamedRecipients(to, cc, bcc),
             Subject = subject,
             PlainTextBody = plainTextBody,
             HtmlBody = htmlBody,
-            Requester = Requester(idempotencyKey),
+            Requester = AuthoredMailArguments.Requester(idempotencyKey),
         };
 
         var record = await submission.SubmitAsync(request, cancellationToken);
@@ -150,86 +147,5 @@ internal sealed class SendEmailTool(AuthoredMailSubmission submission)
         }
 
         return MailAccountSelector.Create(account);
-    }
-
-    /// <summary>Names the invocation asking, from the key the caller supplied for it.</summary>
-    /// <remarks>
-    /// The rules are checked here rather than left to the domain so a caller meets a refusal about the argument it sent
-    /// rather than an argument failure naming a parameter it never wrote. The domain checks them again where the
-    /// record's column is bounded, which is where they stay enforced for every requester whatever boundary it arrived by.
-    /// </remarks>
-    /// <exception cref="MailSubmissionRefusedException">Thrown when the key is not one a record can be written under.</exception>
-    private static OutgoingEmailRequester Requester(string idempotencyKey)
-    {
-        if (idempotencyKey is null
-            || string.IsNullOrWhiteSpace(idempotencyKey)
-            || idempotencyKey.Length > OutgoingEmailRequester.MaximumIdentityLength
-            || idempotencyKey.Any(char.IsControl))
-        {
-            throw MailSubmissionRefusedException.IdempotencyKeyUnusable();
-        }
-
-        return OutgoingEmailRequester.Command(idempotencyKey);
-    }
-
-    /// <summary>Collects the three headers into the one recipient list every author writes.</summary>
-    /// <remarks>
-    /// The order is the order the headers are read in, which is the order the composition writes them in. Nothing is
-    /// deduplicated or parsed here: whether text names a mailbox is the composition's question, and how many people a
-    /// message may actually reach is the deployment's number, both asked once for every way a message is authored. What
-    /// is answered here is only how long the caller's own lists are, because that is what decides whether they are
-    /// expanded at all, and the check therefore belongs in front of the expansion rather than after it.
-    /// </remarks>
-    /// <exception cref="MailSubmissionRefusedException">Thrown when the three headers name more people than a record holds.</exception>
-    private static List<NamedRecipient> NamedRecipients(
-        IReadOnlyList<string> to,
-        IReadOnlyList<string>? cc,
-        IReadOnlyList<string>? bcc)
-    {
-        var count = (to?.Count ?? 0) + (cc?.Count ?? 0) + (bcc?.Count ?? 0);
-
-        if (count > OutgoingEmailRequest.MaximumRecipientCount)
-        {
-            throw MailSubmissionRefusedException.TooManyRecipients();
-        }
-
-        var named = new List<NamedRecipient>(count);
-
-        AddNamed(named, to, OutgoingRecipientRole.To, AuthoredEmailField.To);
-        AddNamed(named, cc, OutgoingRecipientRole.Cc, AuthoredEmailField.Cc);
-        AddNamed(named, bcc, OutgoingRecipientRole.Bcc, AuthoredEmailField.Bcc);
-
-        return named;
-    }
-
-    /// <summary>Adds one header's addresses, refusing an entry that names nobody at all.</summary>
-    /// <remarks>
-    /// Blank text is refused here because an authored recipient is built from an address and a blank one names nothing
-    /// to build from — a defect in whoever called rather than an author's mistake, and this is the boundary that keeps
-    /// it from becoming one. Everything else the text may be wrong about travels unparsed to the composition, which is
-    /// the single place an address is read and refused.
-    /// </remarks>
-    /// <exception cref="MailSubmissionRefusedException">Thrown when an entry carries no address.</exception>
-    private static void AddNamed(
-        List<NamedRecipient> named,
-        IReadOnlyList<string>? addresses,
-        OutgoingRecipientRole role,
-        AuthoredEmailField field)
-    {
-        if (addresses is null)
-        {
-            return;
-        }
-
-        foreach (var address in addresses)
-        {
-            if (string.IsNullOrWhiteSpace(address))
-            {
-                throw MailSubmissionRefusedException.From(
-                    new AuthoredEmailRefusal(AuthoredEmailRefusalReason.FieldUnusable, field));
-            }
-
-            named.Add(NamedRecipient.AtAddress(role, address));
-        }
     }
 }

@@ -350,7 +350,9 @@ mail exists by trying to reply to it. An email whose content this deployment can
 content synchronization deliberately left unstored, a local copy that has gone missing or is damaged, bytes that no
 longer parse, and a body inside a cryptographic envelope all arrive there, because an answer quoting nothing reads to its
 recipient as an answer to an empty message. A damaged copy records a repair request on the way out, exactly as reading
-the message's content does.
+the message's content does. The two codes are one code by the time a caller reads either, for the reason the pair of
+them exists at all: the distinction is worth keeping where a repair request is decided and worth nothing to somebody who
+could use it to find out which mail this deployment holds.
 
 Nothing is written down and nothing is sent by any of this, and no log line, metric, or refusal carries an address, a
 subject, or a line of quoted text.
@@ -440,6 +442,19 @@ reached, so no record, no stored MIME, and no signal to a delivery pass is left 
 field, bound, or count decided it and never what was in it. The codes are the MCP boundary's rather than this
 category's, because that is where they surface;
 [MCP tools](mcp-tools.md#error-reporting) holds the table.
+
+`AuthoredResponseSubmission` is the same use case for the answer, and it is a sibling rather than a mode: what it takes
+is the identity of the email being answered, which act it is, what the author wrote, and whoever the author names
+themselves, and it composes the authoring above with the same composer, the same capabilities, and the same outbox. The
+account is not among its arguments and never becomes one — the answered email decides it, which is the whole reason a
+reply lands on the mailbox the correspondent has heard from — and neither is anything the authoring derives. `reply_to_email`
+and `forward_email` are what call it, and it is the whole of what those tools do.
+
+**A refusal about the answered email is one answer rather than four.** The authoring below distinguishes an email nothing
+is held under from one whose content cannot be read, because a damaged copy is worth a repair request and a missing row
+is not, and that distinction stays where it is useful. What crosses to a caller is `53005` for both, with the same
+sentence, joining the withheld folder and the unserved account the authoring had already collapsed into the first — so
+none of the four situations can be told from another by asking. The repair request is still recorded on the way out.
 
 ## How a written-down send reaches a server
 

@@ -621,7 +621,9 @@ The operational consequences are the ones that always applied to an unauthentica
   `mailfathom.mail.contacts.write` lets them record, amend, and irreversibly erase the deployment's records about
   identified third parties. `mailfathom.mail.send` is the third writing half and the one whose effect cannot be
   recalled: through `send_email` it lets anyone who can reach the port send mail from the owner's own address to
-  anybody, and nothing takes such a message back. Narrow the entry, or keep the port unreachable.
+  anybody, and through `reply_to_email` and `forward_email` — which such an endpoint also grants the reading half those
+  two need — it lets them answer the owner's correspondents and pass the owner's mail and its attachments on to
+  strangers. Nothing takes any of it back. Narrow the entry, or keep the port unreachable.
 
 ### What a credential may do
 

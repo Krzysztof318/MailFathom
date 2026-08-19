@@ -263,9 +263,9 @@ if (runsIntegrationTests)
         // The one account this host serves, which is the account the suite stores its mail under. Configuration is what
         // defines the served set, and it is read whether or not synchronization runs: an operator who switched
         // synchronization off has not asked for the copy already stored to become unreadable. So this is what lets a
-        // tool call over the MCP endpoint answer from mail rather than from an empty scope, and it stays the only key
-        // the account carries — with synchronization off, nothing below reaches a server, so a host, a login, or a
-        // credential here would be configuration nothing acts on.
+        // tool call over the MCP endpoint answer from mail rather than from an empty scope. Nothing below reaches a
+        // server either — the reading endpoint is absent for that reason, and the delivery block further down is read
+        // for the address it declares rather than connected to.
         .WithEnvironment(
             "MailSynchronization__Accounts__0__AccountId",
             OrchestrationContract.ServedMailAccountId)
@@ -285,6 +285,31 @@ if (runsIntegrationTests)
         .WithEnvironment(
             "MailSynchronization__Accounts__0__Folders__0__RemotePath",
             OrchestrationContract.ComposedHostReadableFolderAlias)
+        // The login the account is reached under, which the delivery block below authenticates as and which its
+        // validation requires. It is a mailbox address rather than a bare name, so the account states one identity
+        // whether a reader or a sender asks for it.
+        .WithEnvironment(
+            "MailSynchronization__Accounts__0__UserName",
+            OrchestrationContract.ComposedHostSendingAddress)
+        // The submission endpoint that makes this account able to send, which is what a tool queueing a reply or a
+        // forward is refused without. It names a host in the reserved testing domain rather than the orchestrated mail
+        // server: what a tool call produces is a durable record, and whether that record is then delivered is the
+        // outbox's own behaviour, proven against a real server by the delivery tests rather than through this host. So
+        // the delivery pass here finds a host that does not resolve, retries it under its own bounded budget, and
+        // changes nothing a tool call answered. The port and the connection security are left at their defaults, which
+        // name implicit TLS on the submission port and therefore need no opt-in from the account's transport policy.
+        .WithEnvironment(
+            "MailSynchronization__Accounts__0__Delivery__Host",
+            OrchestrationContract.ComposedHostSubmissionHost)
+        .WithEnvironment(
+            "MailSynchronization__Accounts__0__Delivery__FromAddress",
+            OrchestrationContract.ComposedHostSendingAddress)
+        // Required because a submission endpoint permitting a password mechanism is validated for one at startup, and
+        // spent by nothing: it is the mailbox password the ephemeral topology already declares, under the same
+        // restriction, for a server this host never opens a session with.
+        .WithEnvironment(
+            "MailSynchronization__Accounts__0__Delivery__Secrets__Password__SecretReference",
+            $"plaintext:{OrchestrationContract.MailServerAccountPassword}")
         // The endpoint is served under the posture worth proving end to end — a credential is required, and the origins
         // are narrowed. Leaving the permissive origin default would let a suite pass while the check was never wired in.
         .WithEnvironment("McpEndpoint__Enabled", "true")

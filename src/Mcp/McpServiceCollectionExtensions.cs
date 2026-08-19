@@ -79,6 +79,8 @@ public static class McpServiceCollectionExtensions
             .WithTools<SearchEmailsTool>(McpToolContractSerialization.Options)
             .WithTools<SetMailFlagsTool>(McpToolContractSerialization.Options)
             .WithTools<SendEmailTool>(McpToolContractSerialization.Options)
+            .WithTools<ReplyToEmailTool>(McpToolContractSerialization.Options)
+            .WithTools<ForwardEmailTool>(McpToolContractSerialization.Options)
             .WithTools<AskMailTool>(McpToolContractSerialization.Options)
             .WithTools<ListContactsTool>(McpToolContractSerialization.Options)
             .WithTools<GetContactTool>(McpToolContractSerialization.Options)

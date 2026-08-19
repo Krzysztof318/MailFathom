@@ -370,6 +370,25 @@ public static class OrchestrationContract
     /// </remarks>
     public const string ComposedHostReadableFolderAlias = "mcp-tool-contract";
 
+    /// <summary>The address the composed host's one account sends as, which is also the login its delivery block uses.</summary>
+    /// <remarks>
+    /// Declared here because the account it belongs to is: a tool that queues a send is refused outright unless the
+    /// account it sends as configures an address to send from, so a topology that named none would answer every reply
+    /// and every forward with a deployment that cannot send. The domain is the reserved testing one, so nothing
+    /// composed under it could leave the run it was composed in even if something transmitted — and nothing does,
+    /// because a tool call writes a record and the composed host runs no delivery pass over it.
+    /// </remarks>
+    public const string ComposedHostSendingAddress = "mailfathom@mailfathom.test";
+
+    /// <summary>The submission host the composed host's one account names, which nothing under this topology connects to.</summary>
+    /// <remarks>
+    /// A submission endpoint is configured because its presence is what makes the account able to send at all, and its
+    /// address is a name rather than the orchestrated mail server's: the composed host queues sends and never delivers
+    /// them — synchronization and the outbox pass are both off under this topology — so a reachable host would be
+    /// configuration nothing acts on. The domain is the reserved testing one for the same reason the address above is.
+    /// </remarks>
+    public const string ComposedHostSubmissionHost = "smtp.mailfathom.test";
+
     /// <summary>The whole app host argument that selects the integration-test topology.</summary>
     /// <remarks>
     /// Matched against the argument list itself rather than read through <c>IDistributedApplicationBuilder.Configuration</c>,
