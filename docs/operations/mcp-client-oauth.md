@@ -129,7 +129,7 @@ decide per subject what an admitted caller may do rather than the deployment gra
 one further client scope per permission you intend a token to bring, named exactly as MailFathom publishes it —
 `mailfathom.mail.read`, `mailfathom.mail.ask`, `mailfathom.mail.contacts.read`, `mailfathom.mail.contacts.write`,
 `mailfathom.mail.flags.write`, `mailfathom.mail.send`, or on the administrative endpoint one of the administrative names
-[the published set](permissions.md#the-published-set) lists. A scope is one published name and never the trailing-wildcard
+[the published set](permissions.md#the-published-set) lists. A scope is one published name and never the wildcard
 shorthand a grant accepts, which MailFathom refuses in `RequiredScopes` and `AdvertisedScopes` for the same reason no
 authorization server could mint one. The spelling is compared byte
 for byte, so a differently cased or padded name is a different scope and grants nothing. Leave **Include in token scope**

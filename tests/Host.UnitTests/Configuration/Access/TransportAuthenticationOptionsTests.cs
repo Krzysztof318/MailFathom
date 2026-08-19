@@ -490,6 +490,108 @@ public sealed class TransportAuthenticationOptionsTests
         Assert.Contains("Remove the key", reported, StringComparison.Ordinal);
     }
 
+    /// <summary>The reading half of a surface sits at two depths, and one written value reaches both of them.</summary>
+    [Fact]
+    public void GrantedPermissions_AGrantNamingAWildcardBeforeTheLastSegment_ReachesEveryDepth()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add("mailfathom.*.read");
+
+        // Act
+        var granted = entry.GrantedPermissions(ProtectedSurface.Mail);
+
+        // Assert
+        Assert.Equal(
+            [MailFathomPermission.MailRead, MailFathomPermission.MailContactsRead],
+            granted);
+    }
+
+    /// <summary>An entry guards one surface, so a pattern naming permissions of both grants the half this entry could enforce and never the other.</summary>
+    [Fact]
+    public void GrantedPermissions_AWildcardSpanningBothSurfaces_GrantsOnlyTheSurfaceItIsWrittenOn()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add("mailfathom.*.read");
+
+        // Act
+        var granted = entry.GrantedPermissions(ProtectedSurface.Administration);
+
+        // Assert
+        Assert.Equal(
+            [MailFathomPermission.AdminRead, MailFathomPermission.AdminAuditRead],
+            granted);
+    }
+
+    /// <summary>A pattern reaching part of the other surface is an ordinary grant of what it reaches here, unlike one reaching the whole vocabulary or none of this half.</summary>
+    [Theory]
+    [InlineData(ProtectedSurface.Mail)]
+    [InlineData(ProtectedSurface.Administration)]
+    public void FindConfigurationErrors_AWildcardSpanningBothSurfaces_ReportsNothing(ProtectedSurface surface)
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add("mailfathom.*.read");
+
+        // Act, Assert
+        Assert.Empty(entry.FindConfigurationErrors(SettingPath, surface));
+    }
+
+    /// <summary>A wildcard before the last segment reaches nothing here as easily as a prefix does, and it sits in the file reading as a grant.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AWildcardMatchingOnlyTheOtherSurface_IsRefused()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add("mailfathom.*.operate");
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains($"{SettingPath}:Permissions", reported, StringComparison.Ordinal);
+        Assert.Contains("mailfathom.*.operate", reported, StringComparison.Ordinal);
+        Assert.Contains("other protected surface", reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>Where a pattern reaches both surfaces, only its own half can repeat what an earlier value in the same list already gave.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AWildcardCoveringANameTheGrantAlreadyCarries_IsRefused()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add(MailFathomPermission.MailContactsRead.Name);
+        entry.Permissions.Add("mailfathom.*.read");
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains("mailfathom.*.read", reported, StringComparison.Ordinal);
+        Assert.Contains(MailFathomPermission.MailContactsRead.Name, reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>The other surface's half of a pattern is not part of the grant, so a later value reaching only that half is refused for being elsewhere rather than for repeating something.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AWildcardAndThenTheOtherSurfacesName_IsRefusedForTheSurfaceRatherThanAsARepeat()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add("mailfathom.*.read");
+        entry.Permissions.Add(MailFathomPermission.AdminRead.Name);
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains(MailFathomPermission.AdminRead.Name, reported, StringComparison.Ordinal);
+        Assert.Contains("belongs to the other protected surface", reported, StringComparison.Ordinal);
+    }
+
     /// <summary>A partial segment is no pattern, so the refusal has to be the one an unpublished name draws rather than one about a subtree matching nothing.</summary>
     [Fact]
     public void FindConfigurationErrors_AWildcardInsideASegment_IsRefusedAsAnUnpublishedName()

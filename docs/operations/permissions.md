@@ -172,13 +172,20 @@ Writing `Permissions: []` grants nothing, which is how a credential is retired w
 entry: it still authenticates, and on the administrative surface it still reads `GET /api/admin/session`, which is
 where an operator reads that the credential now holds nothing.
 
-**A value ending in `.*` grants the subtree beneath it.** `mailfathom.admin.*` grants every administrative permission
-and `mailfathom.mail.contacts.*` grants both contact permissions, so a grant states the boundary you mean rather than a
-list to revisit whenever a name is added. The prefix is matched on whole dot-separated segments — `mailfathom.admin.*`
-reaches `mailfathom.admin.credentials.write`, while `mailfathom.mail.c*` is no pattern at all and fails startup as the
-name nothing publishes that it is. A pattern is resolved against the published set on every start rather than frozen at
-the version it was written under, **which carries the same upgrade consequence the absent key does**: a permission
-added beneath a covered prefix in a later release reaches the entry on upgrade alone, with nobody editing the grant.
+**A value writing `*` as a whole segment grants every published name the pattern reaches.** `mailfathom.admin.*` grants
+every administrative permission and `mailfathom.mail.contacts.*` grants both contact permissions, so a grant states the
+boundary you mean rather than a list to revisit whenever a name is added. The wildcard stands for **one or more whole
+segments**, at whatever position it is written and more than once if you like: `mailfathom.admin.*` reaches
+`mailfathom.admin.credentials.write` a level deeper than itself, and `mailfathom.*.read` reaches both depths of the
+reading half — `mailfathom.mail.read` and `mailfathom.mail.contacts.read` on the MCP endpoint,
+`mailfathom.admin.read` and `mailfathom.admin.audit.read` on the administrative one. It stands for at least one segment,
+so a pattern never reaches the name it was written around and `mailfathom.mail.read.*` reaches nothing. A `*` inside a
+segment is no wildcard and no pattern: `mailfathom.mail.c*` fails startup as the name nothing publishes that it is,
+which is the refusal that tells you a pattern was never written from one that matched nothing. A pattern is resolved
+against the published set on every start rather than frozen at the version it was written under, **which carries the
+same upgrade consequence the absent key does**: a permission added where a written pattern reaches, in a later release,
+comes to the entry on upgrade alone, with nobody editing the grant. A wildcard before the last segment widens that:
+`mailfathom.*.read` reaches a reading name published at any depth rather than only beneath one prefix.
 Where that would be wrong, write the names out. `mailfathom.mail.flags.write` is the first case of it and the one to
 check a written grant against: an entry reading `mailfathom.mail.*` used to reach nothing that leaves this deployment,
 and on upgrade it reaches the tool that writes to the owner's mail server. `mailfathom.mail.send` is the second and the
@@ -186,6 +193,14 @@ sharper one, since the same pattern now also carries the grant to send from the 
 `send_email` and through the two tools that answer stored mail. Everything that reads a grant back states
 what a pattern resolved to and never the pattern — the startup line, `GET /api/admin/session`, and `scopes_supported` —
 so no reader has to expand one by hand.
+
+**A pattern grants the surface it is written on, and only that.** `mailfathom.*.read` names two permissions on each
+surface, and an entry guards one — so written on the MCP endpoint it grants `mailfathom.mail.read` and
+`mailfathom.mail.contacts.read`, and written on the administrative endpoint it grants `mailfathom.admin.read` and
+`mailfathom.admin.audit.read`. The other half is dropped rather than granted, because no check on the endpoint you wrote
+it on reads a name of the other surface, and what the startup line and `GET /api/admin/session` report is what the entry
+actually holds. A pattern reaching *only* the other surface is a different thing and still fails startup, since an
+operator who wrote one meant something the entry cannot do.
 
 **A surface with no `Authentication` entry at all grants that surface's whole half** to every caller it serves, because
 there is no entry for a grant to be written on. That is the unauthenticated posture the startup warning already
@@ -205,8 +220,9 @@ from configuration publishes none of its permissions, because no client can ask 
 nothing publishes, a name belonging to the other surface, a name the same grant already carries, a pattern matching
 nothing this repository publishes, a pattern matching only the other surface's half, a pattern covering a name the
 grant already carries explicitly or through another pattern, and a bare `*` or `mailfathom.*` — which reach both
-surfaces, so they are no shorthand for a part of either and grant exactly what leaving the key out grants; they are
-refused rather than accepted as a second spelling of it. A permission name or a pattern written into `RequiredScopes` or
+surfaces *entirely*, so they are no shorthand for a part of either and grant exactly what leaving the key out grants;
+they are refused rather than accepted as a second spelling of it. A pattern reaching part of the other surface beside
+part of this one is not among them: it grants what it reaches here, as the paragraph above says. A permission name or a pattern written into `RequiredScopes` or
 `AdvertisedScopes` is refused as well: requiring a permission at the door would close it on a caller the deployment
 meant to serve less, the grant that reads one advertises it already, and a scope is compared byte for byte at an
 authorization server, which can mint no pattern.

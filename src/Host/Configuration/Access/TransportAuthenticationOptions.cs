@@ -79,8 +79,10 @@ internal sealed class TransportAuthenticationOptions
     /// </para>
     /// <para>
     /// A value is one name <see cref="MailFathomPermission" /> publishes, or a <see cref="PermissionSubtree" /> naming
-    /// several of them at once, and either way it belongs to this entry's own surface; startup refuses anything else
-    /// rather than accepting a grant nothing enforces.
+    /// several of them at once, and either way it has to reach this entry's own surface; startup refuses anything else
+    /// rather than accepting a grant nothing enforces. A pattern may name permissions of both surfaces without naming
+    /// every one of them, and it then grants this surface's half, since the other half names checks this endpoint
+    /// never makes.
     /// </para>
     /// </remarks>
     public IList<string> Permissions { get; } = [];
@@ -140,6 +142,13 @@ internal sealed class TransportAuthenticationOptions
     /// look for a difference that is not there. A subtree resolves here rather than being carried any further, so
     /// nothing downstream — a claim, a startup line, a session response, a metadata document — has to expand one.
     /// </para>
+    /// <para>
+    /// A subtree may reach across both surfaces without reaching everything — <c>mailfathom.*.read</c> names two
+    /// permissions on each — and what it grants here is this surface's half of that. An entry guards one surface, so
+    /// the other half is a name this entry could not enforce and must not be reported as one it holds; validation has
+    /// already refused a pattern whose whole reach is elsewhere, which is the case where the narrowing would leave
+    /// nothing behind.
+    /// </para>
     /// </remarks>
     public IReadOnlyList<MailFathomPermission> GrantedPermissions(ProtectedSurface surface)
     {
@@ -148,7 +157,9 @@ internal sealed class TransportAuthenticationOptions
             return MailFathomPermission.PublishedFor(surface);
         }
 
-        var granted = this.Permissions.SelectMany(ResolveOrThrow).ToHashSet();
+        var granted = this.Permissions
+            .SelectMany(configuredPermission => ResolveOrThrow(configuredPermission, surface))
+            .ToHashSet();
 
         return [.. MailFathomPermission.All.Where(granted.Contains)];
     }
@@ -214,7 +225,8 @@ internal sealed class TransportAuthenticationOptions
         foreach (var configuredPermission in this.Permissions)
         {
             var covered = CoveredBy(configuredPermission);
-            var refusal = RefusalOf(permissionPath, configuredPermission, surface, covered, claimedPermissions);
+            var grantedHere = OnSurface(covered, surface);
+            var refusal = RefusalOf(permissionPath, configuredPermission, surface, covered, grantedHere, claimedPermissions);
 
             if (refusal is not null)
             {
@@ -223,7 +235,7 @@ internal sealed class TransportAuthenticationOptions
                 continue;
             }
 
-            claimedPermissions.UnionWith(covered);
+            claimedPermissions.UnionWith(grantedHere);
         }
     }
 
@@ -233,12 +245,20 @@ internal sealed class TransportAuthenticationOptions
     /// reads back as one message against one line of an operator's file. The four refusals a subtree can draw are
     /// worded apart from the four a name can, since an operator who wrote a pattern is looking for what the pattern
     /// did rather than for a name they did not write.
+    /// <para>
+    /// Two of them read the reach and two read what is left of it on this surface, which is the distinction a pattern
+    /// spanning both surfaces introduced: reaching nothing published and reaching everything published are answered
+    /// against the whole vocabulary, while granting nothing here and repeating something already carried are answered
+    /// against this entry's own half — a value granting two names here and two on the other surface is an ordinary
+    /// grant of the two, and only its own half can repeat what an earlier value in the same list gave.
+    /// </para>
     /// </remarks>
     private static string? RefusalOf(
         string permissionPath,
         string configuredPermission,
         ProtectedSurface surface,
         IReadOnlyList<MailFathomPermission> covered,
+        IReadOnlyList<MailFathomPermission> grantedHere,
         IReadOnlySet<MailFathomPermission> claimedPermissions)
     {
         var namesASubtree = PermissionSubtree.TryParse(configuredPermission, out var subtree);
@@ -246,23 +266,23 @@ internal sealed class TransportAuthenticationOptions
         if (covered.Count == 0)
         {
             return namesASubtree
-                ? $"{permissionPath} — '{configuredPermission}' matches no permission MailFathom publishes; write a prefix of one of {PublishedNamesFor(surface)} followed by '.*', or the name itself."
-                : $"{permissionPath} — '{configuredPermission}' is not a permission MailFathom publishes; write one of {PublishedNamesFor(surface)}, or a prefix of one of them followed by '.*'.";
+                ? $"{permissionPath} — '{configuredPermission}' matches no permission MailFathom publishes; a '*' segment stands for one or more whole segments of a published name, so write a pattern reaching one of {PublishedNamesFor(surface)}, or the name itself."
+                : $"{permissionPath} — '{configuredPermission}' is not a permission MailFathom publishes; write one of {PublishedNamesFor(surface)}, or a pattern over them writing '*' in place of one or more whole segments.";
         }
 
         if (namesASubtree && subtree.ReachesEveryPublishedPermission())
         {
-            return $"{permissionPath} — '{configuredPermission}' reaches both protected surfaces, so it is no shorthand for a part of this one, and what it would grant here is what leaving the '{nameof(Permissions)}' key out already grants. Remove the key, or write a prefix of one of {PublishedNamesFor(surface)} followed by '.*'.";
+            return $"{permissionPath} — '{configuredPermission}' reaches both protected surfaces entirely, so it is no shorthand for a part of this one, and what it would grant here is what leaving the '{nameof(Permissions)}' key out already grants. Remove the key, or write a pattern reaching one of {PublishedNamesFor(surface)}.";
         }
 
-        if (covered.All(permission => permission.Surface != surface))
+        if (grantedHere.Count == 0)
         {
             return namesASubtree
-                ? $"{permissionPath} — '{configuredPermission}' matches only permissions of the other protected surface and grants nothing here; write a prefix of one of {PublishedNamesFor(surface)} followed by '.*', or move the entry to the endpoint that serves it."
+                ? $"{permissionPath} — '{configuredPermission}' matches only permissions of the other protected surface and grants nothing here; write a pattern reaching one of {PublishedNamesFor(surface)}, or move the entry to the endpoint that serves it."
                 : $"{permissionPath} — '{configuredPermission}' belongs to the other protected surface and grants nothing here; write one of {PublishedNamesFor(surface)}, or move the entry to the endpoint that serves it.";
         }
 
-        if (covered.FirstOrDefault(claimedPermissions.Contains) is { IsSpecified: true } alreadyCarried)
+        if (grantedHere.FirstOrDefault(claimedPermissions.Contains) is { IsSpecified: true } alreadyCarried)
         {
             return namesASubtree
                 ? $"{permissionPath} — '{configuredPermission}' covers '{alreadyCarried.Name}', which the grant already carries."
@@ -286,17 +306,29 @@ internal sealed class TransportAuthenticationOptions
             : [];
     }
 
-    /// <summary>Reports what one written grant value reaches, once validation has established that it reaches something.</summary>
+    /// <summary>Reports what one written grant value grants on one surface, once validation has established that it reaches something.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value reaches nothing, which is what validation exists to have refused already.</exception>
-    private static IReadOnlyList<MailFathomPermission> ResolveOrThrow(string configuredPermission)
+    private static IReadOnlyList<MailFathomPermission> ResolveOrThrow(string configuredPermission, ProtectedSurface surface)
     {
         var covered = CoveredBy(configuredPermission);
 
         return covered.Count > 0
-            ? covered
+            ? OnSurface(covered, surface)
             : throw new InvalidOperationException(
                 "The grant was resolved before it was validated, so at least one written value names neither a permission this repository publishes nor a subtree covering one.");
     }
+
+    /// <summary>Narrows what a written value reaches to the surface the entry guards.</summary>
+    /// <remarks>
+    /// A pattern whose wildcard sits before its last segment can name permissions of both surfaces, and an entry
+    /// guards one. What the other half would grant here is nothing — no check on this endpoint reads a name of the
+    /// other surface — so it is dropped rather than reported as held; a value whose whole reach is over there is
+    /// refused instead, because an operator who wrote one meant something this entry cannot do.
+    /// </remarks>
+    private static IReadOnlyList<MailFathomPermission> OnSurface(
+        IReadOnlyList<MailFathomPermission> covered,
+        ProtectedSurface surface) =>
+        [.. covered.Where(permission => permission.Surface == surface)];
 
     private static string PublishedNamesFor(ProtectedSurface surface) =>
         string.Join(", ", MailFathomPermission.PublishedFor(surface).Select(permission => $"'{permission.Name}'"));
