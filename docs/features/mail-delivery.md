@@ -417,7 +417,7 @@ three and inventing the middle one, and it is what `send_email` calls and the wh
 **Nothing here transmits, and no configuration makes it.** The use case holds no delivery session and no factory for
 one, so there is nothing in it that could open a submission channel; what it answers with is the record, at the stage a
 delivery pass reads and continues from.
-[ADR 0013](../decisions/0013-what-a-caller-must-do-before-mail-leaves.md) is the decision that fixes this, and it fixes
+[ADR 0013](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md) is the decision that fixes this, and it fixes
 the wording a caller is given with it — queued, never sent.
 
 **The message is composed before any submission server has spoken**, because the record has to exist before a connection
