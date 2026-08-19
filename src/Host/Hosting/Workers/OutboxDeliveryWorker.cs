@@ -177,7 +177,7 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
                     break;
 
                 case MailOutboxDeliveryOutcome.MissedItsDueTime:
-                    this.LogSendMissedItsDueTime(accountId.Value);
+                    this.LogSendMissedItsDueTime(accountId.Value, FailureCodeOf(result));
 
                     break;
 
@@ -300,13 +300,14 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
     /// <summary>Reports a message this deployment declined to deliver late, which is the second ending that waits for a person.</summary>
     /// <remarks>
     /// The attempt count is deliberately absent: nothing was attempted, and naming one would read as a send that had
-    /// been tried. What an operator acts on is that the message exists, was never transmitted, and is theirs to send by
-    /// hand if it is still worth sending.
+    /// been tried. The failure code is present for the reason every other terminal outcome carries one — it is what an
+    /// operator alerts on and what joins the line to the code registry. What they act on is that the message exists,
+    /// was never transmitted, and is theirs to send by hand if it is still worth sending.
     /// </remarks>
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "A message queued for account {AccountId} was written to leave at a time that has since passed by more than this deployment delivers late, so it was not transmitted. It stays visible in the outbox until somebody decides what to do with it.")]
-    private partial void LogSendMissedItsDueTime(string accountId);
+        Message = "A message queued for account {AccountId} was written to leave at a time that has since passed by more than this deployment delivers late, so it was not transmitted [failure {FailureCode}]. It stays visible in the outbox until somebody decides what to do with it.")]
+    private partial void LogSendMissedItsDueTime(string accountId, int? failureCode);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

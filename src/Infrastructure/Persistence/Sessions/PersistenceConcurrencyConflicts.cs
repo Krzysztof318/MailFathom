@@ -92,6 +92,12 @@ internal static class PersistenceConcurrencyConflicts
     /// a second delivery is the one duplication in this system that cannot be withdrawn afterwards.
     /// </para>
     /// <para>
+    /// The next is the recurring send's identity, which is that same case for a message somebody asked to have sent
+    /// again rather than for one send. Two callers declaring the same repetition reach the database together, one is
+    /// refused here, and the retry reads back the declaration the winner wrote — so one authored act leaves one
+    /// declaration rather than two that would each produce a message on every occasion the schedule names.
+    /// </para>
+    /// <para>
     /// The next is one copy of one outgoing message filed into one role by two passes. Filing guards the key with a
     /// read before it writes, so two passes reading the same record before either commits both find nothing and both
     /// insert; the loser violates the key. Recognizing it is what makes that guard sound rather than decorative — the

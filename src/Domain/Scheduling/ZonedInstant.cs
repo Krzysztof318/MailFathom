@@ -84,6 +84,20 @@ public sealed record ZonedInstant
             resolved = resolved.AddMinutes(1);
         }
 
+        if (resolved != declared)
+        {
+            // The walk steps by a minute from wherever the declared time sat inside the gap, so it lands a minute's
+            // worth of seconds past the end rather than on it. Every transition the zone database names falls on a
+            // whole minute, so dropping what is left below the minute is the end itself — and the guard is what keeps
+            // a zone that ever transitioned mid-minute from being answered with a time it skipped.
+            var beyondTheMinute = TimeSpan.FromTicks(resolved.TimeOfDay.Ticks % TimeSpan.TicksPerMinute);
+
+            if (beyondTheMinute > TimeSpan.Zero && !zone.IsInvalidTime(resolved - beyondTheMinute))
+            {
+                resolved -= beyondTheMinute;
+            }
+        }
+
         var offset = zone.IsAmbiguousTime(resolved)
             ? zone.GetAmbiguousTimeOffsets(resolved).Max()
             : zone.GetUtcOffset(resolved);

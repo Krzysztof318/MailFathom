@@ -45,6 +45,22 @@ public sealed class ZonedInstantTests
         Assert.Equal(Instant("2026-03-29T01:00:00Z"), resolved.Instant);
     }
 
+    /// <summary>A skipped time carrying seconds is taken at the gap's end too, rather than at a minute's worth past it.</summary>
+    /// <remarks>
+    /// The walk out of the gap steps by a minute from wherever the time sat inside it, so a time with seconds on it
+    /// would otherwise land those seconds beyond the end — which is not the instant the type promises and is a message
+    /// leaving at a moment nobody named.
+    /// </remarks>
+    [Fact]
+    public void Resolve_ALocalTimeTheClockSpringsOverThatCarriesSeconds_IsStillTakenAtTheInstantTheGapEnds()
+    {
+        // Act
+        var resolved = ZonedInstant.Resolve(new DateTime(2026, 3, 29, 2, 15, 30), Warsaw);
+
+        // Assert
+        Assert.Equal(Instant("2026-03-29T01:00:00Z"), resolved.Instant);
+    }
+
     /// <summary>A time the clock passes through twice occurs once, at the earlier of the two readings.</summary>
     [Fact]
     public void Resolve_ALocalTimeTheClockPassesThroughTwice_IsTakenAtTheEarlierReading()

@@ -189,7 +189,7 @@ internal sealed class RecurringSendStore(MailFathomDbContext readContext, TimePr
     /// The change-tracker pass is what makes a second declaration in one uncommitted session read back the first,
     /// which is the same two-pass shape every alternate-key lookup in this schema uses.
     /// </remarks>
-    private static async Task<RecurringSendEntity?> FindByIdentityAsync(
+    private static Task<RecurringSendEntity?> FindByIdentityAsync(
         MailFathomDbContext writeContext,
         RecurringSendRequest request,
         CancellationToken cancellationToken)
@@ -198,21 +198,14 @@ internal sealed class RecurringSendStore(MailFathomDbContext readContext, TimePr
         var origin = request.Requester.Origin;
         var identity = request.Requester.Identity;
 
-        bool MatchesIdentity(RecurringSendEntity candidate) =>
-            candidate.MailboxAccountId == accountValue
-            && candidate.RequesterOrigin == origin
-            && candidate.RequesterIdentity == identity;
-
-        var pending = writeContext.RecurringSends.Local.FirstOrDefault(MatchesIdentity);
-        if (pending is not null)
-        {
-            return pending;
-        }
-
-        return await writeContext.RecurringSends.SingleOrDefaultAsync(
-            candidate => candidate.MailboxAccountId == accountValue
-                && candidate.RequesterOrigin == origin
-                && candidate.RequesterIdentity == identity,
+        // The recipients are deliberately not joined here: a declaration read back is loaded whole by its caller, and
+        // an occasion that only needs to know one exists must not pull every address into memory to find out.
+        return TrackedEntityLookup.SinglePendingOrPersistedAsync(
+            writeContext.RecurringSends,
+            writeContext.RecurringSends,
+            declaration => declaration.MailboxAccountId == accountValue
+                && declaration.RequesterOrigin == origin
+                && declaration.RequesterIdentity == identity,
             cancellationToken);
     }
 
