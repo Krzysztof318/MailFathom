@@ -97,6 +97,27 @@ public sealed class TransportGrantStartupReportTests
         Assert.DoesNotContain("writes down no grant", record.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>The line is what an operator reads instead of expanding a pattern by hand, so it names what the subtree resolved to rather than the subtree.</summary>
+    [Fact]
+    public async Task StartAsync_AnEntryGrantingASubtree_StatesTheResolvedNamesRatherThanThePattern()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var entry = AnApiKeyEntry();
+        entry.Permissions.Add("mailfathom.mail.contacts.*");
+
+        var report = ReportFor(McpEndpointWith(entry), new AdminEndpointOptions(), logs);
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.Single(logs.Records);
+        Assert.Equal(
+            "mailfathom.mail.contacts.read, mailfathom.mail.contacts.write",
+            Assert.Contains("GrantedPermissions", record.Properties));
+    }
+
     /// <summary>An empty grant would otherwise read as a message that lost its argument, and it is the value worth being unambiguous about.</summary>
     [Fact]
     public async Task StartAsync_AnEntryGrantedNothing_NamesTheEmptinessRatherThanPrintingNothing()

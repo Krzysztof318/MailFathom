@@ -368,6 +368,259 @@ public sealed class TransportAuthenticationOptionsTests
         Assert.Empty(grants["nightly"]);
     }
 
+    /// <summary>The shorthand this whole shape exists for: one written value in place of a list an operator would otherwise revisit whenever a name is added beneath it.</summary>
+    [Fact]
+    public void GrantedPermissions_AGrantNamingASubtree_ReachesEveryPermissionBeneathIt()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add("mailfathom.mail.contacts.*");
+
+        // Act
+        var granted = entry.GrantedPermissions(ProtectedSurface.Mail);
+
+        // Assert
+        Assert.Equal(
+            [MailFathomPermission.MailContactsRead, MailFathomPermission.MailContactsWrite],
+            granted);
+    }
+
+    /// <summary>A subtree is shorthand for names rather than a value of its own, so it resolves into the same set a written-out grant would and in the same order.</summary>
+    [Fact]
+    public void GrantedPermissions_ASubtreeBesideAName_ResolvesBothIntoThePublishedOrder()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add("mailfathom.mail.contacts.*");
+        entry.Permissions.Add(MailFathomPermission.MailRead.Name);
+
+        // Act
+        var granted = entry.GrantedPermissions(ProtectedSurface.Mail);
+
+        // Assert
+        Assert.Equal(
+            [
+                MailFathomPermission.MailRead,
+                MailFathomPermission.MailContactsRead,
+                MailFathomPermission.MailContactsWrite,
+            ],
+            granted);
+    }
+
+    /// <summary>Nothing downstream expands a pattern, so what a key is mapped to is what the claims, the startup line, and the session response all read.</summary>
+    [Fact]
+    public void GrantsByApiKeyName_AnEntryGrantingASubtree_MapsTheKeyToTheResolvedNames()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey("reporting-job") };
+        entry.Permissions.Add("mailfathom.admin.audit.*");
+
+        // Act
+        var grants = TransportAuthenticationConfiguration.GrantsByApiKeyName(
+            [entry],
+            ProtectedSurface.Administration);
+
+        // Assert
+        Assert.Equal([MailFathomPermission.AdminAuditRead], grants["reporting-job"]);
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_AGrantNamingASubtreeOfItsOwnSurface_ReportsNothing()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add("mailfathom.admin.*");
+
+        // Act, Assert
+        Assert.Empty(entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Administration));
+    }
+
+    /// <summary>A prefix nothing sits beneath is a grant that reaches nothing while reading as a broad one, so it fails startup rather than being accepted as narrowed all the way.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ASubtreeNothingIsPublishedBeneath_IsRefused()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add("mailfathom.post.*");
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains($"{SettingPath}:Permissions", reported, StringComparison.Ordinal);
+        Assert.Contains("mailfathom.post.*", reported, StringComparison.Ordinal);
+        Assert.Contains(MailFathomPermission.MailRead.Name, reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>A cross-surface subtree would sit in the file reaching six names none of which this endpoint enforces.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ASubtreeOfTheOtherSurface_IsRefused()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add("mailfathom.admin.*");
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains($"{SettingPath}:Permissions", reported, StringComparison.Ordinal);
+        Assert.Contains("mailfathom.admin.*", reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>Both spellings say what leaving the key out already says, and giving that posture a second spelling would leave two arrangements meaning one thing.</summary>
+    [Theory]
+    [InlineData("*")]
+    [InlineData("mailfathom.*")]
+    public void FindConfigurationErrors_AGrantReachingBothSurfaces_IsRefused(string written)
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add(written);
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains($"{SettingPath}:Permissions", reported, StringComparison.Ordinal);
+        Assert.Contains(written, reported, StringComparison.Ordinal);
+        Assert.Contains("Remove the key", reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>A partial segment is no pattern, so the refusal has to be the one an unpublished name draws rather than one about a subtree matching nothing.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AWildcardInsideASegment_IsRefusedAsAnUnpublishedName()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add("mailfathom.mail.c*");
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains("is not a permission MailFathom publishes", reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>A grant carrying one permission twice says nothing twice, whichever of the two spellings reached it.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ASubtreeCoveringAPermissionTheGrantAlreadyCarries_IsRefused()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add(MailFathomPermission.MailContactsRead.Name);
+        entry.Permissions.Add("mailfathom.mail.contacts.*");
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains("mailfathom.mail.contacts.*", reported, StringComparison.Ordinal);
+        Assert.Contains(MailFathomPermission.MailContactsRead.Name, reported, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_APermissionASubtreeAlreadyCarries_IsRefused()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add("mailfathom.mail.contacts.*");
+        entry.Permissions.Add(MailFathomPermission.MailContactsWrite.Name);
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains(MailFathomPermission.MailContactsWrite.Name, reported, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_ASubtreeInsideAnotherSubtree_IsRefused()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add("mailfathom.mail.*");
+        entry.Permissions.Add("mailfathom.mail.contacts.*");
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains("mailfathom.mail.contacts.*", reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>Two subtrees that reach different names are an ordinary grant: nothing about a pattern makes a second one suspicious.</summary>
+    [Fact]
+    public void FindConfigurationErrors_TwoDisjointSubtrees_ReportsNothing()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { ApiKey = AnApiKey() };
+        entry.Permissions.Add("mailfathom.admin.audit.*");
+        entry.Permissions.Add("mailfathom.admin.credentials.*");
+
+        // Act, Assert
+        Assert.Empty(entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Administration));
+    }
+
+    /// <summary>A scope is compared byte for byte at the authorization server, so a pattern is one no token could carry and no client could ask for.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ASubtreeWrittenIntoTheRequiredScopes_IsRefused()
+    {
+        // Arrange
+        var oauth = AnOAuthBlock();
+        oauth.RequiredScopes.Add("mailfathom.mail.*");
+
+        var entry = new TransportAuthenticationOptions { OAuth = oauth };
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains($"{SettingPath}:OAuth:RequiredScopes:0", reported, StringComparison.Ordinal);
+        Assert.Contains("mailfathom.mail.*", reported, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_ASubtreeWrittenIntoTheAdvertisedScopes_IsRefused()
+    {
+        // Arrange
+        var oauth = AnOAuthBlock();
+        oauth.AdvertisedScopes.Add("mailfathom.mail.*");
+
+        var entry = new TransportAuthenticationOptions { OAuth = oauth };
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains($"{SettingPath}:OAuth:AdvertisedScopes:0", reported, StringComparison.Ordinal);
+        Assert.Contains("mailfathom.mail.*", reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>An asterisk is a perfectly good scope character, so what is refused is a value that would have granted something rather than every value spelled with one.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AnotherResourcesWildcardScope_IsAccepted()
+    {
+        // Arrange
+        var oauth = AnOAuthBlock();
+        oauth.RequiredScopes.Add("files.read.*");
+        oauth.AdvertisedScopes.Add("calendar.*");
+
+        var entry = new TransportAuthenticationOptions { OAuth = oauth };
+
+        // Act, Assert
+        Assert.Empty(entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail));
+    }
+
     private static ConfiguredSecret APublicKey(string name = "nightly") =>
         new() { Name = name, SecretReference = "file:/etc/mailfathom/nightly.pub" };
 

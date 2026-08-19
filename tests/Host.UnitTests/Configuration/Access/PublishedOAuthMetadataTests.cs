@@ -205,6 +205,28 @@ public sealed class PublishedOAuthMetadataTests
         Assert.Equal(["mailfathom.read", "mailfathom.mail.read"], published.ScopesSupported);
     }
 
+    /// <summary>A client asks for scopes an authorization server can mint, so the document names what the subtree resolved to and never the subtree itself.</summary>
+    [Fact]
+    public void For_AnEntryNarrowedByTokenScopesGrantingASubtree_PublishesTheResolvedNames()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions
+        {
+            OAuth = EntryFor(WorkforceIssuer, "workforce", "mailfathom.read"),
+            PermissionsFromTokenScopes = true,
+        };
+
+        entry.Permissions.Add("mailfathom.mail.contacts.*");
+
+        // Act
+        var published = PublishedOAuthMetadata.For([entry], ProtectedSurface.Mail);
+
+        // Assert
+        Assert.Equal(
+            ["mailfathom.read", "mailfathom.mail.contacts.read", "mailfathom.mail.contacts.write"],
+            published.ScopesSupported);
+    }
+
     /// <summary>An entry granting from configuration alone advertises none of its permissions, because a client asking for one would be asking for something nothing reads.</summary>
     [Fact]
     public void For_AnEntryGrantingFromConfiguration_PublishesNoneOfItsPermissions()

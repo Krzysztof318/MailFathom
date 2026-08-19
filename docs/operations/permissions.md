@@ -133,6 +133,17 @@ third parties. Writing `Permissions: []` grants nothing, which is how a credenti
 entry: it still authenticates, and on the administrative surface it still reads `GET /api/admin/session`, which is
 where an operator reads that the credential now holds nothing.
 
+**A value ending in `.*` grants the subtree beneath it.** `mailfathom.admin.*` grants every administrative permission
+and `mailfathom.mail.contacts.*` grants both contact permissions, so a grant states the boundary you mean rather than a
+list to revisit whenever a name is added. The prefix is matched on whole dot-separated segments — `mailfathom.admin.*`
+reaches `mailfathom.admin.credentials.write`, while `mailfathom.mail.c*` is no pattern at all and fails startup as the
+name nothing publishes that it is. A pattern is resolved against the published set on every start rather than frozen at
+the version it was written under, **which carries the same upgrade consequence the absent key does**: a permission
+added beneath a covered prefix in a later release reaches the entry on upgrade alone, with nobody editing the grant.
+Where that would be wrong, write the names out. Everything that reads a grant back states what a pattern resolved to
+and never the pattern — the startup line, `GET /api/admin/session`, and `scopes_supported` — so no reader has to expand
+one by hand.
+
 **A surface with no `Authentication` entry at all grants that surface's whole half** to every caller it serves, because
 there is no entry for a grant to be written on. That is the unauthenticated posture the startup warning already
 reports.
@@ -147,10 +158,15 @@ operator creates in their authorization server;
 [connecting an MCP client through your identity provider](mcp-client-oauth.md) walks that setup, and an entry granting
 from configuration publishes none of its permissions, because no client can ask for one.
 
-**Four things fail startup**, each naming the entry and the position in the list: a name nothing publishes, a name
-belonging to the other surface, a name the same grant already carries, and a permission name written into
-`RequiredScopes` or `AdvertisedScopes`. The last is refused because requiring a permission at the door would close it on
-a caller the deployment meant to serve less, and because the grant that reads one advertises it already.
+**Startup refuses a grant that says something impossible**, naming the entry and quoting what was written: a name
+nothing publishes, a name belonging to the other surface, a name the same grant already carries, a pattern matching
+nothing this repository publishes, a pattern matching only the other surface's half, a pattern covering a name the
+grant already carries explicitly or through another pattern, and a bare `*` or `mailfathom.*` — which reach both
+surfaces, so they are no shorthand for a part of either and grant exactly what leaving the key out grants; they are
+refused rather than accepted as a second spelling of it. A permission name or a pattern written into `RequiredScopes` or
+`AdvertisedScopes` is refused as well: requiring a permission at the door would close it on a caller the deployment
+meant to serve less, the grant that reads one advertises it already, and a scope is compared byte for byte at an
+authorization server, which can mint no pattern.
 
 **Startup records what every entry resolved to**, one line per entry, so the posture is read on the first run rather
 than inferred later. An entry that wrote no grant says so rather than being reported as though somebody had chosen what
