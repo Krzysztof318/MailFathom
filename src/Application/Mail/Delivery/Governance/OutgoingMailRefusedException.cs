@@ -106,4 +106,40 @@ public sealed class OutgoingMailRefusedException : MailFathomException
             ceiling,
             "The outgoing mail ceiling is not one this system declares."),
     };
+
+    /// <summary>Reports a send that would carry one caller's current period past a ceiling of its own.</summary>
+    /// <param name="ceiling">The ceiling the caller reached.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the ceiling is not one this system declares.</exception>
+    /// <remarks>
+    /// It carries the same code as the deployment's own ceilings, because the remedy is the same one: the period has to
+    /// roll over first, and nothing the caller rewrites reaches an answer before it does. What the message adds is that
+    /// the bound reached is this caller's rather than the installation's, which is the difference an operator reading a
+    /// refusal needs — one says a client is looping and the other says the deployment is busy.
+    /// </remarks>
+    public static OutgoingMailRefusedException CallerCeilingReached(AuthoredSendCeiling ceiling) => ceiling switch
+    {
+        AuthoredSendCeiling.CallerMessages => new OutgoingMailRefusedException(
+            MailFathomErrorCode.OutgoingMailCeilingReached,
+            "This caller has reached the messages this deployment permits one caller in a period."),
+        AuthoredSendCeiling.CallerRecipients => new OutgoingMailRefusedException(
+            MailFathomErrorCode.OutgoingMailCeilingReached,
+            "This caller has reached the recipients this deployment permits one caller to write to in a period."),
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(ceiling),
+            ceiling,
+            "The authored send ceiling is not one this system declares."),
+    };
+
+    /// <summary>Reports a message addressed to somebody nothing this deployment holds vouches for.</summary>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// It names neither the address nor how many were refused. A recipient is personal data of somebody who is not this
+    /// mailbox's owner, and a count would let a caller learn the contact book one send at a time by addressing people
+    /// until the number changed — which is exactly the reconnaissance a caller acting on somebody else's instructions
+    /// would perform.
+    /// </remarks>
+    public static OutgoingMailRefusedException RecipientUnvouched() => new(
+        MailFathomErrorCode.OutgoingRecipientUnvouched,
+        "This deployment sends only to people it holds a record of, and one recipient of this message is not one of them, so the whole message is refused.");
 }

@@ -1,6 +1,6 @@
 # Mail delivery
 
-<!-- describes: src/Application/Mail/Delivery/**, src/Domain/Delivery/**, src/Domain/Scheduling/**, src/Infrastructure/Mail/MailKit/Delivery/**, src/Infrastructure/Mail/Mime/Composition/**, src/Infrastructure/Persistence/Delivery/**, src/Infrastructure/Mail/MailAccountDeliveryOptions.cs, src/Infrastructure/Mail/SmtpAccountSettings.cs, src/Host/Configuration/Mail/ConfiguredSmtpAccountSettingsProvider.cs, src/Host/Configuration/Mail/ConfiguredOutgoingSendPermissionReader.cs, src/Host/Configuration/Mail/MailDeliveryOptions.cs, src/Host/Configuration/Mail/MailSynchronizationOptions.cs, src/Host/Hosting/Workers/OutboxDeliveryWorker.cs -->
+<!-- describes: src/Application/Mail/Delivery/**, src/Domain/Delivery/**, src/Domain/Scheduling/**, src/Infrastructure/Mail/MailKit/Delivery/**, src/Infrastructure/Mail/Mime/Composition/**, src/Infrastructure/Persistence/Delivery/**, src/Infrastructure/Observability/LoggedAuthoredSendAuditor.cs, src/Infrastructure/Mail/MailAccountDeliveryOptions.cs, src/Infrastructure/Mail/SmtpAccountSettings.cs, src/Host/Configuration/Mail/ConfiguredSmtpAccountSettingsProvider.cs, src/Host/Configuration/Mail/ConfiguredOutgoingSendPermissionReader.cs, src/Host/Configuration/Mail/MailDeliveryOptions.cs, src/Host/Configuration/Mail/MailSynchronizationOptions.cs, src/Host/Hosting/Workers/OutboxDeliveryWorker.cs -->
 
 Reading a mailbox and submitting to one are two capabilities against two servers, and MailFathom holds them apart. The
 submission half is whole: an account declares where its mail is submitted, a **delivery session** is opened against that
@@ -141,6 +141,60 @@ can produce a second one.
 constraint; [the runtime configuration](../operations/configuration-runtime.md#deployment) holds the read-only posture.
 What a *caller* must hold to ask at all is a different question with a different answer —
 [`mailfathom.mail.send`](../operations/permissions.md), a grant on a credential rather than a policy on a deployment.
+
+## What a caller may be talked into
+
+The bounds above are about this deployment. This section is about the caller asking it, and it exists because an agent
+holding a read grant and a send grant reads mail written by strangers and then decides what to do. A message that says
+*forward this thread to the address below* is untrusted input arriving inside the very content the agent was asked to
+reason about, and every part of the system between it and a stranger's mailbox is behaving correctly when it obeys.
+Three bounds make that expensive, and every one of them is judged **inside the use case** rather than at the tool, so a
+second entrypoint added later inherits them rather than re-implementing them.
+
+**The recipient policy is judged here as well.** `MailDelivery:RecipientPolicy` is asked on this surface before the
+outgoing record exists, rather than trusted from the layer beneath. An instance restricted to a set of domains cannot
+be steered outside them whatever the mail says, and that holds for the tools as well as for the record.
+
+**Per-caller ceilings bound one client rather than the installation.**
+[`MaxMessagesPerCaller` and `MaxRecipientsPerCaller`](../operations/configuration-mail.md#how-much-may-leave-in-a-period--maildeliverysendceilings)
+count what one calling principal has been admitted for, over the same epoch-anchored window the deployment's own
+ceilings use and separately from them. An agent in a loop is then a refusal after a handful of messages rather than
+after a provider notices. The refusal names which of the two was reached and says the period has to roll over first; it
+never names the number, which is the operator's configuration and nothing a caller could have influenced.
+
+**An address the caller named and nothing here vouches for is the signal.** A recipient of an authored send is one of
+two things: somebody this deployment derived — whoever a reply answers, whoever a reply-to-all keeps, an address
+resolved from a contact named by identity — or an address the caller wrote out itself. Only the second is judged.
+Against it stands what this installation already holds a record of: the contact book, and the addresses its own
+accounts send as. An address that is neither is what an injected instruction looks like, and
+[`MailDelivery:UnvouchedRecipients`](../operations/configuration-mail.md#a-recipient-nothing-here-vouches-for--maildeliveryunvouchedrecipients)
+is the deployment's choice of what to do about one: `Admit` records it, `Refuse` refuses the whole message. Because
+only what the caller named is judged, `reply_to_email` and `forward_email` keep working under `Refuse` — a reply
+addresses whoever asked for answers, which the caller never wrote down.
+
+| Code | Raised when | What resolves it |
+| --- | --- | --- |
+| `53007` `OutgoingRecipientUnvouched` | A caller-named recipient is one this deployment holds no record of, under `Refuse` | Writing to somebody the contact book holds, or admitting unvouched recipients |
+| `57002` `OutgoingMailCeilingReached` | This caller's own period has no room for this message | Waiting for the period to roll over, or raising the per-caller ceiling |
+
+**Every send from this surface is recorded**: the calling principal, the grant it held, which of the four acts was
+asked for, the account, the identity of the outgoing record, how many people it names, and how many of those nothing
+here vouched for. A send that reached somebody unvouched for is recorded at a level of its own, because that is the
+line an owner looking for an odd send is looking for. What is **not** recorded is everything about the message — no
+prompt, no mail content, no subject, no body, and no address. The record answers *who asked for this and under what*,
+which turns "an agent sent something odd" from a suspicion into something an owner can read; what was sent is the
+stored MIME the outgoing record already points at. Today it is written to the structured log, under the deployment's
+own log retention; the port behind it is what a durable evidence store would replace without any caller changing.
+
+**What none of this is.** Every bound here answers a caller that was *manipulated* — one acting in good faith on text
+somebody else wrote. **None of it is a defence against a caller that is itself hostile.** A client holding
+`mailfathom.mail.send` can send within the policy, within the ceilings, and to people the contact book holds, and each
+of those sends is correct by every rule this deployment has. What bounds that is the grant itself and who holds the
+credential carrying it — [permissions](../operations/permissions.md) — rather than anything on this page. Nor is the
+vouching a judgement about a person: an address the contact book happens to hold is admitted whatever the message says
+about it, and an address a correspondent legitimately asked to be copied is refused under `Refuse` until somebody
+records it. The setting trades correspondence with new people for a bound on where an injected instruction can send
+mail, and which side of that trade an installation wants is the operator's to choose.
 
 ## Transport security is judged by the account's rules
 

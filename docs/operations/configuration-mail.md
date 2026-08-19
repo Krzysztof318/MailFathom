@@ -457,6 +457,8 @@ all.
 | `MailDelivery:SendCeilings:MaxRecipientsPerAccount` | long | `0` | Not negative, and never above `MaxRecipientsPerDeployment` where both are declared; `0` is no ceiling | restart |
 | `MailDelivery:SendCeilings:MaxMessagesPerDeployment` | long | `0` | Not negative; `0` is no ceiling | restart |
 | `MailDelivery:SendCeilings:MaxRecipientsPerDeployment` | long | `0` | Not negative; `0` is no ceiling | restart |
+| `MailDelivery:SendCeilings:MaxMessagesPerCaller` | long | `0` | Not negative, and never above `MaxMessagesPerDeployment` where both are declared; `0` is no ceiling | restart |
+| `MailDelivery:SendCeilings:MaxRecipientsPerCaller` | long | `0` | Not negative, and never above `MaxRecipientsPerDeployment` where both are declared; `0` is no ceiling | restart |
 
 The period is a **fixed window anchored at the Unix epoch**, the same shape the
 [embedding spend ceiling](configuration-ai.md#embeddings) uses: every process of a deployment and every restart of one
@@ -471,9 +473,44 @@ which is the operator's own configuration and nothing a caller could have influe
 
 A per-account ceiling above the deployment's own fails startup, because it is a bound this installation could never
 apply: the account would meet the deployment's ceiling first, under a refusal naming a number nobody configured for it.
-Declaring no ceiling at all is a supported posture rather than an oversight — sending is already off until an account is
-turned on — and what a deployment with sending on and no ceiling is exposed to is
+The two per-caller ceilings are refused the same way and for the same reason. Declaring no ceiling at all is a supported
+posture rather than an oversight — sending is already off until an account is turned on — and what a deployment with
+sending on and no ceiling is exposed to is
 [mail delivery](../features/mail-delivery.md#what-a-deployment-must-turn-on-before-it-can-send).
+
+**The two per-caller ceilings count a client rather than a mailbox**, over the same window and against the same
+counting rule. They are what a deployment answers an agent in a loop with: the account and deployment ceilings bound
+the installation, so one client can spend the whole of them, and a client that keeps asking is then a refusal after a
+handful of messages instead of after the provider notices. What a caller is counted as is the principal the credential
+it authenticated with resolves to, and a caller reaching one of these is told which ceiling and that the period has to
+roll over, exactly as one reaching the deployment's own is.
+
+Two properties follow from the counting being per process and in memory. The count is **not durable**: a restart begins
+the period's counting again, which the account and deployment ceilings — counted from the outgoing records themselves —
+do not. And one period counts at most a few thousand distinct callers, past which a caller it is not already counting
+is refused rather than admitted uncounted. Both are deliberate: a durable count would mean writing the identity a
+credential resolves to onto every outgoing record and keeping it as long as the record, which is a great deal of
+retained personal data for a bound whose whole purpose is to stop a loop within minutes.
+
+### A recipient nothing here vouches for — `MailDelivery:UnvouchedRecipients`
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `MailDelivery:UnvouchedRecipients` | enum | `Admit` | `Admit` or `Refuse` | restart |
+
+`Refuse` narrows an authored send to people this deployment already holds a record of: an address in the contact book,
+or one an account of this installation sends as. An address that is none of those and that the **caller itself named**
+refuses the whole message, under `53007`, which names neither the address nor how many were refused.
+
+Only what the caller named is judged. A recipient this deployment derived — whoever a reply answers, whoever a
+reply-to-all keeps, an address resolved from a contact the caller named by identity — is this system's own answer rather
+than the caller's word, so replying and forwarding go on working under `Refuse` exactly as they did.
+
+`Admit` is the default because refusing by default would refuse the first message of every installation whose contact
+book is still empty. It is not the same as not judging: a send reaching somebody nothing vouches for is recorded as
+such either way, which is the line to look for when reading back what a caller has been sending. What this setting is
+for, and what it is not a defence against, is
+[mail delivery](../features/mail-delivery.md#what-a-caller-may-be-talked-into).
 
 
 ## `MailboxSearch`

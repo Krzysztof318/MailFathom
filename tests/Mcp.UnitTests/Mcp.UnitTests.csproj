@@ -13,6 +13,7 @@
          the same way wherever one is arranged rather than once per suite. -->
     <Compile Include="..\shared\AccessAuthorizations.cs" Link="AccessAuthorizations.cs" />
     <Compile Include="..\shared\OutgoingMailGovernors.cs" Link="OutgoingMailGovernors.cs" />
+    <Compile Include="..\shared\AuthoredSendGovernors.cs" Link="AuthoredSendGovernors.cs" />
     <Compile Include="..\shared\RecordingLoggerProvider.cs" Link="RecordingLoggerProvider.cs" />
     <Compile Include="..\shared\StubMailFolderParticipation.cs" Link="StubMailFolderParticipation.cs" />
     <Compile Include="..\shared\StubJunkMailFolderCatalog.cs" Link="StubJunkMailFolderCatalog.cs" />

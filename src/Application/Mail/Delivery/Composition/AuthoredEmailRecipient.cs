@@ -12,6 +12,7 @@ namespace MailFathom.Application.Mail.Delivery.Composition;
 /// <param name="Address">The addr-spec to compose with, unparsed and unvalidated.</param>
 /// <param name="DisplayName">The name to write beside the address, or nothing to write the address alone.</param>
 /// <param name="Contact">The contact the address was resolved from, or nothing when an author supplied the address itself.</param>
+/// <param name="Provenance">How the address came to be here, which is what the sending governance judges a caller's own word by.</param>
 /// <remarks>
 /// <para>
 /// Both text members are an author's input rather than a value this system produced, which is why they arrive as text.
@@ -29,9 +30,15 @@ namespace MailFathom.Application.Mail.Delivery.Composition;
 /// cannot be resumed without them; a name is presentation, so it stays in the stored MIME the way every other authored
 /// field does.
 /// </para>
+/// <para>
+/// The provenance reaches neither. It says where the address came from rather than what it is, which is a question only
+/// the governance in front of the outbox asks, and it defaults to the caller's own word so that a boundary added later
+/// is judged strictly rather than trusted by omission.
+/// </para>
 /// </remarks>
 public sealed record AuthoredEmailRecipient(
     OutgoingRecipientRole Role,
     string Address,
     string? DisplayName = null,
-    ContactId? Contact = null);
+    ContactId? Contact = null,
+    AuthoredRecipientProvenance Provenance = AuthoredRecipientProvenance.NamedByCaller);

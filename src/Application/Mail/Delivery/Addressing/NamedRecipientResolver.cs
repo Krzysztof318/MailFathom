@@ -111,7 +111,8 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts)
                 named.Role,
                 address.Address,
                 contact.DisplayName.Value,
-                contact.Id));
+                contact.Id,
+                AuthoredRecipientProvenance.ResolvedFromContactBook));
         }
 
         return RecipientResolution.Resolved(resolved);

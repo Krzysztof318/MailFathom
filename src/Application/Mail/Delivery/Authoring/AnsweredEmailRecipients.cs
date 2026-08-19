@@ -63,7 +63,7 @@ internal static class AnsweredEmailRecipients
         {
             if (alreadyPlaced.Add(address))
             {
-                placed.Add(new AuthoredEmailRecipient(role, address.Address, address.DisplayName));
+                placed.Add(Derived(role, address));
             }
         }
 
@@ -71,7 +71,7 @@ internal static class AnsweredEmailRecipients
         {
             if (!ownedByAccount.Contains(address) && alreadyPlaced.Add(address))
             {
-                placed.Add(new AuthoredEmailRecipient(role, address.Address, address.DisplayName));
+                placed.Add(Derived(role, address));
             }
         }
 
@@ -82,6 +82,19 @@ internal static class AnsweredEmailRecipients
 
         return placed;
     }
+
+    /// <summary>Names one recipient this system read out of the answered message rather than took from whoever asked.</summary>
+    /// <remarks>
+    /// The provenance is what keeps a reply addressable at all under a deployment that refuses recipients it cannot
+    /// vouch for: the people a reply goes to are the ones the message being answered named, so they are this system's
+    /// reading of mail it already holds rather than an address a caller supplied.
+    /// </remarks>
+    private static AuthoredEmailRecipient Derived(OutgoingRecipientRole role, EmailAddress address) => new(
+        role,
+        address.Address,
+        address.DisplayName,
+        Contact: null,
+        AuthoredRecipientProvenance.DerivedFromAnsweredEmail);
 
     /// <summary>Reads whoever the answered message asked for answers to, which every reply is addressed to.</summary>
     /// <remarks>

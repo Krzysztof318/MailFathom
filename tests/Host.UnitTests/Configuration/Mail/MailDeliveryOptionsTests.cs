@@ -364,6 +364,104 @@ public sealed class MailDeliveryOptionsTests
         Assert.Contains(expectedSetting, Assert.Single(results).ErrorMessage, StringComparison.Ordinal);
     }
 
+    /// <summary>A per-caller ceiling above the deployment's own could never bind, so it is refused rather than ignored.</summary>
+    [Theory]
+    [InlineData(10, 4, 0, 0, "MaxMessagesPerCaller")]
+    [InlineData(0, 0, 10, 4, "MaxRecipientsPerCaller")]
+    public void Validate_CallerCeilingAboveTheDeploymentsOwn_IsRefused(
+        long callerMessages,
+        long deploymentMessages,
+        long callerRecipients,
+        long deploymentRecipients,
+        string expectedSetting)
+    {
+        // Arrange
+        var options = new MailDeliveryOptions
+        {
+            SendCeilings = new OutgoingMailCeilingOptions
+            {
+                MaxMessagesPerCaller = callerMessages,
+                MaxMessagesPerDeployment = deploymentMessages,
+                MaxRecipientsPerCaller = callerRecipients,
+                MaxRecipientsPerDeployment = deploymentRecipients,
+            },
+        };
+
+        // Act
+        var results = Validate(options);
+
+        // Assert
+        Assert.Contains(expectedSetting, Assert.Single(results).ErrorMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>The per-caller ceilings an operator wrote are what one caller's own period is weighed against.</summary>
+    [Fact]
+    public void SendCeilings_CallerCeilingsAnOperatorWrote_BecomeWhatOneCallersPeriodIsWeighedAgainst()
+    {
+        // Arrange
+        var options = new MailDeliveryOptions
+        {
+            SendCeilings = new OutgoingMailCeilingOptions
+            {
+                Period = TimeSpan.FromHours(1),
+                MaxMessagesPerCaller = 2,
+                MaxMessagesPerDeployment = 5,
+            },
+        };
+
+        // Act
+        var ceilings = options.SendCeilings.ToCallerCeilings();
+
+        // Assert
+        Assert.Empty(Validate(options));
+        Assert.False(ceilings.IsUnbounded);
+        Assert.Equal(TimeSpan.FromHours(1), ceilings.Period);
+        Assert.Equal(
+            AuthoredSendCeiling.CallerMessages,
+            ceilings.FindReachedCeiling(new AuthoredSendUsage(2, 2), recipientCount: 1));
+    }
+
+    /// <summary>
+    /// A deployment that says nothing about a recipient nothing vouches for admits one, because refusing by default
+    /// would refuse the first message of every installation whose contact book is still empty.
+    /// </summary>
+    [Fact]
+    public void Defaults_UnconfiguredSection_AdmitARecipientNothingVouchesFor()
+    {
+        // Act
+        var options = new MailDeliveryOptions();
+
+        // Assert
+        Assert.Equal(UnvouchedRecipientPosture.Admit, options.UnvouchedRecipients);
+    }
+
+    /// <summary>The posture an operator wrote is the one bound, so a strict deployment reaches the refusing one.</summary>
+    [Fact]
+    public void UnvouchedRecipients_PostureAnOperatorWrote_IsTheOneBound()
+    {
+        // Arrange
+        var options = new MailDeliveryOptions { UnvouchedRecipients = UnvouchedRecipientPosture.Refuse };
+
+        // Act, Assert
+        Assert.Equal(UnvouchedRecipientPosture.Refuse, options.UnvouchedRecipients);
+        Assert.Empty(Validate(options));
+    }
+
+    /// <summary>A number binds onto an enum without complaint, so a posture nobody declares is refused at startup.</summary>
+    [Fact]
+    public void Validate_PostureThisDeploymentDoesNotDeclare_IsRefused()
+    {
+        // Arrange
+        var options = new MailDeliveryOptions { UnvouchedRecipients = (UnvouchedRecipientPosture)7 };
+
+        // Act
+        var results = Validate(options);
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Contains(nameof(MailDeliveryOptions.UnvouchedRecipients), result.MemberNames);
+    }
+
     private static EmailAddress Mailbox(string address)
     {
         Assert.True(EmailAddress.TryCreate(displayName: null, address, out var mailbox));

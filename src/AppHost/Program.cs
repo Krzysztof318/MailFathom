@@ -375,7 +375,22 @@ if (runsIntegrationTests)
         // observes can only have come from the per-client bucket the route's policy carries.
         .WithEnvironment(
             "McpEndpoint__RateLimiting__MaxConcurrentRequests",
-            OrchestrationContract.McpRateLimitMaxConcurrentRequests.ToString(CultureInfo.InvariantCulture));
+            OrchestrationContract.McpRateLimitMaxConcurrentRequests.ToString(CultureInfo.InvariantCulture))
+        // The two bounds an authored send meets that nothing below the transport can prove: one organization this
+        // deployment may never write to, and a ceiling on the people one caller may reach in a period. Both are stated
+        // here rather than defaulted, because a suite that configured neither would pass whether or not either was
+        // wired into the request path at all.
+        //
+        // The denied entry names a subdomain of the reserved testing domain the rest of this topology composes under,
+        // so nothing else the suite addresses falls beneath it. The ceiling is set well above what every other test on
+        // this host spends together and is reached by naming more people in one message than it permits at all, so the
+        // refusal does not depend on which test ran first.
+        .WithEnvironment(
+            "MailDelivery__RecipientPolicy__DeniedDomains__0",
+            OrchestrationContract.ComposedHostRefusedRecipientDomain)
+        .WithEnvironment(
+            "MailDelivery__SendCeilings__MaxRecipientsPerCaller",
+            OrchestrationContract.ComposedHostCallerRecipientCeiling.ToString(CultureInfo.InvariantCulture));
 
     // The probe section is handed the port the endpoint above allocated, which is what puts the two surfaces on one
     // socket. It is a second reference to the same endpoint rather than a second endpoint, because two endpoints are

@@ -416,6 +416,7 @@ public sealed class SendEmailToolTests
                 granted,
                 OutgoingMailGovernors.Permitting(),
                 new FakeTimeProvider(Recorded)),
+            AuthoredSendGovernors.Permitting(granted),
             granted,
             new FakeTimeProvider(Recorded)));
     }

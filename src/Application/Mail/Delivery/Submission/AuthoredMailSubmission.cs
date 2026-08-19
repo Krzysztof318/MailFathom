@@ -6,6 +6,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Delivery;
 
@@ -52,6 +53,7 @@ namespace MailFathom.Application.Mail.Delivery.Submission;
 /// <param name="recipientResolver">Turns the people the author named into the addresses a message is offered to.</param>
 /// <param name="composer">Builds the MIME, and decides every header this system owns rather than the author.</param>
 /// <param name="outbox">Writes the record and the message down together, and says the account has something to send.</param>
+/// <param name="governor">Answers what this caller may be talked into sending, and records the send once it is durable.</param>
 /// <param name="authorization">Answers whether the caller that reached this holds the grant that lets it send.</param>
 /// <param name="timeProvider">Says whether a time the author named is still one a message can be held until.</param>
 public sealed class AuthoredMailSubmission(
@@ -59,6 +61,7 @@ public sealed class AuthoredMailSubmission(
     NamedRecipientResolver recipientResolver,
     IAuthoredEmailComposer composer,
     MailOutbox outbox,
+    AuthoredSendGovernor governor,
     AccessAuthorization authorization,
     TimeProvider timeProvider)
 {
@@ -70,6 +73,7 @@ public sealed class AuthoredMailSubmission(
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailSend" />.</exception>
     /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account this deployment does not serve.</exception>
     /// <exception cref="MailSubmissionRefusedException">Thrown when a recipient names nobody, a field cannot be composed, a bound is exceeded, the account configures no address to send from, or the message is asked to leave at a time that has passed.</exception>
+    /// <exception cref="OutgoingMailRefusedException">Thrown when a recipient is one this deployment may not write to, when this caller has reached a ceiling of its own, or when a recipient it named is one nothing here vouches for.</exception>
     public async Task<OutgoingEmailRecord> SubmitAsync(
         MailSubmissionRequest request,
         CancellationToken cancellationToken)
@@ -126,6 +130,15 @@ public sealed class AuthoredMailSubmission(
 
         var send = request.DueAt is { } heldUntil ? composed.Request.HeldUntil(heldUntil) : composed.Request;
 
-        return await outbox.EnqueueAsync(send, composed.RawMime, cancellationToken);
+        // After the composition rather than before it, because the bounds are judged against the addresses as they
+        // parsed rather than against the text a caller wrote, and a message that cannot be composed has no recipients
+        // to judge. Nothing has been written down yet, so a refusal here costs the caller the answer alone.
+        var permit = await governor.RequirePermittedAsync(authored.Recipients, send, cancellationToken);
+
+        var record = await outbox.EnqueueAsync(send, composed.RawMime, cancellationToken);
+
+        await governor.RecordAsync(permit, AuthoredSendAct.NewMessage, record, cancellationToken);
+
+        return record;
     }
 }

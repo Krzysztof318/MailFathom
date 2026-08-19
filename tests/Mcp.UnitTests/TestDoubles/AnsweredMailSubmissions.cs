@@ -115,7 +115,12 @@ internal static class AnsweredMailSubmissions
             Bounds(),
             granted);
 
-        return new AuthoredResponseSubmission(authoring, composer, Outbox(granted), granted);
+        return new AuthoredResponseSubmission(
+            authoring,
+            composer,
+            Outbox(granted),
+            AuthoredSendGovernors.Permitting(granted),
+            granted);
     }
 
     /// <summary>Reads the message an answer was composed from, which is where a tool's mapping becomes observable.</summary>

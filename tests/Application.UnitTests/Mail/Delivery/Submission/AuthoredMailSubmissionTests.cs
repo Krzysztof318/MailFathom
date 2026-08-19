@@ -10,6 +10,7 @@ using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Submission;
@@ -19,6 +20,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Governance;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Scheduling;
@@ -396,6 +398,87 @@ public sealed class AuthoredMailSubmissionTests
         Assert.Equal(2, outstanding.Count);
     }
 
+    /// <summary>
+    /// The bounds are judged in the use case rather than at the tool, so a boundary reaching this one another way meets
+    /// the same refusal and leaves the same nothing behind.
+    /// </summary>
+    [Fact]
+    public async Task SubmitAsync_RecipientNothingVouchesFor_IsRefusedWithoutWritingARecord()
+    {
+        // Arrange
+        var store = new InMemoryOutgoingEmailStore();
+        var submission = SubmissionOver(
+            store,
+            out _,
+            out var signal,
+            governor: AuthoredSendGovernors.Governing(
+                settings: new AuthoredSendSettings(UnvouchedRecipientPosture.Refuse)));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
+            () => submission.SubmitAsync(
+                RequestTo("accomplice@elsewhere.test"),
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.OutgoingRecipientUnvouched, refusal.ErrorCode);
+        Assert.DoesNotContain("elsewhere.test", refusal.Message, StringComparison.Ordinal);
+        Assert.Empty(await store.ReadOutstandingAsync(Account, limit: 10, TestContext.Current.CancellationToken));
+        Assert.Equal(0, signal.Depth);
+    }
+
+    /// <summary>A recipient this deployment may never write to is refused on the surface a caller reaches as well.</summary>
+    [Fact]
+    public async Task SubmitAsync_RecipientTheDeploymentMayNeverWriteTo_IsRefusedWithoutWritingARecord()
+    {
+        // Arrange
+        var store = new InMemoryOutgoingEmailStore();
+        Assert.True(OutgoingRecipientRule.TryCreateForDomain("elsewhere.test", out var denied));
+        var submission = SubmissionOver(
+            store,
+            out _,
+            out _,
+            governor: AuthoredSendGovernors.Governing(
+                recipientPolicy: OutgoingRecipientPolicy.Create([], [denied])));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
+            () => submission.SubmitAsync(
+                RequestTo("accomplice@elsewhere.test"),
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.OutgoingRecipientRefusedByPolicy, refusal.ErrorCode);
+        Assert.Empty(await store.ReadOutstandingAsync(Account, limit: 10, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>What a caller was admitted for is counted, so the caller that filled its period is refused the next message.</summary>
+    [Fact]
+    public async Task SubmitAsync_CallerThatFilledItsOwnPeriod_IsRefusedTheNextMessage()
+    {
+        // Arrange
+        var store = new InMemoryOutgoingEmailStore();
+        var ledger = new AuthoredSendUsageLedger(
+            AuthoredSendCeilings.Create(TimeSpan.FromDays(1), maxMessagesPerCaller: 1, maxRecipientsPerCaller: 0),
+            new FakeTimeProvider(Recorded));
+        var submission = SubmissionOver(
+            store,
+            out _,
+            out _,
+            governor: AuthoredSendGovernors.Governing(ledger: ledger));
+        await submission.SubmitAsync(RequestTo("anna@example.test"), TestContext.Current.CancellationToken);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
+            () => submission.SubmitAsync(
+                RequestTo("anna@example.test") with { Requester = OutgoingEmailRequester.Command("send-2") },
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.OutgoingMailCeilingReached, refusal.ErrorCode);
+        Assert.Single(await store.ReadOutstandingAsync(Account, limit: 10, TestContext.Current.CancellationToken));
+    }
+
     private static AuthoredEmail ComposedMessage(IAuthoredEmailComposer composer) => (AuthoredEmail)composer
         .ReceivedCalls()
         .Single(call => call.GetMethodInfo().Name == nameof(IAuthoredEmailComposer.Compose))
@@ -484,7 +567,8 @@ public sealed class AuthoredMailSubmissionTests
         out IAuthoredEmailComposer composer,
         out MailOutboxSignal signal,
         InMemoryContactBookStore? book = null,
-        AccessAuthorization? authorization = null)
+        AccessAuthorization? authorization = null,
+        AuthoredSendGovernor? governor = null)
     {
         composer = ComposerThatComposes();
         signal = new MailOutboxSignal(capacity: 8);
@@ -518,6 +602,7 @@ public sealed class AuthoredMailSubmissionTests
                 authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
                 OutgoingMailGovernors.Permitting(),
                 new FakeTimeProvider(Recorded)),
+            governor ?? AuthoredSendGovernors.Permitting(authorization),
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
             new FakeTimeProvider(Recorded));
     }
