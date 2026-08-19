@@ -749,8 +749,9 @@ public static class ServiceCollectionExtensions
         // Registered beside the composition it produces work for, and scoped for the reason every mailbox read is: it
         // reads stored mail through the same ports a read of that mail uses, and answers with what the composer takes.
         services.AddScoped<StoredEmailResponseAuthoring>();
-        // The one way a boundary asks for a new message to be sent, composed from the three registrations above it and
-        // scoped with them. It holds no delivery session and cannot open one, which is what keeps asking to send from
+        // The one way a boundary asks for a new message to be sent, composed from the account catalog, the resolver and
+        // the composer registered above it, the outbox registered earlier, and the caller's own grant, and scoped with
+        // every one of them. It holds no delivery session and cannot open one, which is what keeps asking to send from
         // ever becoming transmitting.
         services.AddScoped<AuthoredMailSubmission>();
         // Read by synchronization rather than by the performer, so that a relocation coming back through an ordinary

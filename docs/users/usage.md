@@ -409,6 +409,8 @@ The codes a user meets in practice:
 | `51010` | A contact was named with text that is no identifier and no usable address | Pass a `contactId` a listing or a write returned, or an address on its own — and exactly one of the two |
 | `51011` | A contact record breaks a rule the book holds | The message names the rule: a missing name, no address, a preferred address the record does not name, a value over its limit |
 | `51012` | A flag change asked for nothing, stated half a keyword change, named a keyword no mail server would keep, carried a `requestId` that is no identifier, or reused one that already asked for a different value | Name at least one of `seen`, `flagged`, and the keyword pair; send `keywordChange` and `keywords` together; keep each keyword to one word of plain ASCII and name at most 64; keep `requestId` to at most 128 printable characters, or leave it out and let the server issue one; send a new one when you mean a new change |
+| `51013` | A field of a message you authored carries a value no message can be composed from — a line break in a subject or a recipient, an address outside ASCII, text naming no account, or an `account` or `idempotencyKey` that is blank, too long, or not printable | Fix the field the message names; it names the field and never the value you sent |
+| `51014` | A message you authored is larger than this deployment composes — more people than the recipient bound allows, or a body over its character bound | The message names the bound and the configured number: send to fewer people, or send a shorter body |
 | `52001` / `52002` | A cursor this system did not issue, or one reused after the filters changed | Restart the walk from the first page |
 | `52003` | A contact listing's cursor is not one this system issued | Restart the walk; changing the search or the origin mid-walk is allowed and is not what caused it |
 | `53001` | The named account is not served here | Call `list_accounts` and use an `accountId` or `displayName` it returns |
@@ -416,6 +418,7 @@ The codes a user meets in practice:
 | `53003` | A folder was named by a role no folder in scope carries | Name the folder's alias instead, or ask the operator to map the role on that account |
 | `55001` | The email exists but its stored content is currently unreadable; a repair has been queued | Retry later — this is a local-consistency state, not a mail-server problem |
 | `56001` | This deployment cannot answer questions about mail, either at all or for now | Nothing about the question caused it; the message says which, and only the operator can change it |
+| `56002` | This deployment cannot send as the account you named | The account is served and readable, and sending from it is the part nobody configured; only the operator can add its delivery configuration |
 | `57001` | Answering would cost more than this deployment allows | The message says which ceiling: a spent period is worth asking again once it turns over, while a question that reached what one question may cost needs to be narrower |
 | `54001` | Something failed for a reason the boundary deliberately does not describe | The server log has the detail, correlated by the request's trace |
 

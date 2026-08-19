@@ -20,6 +20,7 @@ using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.TestSupport;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
@@ -438,7 +439,7 @@ public sealed class AuthoredMailSubmissionTests
                 new OptimisticConcurrencyRetryPolicy(
                     sessionFactory,
                     new PersistenceConcurrencyOptions(),
-                    TimeProvider.System),
+                    new FakeTimeProvider()),
                 signal,
                 authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend)),
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend));

@@ -23,6 +23,7 @@ using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.Tools.Results;
 using MailFathom.Mcp.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
@@ -406,7 +407,7 @@ public sealed class SendEmailToolTests
                 new OptimisticConcurrencyRetryPolicy(
                     sessionFactory,
                     new PersistenceConcurrencyOptions(),
-                    TimeProvider.System),
+                    new FakeTimeProvider()),
                 new MailOutboxSignal(capacity: 8),
                 granted),
             granted));

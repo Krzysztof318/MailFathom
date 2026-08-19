@@ -242,7 +242,7 @@ configured name for an account and carries nothing the caller did not already wr
 | `53001` | The call named a mail account this deployment does not serve | An account identifier nobody configured, or one belonging to someone else — the two are deliberately one answer |
 | `53002` | The call named an email the local mailbox copy holds no row for | An email never synchronized, one expunged and collected, or one of an account this deployment stopped serving — deliberately one answer |
 | `53003` | The call named a folder by a role no folder in scope is mapped with | A `folders` element written `role:Junk` on a deployment whose accounts map no junk folder; naming the alias, or mapping the role, is what answers it |
-| `53004` | A recipient named by naming somebody resolved to nobody the contact book holds | A contact identity or name the book does not hold, a name several contacts carry, or an address the named contact does not hold — the message says which and, for an ambiguous name, how many carried it, and never names anybody it counted |
+| `53004` | A recipient named by naming somebody resolved to nobody the contact book holds | No tool published today produces it: `send_email` takes addresses, so nothing on this surface names a contact as a recipient. It is the answer the shared resolution behind that tool already gives — a contact identity or name the book does not hold, a name several contacts carry, or an address the named contact does not hold — and it is stated here because the code is allocated and the resolution is one argument shape away rather than a path that does not exist |
 | `54001` | The call failed for a reason the boundary deliberately does not describe | Anything undiagnosed; the detail is in the server log |
 | `55001` | The email exists locally and its stored content is missing, damaged, or unreadable | A local copy being repaired; the call is worth repeating once repair has run |
 | `56001` | This deployment cannot answer questions about mail, either at all or for now | `ask_mail` called on a server that declared no chat endpoint or embeds no mail, or one whose chat provider is currently refusing; the message says which |
@@ -1084,8 +1084,10 @@ this deployment holds.
 
 Every refusal names a field, a bound, or a count, and never a value. An address, a subject, and a body are the personal
 data of the people a message is between, and a refusal that quoted one would put mail content into every log line and
-every error a client keeps. A recipient named out of the contact book that resolved to several people is told how many
-carried the name and nothing about any of them, and a caller that supplied no address never learns one from a refusal.
+every error a client keeps. A caller that supplied no address never learns one
+from a refusal, and the shared resolution behind this tool holds the same line for a name it cannot settle — it answers
+how many contacts carried it and nothing about any of them — which is the property this tool would inherit rather than
+have to be given if its arguments ever named people that way.
 
 A message this deployment will not compose is refused before anything is written down, so a refused send leaves no
 record, no stored MIME, and no signal to the delivery pass. What happens after the record exists — a submission server
