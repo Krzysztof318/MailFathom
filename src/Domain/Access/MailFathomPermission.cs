@@ -103,10 +103,9 @@ public readonly record struct MailFathomPermission
     /// owner's own mail server rather than a stranger's.
     /// </para>
     /// <para>
-    /// It permits asking rather than sending. The deployment's own switch decides whether sending exists at all and is
-    /// evaluated first, so a caller holding this reaches nothing on an instance that sends from no account; a grant is
-    /// permission to use a capability and never a way to acquire one. It says nothing about which account a caller may
-    /// send from either, since bounding a credential to particular accounts is outside this model.
+    /// It permits asking rather than sending: what it reaches writes a send down durably, and a delivery pass is what
+    /// transmits it. It says nothing about which account a caller may send from either, since bounding a credential to
+    /// particular accounts is outside this model.
     /// </para>
     /// </remarks>
     public static MailFathomPermission MailSend { get; } = new("mailfathom.mail.send", ProtectedSurface.Mail);

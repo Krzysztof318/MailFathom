@@ -213,6 +213,7 @@ public sealed class MailOutboxTests
     [InlineData("mailfathom.mail.read")]
     [InlineData("mailfathom.mail.ask")]
     [InlineData("mailfathom.mail.flags.write")]
+    [InlineData("mailfathom.mail.contacts.read")]
     [InlineData("mailfathom.mail.contacts.write")]
     public async Task EnqueueAsync_CallerGrantedAnotherMailPermission_Refuses(string grantedPermissionName)
     {

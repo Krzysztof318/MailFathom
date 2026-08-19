@@ -269,10 +269,7 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
             "anna@example.test",
             "bruno@example.invalid",
             "clara@example.test");
-        var enqueued = await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<MailOutbox>()
-                .EnqueueAsync(request, MimeOf("partial-acceptance"), token),
-            cancellationToken);
+        var enqueued = await EnqueueAsync(services, request, MimeOf("partial-acceptance"), cancellationToken);
         var answeredAt = DateTimeOffset.UnixEpoch.AddMinutes(1);
         var claimed = await ClaimAsync(services, enqueued.Id, cancellationToken);
 

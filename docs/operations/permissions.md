@@ -196,6 +196,14 @@ refused rather than accepted as a second spelling of it. A permission name or a 
 meant to serve less, the grant that reads one advertises it already, and a scope is compared byte for byte at an
 authorization server, which can mint no pattern.
 
+**That last refusal is the other half of what publishing a name costs an upgrade**, and it is the one that stops a
+deployment rather than widening it. A name nothing publishes is an ordinary scope token, so an operator who minted a
+scope of their own with that spelling could write it in `RequiredScopes` or `AdvertisedScopes` and start; the release
+that publishes the name turns the same value into a permission, and startup refuses it by name. `mailfathom.mail.send`
+is the case on this release. The action is the one the refusal states: take the value out of `RequiredScopes` or
+`AdvertisedScopes` and write it in `Permissions` on the entry — with `PermissionsFromTokenScopes` where the point was
+for the token's own scope to decide.
+
 **Startup records what every entry resolved to**, one line per entry, so the posture is read on the first run rather
 than inferred later. An entry that wrote no grant says so rather than being reported as though somebody had chosen what
 it holds, an entry with `PermissionsFromTokenScopes` is reported as what it grants *at most*, and an entry granted
