@@ -6,6 +6,7 @@ using System.Text;
 using MailFathom.AppHost;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Outbox;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
@@ -188,11 +189,12 @@ public sealed class OrchestratedOutboxDeliveryTests(MailFathomOrchestrationFixtu
         OrchestratedMailFathomServices services,
         string invocationIdentity,
         string subject,
-        CancellationToken cancellationToken) => services.InScopeAsync(
+        CancellationToken cancellationToken) => services.AsCallerInScopeAsync(
             (scope, token) => scope.GetRequiredService<MailOutbox>().EnqueueAsync(
                 RequestFor(invocationIdentity),
                 MimeOf(subject),
                 token),
+            [MailFathomPermission.MailSend],
             cancellationToken);
 
     private static Task<MailOutboxPassReport> RunPassAsync(

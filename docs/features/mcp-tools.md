@@ -87,8 +87,10 @@ call naming a tool that does not exist: the same JSON-RPC error, the same code, 
 credential, the permission, or what a different caller would have been served.
 
 [Which tool each name covers](../operations/permissions.md#which-tool-each-name-covers) is the mapping, one row per
-tool, and the page around it is the model those five names belong to: what each one reaches, and why no permission here
-implies another. Which grant a credential holds is written on the entry that admits it, and
+tool, and the page around it is the model those names belong to: what each one reaches, and why no permission here
+implies another. This surface publishes a sixth, `mailfathom.mail.send`, which no tool requires yet — the use case
+behind every sending tool already asks for it, and the tools that reach it are not published. Which grant a credential
+holds is written on the entry that admits it, and
 [the MCP endpoint](../operations/mcp-endpoint.md#what-a-credential-may-do) is where that is configured; a deployment
 whose entries write no grant serves every permission to every caller, which is what makes this invisible until an
 operator narrows something. An entry that writes no grant but sets `PermissionsFromTokenScopes` is the one exception:
@@ -1279,3 +1281,11 @@ What is still pending is the run trace an operator reads after a question, its o
 SMTP delivery is deliberately absent from this tool set. Neither of the two writes here is a step towards it — a contact
 write changes a row in MailFathom's own database and reaches nothing outside the process, and a flag change asks a mail
 server to record something about a message that is already there.
+
+The grant those tools will require is published ahead of them and is `mailfathom.mail.send`. It is not on any
+descriptor and not in the mapping above, because the protocol has nowhere on a tool to state a required permission and
+because no tool requires it yet; what already asks for it is the use case a sending tool reaches, which admits a caller
+holding that name and refuses every other. So an operator writing a grant today can name it, a credential holding it
+reaches no tool, and the release that publishes a sending tool changes what the same grant reaches rather than what an
+operator has to write. [What a credential may do](../operations/permissions.md#the-published-set) holds the name beside
+the rest of the set.

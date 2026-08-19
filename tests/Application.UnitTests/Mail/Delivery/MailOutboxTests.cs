@@ -3,14 +3,17 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
+using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
+using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -127,7 +130,12 @@ public sealed class MailOutboxTests
             return PersistenceCommitResult.ConcurrencyConflict;
         });
         retrying.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
-        var outbox = new MailOutbox(store, contentStore, CreateRetryPolicy(sessionFactory), new MailOutboxSignal(capacity: 8));
+        var outbox = new MailOutbox(
+            store,
+            contentStore,
+            CreateRetryPolicy(sessionFactory),
+            new MailOutboxSignal(capacity: 8),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend));
 
         // Act
         var record = await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None);
@@ -170,6 +178,115 @@ public sealed class MailOutboxTests
         Assert.Equal(0, signal.Depth);
     }
 
+    /// <summary>
+    /// The transport is not the authority: a caller whose grant omits sending is refused by the outbox itself, before a
+    /// record or a message is written, so an entrypoint that never passed a filter reaches the same answer.
+    /// </summary>
+    [Fact]
+    public async Task EnqueueAsync_CallerWithoutTheSendGrant_RefusesAndRecordsNothing()
+    {
+        // Arrange
+        var contentStore = Substitute.For<IEmailContentStore>();
+        var signal = new MailOutboxSignal(capacity: 4);
+        var outbox = CreateOutbox(
+            new InMemoryOutgoingEmailStore(),
+            contentStore,
+            signal: signal,
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailSend, refusal.RequiredPermission);
+        Assert.Equal(0, signal.Depth);
+        await contentStore.DidNotReceive().SaveOutgoingContentAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<OutgoingEmailId>(),
+            Arg.Any<ReadOnlyMemory<byte>>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Reading a mailbox is not writing from it, so the grant that reaches every other mail tool reaches no send.</summary>
+    [Theory]
+    [InlineData("mailfathom.mail.read")]
+    [InlineData("mailfathom.mail.ask")]
+    [InlineData("mailfathom.mail.flags.write")]
+    [InlineData("mailfathom.mail.contacts.write")]
+    public async Task EnqueueAsync_CallerGrantedAnotherMailPermission_Refuses(string grantedPermissionName)
+    {
+        // Arrange
+        Assert.True(MailFathomPermission.TryParse(grantedPermissionName, out var granted));
+        var outbox = CreateOutbox(
+            new InMemoryOutgoingEmailStore(),
+            Substitute.For<IEmailContentStore>(),
+            authorization: AccessAuthorizations.ForCallerGranted(granted));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailSend, refusal.RequiredPermission);
+    }
+
+    /// <summary>A rule sends without anybody present, so the origin it states is admitted under this process's own identity and under nothing a grant can carry.</summary>
+    [Fact]
+    public async Task EnqueueAsync_RuleAskingUnderTheProcessIdentity_RecordsTheSend()
+    {
+        // Arrange
+        var outbox = CreateOutbox(
+            new InMemoryOutgoingEmailStore(),
+            Substitute.For<IEmailContentStore>(),
+            authorization: AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
+
+        // Act
+        var record = await outbox.EnqueueAsync(CreateRuleRequest(), RawMime, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(OutgoingEmailStage.Recorded, record.Stage);
+    }
+
+    /// <summary>
+    /// The origin is checked rather than believed, in both directions: a caller cannot enqueue as a rule and so cannot
+    /// borrow a rule's idempotency identity, and work no caller requested cannot enqueue as a command, because the
+    /// process identity holds no permission whatever an operator granted.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task EnqueueAsync_OriginTheReachingPrincipalCannotProduce_Refuses(bool askedAsARule)
+    {
+        // Arrange
+        var outbox = CreateOutbox(
+            new InMemoryOutgoingEmailStore(),
+            Substitute.For<IEmailContentStore>(),
+            authorization: askedAsARule
+                ? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend)
+                : AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => outbox.EnqueueAsync(
+                askedAsARule ? CreateRuleRequest() : CreateRequest("mfctl-4f2a"),
+                RawMime,
+                CancellationToken.None));
+
+        // Assert
+        Assert.False(refusal.RequiredPermission.IsSpecified);
+    }
+
+    private static OutgoingEmailRequest CreateRuleRequest()
+    {
+        Assert.True(EmailAddress.TryCreate(displayName: null, "anna@example.test", out var address));
+
+        return OutgoingEmailRequest.Create(
+            Account,
+            OutgoingEmailRequester.Rule("auto-reply", "revision-1", StoredEmailId.Create(Guid.CreateVersion7())),
+            [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]);
+    }
+
     private static OutgoingEmailRequest CreateRequest(string invocationIdentity)
     {
         Assert.True(EmailAddress.TryCreate(displayName: null, "anna@example.test", out var address));
@@ -184,7 +301,8 @@ public sealed class MailOutboxTests
         IOutgoingEmailStore store,
         IEmailContentStore contentStore,
         List<IPersistenceSession>? stagedSessions = null,
-        MailOutboxSignal? signal = null)
+        MailOutboxSignal? signal = null,
+        AccessAuthorization? authorization = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ =>
@@ -196,7 +314,12 @@ public sealed class MailOutboxTests
             return session;
         });
 
-        return new MailOutbox(store, contentStore, CreateRetryPolicy(sessionFactory), signal ?? new MailOutboxSignal(capacity: 8));
+        return new MailOutbox(
+            store,
+            contentStore,
+            CreateRetryPolicy(sessionFactory),
+            signal ?? new MailOutboxSignal(capacity: 8),
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend));
     }
 
     /// <summary>Builds the policy the outbox commits through, over the real clock the policy's own tests use.</summary>

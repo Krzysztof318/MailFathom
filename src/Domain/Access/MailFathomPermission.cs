@@ -94,6 +94,23 @@ public readonly record struct MailFathomPermission
     /// </remarks>
     public static MailFathomPermission MailFlagsWrite { get; } = new("mailfathom.mail.flags.write", ProtectedSurface.Mail);
 
+    /// <summary>Gets the permission covering asking this deployment to send mail from an account it holds.</summary>
+    /// <remarks>
+    /// <para>
+    /// It is the one grant on this surface whose effect leaves the deployment and cannot be withdrawn: a message that
+    /// reached somebody else's mailbox is not recallable by any act available here. That is why it is its own name and
+    /// follows from nothing — reading a mailbox is not writing from it, and <see cref="MailFlagsWrite" /> reaches the
+    /// owner's own mail server rather than a stranger's.
+    /// </para>
+    /// <para>
+    /// It permits asking rather than sending. The deployment's own switch decides whether sending exists at all and is
+    /// evaluated first, so a caller holding this reaches nothing on an instance that sends from no account; a grant is
+    /// permission to use a capability and never a way to acquire one. It says nothing about which account a caller may
+    /// send from either, since bounding a credential to particular accounts is outside this model.
+    /// </para>
+    /// </remarks>
+    public static MailFathomPermission MailSend { get; } = new("mailfathom.mail.send", ProtectedSurface.Mail);
+
     #endregion
 
     #region Administration
@@ -127,6 +144,7 @@ public readonly record struct MailFathomPermission
         MailContactsRead,
         MailContactsWrite,
         MailFlagsWrite,
+        MailSend,
         AdminRead,
         AdminAuditRead,
         AdminOperate,

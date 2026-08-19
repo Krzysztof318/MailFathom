@@ -31,6 +31,7 @@ using MailFathom.Application.Spam;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure;
@@ -324,8 +325,10 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             DeterministicEmbeddingInputCharacterLimit);
         // What a use case is told admitted the work. A composition root supplies it from the request being served, and
         // this suite serves none: every class it exercises is driven directly, which is work no caller requested and is
-        // exactly what the process identity names.
-        builder.Services.AddScoped<IAuthorizedPrincipalSource>(_ => new ProcessAuthorizedPrincipalSource());
+        // exactly what the process identity names, until a test acting as an agent states a caller for its own scope.
+        builder.Services.AddScoped(_ => new StatedAuthorizedPrincipalSource());
+        builder.Services.AddScoped<IAuthorizedPrincipalSource>(provider =>
+            provider.GetRequiredService<StatedAuthorizedPrincipalSource>());
         builder.Services.AddInfrastructure(
             _ => new PostgresConnectionSettings(orchestration.DatabaseConnectionString, null, null),
             PostgresTextSearchConfiguration.Default,
@@ -403,6 +406,30 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
 
         return await work(scope.ServiceProvider, cancellationToken);
     }
+
+    /// <summary>Runs one unit of work in its own scope, as an admitted caller holding exactly the permissions named.</summary>
+    /// <typeparam name="TResult">What the unit of work produces.</typeparam>
+    /// <param name="work">The unit of work.</param>
+    /// <param name="grantedPermissions">What the entry that admitted the caller resolved to, which is empty for a caller granted nothing.</param>
+    /// <param name="cancellationToken">Cancels the work.</param>
+    /// <returns>What the unit of work produced.</returns>
+    /// <remarks>
+    /// For a use case an agent reaches rather than a worker. The scope is composed exactly as
+    /// <see cref="InScopeAsync{TResult}" /> composes one and the caller is stated into it before the work runs, so what
+    /// is exercised is the production graph answering a request rather than a substitute standing in for one.
+    /// </remarks>
+    internal Task<TResult> AsCallerInScopeAsync<TResult>(
+        Func<IServiceProvider, CancellationToken, Task<TResult>> work,
+        IEnumerable<MailFathomPermission> grantedPermissions,
+        CancellationToken cancellationToken) => this.InScopeAsync(
+            (scope, token) =>
+            {
+                scope.GetRequiredService<StatedAuthorizedPrincipalSource>()
+                    .Assume(AuthorizedPrincipal.Caller("orchestrated-caller", grantedPermissions));
+
+                return work(scope, token);
+            },
+            cancellationToken);
 
     /// <summary>Runs one unit of work across two independent scopes, the way two writers reach the database at once.</summary>
     /// <typeparam name="TResult">What the unit of work produces.</typeparam>

@@ -624,8 +624,9 @@ The operational consequences are the ones that always applied to an unauthentica
 ### What a credential may do
 
 Every entry in `McpEndpoint:Authentication` states what the credentials it admits may do, as `Permissions`. This
-surface's half of the published set is five names — `mailfathom.mail.read`, `mailfathom.mail.ask`,
-`mailfathom.mail.contacts.read`, `mailfathom.mail.contacts.write`, and `mailfathom.mail.flags.write` — and
+surface's half of the published set is six names — `mailfathom.mail.read`, `mailfathom.mail.ask`,
+`mailfathom.mail.contacts.read`, `mailfathom.mail.contacts.write`, `mailfathom.mail.flags.write`, and
+`mailfathom.mail.send`, the last of which no tool requires yet — and
 [what a credential may do](permissions.md) holds the model behind them in full: what each name reaches, which tool each
 one covers, how a grant is written, what an absent `Permissions` key and an empty list mean, what
 `PermissionsFromTokenScopes` turns the list into, and what fails startup.
@@ -653,9 +654,9 @@ chosen what it holds:
 info: MailFathom.Host.Hosting.Warnings.TransportGrantStartupReport
       The MCP endpoint entry McpEndpoint:Authentication:0 writes down no grant, so every credential it admits holds
       mailfathom.mail.read, mailfathom.mail.ask, mailfathom.mail.contacts.read, mailfathom.mail.contacts.write,
-      mailfathom.mail.flags.write — everything this surface publishes. Write a 'Permissions' list on the entry to
-      narrow it, or an empty one to grant nothing. A caller here is served only the tools its grant permits, and a call
-      naming any other is answered as a tool that does not exist.
+      mailfathom.mail.flags.write, mailfathom.mail.send — everything this surface publishes. Write a 'Permissions' list
+      on the entry to narrow it, or an empty one to grant nothing. A caller here is served only the tools its grant
+      permits, and a call naming any other is answered as a tool that does not exist.
 ```
 
 Every line closes with what a grant on that surface does, so an operator reading back the one entry they edited learns
