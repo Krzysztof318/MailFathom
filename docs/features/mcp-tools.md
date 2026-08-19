@@ -4,7 +4,7 @@
 
 MailFathom publishes Model Context Protocol tools over the Streamable HTTP transport: the mailbox read side, one
 tool that changes the flags and keywords on mail this deployment holds, three that send mail from a mailbox it holds —
-a new message, a reply, and a forward — and the contact book. This page records the
+a new message, a reply, and a forward — two over a send that was queued that way, and the contact book. This page records the
 conventions every tool follows, the contract of the tools that exist, and what a client reads when a call fails.
 
 The endpoint is disabled by default, and enabling it requires stating whether a client presents an API key or nothing at all.
@@ -21,6 +21,8 @@ nothing else, `get_email_content` calls the `EmailContentReader` use case and no
 `MailboxSearchReader` use case and nothing else, `set_mail_flags` calls the `MailFlagChangeRecorder` use case and
 nothing else, `send_email` calls the `AuthoredMailSubmission` use case and nothing else, `reply_to_email` and
 `forward_email` call the `AuthoredResponseSubmission` use case and nothing else,
+`get_outgoing_email` calls the `OutgoingMailReader` use case and nothing else, `cancel_outgoing_email` calls the
+`OutgoingMailCancellation` use case and nothing else,
 `ask_mail` calls the `MailboxQuestionReader` use case and nothing else,
 `list_contacts` and `get_contact` call the `ContactBookReader` use case and nothing else, and `create_contact`,
 `update_contact`, `delete_contact`, and `promote_contact` call the `ContactBookWriter` use case and nothing else.
@@ -73,16 +75,19 @@ Four properties hold for every tool and are proven by test rather than asserted 
   default at most 20 000 characters of
   answer citing at most 20 emails, having read at most 20 000 characters of mail to write it, and `list_contacts` pages
   at 200 people. A caller can never raise any of them, and the `ask_mail` set is the operator's to lower or raise in
-  [`MailAnswering`](../operations/configuration-ai.md#mailanswering).
+  [`MailAnswering`](../operations/configuration-ai.md#mailanswering). `get_outgoing_email` and `cancel_outgoing_email`
+  are bounded by construction rather than by a number: each answers about the one record its argument names, and
+  neither has a listing shape to bound.
 
-One property holds for fourteen of the fifteen and is stated where it stops. `list_accounts`, `list_emails`,
-`get_email_content`, `search_emails`, `set_mail_flags`, the three sending tools, and the six contact tools are within
+One property holds for sixteen of the seventeen and is stated where it stops. `list_accounts`, `list_emails`,
+`get_email_content`, `search_emails`, `set_mail_flags`, the three sending tools, the two over a queued send, and the six
+contact tools are within
 reach of every deployment, because local state is all they need — the sending tools included, since each writes a
 message down rather than sending one and an account configured for no delivery refuses the call rather than withdrawing
 the tool. `ask_mail`
 needs two AI providers an operator configures separately, so it is advertised only while both are configured and
 working; the [`ask_mail`](#ask_mail) section records what decides that and what a call meets when it arrives anyway.
-Whether any of the fifteen is offered to a particular caller is a second question, which the next section answers.
+Whether any of the seventeen is offered to a particular caller is a second question, which the next section answers.
 
 ## What a caller is offered
 
@@ -125,8 +130,8 @@ it calls anything:
 
 | Element | Convention |
 |---|---|
-| `name` | Snake case, as the MCP tool ecosystem spells tool names — `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `set_mail_flags`, `send_email`, `reply_to_email`, `forward_email`, `ask_mail`, `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact`, `promote_contact` |
-| `title` | A human-readable label for display — `List accounts`, `List emails`, `Get email content`, `Search emails`, `Set mail flags`, `Send email`, `Reply to email`, `Forward email`, `Ask about mail`, `List contacts`, `Get contact`, `Create contact`, `Update contact`, `Delete contact` |
+| `name` | Snake case, as the MCP tool ecosystem spells tool names — `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `set_mail_flags`, `send_email`, `reply_to_email`, `forward_email`, `get_outgoing_email`, `cancel_outgoing_email`, `ask_mail`, `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact`, `promote_contact` |
+| `title` | A human-readable label for display — `List accounts`, `List emails`, `Get email content`, `Search emails`, `Set mail flags`, `Send email`, `Reply to email`, `Forward email`, `Get outgoing email`, `Cancel outgoing email`, `Ask about mail`, `List contacts`, `Get contact`, `Create contact`, `Update contact`, `Delete contact` |
 | `description` | States what the tool reads or changes, that the call itself reaches no mail server, and what it bounds |
 | `inputSchema` | Every argument is a top-level property carrying its own description, unit, and absence meaning |
 | `outputSchema` | Generated from the result type, whose properties carry descriptions of their own |
@@ -137,9 +142,10 @@ per tool rather than per surface:
 
 | Tool | `readOnlyHint` | `destructiveHint` | `idempotentHint` |
 |---|---|---|---|
-| `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `ask_mail` | `true` | `false` | `true` |
+| `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `ask_mail`, `get_outgoing_email` | `true` | `false` | `true` |
 | `set_mail_flags` | `false` | `true` | `true` |
 | `send_email`, `reply_to_email`, `forward_email` | `false` | `true` | `true` |
+| `cancel_outgoing_email` | `false` | `true` | `true` |
 | `list_contacts`, `get_contact` | `true` | `false` | `true` |
 | `create_contact` | `false` | `false` | `false` |
 | `update_contact` | `false` | `true` | `true` |
@@ -183,6 +189,16 @@ flag change reaches the owner's own mailbox on the owner's own server; a send, a
 deployment does not own and a recipient nobody here controls, which is the first time anything on this surface leaves
 for somebody who is not this mailbox's owner. Every other tool, contact writes included, reaches MailFathom's own
 database and no third party.
+
+The two tools over a queued send are what makes the four annotations readable as four separate facts rather than as one
+safety flag, because between them the table now publishes three distinct shapes. `get_outgoing_email` is the plain
+**read**: `readOnlyHint` `true`, nothing destroyed, closed-world, which is the shape a client may call unattended.
+`send_email` and its two siblings are the **open-world write**: not read-only, destructive because the effect cannot be
+undone at all, and reaching a server this deployment does not own. `cancel_outgoing_email` is the **closed-world
+destructive** shape, and it is the send's opposite on both counts: withdrawing reaches no submission server and no
+recipient — it is what stops a message from leaving — while destroying a queued send no further call brings back. A
+client that reads only `destructiveHint` cannot tell the last two apart; a client that reads `openWorldHint` beside it
+can, which is what the pair is for.
 
 The annotations are contract metadata rather than documentation, so `Mcp.UnitTests` asserts the advertised
 `tools/list` output: the name, the title, the description, every input property, the descriptions on them, the output
@@ -238,6 +254,7 @@ configured name for an account and carries nothing the caller did not already wr
 | `51012` | A flag change asks for nothing, states half a keyword change, names a value no record could carry, or reuses a request identity for a different change | A call naming an email and no value at all; `keywordChange` without `keywords` or the reverse; an empty list under `add` or `remove`; a keyword that is no IMAP atom, one over 64 characters, or more than 64 of them; a `requestId` that is blank, over 128 characters, or carrying a control character; or a `requestId` already used on that email for a different value, which is answered by sending a new one rather than by retrying — the message names the rule and never the keyword |
 | `51013` | A field of a message a caller authored carries a value no message can be composed from | A subject or a recipient carrying a line break, which would smuggle a header nobody wrote; text naming no mailbox; an address outside ASCII, which is refused because a message is written down long before a submission server has said whether it carries one; an `account` or an `idempotencyKey` that is blank, too long, or carrying a control character — the message names the field and never the value |
 | `51014` | A message a caller authored is larger than this deployment composes | More recipients than an outgoing record holds, more than `MailDelivery:MaxRecipientCount` across the three headers, a body over `MailDelivery:MaxBodyCharacters`, or a forward whose original carries more files or larger ones than `MailDelivery` sends — the message names the field and the configured number, never what was measured |
+| `51015` | The call named a queued send with text that is no identifier this system issues | An `outgoingEmailId` that is blank, not a UUID, or the all-zero UUID, refused before anything is looked up — separate from a send nobody may be told about, because this one is true whatever this deployment has queued |
 | `52001` | A continuation cursor is not one this system issued | A truncated, hand-written, or foreign cursor |
 | `52002` | A continuation cursor was issued for different filters | A cursor reused after a filter or the reading direction changed |
 | `52003` | A contact listing's cursor is not one this system issued | A truncated, hand-written, or foreign `cursor`; a contact cursor is not bound to the filters, so changing `search` or `origin` mid-walk is not what produces it |
@@ -247,6 +264,7 @@ configured name for an account and carries nothing the caller did not already wr
 | `53004` | A recipient named by naming somebody resolved to nobody the contact book holds | No tool published today produces it: `send_email`, `reply_to_email`, and `forward_email` all take addresses, so nothing on this surface names a contact as a recipient. It is the answer the shared resolution behind those tools already gives — a contact identity or name the book does not hold, a name several contacts carry, or an address the named contact does not hold — and it is stated here because the code is allocated and the resolution is one argument shape away rather than a path that does not exist |
 | `53005` | The call named no email this deployment can answer | `reply_to_email` or `forward_email` naming an identifier nothing is held under, an email of an account this deployment no longer serves, an email in a folder the calling grant does not read, or one whose stored content is no longer readable — four situations and deliberately one answer, so a caller cannot learn from a refusal which of them it met |
 | `53006` | The call named a recipient this deployment's recipient policy does not admit | Any of the three sending tools naming somebody a denied entry of `MailDelivery:RecipientPolicy` covers, or somebody outside the allowed entries where an operator wrote any; the whole message is refused rather than sent to the remaining recipients, and the answer names which half of the policy refused and never the address |
+| `53007` | The call named no queued send this caller may be told about | `get_outgoing_email` or `cancel_outgoing_email` naming an identifier nothing is held under, or one held for a send some other caller queued — two situations and deliberately one answer, so an identifier alone never establishes that this mailbox sent something |
 | `54001` | The call failed for a reason the boundary deliberately does not describe | Anything undiagnosed; the detail is in the server log |
 | `55001` | The email exists locally and its stored content is missing, damaged, or unreadable | A local copy being repaired; the call is worth repeating once repair has run |
 | `56001` | This deployment cannot answer questions about mail, either at all or for now | `ask_mail` called on a server that declared no chat endpoint or embeds no mail, or one whose chat provider is currently refusing; the message says which |
@@ -254,8 +272,9 @@ configured name for an account and carries nothing the caller did not already wr
 | `56003` | This deployment holds no capability to send as the account a message would be sent from | Any of the three sending tools on an account whose `Delivery:Enabled` is off, which is every account's default, or on a deployment running under `Deployment:ReadOnly`; the message says which, the account is never named, and only an operator's edit changes the answer |
 | `57001` | Answering would cost more than this deployment allows | `ask_mail` on a server whose current period has spent its allowance, or a run that reached what one question may spend; the message says which, and only the first becomes answerable by waiting |
 | `57002` | Sending would carry this period past a ceiling this deployment configured | Any of the three sending tools on a deployment whose `MailDelivery:SendCeilings` for the account or for the installation has no room for the message; the message names which of the four ceilings and never the number, and the period's roll-over is when asking again can succeed |
+| `58001` | The call asked for a state the record has already passed | `cancel_outgoing_email` on a send that is being transmitted, has been transmitted, or was already given up on — three situations and one answer, because nothing was withdrawn in any of them and which it was reads from the state the record itself carries |
 
-Codes `51001` through `53006`, `55001`, `56001` through `56003`, `57001`, and `57002` are the use cases' own, allocated in the
+Codes `51001` through `53007`, `55001`, `56001` through `56003`, `57001`, `57002`, and `58001` are the use cases' own, allocated in the
 MCP-boundary category because that is
 where they surface, and every one of them is written for a caller to read. That is the whole rule the boundary applies: a
 failure whose code belongs to that category is published as it stands, and a failure from any other category — a schema
@@ -1062,6 +1081,12 @@ an agent told a message was *recorded* will report that it was sent.
 Nothing about the message appears — no address, no subject, no body, no `Message-ID`, and no MIME. The identity and the
 account are MailFathom's own names for things, and a caller that wants any of the rest already holds what it sent.
 
+`outgoingEmailId` is what the send is known by afterwards, and it is the argument
+[`get_outgoing_email`](#get_outgoing_email) and [`cancel_outgoing_email`](#cancel_outgoing_email) take: the first is how
+a caller learns whether the message went out, the second how it stops one while it is still waiting. The description
+names both, so a client reading `tools/list` sees the three together rather than finding out later that `queued` was
+answerable.
+
 ### Asking twice
 
 `idempotencyKey` is required, and that is what makes `idempotentHint` true of the tool rather than of a careful caller.
@@ -1099,7 +1124,8 @@ have to be given if its arguments ever named people that way.
 A message this deployment will not compose is refused before anything is written down, so a refused send leaves no
 record, no stored MIME, and no signal to the delivery pass. What happens after the record exists — a submission server
 that refuses a recipient, a transmission whose outcome is unknown, a send that spends its attempts — is on the record
-rather than in this call's answer, and [mail delivery](mail-delivery.md) is where those endings are read.
+rather than in this call's answer. [`get_outgoing_email`](#get_outgoing_email) is how a caller reads that record, and
+[mail delivery](mail-delivery.md) is where the endings themselves are described.
 
 ## `reply_to_email`
 
@@ -1210,6 +1236,124 @@ that is no value a message can be composed from is `51013`, too many recipients 
 `51014` naming the number, an account with no `Delivery` block behind the answered email is `56002`, and a forward past
 an attachment bound is `51014` naming the limit. Every one of them names a field, a bound, or a count and never a value,
 so no refusal carries an address, a subject, or a line of the message being answered.
+
+## `get_outgoing_email`
+
+Reports what became of one message this caller queued. It is the other half of `queued`: a sending tool answers with an
+identifier and no outcome, because a call that waited for an SMTP exchange would be a call that blocks on a mail server,
+and a caller left holding that identifier with no way to learn what happened does the one thing that cannot be taken
+back — it sends again. So the three sending tools name this tool in their own descriptions, and a client reading
+`tools/list` sees the pair rather than discovering the second one later.
+
+**It reads a durable record and speaks to no mail server.** The answer is as fresh as the last delivery attempt, not a
+live check with a provider, which is what lets the tool be `readOnlyHint` `true` and `openWorldHint` `false` at the same
+time as reporting what a mail server said.
+
+**It reads one send and cannot enumerate.** There is no listing of a mailbox's outgoing mail on this surface, and no
+argument here that could be widened into one: the call names a record the caller already holds the identifier for, and a
+caller that kept none reaches nothing. The view of the whole outbox is the operator's, through `mfctl outbox` against
+the administrative surface, which is a different endpoint reached with a different grant —
+[what an operator sees while mail is leaving](mail-delivery.md#what-an-operator-sees-while-mail-is-leaving) records
+it.
+
+### Arguments
+
+| Argument | Type | Meaning |
+|---|---|---|
+| `outgoingEmailId` | `string` | **Required.** The identifier a sending tool answered with. Blank, not a UUID, or the all-zero UUID is refused with `51015` before anything is looked up |
+
+### Result
+
+| Field | Meaning |
+|---|---|
+| `outgoingEmailId` | The stable identifier of the message, the same value the sending tool answered with |
+| `accountId` | The account the message is sent as, as MailFathom's configuration names it |
+| `state` | `queued`, `sending`, `sent`, `refused`, or `cancelled` — this surface's own spellings, the same ones `send_email` answers with |
+| `attemptCount` | How many delivery attempts have been made. It is counted before each attempt rather than after it, so a message being attempted right now already shows that attempt |
+| `queuedAt` | When the send was first written down |
+| `recipients` | One entry per person the message is addressed to, in the order the headers name them |
+| `failureCode` | The five-digit code the last delivery attempt failed with, absent while none has failed |
+
+Each entry under `recipients` carries the `address` exactly as the send named it, the `header` it is named in — `to`,
+`cc`, or `bcc` — the `state` a mail server has left it in — `pending`, `accepted`, or `refused` — and the
+`lastReplyCode`, the three-digit SMTP reply code a server last answered about that address with, absent while none has.
+
+`failureCode` publishes the code and never the message, which is the record's own rule rather than this boundary's: a
+code is a stable identity an operator can look up, and a failure message is text assembled at the failure site that may
+repeat what a remote server wrote. A code can be present on a message that later succeeds, because an attempt that
+failed is not a send that ended.
+
+**The answer carries only what the caller supplied.** The recipients are the addresses that caller wrote down and the
+account is the one it named. There is no subject, no body, no raw MIME, no `Message-ID`, no folder the copy was filed
+into, and no address the caller did not already know — reading back a send is not reading the message.
+
+## `cancel_outgoing_email`
+
+Stops a message this caller queued from being sent, while it is still waiting. It is the only point at which sending is
+reversible at all, and the window it acts in is the one between the record being written and the first byte of the body
+going out — ordinarily seconds, longer where an operator configured a hold.
+
+**It cannot recall a message that has been transmitted**, and the descriptor says so in those words, because a model
+that discovers it by trying has already told somebody a message was stopped. Past that point the call is refused with
+`58001` and nothing is withdrawn.
+
+**The message is destroyed rather than paused.** Nothing here reschedules a send and no further call brings a cancelled
+message back; queueing it again is a sending tool with a new `idempotencyKey`. That is what `destructiveHint` `true`
+states, and `openWorldHint` `false` beside it states the other half — the whole act happens inside this deployment and
+reaches nobody.
+
+### Arguments
+
+| Argument | Type | Meaning |
+|---|---|---|
+| `outgoingEmailId` | `string` | **Required.** The identifier a sending tool answered with. Blank, not a UUID, or the all-zero UUID is refused with `51015` before anything is looked up |
+
+### Result
+
+The answer is `get_outgoing_email`'s shape and `get_outgoing_email`'s reading, so a client parses one payload whichever
+of the two it called. A withdrawal answers with `state` `cancelled`, which is what a caller reads rather than inferring
+the outcome from the absence of an error.
+
+### It never races the delivery pass
+
+The decision and the write are one statement in the database, conditioned on the same facts a delivery attempt's own
+claim is conditioned on: the record is still at the stage a queued send sits at, and no unexpired lease is held on it.
+So a send an attempt is holding is left alone instead of being withdrawn out from under a session that may be part-way
+through an envelope, and nothing in this call can produce a message that was transmitted and recorded as cancelled.
+
+The stage the call reads before writing is therefore advisory rather than decisive. A delivery pass may take the record
+between the read and the write, so what happened is the statement's own answer, read back from the record afterwards —
+which is why a call that loses that race is refused rather than reported as a withdrawal that did not happen.
+
+### Asking twice
+
+A send already withdrawn is answered with itself and nothing is written a second time, which is what makes
+`idempotentHint` true of the tool rather than of a careful caller. Two callers withdrawing together produce one
+withdrawal and two identical answers.
+
+### What both tools refuse, and what they do not reveal
+
+`mailfathom.mail.send` is what reaches both, and it is the sending grant rather than the reading one. Reading back a
+send is part of sending: what it answers is what the caller itself asked to have sent, and a credential granted only to
+read a mailbox must not learn from it what this mailbox has written to whom — which is the disclosure the absence of a
+listing exists to prevent, reached one identifier at a time instead of in a page. Withdrawing follows the same rule from
+the other direction: what a caller may stop is exactly what it was allowed to start, so no grant of its own is minted
+for taking back what one grant already permitted. Both tools are absent from `tools/list` for a caller without it, and a
+call is answered as a call naming a tool that does not exist. The use cases ask for the same grant on their own.
+
+**What a caller may reach is what it queued.** A record another principal queued and a record nobody queued are one
+answer — `53007`, with one message — deliberately, because a caller able to tell them apart would learn from an
+identifier alone that this mailbox sent something. The scoping is on the record rather than on the argument: the
+principal a send was queued under is stamped by the outbox when the send is written down, never stated by a caller, and
+a send a mail rule queued is reachable by no caller at all.
+
+Text that names no send and a send that may not be reached are told apart, for the mirror-image reason: `51015` says the
+argument is not an identifier this system issues, which is true whatever this deployment has queued, and answering it as
+a send nobody holds would tell a caller its own malformed argument was somebody else's record.
+
+`58001` covers three situations with one message — a send being transmitted, one already transmitted, and one already
+given up on — because nothing was withdrawn in any of them and which it was reads from the `state` the same record
+carries. It is never produced for a send that was already cancelled: that one succeeds.
 
 ## `ask_mail`
 

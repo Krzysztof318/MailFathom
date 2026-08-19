@@ -6,12 +6,13 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Submission;
+using MailFathom.Application.Mail.Delivery.Tracking;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Mcp.Tools;
 
-/// <summary>Reads the arguments every tool that asks for mail to be sent shares, in the one place they are read.</summary>
+/// <summary>Reads the arguments the tools that send mail, and the tools that ask about a send, share.</summary>
 /// <remarks>
 /// <para>
 /// Three tools send, and each of them takes an idempotency key and a list of addresses in the same shape and refuses
@@ -54,6 +55,29 @@ internal static class AuthoredMailArguments
         }
 
         return StoredEmailId.Create(parsed);
+    }
+
+    /// <summary>Reads the identity of the send a caller is asking about.</summary>
+    /// <param name="outgoingEmailId">The text the caller named the queued message by.</param>
+    /// <returns>The record identity.</returns>
+    /// <exception cref="QueuedSendRefusedException">Thrown when the text is not an identifier this system issues.</exception>
+    /// <remarks>
+    /// The bound and the parse are the stored email's, for the same reason: the longest form
+    /// <see cref="Guid.TryParse(string, out Guid)" /> accepts is 68 characters and the parse scans whatever it is
+    /// handed. What differs is the refusal, because the two identify different things and a caller told its send
+    /// identifier is not an email identifier would be looking for the wrong mistake.
+    /// </remarks>
+    public static OutgoingEmailId QueuedSend(string outgoingEmailId)
+    {
+        if (outgoingEmailId is null
+            || outgoingEmailId.Length > MaximumIdentifierLength
+            || !Guid.TryParse(outgoingEmailId, out var parsed)
+            || parsed == Guid.Empty)
+        {
+            throw QueuedSendRefusedException.IdentifierMalformed();
+        }
+
+        return OutgoingEmailId.Create(parsed);
     }
 
     /// <summary>Names the invocation asking, from the key the caller supplied for it.</summary>

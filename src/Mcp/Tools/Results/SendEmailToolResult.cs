@@ -56,27 +56,9 @@ internal sealed record SendEmailToolResult
         {
             OutgoingEmailId = record.Id.ToString(),
             AccountId = record.AccountId.Value,
-            State = Published(record.Stage),
+            State = SendEmailStateMapping.Published(record.Stage),
             RecipientCount = record.Recipients.Count,
             QueuedAt = record.RecordedAt,
         };
     }
-
-    /// <summary>Reads the published state one stored stage is reported under.</summary>
-    /// <remarks>
-    /// Written out rather than cast, so a stage added to the record has to be given a published spelling here before it
-    /// can reach a client. The alternative would publish whichever name happened to sit at the same ordinal.
-    /// </remarks>
-    private static SendEmailState Published(OutgoingEmailStage stage) => stage switch
-    {
-        OutgoingEmailStage.Recorded => SendEmailState.Queued,
-        OutgoingEmailStage.TransmissionBegun => SendEmailState.Sending,
-        OutgoingEmailStage.Sent => SendEmailState.Sent,
-        OutgoingEmailStage.Refused => SendEmailState.Refused,
-        OutgoingEmailStage.Cancelled => SendEmailState.Cancelled,
-        _ => throw new ArgumentOutOfRangeException(
-            nameof(stage),
-            stage,
-            "The outgoing email stage is not one this surface publishes."),
-    };
 }

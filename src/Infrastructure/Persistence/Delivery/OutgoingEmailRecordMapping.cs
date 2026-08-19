@@ -41,6 +41,7 @@ internal static class OutgoingEmailRecordMapping
             Id = OutgoingEmailId.Create(entity.Id),
             AccountId = MailAccountId.Create(entity.MailboxAccountId),
             Requester = OutgoingEmailRequester.Create(entity.RequesterOrigin, entity.RequesterIdentity),
+            Principal = ToPrincipal(entity.PrincipalFingerprint),
             Recipients = recipients,
             Stage = entity.Stage,
             MimeByteLength = entity.MimeByteLength,
@@ -126,6 +127,16 @@ internal static class OutgoingEmailRecordMapping
     /// </remarks>
     private static ContactId? ContactOf(OutgoingEmailRecipientEntity entity) =>
         entity.ContactId is { } contactId && contactId != Guid.Empty ? ContactId.Create(contactId) : null;
+
+    /// <summary>Reads back whoever asked for the send, where the row says.</summary>
+    /// <remarks>
+    /// A row written before the column existed reads as nobody, which matches no caller and so keeps such a send out of
+    /// every caller's reach. A stored value that is not a fingerprint this system writes fails the read instead: the
+    /// value's only use is that two of them are equal, so serving one that can never match would hide a send from
+    /// exactly the caller entitled to it.
+    /// </remarks>
+    private static OutgoingEmailPrincipal? ToPrincipal(string? fingerprint) =>
+        string.IsNullOrEmpty(fingerprint) ? null : OutgoingEmailPrincipal.Create(fingerprint);
 
     /// <summary>Reads back the code of the failure the last attempt ended in.</summary>
     /// <remarks>

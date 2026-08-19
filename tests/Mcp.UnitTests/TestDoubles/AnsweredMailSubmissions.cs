@@ -274,6 +274,7 @@ internal static class AnsweredMailSubmissions
             .OpenAsync(
                 Arg.Any<IPersistenceSession>(),
                 Arg.Any<OutgoingEmailRequest>(),
+                Arg.Any<OutgoingEmailPrincipal>(),
                 Arg.Any<long>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -288,9 +289,10 @@ internal static class AnsweredMailSubmissions
                         Id = OutgoingEmailId.Create(Guid.CreateVersion7(RecordedAt)),
                         AccountId = request.AccountId,
                         Requester = request.Requester,
+                        Principal = call.ArgAt<OutgoingEmailPrincipal>(2),
                         Recipients = [.. request.Recipients.Select(OutgoingRecipientOutcome.Unanswered)],
                         Stage = OutgoingEmailStage.Recorded,
-                        MimeByteLength = call.ArgAt<long>(2),
+                        MimeByteLength = call.ArgAt<long>(3),
                         AttemptCount = 0,
                         RecordedAt = RecordedAt,
                         StageChangedAt = RecordedAt,

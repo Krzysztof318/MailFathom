@@ -1405,6 +1405,12 @@ internal sealed class MailFathomDbContext : DbContext
                 .HasMaxLength(OutgoingEmailRequester.MaximumIdentityLength)
                 .IsRequired();
 
+            // Optional because the column arrived after the table did, and a record written before it carries no
+            // principal rather than an empty one: absence has to stay tellable from a value, since a caller matching
+            // the empty string would be reading somebody else's send.
+            entity.Property(message => message.PrincipalFingerprint)
+                .HasMaxLength(OutgoingEmailPrincipal.FingerprintLength);
+
             // Stored as text for the reason the mutation stage is: both stay readable in an ad-hoc audit query and
             // survive any later reordering of their enum.
             entity.Property(message => message.RequesterOrigin).HasConversion<string>().HasMaxLength(64).IsRequired();

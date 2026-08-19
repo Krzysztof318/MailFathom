@@ -53,11 +53,13 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
     public async Task<OutgoingEmailRecord> OpenAsync(
         IPersistenceSession session,
         OutgoingEmailRequest request,
+        OutgoingEmailPrincipal principal,
         long mimeByteLength,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(principal);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(mimeByteLength);
 
         var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
@@ -82,6 +84,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
             MailboxAccountId = request.AccountId.Value,
             RequesterOrigin = request.Requester.Origin,
             RequesterIdentity = request.Requester.Identity,
+            PrincipalFingerprint = principal.Fingerprint,
             Stage = OutgoingEmailStage.Recorded,
             MimeByteLength = mimeByteLength,
             AttemptCount = 0,

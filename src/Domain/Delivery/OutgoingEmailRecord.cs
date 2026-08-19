@@ -40,6 +40,15 @@ public sealed record OutgoingEmailRecord
     /// <summary>Gets the authored act that asked, restored exactly as it was written down.</summary>
     public required OutgoingEmailRequester Requester { get; init; }
 
+    /// <summary>Gets whoever the send was asked for by, or <see langword="null" /> for a record written before that was kept.</summary>
+    /// <remarks>
+    /// It is what confines a caller reading a send back, or withdrawing one, to the sends it asked for itself. Absence
+    /// is a record from an earlier build rather than a send nobody asked for, and it matches nobody: a caller cannot
+    /// prove it queued a record that never said who did, and the operator's own view of the outbox is where such a
+    /// record is read from instead.
+    /// </remarks>
+    public required OutgoingEmailPrincipal? Principal { get; init; }
+
     /// <summary>Gets every recipient the message names, with what the server has said about each.</summary>
     public required IReadOnlyList<OutgoingRecipientOutcome> Recipients { get; init; }
 

@@ -26,6 +26,15 @@ internal sealed class OutgoingEmailEntity
 
     public required string RequesterIdentity { get; set; }
 
+    /// <summary>Gets or sets the fingerprint of whoever asked for the send, and <see langword="null" /> on a row written before it was kept.</summary>
+    /// <remarks>
+    /// It is read only for equality, by a caller asking what became of a send it queued or asking for one to be
+    /// withdrawn, which is why the fingerprint is stored rather than the identity behind it: the column has a fixed
+    /// width whatever an authorization server named a caller, and an outgoing record gains no second identifier for the
+    /// person who asked.
+    /// </remarks>
+    public string? PrincipalFingerprint { get; set; }
+
     public OutgoingEmailStage Stage { get; set; }
 
     /// <summary>Gets or sets how many bytes of MIME were stored for this message.</summary>

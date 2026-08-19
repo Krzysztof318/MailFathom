@@ -11,10 +11,12 @@ MailFathom is a self-hosted service that synchronizes mail from your IMAP accoun
 indexes it for search, and serves it to AI agents as tools over the
 [Model Context Protocol](https://modelcontextprotocol.io/). An agent connected to it can list, read, and search your
 mail, it can mark, star, and label one message at a time through `set_mail_flags`, and it can send a message through
-`send_email` — or answer one it already holds through `reply_to_email` and `forward_email`. Each of those is offered
-only to a credential granted its own name —
+`send_email` — or answer one it already holds through `reply_to_email` and `forward_email`. Each of those acts is
+offered only to a credential granted its own name —
 `mailfathom.mail.flags.write` and `mailfathom.mail.send` — and neither comes with being able to read; the two answering
-tools need both names, because an answer is derived from the message it answers. It cannot delete
+tools need both names, because an answer is derived from the message it answers. `get_outgoing_email` and
+`cancel_outgoing_email` say what became of a message it sent and stop one that has not left yet, and both sit behind the
+sending name rather than one of their own. It cannot delete
 or move mail. What it can write besides is MailFathom's own contact book — the people you or your
 deployment wrote down — which six tools read and maintain, one of them by erasing a record for good.
 

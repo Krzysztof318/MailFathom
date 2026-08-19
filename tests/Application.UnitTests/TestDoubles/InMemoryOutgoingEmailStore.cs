@@ -68,16 +68,20 @@ internal sealed class InMemoryOutgoingEmailStore(
     /// <summary>Writes a record the way a writer that has already committed left it, without going through a session.</summary>
     /// <param name="request">The request the other writer recorded.</param>
     /// <param name="mimeByteLength">How many bytes of MIME it stored.</param>
+    /// <param name="principal">Whoever asked for it, or absent to write the row a build that did not keep the principal left.</param>
     /// <returns>The record now in the store.</returns>
     /// <remarks>
     /// This is how a test arranges a race it has to interleave: the winner's row appears while the loser holds an open
     /// session, which is the moment the real unique index refuses the loser's insert.
     /// </remarks>
-    internal OutgoingEmailRecord Publish(OutgoingEmailRequest request, long mimeByteLength)
+    internal OutgoingEmailRecord Publish(
+        OutgoingEmailRequest request,
+        long mimeByteLength,
+        OutgoingEmailPrincipal? principal = null)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var recorded = this.Record(request, mimeByteLength);
+        var recorded = this.Record(request, principal, mimeByteLength);
         this.Commit(request, recorded);
 
         return recorded;
@@ -134,11 +138,13 @@ internal sealed class InMemoryOutgoingEmailStore(
     public Task<OutgoingEmailRecord> OpenAsync(
         IPersistenceSession session,
         OutgoingEmailRequest request,
+        OutgoingEmailPrincipal principal,
         long mimeByteLength,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(principal);
 
         this.openRequests.Add(request);
 
@@ -147,7 +153,7 @@ internal sealed class InMemoryOutgoingEmailStore(
             return Task.FromResult(this.rows[existing].Record);
         }
 
-        var recorded = this.Record(request, mimeByteLength);
+        var recorded = this.Record(request, principal, mimeByteLength);
 
         // A session that will not commit leaves the record staged and nothing durable behind it, exactly as a losing
         // insert does against the unique index.
@@ -157,6 +163,38 @@ internal sealed class InMemoryOutgoingEmailStore(
         }
 
         return Task.FromResult(recorded);
+    }
+
+    /// <summary>Withdraws one record the way the operator's own statement does, and reports what stopped it otherwise.</summary>
+    /// <param name="outgoingEmailId">The record to withdraw.</param>
+    /// <param name="asOf">The instant a held record is judged still held at.</param>
+    /// <returns>What became of the record.</returns>
+    /// <remarks>
+    /// It belongs to this double rather than to a second one because the rows are here, and it answers in the outbox
+    /// store's own vocabulary because that is the port a caller reaches it through. The lease columns are deliberately
+    /// left as they stand, exactly as the real statement leaves them: the stage is what stops anything claiming the
+    /// record again, and a withdrawal that also tidied up would be a double whose rows no deployment produces.
+    /// </remarks>
+    internal OutboxDecisionOutcome Withdraw(OutgoingEmailId outgoingEmailId, DateTimeOffset asOf)
+    {
+        if (!this.rows.TryGetValue(outgoingEmailId, out var row))
+        {
+            return OutboxDecisionOutcome.RecordUnknown;
+        }
+
+        if (row.Record.Stage != OutgoingEmailStage.Recorded)
+        {
+            return OutboxDecisionOutcome.StageDoesNotAllowIt;
+        }
+
+        if (row.LeaseExpiresAt > asOf)
+        {
+            return OutboxDecisionOutcome.AttemptUnderWay;
+        }
+
+        row.Record = row.Record with { Stage = OutgoingEmailStage.Cancelled, StageChangedAt = asOf };
+
+        return OutboxDecisionOutcome.Accepted;
     }
 
     /// <summary>Gets or sets what a read of one record raises, which is how a store that failed outright is reached.</summary>
@@ -496,23 +534,27 @@ internal sealed class InMemoryOutgoingEmailStore(
         this.rows[recorded.Id] = new StoredRow { Record = recorded };
     }
 
-    private OutgoingEmailRecord Record(OutgoingEmailRequest request, long mimeByteLength) => new()
-    {
-        Id = OutgoingEmailId.Create(Guid.CreateVersion7()),
-        AccountId = request.AccountId,
-        Requester = request.Requester,
-        Recipients = [.. request.Recipients.Select(OutgoingRecipientOutcome.Unanswered)],
-        Stage = OutgoingEmailStage.Recorded,
-        MimeByteLength = mimeByteLength,
-        AttemptCount = 0,
-        RecordedAt = this.clock.GetUtcNow(),
-        StageChangedAt = this.clock.GetUtcNow(),
-        AvailableAt = this.clock.GetUtcNow(),
-        LastFailure = null,
-        LastReplyCode = null,
-        Filings = [],
-        LastFilingFailure = null,
-    };
+    private OutgoingEmailRecord Record(
+        OutgoingEmailRequest request,
+        OutgoingEmailPrincipal? principal,
+        long mimeByteLength) => new()
+        {
+            Id = OutgoingEmailId.Create(Guid.CreateVersion7()),
+            AccountId = request.AccountId,
+            Requester = request.Requester,
+            Principal = principal,
+            Recipients = [.. request.Recipients.Select(OutgoingRecipientOutcome.Unanswered)],
+            Stage = OutgoingEmailStage.Recorded,
+            MimeByteLength = mimeByteLength,
+            AttemptCount = 0,
+            RecordedAt = this.clock.GetUtcNow(),
+            StageChangedAt = this.clock.GetUtcNow(),
+            AvailableAt = this.clock.GetUtcNow(),
+            LastFailure = null,
+            LastReplyCode = null,
+            Filings = [],
+            LastFilingFailure = null,
+        };
 
     /// <summary>Holds one record beside the claim state the record itself does not publish.</summary>
     private sealed class StoredRow

@@ -440,7 +440,7 @@ requested cannot enqueue as a command however a grant is written. The question i
 picture, which is what makes it hold for an entrypoint added later — a command, a gateway, a second protocol — rather
 than only for a request that passed a filter. Nothing has been written down when it is asked, so a refusal leaves no
 record and no stored message behind. [What a credential may do](../operations/permissions.md#the-published-set) is the
-grant, and `send_email` is the one tool that reaches it.
+grant, and `send_email`, `reply_to_email`, and `forward_email` are the tools that reach the enqueue behind it.
 
 **The same authored request arriving twice delivers once.** The identity is the sending account together with the act
 that asked — a rule with its name, its revision, and the email it acted on; or a caller with a key of their own — and it
@@ -557,6 +557,57 @@ enough down a slow batch is reached after its own lease has already run out. It 
 offered for it: every write it would make is refused anyway — which is what keeps a reclaimed send from being
 transmitted twice — so asking first buys the connection, the submission, and the wait that would otherwise be spent on
 a record this attempt no longer holds.
+
+## Reading a send back, and withdrawing one that is still waiting
+
+A caller is answered with an identifier and `queued`, which is honest and is only half a contract: a caller holding that
+identifier with no way to learn what became of the message does the one thing that cannot be taken back and sends again.
+`OutgoingMailReader` is the other half. It reads the durable record — the state, the attempts counted against it, what a
+server has said about each recipient, and the code the last failed attempt ended on — and it reaches no submission
+server to do it, so the answer is as fresh as the last delivery pass rather than a live check.
+
+`OutgoingMailCancellation` is the one point at which sending is reversible at all. The window is between the record
+being written and the first byte of the body going out — ordinarily seconds, longer where an operator configured a hold
+— and past it the message is somebody else's, so the call says so rather than reporting a withdrawal it did not perform.
+
+**Withdrawing never races a delivery pass.** The decision and the write are one statement, conditioned on exactly what
+the claim above is conditioned on: the record still at *recorded*, and no unexpired lease on it. A send an attempt is
+holding is therefore left alone instead of being cancelled out from under a session that may be part-way through an
+envelope, and no state exists in which a message was transmitted and the record says it was withdrawn. The stage read
+before the write is advisory — a pass may take the record in between — so what happened is the statement's own answer,
+read back from the record afterwards. An expired lease counts as free, by the same predicate that lets a pass reclaim
+such a row.
+
+It is the statement `mfctl outbox cancel` writes, reached under a second authorization rather than written a second
+time. What differs between the two is who may ask and about which records — an operator names any send this deployment
+holds, and a caller here reaches only what it queued — and that difference is decided before the statement rather than
+inside it. Two accounts of one invariant would drift, and whichever drifted would be found as a message somebody was
+told had been withdrawn.
+
+**Withdrawing twice is one withdrawal.** A record already at *cancelled* is answered with itself and nothing is written
+a second time, which is what makes the tool over it idempotent rather than idempotent as long as nobody repeats a call.
+A withdrawn record is terminal: nothing reschedules it, and queueing the message again is a fresh send with a fresh
+idempotency key.
+
+**What either use case may reach is what the caller queued.** A send carries the principal it was queued under —
+stamped by the outbox from the admitted identity when the record is written, never stated by a caller — and a record
+whose principal is not this caller's answers exactly as a record that does not exist. Two consequences follow. A caller
+cannot learn from an identifier alone that this mailbox sent something, which is the enumeration this surface refuses to
+offer, reached one guess at a time instead of through a listing. And a send a **rule** queued is reachable by no caller
+at all: the origin the record already carries is checked beside the principal, so a send this deployment made for itself
+stays out of every caller's reach whatever a credential happens to be named. What reads those is
+[the operator's own view](#what-an-operator-sees-while-mail-is-leaving), on the administrative surface rather than
+this one.
+
+The stamp is a fixed-width digest of the admitted identity rather than the identity itself, so what is at rest is enough
+to compare a later caller against and is not a second copy of whatever a token asserted. A record written before the
+column existed carries none and therefore matches nobody, which is the safe direction: it reads as not found rather than
+as everybody's. [The outgoing messages waiting to be sent](../architecture/stored-email-schema.md#the-outgoing-messages-waiting-to-be-sent)
+holds the column.
+
+[`get_outgoing_email` and `cancel_outgoing_email`](mcp-tools.md#get_outgoing_email) are the tools over these two use
+cases, and both take the sending grant rather than the reading one — what a caller may read back and stop is exactly
+what it was allowed to start.
 
 ## The window that cannot be decided
 

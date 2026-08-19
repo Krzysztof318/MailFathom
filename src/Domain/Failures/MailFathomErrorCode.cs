@@ -437,6 +437,14 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode AuthoredMailBoundExceeded { get; } = new(51014);
 
+    /// <summary>Gets subcategory 1, request validation: a request named a queued send by text that is not an identifier this system issues.</summary>
+    /// <remarks>
+    /// It is separate from a send that is not found for the reason the stored-email pair is separate: this one says the
+    /// text could name no send at all, which is true whatever this deployment has queued, and answering it as a send
+    /// nobody holds would tell a caller its own malformed argument was somebody else's record.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailIdentifierMalformed { get; } = new(51015);
+
     /// <summary>Gets subcategory 2, pagination: a continuation cursor is not one this system issued.</summary>
     public static MailFathomErrorCode MailboxQueryCursorMalformed { get; } = new(52001);
 
@@ -498,6 +506,15 @@ public readonly record struct MailFathomErrorCode
     /// publish a recipient into a log and a policy answered address by address would be a list a caller could map.
     /// </remarks>
     public static MailFathomErrorCode OutgoingRecipientRefusedByPolicy { get; } = new(53006);
+
+    /// <summary>Gets subcategory 3, access: a request named a queued send this caller did not ask for, or none at all.</summary>
+    /// <remarks>
+    /// One code covers both on purpose. A caller may read back and withdraw the sends it asked for and nothing else, so
+    /// a record another caller queued has to answer exactly as a record nobody queued — a refusal a caller could tell
+    /// apart would let whoever holds an identifier learn that somebody else's send exists, which on this surface is a
+    /// fact about the mailbox's outgoing correspondence.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailNotFound { get; } = new(53007);
 
     /// <summary>Gets subcategory 4, undiagnosed failure: a tool call failed for a reason the boundary deliberately does not describe.</summary>
     /// <remarks>
@@ -567,6 +584,22 @@ public readonly record struct MailFathomErrorCode
     /// names which was reached and the remedy is the same for each.
     /// </remarks>
     public static MailFathomErrorCode OutgoingMailCeilingReached { get; } = new(57002);
+
+    /// <summary>Gets subcategory 8, a state already passed: a queued send can no longer be withdrawn, because it is being transmitted or has been.</summary>
+    /// <remarks>
+    /// <para>
+    /// A subcategory of its own because it is neither of the two it would otherwise be folded into. The send was named
+    /// correctly and the caller is entitled to it, so it is not an access refusal; the capability is configured and
+    /// working, so it is not an absent one. What it says is that the one moment the act was possible in has passed,
+    /// which no rewriting of the request and no waiting reaches again.
+    /// </para>
+    /// <para>
+    /// One code covers a transmission that has begun, one that finished, and a send that was already given up on, for
+    /// the reason the caller acts on all three identically: nothing is withdrawn and nothing will be. Which of them it
+    /// was reads from the state the same call answers with.
+    /// </para>
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailNoLongerCancellable { get; } = new(58001);
 
     #endregion
 
@@ -711,6 +744,7 @@ public readonly record struct MailFathomErrorCode
         MailFlagChangeInvalid,
         AuthoredMailFieldRefused,
         AuthoredMailBoundExceeded,
+        OutgoingEmailIdentifierMalformed,
         MailboxQueryCursorMalformed,
         MailboxQueryCursorFilterMismatch,
         ContactCursorMalformed,
@@ -720,6 +754,7 @@ public readonly record struct MailFathomErrorCode
         AuthoredMailRecipientUnresolved,
         AnsweredEmailUnavailable,
         OutgoingRecipientRefusedByPolicy,
+        OutgoingEmailNotFound,
         McpToolFailedUnexpectedly,
         EmailContentUnavailable,
         MailAnsweringUnavailable,
@@ -727,6 +762,7 @@ public readonly record struct MailFathomErrorCode
         MailSendingNotEnabled,
         MailAnsweringBudgetExhausted,
         OutgoingMailCeilingReached,
+        OutgoingEmailNoLongerCancellable,
         EmbeddingProviderCredentialRejected,
         EmbeddingProviderUnavailable,
         EmbeddingVectorShapeUnexpected,

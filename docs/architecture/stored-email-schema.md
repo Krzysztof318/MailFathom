@@ -725,6 +725,7 @@ withdrawn from the mailbox it reached.
 | `Id` | The record's identity, and what the stored message and the recipients hang on. A UUIDv7 generated from the instant the intent was written, so the outbox's own order is the identifier's |
 | `MailboxAccountId` | The account the message is submitted through and sent as. A plain column rather than a foreign key: the account row is created by the first folder binding synchronization writes, and an account configured only to send need never have synchronized anything |
 | `RequesterOrigin`, `RequesterIdentity` | The authored act that asked, by kind and by the text two requests are compared by. A rule answers with its name, the revision it was evaluated at, and the email it acted on; somebody present answers with a key of their own |
+| `PrincipalFingerprint` | A fixed-width digest of the identity the caller was admitted under, written by the outbox rather than stated by a caller. It is what confines a read or a withdrawal of a send to the caller that queued it, and a digest rather than the identity so the comparison is possible without a second copy of whatever a token asserted living at rest. A send a rule asked for carries the process identity's digest and is additionally excluded by its origin, so no caller reaches one; a row written before the column existed carries null and therefore matches nobody |
 | `Stage` | How far the submission has durably got, in the vocabulary below |
 | `MimeByteLength` | How many bytes of MIME were stored. Kept beside the record as well as on the message, so the size bound a submission server advertised can be compared against it — and the outbox listed — without reading a single queued message's `bytea` |
 | `AttemptCount` | Counted by the claim itself rather than after the attempt, so an attempt that kills the process still counted |
@@ -750,6 +751,13 @@ afterwards would announce it only in the case where the crash it exists for did 
 re-sent. Two of the terminal stages are reachable from one stage only, which is that same window read from either end —
 `Sent` follows only `TransmissionBegun`, so no row claims a delivery nothing could have produced, and `Cancelled`
 follows only `Recorded`, so no row claims a withdrawal after bytes that may already have reached somebody.
+
+**A withdrawal is one conditional statement rather than a read followed by a write.** It moves a row to `Cancelled` and
+clears the lease columns only where the row is still at `Recorded` and no unexpired lease is held on it, which is the
+same predicate the claim below applies — so a send an attempt is holding is left alone, an expired lease counts as free
+in both, and the statement writing nothing is how a caller learns the send can no longer be withdrawn. Applied a second
+time it matches nothing, because the row is no longer at the stage it names, which is what makes withdrawing twice one
+withdrawal rather than two writes with the same result.
 
 **A send stopped mid-transmission stays at `TransmissionBegun` and is never advanced by anything automatic.** Moving it
 to `Refused` would be this system stating that nothing reached anybody, which is the one thing nobody can establish

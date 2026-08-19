@@ -2,22 +2,22 @@
 
 <!-- describes: src/Mcp/Tools/** -->
 
-MailFathom publishes fifteen MCP tools, and together they are the whole surface: an agent can see which mailboxes
+MailFathom publishes seventeen MCP tools, and together they are the whole surface: an agent can see which mailboxes
 exist, list mail, read one message, search, ask a question, mark and label a message, send a message, reply to or
-forward one it already holds, and keep the
+forward one it already holds, find out what became of a message it sent and stop one that has not left yet, and keep the
 deployment's own contact book — nothing else. This
 page is the user's view of that surface: what each tool answers, what every result carries, what the deliberate limits
 are, and how to read a failure. The full contracts — every argument, every field, every bound — live in
 [MCP tools](../features/mcp-tools.md) and the feature pages it links, and this page does not restate them.
 
-Eight of the nine mailbox tools are always within the deployment's reach. `ask_mail` needs a chat model and an embedding
+Ten of the eleven mailbox tools are always within the deployment's reach. `ask_mail` needs a chat model and an embedding
 model configured and working, so a deployment that has neither does not offer it at all; its absence from a tool listing
 is that deployment saying it cannot answer questions rather than something being broken. The three sending tools are
 always offered to a caller granted them and refuse the call where the account behind the message has no sending
 configuration, because whether a
 particular mailbox can send is a question about that account rather than about the deployment.
 
-Which of the fifteen *you* are offered is a second question, and its answer is the grant on the credential you connected
+Which of the seventeen *you* are offered is a second question, and its answer is the grant on the credential you connected
 with. A tool that grant does not permit is absent from the listing, and calling it anyway is answered as though no such
 tool existed — nothing names the permission that was missing, so a shorter tool list than this page describes is a
 question for whoever configured the deployment:
@@ -255,7 +255,8 @@ behalf.
 **It does not send while you wait, and the answer says so.** The call writes the composed message down durably and
 answers with the record it was written as; a delivery pass offers it to your mail server seconds later. So the `state`
 you get back is `queued`, never `sent` — a message reported as delivered by this call would be a message reported as
-delivered before anything was offered to anybody.
+delivered before anything was offered to anybody. Keep the `outgoingEmailId`: it is what `get_outgoing_email` answers
+about, and what `cancel_outgoing_email` stops during the seconds before the message leaves.
 
 **You never say who it is from.** There is no `from` argument and there never will be one. The message is sent as the
 account you name, from the address that account's configuration declares, which is what stops anything a client sends
@@ -334,6 +335,36 @@ call, so a deployment meant to let an agent reply grants both names.
 account this deployment no longer serves, mail in a folder the operator withheld from tools, and a message whose stored
 content is no longer readable all come back as `53005`, worded identically. Nothing tells you which — otherwise
 replying to identifiers one at a time would map out what the deployment holds and what was withheld from you.
+
+## `get_outgoing_email` and `cancel_outgoing_email` — what became of a send, and stopping one
+
+A sending tool answers `queued` and an identifier, which is honest and leaves you holding a question. These two answer
+it. **Call `get_outgoing_email` instead of sending again** when you are unsure whether a message went out — a second
+send is a second message in somebody's mailbox, and that is exactly the mistake the pair exists to prevent.
+
+`get_outgoing_email` takes the `outgoingEmailId` the send answered with and reports where the message stands: the
+`state`, how many delivery attempts it has taken, what a mail server has said about each person you addressed it to
+including the reply code, and the five-digit code the last attempt failed on if one has. It reads a record this
+deployment already holds and contacts no mail server, so the answer is as fresh as the last delivery pass rather than a
+live check. Nothing about the message itself comes back — no subject, no body, no attachments — because you already have
+what you sent.
+
+`cancel_outgoing_email` takes the same identifier and stops the message while it is still waiting. **It cannot recall a
+message that has already been transmitted.** The window is between the send being written down and the first byte going
+out — ordinarily seconds — and past it the call is refused with `58001` and nothing is withdrawn. The message is
+destroyed rather than paused: nothing reschedules it, no later call brings it back, and sending it after all means
+queueing it again with a fresh `idempotencyKey`. Cancelling something already cancelled succeeds and does nothing
+twice, so repeating the call after a timeout is safe.
+
+**There is no listing of what a mailbox has sent.** Both tools answer about one identifier at a time and nothing on this
+surface enumerates outgoing mail, which is why keeping the identifier a send answered with is worth doing — an
+identifier you did not keep is a send nothing on this surface reaches. The view of the whole outbox belongs to whoever
+runs the deployment, through `mfctl outbox`, and is reached with an administrative credential rather than with yours.
+
+**You can only reach what you queued.** A message some other credential sent reads as not found, in exactly the same
+words as an identifier nothing is held under — `53007` for both, so an identifier alone never establishes that this
+mailbox sent something. Both take `mailfathom.mail.send`, the sending grant rather than the reading one: what this
+mailbox has written to whom is not something a credential given the mailbox to read is thereby told.
 
 ## `ask_mail` — a question, answered with its sources
 
@@ -465,6 +496,7 @@ The codes a user meets in practice:
 | `51012` | A flag change asked for nothing, stated half a keyword change, named a keyword no mail server would keep, carried a `requestId` that is no identifier, or reused one that already asked for a different value | Name at least one of `seen`, `flagged`, and the keyword pair; send `keywordChange` and `keywords` together; keep each keyword to one word of plain ASCII and name at most 64; keep `requestId` to at most 128 printable characters, or leave it out and let the server issue one; send a new one when you mean a new change |
 | `51013` | A field of a message you authored carries a value no message can be composed from — a line break in a subject or a recipient, an address outside ASCII, text naming no account, or an `account` or `idempotencyKey` that is blank, too long, or not printable | Fix the field the message names; it names the field and never the value you sent |
 | `51014` | A message you authored is larger than this deployment composes — more people than the recipient bound allows, a body over its character bound, or a forward whose original carries more files or larger ones than this deployment sends | The message names the bound and the configured number: send to fewer people, send a shorter body, or accept that the message cannot be forwarded from here |
+| `51015` | The `outgoingEmailId` you passed is no identifier this system issues — blank, truncated, or invented | Pass the value a sending tool answered with, verbatim |
 | `52001` / `52002` | A cursor this system did not issue, or one reused after the filters changed | Restart the walk from the first page |
 | `52003` | A contact listing's cursor is not one this system issued | Restart the walk; changing the search or the origin mid-walk is allowed and is not what caused it |
 | `53001` | The named account is not served here | Call `list_accounts` and use an `accountId` or `displayName` it returns |
@@ -472,12 +504,14 @@ The codes a user meets in practice:
 | `53003` | A folder was named by a role no folder in scope carries | Name the folder's alias instead, or ask the operator to map the role on that account |
 | `53005` | There is no email here you can reply to or forward under that identifier | One answer for four situations, deliberately: no such identifier, an account no longer served, a folder withheld from tools, or content no longer readable. Nothing tells you which — list again, and ask the operator if the message is one you expected to be able to answer |
 | `53006` | A recipient is one this deployment may not write to | The whole message was refused rather than sent to the rest; write to somebody the policy admits, or ask the operator to widen it. The answer never repeats the address |
+| `53007` | There is no queued message *you* sent under that identifier | One answer for two situations, deliberately: nothing is held under it, or somebody else queued it. Pass the identifier the sending tool answered with, and note that another credential's sends are never yours to read or stop |
 | `55001` | The email exists but its stored content is currently unreadable; a repair has been queued | Retry later — this is a local-consistency state, not a mail-server problem |
 | `56001` | This deployment cannot answer questions about mail, either at all or for now | Nothing about the question caused it; the message says which, and only the operator can change it |
 | `56002` | This deployment cannot send as the account you named | The account is served and readable, and sending from it is the part nobody configured; only the operator can add its delivery configuration |
 | `56003` | Sending is not turned on for the account you named, or this deployment is running read-only | The message says which; both are the operator's switch, and nothing you rewrite reaches an answer |
 | `57001` | Answering would cost more than this deployment allows | The message says which ceiling: a spent period is worth asking again once it turns over, while a question that reached what one question may cost needs to be narrower |
 | `57002` | Sending would carry this period past a ceiling the operator configured | The message names which ceiling; the period rolling over is when the same send can be asked for again |
+| `58001` | The message can no longer be cancelled | It is being transmitted, has been transmitted, or was already given up on. Nothing was withdrawn; call `get_outgoing_email` to see which, and treat a message that has left as final |
 | `54001` | Something failed for a reason the boundary deliberately does not describe | The server log has the detail, correlated by the request's trace |
 
 `53002` and `55001` also reach you inside a *successful* `get_email_content` result, as the `failure` on the entry for
