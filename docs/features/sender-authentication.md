@@ -128,14 +128,15 @@ contradictions, and both stay visible because the identity and the author are re
 The trusted reading establishes nothing wherever nothing trusted could be read:
 
 - the account names no trusted server;
-- no header carries that server's identifier;
+- no readable header carries that server's identifier — which includes a header that *did* carry it and was malformed
+  or longer than the bound below, because such a header is dropped before anything looks at whose it was;
 - the trusted header names no method this reading uses, or names one whose result was `none`;
-- the trusted header is malformed, or longer than the bound below;
 - a check passed but named no usable domain, so there is no identity to record.
 
-The first two of those are where the local verification below takes over; the rest are a server having spoken, and are
-final. It is deliberately distinct from *failed*, which is the receiving server having attempted an identity and found
-it did not hold. Any result other than `pass` and `none` for DKIM or SPF is that failure — `fail`, `softfail`,
+The first two of those are where the local verification below takes over, and they are one case rather than two: no
+trusted server has spoken about this message, whether because none was configured or because nothing readable from one
+arrived. The rest are a server having spoken, and are final. It is deliberately distinct from *failed*, which is the
+receiving server having attempted an identity and found it did not hold. Any result other than `pass` and `none` for DKIM or SPF is that failure — `fail`, `softfail`,
 `neutral`, `policy`, and both error results — because none of them establishes anything and the exact wording stays in
 the raw MIME the verdict is re-derivable from.
 

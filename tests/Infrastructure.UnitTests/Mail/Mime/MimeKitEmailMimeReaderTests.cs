@@ -1011,6 +1011,34 @@ public sealed class MimeKitEmailMimeReaderTests
         Assert.Equal(SenderAuthenticationSource.LocalVerification, authentication.Source);
     }
 
+    /// <summary>A trusted header nothing can read is no header, so the message reaches the local verification.</summary>
+    /// <remarks>
+    /// A malformed or over-long header is dropped before anything looks at whose identifier it carried, so the trusted
+    /// reading finds no statement and the fallback is exactly as available as it is for a message that carried no such
+    /// header at all. Stating otherwise would tell an operator that the one path making a DNS query never runs here.
+    /// </remarks>
+    [Fact]
+    public async Task ReadMetadataAsync_TheOnlyTrustedHeaderBeingMalformed_ReachesTheLocalVerification()
+    {
+        // Arrange
+        var verifier = LocalVerifierAnswering();
+        var content = MimeFixtures.Message(
+            "Authentication-Results: mx.example.test; dkim=pass header.d=",
+            "From: alerts@bank.test",
+            "Content-Type: text/plain",
+            string.Empty,
+            "Body");
+
+        // Act
+        await CreateReader("mx.example.test", verifier).ReadMetadataAsync(content, CancellationToken.None);
+
+        // Assert
+        await verifier.Received(1).VerifyAsync(
+            Arg.Any<MimeKit.MimeMessage>(),
+            "alerts@bank.test",
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>An account naming no trusted server believes no header, so it reaches the local verification too.</summary>
     [Fact]
     public async Task ReadMetadataAsync_AccountNamingNoTrustedServer_ReachesTheLocalVerification()
