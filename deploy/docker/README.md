@@ -17,7 +17,7 @@ Two properties hold everywhere:
 - **Reading is local.** A read answers from your copy and never contacts a mail server, so it is fast, it works while the server is down, and it changes nothing remotely.
 - **Synchronization never writes to your mailbox.** Fetching mail never sets the remote `\Seen` flag, so mail MailFathom has copied still shows as unread in your own mail client. One tool writes, behind a grant of its own, and it is named below.
 
-An agent gets twelve tools, and they are the whole surface. Five of them read your mail:
+An agent gets thirteen tools, and they are the whole surface. Five of them read your mail:
 
 | Tool | What it answers |
 | --- | --- |
@@ -29,11 +29,11 @@ An agent gets twelve tools, and they are the whole surface. Five of them read yo
 
 The first four are always there. `ask_mail` needs a chat model and an embedding model you configure and point at, so a deployment with neither does not advertise it at all.
 
-One tool writes to your mailbox: `set_mail_flags` marks one message read or unread, stars or unstars it, and adds, removes, or replaces its keywords. It does not wait on your mail server — the call writes the change down and answers with a record identity per value, and the account's next synchronization run issues it. Every change is reversible with the call that would have made it, and it is offered only to a credential granted `mailfathom.mail.flags.write`, which reading mail does not carry.
+Two tools reach a mail server. `set_mail_flags` marks one message read or unread, stars or unstars it, and adds, removes, or replaces its keywords; `send_email` sends one message, as an account you configured to send, to the addresses the call names. Neither waits on your mail server — each writes what was asked for down and answers with a record identity, and the account's next run issues it. A flag change is reversible with the call that would have made it; a send is not reversible by anything, which is why it announces itself as destructive and why its answer says `queued` rather than `sent`. Nothing a caller sends decides who a message is from: it is sent from the address that account's own configuration declares, and an account with no delivery configuration cannot send at all. Each tool is offered only to a credential granted its own permission — `mailfathom.mail.flags.write` and `mailfathom.mail.send` — neither of which reading mail carries and neither of which implies the other.
 
 The other six are MailFathom's own contact book — `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact`, and `promote_contact` — which record the people you write down and the addresses each of them uses, and take on the ones this deployment collected from arriving mail. They are offered to a credential granted them, which every credential is until you narrow its entry, and both `update_contact` and `delete_contact` announce themselves as destructive — an amendment drops whatever the caller left out of the record, and an erasure cannot be undone.
 
-`set_mail_flags` is the whole of what a tool can write to a mailbox. An agent cannot send, delete, or move mail, and the contact tools reach no mail server at all.
+`set_mail_flags` and `send_email` are the whole of what a tool can ask a mail server for. An agent cannot delete or move mail, and the contact tools reach no mail server at all.
 
 ## Tags
 

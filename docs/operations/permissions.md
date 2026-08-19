@@ -24,7 +24,7 @@ surfaces draw from disjoint halves, and the prefix after `mailfathom.` says whic
 | `mailfathom.mail.read` | MCP | The tools that read the local mailbox copy: `list_accounts`, `list_emails`, `get_email_content`, `search_emails`. Where semantic retrieval is configured, searching places the caller's own query text with the embedding provider, so this is not an egress-free grant |
 | `mailfathom.mail.ask` | MCP | `ask_mail`, which answers from mail content by sending it to a model provider. It does not imply `mailfathom.mail.read`, and granting it is granting access to mail |
 | `mailfathom.mail.flags.write` | MCP | `set_mail_flags`, which marks mail read or unread, stars or unstars it, and writes its keywords. It is the one MCP grant whose effect reaches the owner's mail server, and it does not follow from reading mail: a deployment that lets an agent read has not thereby let it change anything |
-| `mailfathom.mail.send` | MCP | Asking this deployment to send mail from an account it holds. It is the one grant here whose effect leaves the deployment and cannot be recalled, which is why it follows from nothing: reading a mailbox is not writing from it, and marking mail reaches the owner's own server rather than a stranger's. What it governs today is the use case that writes a send down, which admits a caller holding this name and refuses every other; the sending tools are not published yet, so a credential granted it reaches nothing from a client |
+| `mailfathom.mail.send` | MCP | Asking this deployment to send mail from an account it holds. It is the one grant here whose effect leaves the deployment and cannot be recalled, which is why it follows from nothing: reading a mailbox is not writing from it, and marking mail reaches the owner's own server rather than a stranger's. It covers `send_email`, which queues a message for a mailbox this deployment holds, and it is asked for again by the use case behind it and by the outbox beneath that, so it governs the act rather than only the tool |
 | `mailfathom.mail.contacts.read` | MCP | `list_contacts` and `get_contact`, which read the deployment's own contact book: names, addresses, and the notes an owner wrote about identified third parties |
 | `mailfathom.mail.contacts.write` | MCP | `create_contact`, `update_contact`, `delete_contact`, and `promote_contact`, which record, amend, erase, and take on a person in that book. The erasure is here rather than apart, because a grant that cannot edit the book cannot be trusted to take somebody out of it |
 | `mailfathom.admin.read` | administrative | The reads reporting the deployment's own state and no mail: what synchronization is doing per account and per folder, embedding status and the activation preview, the loaded rules, a run's progress, what a rewind would cost, where a re-derivation has got to, the stopped-job list |
@@ -64,10 +64,11 @@ what the deployment holds.
 made when there is an operation for it to govern rather than ahead of one, because a grant naming a capability the
 deployment does not have is a grant that means nothing.
 
-The operation rather than the tool is what that rule counts, which is why `mailfathom.mail.send` is here while nothing
-in the tool table below requires it. The use case behind every sending tool exists, is reached, and refuses a caller
-that does not hold this name; what is still being built is the tools that reach it from a client. A name allocated that
-way governs something from the day it is published, which a name reserved for a capability nobody has written would not.
+The operation rather than the tool is what that rule counts, and `mailfathom.mail.send` is the worked example of it.
+It was published while no tool required it, because the use case that writes a send down already existed, was reached,
+and refused a caller that did not hold the name; `send_email` then changed what the same grant reaches rather than what
+an operator has to write. A name allocated that way governs something from the day it is published, which a name
+reserved for a capability nobody has written would not.
 
 ## Which tool each name covers
 
@@ -82,6 +83,7 @@ call.
 | `get_email_content` | `mailfathom.mail.read` |
 | `search_emails` | `mailfathom.mail.read` |
 | `set_mail_flags` | `mailfathom.mail.flags.write` |
+| `send_email` | `mailfathom.mail.send` |
 | `ask_mail` | `mailfathom.mail.ask` |
 | `list_contacts` | `mailfathom.mail.contacts.read` |
 | `get_contact` | `mailfathom.mail.contacts.read` |
@@ -90,9 +92,11 @@ call.
 | `delete_contact` | `mailfathom.mail.contacts.write` |
 | `promote_contact` | `mailfathom.mail.contacts.write` |
 
-`mailfathom.mail.send` covers no row here yet, and its absence is the current shape rather than an omission: the tools
-that will require it are not published. What already asks for it is the use case they reach — the outbox a send is
-written down in — so the check exists in front of the act rather than only in front of a tool.
+The row for `send_email` is the one worth reading twice. It is the only grant here whose effect leaves this deployment
+and cannot be recalled, and the mapping is what withholds the tool from every other credential: a caller without the
+name is not offered the descriptor and is answered as if the tool did not exist. Two further checks stand behind it —
+the use case, and the outbox it writes through — so an entrypoint added later meets the same refusal without passing
+this table.
 
 ## Which administrative route each name covers
 
@@ -152,7 +156,8 @@ means *this surface* rather than the names published the day the file was writte
 release reaches an unrestricted entry on its own — the contact tools are the worked example, since an entry that wrote
 no key gained `mailfathom.mail.contacts.read` and `mailfathom.mail.contacts.write` on upgrade alone, and with the
 second of those a credential that can record, amend, and irreversibly erase what this deployment holds about identified
-third parties. `mailfathom.mail.send` reaches such an entry the same way on this release, before any tool requires it.
+third parties. `mailfathom.mail.send` is the same shape and the sharpest case of it: an entry that wrote no key gains it on upgrade,
+and with it a credential that can send mail from the deployment's mailboxes to anybody.
 Writing `Permissions: []` grants nothing, which is how a credential is retired without deleting its
 entry: it still authenticates, and on the administrative surface it still reads `GET /api/admin/session`, which is
 where an operator reads that the credential now holds nothing.
@@ -167,8 +172,8 @@ added beneath a covered prefix in a later release reaches the entry on upgrade a
 Where that would be wrong, write the names out. `mailfathom.mail.flags.write` is the first case of it and the one to
 check a written grant against: an entry reading `mailfathom.mail.*` used to reach nothing that leaves this deployment,
 and on upgrade it reaches the tool that writes to the owner's mail server. `mailfathom.mail.send` is the second and the
-sharper one, since the same pattern now also carries the grant to send from the owner's address — reaching no tool
-today, and reaching every sending tool the release that publishes them ships. Everything that reads a grant back states
+sharper one, since the same pattern now also carries the grant to send from the owner's address to anybody, through
+`send_email`. Everything that reads a grant back states
 what a pattern resolved to and never the pattern — the startup line, `GET /api/admin/session`, and `scopes_supported` —
 so no reader has to expand one by hand.
 
@@ -199,8 +204,8 @@ authorization server, which can mint no pattern.
 **That last refusal is the other half of what publishing a name costs an upgrade**, and it is the one that stops a
 deployment rather than widening it. A name nothing publishes is an ordinary scope token, so an operator who minted a
 scope of their own with that spelling could write it in `RequiredScopes` or `AdvertisedScopes` and start; the release
-that publishes the name turns the same value into a permission, and startup refuses it by name. `mailfathom.mail.send`
-is the case on this release. The action is the one the refusal states: take the value out of `RequiredScopes` or
+that publishes the name turns the same value into a permission, and startup refuses it by name. The action is the one
+the refusal states: take the value out of `RequiredScopes` or
 `AdvertisedScopes` and write it in `Permissions` on the entry — with `PermissionsFromTokenScopes` where the point was
 for the token's own scope to decide.
 

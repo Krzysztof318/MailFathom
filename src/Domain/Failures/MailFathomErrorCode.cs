@@ -396,6 +396,23 @@ public readonly record struct MailFathomErrorCode
     /// <summary>Gets subcategory 1, request validation: a request to write flags or keywords on an email states no usable change.</summary>
     public static MailFathomErrorCode MailFlagChangeInvalid { get; } = new(51012);
 
+    /// <summary>Gets subcategory 1, request validation: a field of a message a caller authored carries a value no message can be composed from.</summary>
+    /// <remarks>
+    /// It covers a line break that would end a header early, text naming no mailbox, and an address outside ASCII this
+    /// deployment cannot compose for — one code because the remedy is the same in each case, which is to write that
+    /// field differently. The message names the field and never what was in it, because every field of an authored
+    /// message is mail content or somebody's address. It is separate from <see cref="AuthoredMailBoundExceeded" />
+    /// because a bound is met by writing less rather than by writing something else.
+    /// </remarks>
+    public static MailFathomErrorCode AuthoredMailFieldRefused { get; } = new(51013);
+
+    /// <summary>Gets subcategory 1, request validation: a message a caller authored is larger than this deployment composes.</summary>
+    /// <remarks>
+    /// The message names the field and the configured number, so a caller learns what to write less of and how much
+    /// less. What was measured is deliberately absent: the size of somebody's message says how much they wrote.
+    /// </remarks>
+    public static MailFathomErrorCode AuthoredMailBoundExceeded { get; } = new(51014);
+
     /// <summary>Gets subcategory 2, pagination: a continuation cursor is not one this system issued.</summary>
     public static MailFathomErrorCode MailboxQueryCursorMalformed { get; } = new(52001);
 
@@ -427,6 +444,16 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode MailFolderRoleUnmapped { get; } = new(53003);
 
+    /// <summary>Gets subcategory 3, access: a recipient a message was addressed to by naming somebody resolved to nobody the contact book holds.</summary>
+    /// <remarks>
+    /// It covers a contact the book does not hold, a name several contacts carry, and an address the named contact does
+    /// not hold. The message says which of the three and, for an ambiguous name, how many carried it; it never names
+    /// anybody who was counted and never reveals an address the caller did not supply. It is allocated beside the
+    /// account a deployment does not serve because it is the same kind of answer — the caller named something this
+    /// deployment will not resolve, and naming it differently is the remedy.
+    /// </remarks>
+    public static MailFathomErrorCode AuthoredMailRecipientUnresolved { get; } = new(53004);
+
     /// <summary>Gets subcategory 4, undiagnosed failure: a tool call failed for a reason the boundary deliberately does not describe.</summary>
     /// <remarks>
     /// This is the one code every failure that is not already an allocated one collapses into, so a client learns that
@@ -456,6 +483,15 @@ public readonly record struct MailFathomErrorCode
     /// deciding whether to ask again.
     /// </remarks>
     public static MailFathomErrorCode MailAnsweringUnavailable { get; } = new(56001);
+
+    /// <summary>Gets subcategory 6, capability: the account a message would be sent as configures no way to send it.</summary>
+    /// <remarks>
+    /// An account without a submission endpoint, and one whose endpoint names no address to send from, are one answer
+    /// here: neither can send, and neither is something a caller can rewrite its way past. It sits beside the answering
+    /// capability rather than with the access refusals because nothing the caller wrote caused it — the account is
+    /// served and readable, and sending from it is the part this deployment has not been configured for.
+    /// </remarks>
+    public static MailFathomErrorCode MailSendingUnavailable { get; } = new(56002);
 
     /// <summary>Gets subcategory 7, spend ceilings: answering a question would exceed a ceiling this deployment configured on what it spends.</summary>
     /// <remarks>
@@ -605,15 +641,19 @@ public readonly record struct MailFathomErrorCode
         ContactIdentifierMalformed,
         ContactRecordInvalid,
         MailFlagChangeInvalid,
+        AuthoredMailFieldRefused,
+        AuthoredMailBoundExceeded,
         MailboxQueryCursorMalformed,
         MailboxQueryCursorFilterMismatch,
         ContactCursorMalformed,
         MailAccountNotAccessible,
         StoredEmailNotFound,
         MailFolderRoleUnmapped,
+        AuthoredMailRecipientUnresolved,
         McpToolFailedUnexpectedly,
         EmailContentUnavailable,
         MailAnsweringUnavailable,
+        MailSendingUnavailable,
         MailAnsweringBudgetExhausted,
         EmbeddingProviderCredentialRejected,
         EmbeddingProviderUnavailable,

@@ -10,9 +10,10 @@ repository root and [`docs/`](https://github.com/Krzysztof318/MailFathom/blob/ma
 MailFathom is a self-hosted service that synchronizes mail from your IMAP accounts into a local PostgreSQL copy,
 indexes it for search, and serves it to AI agents as tools over the
 [Model Context Protocol](https://modelcontextprotocol.io/). An agent connected to it can list, read, and search your
-mail, and it can mark, star, and label one message at a time through `set_mail_flags`, which is the only tool on the
-surface that writes to a mailbox and is offered only to a credential granted `mailfathom.mail.flags.write`. It cannot
-send, delete, or move any of it. What it can write besides is MailFathom's own contact book — the people you or your
+mail, it can mark, star, and label one message at a time through `set_mail_flags`, and it can send a message through
+`send_email`. Each of those two is offered only to a credential granted its own name —
+`mailfathom.mail.flags.write` and `mailfathom.mail.send` — and neither comes with being able to read. It cannot delete
+or move mail. What it can write besides is MailFathom's own contact book — the people you or your
 deployment wrote down — which six tools read and maintain, one of them by erasing a record for good.
 
 Two properties hold everywhere and are worth knowing before anything is installed:
@@ -23,7 +24,8 @@ Two properties hold everywhere and are worth knowing before anything is installe
   shows as unread in your mail client until you read it there. Three things write to your mailbox: a mail rule whose
   action moves, copies, deletes, or marks a message read, the spam actions that file junk and mark it read, and the
   `set_mail_flags` tool. The first two are off until you turn them on; the third needs a grant that reading mail does
-  not carry.
+  not carry. A fourth path leaves your deployment altogether rather than writing to your mailbox: `send_email`, behind
+  a grant of its own, and it is the one act here nothing can take back.
 
 ## The state of the release
 
@@ -43,7 +45,7 @@ says so and names the release, rather than describing it as though you could alr
 4. **[Connecting the chat client you already use](mcp-clients.md)** — where the dialog is in each popular client, which
    address kind it needs, and which of them cannot present an API key at all.
 5. **[Using the tools](usage.md)** — what `list_emails`, `search_emails`, `get_email_content`, `set_mail_flags`,
-   `ask_mail`, and the six contact tools do, what they deliberately bound, and how to read a failure.
+   `send_email`, `ask_mail`, and the six contact tools do, what they deliberately bound, and how to read a failure.
 6. **[Administering your deployment](administering.md)** — the `mfctl` command: what it is for, signing in to a
    deployment from your own machine, and what it cannot do yet.
 7. **[Configuration reference](../operations/configuration-reference.md)** — the map to the four pages that list every

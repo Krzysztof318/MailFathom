@@ -1,0 +1,112 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Application.Access;
+using MailFathom.Application.Accounts;
+using MailFathom.Application.Mail.Delivery.Addressing;
+using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Domain.Access;
+using MailFathom.Domain.Delivery;
+
+namespace MailFathom.Application.Mail.Delivery.Submission;
+
+/// <summary>Takes a message somebody wrote and queues it, which is the whole of what asking to send does.</summary>
+/// <remarks>
+/// <para>
+/// It is the one use case a boundary reaches to send a new message, and it composes the three steps that were already
+/// each proven on their own: the people named become addresses, the addresses and the text become MIME, and the MIME
+/// and the request become a durable record. Composing them here rather than at each entrypoint is what keeps a second
+/// protocol from doing two of the three and inventing the middle one.
+/// </para>
+/// <para>
+/// <b>Nothing here transmits, and no configuration makes it.</b> What comes back is the record the message was written
+/// down as, at the stage a delivery pass reads and continues from, which is why a caller is told the message is queued
+/// rather than sent. That is
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md">ADR 0013</see>'s
+/// fixed part, and it is structural rather than enforced: this use case holds no delivery session and no factory for
+/// one, so there is nothing here that could open a submission channel.
+/// </para>
+/// <para>
+/// The message is composed against
+/// <see cref="MailDeliveryCapabilities.BeforeAnyServerHasSpoken" /> rather than against a session, for the same reason:
+/// the server that will carry the message is not being talked to and must not be, so the composition is held to the
+/// answers that stay correct whatever it turns out to say. What the server does decide — whether the message is within
+/// the size it advertises — is asked again by the delivery pass against the length that was stored, so nothing is lost
+/// by not asking now.
+/// </para>
+/// <para>
+/// The grant is asked for here and again by the outbox, and the two are not a duplicate. This one refuses before the
+/// contact book is read and before anything is composed, so a caller without it spends nothing and learns nothing about
+/// who is in the book; the outbox's is the authority, asked with no boundary in the picture so that an entrypoint added
+/// later meets it whatever it did first.
+/// </para>
+/// </remarks>
+/// <param name="accountCatalog">Says which accounts this deployment serves, and therefore which one a caller may name.</param>
+/// <param name="recipientResolver">Turns the people the author named into the addresses a message is offered to.</param>
+/// <param name="composer">Builds the MIME, and decides every header this system owns rather than the author.</param>
+/// <param name="outbox">Writes the record and the message down together, and says the account has something to send.</param>
+/// <param name="authorization">Answers whether the caller that reached this holds the grant that lets it send.</param>
+public sealed class AuthoredMailSubmission(
+    IMailAccountCatalog accountCatalog,
+    NamedRecipientResolver recipientResolver,
+    IAuthoredEmailComposer composer,
+    MailOutbox outbox,
+    AccessAuthorization authorization)
+{
+    /// <summary>Queues one message, or refuses it naming what the caller has to change.</summary>
+    /// <param name="request">The message that was asked for.</param>
+    /// <param name="cancellationToken">Cancels the reads and the write.</param>
+    /// <returns>The durable record the message was written down as, whether this call created it or an identical earlier one did.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailSend" />.</exception>
+    /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account this deployment does not serve.</exception>
+    /// <exception cref="MailSubmissionRefusedException">Thrown when a recipient names nobody, a field cannot be composed, a bound is exceeded, or the account configures no address to send from.</exception>
+    public async Task<OutgoingEmailRecord> SubmitAsync(
+        MailSubmissionRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        authorization.RequirePermission(MailFathomPermission.MailSend);
+
+        var account = accountCatalog.ServedAccounts.FirstOrDefault(served => served.IsNamedBy(request.Account))
+            ?? throw new MailAccountNotAccessibleException(request.Account);
+
+        // Ahead of the resolution rather than left to it, because the reads it performs carry what the caller supplied
+        // and because a list this long describes a send no record could be written for however the book answered. The
+        // resolution treats the same length as a defect in whoever called it, which is what this keeps it from meeting.
+        if (request.Recipients.Count > OutgoingEmailRequest.MaximumRecipientCount)
+        {
+            throw MailSubmissionRefusedException.TooManyRecipients();
+        }
+
+        var resolution = await recipientResolver.ResolveAsync(request.Recipients, cancellationToken);
+
+        if (resolution.Refusal is { } recipientRefusal)
+        {
+            throw MailSubmissionRefusedException.From(recipientRefusal);
+        }
+
+        var authored = new AuthoredEmail
+        {
+            Recipients = resolution.Recipients,
+            Subject = request.Subject,
+            PlainTextBody = request.PlainTextBody,
+            HtmlBody = request.HtmlBody,
+        };
+
+        var composition = composer.Compose(
+            account.Id,
+            request.Requester,
+            authored,
+            MailDeliveryCapabilities.BeforeAnyServerHasSpoken);
+
+        if (composition.Email is not { } composed)
+        {
+            throw MailSubmissionRefusedException.From(composition.Refusal!);
+        }
+
+        return await outbox.EnqueueAsync(composed.Request, composed.RawMime, cancellationToken);
+    }
+}

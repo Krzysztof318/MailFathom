@@ -1,0 +1,165 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using System.Globalization;
+using MailFathom.Application.Mail.Delivery.Addressing;
+using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Failures;
+
+namespace MailFathom.Application.Mail.Delivery.Submission;
+
+/// <summary>The failure raised when a message somebody asked to send is not written down at all.</summary>
+/// <remarks>
+/// <para>
+/// Addressing and composition each answer with a refusal rather than an exception, because both are steps inside a
+/// submission and a step tells the step above it what happened. This is the boundary of the submission itself, and a
+/// caller that reached it asked for one thing: a message to be queued. So the whole of what it needs back is that the
+/// message was not queued and what to do about it, which is a coded failure — the same shape every other refusal a
+/// protocol boundary publishes already takes, and one no adapter has to translate a second time.
+/// </para>
+/// <para>
+/// The code is chosen per refusal rather than fixed for the type, because the three families call for different acts: a
+/// field is rewritten, a bound is written under, somebody is named differently, and an account that cannot send at all
+/// is an operator's to configure. Each message names the field, the number, or the count that decided it, and none of
+/// them carries an address, a subject, a body, or anybody the contact book was searched for.
+/// </para>
+/// </remarks>
+public sealed class MailSubmissionRefusedException : MailFathomException
+{
+    private MailSubmissionRefusedException(MailFathomErrorCode errorCode, string clientSafeMessage)
+        : base(clientSafeMessage) => this.ErrorCode = errorCode;
+
+    /// <inheritdoc />
+    public override MailFathomErrorCode ErrorCode { get; }
+
+    /// <summary>Reports a message that was not composed, in the terms the author can act on.</summary>
+    /// <param name="refusal">What the composition refused and where.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="refusal" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the refusal names a reason this system does not declare, which a refusal built from a cast integer is.</exception>
+    public static MailSubmissionRefusedException From(AuthoredEmailRefusal refusal)
+    {
+        ArgumentNullException.ThrowIfNull(refusal);
+
+        var field = Published(refusal.Field);
+
+        return refusal.Reason switch
+        {
+            AuthoredEmailRefusalReason.SenderUnconfigured => new MailSubmissionRefusedException(
+                MailFathomErrorCode.MailSendingUnavailable,
+                "The account this message would be sent as configures no address to send from, so this deployment cannot send from it."),
+            AuthoredEmailRefusalReason.HeaderInjected => new MailSubmissionRefusedException(
+                MailFathomErrorCode.AuthoredMailFieldRefused,
+                $"The {field} of a message cannot carry a line break, because it is written into a header."),
+            AuthoredEmailRefusalReason.FieldUnusable => new MailSubmissionRefusedException(
+                MailFathomErrorCode.AuthoredMailFieldRefused,
+                $"The {field} of a message carries a value no message can be composed from."),
+            AuthoredEmailRefusalReason.InternationalizationUnsupported => new MailSubmissionRefusedException(
+                MailFathomErrorCode.AuthoredMailFieldRefused,
+                $"The {field} of a message names an address outside ASCII, which this deployment does not compose."),
+            AuthoredEmailRefusalReason.BoundExceeded => new MailSubmissionRefusedException(
+                MailFathomErrorCode.AuthoredMailBoundExceeded,
+                BoundMessage(field, refusal.Bound)),
+            _ => throw new InvalidOperationException(
+                "The composition refusal reason is not one this system declares."),
+        };
+    }
+
+    /// <summary>Reports a recipient that resolved to nobody, naming what was counted and never who.</summary>
+    /// <param name="refusal">What the resolution refused.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="refusal" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the refusal names a reason this system does not declare.</exception>
+    public static MailSubmissionRefusedException From(RecipientResolutionRefusal refusal)
+    {
+        ArgumentNullException.ThrowIfNull(refusal);
+
+        var described = refusal.Reason switch
+        {
+            RecipientResolutionRefusalReason.ContactUnknown =>
+                "One recipient names a contact this deployment's contact book does not hold.",
+            RecipientResolutionRefusalReason.ContactNameAmbiguous => string.Create(
+                CultureInfo.InvariantCulture,
+                $"One recipient names a contact by a name {refusal.MatchedContactCount} contacts carry, so it names nobody."),
+            RecipientResolutionRefusalReason.ContactAddressNotHeld =>
+                "One recipient chooses an address the contact it names does not hold.",
+            _ => throw new InvalidOperationException(
+                "The recipient resolution refusal reason is not one this system declares."),
+        };
+
+        return new MailSubmissionRefusedException(
+            MailFathomErrorCode.AuthoredMailRecipientUnresolved,
+            described);
+    }
+
+    /// <summary>Reports a list of recipients longer than any outgoing record could be written for.</summary>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// It is refused before the contact book is read, because the reads carry what the caller supplied. The number
+    /// named is what a record holds rather than what this deployment composes: the second is smaller and is the
+    /// composition's to state, and a caller told the larger one first still learns the smaller one on its next attempt.
+    /// </remarks>
+    public static MailSubmissionRefusedException TooManyRecipients() => new(
+        MailFathomErrorCode.AuthoredMailBoundExceeded,
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"A message names at most {OutgoingEmailRequest.MaximumRecipientCount} recipients across its to, cc, and bcc headers."));
+
+    /// <summary>Reports text that names no account this deployment could look for.</summary>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// It is separate from an account that was named and is not served, because the two are different mistakes and the
+    /// second is not a mistake a caller can always avoid. Nothing about the served accounts is revealed by either: this
+    /// one says the text is not a name at all, which is true whatever this deployment holds.
+    /// </remarks>
+    public static MailSubmissionRefusedException AccountNotNamed() => new(
+        MailFathomErrorCode.AuthoredMailFieldRefused,
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"The account a message is sent as is named by 1 to {MailAccountSelector.MaximumLength} characters and no control character."));
+
+    /// <summary>Reports an idempotency key no outgoing record could be written under.</summary>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// The rules are the record's own and are checked again where its column is bounded. Refusing here is what lets a
+    /// caller meet a statement about the key it sent rather than an argument failure naming a parameter it never wrote.
+    /// </remarks>
+    public static MailSubmissionRefusedException IdempotencyKeyUnusable() => new(
+        MailFathomErrorCode.AuthoredMailFieldRefused,
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"The idempotency key a send is asked under carries 1 to {OutgoingEmailRequester.MaximumIdentityLength} characters and no control character."));
+
+    /// <summary>Writes the bound refusal, which names a number only where the refusal carried one.</summary>
+    /// <remarks>
+    /// Every bound the composition refuses carries its number, so the second form is unreachable from a refusal this
+    /// system produced. It exists because the number is optional on the refusal record, and a message reading
+    /// <c>exceeds the bound of</c> followed by nothing is worse than one that simply does not state it.
+    /// </remarks>
+    private static string BoundMessage(string field, long? bound) => bound is { } declared
+        ? string.Create(CultureInfo.InvariantCulture, $"The {field} of a message exceeds the bound this deployment composes, which is {declared}.")
+        : $"The {field} of a message exceeds a bound this deployment composes.";
+
+    /// <summary>Names the part of the message a refusal is about, in the spelling a caller wrote it under.</summary>
+    /// <remarks>
+    /// The names are the authored message's own rather than any one boundary's argument names, so the same refusal
+    /// reads identically whichever entrypoint asked for the send. Nothing that was in the field is named beside it.
+    /// </remarks>
+    private static string Published(AuthoredEmailField field) => field switch
+    {
+        AuthoredEmailField.Recipients => "recipients",
+        AuthoredEmailField.To => "to recipients",
+        AuthoredEmailField.Cc => "cc recipients",
+        AuthoredEmailField.Bcc => "bcc recipients",
+        AuthoredEmailField.Subject => "subject",
+        AuthoredEmailField.PlainTextBody => "plainTextBody",
+        AuthoredEmailField.HtmlBody => "htmlBody",
+        AuthoredEmailField.Attachment => "attachment",
+        AuthoredEmailField.Sender => "sending address",
+        AuthoredEmailField.Message => "whole message",
+        _ => throw new InvalidOperationException("The authored email field is not one this system declares."),
+    };
+}
