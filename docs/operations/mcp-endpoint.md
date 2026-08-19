@@ -1705,8 +1705,12 @@ do](#what-a-credential-may-do) is what decides it, and the startup line for the 
 
 `set_mail_flags` is beside them under the same condition, and it is the one tool in the listing that reports
 `readOnlyHint` false with `openWorldHint` true: it changes the owner's mailbox rather than MailFathom's copy of it, so
-its effect leaves this process. It is also `idempotentHint` true and `destructiveHint` false, because each value it
-writes is stated rather than adjusted and every one of them is reversible. An entry granting
+its effect leaves this process. It is `idempotentHint` true because each value it writes is stated rather than
+adjusted, so a second identical call asks for what the first one asked for, and `destructiveHint` true because that
+annotation asks whether a tool performs only additive updates: a keyword replacement states the whole set and so takes
+off a label the caller did not list, a removal takes named labels off, and clearing either flag removes a value the
+message carried. Every one of those is reversible, which is a separate fact the annotation does not answer. An entry
+granting
 `mailfathom.mail.flags.write` is what puts it in the listing, and an entry that writes no `Permissions` list grants it
 like everything else this surface publishes.
 

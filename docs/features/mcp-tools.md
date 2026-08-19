@@ -211,7 +211,7 @@ configured name for an account and carries nothing the caller did not already wr
 | `51009` | A contact listing carries a page size, an origin, or a search the book does not serve | A `pageSize` of 0 or above 200, refused rather than clamped; an `origin` that is neither published name; a `search` over 320 characters or carrying a character that renders as nothing |
 | `51010` | The call named a contact with text that is no identifier and no usable address | A `contactId` that is blank, not a UUID, or the all-zero UUID; an `address` that is no address; or a `get_contact` call naming both or neither |
 | `51011` | A contact record breaks a rule the book holds | No name or one over 256 characters, no address or more than 32, an address that is not one, a preferred address the record does not name, or a note over 4000 characters — the message names the rule and never the value |
-| `51012` | A flag change asks for nothing, states half a keyword change, or names a value no record could carry | A call naming an email and no value at all; `keywordChange` without `keywords` or the reverse; an empty list under `add` or `remove`; a keyword that is no IMAP atom, one over 64 characters, or more than 64 of them; a `requestId` that is blank, over 128 characters, or carrying a control character — the message names the rule and never the keyword |
+| `51012` | A flag change asks for nothing, states half a keyword change, names a value no record could carry, or reuses a request identity for a different change | A call naming an email and no value at all; `keywordChange` without `keywords` or the reverse; an empty list under `add` or `remove`; a keyword that is no IMAP atom, one over 64 characters, or more than 64 of them; a `requestId` that is blank, over 128 characters, or carrying a control character; or a `requestId` already used on that email for a different value, which is answered by sending a new one rather than by retrying — the message names the rule and never the keyword |
 | `52001` | A continuation cursor is not one this system issued | A truncated, hand-written, or foreign cursor |
 | `52002` | A continuation cursor was issued for different filters | A cursor reused after a filter or the reading direction changed |
 | `52003` | A contact listing's cursor is not one this system issued | A truncated, hand-written, or foreign `cursor`; a contact cursor is not bound to the filters, so changing `search` or `origin` mid-walk is not what produces it |
@@ -873,10 +873,10 @@ Three things follow, and the tool's description states each of them:
 At least one of `seen`, `flagged`, and the keyword pair has to be given. A call that names an email and asks for nothing
 is refused with `51012` rather than answered with a change of nothing.
 
-`replace` states the whole keyword set, so a keyword the caller did not list is removed. That is the one call on this
-surface worth a second thought and no annotation can say so — it is idempotent and reversible like the rest — so the
-description says it instead, and points a caller working from a partial view of a message's labels at `add` and
-`remove`, which touch only what they name.
+`replace` states the whole keyword set, so a keyword the caller did not list is removed. That is what makes this tool
+`destructiveHint` true, so a client that asks before calling a destructive tool asks before this one. The description
+says it as well, and points a caller working from a partial view of a message's labels at `add` and `remove`, which
+touch only what they name.
 
 ### Result
 

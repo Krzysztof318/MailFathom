@@ -12,6 +12,7 @@ using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace MailFathom.Infrastructure.Persistence.Mutations;
 
@@ -28,8 +29,9 @@ namespace MailFathom.Infrastructure.Persistence.Mutations;
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext readContext)
-    : IMailboxMutationReconciliationStore
+internal sealed partial class MailboxMutationReconciliationStore(
+    MailFathomDbContext readContext,
+    ILogger<MailboxMutationReconciliationStore> logger) : IMailboxMutationReconciliationStore
 {
     /// <summary>The stored names of every mutation whose whole effect is a value a <c>FLAGS</c> response reports back.</summary>
     /// <remarks>
@@ -38,13 +40,7 @@ internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext rea
     /// provider translates into the <c>= ANY</c> the query wants; a frozen set would be evaluated in this process.
     /// </remarks>
     private static readonly string[] FlagWritingMutationNames =
-    [
-        MailboxMutation.SetSeen.Name,
-        MailboxMutation.SetFlagged.Name,
-        MailboxMutation.AddKeywords.Name,
-        MailboxMutation.RemoveKeywords.Name,
-        MailboxMutation.SetKeywords.Name,
-    ];
+        [.. MailboxMutation.FlagWriting.Select(static mutation => mutation.Name)];
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<MailboxMutationRecord>> ReadPlacementsAtAsync(
@@ -108,6 +104,7 @@ internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext rea
         var generation = folderResolutionId.Generation.Value;
         var uidValidityValue = uidValidity.Value;
         uint[] changedUids = [.. uids.Select(static uid => uid.Value)];
+        var ceiling = IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsFor(uids.Count);
 
         // Reached through the prefix of the identity index — folder, UIDVALIDITY, UID — which is why this question needs
         // no index of its own, exactly as reading a disappearance back does not.
@@ -123,8 +120,13 @@ internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext rea
                 && mutation.StageChangedAt > issuedAfter)
             .OrderByDescending(mutation => mutation.StageChangedAt)
             .ThenByDescending(mutation => mutation.Id)
-            .Take(IMailboxMutationReconciliationStore.MaximumFlagChangeRecords)
+            .Take(ceiling)
             .ToArrayAsync(cancellationToken);
+
+        if (entities.Length == ceiling)
+        {
+            LogFlagChangeCeilingReached(logger, ceiling, uids.Count, accountValue, alias);
+        }
 
         // Ranked by the stage change rather than by when the record was written, because that is the column the filter
         // above and every comparison the caller makes are about: a store recorded early and completed late accounts for
@@ -223,4 +225,17 @@ internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext rea
         return await writeContext.MailboxMutations.FindAsync([recordId.Value], cancellationToken)
             ?? throw new InvalidOperationException($"No mailbox mutation record carries the identifier {recordId}.");
     }
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The attribution of a reconciliation window read its whole ceiling of {Ceiling} flag and keyword "
+            + "stores across {ChangedOccurrenceCount} changed occurrences of account {AccountId} in folder "
+            + "{FolderAlias}, so an older store that could still explain a value went unread and that value may be "
+            + "attributed to the mailbox owner.")]
+    private static partial void LogFlagChangeCeilingReached(
+        ILogger logger,
+        int ceiling,
+        int changedOccurrenceCount,
+        string accountId,
+        string folderAlias);
 }

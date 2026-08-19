@@ -54,14 +54,25 @@ public interface IMailboxMutationReconciliationStore
         IReadOnlyCollection<ImapUid> uids,
         CancellationToken cancellationToken);
 
-    /// <summary>The greatest number of flag and keyword stores one window's attribution reads.</summary>
+    /// <summary>The greatest number of flag and keyword stores the attribution of one window reads.</summary>
+    /// <param name="changedOccurrenceCount">How many occurrences the window found standing somewhere new.</param>
+    /// <returns>One record per value each of those occurrences could carry.</returns>
     /// <remarks>
-    /// It is a ceiling rather than a page: the narrowing below already drops every record that could not account for
-    /// anything, so reaching this number means one window's occurrences carry more unspent stores than a reconciliation
-    /// pass has any use for. The newest are the ones kept, because a store can only account for a reading taken after
-    /// its own stage last moved.
+    /// It is a ceiling rather than a page, and it is derived from the window rather than fixed, because the window is
+    /// what decides how many records can account for something: a run reconciles up to as many occurrences as the
+    /// account's configured window holds, and each of them can carry a store of every value a <c>FLAGS</c> response
+    /// reports. A constant would have had to be right for both a window of ten and a window of ten thousand, and being
+    /// wrong at the top end drops records that explain a change — which is the one failure this read exists to prevent,
+    /// since a value nothing explains is credited to the mailbox owner and reacted to as their act.
+    /// <para>
+    /// What it still bounds is duplication under one value: a caller-authored requester is per invocation, so an agent
+    /// that stars and unstars one message leaves a record per call, and only the newest of those can account for the
+    /// current reading. Reaching the number therefore means one window's occurrences carry more unspent stores than any
+    /// attribution has a use for, and the adapter says so in a log line rather than truncating in silence.
+    /// </para>
     /// </remarks>
-    const int MaximumFlagChangeRecords = 500;
+    static int MaximumFlagChangeRecordsFor(int changedOccurrenceCount) =>
+        changedOccurrenceCount * MailboxMutation.FlagWriting.Count;
 
     /// <summary>Reads the flag and keyword stores issued against any of the occurrences a reconciliation window found moved.</summary>
     /// <param name="accountId">The account whose mutations are read.</param>
@@ -92,7 +103,7 @@ public interface IMailboxMutationReconciliationStore
     /// leaves a record per call and nothing ever deletes one. What bounds the answer instead is stated rather than
     /// assumed — the UIDs and <paramref name="issuedAfter" />, which drops only records that could account for nothing,
     /// since all three comparisons require a record whose stage moved after the occurrence was last read. What survives
-    /// both is capped at <see cref="MaximumFlagChangeRecords" />.
+    /// both is capped at <see cref="MaximumFlagChangeRecordsFor" /> of the occurrences asked about.
     /// </para>
     /// <para>
     /// Every such record is returned, spent or not, because whether one still accounts for anything is settled against

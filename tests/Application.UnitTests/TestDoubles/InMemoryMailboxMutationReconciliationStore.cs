@@ -117,7 +117,7 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
                     && record.StageChangedAt > issuedAfter)
                 .OrderByDescending(record => record.StageChangedAt)
                 .ThenByDescending(record => record.Id.Value)
-                .Take(IMailboxMutationReconciliationStore.MaximumFlagChangeRecords)
+                .Take(IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsFor(uids.Count))
                 .Reverse(),
         ];
 

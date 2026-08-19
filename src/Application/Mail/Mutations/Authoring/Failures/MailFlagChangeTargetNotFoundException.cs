@@ -9,10 +9,12 @@ namespace MailFathom.Application.Mail.Mutations.Authoring.Failures;
 /// <summary>The failure raised when a change names an email this deployment holds no readable row for.</summary>
 /// <remarks>
 /// <para>
-/// It answers three cases with one sentence: no row carries that identity, the row belongs to an account this
-/// deployment no longer serves, and the row is in a folder an operator withheld from tools. Telling them apart would
-/// let a caller learn which identifiers exist by asking about them, which is the same reading every mailbox read
-/// applies to the same three cases.
+/// It answers four cases with one sentence: no row carries that identity, the row belongs to an account this
+/// deployment no longer serves, the row is in a folder an operator withheld from tools, and the row names a remote
+/// occurrence the server has expunged — a local copy retained after MailFathom deleted the message, which a listing
+/// still serves because the mail is readable while the UID it carries names nothing the server holds. Telling them
+/// apart would let a caller learn which identifiers exist by asking about them, which is the same reading every mailbox
+/// read applies to the first three.
 /// </para>
 /// <para>
 /// It carries <see cref="MailFathomErrorCode.StoredEmailNotFound" />, which is the code a request naming an email

@@ -40,6 +40,36 @@ public sealed class MailboxMutationTests
         Assert.Equal(expected, permitted);
     }
 
+    /// <summary>Which mutations a FLAGS response reports back is what reconciliation attributes a value by.</summary>
+    /// <remarks>
+    /// The three left out move a message rather than write a value on one, so a run recognizes them by where the
+    /// message turned up. Admitting one of them here would make the flag-change read ask for records that can explain
+    /// nothing it is looking at, and leaving one of the five out would leave that value unexplained and credited to the
+    /// mailbox owner.
+    /// </remarks>
+    [Fact]
+    public void FlagWriting_IsEveryMutationWhoseWholeEffectAFlagsResponseReports()
+    {
+        // Arrange
+        MailboxMutation[] expected =
+        [
+            MailboxMutation.SetSeen,
+            MailboxMutation.SetFlagged,
+            MailboxMutation.AddKeywords,
+            MailboxMutation.RemoveKeywords,
+            MailboxMutation.SetKeywords,
+        ];
+
+        // Act
+        var flagWriting = MailboxMutation.FlagWriting;
+
+        // Assert
+        Assert.Equal(expected, flagWriting);
+        Assert.DoesNotContain(MailboxMutation.Relocate, flagWriting);
+        Assert.DoesNotContain(MailboxMutation.Copy, flagWriting);
+        Assert.DoesNotContain(MailboxMutation.Delete, flagWriting);
+    }
+
     /// <summary>The name is what a log line, a span, and a counter dimension all show, so it is the published identity.</summary>
     [Theory]
     [InlineData("relocate")]
