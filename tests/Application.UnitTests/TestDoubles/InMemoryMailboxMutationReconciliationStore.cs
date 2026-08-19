@@ -29,13 +29,33 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
 {
     private readonly Dictionary<MailboxMutationRecordId, MailboxMutationRecord> recordsById = [];
 
-    /// <summary>Gets how many times a caller asked which <c>\Seen</c> changes were MailFathom's own.</summary>
+    /// <summary>The mutations whose whole effect is a value a <c>FLAGS</c> response reports back.</summary>
+    /// <remarks>Written out rather than shared with the real store, for the reason this whole double exists: a fake that reached into the implementation would pass whatever that implementation did.</remarks>
+    private static readonly MailboxMutation[] FlagWritingMutations =
+    [
+        MailboxMutation.SetSeen,
+        MailboxMutation.SetFlagged,
+        MailboxMutation.AddKeywords,
+        MailboxMutation.RemoveKeywords,
+        MailboxMutation.SetKeywords,
+    ];
+
+    /// <summary>Gets how many times a caller asked which flag and keyword changes were MailFathom's own.</summary>
     /// <remarks>
     /// A window over a mailbox nobody has touched must ask nothing, which is a cost guarantee no assertion about the
     /// answer can express: a store that returned nothing would satisfy every other test while still costing a query on
-    /// every run of every folder.
+    /// every run of every folder. It counts calls rather than values asked about, which is also what proves the three
+    /// values are attributed against one read rather than three.
     /// </remarks>
-    internal int SeenStateChangeReadCount { get; private set; }
+    internal int FlagChangeReadCount { get; private set; }
+
+    /// <summary>Gets the age bound the last flag-change read was narrowed by.</summary>
+    /// <remarks>
+    /// The bound is what keeps that read from growing without limit as one occurrence accumulates records, and passing
+    /// one that is too late would silently withhold the record that explains a value. Nothing in the answer reports
+    /// which bound produced it, so the argument is recorded here instead.
+    /// </remarks>
+    internal DateTimeOffset? LastFlagChangeReadIssuedAfter { get; private set; }
 
     /// <summary>Puts a record into the state a completed mutation would have left.</summary>
     internal void Add(MailboxMutationRecord record) => this.recordsById[record.Id] = record;
@@ -73,30 +93,39 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<MailboxMutationRecord>> ReadSeenStateChangesOnAsync(
+    public Task<IReadOnlyList<MailboxMutationRecord>> ReadFlagChangesOnAsync(
         MailAccountId accountId,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
+        DateTimeOffset issuedAfter,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(uids);
 
-        this.SeenStateChangeReadCount++;
+        this.FlagChangeReadCount++;
+        this.LastFlagChangeReadIssuedAfter = issuedAfter;
 
-        IReadOnlyList<MailboxMutationRecord> setting =
+        IReadOnlyList<MailboxMutationRecord> writing =
         [
             .. this.recordsById.Values
                 .Where(record => record.Request.Occurrence.AccountId == accountId
                     && record.Request.Occurrence.FolderResolutionId == folderResolutionId
                     && record.Request.Occurrence.UidValidity == uidValidity
                     && uids.Contains(record.Request.Occurrence.Uid)
-                    && record.Request.Mutation == MailboxMutation.SetSeen)
-                .OrderBy(record => record.RecordedAt)
+                    && FlagWritingMutations.Contains(record.Request.Mutation)
+                    && record.Stage != MailboxMutationStage.Recorded
+                    && record.StageChangedAt > issuedAfter)
+                .GroupBy(record => new { record.Request.Occurrence.Uid, record.Request.Mutation })
+                .SelectMany(storedValue => storedValue
+                    .OrderByDescending(record => record.StageChangedAt)
+                    .ThenByDescending(record => record.Id.Value)
+                    .Take(IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsPerValue))
+                .OrderBy(record => record.StageChangedAt)
                 .ThenBy(record => record.Id.Value),
         ];
 
-        return Task.FromResult(setting);
+        return Task.FromResult(writing);
     }
 
     /// <inheritdoc />

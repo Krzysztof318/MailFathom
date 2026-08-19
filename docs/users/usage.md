@@ -2,17 +2,18 @@
 
 <!-- describes: src/Mcp/Tools/** -->
 
-MailFathom publishes eleven MCP tools, and together they are the whole surface: an agent can see which mailboxes exist,
-list mail, read one message, search, ask a question, and keep the deployment's own contact book — nothing else. This
+MailFathom publishes twelve MCP tools, and together they are the whole surface: an agent can see which mailboxes
+exist, list mail, read one message, search, ask a question, mark and label a message, and keep the deployment's own
+contact book — nothing else. This
 page is the user's view of that surface: what each tool answers, what every result carries, what the deliberate limits
 are, and how to read a failure. The full contracts — every argument, every field, every bound — live in
 [MCP tools](../features/mcp-tools.md) and the feature pages it links, and this page does not restate them.
 
-Four of the five mailbox tools are always within the deployment's reach. `ask_mail` needs a chat model and an embedding
+Five of the six mailbox tools are always within the deployment's reach. `ask_mail` needs a chat model and an embedding
 model configured and working, so a deployment that has neither does not offer it at all; its absence from a tool listing
 is that deployment saying it cannot answer questions rather than something being broken.
 
-Which of the eleven *you* are offered is a second question, and its answer is the grant on the credential you connected
+Which of the twelve *you* are offered is a second question, and its answer is the grant on the credential you connected
 with. A tool that grant does not permit is absent from the listing, and calling it anyway is answered as though no such
 tool existed — nothing names the permission that was missing, so a shorter tool list than this page describes is a
 question for whoever configured the deployment:
@@ -21,10 +22,12 @@ which is the default, offers everything it has, and the six contact tools are pa
 
 ## The model behind every call
 
-A mailbox tool call reads the **local copy** that synchronization maintains. Nothing in a request reaches a mail server,
-so a call is fast, works while the server is unreachable, and cannot mark anything as read — locally or remotely. That
-holds for the contact tools too, including the three that write: what they change is a table in MailFathom's own
-database, and no mail and no mail server is touched by any of them. The price
+A mailbox tool call reads the **local copy** that synchronization maintains. Nothing in a request reaches a mail
+server, so a call is fast, works while the server is unreachable, and reading mail can never mark it as read — locally
+or remotely. That holds for the contact tools too, including the three that write: what they change is a table in
+MailFathom's own database, and no mail and no mail server is touched by any of them. `set_mail_flags` is the one call
+whose effect is meant to reach your mail server, and it does not reach one while you wait either — it writes the change
+down and the next synchronization run carries it. The price
 of that model is freshness, which is why every listing and every search carries `folderFreshness`: one entry per
 folder in scope, stating when synchronization last committed progress there, or that it never has. An agent that reads
 mail without reading that field will eventually present an empty folder as an empty mailbox.
@@ -203,6 +206,38 @@ Ten parts of the result exist so that an agent does not misreport a message:
 The HTML body, when requested, is aggressively sanitized — no scripts, no styles, no remote loads — and
 [email content](../features/email-content.md) records exactly what survives.
 
+## `set_mail_flags` — marking, starring, and labelling
+
+The one tool that changes your mailbox rather than MailFathom's copy of it. It marks a message read or unread, stars or
+unstars it, and adds, removes, or replaces its keywords — the labels your mail client shows as tags. All three in one
+call, because triaging a message is one decision, and each of them optional: a call that names none is refused rather
+than treated as a change of nothing.
+
+**It does not happen while you wait.** The call writes the change down and answers immediately; the account's next
+synchronization run is what tells your mail server. So the answer reports records rather than a mailbox that has already
+changed. A star that has not appeared in your own client after a few minutes is followed up by making the same call
+again with the same `requestId`: it answers with the same records and the lifecycle each has reached by then, rather
+than starring the message a second time. What you get from that arrangement is that a crash mid-flight leaves a
+change that finishes by itself instead of a value MailFathom thinks it set and the server never heard about.
+
+Keywords have three directions and the third is the one to be careful with. `add` and `remove` touch only the keywords
+you name. `replace` states the **whole** set, so a label you did not list is taken off — the same trap `update_contact`
+has, and the same remedy: read the message's keywords first, or use `add` and `remove`.
+
+Everything it writes is reversible with the call that would have made it: mark unread what you marked read, unstar what
+you starred, remove what you added. Nothing else about a message can be written from here: this tool never sets the
+answered or draft flags, never deletes mail, and never sends anything.
+
+`requestId` is worth sending. It is your own name for the call, and repeating a call with the `requestId` the first one
+carried is the *same* request rather than a second one, which is what makes a retry after a timeout safe. A new value,
+or none, is a new request — which is what lets you star a message, unstar it, and star it again. Send a *different*
+value each time you mean a different change: reusing one to ask for the opposite of what it already asked for is
+refused with `51012` rather than quietly answered with the earlier call's record, because a change reported as written
+down while the mailbox never moves is the one failure you could not see from the answer.
+
+It needs its own grant, `mailfathom.mail.flags.write`, which does not come with being able to read mail. A deployment
+that offers the reading tools and not this one has been configured that way on purpose.
+
 ## `ask_mail` — a question, answered with its sources
 
 Takes a question in ordinary words, optionally narrowed to accounts and folders, and returns prose plus the emails the
@@ -322,7 +357,7 @@ The codes a user meets in practice:
 | --- | --- | --- |
 | `51001` / `51003` | A page size or result limit outside the served range | Stay within 1–100 pages, 1–50 search results |
 | `51002` | A filter value the query does not accept — too long, malformed, or a range that ends before it starts | Fix the argument; the message names the filter and its limit, never the value |
-| `51004` | A `storedEmailIds` entry is no identifier this system issues — blank, truncated, or invented | Pass the identifiers a listing or search actually returned; never construct or guess one |
+| `51004` | A `storedEmailIds` entry, or the `storedEmailId` a flag change names, is no identifier this system issues — blank, truncated, or invented | Pass the identifiers a listing or search actually returned; never construct or guess one |
 | `51005` | A content read named no messages, or more than the ten one call serves | Split the list into calls of at most ten |
 | `51006` | A content read named the same message twice | Remove the repeat; results are not served twice |
 | `51007` | A content read named both `storedEmailIds` and `threadId`, or neither | Name exactly one of them; which you meant is not something the server guesses |
@@ -330,6 +365,7 @@ The codes a user meets in practice:
 | `51009` | A contact listing's page size, origin, or search text is not one the book serves | Stay within 1–200 contacts, name `asserted` or `collected`, keep the search to at most 320 characters |
 | `51010` | A contact was named with text that is no identifier and no usable address | Pass a `contactId` a listing or a write returned, or an address on its own — and exactly one of the two |
 | `51011` | A contact record breaks a rule the book holds | The message names the rule: a missing name, no address, a preferred address the record does not name, a value over its limit |
+| `51012` | A flag change asked for nothing, stated half a keyword change, named a keyword no mail server would keep, carried a `requestId` that is no identifier, or reused one that already asked for a different value | Name at least one of `seen`, `flagged`, and the keyword pair; send `keywordChange` and `keywords` together; keep each keyword to one word of plain ASCII and name at most 64; keep `requestId` to at most 128 printable characters, or leave it out and let the server issue one; send a new one when you mean a new change |
 | `52001` / `52002` | A cursor this system did not issue, or one reused after the filters changed | Restart the walk from the first page |
 | `52003` | A contact listing's cursor is not one this system issued | Restart the walk; changing the search or the origin mid-walk is allowed and is not what caused it |
 | `53001` | The named account is not served here | Call `list_accounts` and use an `accountId` or `displayName` it returns |
@@ -367,7 +403,9 @@ which are counts and nothing about what they were spent on.
 - **Freshness is the synchronization interval** — five minutes by default, per account, plus the length of the run
   itself. Mail sent a moment ago is not yet listable.
 - **The remote `\Seen` flag is an observation, not an effect.** Results report the flags the last synchronization run
-  saw, with `wasObserved` saying whether any run has looked; reading through MailFathom never changes them.
+  saw, with `wasObserved` saying whether any run has looked; reading through MailFathom never changes them. A change you
+  asked for with `set_mail_flags` shows up in those fields once the next run has both issued it and read the folder
+  back, so a listing taken immediately afterwards still reports the value the server was last seen to hold.
 - **Removing an account from configuration makes its stored mail unreachable** through the tools, though the rows
   remain until removed. Disabling synchronization does not — the copy already stored stays readable.
 - **What happens to locally stored mail the server deleted is per account**: the default keeps a hidden tombstone,

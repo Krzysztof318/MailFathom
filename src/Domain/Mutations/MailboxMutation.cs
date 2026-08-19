@@ -81,6 +81,18 @@ public readonly record struct MailboxMutation
     public static IReadOnlyList<MailboxMutation> All { get; } =
         [Relocate, Delete, SetSeen, Copy, SetFlagged, AddKeywords, RemoveKeywords, SetKeywords];
 
+    /// <summary>Gets every mutation whose whole effect is a value a <c>FLAGS</c> response reports back.</summary>
+    /// <remarks>
+    /// Provenance turns on this set. A change to one of these values reaches synchronization as nothing but a changed
+    /// modification sequence, which is what a person marking mail read in their own client produces too, so what
+    /// separates MailFathom's own write from the mailbox owner's act is a record naming one of these and nothing else.
+    /// The other three move a message rather than a value on one, and are recognized by where the message turned up.
+    /// It is declared here so the read that asks for those records and the ceiling that bounds the answer are the same
+    /// decision rather than two lists that can disagree.
+    /// </remarks>
+    public static IReadOnlyList<MailboxMutation> FlagWriting { get; } =
+        [SetSeen, SetFlagged, AddKeywords, RemoveKeywords, SetKeywords];
+
     /// <summary>Gets whether this value names a permitted mutation rather than the unusable struct default.</summary>
     public bool IsSpecified => this.name is not null;
 

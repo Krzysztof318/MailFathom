@@ -521,10 +521,339 @@ public sealed class MailboxMutationRecordTests
         SourceRemovalObservedAt = null,
     };
 
+    /// <summary>The star standing where a completed store put it is that store completing, not the owner starring the message.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AccountsForFlaggedStateOf_TheDirectionItAskedFor_IsRecognized(bool isFlagged)
+    {
+        // Arrange
+        var record = CompletedFlaggedStateChange(isFlagged);
+
+        // Act
+        var accountsForFlaggedState = record.AccountsForFlaggedStateOf(
+            SourceOccurrence(),
+            isFlagged,
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.True(accountsForFlaggedState);
+    }
+
+    /// <summary>A store that asked for one direction says nothing about the star moving the other way.</summary>
+    [Fact]
+    public void AccountsForFlaggedStateOf_TheOppositeDirection_MatchesNothing()
+    {
+        // Arrange
+        var record = CompletedFlaggedStateChange(isFlagged: true);
+
+        // Act
+        var accountsForFlaggedState = record.AccountsForFlaggedStateOf(
+            SourceOccurrence(),
+            observedFlaggedState: false,
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.False(accountsForFlaggedState);
+    }
+
+    /// <summary>A reading taken after the store is a mailbox somebody else has had the chance to change, so the record stops answering for it.</summary>
+    [Fact]
+    public void AccountsForFlaggedStateOf_AnOccurrenceReadSinceTheStore_MatchesNothing()
+    {
+        // Arrange
+        var record = CompletedFlaggedStateChange(isFlagged: true);
+
+        // Act
+        var accountsForFlaggedState = record.AccountsForFlaggedStateOf(
+            SourceOccurrence(),
+            observedFlaggedState: true,
+            record.StageChangedAt.AddSeconds(1));
+
+        // Assert
+        Assert.False(accountsForFlaggedState);
+    }
+
+    /// <summary>Nothing has reached the server for a recorded change, so the star standing there is somebody else's doing.</summary>
+    [Fact]
+    public void AccountsForFlaggedStateOf_ARecordNoCommandWentOutFor_MatchesNothing()
+    {
+        // Arrange
+        var record = CompletedFlaggedStateChange(isFlagged: true) with { Stage = MailboxMutationStage.Recorded };
+
+        // Act
+        var accountsForFlaggedState = record.AccountsForFlaggedStateOf(
+            SourceOccurrence(),
+            observedFlaggedState: true,
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.False(accountsForFlaggedState);
+    }
+
+    /// <summary>A seen-state store writes no star, and a star store writes no seen state; neither answers for the other's value.</summary>
+    [Fact]
+    public void AccountsForFlaggedStateOf_AMutationThatWritesAnotherValue_MatchesNothing()
+    {
+        // Arrange
+        var seenStateChange = CompletedSeenStateChange(isSeen: true);
+        var flaggedStateChange = CompletedFlaggedStateChange(isFlagged: true);
+
+        // Act
+        var seenStateAccountsForStar = seenStateChange.AccountsForFlaggedStateOf(
+            SourceOccurrence(),
+            observedFlaggedState: true,
+            ObservedBeforeTheStore);
+        var starAccountsForSeenState = flaggedStateChange.AccountsForSeenStateOf(
+            SourceOccurrence(),
+            observedSeenState: true,
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.False(seenStateAccountsForStar);
+        Assert.False(starAccountsForSeenState);
+    }
+
+    /// <summary>An addition leaves what the message carried plus what it named, and that reading is the addition completing.</summary>
+    [Fact]
+    public void AccountsForKeywordsOf_AnAdditionThatExplainsTheWholeReading_IsRecognized()
+    {
+        // Arrange
+        var record = CompletedKeywordChange(MailboxMutation.AddKeywords, "$Todo");
+
+        // Act
+        var accountsForKeywords = record.AccountsForKeywordsOf(
+            SourceOccurrence(),
+            RemoteEmailKeywords.Create(["$Invoice"]),
+            RemoteEmailKeywords.Create(["$todo", "$Invoice"]),
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.True(accountsForKeywords);
+    }
+
+    /// <summary>An addition says nothing about a reading that does not carry what it asked for.</summary>
+    [Fact]
+    public void AccountsForKeywordsOf_AnAdditionWhoseKeywordIsAbsent_MatchesNothing()
+    {
+        // Arrange
+        var record = CompletedKeywordChange(MailboxMutation.AddKeywords, "$Todo");
+
+        // Act
+        var accountsForKeywords = record.AccountsForKeywordsOf(
+            SourceOccurrence(),
+            RemoteEmailKeywords.Create(["$Invoice"]),
+            RemoteEmailKeywords.Create(["$Invoice"]),
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.False(accountsForKeywords);
+    }
+
+    /// <summary>A label the owner attached beside MailFathom's own is a reading no addition here produced.</summary>
+    [Fact]
+    public void AccountsForKeywordsOf_AnAdditionBesideAKeywordSomebodyElseAttached_MatchesNothing()
+    {
+        // Arrange
+        var record = CompletedKeywordChange(MailboxMutation.AddKeywords, "$Todo");
+
+        // Act
+        var accountsForKeywords = record.AccountsForKeywordsOf(
+            SourceOccurrence(),
+            RemoteEmailKeywords.None,
+            RemoteEmailKeywords.Create(["$Todo", "$Invoice"]),
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.False(accountsForKeywords);
+    }
+
+    /// <summary>A removal leaves what the message carried without what it named, and that reading is the removal completing.</summary>
+    [Fact]
+    public void AccountsForKeywordsOf_ARemovalThatExplainsTheWholeReading_IsRecognized()
+    {
+        // Arrange
+        var record = CompletedKeywordChange(MailboxMutation.RemoveKeywords, "$Todo");
+
+        // Act
+        var accountsForKeywords = record.AccountsForKeywordsOf(
+            SourceOccurrence(),
+            RemoteEmailKeywords.Create(["$TODO", "$Invoice"]),
+            RemoteEmailKeywords.Create(["$Invoice"]),
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.True(accountsForKeywords);
+    }
+
+    /// <summary>A removal whose keyword is still on the message did not produce the reading being judged.</summary>
+    [Fact]
+    public void AccountsForKeywordsOf_ARemovalWhoseKeywordIsStillCarried_MatchesNothing()
+    {
+        // Arrange
+        var record = CompletedKeywordChange(MailboxMutation.RemoveKeywords, "$Todo");
+
+        // Act
+        var accountsForKeywords = record.AccountsForKeywordsOf(
+            SourceOccurrence(),
+            RemoteEmailKeywords.Create(["$Todo", "$Invoice"]),
+            RemoteEmailKeywords.Create(["$TODO"]),
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.False(accountsForKeywords);
+    }
+
+    /// <summary>A removal of a keyword the message never carried explains no reading, which is the case a weaker test would swallow.</summary>
+    [Fact]
+    public void AccountsForKeywordsOf_ARemovalBesideAKeywordSomebodyElseAttached_MatchesNothing()
+    {
+        // Arrange
+        var record = CompletedKeywordChange(MailboxMutation.RemoveKeywords, "$Todo");
+
+        // Act
+        var accountsForKeywords = record.AccountsForKeywordsOf(
+            SourceOccurrence(),
+            RemoteEmailKeywords.None,
+            RemoteEmailKeywords.Create(["$Invoice"]),
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.False(accountsForKeywords);
+    }
+
+    /// <summary>A replacement stated the whole set, so only the whole set standing as it named is that replacement completing.</summary>
+    [Fact]
+    public void AccountsForKeywordsOf_AReplacementMatchingTheWholeSet_IsRecognized()
+    {
+        // Arrange
+        var record = CompletedKeywordChange(MailboxMutation.SetKeywords, "$Todo");
+
+        // Act
+        var accountsForKeywords = record.AccountsForKeywordsOf(
+            SourceOccurrence(),
+            RemoteEmailKeywords.Create(["$Invoice"]),
+            RemoteEmailKeywords.Create(["$todo"]),
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.True(accountsForKeywords);
+    }
+
+    /// <summary>A keyword the replacement never named is somebody else's, whichever way round the difference falls.</summary>
+    [Fact]
+    public void AccountsForKeywordsOf_AReplacementBesideAKeywordItNeverNamed_MatchesNothing()
+    {
+        // Arrange
+        var record = CompletedKeywordChange(MailboxMutation.SetKeywords, "$Todo");
+
+        // Act
+        var accountsForKeywords = record.AccountsForKeywordsOf(
+            SourceOccurrence(),
+            RemoteEmailKeywords.None,
+            RemoteEmailKeywords.Create(["$Todo", "$Invoice"]),
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.False(accountsForKeywords);
+    }
+
+    /// <summary>An empty replacement asked for every keyword to go, so a message carrying none is that replacement completing.</summary>
+    [Fact]
+    public void AccountsForKeywordsOf_AnEmptyReplacementAgainstNoKeywords_IsRecognized()
+    {
+        // Arrange
+        var record = CompletedRelocation() with
+        {
+            Request = MailboxMutationRequest.SetKeywords(
+                LocalEmail,
+                SourceOccurrence(),
+                Requester,
+                AuthoredMailKeywords.None),
+            RequiresSourceRemoval = false,
+            Placement = RemoteEmailPlacement.NotReported(),
+        };
+
+        // Act
+        var accountsForKeywords = record.AccountsForKeywordsOf(
+            SourceOccurrence(),
+            RemoteEmailKeywords.Create(["$Todo"]),
+            RemoteEmailKeywords.None,
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.True(accountsForKeywords);
+    }
+
+    /// <summary>A mutation that writes no keyword answers for none, whatever the message ended up carrying.</summary>
+    [Fact]
+    public void AccountsForKeywordsOf_AMutationThatWritesNoKeyword_MatchesNothing()
+    {
+        // Arrange
+        var record = CompletedSeenStateChange(isSeen: true);
+
+        // Act
+        var accountsForKeywords = record.AccountsForKeywordsOf(
+            SourceOccurrence(),
+            RemoteEmailKeywords.None,
+            RemoteEmailKeywords.Create(["$Todo"]),
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.False(accountsForKeywords);
+    }
+
+    /// <summary>Nothing has reached the server for a recorded change, so the keywords standing there are somebody else's doing.</summary>
+    [Fact]
+    public void AccountsForKeywordsOf_ARecordNoCommandWentOutFor_MatchesNothing()
+    {
+        // Arrange
+        var record = CompletedKeywordChange(MailboxMutation.AddKeywords, "$Todo") with
+        {
+            Stage = MailboxMutationStage.Recorded,
+        };
+
+        // Act
+        var accountsForKeywords = record.AccountsForKeywordsOf(
+            SourceOccurrence(),
+            RemoteEmailKeywords.None,
+            RemoteEmailKeywords.Create(["$Todo"]),
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.False(accountsForKeywords);
+    }
+
     private static MailboxMutationRecord CompletedSeenStateChange(bool isSeen) => CompletedRelocation() with
     {
         Request = MailboxMutationRequest.SetSeen(LocalEmail, SourceOccurrence(), Requester, isSeen),
         RequiresSourceRemoval = false,
         Placement = RemoteEmailPlacement.NotReported(),
     };
+
+    private static MailboxMutationRecord CompletedFlaggedStateChange(bool isFlagged) => CompletedRelocation() with
+    {
+        Request = MailboxMutationRequest.SetFlagged(LocalEmail, SourceOccurrence(), Requester, isFlagged),
+        RequiresSourceRemoval = false,
+        Placement = RemoteEmailPlacement.NotReported(),
+    };
+
+    private static MailboxMutationRecord CompletedKeywordChange(MailboxMutation mutation, params string[] keywords)
+    {
+        var authored = AuthoredMailKeywords.Create(keywords);
+        var occurrence = SourceOccurrence();
+
+        var request = mutation == MailboxMutation.AddKeywords
+            ? MailboxMutationRequest.AddKeywords(LocalEmail, occurrence, Requester, authored)
+            : mutation == MailboxMutation.RemoveKeywords
+                ? MailboxMutationRequest.RemoveKeywords(LocalEmail, occurrence, Requester, authored)
+                : MailboxMutationRequest.SetKeywords(LocalEmail, occurrence, Requester, authored);
+
+        return CompletedRelocation() with
+        {
+            Request = request,
+            RequiresSourceRemoval = false,
+            Placement = RemoteEmailPlacement.NotReported(),
+        };
+    }
 }

@@ -393,6 +393,9 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode ContactRecordInvalid { get; } = new(51011);
 
+    /// <summary>Gets subcategory 1, request validation: a request to write flags or keywords on an email states no usable change.</summary>
+    public static MailFathomErrorCode MailFlagChangeInvalid { get; } = new(51012);
+
     /// <summary>Gets subcategory 2, pagination: a continuation cursor is not one this system issued.</summary>
     public static MailFathomErrorCode MailboxQueryCursorMalformed { get; } = new(52001);
 
@@ -601,6 +604,7 @@ public readonly record struct MailFathomErrorCode
         ContactQueryInvalid,
         ContactIdentifierMalformed,
         ContactRecordInvalid,
+        MailFlagChangeInvalid,
         MailboxQueryCursorMalformed,
         MailboxQueryCursorFilterMismatch,
         ContactCursorMalformed,

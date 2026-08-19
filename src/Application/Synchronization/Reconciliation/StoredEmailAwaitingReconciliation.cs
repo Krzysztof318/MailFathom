@@ -28,14 +28,28 @@ namespace MailFathom.Application.Synchronization.Reconciliation;
 public sealed record StoredEmailAwaitingReconciliation(
     StoredEmailId StoredEmailId,
     ImapUid Uid,
-    RemoteSeenStateObservation? LastObservation);
+    RemoteWritableFlagObservation? LastObservation);
 
-/// <summary>The previous reading of one occurrence's remote <c>\Seen</c> flag, and when it was taken.</summary>
-/// <param name="ObservedAt">When the flag below was read from the server.</param>
-/// <param name="IsSeen">The value it stood at then.</param>
+/// <summary>The previous reading of the values a mutation may write on one occurrence, and when it was taken.</summary>
+/// <param name="ObservedAt">When the values below were read from the server.</param>
+/// <param name="IsSeen">Where the <c>\Seen</c> flag stood then.</param>
+/// <param name="IsFlagged">Where the <c>\Flagged</c> flag stood then.</param>
+/// <param name="Keywords">The keywords the occurrence carried then.</param>
 /// <remarks>
-/// The two travel together because both are needed and neither is meaningful alone. The value says whether the flag has
-/// moved since; the moment says whether a change MailFathom made could still be the reason it moved, which is what stops
-/// a mutation record answering for a mailbox somebody has had the chance to change since.
+/// <para>
+/// The values travel with the moment because neither is meaningful alone. A value says whether that part of the message
+/// has moved since; the moment says whether a change MailFathom made could still be the reason it moved, which is what
+/// stops a mutation record answering for a mailbox somebody has had the chance to change since.
+/// </para>
+/// <para>
+/// Exactly the three a <c>STORE</c> of MailFathom's may write are carried, and the other flags the same snapshot holds
+/// are not. A previous reading exists here to answer whether a change was MailFathom's own, and no record can ever
+/// account for <c>\Answered</c>, <c>\Draft</c>, or <c>\Deleted</c> — those are refused mutations, so reading their
+/// earlier value into a window would be reading a comparison nothing can consume.
+/// </para>
 /// </remarks>
-public readonly record struct RemoteSeenStateObservation(DateTimeOffset ObservedAt, bool IsSeen);
+public sealed record RemoteWritableFlagObservation(
+    DateTimeOffset ObservedAt,
+    bool IsSeen,
+    bool IsFlagged,
+    RemoteEmailKeywords Keywords);

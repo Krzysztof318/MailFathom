@@ -95,9 +95,10 @@ A use case reached under no principal at all is refused the same way. That is th
 omission — it never said what admitted the work — and refusing it is what "fails rather than defaulting to permitted"
 means in the one place the decision is taken.
 
-**The MCP surface answers it by saying nothing.** The five use cases behind its tools each require a permission —
+**The MCP surface answers it by saying nothing.** The use cases behind its tools each require a permission —
 `mailfathom.mail.read` for the four that read the local mailbox copy, `mailfathom.mail.ask` for the one that answers
-from it — and the endpoint asks the same question ahead of them, from the grant the caller was admitted under. A tool
+from it, `mailfathom.mail.flags.write` for the one that changes a mailbox, and the two contact names for the book — and
+the endpoint asks the same question ahead of them, from the grant the caller was admitted under. A tool
 the grant does not permit is absent from `tools/list`, and a call naming one is answered as a call naming a tool that
 does not exist: the same error, the same code, and nothing about the caller, the credential, or the permission. So this
 refusal never reaches a client in a form it could read;

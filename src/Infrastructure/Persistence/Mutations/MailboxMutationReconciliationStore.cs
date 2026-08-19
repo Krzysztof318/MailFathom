@@ -12,6 +12,7 @@ using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace MailFathom.Infrastructure.Persistence.Mutations;
 
@@ -28,9 +29,19 @@ namespace MailFathom.Infrastructure.Persistence.Mutations;
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
-internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext readContext)
-    : IMailboxMutationReconciliationStore
+internal sealed partial class MailboxMutationReconciliationStore(
+    MailFathomDbContext readContext,
+    ILogger<MailboxMutationReconciliationStore> logger) : IMailboxMutationReconciliationStore
 {
+    /// <summary>The stored names of every mutation whose whole effect is a value a <c>FLAGS</c> response reports back.</summary>
+    /// <remarks>
+    /// Composed from the mutations themselves rather than written out, so a mutation renamed in the one place it is
+    /// declared cannot leave a literal here that matches no row. It is an array because that is the shape the Npgsql
+    /// provider translates into the <c>= ANY</c> the query wants; a frozen set would be evaluated in this process.
+    /// </remarks>
+    private static readonly string[] FlagWritingMutationNames =
+        [.. MailboxMutation.FlagWriting.Select(static mutation => mutation.Name)];
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<MailboxMutationRecord>> ReadPlacementsAtAsync(
         MailAccountId accountId,
@@ -73,11 +84,12 @@ internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext rea
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<MailboxMutationRecord>> ReadSeenStateChangesOnAsync(
+    public async Task<IReadOnlyList<MailboxMutationRecord>> ReadFlagChangesOnAsync(
         MailAccountId accountId,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
+        DateTimeOffset issuedAfter,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(uids);
@@ -91,25 +103,69 @@ internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext rea
         var alias = folderResolutionId.Alias.Value;
         var generation = folderResolutionId.Generation.Value;
         var uidValidityValue = uidValidity.Value;
-        var setSeenName = MailboxMutation.SetSeen.Name;
         uint[] changedUids = [.. uids.Select(static uid => uid.Value)];
+        var perValue = IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsPerValue;
+
+        // One row past the budget, so a value whose tail was cut is told apart from one that exactly fills it. Without
+        // the extra row the count alone cannot say which happened, and the warning below would fire on a value that
+        // dropped nothing. It cannot say more than that: the bound is the earliest reading across the whole window, so
+        // a value's group admits stores older than its own occurrence's last reading, and every comparison the caller
+        // makes rejects those. What the count establishes is that stores past the window's bound went unread, not that
+        // one of them could have explained the value.
+        var probed = perValue + 1;
 
         // Reached through the prefix of the identity index — folder, UIDVALIDITY, UID — which is why this question needs
-        // no index of its own, exactly as reading a disappearance back does not.
-        var entities = await readContext.MailboxMutations
+        // no index of its own, exactly as reading a disappearance back does not. The stage is excluded here rather than
+        // left to the caller because a record written down and not yet issued explains no reading, and it carries the
+        // newest stage change in the table: against an occurrence a caller has just triaged, those rows would otherwise
+        // fill the budget and drop the completed record that does explain what the server reported.
+        var storedValues = await readContext.MailboxMutations
             .AsNoTracking()
-            .Include(mutation => mutation.MailFolder)
             .Where(mutation => mutation.MailboxAccountId == accountValue
                 && mutation.MailFolder.Alias == alias
                 && mutation.MailFolder.ResolutionGeneration == generation
                 && mutation.UidValidity == uidValidityValue
                 && changedUids.Contains(mutation.Uid)
-                && mutation.Mutation == setSeenName)
-            .OrderBy(mutation => mutation.RecordedAt)
-            .ThenBy(mutation => mutation.Id)
+                && FlagWritingMutationNames.Contains(mutation.Mutation)
+                && mutation.Stage != MailboxMutationStage.Recorded
+                && mutation.StageChangedAt > issuedAfter)
+            .GroupBy(mutation => new { mutation.Uid, mutation.Mutation })
+            .Select(storedValue => new
+            {
+                // Ranked within the UID and the mutation rather than across the answer, so neither another occurrence
+                // nor another value of this one can spend this value's budget. Ranked by the stage change rather than
+                // by when the record was written, because that is the column the filter above and every comparison the
+                // caller makes are about: a store recorded early and completed late accounts for a later reading than
+                // one recorded after it and staged before it.
+                Newest = storedValue
+                    .OrderByDescending(mutation => mutation.StageChangedAt)
+                    .ThenByDescending(mutation => mutation.Id)
+                    .Take(probed)
+                    .Select(mutation => new { Mutation = mutation, Folder = mutation.MailFolder }),
+            })
             .ToArrayAsync(cancellationToken);
 
-        return [.. entities.Select(static entity => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder))];
+        var truncatedValueCount = storedValues.Count(storedValue => storedValue.Newest.Count() > perValue);
+
+        if (truncatedValueCount > 0)
+        {
+            LogFlagChangeCeilingReached(logger, perValue, truncatedValueCount, accountValue, alias);
+        }
+
+        // Handed back oldest first, because that is the order the caller credits a value to the earliest store that
+        // explains it. The ordering is restated here rather than trusted from the answer's shape, since a grouped read
+        // guarantees the order within a group and nothing about the order between them.
+        return
+        [
+            .. storedValues
+                .SelectMany(storedValue => storedValue.Newest
+                    .OrderByDescending(entry => entry.Mutation.StageChangedAt)
+                    .ThenByDescending(entry => entry.Mutation.Id)
+                    .Take(perValue))
+                .OrderBy(entry => entry.Mutation.StageChangedAt)
+                .ThenBy(entry => entry.Mutation.Id)
+                .Select(static entry => MailboxMutationRecordMapping.ToRecord(entry.Mutation, entry.Folder)),
+        ];
     }
 
     /// <inheritdoc />
@@ -196,4 +252,18 @@ internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext rea
         return await writeContext.MailboxMutations.FindAsync([recordId.Value], cancellationToken)
             ?? throw new InvalidOperationException($"No mailbox mutation record carries the identifier {recordId}.");
     }
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "{TruncatedValueCount} values of changed occurrences of account {AccountId} in folder {FolderAlias} "
+            + "carry more stores past this window's age bound than the {Ceiling} an attribution reads for one value of "
+            + "one occurrence, so any of those beyond the newest went unread — and a store issued after that "
+            + "occurrence's own last reading which went unread with them would leave its value attributed to the "
+            + "mailbox owner.")]
+    private static partial void LogFlagChangeCeilingReached(
+        ILogger logger,
+        int ceiling,
+        int truncatedValueCount,
+        string accountId,
+        string folderAlias);
 }

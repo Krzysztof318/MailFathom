@@ -1032,6 +1032,25 @@ internal sealed partial class AccountSynchronizationSupervisor
                 reconciliation.SeenStateChangedEmailCount);
         }
 
+        // Reported apart from the \Seen line rather than added to it, because the two say different things about a
+        // mailbox: one is mail somebody read, the other is mail somebody singled out, and an operator watching for
+        // either would have to subtract to get it back out of a total.
+        if (reconciliation.FlaggedStateChangedEmailCount > 0)
+        {
+            this.LogFlaggedStateChangesObserved(
+                this.accountId.Value,
+                folderAlias,
+                reconciliation.FlaggedStateChangedEmailCount);
+        }
+
+        if (reconciliation.KeywordsChangedEmailCount > 0)
+        {
+            this.LogKeywordChangesObserved(
+                this.accountId.Value,
+                folderAlias,
+                reconciliation.KeywordsChangedEmailCount);
+        }
+
         if (reconciliation.ObservedEmailCount > 0)
         {
             this.LogFolderReconciled(
@@ -1145,6 +1164,25 @@ internal sealed partial class AccountSynchronizationSupervisor
         string accountId,
         string folderAlias,
         int seenStateChangedEmailCount);
+
+    /// <summary>Reports the stars the mailbox owner set or cleared themselves, which no change of MailFathom's explains.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Mail server reports a moved \\Flagged flag on {FlaggedStateChangedEmailCount} messages stored for {AccountId}/{FolderAlias} that no change of MailFathom's accounts for.")]
+    private partial void LogFlaggedStateChangesObserved(
+        string accountId,
+        string folderAlias,
+        int flaggedStateChangedEmailCount);
+
+    /// <summary>Reports the labels the mailbox owner put on or took off themselves, counted per message rather than per keyword.</summary>
+    /// <remarks>The keywords themselves never reach the line. A label is text the owner or their client chose and can name a person, a case, or a diagnosis, so it is treated as derived from the message like any other part of it.</remarks>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Mail server reports different keywords on {KeywordsChangedEmailCount} messages stored for {AccountId}/{FolderAlias} that no change of MailFathom's accounts for.")]
+    private partial void LogKeywordChangesObserved(
+        string accountId,
+        string folderAlias,
+        int keywordsChangedEmailCount);
 
     /// <summary>Records mail leaving the local copy, which is the one reconciliation outcome an operator has to be able to find afterwards.</summary>
     /// <remarks>

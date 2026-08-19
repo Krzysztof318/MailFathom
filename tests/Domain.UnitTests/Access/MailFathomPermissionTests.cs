@@ -52,7 +52,8 @@ public sealed class MailFathomPermissionTests
     /// <summary>The published set, asserted by name because a name is what an operator writes and an authorization server mints.</summary>
     /// <remarks>
     /// ADR 0012 fixed the first eight and the rule the set grows under: a name is published when the capability it names
-    /// exists. The two contact permissions were allocated under that rule when the contact tools arrived.
+    /// exists. The two contact permissions were allocated under that rule when the contact tools arrived, and the flag
+    /// permission when the tool that writes a mailbox did.
     /// </remarks>
     [Fact]
     public void All_CarriesThePublishedNames() =>
@@ -62,6 +63,7 @@ public sealed class MailFathomPermissionTests
                 "mailfathom.mail.ask",
                 "mailfathom.mail.contacts.read",
                 "mailfathom.mail.contacts.write",
+                "mailfathom.mail.flags.write",
                 "mailfathom.admin.read",
                 "mailfathom.admin.audit.read",
                 "mailfathom.admin.operate",
@@ -112,6 +114,7 @@ public sealed class MailFathomPermissionTests
                 MailFathomPermission.MailAsk,
                 MailFathomPermission.MailContactsRead,
                 MailFathomPermission.MailContactsWrite,
+                MailFathomPermission.MailFlagsWrite,
             ],
             mail);
         Assert.Equal(MailFathomPermission.All.Count, mail.Count + administration.Count);

@@ -127,6 +127,24 @@ public sealed class PublishedToolsTests
         Assert.Equal(MailFathomPermission.MailContactsWrite, permission);
     }
 
+    /// <summary>Writing a mailbox is a grant of its own, and this mapping is what withholds the tool from a reader.</summary>
+    /// <remarks>
+    /// The use case checks the same permission again, so a credential holding only <c>mailfathom.mail.read</c> is
+    /// refused whatever this says. What this decides is the half a refusal cannot repair: a mapping naming a read grant
+    /// would advertise the mailbox-writing tool to that credential and let it call one, which is disclosure and an
+    /// offer against least privilege rather than a change that got through.
+    /// </remarks>
+    [Fact]
+    public void TryGetRequiredPermission_TheToolThatWritesAMailbox_RequiresTheFlagWritingGrant()
+    {
+        // Act
+        var declared = PublishedTools.TryGetRequiredPermission(SetMailFlagsTool.ToolName, out var permission);
+
+        // Assert
+        Assert.True(declared);
+        Assert.Equal(MailFathomPermission.MailFlagsWrite, permission);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

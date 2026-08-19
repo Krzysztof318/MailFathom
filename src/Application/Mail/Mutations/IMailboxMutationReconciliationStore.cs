@@ -54,37 +54,77 @@ public interface IMailboxMutationReconciliationStore
         IReadOnlyCollection<ImapUid> uids,
         CancellationToken cancellationToken);
 
-    /// <summary>Reads the <c>\Seen</c> stores issued against any of the occurrences a reconciliation window read flags for.</summary>
+    /// <summary>The greatest number of stores of one value the attribution reads for one changed occurrence.</summary>
+    /// <remarks>
+    /// <para>
+    /// The budget belongs to one occurrence's one value, which is the terms the comparisons below are in: a reading of
+    /// <c>\Seen</c> is settled against stores of <c>\Seen</c> and against nothing else. Both halves of that are what
+    /// it has to guarantee. A budget spent across the window would let a message an agent starred and unstarred a
+    /// dozen times take every slot from the message beside it; a budget spent across one occurrence's values would let
+    /// the same pile of stars take the room that occurrence's own <c>\Seen</c> store needs. Either way the record that
+    /// explains a value is dropped, that value is credited to the mailbox owner, and the rule that wrote it re-fires on
+    /// the mail it just acted on. So the read ranks within each UID and mutation rather than across the answer.
+    /// </para>
+    /// <para>
+    /// Five is the recent history of one value. A reading is settled against the newest store of that value which asked
+    /// for what the server now reports, and the stores behind it are the ones a convergence pass abandoned or a later
+    /// call superseded — a caller-authored requester is per invocation, so an agent that stars and unstars one message
+    /// leaves a record per call and nothing deletes one. A value whose newest five stores all fail to explain the
+    /// reading is a value somebody changed after MailFathom last wrote it, which is the answer the older stores would
+    /// have produced anyway. Reaching the number therefore means one occurrence carries more unspent stores of a single
+    /// value than any attribution has a use for, and the adapter says so in a log line rather than truncating in
+    /// silence.
+    /// </para>
+    /// </remarks>
+    const int MaximumFlagChangeRecordsPerValue = 5;
+
+    /// <summary>Reads the flag and keyword stores issued against any of the occurrences a reconciliation window found moved.</summary>
     /// <param name="accountId">The account whose mutations are read.</param>
     /// <param name="folderResolutionId">The alias binding the occurrences were stored under.</param>
     /// <param name="uidValidity">The UIDVALIDITY the window was opened for.</param>
-    /// <param name="uids">The UIDs whose remote <c>\Seen</c> flag the window found standing somewhere new.</param>
+    /// <param name="uids">The UIDs whose <c>\Seen</c> flag, <c>\Flagged</c> flag, or keywords the window found standing somewhere new.</param>
+    /// <param name="issuedAfter">The earliest previous observation among those occurrences, before which no record can account for anything.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>Every <c>\Seen</c> store issued against one of those occurrences, which may be none.</returns>
+    /// <returns>Every store of one of those values issued against one of those occurrences, which may be none.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="uids" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
-    /// This is the read the whole issue turns on. A flag change reaches synchronization as a changed modification
-    /// sequence, which is exactly what a person marking mail read in their own client produces, so nothing in the
-    /// server's answer distinguishes the two and only the record does. A rule conditioned on unread mail that marks mail
-    /// read would otherwise re-evaluate every message it had just acted on.
+    /// This is the read the whole provenance question turns on. A flag change reaches synchronization as a changed
+    /// modification sequence, which is exactly what a person marking mail read or starring it in their own client
+    /// produces, so nothing in the server's answer distinguishes the two and only the record does. A rule conditioned on
+    /// unread mail that marks mail read would otherwise re-evaluate every message it had just acted on.
     /// </para>
     /// <para>
-    /// Only the occurrences whose flag actually moved are asked about, so a window that found the mailbox unchanged —
-    /// which is most windows — asks nothing. The answer is bounded by <paramref name="uids" /> and by the idempotency
-    /// identity, which admits one record per occurrence, requester, and mutation.
+    /// All five stores are read together rather than one query per value, because one <c>FLAGS</c> response carries
+    /// every value at once: an occurrence whose star and whose label both moved is one question, and splitting it would
+    /// cost a query per value on every window that found anything. Which record answers for which value is settled by
+    /// the caller against the record's own comparisons.
     /// </para>
     /// <para>
-    /// Every such record is returned, spent or not, because whether one still accounts for anything is settled against
+    /// Only the occurrences where something actually moved are asked about, so a window that found the mailbox unchanged
+    /// — which is most windows — asks nothing. The idempotency identity no longer bounds what one occurrence can carry:
+    /// the requester of a caller-authored change is the invocation, so an agent that stars and unstars one message
+    /// leaves a record per call and nothing ever deletes one. What bounds the answer instead is stated rather than
+    /// assumed — the UIDs, <paramref name="issuedAfter" />, and the stage. Each drops only records that could account
+    /// for nothing, because all three comparisons below require a record past <see cref="MailboxMutationStage.Recorded" />
+    /// whose stage moved after the occurrence was last read; a change written down and not yet issued explains no
+    /// reading, and against a freshly triaged occurrence those are the newest rows in the table. What survives is then
+    /// capped at <see cref="MaximumFlagChangeRecordsPerValue" /> for each occurrence's each value.
+    /// </para>
+    /// <para>
+    /// Every surviving record is returned, spent or not, because whether one still accounts for anything is settled against
     /// the occurrence's own last observation rather than against a mark on the row. That comparison belongs to
-    /// <see cref="MailboxMutationRecord.AccountsForSeenStateOf" />, which the caller applies to what this returns.
+    /// <see cref="MailboxMutationRecord.AccountsForSeenStateOf" />,
+    /// <see cref="MailboxMutationRecord.AccountsForFlaggedStateOf" />, and
+    /// <see cref="MailboxMutationRecord.AccountsForKeywordsOf" />, which the caller applies to what this returns.
     /// </para>
     /// </remarks>
-    Task<IReadOnlyList<MailboxMutationRecord>> ReadSeenStateChangesOnAsync(
+    Task<IReadOnlyList<MailboxMutationRecord>> ReadFlagChangesOnAsync(
         MailAccountId accountId,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
+        DateTimeOffset issuedAfter,
         CancellationToken cancellationToken);
 
     /// <summary>Reads the mutations issued against any of the source occurrences a reconciliation window found gone.</summary>

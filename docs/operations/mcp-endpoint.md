@@ -612,18 +612,20 @@ The operational consequences are the ones that always applied to an unauthentica
   someone else.
 - **Restrict who can reach the address at the network layer.** A loopback bind, a firewall rule, a private network, or an
   authenticating reverse proxy are all outside MailFathom and all appropriate.
-- **Nothing here can touch mail, and the contact book is a different answer.** The mailbox tools cannot send, delete,
-  move, or mark mail as read, so on that half the exposure is disclosure rather than modification — and disclosure of a
-  mailbox is enough on its own. The contact tools are the half that writes: an endpoint with no `Authentication` entry
-  grants `mailfathom.mail.contacts.write` like every other permission on this surface, so anyone who can reach the port
-  can record, amend, and irreversibly erase the deployment's records about identified third parties. Narrow the entry, or
-  keep the port unreachable.
+- **What can be read here can also be marked, and the contact book can be erased.** An endpoint with no
+  `Authentication` entry grants every permission this surface publishes, so anyone who can reach the port holds the
+  reading half — where the exposure is disclosure of a mailbox, which is enough on its own — and both writing halves
+  with it. `mailfathom.mail.flags.write` lets them mark, star, and relabel the owner's mail on the real mail server
+  through `set_mail_flags`, and the change converges out over the account's own write connection; nothing there sends,
+  deletes, or moves mail, but a message somebody else marked read is a message the owner never saw arrive.
+  `mailfathom.mail.contacts.write` lets them record, amend, and irreversibly erase the deployment's records about
+  identified third parties. Narrow the entry, or keep the port unreachable.
 
 ### What a credential may do
 
 Every entry in `McpEndpoint:Authentication` states what the credentials it admits may do, as `Permissions`. This
-surface's half of the published set is four names — `mailfathom.mail.read`, `mailfathom.mail.ask`,
-`mailfathom.mail.contacts.read`, and `mailfathom.mail.contacts.write` — and
+surface's half of the published set is five names — `mailfathom.mail.read`, `mailfathom.mail.ask`,
+`mailfathom.mail.contacts.read`, `mailfathom.mail.contacts.write`, and `mailfathom.mail.flags.write` — and
 [what a credential may do](permissions.md) holds the model behind them in full: what each name reaches, which tool each
 one covers, how a grant is written, what an absent `Permissions` key and an empty list mean, what
 `PermissionsFromTokenScopes` turns the list into, and what fails startup.
@@ -650,10 +652,10 @@ chosen what it holds:
 ```text
 info: MailFathom.Host.Hosting.Warnings.TransportGrantStartupReport
       The MCP endpoint entry McpEndpoint:Authentication:0 writes down no grant, so every credential it admits holds
-      mailfathom.mail.read, mailfathom.mail.ask, mailfathom.mail.contacts.read, mailfathom.mail.contacts.write —
-      everything this surface publishes. Write a 'Permissions' list on the entry to narrow it, or an empty one to grant
-      nothing. A caller here is served only the tools its grant permits, and a call naming any other is answered as a
-      tool that does not exist.
+      mailfathom.mail.read, mailfathom.mail.ask, mailfathom.mail.contacts.read, mailfathom.mail.contacts.write,
+      mailfathom.mail.flags.write — everything this surface publishes. Write a 'Permissions' list on the entry to
+      narrow it, or an empty one to grant nothing. A caller here is served only the tools its grant permits, and a call
+      naming any other is answered as a tool that does not exist.
 ```
 
 Every line closes with what a grant on that surface does, so an operator reading back the one entry they edited learns
@@ -666,9 +668,9 @@ section a grant would be written under.
 
 **The endpoint asks whether this is a caller the deployment serves, and of a token also which person it names.** What an
 admitted caller may then do is the grant its entry carries, and that decides one thing: which of this surface's tools it
-is offered and may call. Which tool each of the four names covers is
+is offered and may call. Which tool each of the five names covers is
 [what a credential may do](permissions.md#which-tool-each-name-covers); an entry narrowed to the contact half therefore
-reaches the contact book and nothing else, and one granted none of the four is served an empty tool list and refused
+reaches the contact book and nothing else, and one granted none of the five is served an empty tool list and refused
 every call it makes.
 
 **A refused caller is told nothing**, for the reason
@@ -1700,6 +1702,17 @@ writes no `Permissions` list does: `list_contacts` and `get_contact` read like t
 `delete_contact` report `destructiveHint` true.
 A contact tool missing from the listing is the grant rather than a fault — [What a credential may
 do](#what-a-credential-may-do) is what decides it, and the startup line for the entry says what it resolved to.
+
+`set_mail_flags` is beside them under the same condition, and it is the one tool in the listing that reports
+`readOnlyHint` false with `openWorldHint` true: it changes the owner's mailbox rather than MailFathom's copy of it, so
+its effect leaves this process. It is `idempotentHint` true because each value it writes is stated rather than
+adjusted, so a second identical call asks for what the first one asked for, and `destructiveHint` true because that
+annotation asks whether a tool performs only additive updates: a keyword replacement states the whole set and so takes
+off a label the caller did not list, a removal takes named labels off, and clearing either flag removes a value the
+message carried. Every one of those is reversible, which is a separate fact the annotation does not answer. An entry
+granting
+`mailfathom.mail.flags.write` is what puts it in the listing, and an entry that writes no `Permissions` list grants it
+like everything else this surface publishes.
 
 **Verify with a credential whose entry writes no grant, or read what that entry granted first.** A listing narrows to
 the caller's grant as well as to the deployment, so a credential granted less than the whole surface is served fewer
