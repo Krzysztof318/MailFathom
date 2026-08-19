@@ -739,6 +739,64 @@ public sealed class MailboxReconcilerTests
                 && suppressed.StoredEmailId == store.StoredEmailIdOf(11));
     }
 
+    /// <summary>A pile of stars on one message cannot crowd out that same message's only <c>\Seen</c> store.</summary>
+    /// <remarks>
+    /// One occurrence's values compete for the budget unless the ranking says otherwise, and the two values arrive in
+    /// one <c>FLAGS</c> response, so the failure is invisible in the protocol: the star is explained, the read flag is
+    /// not, and the rule that marked the message read re-fires on the mail it just acted on. The stars are staged after
+    /// the <c>\Seen</c> store, which is what puts the store last in a newest-first truncation.
+    /// </remarks>
+    [Fact]
+    public async Task ReconcileAsync_OneOccurrenceWhoseStarsOutnumberItsOnlySeenStore_WithholdsBothChanges()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: false));
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        var explainsTheReadFlag = MutationSettingSeen(
+            store.StoredEmailIdOf(10),
+            uid: 10,
+            isSeen: true,
+            stagedAt: RunInstant.AddMinutes(1));
+
+        mutationStore.Add(explainsTheReadFlag);
+
+        foreach (var minute in Enumerable.Range(2, 20))
+        {
+            mutationStore.Add(MutationSettingFlagged(
+                store.StoredEmailIdOf(10),
+                uid: 10,
+                isFlagged: true,
+                stagedAt: RunInstant.AddMinutes(minute)));
+        }
+
+        await using var mailboxSession = CreateSessionReportingFlags(
+            isSeen: true,
+            isFlagged: true,
+            RemoteEmailKeywords.None,
+            10);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.SeenStateChangedEmailCount);
+        Assert.Equal(0, result.FlaggedStateChangedEmailCount);
+        Assert.Contains(
+            result.SuppressedChanges,
+            suppressed => suppressed.MutationRecordId == explainsTheReadFlag.Id
+                && suppressed.Kind == MailboxChangeKind.SeenStateChanged);
+    }
+
     /// <summary>Marking mail read by hand is the mailbox owner's act, and it stays a change to react to.</summary>
     [Fact]
     public async Task ReconcileAsync_OwnerMarkedMailReadThemselves_RaisesTheChange()
@@ -1563,8 +1621,9 @@ public sealed class MailboxReconcilerTests
     private static MailboxMutationRecord MutationSettingFlagged(
         StoredEmailId storedEmailId,
         uint uid,
-        bool isFlagged) =>
-        MutationSettingSeen(storedEmailId, uid, isSeen: false) with
+        bool isFlagged,
+        DateTimeOffset? stagedAt = null) =>
+        MutationSettingSeen(storedEmailId, uid, isSeen: false, stagedAt: stagedAt) with
         {
             Request = MailboxMutationRequest.SetFlagged(
                 storedEmailId,

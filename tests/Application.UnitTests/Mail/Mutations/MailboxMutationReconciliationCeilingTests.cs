@@ -3,31 +3,30 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Mail.Mutations;
-using MailFathom.Domain.Mutations;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Mail.Mutations;
 
-/// <summary>Covers the budget the attribution read applies, which belongs to one occurrence rather than to a window.</summary>
+/// <summary>Covers the budget the attribution read applies, which belongs to one value of one occurrence.</summary>
 /// <remarks>
 /// A record this budget drops is a change MailFathom made that reconciliation then credits to the mailbox owner and
-/// reacts to, which is the loop the read exists to prevent. What it has to guarantee is therefore room for every value
-/// one occurrence could carry — and that the number says nothing about the window, since a budget spent across one
-/// lets a message somebody starred and unstarred repeatedly take every slot from the message beside it.
-/// <see cref="Synchronization.Reconciliation.MailboxReconcilerTests" /> covers that
-/// consequence against a whole window; what is stated here is the number itself.
+/// reacts to, which is the loop the read exists to prevent. The number is stated here rather than derived from
+/// anything, because everything it could be derived from has a different meaning: it is neither the size of a window
+/// nor the count of the values a <c>FLAGS</c> response reports, and expressing it as either is what let the two earlier
+/// shapes of this ceiling starve a record that explained something.
+/// <see cref="Synchronization.Reconciliation.MailboxReconcilerTests" /> covers what
+/// spending it in the wrong terms costs; what is stated here is the number.
 /// </remarks>
 public sealed class MailboxMutationReconciliationCeilingTests
 {
-    /// <summary>An attribution settles each value against the newest store of it, so one per value is what it can use.</summary>
+    /// <summary>A reading is settled against the newest store of that value, with room for the ones behind it.</summary>
     [Fact]
-    public void MaximumFlagChangeRecordsPerOccurrence_LeavesRoomForEveryValueAnOccurrenceCouldCarry()
+    public void MaximumFlagChangeRecordsPerValue_IsTheRecentHistoryOfOneValue()
     {
         // Act
-        var perOccurrence = IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsPerOccurrence;
+        var perValue = IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsPerValue;
 
         // Assert
-        Assert.Equal(MailboxMutation.FlagWriting.Count, perOccurrence);
-        Assert.True(perOccurrence > 0);
+        Assert.Equal(5, perValue);
     }
 }

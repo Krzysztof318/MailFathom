@@ -123,7 +123,7 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
     /// rows that account for nothing.
     /// </summary>
     [Fact]
-    public async Task ReadSeenStateChangesOnAsync_AWindowHoldingBothKindsOfMutation_ReturnsOnlyTheIssuedSeenStoresAfterTheBound()
+    public async Task ReadFlagChangesOnAsync_AWindowHoldingBothKindsOfMutation_ReturnsOnlyTheIssuedStoresAfterTheBound()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;

@@ -54,24 +54,29 @@ public interface IMailboxMutationReconciliationStore
         IReadOnlyCollection<ImapUid> uids,
         CancellationToken cancellationToken);
 
-    /// <summary>The greatest number of flag and keyword stores the attribution reads for any one changed occurrence.</summary>
+    /// <summary>The greatest number of stores of one value the attribution reads for one changed occurrence.</summary>
     /// <remarks>
     /// <para>
-    /// The budget belongs to the occurrence rather than to the window, which is the whole of what it has to guarantee:
-    /// one occurrence cannot spend another's. A window-wide number of the same size would let a message an agent
-    /// starred and unstarred a dozen times take every slot, and the record explaining the message beside it would be
-    /// dropped — that value is then credited to the mailbox owner and reacted to as their act, which is the loop this
-    /// read exists to prevent. The read therefore ranks within each UID rather than across the answer.
+    /// The budget belongs to one occurrence's one value, which is the terms the comparisons below are in: a reading of
+    /// <c>\Seen</c> is settled against stores of <c>\Seen</c> and against nothing else. Both halves of that are what
+    /// it has to guarantee. A budget spent across the window would let a message an agent starred and unstarred a
+    /// dozen times take every slot from the message beside it; a budget spent across one occurrence's values would let
+    /// the same pile of stars take the room that occurrence's own <c>\Seen</c> store needs. Either way the record that
+    /// explains a value is dropped, that value is credited to the mailbox owner, and the rule that wrote it re-fires on
+    /// the mail it just acted on. So the read ranks within each UID and mutation rather than across the answer.
     /// </para>
     /// <para>
-    /// One record per value a <c>FLAGS</c> response reports is what an attribution can use, because the comparisons
-    /// below settle each value against the newest store of it. What the number bounds is duplication under one value:
-    /// a caller-authored requester is per invocation, so an agent that stars and unstars one message leaves a record
-    /// per call and nothing deletes one. Reaching it means one occurrence carries more unspent stores of a single value
-    /// than any attribution has a use for, and the adapter says so in a log line rather than truncating in silence.
+    /// Five is the recent history of one value. A reading is settled against the newest store of that value which asked
+    /// for what the server now reports, and the stores behind it are the ones a convergence pass abandoned or a later
+    /// call superseded — a caller-authored requester is per invocation, so an agent that stars and unstars one message
+    /// leaves a record per call and nothing deletes one. A value whose newest five stores all fail to explain the
+    /// reading is a value somebody changed after MailFathom last wrote it, which is the answer the older stores would
+    /// have produced anyway. Reaching the number therefore means one occurrence carries more unspent stores of a single
+    /// value than any attribution has a use for, and the adapter says so in a log line rather than truncating in
+    /// silence.
     /// </para>
     /// </remarks>
-    static int MaximumFlagChangeRecordsPerOccurrence => MailboxMutation.FlagWriting.Count;
+    const int MaximumFlagChangeRecordsPerValue = 5;
 
     /// <summary>Reads the flag and keyword stores issued against any of the occurrences a reconciliation window found moved.</summary>
     /// <param name="accountId">The account whose mutations are read.</param>
@@ -104,7 +109,7 @@ public interface IMailboxMutationReconciliationStore
     /// for nothing, because all three comparisons below require a record past <see cref="MailboxMutationStage.Recorded" />
     /// whose stage moved after the occurrence was last read; a change written down and not yet issued explains no
     /// reading, and against a freshly triaged occurrence those are the newest rows in the table. What survives is then
-    /// capped per occurrence at <see cref="MaximumFlagChangeRecordsPerOccurrence" />.
+    /// capped at <see cref="MaximumFlagChangeRecordsPerValue" /> for each occurrence's each value.
     /// </para>
     /// <para>
     /// Every surviving record is returned, spent or not, because whether one still accounts for anything is settled against

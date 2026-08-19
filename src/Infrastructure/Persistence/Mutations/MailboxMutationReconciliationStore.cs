@@ -104,21 +104,20 @@ internal sealed partial class MailboxMutationReconciliationStore(
         var generation = folderResolutionId.Generation.Value;
         var uidValidityValue = uidValidity.Value;
         uint[] changedUids = [.. uids.Select(static uid => uid.Value)];
-        var perOccurrence = IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsPerOccurrence;
+        var perValue = IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsPerValue;
 
-        // One row past the budget, so an occurrence whose tail was cut is told apart from one that exactly fills it.
-        // Without the extra row the count alone cannot say which happened, and the warning below would report a
-        // misattribution that could not have occurred.
-        var probed = perOccurrence + 1;
+        // One row past the budget, so a value whose tail was cut is told apart from one that exactly fills it. Without
+        // the extra row the count alone cannot say which happened, and the warning below would report a misattribution
+        // that could not have occurred.
+        var probed = perValue + 1;
 
         // Reached through the prefix of the identity index — folder, UIDVALIDITY, UID — which is why this question needs
         // no index of its own, exactly as reading a disappearance back does not. The stage is excluded here rather than
         // left to the caller because a record written down and not yet issued explains no reading, and it carries the
         // newest stage change in the table: against an occurrence a caller has just triaged, those rows would otherwise
         // fill the budget and drop the completed record that does explain what the server reported.
-        var occurrences = await readContext.MailboxMutations
+        var storedValues = await readContext.MailboxMutations
             .AsNoTracking()
-            .Include(mutation => mutation.MailFolder)
             .Where(mutation => mutation.MailboxAccountId == accountValue
                 && mutation.MailFolder.Alias == alias
                 && mutation.MailFolder.ResolutionGeneration == generation
@@ -127,25 +126,27 @@ internal sealed partial class MailboxMutationReconciliationStore(
                 && FlagWritingMutationNames.Contains(mutation.Mutation)
                 && mutation.Stage != MailboxMutationStage.Recorded
                 && mutation.StageChangedAt > issuedAfter)
-            .GroupBy(mutation => mutation.Uid)
-            .Select(occurrence => new
+            .GroupBy(mutation => new { mutation.Uid, mutation.Mutation })
+            .Select(storedValue => new
             {
-                // Ranked within the UID rather than across the answer, so no occurrence can spend another's budget.
-                // Ranked by the stage change rather than by when the record was written, because that is the column the
-                // filter above and every comparison the caller makes are about: a store recorded early and completed
-                // late accounts for a later reading than one recorded after it and staged before it.
-                Newest = occurrence
+                // Ranked within the UID and the mutation rather than across the answer, so neither another occurrence
+                // nor another value of this one can spend this value's budget. Ranked by the stage change rather than
+                // by when the record was written, because that is the column the filter above and every comparison the
+                // caller makes are about: a store recorded early and completed late accounts for a later reading than
+                // one recorded after it and staged before it.
+                Newest = storedValue
                     .OrderByDescending(mutation => mutation.StageChangedAt)
                     .ThenByDescending(mutation => mutation.Id)
-                    .Take(probed),
+                    .Take(probed)
+                    .Select(mutation => new { Mutation = mutation, Folder = mutation.MailFolder }),
             })
             .ToArrayAsync(cancellationToken);
 
-        var truncatedOccurrenceCount = occurrences.Count(occurrence => occurrence.Newest.Count() > perOccurrence);
+        var truncatedValueCount = storedValues.Count(storedValue => storedValue.Newest.Count() > perValue);
 
-        if (truncatedOccurrenceCount > 0)
+        if (truncatedValueCount > 0)
         {
-            LogFlagChangeCeilingReached(logger, perOccurrence, truncatedOccurrenceCount, accountValue, alias);
+            LogFlagChangeCeilingReached(logger, perValue, truncatedValueCount, accountValue, alias);
         }
 
         // Handed back oldest first, because that is the order the caller credits a value to the earliest store that
@@ -153,14 +154,14 @@ internal sealed partial class MailboxMutationReconciliationStore(
         // guarantees the order within a group and nothing about the order between them.
         return
         [
-            .. occurrences
-                .SelectMany(occurrence => occurrence.Newest
-                    .OrderByDescending(entity => entity.StageChangedAt)
-                    .ThenByDescending(entity => entity.Id)
-                    .Take(perOccurrence))
-                .OrderBy(entity => entity.StageChangedAt)
-                .ThenBy(entity => entity.Id)
-                .Select(static entity => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder)),
+            .. storedValues
+                .SelectMany(storedValue => storedValue.Newest
+                    .OrderByDescending(entry => entry.Mutation.StageChangedAt)
+                    .ThenByDescending(entry => entry.Mutation.Id)
+                    .Take(perValue))
+                .OrderBy(entry => entry.Mutation.StageChangedAt)
+                .ThenBy(entry => entry.Mutation.Id)
+                .Select(static entry => MailboxMutationRecordMapping.ToRecord(entry.Mutation, entry.Folder)),
         ];
     }
 
@@ -251,14 +252,14 @@ internal sealed partial class MailboxMutationReconciliationStore(
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "{TruncatedOccurrenceCount} changed occurrences of account {AccountId} in folder {FolderAlias} carry "
-            + "more than the {Ceiling} flag and keyword stores an attribution reads for one occurrence, so an older "
+        Message = "{TruncatedValueCount} values of changed occurrences of account {AccountId} in folder {FolderAlias} "
+            + "carry more than the {Ceiling} stores an attribution reads for one value of one occurrence, so an older "
             + "store that could still explain a value went unread and that value may be attributed to the mailbox "
             + "owner.")]
     private static partial void LogFlagChangeCeilingReached(
         ILogger logger,
         int ceiling,
-        int truncatedOccurrenceCount,
+        int truncatedValueCount,
         string accountId,
         string folderAlias);
 }

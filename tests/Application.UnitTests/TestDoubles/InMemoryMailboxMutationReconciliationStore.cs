@@ -116,11 +116,11 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
                     && FlagWritingMutations.Contains(record.Request.Mutation)
                     && record.Stage != MailboxMutationStage.Recorded
                     && record.StageChangedAt > issuedAfter)
-                .GroupBy(record => record.Request.Occurrence.Uid)
-                .SelectMany(occurrence => occurrence
+                .GroupBy(record => new { record.Request.Occurrence.Uid, record.Request.Mutation })
+                .SelectMany(storedValue => storedValue
                     .OrderByDescending(record => record.StageChangedAt)
                     .ThenByDescending(record => record.Id.Value)
-                    .Take(IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsPerOccurrence))
+                    .Take(IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsPerValue))
                 .OrderBy(record => record.StageChangedAt)
                 .ThenBy(record => record.Id.Value),
         ];
