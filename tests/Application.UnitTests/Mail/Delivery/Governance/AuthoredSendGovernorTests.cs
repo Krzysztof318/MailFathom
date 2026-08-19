@@ -296,6 +296,7 @@ public sealed class AuthoredSendGovernorTests
                 OutgoingRecipient.Create(Address(address), OutgoingRecipientRole.To))),
         ],
         Stage = OutgoingEmailStage.Recorded,
+        DueAt = null,
         MimeByteLength = 512,
         AttemptCount = 0,
         RecordedAt = Recorded,
