@@ -617,6 +617,59 @@ public sealed class MailboxReconcilerTests
         Assert.Equal(readingTheWindowStartedFrom, mutationStore.LastFlagChangeReadIssuedAfter);
     }
 
+    /// <summary>Two occurrences read at different times narrow the record search from the earlier reading, not the later one.</summary>
+    /// <remarks>
+    /// Every record that could account for a value was staged after the reading the value moved from, so a bound taken
+    /// from the latest reading in the window would withhold the records explaining every occurrence read before it —
+    /// and those changes would then be attributed to the mailbox owner and reacted to as their act. One occurrence
+    /// cannot say which end of the window the bound came from, so this is the case that does.
+    /// </remarks>
+    [Fact]
+    public async Task ReconcileAsync_ValuesMovedOnOccurrencesReadAtDifferentTimes_NarrowsFromTheEarlierReading()
+    {
+        // Arrange
+        var readThreeHoursAgo = RunInstant.AddHours(-3);
+        var readOneHourAgo = RunInstant.AddHours(-1);
+        var store = new FakeReconciliationStore(
+        [
+            new StoredOccurrence(
+                StoredEmailId.Create(Guid.CreateVersion7(RunInstant.AddSeconds(10))),
+                10,
+                PreviouslyObservedSeenState: false,
+                PreviouslyObservedAt: readThreeHoursAgo),
+            new StoredOccurrence(
+                StoredEmailId.Create(Guid.CreateVersion7(RunInstant.AddSeconds(11))),
+                11,
+                PreviouslyObservedSeenState: false,
+                PreviouslyObservedAt: readOneHourAgo),
+        ]);
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        await using var mailboxSession = CreateSessionReportingFlags(
+            isSeen: true,
+            isFlagged: false,
+            RemoteEmailKeywords.None,
+            10,
+            11);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, result.SeenStateChangedEmailCount);
+        Assert.Equal(1, mutationStore.FlagChangeReadCount);
+        Assert.Equal(readThreeHoursAgo, mutationStore.LastFlagChangeReadIssuedAfter);
+    }
+
     /// <summary>Marking mail read by hand is the mailbox owner's act, and it stays a change to react to.</summary>
     [Fact]
     public async Task ReconcileAsync_OwnerMarkedMailReadThemselves_RaisesTheChange()
@@ -1495,12 +1548,17 @@ public sealed class MailboxReconcilerTests
     /// </param>
     /// <param name="PreviouslyObservedFlaggedState">Where the <c>\Flagged</c> flag stood at that earlier reading.</param>
     /// <param name="PreviouslyObservedKeywords">The keywords that earlier reading recorded, or <see langword="null" /> for none.</param>
+    /// <param name="PreviouslyObservedAt">
+    /// When that earlier reading happened, defaulting to an hour before the run. Two occurrences read at different
+    /// instants are what a test needs to say which of them a bound computed across the window is taken from.
+    /// </param>
     private sealed record StoredOccurrence(
         StoredEmailId StoredEmailId,
         uint Uid,
         bool? PreviouslyObservedSeenState = null,
         bool PreviouslyObservedFlaggedState = false,
-        RemoteEmailKeywords? PreviouslyObservedKeywords = null);
+        RemoteEmailKeywords? PreviouslyObservedKeywords = null,
+        DateTimeOffset? PreviouslyObservedAt = null);
 
     /// <summary>
     /// Holds the reconciliation queue the way the database does, because the queue is the mechanism under test: the
@@ -1519,7 +1577,8 @@ public sealed class MailboxReconcilerTests
                     occurrence.Uid,
                     occurrence.PreviouslyObservedSeenState,
                     occurrence.PreviouslyObservedFlaggedState,
-                    occurrence.PreviouslyObservedKeywords));
+                    occurrence.PreviouslyObservedKeywords,
+                    occurrence.PreviouslyObservedAt));
         }
 
         public List<uint> AskedAboutUids { get; } = [];
@@ -1670,7 +1729,8 @@ public sealed class MailboxReconcilerTests
             uint uid,
             bool? previouslyObservedSeenState = null,
             bool previouslyObservedFlaggedState = false,
-            RemoteEmailKeywords? previouslyObservedKeywords = null)
+            RemoteEmailKeywords? previouslyObservedKeywords = null,
+            DateTimeOffset? previouslyObservedAt = null)
         {
             this.Uid = uid;
 
@@ -1679,7 +1739,7 @@ public sealed class MailboxReconcilerTests
                 return;
             }
 
-            var seededAt = RunInstant.AddHours(-1);
+            var seededAt = previouslyObservedAt ?? RunInstant.AddHours(-1);
 
             this.ObservedAt = seededAt;
             this.Snapshot = new RemoteEmailFlagSnapshot(

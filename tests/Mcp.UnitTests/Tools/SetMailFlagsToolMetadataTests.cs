@@ -30,7 +30,13 @@ public sealed class SetMailFlagsToolMetadataTests
         Assert.Equal("Set mail flags", advertisedTool.Title);
     }
 
-    /// <summary>A writing tool that is neither destructive nor unsafe to repeat, and whose effect leaves this process.</summary>
+    /// <summary>A writing tool whose updates are not only additive, which is safe to repeat and whose effect leaves this process.</summary>
+    /// <remarks>
+    /// <c>destructiveHint</c> is <see langword="true" /> because the protocol defines it as whether the tool performs
+    /// only additive updates and this one does not: a keyword replacement drops labels it was not given, a removal takes
+    /// named ones off, and clearing either flag removes a value the message carried. It is the annotation a client reads
+    /// before deciding whether a call needs a person, so reversibility is not what it answers.
+    /// </remarks>
     [Fact]
     public void AddMailFathomServer_AdvertisesTheWritingIdempotentOpenWorldAnnotations()
     {
@@ -40,7 +46,7 @@ public sealed class SetMailFlagsToolMetadataTests
         // Assert
         Assert.NotNull(annotations);
         Assert.False(annotations.ReadOnlyHint);
-        Assert.False(annotations.DestructiveHint);
+        Assert.True(annotations.DestructiveHint);
         Assert.True(annotations.IdempotentHint);
         Assert.True(annotations.OpenWorldHint);
     }
@@ -56,6 +62,24 @@ public sealed class SetMailFlagsToolMetadataTests
         Assert.NotNull(description);
         Assert.Contains("written down durably", description, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("changeRecordId", description, StringComparison.Ordinal);
+    }
+
+    /// <summary>The only way to read where a change got to is the call itself, so the description names that and no other.</summary>
+    /// <remarks>
+    /// Nothing on any surface takes a record identifier: no MCP tool, and the administration endpoint's audit route
+    /// pages completed changes by account rather than answering for one. A description promising a lookup would send an
+    /// agent asked why a star is stuck to a surface that does not exist.
+    /// </remarks>
+    [Fact]
+    public void AddMailFathomServer_AdvertisesTheRepeatedCallAsHowAChangeIsFollowedUp()
+    {
+        // Arrange, Act
+        var description = AdvertisedSetMailFlagsTool().Description;
+
+        // Assert
+        Assert.NotNull(description);
+        Assert.Contains("call again with the same requestId", description, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("found by the changeRecordId", description, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>A replacement can drop labels the caller never saw, which is the one call worth a second thought.</summary>
@@ -80,7 +104,7 @@ public sealed class SetMailFlagsToolMetadataTests
 
         // Assert
         Assert.NotNull(description);
-        Assert.Contains("never sets the answered or draft flags", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("this tool never sets the answered or draft flags", description, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("never deletes mail", description, StringComparison.OrdinalIgnoreCase);
     }
 

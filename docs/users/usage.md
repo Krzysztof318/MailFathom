@@ -215,16 +215,17 @@ than treated as a change of nothing.
 
 **It does not happen while you wait.** The call writes the change down and answers immediately; the account's next
 synchronization run is what tells your mail server. So the answer reports records rather than a mailbox that has already
-changed, and a star that has not appeared in your own client after a few minutes is looked up by the
-`changeRecordId` the call returned. What you get from that arrangement is that a crash mid-flight leaves a change that
-finishes by itself instead of a value MailFathom thinks it set and the server never heard about.
+changed. A star that has not appeared in your own client after a few minutes is followed up by making the same call
+again with the same `requestId`: it answers with the same records and the lifecycle each has reached by then, rather
+than starring the message a second time. What you get from that arrangement is that a crash mid-flight leaves a
+change that finishes by itself instead of a value MailFathom thinks it set and the server never heard about.
 
 Keywords have three directions and the third is the one to be careful with. `add` and `remove` touch only the keywords
 you name. `replace` states the **whole** set, so a label you did not list is taken off — the same trap `update_contact`
 has, and the same remedy: read the message's keywords first, or use `add` and `remove`.
 
 Everything it writes is reversible with the call that would have made it: mark unread what you marked read, unstar what
-you starred, remove what you added. Nothing else about a message can be written from here. MailFathom never sets the
+you starred, remove what you added. Nothing else about a message can be written from here: this tool never sets the
 answered or draft flags, never deletes mail, and never sends anything.
 
 `requestId` is worth sending. It is your own name for the call, and repeating a call with the `requestId` the first one

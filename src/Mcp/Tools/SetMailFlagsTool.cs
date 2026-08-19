@@ -35,11 +35,12 @@ namespace MailFathom.Mcp.Tools;
 /// refuses them for that reason.
 /// </para>
 /// <para>
-/// It changes state, reaches outside this process eventually rather than during the call, and is not destructive: every
-/// value it writes is reversible from any mail client with the gesture that would have made it, and reversible by
-/// MailFathom itself since each direction exists. A replacement is the one call worth a second thought and its
-/// annotation cannot say so — it is idempotent and reversible like the rest — so the description does, because a caller
-/// working from a partial view of a message's labels can drop the ones it never saw.
+/// It changes state, reaches outside this process eventually rather than during the call, and is destructive in the
+/// sense the protocol gives that word: <c>destructiveHint</c> asks whether the tool performs only additive updates, and
+/// this one does not. A keyword replacement states the whole set, so a label the caller never listed comes off; a
+/// removal takes named labels off; and clearing <c>\Seen</c> or <c>\Flagged</c> removes a flag the message carried. The
+/// annotation is what a client reads before deciding whether a call needs a person, so it says that rather than saying
+/// the change is easy to reverse — which it is, and which the description states separately.
 /// </para>
 /// <para>
 /// Whether a caller may reach the tool at all is <see cref="McpToolAuthorization" />'s question, answered from
@@ -86,7 +87,7 @@ internal sealed class SetMailFlagsTool(MailFlagChangeRecorder flagChangeRecorder
         Name = ToolName,
         Title = "Set mail flags",
         ReadOnly = false,
-        Destructive = false,
+        Destructive = true,
         Idempotent = true,
         OpenWorld = true,
         UseStructuredContent = true)]
@@ -94,12 +95,13 @@ internal sealed class SetMailFlagsTool(MailFlagChangeRecorder flagChangeRecorder
         "Marks one email read or unread, stars or unstars it, and adds, removes, or replaces its keywords — the labels "
         + "a mail client shows as tags. Every value is optional and at least one is required; a call that names none is "
         + "refused. The change is written down durably and issued to the mail server by the account's next "
-        + "synchronization run, so the result reports the records rather than a mailbox that has already changed, and a "
-        + "value that has not appeared in the owner's client after a few minutes is found by the changeRecordId this "
-        + "returns. Every change is reversible: call again with the opposite value. keywordChange replace states the "
-        + "whole keyword set — a keyword you do not list is removed, and an empty list clears them all — so read the "
-        + "email's keywords first, or use add and remove, which touch only what they name. Only these three values can "
-        + "be written: MailFathom never sets the answered or draft flags, never deletes mail, and never sends anything.")]
+        + "synchronization run, so the result reports the records rather than a mailbox that has already changed: each "
+        + "carries a changeRecordId and the lifecycle it has reached. To read where a change has got to, call again with "
+        + "the same requestId, which answers with the same records and their current lifecycle. Every change is "
+        + "reversible: call again with the opposite value. keywordChange replace states the whole keyword set — a "
+        + "keyword you do not list is removed, and an empty list clears them all — so read the email's keywords first, "
+        + "or use add and remove, which touch only what they name. Only these three values can be written: this tool "
+        + "never sets the answered or draft flags, never deletes mail, and never sends anything.")]
     public async Task<SetMailFlagsToolResult> SetMailFlagsAsync(
         [Description("The storedEmailId a listing, a search, or a read returned for the email. A UUID that does not change when the mail server renumbers or moves the message.")]
         string storedEmailId,

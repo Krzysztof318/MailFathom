@@ -131,7 +131,7 @@ per tool rather than per surface:
 | Tool | `readOnlyHint` | `destructiveHint` | `idempotentHint` |
 |---|---|---|---|
 | `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `ask_mail` | `true` | `false` | `true` |
-| `set_mail_flags` | `false` | `false` | `true` |
+| `set_mail_flags` | `false` | `true` | `true` |
 | `list_contacts`, `get_contact` | `true` | `false` | `true` |
 | `create_contact` | `false` | `false` | `false` |
 | `update_contact` | `false` | `true` | `true` |
@@ -148,8 +148,13 @@ removed a record nothing here can bring back. `create_contact` is the one write 
 record where none was held and so has nothing to drop. `promote_contact` is idempotent and not destructive: nothing
 about the person is rewritten, what moves is which half of the book they are in, and the second call answers
 `alreadyAsserted`. `set_mail_flags` is idempotent because each value it writes is stated rather than adjusted, so a
-second identical call asks for exactly what the first one asked for — and it is not destructive, because every value it
-writes is reversible with the gesture that would have made it, in MailFathom or in any mail client the owner opens.
+second identical call asks for exactly what the first one asked for. It is destructive in the sense the protocol
+gives that word — whether the tool performs only additive updates — and it does not: a keyword replacement states the
+whole set and so removes a label the caller never listed, a removal takes named labels off, and clearing `\Seen` or
+`\Flagged` takes a flag off the message. That every one of those is reversible with the gesture that would have made
+it, in MailFathom or in any mail client the owner opens, is true and is a separate fact: the annotation is what a
+client reads before deciding whether a call needs a person, so it answers what the call takes away rather than how
+easily it can be undone.
 
 `set_mail_flags` is also the one tool marked `openWorld`, because what it changes is the owner's mailbox on somebody
 else's server. Every other tool on this surface, contact writes included, reaches MailFathom's own database and no third
@@ -848,8 +853,9 @@ dead-lettered ending, exactly as it carries a change a rule authored.
 Three things follow, and the tool's description states each of them:
 
 - A protocol request never waits on IMAP and never opens a connection against an account's budget.
-- The result reports records rather than a mailbox that has already changed. A value the owner cannot see in their own
-  client after a few minutes is looked up by the `changeRecordId` this returned.
+- The result reports records rather than a mailbox that has already changed, each with the lifecycle it has reached.
+  A value the owner cannot see in their own client after a few minutes is followed up by calling again with the same
+  `requestId`, which answers with the same records and their current lifecycle.
 - A crash between the record and the command leaves a change that converges, rather than a stored value that quietly
   disagrees with the mailbox.
 
@@ -881,7 +887,7 @@ description says it instead, and points a caller working from a partial view of 
 | `folderAlias` | The folder the email is in, as MailFathom's configuration names it |
 | `recordedChanges[]` | One entry per value asked for, in the order `seen`, `flagged`, keywords |
 | `recordedChanges[].change` | `set-seen`, `set-flagged`, `add-keywords`, `remove-keywords`, or `set-keywords` |
-| `recordedChanges[].changeRecordId` | The durable record's identifier, which is what an operator looks a change up by |
+| `recordedChanges[].changeRecordId` | The durable record's identifier, which is the name a log line and an audit entry give the same change |
 | `recordedChanges[].state` | `pending`, `converging`, `completed`, or `dead-lettered` |
 
 The change and the state are published under the names MailFathom's own log lines and counters use, so a caller quoting

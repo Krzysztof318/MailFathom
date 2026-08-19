@@ -27,7 +27,17 @@ public interface IAuthoredMailboxTargetReader
     /// <summary>Finds where one stored email is, or reports that this deployment holds no such row.</summary>
     /// <param name="storedEmailId">The email a caller named.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The occurrence and its folder binding, or <see langword="null" /> when no row carries that identity.</returns>
+    /// <returns>The occurrence and its folder binding, or <see langword="null" /> when this deployment holds no occurrence to change under that identity.</returns>
+    /// <remarks>
+    /// <para>
+    /// Two rows this deployment does hold answer as absent, and both exclusions belong here rather than to whichever
+    /// adapter implements the read, because the caller turns either into the refusal a client is given. A tombstoned
+    /// row answers as absent on the same terms every read of stored mail applies. So does a row whose remote occurrence
+    /// the server has expunged, including a local copy retained after MailFathom deleted the message — a listing serves
+    /// that one, because the mail is still readable, while the UID it carries names a message the server no longer
+    /// holds, so a change recorded against it could only be attempted and fail.
+    /// </para>
+    /// </remarks>
     Task<AuthoredMailboxTarget?> FindAsync(StoredEmailId storedEmailId, CancellationToken cancellationToken);
 }
 

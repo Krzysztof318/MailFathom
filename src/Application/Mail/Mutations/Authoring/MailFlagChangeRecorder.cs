@@ -29,9 +29,10 @@ namespace MailFathom.Application.Mail.Mutations.Authoring;
 /// <para>
 /// Which mail may be written is the same question as which mail may be read, answered by the same resolver: an account
 /// this deployment no longer serves and a folder an operator withheld from tools are both mail no tool may reach, and a
-/// surface that could write what it may not read would be the way round that withholding. The three cases — no such
-/// row, an unserved account, a withheld folder — produce one answer, because telling them apart would let a caller
-/// learn which identifiers exist by asking about them.
+/// surface that could write what it may not read would be the way round that withholding. A fourth case joins them and
+/// is the one a read does not share: a local copy retained after MailFathom deleted the message, which a listing serves
+/// because the mail is readable while the UID it carries names an occurrence the server expunged. All four produce one
+/// answer, because telling them apart would let a caller learn which identifiers exist by asking about them.
 /// </para>
 /// <para>
 /// The records for one call are opened in one commit, so a call either writes down everything it asked for or nothing.
@@ -81,7 +82,7 @@ public sealed class MailFlagChangeRecorder
     /// <returns>The record opened for each value, in the order the change states them.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="change" /> or <paramref name="requester" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the writing grant.</exception>
-    /// <exception cref="MailFlagChangeTargetNotFoundException">Thrown when this deployment serves no readable email under that identity.</exception>
+    /// <exception cref="MailFlagChangeTargetNotFoundException">Thrown when this deployment serves no readable email under that identity, or when the email it serves names a remote occurrence the mail server no longer holds.</exception>
     /// <exception cref="MailFlagChangeInvalidException">Thrown when the requester identity already names one of these mutations on this occurrence with a different value.</exception>
     /// <remarks>
     /// A change asked for twice under one requester identity is one change: the record store admits one record per

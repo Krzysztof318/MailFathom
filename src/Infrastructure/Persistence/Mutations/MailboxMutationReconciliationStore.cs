@@ -121,13 +121,16 @@ internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext rea
                 && changedUids.Contains(mutation.Uid)
                 && FlagWritingMutationNames.Contains(mutation.Mutation)
                 && mutation.StageChangedAt > issuedAfter)
-            .OrderByDescending(mutation => mutation.RecordedAt)
+            .OrderByDescending(mutation => mutation.StageChangedAt)
             .ThenByDescending(mutation => mutation.Id)
             .Take(IMailboxMutationReconciliationStore.MaximumFlagChangeRecords)
             .ToArrayAsync(cancellationToken);
 
-        // Read newest first so the ceiling drops the records least able to account for anything, and handed back oldest
-        // first because that is the order the caller credits a value to the earliest store that explains it.
+        // Ranked by the stage change rather than by when the record was written, because that is the column the filter
+        // above and every comparison the caller makes are about: a store recorded early and completed late accounts for
+        // a later reading than one recorded after it and staged before it. Read newest first so the ceiling drops the
+        // records least able to account for anything, and handed back oldest first because that is the order the caller
+        // credits a value to the earliest store that explains it.
         return
         [
             .. entities
