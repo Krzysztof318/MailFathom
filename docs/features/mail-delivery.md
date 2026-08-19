@@ -650,8 +650,8 @@ UID the append reported. A server without `UIDPLUS` leaves the copy standing rat
 does a copy the server never named — one copy of the owner's own message in a folder they mapped, deletable with the
 gesture they would have used anyway. A sent copy is withdrawn by nothing: it is what the owner keeps.
 
-[ADR 0007](../decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md) is where appending became something
-MailFathom may do at all, and holds the authorization review that admitted it.
+[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
+is where appending became something MailFathom may do at all, and holds the authorization review that admitted it.
 
 ## What an operator sees while mail is leaving
 
