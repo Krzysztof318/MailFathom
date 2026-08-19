@@ -147,7 +147,9 @@ reaches `mailfathom.admin.credentials.write`, while `mailfathom.mail.c*` is no p
 name nothing publishes that it is. A pattern is resolved against the published set on every start rather than frozen at
 the version it was written under, **which carries the same upgrade consequence the absent key does**: a permission
 added beneath a covered prefix in a later release reaches the entry on upgrade alone, with nobody editing the grant.
-Where that would be wrong, write the names out. Everything that reads a grant back states what a pattern resolved to
+Where that would be wrong, write the names out. `mailfathom.mail.flags.write` is the first case of it and the one to
+check a written grant against: an entry reading `mailfathom.mail.*` used to reach nothing that leaves this deployment,
+and on upgrade it reaches the tool that writes to the owner's mail server. Everything that reads a grant back states what a pattern resolved to
 and never the pattern — the startup line, `GET /api/admin/session`, and `scopes_supported` — so no reader has to expand
 one by hand.
 
