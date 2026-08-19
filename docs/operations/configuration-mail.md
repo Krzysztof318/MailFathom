@@ -89,10 +89,11 @@ believes no header and every message it holds records that nothing was establish
 holds.
 
 `TrustedSenders` and `TrustOwnAccountDomains` are the second half of that: they decide whether a message's author is
-somebody this deployment recognizes, which is a separate question from what was established about them. Both
-lists are held against an **authenticated author** — the domain the receiving server's DMARC result or a matching
-DKIM or SPF identity established for the `From` header — and never against the raw header, so naming a correspondent
-here cannot be exploited by writing their address into a message. Most legitimate mail stays unknown and that is the
+somebody this deployment recognizes, which is a separate question from what was established about them. Both lists are
+held against an **authenticated author** — the domain a trusted DMARC result or a matching DKIM or SPF identity
+established for the `From` header, or, where no server wrote a verdict, a locally verified DKIM signature naming that
+same domain — and never against the raw header, so naming a correspondent here cannot be exploited by writing their
+address into a message. Most legitimate mail stays unknown and that is the
 intended outcome: the claim is that this deployment does not know the author, not that the message is suspicious.
 Turning `TrustOwnAccountDomains` off is the right move for a deployment whose accounts sit on a large shared provider,
 since every user of that provider writes from the same domain; the same page states what an address entry rests on and

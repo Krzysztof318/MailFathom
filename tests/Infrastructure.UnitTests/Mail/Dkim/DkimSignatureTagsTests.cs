@@ -37,12 +37,19 @@ public sealed class DkimSignatureTagsTests
         Assert.Equal("SIGNER.EXAMPLE.TEST", domain.NormalizedValue);
     }
 
-    /// <summary>A value written across a folded header is read as the name it is, not refused for the transport's line break.</summary>
-    [Fact]
-    public void TryReadSigningDomain_AFoldedValue_ReadsTheSigningDomain()
+    /// <summary>A header a transport folded is read as the name it is, wherever the line break landed.</summary>
+    /// <remarks>
+    /// The two rows are the two places folding occurs and they are not the same claim: the first breaks between tags,
+    /// which any reading survives, and the second breaks inside the value itself, which is what the whitespace removal
+    /// exists for — a domain name carries no whitespace of its own, so every space in the value is the transport's.
+    /// </remarks>
+    [Theory]
+    [InlineData("v=1;\r\n\td=signer.example.test;\r\n\ts=mailfathom")]
+    [InlineData("v=1; d=signer.exa\r\n\tmple.test; s=mailfathom")]
+    public void TryReadSigningDomain_AFoldedHeader_ReadsTheSigningDomain(string headerValue)
     {
         // Act
-        var read = DkimSignatureTags.TryReadSigningDomain("v=1;\r\n\td=signer.example.test;\r\n\ts=mailfathom", out var domain);
+        var read = DkimSignatureTags.TryReadSigningDomain(headerValue, out var domain);
 
         // Assert
         Assert.True(read);
