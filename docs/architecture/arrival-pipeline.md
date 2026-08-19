@@ -201,7 +201,11 @@ defect that is invisible when it happens.
 ## The paths that re-derive the same data
 
 Three paths produce derived data, and all three obey the order above rather than a version of it. Two of them wait for
-the record that the rule pass has finished with a message. That record is written by an account run's rule pass and once
+the record that the rule pass has finished with a message. There are two ways to be finished with one, and both count:
+a pass evaluated the message and stamped it, or the message is a copy MailFathom filed of this deployment's own
+outgoing mail, which no pass will ever evaluate and which is therefore never stamped. Reading the stamp alone would
+leave every such message uncut and unembedded for the life of the deployment — invisible until somebody asks a question
+about mail they sent and is answered from everything except it. That record is written by an account run's rule pass and once
 besides, by the migration that added the column, which stamped every message the previous version had already stored —
 so a deployment running with `MailSynchronization:Enabled` set to `false` does cut and embed the mail it upgraded with,
 and what the stamp holds back there is mail an account run stored and no rule pass reached. Only a *first* cut waits on

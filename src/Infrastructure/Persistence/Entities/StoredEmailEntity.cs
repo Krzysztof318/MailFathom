@@ -346,6 +346,22 @@ internal sealed class StoredEmailEntity
     /// </remarks>
     public bool IsRetainedAfterAuthoredDelete { get; set; }
 
+    /// <summary>Gets or sets the outgoing record this email is MailFathom's own filed copy of, and <see langword="null" /> for every message it did not send.</summary>
+    /// <remarks>
+    /// <para>
+    /// A copy MailFathom appends to the sent or outbox folder comes back through synchronization as ordinary new mail,
+    /// and this is what tells it apart afterwards. It is the join everything reacting to newly synchronized mail filters
+    /// on: a rule conditioned on arriving mail must not fire on the owner's own outgoing message the moment its copy is
+    /// discovered.
+    /// </para>
+    /// <para>
+    /// It is a plain column rather than a foreign key, for the reason the outgoing record's own account column is one:
+    /// the two rows have different lifetimes, and an outgoing record erased under its retention obligation must not take
+    /// the mail out of the mailbox with it.
+    /// </para>
+    /// </remarks>
+    public Guid? FiledFromOutgoingEmailId { get; set; }
+
     public bool IsRemotelySeen { get; set; }
 
     public bool IsRemotelyAnswered { get; set; }

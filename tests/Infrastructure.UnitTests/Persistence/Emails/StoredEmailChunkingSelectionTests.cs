@@ -74,6 +74,27 @@ public sealed class StoredEmailChunkingSelectionTests
         Assert.Empty(selected.AsEnumerable());
     }
 
+    /// <summary>
+    /// A copy MailFathom filed of this deployment's own outgoing mail is never stamped, because no rule pass will ever
+    /// evaluate it. Reading the stamp alone would therefore leave every such message uncut and unembedded for the life
+    /// of the deployment — invisible until somebody asks a question about mail they sent and is answered from
+    /// everything except it.
+    /// </summary>
+    [Fact]
+    public void Selecting_ACopyThisDeploymentFiled_SelectsItAlthoughNoRulePassStampedIt()
+    {
+        // Arrange
+        var email = Email("work", "INBOX");
+        email.RulesEvaluatedAt = null;
+        email.FiledFromOutgoingEmailId = Guid.CreateVersion7();
+
+        // Act
+        var selected = StoredEmailChunkingStore.Selecting(Emails(email), "work", [WorkInbox], ClassificationOff);
+
+        // Assert
+        Assert.Single(selected.AsEnumerable());
+    }
+
     /// <summary>Cutting is what removes a message from this query, which is what lets the pass run without a cursor.</summary>
     [Fact]
     public void Selecting_MailThatAlreadyHasPassages_LeavesItOut()

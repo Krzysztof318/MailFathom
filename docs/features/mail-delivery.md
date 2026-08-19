@@ -572,13 +572,97 @@ address this deployment offered rather than to whatever form the server echoed �
 in a different case is answering about the same person, and one that answers about an address nobody offered is
 answering about nothing and is dropped.
 
+## The copy in the account's own folders
+
+SMTP files nothing. A message a submission server accepted leaves no trace in the mailbox it was sent from, so a
+deployment that only submits sends mail its owner's mail client shows they never sent. **Filing** is the answer: one
+mechanism appends a copy of an outgoing message to the folder playing the role the message's own state calls for, and
+takes it back out when that state changes.
+
+A message's own state is what decides both halves of that, and an outgoing message has two states worth a copy:
+
+| The message is | The copy goes to the folder playing | And carries |
+| --- | --- | --- |
+| waiting for an instant still ahead | the **outbox** role | `\Draft`, and is withdrawn when it leaves |
+| accepted by a submission server | the **sent** role | `\Seen` |
+
+The flags travel with the role rather than being chosen by a caller, so a draft cannot be filed as read and a sent copy
+cannot arrive as unread mail somebody has to open. The copy's internal date is the instant the injected clock reports,
+which is the same clock everything else in this system is stamped from.
+
+**The outgoing record stays the truth about what will be sent.** A copy in a folder is a view of it: deleting the copy
+in a mail client cancels nothing, cancelling is [a command of its own](#the-record-a-send-is-written-down-as-before-anything-is-sent),
+and nothing reads a folder to decide what to send. That is what makes the copy safe to write and safe to leave out — a
+deployment that appends nothing loses visibility and loses no mail.
+
+**No server has an outbox, so nothing looks for one.** RFC 6154 defines the special-use attributes a server may
+advertise and there is no `\Outbox` among them, because the outbox a mail client shows is that client's own local queue
+of what it has not managed to send. MailFathom's outbox is the durable record above. So the outbox role is MailFathom's
+own: it is never read off a server, a provider folder merely *named* like one plays no role — nothing here reads a
+folder's name — and a folder plays it only where an operator mapped a path to it by hand. A mapping naming the role
+with no path is refused at startup, naming the alias and the key it wants, because discovery has nothing to look for.
+Nothing is mirrored until somebody writes that mapping.
+
+**The sent copy is appended after a delivery the server acknowledged, and only then.** Whether it is appended at all is
+`Delivery:FileSentCopy`, a per-account setting that defaults to on and is configured rather than detected: a provider
+that files the copy itself does so asynchronously, so looking in the folder immediately after a delivery cannot tell
+*will appear shortly* from *will never appear*. Turn it off for an account whose provider files the copy, and leave it
+alone otherwise — a duplicate an owner deletes beats a record of what they sent that never existed.
+
+**The bytes are the ones the recipients received.** The append reuses the stored MIME rather than recomposing it, for
+the reason a retry does: a recomposed message carries a different `Message-ID` and threads as a second message in every
+client, including the owner's own.
+
+**A copy is appended once, and an append whose answer never came back is never repeated.** The filing is written down
+before the command goes out, so a process that died in between leaves a row saying the copy may be there — and nothing
+appends again on the strength of it. That is deliberate and it is the one outcome here left unsettled: an `APPEND`
+issued twice is a second message in somebody's folder rather than a repeat of the first, and nothing the folder shows
+afterwards tells the two apart. A failure *before* the command reached the server is ordinary and may be attempted
+again.
+
+**The copy comes back through synchronization and is recognized rather than guessed at.** Where the server advertises
+RFC 4315 `UIDPLUS`, its `APPENDUID` response names the occurrence exactly and that is the join; where it does not, the
+`Message-ID` this system minted, read back off the appended bytes, is what recognizes it. Either way the stored message
+is marked as this deployment's own, which is what keeps [a rule](mail-rules.md#when-rules-run) conditioned on arriving
+mail from firing on what the owner just sent, and what keeps
+[spam classification](spam-classification.md#mail-is-classified-as-it-arrives) from scoring a message this system
+composed.
+
+**Nothing else about the copy is treated differently, and that is deliberate.** It is stored, extracted, searchable,
+cut into passages, and embedded exactly as any other message in that folder — a question asked of the mailbox is
+answered from the mail the owner sent as well as the mail they received. Contacts are collected from it too, because
+which header a message contributes is decided by the role of its folder: a copy in the sent folder contributes the
+people the owner wrote to, which is the same answer the copy would get had the provider filed it. What the join changes
+is the two things that would otherwise be this system reacting to its own act.
+
+**Filing is never part of delivering.** A send is delivered or it is not, and where its copies are is a second account
+of the same message. An append that failed after a successful delivery leaves the record saying delivered and not
+filed, with the reason beside it, and the delivery is never attempted again because of it. Nothing retries the append on
+its own either: a settled send is claimed by nothing, so what an operator gets is the reason on the record, a log line
+naming the account and the folder alias, and a measurement under the outcome that failed. A
+destination that does not exist is the same answer a mapped folder the server does not advertise gives — the mapping is
+what changes it, including
+[creating the folder](imap-synchronization.md#a-folder-the-mapping-asked-for-is-created) where the mapping asked for
+that — and the message is untouched either way.
+
+The withdrawal of an outbox mirror reaches that copy and nothing else: `\Deleted` followed by `UID EXPUNGE` against the
+UID the append reported. A server without `UIDPLUS` leaves the copy standing rather than expunging the folder, and so
+does a copy the server never named — one copy of the owner's own message in a folder they mapped, deletable with the
+gesture they would have used anyway. A sent copy is withdrawn by nothing: it is what the owner keeps.
+
+[ADR 0007](../decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md) is where appending became something
+MailFathom may do at all, and holds the authorization review that admitted it.
+
 ## What an operator sees while mail is leaving
 
 Each attempt opens the `submit_outgoing_email` span over the exchange with the server, its duration is recorded, and
 its outcome counts under `mailfathom.mail.delivery.attempts` by account. `outcome-unknown` is the value worth alerting
 on at any rate above zero, because each measurement is a message nothing will attempt again until a person decides.
+Filing is counted beside it, under `mailfathom.mail.filing.attempts` by account, place, and outcome, and each append
+opens a span of its own in the mailbox-mutation record.
 [Telemetry § What delivering the outbox emits](../operations/telemetry.md#what-delivering-the-outbox-emits) holds the
-instruments, the tags, and what none of them carries.
+instruments, the tags, and what none of them carries. A failure names the account alias and the folder alias and
+nothing else: no subject, no address, and no line of a message.
 
 ## What never leaves the process
 
@@ -633,6 +717,21 @@ are a declared size bound and eight-bit content. What the real server does settl
 account it can satisfy authenticates from the mechanisms actually on offer, and an account restricted to
 `OAUTHBEARER` — which this server does not advertise, though it advertises `XOAUTH2` — is refused before a credential
 is presented.
+
+Filing is split the same way again. The unit suite carries what a scripted session settles: an account that files no
+sent copy appending nothing at all, a delivered message appended from the stored bytes with `\Seen` at the clock's
+instant, a mirrored message appended with `\Draft` and never with `\Seen`, an append the server never answered not
+being appended a second time however often the pass runs, and a failed append after a successful delivery leaving the
+record at `Sent` with a filing failure beside it and its attempt count unmoved. The adapter's own half is asserted as
+the commands it issues — the flags, the internal date, the `APPENDUID` read back, and a withdrawal that names one UID
+and never issues a bare `EXPUNGE` — including the two refusals, a folder recreated since the append and a server
+without `UIDPLUS`. The join is proven in both directions a server can answer, and with the control the absence rule
+needs: the same run over a message no filing accounts for stores ordinary arriving mail.
+
+The integration suite runs the whole loop once against the orchestrated server: a delivered message is appended to the
+folder mapped as this account's sent folder, exactly one copy of it is there and it is read, asking for the settlement
+again reports it as already filed rather than appending a second, an ordinary synchronization then joins the copy to
+the send it came from — and the queue a rule pass reads holds a message appended beside it and not the copy.
 
 The outgoing record is split the same way. What the shape of the state guarantees — which stages are undecidable, which
 recipients a later attempt still owes, and which terminal stage may follow which — is a unit test over the domain

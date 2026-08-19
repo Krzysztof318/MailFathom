@@ -9,7 +9,7 @@ informed:
 
 # Write to the remote mailbox through a session type no read path can obtain, and scope the never-marks-read guarantee to retrieval
 
-<!-- describes: src/Application/Mail/Mutations/**, src/Domain/Mutations/**, src/Infrastructure/Mail/MailKit/Writes/**, src/Infrastructure/Observability/** -->
+<!-- describes: src/Application/Mail/Mutations/**, src/Application/Mail/Delivery/Filing/**, src/Domain/Mutations/**, src/Domain/Delivery/Filing/**, src/Infrastructure/Mail/MailKit/Writes/**, src/Infrastructure/Observability/** -->
 
 ## Context and Problem Statement
 
@@ -25,6 +25,8 @@ Recorded on issue 447, which is the gate for feature 452. No numbered specificat
 
 **Issue 864 reopened it a third time**, for who may author a change rather than for which change may be authored. Axes G and H settled that `\Flagged` and keywords are writable and left the requester where the record had always assumed it: a rule, or the spam verdict that behaves like one. What issue 862 then made visible is that all three values are readable, publishable, and filterable over the protocol surface, so a caller can find the starred mail and star nothing — and the act the tier's own driver describes, *something the mailbox owner authored, carried by MailFathom on their behalf*, is exactly what an agent triaging mail for the owner is doing. Axis I below is that reopening. The eight axes above are untouched by it, no mutation is added or removed, and the status is still `proposed`, so this is an amendment rather than a supersession.
 
+**Issue 739 reopened it a fourth time**, for the one message this record's closed set has no way to put anywhere: the one MailFathom composed itself. Issue 738 delivers a message through a submission server, and SMTP says nothing about the sender's own mailbox — a delivered message leaves no trace in the folder its owner reads their sent mail in unless something appends one there. Every mutation this record permits acts on a message the server already holds, so under the set as written a deployment sends mail and the owner's mail client shows they never did. The same gap covers the two other stages an outgoing message has: a draft the owner is composing, and a message held until an instant still ahead, neither of which exists anywhere the owner can see. Axis J below is that reopening and axis K is the one thing carrying it turns out to require; the nine axes above are untouched, and the status is still `proposed`, so this is an amendment rather than a supersession.
+
 ## Decision Drivers
 
 - **The guarantee has to survive every later change, not just this one.** A rule saying reconciliation must not write flags is a rule somebody has to notice during review. A refactor cannot accidentally give reconciliation the ability to write if reconciliation never holds a type that has it.
@@ -37,11 +39,12 @@ Recorded on issue 447, which is the gate for feature 452. No numbered specificat
 - **A mapping that resolves to nothing is how a mistyped path reports itself.** `RemotePath` is free text an operator writes, and the unresolved alias is the only thing that ever tells them they wrote it wrong. Whatever MailFathom becomes able to create, that report has to survive: a typo turning into a folder on somebody's mail server named after the mistake is a defect they cannot read.
 - **A write that says one thing may not quietly say another.** IMAP's `STORE FLAGS` replaces a message's entire flag set, so the command that most obviously writes a message's keywords also clears `\Seen`, `\Flagged`, `\Answered`, and `\Draft` — values another client set and MailFathom may never have observed. A rule that labels a message and marks it unread as a side effect is a defect nobody would report as one.
 - **Who asked is a separate question from what was asked, and only the first is about authorization.** The mutations are a closed set decided on their own merits, and widening who may reach one does not widen the set. What it does change is the input class the authorization review is written against, so a new kind of requester owes a review of its own even where it asks for nothing new.
+- **An append is the one write here that cannot be corrected by repeating it.** Every other mutation names a message the server already holds, so issuing it twice reaches the same message and leaves the same state. An `APPEND` creates a message, so a second one is a second copy in somebody's folder — and nothing the folder shows afterwards tells the two apart, because both are the same bytes with the same identity.
 - **What a server keeps is a capability rather than an assumption.** RFC 9051 has a server declare through `PERMANENTFLAGS` which flags survive a session, and one that keeps no arbitrary keyword accepts the `STORE` and forgets it. A write nobody refused, whose effect is gone by the next run, reads to an operator as a rule that never fired.
 
 ## Considered Options
 
-The decision has nine axes. The first four are independent — an option on one constrains no option on another, which is why they are listed apart rather than as bundled proposals. E and F arrived with the reopening on issue 713 and are ordered against each other: F is read at all only where E permits a creation to exist. G and H arrived with the reopening on issue 917 and are ordered the same way, H being a question only the widest option on G raises. I arrived with the reopening on issue 864 and is independent of all eight: it decides who may ask for a mutation the set already holds.
+The decision has eleven axes. The first four are independent — an option on one constrains no option on another, which is why they are listed apart rather than as bundled proposals. E and F arrived with the reopening on issue 713 and are ordered against each other: F is read at all only where E permits a creation to exist. G and H arrived with the reopening on issue 917 and are ordered the same way, H being a question only the widest option on G raises. I arrived with the reopening on issue 864 and is independent of all eight: it decides who may ask for a mutation the set already holds. J and K arrived with the reopening on issue 739 and are ordered against each other like the two pairs before them: K is a question only an append that exists can raise.
 
 **A — which mutations are permitted:**
 
@@ -98,9 +101,21 @@ The decision has nine axes. The first four are independent — an option on one 
 2. A caller too, through one MCP tool that opens the same durable record a rule opens and holds no session of either kind, behind a permission of its own that reading mail does not confer.
 3. A caller too, through an MCP tool that obtains the write session and issues the `STORE` while the call is open.
 
+**J — whether MailFathom may put a message it composed into a folder:**
+
+1. It may not; `APPEND` stays outside the closed set, and an outgoing message exists only in MailFathom's own record.
+2. It may, into any folder a caller names.
+3. It may, only into the folder playing the role the outgoing record's own stage calls for, and only for a message MailFathom composed and stored itself.
+
+**K — which flags such an append carries:**
+
+1. None; the copy arrives with no flags, as a plain message in the folder.
+2. The flags the destination's role means: `\Draft` where the message has not left, `\Seen` where it has.
+3. Whatever the caller names, from the flags IMAP defines.
+
 ## Decision Outcome
 
-Chosen options: **A3**, **B1**, **C1**, **D1**, **E3**, **F3**, **G2**, **H2**, and **I2**.
+Chosen options: **A3**, **B1**, **C1**, **D1**, **E3**, **F3**, **G2**, **H2**, **I2**, **J3**, and **K2**.
 
 ### MailFathom writes, and the mutations that exist are a closed set
 
@@ -227,6 +242,38 @@ A new kind of requester owes a review against the driver that refuses irreversib
 
 **The sentence issue 917 wrote here has been overtaken and is corrected rather than left standing.** That review said *no MCP tool writes a flag or a keyword, and no model output reaches this path at all*. Both halves stopped being true with this amendment, which is why the paragraph above replaces them rather than sitting beside them: the review that admits a requester is the place the requester has to be described.
 
+### A message MailFathom composed is filed where its own stage says, and nowhere else
+
+MailFathom may **append** a message to a folder, and the message it may append is one it composed and stored itself — never one the mailbox holds, and never bytes a caller supplies. Which folder is not the caller's either: the outgoing record's stage decides it, through the role the destination folder plays. A message waiting for an instant still ahead goes to the folder playing the **outbox** role, and a message a submission server has accepted to the one playing the **sent** role; the **drafts** role is decided by the same tier and filed by nothing today, because composing a draft is not something this system does yet. There is one filing mechanism for all of them, because they are one act with a place per state rather than a feature per place — a further state is a member of the closed set the stage travels on rather than a second filer.
+
+**The outgoing record stays the truth about what will be sent, and the copy is a view of it.** Deleting the copy in a mail client cancels nothing — cancelling is its own command against the record — and nothing reads the folder to decide what to send. That is what makes the copy safe to write and safe to leave out: a deployment that appends nothing loses visibility and loses no mail.
+
+**No server advertises an outbox, so nothing discovers one.** RFC 6154 defines the special-use attributes a server may publish and there is no `\Outbox` among them, because the outbox a mail client shows is that client's own local queue of what it has not managed to send. MailFathom's outbox is the durable outgoing record. So the outbox role is MailFathom's own, it is never read off a server, and a provider folder merely *named* like one is left untouched — a folder plays this role only where an operator mapped a path to it by hand, which is also why the mirror is off unless somebody asks for it. A mapping that names the role with no path is refused where configuration is read, because discovery has nothing to look for.
+
+**A copy is appended once, and an append whose answer never came back is never repeated.** The record of the filing is written before the command goes out, so a process that died between the command and the answer leaves a row saying the copy may be there — and nothing appends again on the strength of it. That is the one outcome in this record that is deliberately left unsettled rather than retried, for the reason the driver states: a second `APPEND` is a second message in somebody's folder, and nothing distinguishes them afterwards. A failure *before* the command is an ordinary failure and nothing forbids attempting it again, although nothing sweeps for one today: a send that has settled is claimed by nothing, so a copy that failed to be filed is reported rather than re-attempted.
+
+**The copy comes back through synchronization, and is recognized rather than guessed at.** Where the server advertises RFC 4315 `UIDPLUS`, its `APPENDUID` response names the occurrence exactly and that is the join. Where it does not, the `Message-ID` MailFathom minted for the message and read back off the appended bytes is what recognizes it — an identity comparison rather than a search for something that looks like the message. Either way the stored email is marked as this deployment's own, which is what keeps a rule conditioned on arriving mail from firing on the owner's own outgoing message and keeps spam classification from scoring one. Nothing else about the copy is treated differently: it is stored, searchable, cut, and embedded as any other message in that folder.
+
+**Filing is never part of delivering.** A message is delivered or it is not, and where its copies are is a second account of the same message: an append that failed after a successful delivery leaves the record saying delivered and not filed, with the reason beside it, and nothing offers the message to anybody again. Whether the sent copy is appended at all is a per-account setting defaulting to on, configured rather than detected, because a provider that files the copy itself does so asynchronously and looking in the folder afterwards cannot tell *will appear shortly* from *will never appear*.
+
+### The flags such a copy carries, and the withdrawal that follows the outbox mirror
+
+The flags are the destination's meaning rather than a caller's choice: **`\Draft`** where the message has not left — a draft, and a message waiting in the outbox — and **`\Seen`** where it has, because a copy of what the owner just sent is not unread mail for them to read. They travel with the role as one value, so a caller cannot file a draft as read or a sent copy as unread.
+
+**This is the one place `\Draft` is written, and it is not the assertion axis G refused.** That refusal was that `\Answered` and `\Draft` state acts MailFathom did not perform, told to a client that renders them as fact. Here MailFathom composed the message and it has not been sent, so the flag states exactly what happened; and unlike the flag tier, this is a flag on a message MailFathom itself created rather than on somebody's mail. The refusal stands unchanged for every message the mailbox already holds — no rule, no tool, and no reconciliation writes `\Draft` on one.
+
+**The outbox mirror is withdrawn when the message leaves, and the withdrawal reaches only that copy.** It is `STORE +FLAGS (\Deleted)` followed by RFC 4315 `UID EXPUNGE` against the UID the append reported, which is axis C's mechanism applied to a message MailFathom itself put there; a bare `EXPUNGE` is no more available here than anywhere else in this record, so a server without `UIDPLUS` leaves the copy standing rather than expunging the folder. A copy the server never named cannot be reached at all — searching the folder for something that looks like the message is a guess about identity — so such a row is marked withdrawn regardless, which leaves one copy of the owner's own message in a folder they mapped, deletable with the gesture they would have used anyway. A sent copy is withdrawn by nothing: it is what the owner keeps.
+
+### The authorization review the filing tier required
+
+A reopened tier owes an authorization review against the driver that refused it, which is again that irreversible acts driven by attacker-influenced input are the thing to refuse.
+
+**Nothing is destroyed, and the one thing that is removed is a message MailFathom put there.** An append adds a message to the mailbox and displaces none; the only expunge in the tier names, by UID, a copy this deployment appended minutes earlier and recorded. A copy the owner does not want is deleted from any mail client with one gesture, which is the same reversibility the flag tier was granted on.
+
+**The content is MailFathom's own, and it is the bytes a submission already carried.** The append reuses the stored MIME rather than recomposing it, so what lands in the folder is what the recipients received, down to the `Message-ID` — a recomposition would thread as a second message in every client. Nothing a sender wrote reaches this path: an arriving message can no more cause an append than it can cause a send, because what is appended is an outgoing record that already exists and whose recipients and content were settled when it was authored. Model output does not reach it either; the authoring boundary that composes an outgoing message is where that question is answered, and this tier only files what that boundary produced.
+
+**The destination is not addressable.** A caller names a stage, never a folder, and the stage resolves through a role an operator mapped. So the widest thing an attacker who fully controls a message could reach — supposing they could reach this path at all — is the folder the operator already nominated for that stage, and a folder nobody nominated is a filing that reports itself as having nowhere to go rather than one that picks somewhere.
+
 ### Consequences
 
 - Good, because the never-marks-mail-read guarantee stops depending on a reviewer noticing and starts depending on which type a component holds.
@@ -247,6 +294,12 @@ A new kind of requester owes a review against the driver that refuses irreversib
 - Bad, because `CreateIfMissing` is a key an operator has to know exists. A mapping that meant to have its folder created and did not say so reports the same unresolved alias a typo reports, and telling the two apart is reading the file. That is the price of the typo staying readable, and it is the right way round to pay it.
 - Bad, because a rule can now be refused by a folder's `PERMANENTFLAGS` rather than by anything the operator wrote, and that refusal arrives when the rule fires rather than when the configuration is read. Nothing at startup can know it: the capability belongs to a selected folder on a server, so the earliest honest moment to report it is the write itself.
 - Bad, because keywords are text an operator invents, and the constraint on that text is IMAP's rather than MailFathom's. A keyword refused for carrying a character an atom cannot hold is a refusal that reads as arbitrary until somebody knows why, which is why the message names what the constraint is instead of only that the value failed.
+- Good, because a deployment that sends mail leaves a record of it where its owner actually looks — their own mail client — instead of only in MailFathom's database, which no mail client reads.
+- Good, because the copy that comes back is recognized as this deployment's own, so automation conditioned on arriving mail cannot react to what the owner just sent. That is a defect nothing would have reported: the rule would simply have fired.
+- Neutral, because MailFathom now creates a message on somebody's mail server rather than only annotating or moving one that is there. It is bounded to messages MailFathom composed, to folders an operator mapped a role to, and to one copy per stage per message.
+- Bad, because an append whose answer never arrived leaves a state nobody can settle: the copy may be in the folder or may not, and the record says exactly that rather than resolving it. Resolving it either way would mean a second copy or a permanent gap, and this is the honest one of the three.
+- Bad, because a copy that failed to be filed stays unfiled. The failure is recorded against the send, logged, and counted, but a settled send is claimed by nothing, so nothing comes back for the append the way a delivery pass comes back for a deferred send.
+- Bad, because whether a provider files the sent copy itself is a setting an operator has to get right. Leaving it on where the provider also files produces two copies of every sent message, and turning it off where the provider does not produces none — and no observation MailFathom can make distinguishes the two providers in time to decide for them.
 
 ## Validation
 
@@ -260,6 +313,11 @@ A new kind of requester owes a review against the driver that refuses irreversib
 - The integration suite writes `\Flagged` and a keyword against the orchestrated server and reads both back, which is where a real `PERMANENTFLAGS` and the write connection meet.
 - The caller-authored path is proven at its own boundary rather than through the session: unit tests require the tool to refuse an identifier that names no email before anything is looked up, to refuse a call that asks for nothing and one that states half a keyword change, to refuse a keyword list longer than a message may carry before anything normalizes it, to name each call its own request where the caller sent no `requestId` and the caller's own where it did, to refuse a `requestId` reused for a different value rather than answering with the earlier record, and to open one record per value in one commit even when the first commit conflicts; the use case is required to ask for `mailfathom.mail.flags.write` before it reads anything, and to answer a withheld folder and an absent row identically. The descriptor test requires the advertised annotations to say not read-only and open-world, which is the one place a client learns it.
 - Reconciliation is required to attribute each of the three values independently, so a run withholds the value a record accounts for while raising the one beside it that nobody asked for.
+- The filing tier is proven by unit tests that read what the session was asked for rather than what it returned: an account that files no sent copy appends nothing at all; a delivered message appends the stored bytes with `\Seen` at the injected clock's instant; a mirrored message appends with `\Draft` and never with `\Seen`; an append the server never answered is not appended a second time however often the pass runs; and a failed append after a successful delivery leaves the record at `Sent` with a filing failure beside it and its attempt count unmoved.
+- The join is proven in both directions a server can answer: a discovery at the occurrence an `APPENDUID` named, and a discovery on a server that named none, matched by the identity in the appended bytes. Both assert that the stored email is recorded as filed from the outgoing record and that the filing is stamped as met — with the control the absence rule requires, since the same run over a message no filing accounts for stores ordinary arriving mail and writes neither.
+- The withdrawal is asserted as its commands: `STORE +FLAGS (\Deleted)` and `UID EXPUNGE` naming that UID alone, with no bare `EXPUNGE` anywhere in the sequence, a folder whose UIDVALIDITY moved since the append refusing to remove anything, and a server without `UIDPLUS` refused rather than expunging the folder.
+- Configuration is asserted where it binds: an outbox role written without a path fails validation naming the key, the same role beside a path resolves to the folder the operator named, a folder merely named like an outbox plays no role, and an account that says nothing about the sent copy files one.
+- The integration suite appends a sent copy against the orchestrated server, reads it back through an ordinary synchronization run, and requires exactly one stored occurrence joined to the outgoing record and absent from the arrival queue a rule pass reads.
 - Folder creation is built by issue 714, and what it has to establish is stated here rather than there: a mapping without `CreateIfMissing` still refuses, tested beside one that creates so the refusal cannot quietly become a creation; `CreateIfMissing` on a `SpecialUse` mapping fails configuration binding; a `CREATE` against a folder that already exists reads as success, including where another client won the race between the listing and the attempt; a server reporting a delimiter other than `/` builds the same hierarchy from the same configured text; a refused `SUBSCRIBE` leaves the creation successful; and the integration suite creates a folder and files a message into it against a live server, which is where a real `CREATE` and the write connection meet.
 
 ## Pros and Cons of the Options
@@ -341,13 +399,38 @@ A new kind of requester owes a review against the driver that refuses irreversib
 - Bad, because clearing every keyword is then unsayable: a rule would have to name each keyword a message might carry, which is a list nobody has.
 - Bad, because it pushes the difference into the operator's file. Saying *these and only these* is the intent, and expressing it as a removal list that has to be kept in step with the addition list is the same computation done by hand and left to rot.
 
+### J1 — `APPEND` stays outside the closed set
+
+- Good, because it keeps the set at mutations of mail the server already holds, which is the smallest surface and the easiest one to reason about.
+- Bad, because it leaves a deployment that sends mail with no record of it anywhere its owner reads mail. SMTP files nothing, so the sent folder every mail client shows would stay empty however much MailFathom sent.
+- Bad, because the workaround is worse than the act. An operator who wants their sent mail visible would have to send through a client instead, which is the feature being built read backwards.
+
+### J2 — append into any folder a caller names
+
+- Good, because it needs no role mapping and no stage, and one method serves whatever a later feature wants to put in a mailbox.
+- Bad, because it makes the destination attacker-reachable in principle. A folder is then a value flowing from a caller into a message-creating command, and the whole of this record's refusal posture is that such surfaces are the ones to refuse.
+- Bad, because it turns one act into a general capability nobody asked for. Nothing here needs to append arbitrary bytes anywhere, and a capability that exists is a capability a later change will reach for.
+
+### K1 — the copy arrives with no flags
+
+- Good, because it writes the fewest flags, and it never asserts anything about a message.
+- Bad, because it is wrong in the owner's own client for both cases that have one. A sent copy with no `\Seen` shows their sent folder carrying unread mail they wrote themselves, and a mirrored message with no `\Draft` reads as an ordinary message in a folder nothing sends from.
+
+### K3 — whatever the caller names
+
+- Good, because it needs no decision here and leaves the caller free.
+- Bad, because it separates two halves of one answer. What a folder means and what a copy in it looks like are the same fact, and splitting them is what lets a draft be filed as read.
+- Bad, because it re-opens the flag question this record closed. Every flag IMAP defines would be writable through the append path, including the `\Answered` axis G refused, and by a route the flag tier's own review never covered.
+
 ## More Information
 
 - Issue 446 asked the question and carries the decision comment this record is written from; issue 447 is the change that implements it; issue 452 is the feature all of it belongs to.
 - Issue 713 reopened the record for folder creation and carries that request; issue 714 is the change that implements what axes E and F decided; issue 709 is the mapping contract whose refusal of a destination that resolves to nothing the creation lifts, and only where a mapping asked.
 - Issue 917 reopened it for the flag tier and is the change that implements what axes G and H decided.
 - Issue 864 reopened it for the caller-authored requester and is the change that implements what axis I decided; issue 862 is the read half that made the asymmetry visible, and [ADR 0012](0012-authorization-model-named-permissions-and-where-they-are-enforced.md) governs the permission the tool is reached under.
+- Issue 739 reopened it for filing an outgoing message and is the change that implements what axes J and K decided; issue 738 is the delivery whose successful outcome the sent copy follows, and issue 714 is the folder creation a destination that does not exist falls back on.
 - [ADR 0003](0003-first-party-exception-hierarchy-and-stable-error-codes.md) governs `MailboxMutationUnsupported` (25001), which is category 2 subcategory 5 — a subcategory of its own because it says the opposite of an unavailable mailbox about repeating the work.
 - RFC 9051 § 2.3.2 defines the flags and keywords a message carries, § 6.4.6 defines what `STORE FLAGS` replaces, and § 7.1 defines the `PERMANENTFLAGS` response and the `\*` that says arbitrary keywords persist.
+- RFC 4315 defines `UIDPLUS`, the `APPENDUID` response that names where an append landed, and the `UID EXPUNGE` the mirror is withdrawn with. RFC 6154 defines the special-use attributes a server may advertise, and carries no outbox among them.
 - Draft section 11.1 carries the amended invariant, and draft section 21.5 carries the action tiers this narrows.
-- Revisit when a request arrives for one of the tiers that remain refused — sending, `\Answered` or `\Draft`, or renaming, deleting, or unsubscribing a folder. Each reopens this record with its own authorization review, as folder creation did on issue 713 and the flag tier on issue 917, rather than being read out of a gap. A request to let a caller author one of the mutations axis I did not reach — a relocation, a copy, a delete — reopens it the same way, because axis I decided who may ask for the flag tier and nothing wider.
+- Revisit when a request arrives for one of the tiers that remain refused — sending, `\Answered`, `\Draft` on a message the mailbox already holds, or renaming, deleting, or unsubscribing a folder. Each reopens this record with its own authorization review, as folder creation did on issue 713, the flag tier on issue 917, and filing an outgoing message on issue 739, rather than being read out of a gap. A request to let a caller author one of the mutations axis I did not reach — a relocation, a copy, a delete — reopens it the same way, because axis I decided who may ask for the flag tier and nothing wider.

@@ -232,6 +232,21 @@ internal sealed class MailFathomDbContext : DbContext
     /// <remarks>Named for the reason above: the composed name would be truncated and permanent.</remarks>
     internal const string OutgoingEmailContentForeignKeyName = "fk_outgoing_email_contents_emails";
 
+    /// <summary>The foreign key that removes the record of what was filed where with the record it was filed from.</summary>
+    /// <remarks>Named for the reason above: the composed name would be truncated and permanent.</remarks>
+    internal const string OutgoingEmailFilingForeignKeyName = "fk_outgoing_email_filings_emails";
+
+    /// <summary>The index a batch of discovered mail is joined to the copies this deployment filed through.</summary>
+    /// <remarks>
+    /// Filtered to the filings synchronization has not met yet, which is what keeps it proportional to what is in
+    /// flight rather than to everything the deployment has ever sent: a copy is looked for once, and every mailbox this
+    /// system has been filing into for a year is otherwise in the structure that lookup reads.
+    /// </remarks>
+    internal const string OutgoingEmailFilingPlacementIndexName = "ix_outgoing_email_filings_placement";
+
+    /// <summary>The index the same join falls back to where the server named no placement to look the copy up by.</summary>
+    internal const string OutgoingEmailFilingMessageIdIndexName = "ix_outgoing_email_filings_message_id";
+
     /// <summary>The uniqueness a job's idempotency rests on, which spans every state a row can reach.</summary>
     internal const string JobIdentityUniqueIndexName = "ix_jobs_identity";
 
@@ -334,6 +349,9 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<OutgoingEmailContentEntity> OutgoingEmailContents =>
         this.Set<OutgoingEmailContentEntity>();
+
+    internal DbSet<OutgoingEmailFilingEntity> OutgoingEmailFilings =>
+        this.Set<OutgoingEmailFilingEntity>();
 
     internal DbSet<MailboxMutationAuditEntryEntity> MailboxMutationAuditEntries =>
         this.Set<MailboxMutationAuditEntryEntity>();
@@ -731,6 +749,7 @@ internal sealed class MailFathomDbContext : DbContext
         ConfigureOutgoingEmail(modelBuilder);
         ConfigureOutgoingEmailRecipient(modelBuilder);
         ConfigureOutgoingEmailContent(modelBuilder);
+        ConfigureOutgoingEmailFiling(modelBuilder);
         ConfigureMailboxMutationAuditEntry(modelBuilder);
         ConfigureMailAnsweringAuditEntry(modelBuilder);
         ConfigureMailRuleExecution(modelBuilder);
@@ -1477,6 +1496,78 @@ internal sealed class MailFathomDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+    /// <summary>Declares the copies of one outgoing message this deployment put into folders of its own mailbox.</summary>
+    /// <remarks>
+    /// <para>
+    /// One row per role rather than per append, which is what makes filing idempotent without a read-then-write: the key
+    /// is the record and the role, so a second attempt to file the same message into the same role is refused by the key
+    /// rather than putting a second copy in the mailbox. That is the duplication no local correction can withdraw for
+    /// the owner, since a copy in their sent folder is a message they will read as one they sent twice.
+    /// </para>
+    /// <para>
+    /// The row is written before the <c>APPEND</c> goes out and completed after it, which is why the stage is a column
+    /// rather than the presence of a placement. A process that died between the command and its answer left a row
+    /// saying a copy may be there, and nothing appends again on the strength of it.
+    /// </para>
+    /// <para>
+    /// The account and the path are copied here from the binding rather than joined to it, because the query that reads
+    /// this table runs once per synchronized batch and leads with both. The placement columns are nullable together:
+    /// a server without <c>UIDPLUS</c> answers an append with no identity at all, and the <c>Message-ID</c> beside them
+    /// is what the copy is recognized by there.
+    /// </para>
+    /// <para>
+    /// The cascade is the erasure obligation the content table carries: erasing the record of a send erases what it
+    /// says about the mailbox with it. The copy in the mailbox is the mailbox's own and stays where it is.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureOutgoingEmailFiling(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<OutgoingEmailFilingEntity>(entity =>
+        {
+            entity.ToTable("outgoing_email_filings");
+            entity.HasKey(filing => new { filing.OutgoingEmailId, filing.Filing });
+
+            // The filing's own published name, which is what the closed enumeration is; stored as itself for the reason
+            // the mutation name is, and bounded rather than free so a row can never name something longer than a value.
+            entity.Property(filing => filing.Filing).HasMaxLength(64);
+            entity.Property(filing => filing.MailboxAccountId).HasMaxLength(128).IsRequired();
+            entity.Property(filing => filing.FolderAlias).HasMaxLength(128).IsRequired();
+            entity.Property(filing => filing.FolderPath)
+                .HasMaxLength(OutgoingEmailFilingEntity.MaximumFolderPathLength)
+                .IsRequired();
+            entity.Property(filing => filing.InternetMessageId)
+                .HasMaxLength(OutgoingEmailFilingEntity.MaximumInternetMessageIdLength);
+
+            // Stored as text for the reason every other enum on this feature is: it stays readable in an ad-hoc audit
+            // query and survives any later reordering of the enum.
+            entity.Property(filing => filing.Stage).HasConversion<string>().HasMaxLength(64).IsRequired();
+
+            // A filing row is completed and withdrawn on its own, without the record above it changing, so the record's
+            // token would not notice two passes settling one copy differently.
+            entity.Property(filing => filing.ConcurrencyVersion).IsRowVersion();
+
+            // The join a synchronized batch runs, filtered to what is still being looked for. A copy is met once, and
+            // stamping it observed is what takes it out of both this structure and the work the join does.
+            entity.HasIndex(filing => new
+            {
+                filing.MailboxAccountId,
+                filing.FolderPath,
+                filing.PlacementUidValidity,
+                filing.PlacementUid,
+            })
+                .HasDatabaseName(OutgoingEmailFilingPlacementIndexName)
+                .HasFilter($"\"{nameof(OutgoingEmailFilingEntity.ObservedAt)}\" IS NULL");
+
+            entity.HasIndex(filing => new { filing.MailboxAccountId, filing.InternetMessageId })
+                .HasDatabaseName(OutgoingEmailFilingMessageIdIndexName)
+                .HasFilter($"\"{nameof(OutgoingEmailFilingEntity.ObservedAt)}\" IS NULL");
+
+            entity.HasOne(filing => filing.OutgoingEmail)
+                .WithMany(message => message.Filings)
+                .HasForeignKey(filing => filing.OutgoingEmailId)
+                .HasConstraintName(OutgoingEmailFilingForeignKeyName)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
     /// <summary>Declares the derived search document and the lexical index built over it.</summary>
     /// <remarks>
     /// <para>
@@ -1787,7 +1878,9 @@ internal sealed class MailFathomDbContext : DbContext
                 email => new { email.MailboxAccountId, email.Id },
                 StoredEmailAwaitingRuleEvaluationIndexName)
             .HasDatabaseName(StoredEmailAwaitingRuleEvaluationIndexName)
-            .HasFilter($"\"{nameof(StoredEmailEntity.RulesEvaluatedAt)}\" IS NULL");
+            .HasFilter(
+                $"\"{nameof(StoredEmailEntity.RulesEvaluatedAt)}\" IS NULL AND "
+                + $"\"{nameof(StoredEmailEntity.FiledFromOutgoingEmailId)}\" IS NULL");
 
         // Every read of a conversation runs on this: assembling an arrival asks its thread for the message it answers
         // and for the messages already stored that answer it, and publishing a thread reads its whole membership. The

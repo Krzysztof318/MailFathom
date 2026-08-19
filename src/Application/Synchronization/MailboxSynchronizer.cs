@@ -7,6 +7,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
@@ -16,6 +17,7 @@ using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
@@ -40,6 +42,7 @@ public sealed class MailboxSynchronizer
     private readonly RawMimeMemoryBudget rawMimeMemoryBudget;
     private readonly IEmailMimeReader mimeReader;
     private readonly IMailboxMutationReconciliationStore mutationStore;
+    private readonly IOutgoingMailFilingStore filingStore;
     private readonly MailboxReconciler reconciler;
     private readonly DerivedWorkGate derivedWorkGate;
     private readonly IDerivedWorkGateTelemetry gateTelemetry;
@@ -65,6 +68,7 @@ public sealed class MailboxSynchronizer
         RawMimeMemoryBudget rawMimeMemoryBudget,
         IEmailMimeReader mimeReader,
         IMailboxMutationReconciliationStore mutationStore,
+        IOutgoingMailFilingStore filingStore,
         MailboxReconciler reconciler,
         DerivedWorkGate derivedWorkGate,
         IDerivedWorkGateTelemetry gateTelemetry,
@@ -88,6 +92,7 @@ public sealed class MailboxSynchronizer
         this.rawMimeMemoryBudget = rawMimeMemoryBudget;
         this.mimeReader = mimeReader;
         this.mutationStore = mutationStore;
+        this.filingStore = filingStore;
         this.reconciler = reconciler;
         this.derivedWorkGate = derivedWorkGate;
         this.gateTelemetry = gateTelemetry;
@@ -235,6 +240,12 @@ public sealed class MailboxSynchronizer
                     uidValidity,
                     batch,
                     cancellationToken);
+                var filings = await this.ReadFilingsInBatchAsync(
+                    accountId,
+                    folder,
+                    uidValidity,
+                    batch,
+                    cancellationToken);
 
                 var processedThroughUid = default(ImapUid?);
 
@@ -275,10 +286,17 @@ public sealed class MailboxSynchronizer
                         ? candidate
                         : null;
 
+                    // A copy MailFathom filed of its own outgoing message arrives here as ordinary new mail, and the
+                    // filing row is the only thing that says otherwise. It is stored like any other message and marked
+                    // as this deployment's own, which is what keeps a rule that reacts to arriving mail from reacting
+                    // to what the owner just sent.
+                    var filing = FindFilingOf(filings, folder, metadata);
+
                     var occurrence = await this.StoreOccurrenceAsync(
                         mailboxSession,
                         metadata,
                         copy,
+                        filing,
                         budget,
                         collection,
                         cancellationToken);
@@ -568,6 +586,7 @@ public sealed class MailboxSynchronizer
                 mailboxSession,
                 metadata,
                 placement: null,
+                filing: null,
                 budget,
                 collection,
                 cancellationToken);
@@ -633,6 +652,53 @@ public sealed class MailboxSynchronizer
         EmailOccurrenceId occurrenceId) =>
         placements.FirstOrDefault(candidate =>
             candidate.AccountsForPlacementAt(folder.RemotePath, occurrenceId.UidValidity, occurrenceId.Uid));
+
+    /// <summary>Reads the copies MailFathom filed into this folder that one of this batch's discoveries could be.</summary>
+    /// <remarks>
+    /// A batch that discovered nothing asks nothing, and the read is otherwise made once for the whole batch, so
+    /// recognizing this deployment's own outgoing mail costs one query per batch on a folder nothing was ever filed
+    /// into and never one per message. Both halves of the join travel in the same read, because a batch can carry
+    /// discoveries of both kinds and a second query would double the cost of the case that answers nothing.
+    /// </remarks>
+    private async Task<IReadOnlyList<OutgoingMailFilingRecord>> ReadFilingsInBatchAsync(
+        MailAccountId accountId,
+        MailFolderResolution folder,
+        ImapUidValidity uidValidity,
+        RemoteEmailMetadataBatch batch,
+        CancellationToken cancellationToken)
+    {
+        if (batch.Emails.Count == 0)
+        {
+            return [];
+        }
+
+        return await this.filingStore.ReadFilingsAtAsync(
+            accountId,
+            folder.RemotePath,
+            uidValidity,
+            [.. batch.Emails.Select(static email => email.OccurrenceId.Uid)],
+            [.. batch.Emails.Select(static email => email.InternetMessageId).OfType<string>().Distinct(StringComparer.Ordinal)],
+            cancellationToken);
+    }
+
+    /// <summary>Finds the copy this discovery is, if it is one MailFathom filed.</summary>
+    /// <remarks>
+    /// The placement is preferred over the message identity, because the placement is the server's own statement about
+    /// where it put the copy while the identity is a comparison MailFathom makes. The fallback exists for the servers
+    /// that advertise no <c>UIDPLUS</c> and therefore never made that statement; every condition of the read is
+    /// restated by the row itself, so a query widened later cannot quietly widen what counts as this system's own.
+    /// </remarks>
+    private static OutgoingMailFilingRecord? FindFilingOf(
+        IReadOnlyList<OutgoingMailFilingRecord> filings,
+        MailFolderResolution folder,
+        RemoteEmailMetadata metadata) =>
+        filings.FirstOrDefault(candidate => candidate.AccountsForPlacementAt(
+            folder.RemotePath,
+            metadata.OccurrenceId.UidValidity,
+            metadata.OccurrenceId.Uid))
+        ?? filings.FirstOrDefault(candidate => candidate.AccountsForMessageAt(
+            folder.RemotePath,
+            metadata.InternetMessageId));
 
     /// <summary>Carries the local email a relocation moved onto the occurrence it was discovered at, rather than storing a second one.</summary>
     /// <returns><see langword="true" /> when the discovery was this mutation's own and needs nothing further; otherwise, <see langword="false" />.</returns>
@@ -740,6 +806,7 @@ public sealed class MailboxSynchronizer
         IMailboxSession mailboxSession,
         RemoteEmailMetadata metadata,
         MailboxMutationRecord? placement,
+        OutgoingMailFilingRecord? filing,
         SynchronizationContentBudget budget,
         ContactCollectionRun collection,
         CancellationToken cancellationToken)
@@ -749,6 +816,7 @@ public sealed class MailboxSynchronizer
             return await this.RecordOccurrenceWithoutContentAsync(
                 metadata,
                 placement,
+                filing,
                 StoredEmailContentAvailability.ExceededSizeLimit,
                 cancellationToken);
         }
@@ -765,6 +833,7 @@ public sealed class MailboxSynchronizer
             return await this.RecordOccurrenceWithoutContentAsync(
                 metadata,
                 placement,
+                filing,
                 StoredEmailContentAvailability.AwaitingStorageHeadroom,
                 cancellationToken);
         }
@@ -794,6 +863,7 @@ public sealed class MailboxSynchronizer
             return await this.RecordOccurrenceWithoutContentAsync(
                 metadata,
                 placement,
+                filing,
                 StoredEmailContentAvailability.ExceededSizeLimit,
                 cancellationToken);
         }
@@ -834,6 +904,7 @@ public sealed class MailboxSynchronizer
                     attemptCancellationToken);
 
                 await this.ObservePlacementAsync(persistenceSession, placement, attemptCancellationToken);
+                await this.ObserveFilingAsync(persistenceSession, filing, storedEmailId, attemptCancellationToken);
             },
             cancellationToken);
 
@@ -844,10 +915,18 @@ public sealed class MailboxSynchronizer
         // work enqueued against a transaction that then rolled back would name a message no local state holds. It is one
         // insert per stored message, it is refused rather than queued once the deployment's backlog bound is reached,
         // and it is skipped outright where classification is off or does not cover this folder.
-        await this.classificationArrivals.ScheduleAsync(
-            storedEmailId,
-            metadata.OccurrenceId,
-            cancellationToken);
+        //
+        // A copy MailFathom filed of this deployment's own outgoing message is skipped too, which is the one place
+        // scoring is decided by where a message came from rather than by what it holds: nothing this system composed
+        // and sent needs a verdict about whether somebody sent it unsolicited, and a spam verdict on it would withhold
+        // everything derived from a message the owner wrote and could file their own send into their junk folder.
+        if (filing is null)
+        {
+            await this.classificationArrivals.ScheduleAsync(
+                storedEmailId,
+                metadata.OccurrenceId,
+                cancellationToken);
+        }
 
         // The second hand-off, and the one that stays inside this pass rather than reaching a queue: the headers it
         // reads are the ones the extraction above already produced, so a contact costs a bounded number of indexed
@@ -868,6 +947,7 @@ public sealed class MailboxSynchronizer
     private async Task<OccurrenceSynchronizationOutcome> RecordOccurrenceWithoutContentAsync(
         RemoteEmailMetadata metadata,
         MailboxMutationRecord? placement,
+        OutgoingMailFilingRecord? filing,
         StoredEmailContentAvailability availability,
         CancellationToken cancellationToken)
     {
@@ -884,6 +964,7 @@ public sealed class MailboxSynchronizer
                     attemptCancellationToken);
 
                 await this.ObservePlacementAsync(persistenceSession, placement, attemptCancellationToken);
+                await this.ObserveFilingAsync(persistenceSession, filing, storedEmailId, attemptCancellationToken);
             },
             cancellationToken);
 
@@ -906,6 +987,37 @@ public sealed class MailboxSynchronizer
         await this.mutationStore.RecordPlacementObservedAsync(
             persistenceSession,
             placement.Id,
+            this.timeProvider.GetUtcNow(),
+            cancellationToken);
+    }
+
+    /// <summary>Writes down that a copy MailFathom filed has been met, and joins the stored email to the send it is of.</summary>
+    /// <remarks>
+    /// Both writes belong in the transaction that stores the email. The join is what keeps everything reacting to newly
+    /// synchronized mail from reacting to the owner's own outgoing message, and recording it apart from the row it is
+    /// about would let a rolled-back store leave a filing claiming to have been met by an email nothing holds.
+    /// </remarks>
+    private async Task ObserveFilingAsync(
+        IPersistenceSession persistenceSession,
+        OutgoingMailFilingRecord? filing,
+        StoredEmailId storedEmailId,
+        CancellationToken cancellationToken)
+    {
+        if (filing is null)
+        {
+            return;
+        }
+
+        await this.metadataRepository.RecordFiledFromOutgoingAsync(
+            persistenceSession,
+            storedEmailId,
+            filing.OutgoingEmailId,
+            cancellationToken);
+
+        await this.filingStore.RecordFilingObservedAsync(
+            persistenceSession,
+            filing.OutgoingEmailId,
+            filing.Filing,
             this.timeProvider.GetUtcNow(),
             cancellationToken);
     }

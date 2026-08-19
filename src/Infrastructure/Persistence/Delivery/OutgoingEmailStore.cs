@@ -108,6 +108,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         var entity = await readContext.OutgoingEmails
             .AsNoTracking()
             .Include(message => message.Recipients)
+            .Include(message => message.Filings)
             .SingleOrDefaultAsync(message => message.Id == outgoingEmailId.Value, cancellationToken);
 
         return entity is null ? null : OutgoingEmailRecordMapping.ToRecord(entity);
@@ -130,6 +131,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         var entities = await readContext.OutgoingEmails
             .AsNoTracking()
             .Include(message => message.Recipients)
+            .Include(message => message.Filings)
             .Where(message => message.MailboxAccountId == accountValue
                 && message.Stage != OutgoingEmailStage.Sent
                 && message.Stage != OutgoingEmailStage.Refused
@@ -169,6 +171,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         var claimed = await readContext.OutgoingEmails
             .AsNoTracking()
             .Include(message => message.Recipients)
+            .Include(message => message.Filings)
             .Where(message => claimedIds.Contains(message.Id))
             .OrderBy(message => message.AvailableAt)
             .ThenBy(message => message.Id)
@@ -494,7 +497,9 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         // carries the recipients, because a record read back is a record about to be returned whole.
         return await TrackedEntityLookup.SinglePendingOrPersistedAsync(
             writeContext.OutgoingEmails,
-            writeContext.OutgoingEmails.Include(message => message.Recipients),
+            writeContext.OutgoingEmails
+                .Include(message => message.Recipients)
+                .Include(message => message.Filings),
             message => message.MailboxAccountId == accountValue
                 && message.RequesterOrigin == origin
                 && message.RequesterIdentity == identity,

@@ -7,6 +7,7 @@ using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Failures;
 using Microsoft.Extensions.Time.Testing;
 
@@ -78,7 +79,26 @@ internal sealed class InMemoryOutgoingEmailStore(
     /// <summary>Reads the instant from which one record may be claimed again.</summary>
     /// <param name="outgoingEmailId">The record to read.</param>
     /// <returns>The instant the claim compares against.</returns>
-    internal DateTimeOffset ReadAvailableAt(OutgoingEmailId outgoingEmailId) => this.rows[outgoingEmailId].AvailableAt;
+    internal DateTimeOffset ReadAvailableAt(OutgoingEmailId outgoingEmailId) =>
+        this.rows[outgoingEmailId].Record.AvailableAt;
+
+    /// <summary>Writes what the filing store has recorded about one record's copies onto the record itself.</summary>
+    /// <remarks>
+    /// The real store returns the filing rows with the record they hang off, because they are read through the same
+    /// navigation. Keeping them in step here is what lets a pass read what an earlier append wrote.
+    /// </remarks>
+    internal void SetFilings(
+        OutgoingEmailId outgoingEmailId,
+        IReadOnlyList<OutgoingMailFilingRecord> filings,
+        MailFathomErrorCode? lastFilingFailure)
+    {
+        if (!this.rows.TryGetValue(outgoingEmailId, out var row))
+        {
+            return;
+        }
+
+        row.Record = row.Record with { Filings = filings, LastFilingFailure = lastFilingFailure };
+    }
 
     /// <summary>Answers whether one record is held by an attempt at all.</summary>
     /// <param name="outgoingEmailId">The record to read.</param>
@@ -129,8 +149,14 @@ internal sealed class InMemoryOutgoingEmailStore(
 
     public Task<OutgoingEmailRecord?> FindAsync(
         OutgoingEmailId outgoingEmailId,
-        CancellationToken cancellationToken) => Task.FromResult(
-            this.rows.TryGetValue(outgoingEmailId, out var row) ? row.Record : null);
+        CancellationToken cancellationToken)
+    {
+        // Honoured rather than ignored, unlike the reads around it, because one caller runs after a host has begun
+        // stopping and what it does then is a behavior a test has to be able to reach.
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return Task.FromResult(this.rows.TryGetValue(outgoingEmailId, out var row) ? row.Record : null);
+    }
 
     public Task<IReadOnlyList<OutgoingEmailRecord>> ReadOutstandingAsync(
         MailAccountId accountId,
@@ -163,9 +189,9 @@ internal sealed class InMemoryOutgoingEmailStore(
         var due = this.rows.Values
             .Where(row => row.Record.AccountId == request.AccountId
                 && row.Record.Stage == OutgoingEmailStage.Recorded
-                && row.AvailableAt <= claimedAt
+                && row.Record.AvailableAt <= claimedAt
                 && (row.LeaseExpiresAt is null || row.LeaseExpiresAt <= claimedAt))
-            .OrderBy(row => row.AvailableAt)
+            .OrderBy(row => row.Record.AvailableAt)
             .ThenBy(row => row.Record.Id.Value)
             .Take(request.BatchSize)
             .ToArray();
@@ -215,10 +241,10 @@ internal sealed class InMemoryOutgoingEmailStore(
         {
             Stage = OutgoingEmailStage.Recorded,
             StageChangedAt = this.clock.GetUtcNow(),
+            AvailableAt = availableAt,
             LastFailure = failure ?? row.Record.LastFailure,
         };
 
-        row.AvailableAt = availableAt;
         row.LeaseOwner = null;
         row.LeaseExpiresAt = null;
 
@@ -415,7 +441,7 @@ internal sealed class InMemoryOutgoingEmailStore(
     private void Commit(OutgoingEmailRequest request, OutgoingEmailRecord recorded)
     {
         this.identities[IdentityOf(request)] = recorded.Id;
-        this.rows[recorded.Id] = new StoredRow { Record = recorded, AvailableAt = recorded.RecordedAt };
+        this.rows[recorded.Id] = new StoredRow { Record = recorded };
     }
 
     private OutgoingEmailRecord Record(OutgoingEmailRequest request, long mimeByteLength) => new()
@@ -429,16 +455,17 @@ internal sealed class InMemoryOutgoingEmailStore(
         AttemptCount = 0,
         RecordedAt = this.clock.GetUtcNow(),
         StageChangedAt = this.clock.GetUtcNow(),
+        AvailableAt = this.clock.GetUtcNow(),
         LastFailure = null,
         LastReplyCode = null,
+        Filings = [],
+        LastFilingFailure = null,
     };
 
     /// <summary>Holds one record beside the claim state the record itself does not publish.</summary>
     private sealed class StoredRow
     {
         public required OutgoingEmailRecord Record { get; set; }
-
-        public required DateTimeOffset AvailableAt { get; set; }
 
         public Guid? LeaseOwner { get; set; }
 

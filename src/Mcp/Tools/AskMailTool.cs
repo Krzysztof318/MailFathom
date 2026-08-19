@@ -95,7 +95,7 @@ internal sealed class AskMailTool(
         string question,
         [Description("MailFathom accounts the answer may be drawn from, each named by its configured account identifier or by the display name it is published under. Omit to draw on every account this deployment serves; call list_accounts to see what they are. At most 64 may be named, and a name this deployment does not serve is refused rather than answered from the rest.")]
         string[]? accounts = null,
-        [Description("MailFathom folders the answer may be drawn from, each named by its alias, such as INBOX, or by the role it plays, written as role:Junk. Roles are Inbox, Archive, Drafts, Sent, Junk, Trash, All, Flagged, and Important; naming one draws on whichever folder each account in scope maps with that role, whatever it is called there. Omit to draw on every folder of the accounts in scope. At most 64 may be named. An alias is MailFathom's own name for a folder and is matched without regard to case.")]
+        [Description("MailFathom folders the answer may be drawn from, each named by its alias, such as INBOX, or by the role it plays, written as role:Junk. Roles are Inbox, Archive, Drafts, Sent, Junk, Trash, All, Flagged, Important, and Outbox; naming one draws on whichever folder each account in scope maps with that role, whatever it is called there. Omit to draw on every folder of the accounts in scope. At most 64 may be named. An alias is MailFathom's own name for a folder and is matched without regard to case.")]
         string[]? folders = null,
         CancellationToken cancellationToken = default)
     {

@@ -430,6 +430,14 @@ internal sealed partial class AccountSynchronizationSupervisor
         {
             this.LogOutboxOutcomesNotRecorded(this.accountId.Value, report.NotRecordedCount);
         }
+
+        // A copy that is not where it should be is a warning rather than an error, because nobody is missing a message
+        // over it: the mail was delivered, and what is lost is the owner seeing it in their own client. Nothing sends
+        // anything again over one, and nothing files it again either — a settled send is claimed by nothing.
+        if (report.NotFiledCount > 0)
+        {
+            this.LogOutboxCopiesNotFiled(this.accountId.Value, report.NotFiledCount);
+        }
     }
 
     /// <summary>Erases whatever in this account's three records has outlived the window it was configured for.</summary>
@@ -1230,6 +1238,12 @@ internal sealed partial class AccountSynchronizationSupervisor
         Level = LogLevel.Error,
         Message = "The outcome of {NotRecordedCount} message(s) queued for account {AccountId} could not be written down, so each record stands where the failed write left it and its lease is what frees it for another attempt.")]
     private partial void LogOutboxOutcomesNotRecorded(string accountId, int notRecordedCount);
+
+    /// <summary>Reports the copies of delivered mail that are not in the folder the account asked for.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "{NotFiledCount} copy/copies of mail sent for account {AccountId} could not be put into the folder it files them in, so the owner will not see them in their own client. The messages were delivered, none is sent again, and nothing files the copies again on its own.")]
+    private partial void LogOutboxCopiesNotFiled(string accountId, int notFiledCount);
 
     /// <summary>Reports what the account's own run found waiting in its outbox; a recipient names a person and never reaches a log.</summary>
     [LoggerMessage(

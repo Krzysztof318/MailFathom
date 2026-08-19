@@ -106,6 +106,39 @@ public sealed class MailOutboxPassTests
         Assert.Equal(OutgoingEmailStage.Sent, context.Store.Read(behind).Stage);
     }
 
+    /// <summary>
+    /// A host that begins stopping while a delivered send's copies are being settled records nothing against the send.
+    /// Filing never reached a mail server, so a failure written here would leave a delivered message saying its copy
+    /// could not be filed — a statement about somebody's mailbox that nothing observed.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_TheHostStopsWhileASettledSendsCopiesAreFiled_RecordsNoFilingFailure()
+    {
+        // Arrange
+        var context = new PassContext();
+        var queued = context.Enqueue();
+        using var stopping = new CancellationTokenSource();
+        context.Transmit = (request, envelope, _) =>
+        {
+            foreach (var recipient in request.Recipients)
+            {
+                envelope.Record(new MailRecipientReply(recipient.Address, 250, MailRecipientAcceptance.Accepted));
+            }
+
+            stopping.Cancel();
+
+            return Task.FromResult(new MailTransmission(MailTransmissionOutcome.Accepted, 250));
+        };
+
+        // Act
+        var report = await context.RunAsync(stopping.Token);
+
+        // Assert
+        Assert.Equal(OutgoingEmailStage.Sent, context.Store.Read(queued).Stage);
+        Assert.Empty(report.FilingResults);
+        Assert.Null(context.Store.Read(queued).LastFilingFailure);
+    }
+
     /// <summary>A send a stopped process left mid-transmission is stamped with the reason before anything is claimed.</summary>
     [Fact]
     public async Task RunAsync_ARecordWasLeftMidTransmission_MarksItWithTheUnknownOutcome()
@@ -221,6 +254,8 @@ public sealed class MailOutboxPassTests
             var policyReader = Substitute.For<IMailTransportSecurityPolicyReader>();
             policyReader.GetDeliveryPolicy(Account).Returns(submits ? TransportSecurityPolicy() : null);
 
+            this.Filing = new OutgoingMailFilingHarness(this.Store, contentStore, settings, this.clock);
+
             this.pass = new MailOutboxPass(
                 this.Store,
                 new MailOutboxDelivery(
@@ -234,11 +269,15 @@ public sealed class MailOutboxPassTests
                         this.clock),
                     settings,
                     this.clock),
+                this.Filing.Pass,
                 policyReader,
                 settings);
         }
 
         internal InMemoryOutgoingEmailStore Store { get; }
+
+        /// <summary>Gets the filing side of the pass, which files nothing until a test asks it to.</summary>
+        internal OutgoingMailFilingHarness Filing { get; }
 
         internal ScriptedMailDeliverySession Session { get; }
 
@@ -309,8 +348,8 @@ public sealed class MailOutboxPassTests
             return stranded;
         }
 
-        internal Task<MailOutboxPassReport> RunAsync() =>
-            this.pass.RunAsync(Account, TestContext.Current.CancellationToken);
+        internal Task<MailOutboxPassReport> RunAsync(CancellationToken? stoppingToken = null) =>
+            this.pass.RunAsync(Account, stoppingToken ?? TestContext.Current.CancellationToken);
 
         private static MailTransportSecurityPolicy TransportSecurityPolicy() => MailTransportSecurityPolicy.Create(
             MailConnectionSecurity.StartTlsRequired,

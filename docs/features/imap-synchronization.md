@@ -545,10 +545,12 @@ clearing it is what lets automation put something back in front of them.
 
 `\Flagged` and a message's keywords are written the same way and under the same rules — an authored change, carried by
 the write session, recorded before it is issued, and never a side effect of reading anything. `\Answered` and `\Draft`
-stay unwritten, because each states that an act was performed rather than describing the message, and permitting one of
-them is a decision to reopen
+stay unwritten on every message the mailbox already holds, because each states that an act was performed rather than
+describing the message, and permitting one of them is a decision to reopen
 [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
-rather than a gap to read as permission.
+rather than a gap to read as permission. The one `\Draft` MailFathom writes is on a message it composed itself and put
+in a folder — [the copy of a waiting message](mail-delivery.md#the-copy-in-the-accounts-own-folders) — where the flag
+states exactly what happened.
 
 **A keyword replacement reads before it writes, and reads nothing else.** Asking a server to set a message's keywords
 outright would replace its entire flag set, clearing `\Seen`, `\Flagged`, `\Answered`, and `\Draft` as a side effect of
@@ -705,13 +707,20 @@ account's folders through `IRemoteFolderCatalog` and matches the mapping against
 | Mapping | Matches |
 | --- | --- |
 | `RemotePath` | The advertised folder whose path is the configured text. |
-| `SpecialUse`, alone | The advertised folder carrying that RFC 6154 role. |
+| `SpecialUse`, alone | The advertised folder carrying that RFC 6154 role. `Outbox` is refused here, because no server advertises one. |
 | `RemotePath` and `SpecialUse` together | The advertised folder whose path is the configured text; the role is what that folder *plays* rather than how it is found. |
 
 A role several folders carry does **not** resolve to whichever the server listed first. `LIST` ordering is a response
 order rather than an identity contract, so taking the first would let a reordered response repoint the alias, start a
 generation, and resynchronize a different folder with no configuration having changed. The alias is reported ambiguous
 instead, and the log names the remedy: configure its `RemotePath`.
+
+One role is MailFathom's own and is therefore never matched against what a server advertised. RFC 6154 defines no
+outbox attribute — the outbox a mail client shows is that client's own local queue — so `SpecialUse: Outbox` names a
+folder only beside a `RemotePath`, and startup refuses the role written alone, naming the alias and the key it wants. A
+provider folder merely *named* like an outbox plays no role either, because nothing here reads a folder's name. What
+the role is for is [the copy of a waiting message](mail-delivery.md#the-copy-in-the-accounts-own-folders), which is
+mirrored into that folder and withdrawn when the message leaves; an account that maps none mirrors nothing.
 
 A `SpecialUse: Inbox` mapping additionally falls back to the folder named `INBOX` when the server advertises no
 special-use attribute at all, because RFC 3501 mandates that name and makes it case-insensitive. That fallback exists
@@ -1710,7 +1719,7 @@ The extraction backfill has a section of its own rather than a block inside the 
 
 Every configured account carries a `DisplayName`, whether or not synchronization is enabled, because the stored copy stays readable after the switch is turned off and the name is what a caller reads the account back as. There is no fallback to `AccountId`: a name MailFathom invented would be published to callers as though an operator had chosen it. The two share one naming space — a request may name an account by either — so startup refuses a display name another account's identifier or display name already carries, compared without regard to case; one equal to the account's own identifier is accepted, since both spellings then reach the same mailbox.
 
-When enabled, at least one account with a non-blank `AccountId`, host, and user name must be configured. The account password is not a configuration value at all: `Secrets.Password` carries a reference, and startup fails when it cannot be resolved. Each entry of `Folders` names an alias and at least one of `RemotePath` and `SpecialUse`; naming neither, or naming a role that does not exist, fails startup with a message identifying the alias. Naming both is how a folder found by its path still [plays a role](#what-a-role-says-beside-how-a-folder-is-found), and two folders of one account naming the same role fails startup with a message identifying both aliases and the role. Supported roles are `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`, and `Important`. An entry naming a `RemotePath` may additionally set `CreateIfMissing`, which defaults to `false` and is what [creates the folder](#a-folder-the-mapping-asked-for-is-created) when the server advertises none at that path; setting it on an entry that names no `RemotePath` fails startup naming the alias. If an account omits `Folders`, its supervisor applies the post-binding default of one alias `inbox` mapped to the inbox role; explicit folder lists replace that default.
+When enabled, at least one account with a non-blank `AccountId`, host, and user name must be configured. The account password is not a configuration value at all: `Secrets.Password` carries a reference, and startup fails when it cannot be resolved. Each entry of `Folders` names an alias and at least one of `RemotePath` and `SpecialUse`; naming neither, or naming a role that does not exist, fails startup with a message identifying the alias. Naming both is how a folder found by its path still [plays a role](#what-a-role-says-beside-how-a-folder-is-found), and two folders of one account naming the same role fails startup with a message identifying both aliases and the role. Supported roles are `Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`, `Important`, and `Outbox`; `Outbox` is MailFathom's own rather than one RFC 6154 defines, so an entry naming it without a `RemotePath` fails startup naming the alias. An entry naming a `RemotePath` may additionally set `CreateIfMissing`, which defaults to `false` and is what [creates the folder](#a-folder-the-mapping-asked-for-is-created) when the server advertises none at that path; setting it on an entry that names no `RemotePath` fails startup naming the alias. If an account omits `Folders`, its supervisor applies the post-binding default of one alias `inbox` mapped to the inbox role; explicit folder lists replace that default.
 
 ### Bounding how far back a run reaches
 

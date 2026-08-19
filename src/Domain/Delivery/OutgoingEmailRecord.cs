@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Failures;
 
 namespace MailFathom.Domain.Delivery;
@@ -67,6 +68,15 @@ public sealed record OutgoingEmailRecord
     /// <summary>Gets when the record last moved, which is what says how long a stuck send has been stuck.</summary>
     public required DateTimeOffset StageChangedAt { get; init; }
 
+    /// <summary>Gets the instant from which this send may be attempted again.</summary>
+    /// <remarks>
+    /// It is read rather than only written because it is the one value that says a message is <em>waiting</em> rather
+    /// than merely queued. A send whose instant has passed is claimed by the next pass and is gone in seconds; one whose
+    /// instant lies ahead sits in the outbox until then, which is the message worth mirroring into a folder the owner
+    /// can see.
+    /// </remarks>
+    public required DateTimeOffset AvailableAt { get; init; }
+
     /// <summary>Gets the failure the last attempt ended in, or <see langword="null" /> while no attempt has failed.</summary>
     /// <remarks>
     /// The code is kept and the message is not. A code is a stable identity an operator can look up, while a message is
@@ -83,6 +93,23 @@ public sealed record OutgoingEmailRecord
     /// </remarks>
     public required int? LastReplyCode { get; init; }
 
+    /// <summary>Gets every copy of this message MailFathom has put into a folder of the mailbox.</summary>
+    /// <remarks>
+    /// Filing is not part of sending, and the two are kept apart here on purpose: a message is delivered or it is not,
+    /// and where its copies are is a separate account of the same message. A send that was delivered and whose copy
+    /// could not be filed therefore reads as exactly that — <see cref="OutgoingEmailStage.Sent" /> with no filing and a
+    /// reason in <see cref="LastFilingFailure" /> — rather than as a delivery that failed.
+    /// </remarks>
+    public required IReadOnlyList<OutgoingMailFilingRecord> Filings { get; init; }
+
+    /// <summary>Gets the failure the last filing attempt ended in, or <see langword="null" /> while none has failed.</summary>
+    /// <remarks>
+    /// It is separate from <see cref="LastFailure" /> because the two answer different questions and an operator acts on
+    /// them differently. A delivery failure means somebody did not receive the message; a filing failure means the owner
+    /// cannot see it in their own mail client. Overwriting one with the other would lose whichever happened first.
+    /// </remarks>
+    public required MailFathomErrorCode? LastFilingFailure { get; init; }
+
     /// <summary>Gets whether the record has reached a stage nothing moves it out of.</summary>
     public bool IsTerminal => this.Stage
         is OutgoingEmailStage.Sent
@@ -96,6 +123,27 @@ public sealed record OutgoingEmailRecord
     /// outcome is established another way or the record is given up on visibly.
     /// </remarks>
     public bool HasUnknownOutcome => this.Stage == OutgoingEmailStage.TransmissionBegun;
+
+    /// <summary>Reports whether this send is waiting for an instant that has not arrived yet.</summary>
+    /// <param name="asOf">The instant the question is asked at.</param>
+    /// <returns><see langword="true" /> when the message is queued and nothing will attempt it yet.</returns>
+    /// <remarks>
+    /// A send held for seconds and one held until Monday are the same record, and this is what tells them apart. Only a
+    /// waiting send is worth mirroring into a folder: a message the next pass will take needs no copy anywhere, and
+    /// making one would append and withdraw a message on somebody's mail server for every send.
+    /// </remarks>
+    public bool IsWaitingAt(DateTimeOffset asOf) =>
+        this.Stage == OutgoingEmailStage.Recorded && asOf < this.AvailableAt;
+
+    /// <summary>Finds the copy of this message filed into one place, if one was.</summary>
+    /// <param name="filing">The place to look for.</param>
+    /// <returns>The filing row, or <see langword="null" /> when nothing was filed there.</returns>
+    /// <remarks>
+    /// One row per place, which is what the durable identity of a filing already is: filing the same message into the
+    /// same folder twice would be a second copy, so the answer is a row rather than a list.
+    /// </remarks>
+    public OutgoingMailFilingRecord? FindFiling(OutgoingMailFiling filing) =>
+        this.Filings.FirstOrDefault(candidate => candidate.Filing == filing);
 
     /// <summary>Gets the recipients a later attempt still offers the message to.</summary>
     /// <remarks>

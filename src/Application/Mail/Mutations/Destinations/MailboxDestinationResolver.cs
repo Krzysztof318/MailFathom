@@ -157,8 +157,8 @@ public sealed class MailboxDestinationResolver
             mapping.Alias,
             cancellationToken);
 
-        return binding is { RemotePath: var remotePath }
-            ? MailboxDestinationResolution.Resolved(new MailboxDestination(mapping.Alias, remotePath, IsMirrored: true))
+        return binding is not null
+            ? MailboxDestinationResolution.Resolved(new MailboxDestination(binding, IsMirrored: true))
             : MailboxDestinationResolution.Unbound();
     }
 
@@ -193,8 +193,7 @@ public sealed class MailboxDestinationResolver
         return result switch
         {
             { Outcome: MailFolderResolutionOutcome.Resolved, Resolution: { } binding } =>
-                MailboxDestinationResolution.Resolved(
-                    new MailboxDestination(mapping.Alias, binding.RemotePath, IsMirrored: false)),
+                MailboxDestinationResolution.Resolved(new MailboxDestination(binding, IsMirrored: false)),
             { Outcome: MailFolderResolutionOutcome.AdvertisedFoldersAreAmbiguous } =>
                 MailboxDestinationResolution.Ambiguous(),
             _ => MailboxDestinationResolution.NotAdvertised(),

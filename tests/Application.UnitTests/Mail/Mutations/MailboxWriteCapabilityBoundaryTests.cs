@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Reflection;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Mutations;
 using Xunit;
 
@@ -23,18 +24,24 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations;
 /// nested type's mentions to the type that declares it catches a component that resolves the factory from a service
 /// provider and never names it in a signature.
 /// </para>
+/// <para>
+/// The expected set is the list of tiers the decision record names and nothing else, so growing it is an amendment to
+/// that record rather than an edit here. It has grown once: filing a copy of a message MailFathom composed is a write
+/// no mutation of the owner's own mail can express, because the message it appends does not exist on the server yet.
+/// </para>
 /// </remarks>
 public sealed class MailboxWriteCapabilityBoundaryTests
 {
-    /// <summary>Exactly one application type can obtain a session that writes, and it is the one mutations go through.</summary>
+    /// <summary>Two application types can obtain a session that writes, and both are tiers the decision record names.</summary>
     /// <remarks>
     /// Failing here is not a reason to extend the expected set. A read path that needs to write is a read path that has
     /// acquired something
     /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>
-    /// refuses it, and the change belongs behind <see cref="IMailboxMutationPerformer" /> instead.
+    /// refuses it, and a change to the owner's own mail belongs behind <see cref="IMailboxMutationPerformer" /> instead.
+    /// A third name here is a third tier, which that record reopens for or refuses.
     /// </remarks>
     [Fact]
-    public void ApplicationAssembly_HoldsTheWriteCapabilityInTheMutationPerformerAlone()
+    public void ApplicationAssembly_HoldsTheWriteCapabilityInTheTiersTheDecisionRecordNames()
     {
         // Arrange
         var applicationAssembly = Assembly.Load("MailFathom.Application");
@@ -52,7 +59,7 @@ public sealed class MailboxWriteCapabilityBoundaryTests
             .ToArray();
 
         // Assert
-        Assert.Equal([nameof(MailboxMutationPerformer)], holders);
+        Assert.Equal([nameof(MailboxMutationPerformer), nameof(OutgoingMailFiler)], holders);
     }
 
     /// <summary>Every type a member of <paramref name="type" /> names, with generic arguments unwrapped.</summary>

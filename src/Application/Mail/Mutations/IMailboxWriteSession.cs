@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Synchronization.Sessions;
+using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
@@ -20,11 +21,20 @@ namespace MailFathom.Application.Mail.Mutations;
 /// <para>
 /// The surface is closed to exactly the mutations MailFathom is permitted to perform. There is no method that sends,
 /// replies, or forwards, none that creates, renames, deletes, or subscribes to a folder, and none that writes
-/// <c>\Answered</c> or <c>\Draft</c>. Permitting one of those later is a decision to reopen rather than a method to
-/// append, and this surface is what a permitted mutation arrives on — <c>\Flagged</c> and the keywords did, because
-/// each is a change to one message and therefore the same kind of act as the four that were here first. What does not
-/// arrive here is an act of a different kind: folder creation is a port of its own for exactly that reason, so a caller
-/// able to file a message into a folder is deliberately unable to create one, and the reverse.
+/// <c>\Answered</c>. Permitting one of those later is a decision to reopen rather than a method to append, and this
+/// surface is what a permitted mutation arrives on — <c>\Flagged</c> and the keywords did, because each is a change to
+/// one message and therefore the same kind of act as the four that were here first. What does not arrive here is an act
+/// of a different kind: folder creation is a port of its own for exactly that reason, so a caller able to file a message
+/// into a folder is deliberately unable to create one, and the reverse.
+/// </para>
+/// <para>
+/// <see cref="AppendAsync" /> and <see cref="WithdrawAppendedAsync" /> are the third reopening, and they are narrower
+/// than they look. Both act only on a message MailFathom itself composed and holds the outgoing record of: the append
+/// puts a copy of it into the folder its state calls for, and the withdrawal takes back a copy the append put there.
+/// Neither can reach a message somebody sent to this mailbox, because neither takes an occurrence — an append names no
+/// message at all and a withdrawal names a UID the append itself reported. That is also why <c>\Draft</c> is writable
+/// here and nowhere else: it is an assertion about a message being composed, which is true of exactly these and of
+/// nothing an owner received.
 /// </para>
 /// <para>
 /// Every operation names what the caller asked for and never how the server was made to do it. Which protocol
@@ -218,5 +228,68 @@ public interface IMailboxWriteSession : IAsyncDisposable
         EmailOccurrenceId occurrenceId,
         AuthoredMailKeywords keywords,
         IMailboxMutationJournal journal,
+        CancellationToken cancellationToken);
+
+    /// <summary>Puts a copy of a message MailFathom composed into this session's folder.</summary>
+    /// <param name="rawMime">The stored RFC 822 bytes to append, which are the bytes that were or will be transmitted.</param>
+    /// <param name="flags">The flags the appended copy carries, which the message's own state decides.</param>
+    /// <param name="internalDate">The internal date the server records for the copy, which is what a mail client sorts the folder by.</param>
+    /// <param name="cancellationToken">Cancels the append.</param>
+    /// <returns>What the server said about the copy it accepted.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="rawMime" /> is empty.</exception>
+    /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the append within its configured resilience budget.</exception>
+    /// <exception cref="MailboxFolderRecreatedException">Thrown when a recovered connection reselected the folder with a different UIDVALIDITY.</exception>
+    /// <remarks>
+    /// <para>
+    /// This is the one operation here that creates a message rather than changing one, and the one that takes no
+    /// occurrence — an <c>APPEND</c> names a folder and a body, so there is no message of the owner's it could reach.
+    /// The folder is this session's own selection rather than an argument, which is what keeps a caller from appending
+    /// into a folder it did not open the session for.
+    /// </para>
+    /// <para>
+    /// It is never repeated on the caller's behalf, for the reason a copy is not: an <c>APPEND</c> issued twice is a
+    /// second message in the owner's folder rather than a repeat of the first, and nothing the folder shows afterwards
+    /// tells them apart. There is no journal here because the durable record of the append is the caller's outgoing
+    /// record, which is written before this is called and confirmed after it returns.
+    /// </para>
+    /// <para>
+    /// The bytes are appended as they were stored rather than recomposed, so the filed copy is the message that was
+    /// delivered. Nothing about this reads or writes any other message's flags.
+    /// </para>
+    /// </remarks>
+    Task<AppendedMailCopy> AppendAsync(
+        ReadOnlyMemory<byte> rawMime,
+        AppendedMailFlags flags,
+        DateTimeOffset internalDate,
+        CancellationToken cancellationToken);
+
+    /// <summary>Takes a copy this session's folder was given by an earlier append back out of it.</summary>
+    /// <param name="uidValidity">The UIDVALIDITY the append reported, which must still be the folder's.</param>
+    /// <param name="uid">The UID the append reported for the copy.</param>
+    /// <param name="cancellationToken">Cancels the withdrawal.</param>
+    /// <returns>A task that completes when the folder no longer holds the copy.</returns>
+    /// <exception cref="MailboxMutationUnsupportedException">Thrown when the server advertises no <c>UIDPLUS</c>, so no message-scoped expunge exists.</exception>
+    /// <exception cref="MailboxUnavailableException">Thrown when the mail server did not serve the withdrawal within its configured resilience budget.</exception>
+    /// <exception cref="MailboxFolderRecreatedException">Thrown when the folder no longer reports the UIDVALIDITY the append named.</exception>
+    /// <remarks>
+    /// <para>
+    /// It exists so a mirrored copy of an undelivered message does not outlive the wait it was showing. The UID is one
+    /// the server itself named when it accepted the copy, so this reaches a message MailFathom put there and can reach
+    /// no other — which is what separates it from the delete a mutation performs on the owner's own mail.
+    /// </para>
+    /// <para>
+    /// The UIDVALIDITY is compared before anything is issued, because a folder recreated since the append renumbered
+    /// every message in it and the recorded UID would name somebody else's. A bare <c>EXPUNGE</c> is never issued, so a
+    /// server without <c>UID EXPUNGE</c> is refused rather than served: removing every message anybody flagged
+    /// <c>\Deleted</c> is not a side effect this may have.
+    /// </para>
+    /// <para>
+    /// A copy the folder no longer holds is not an error. The owner deleting it themselves is the ordinary case, and
+    /// what was asked for — that the copy is gone — is already true.
+    /// </para>
+    /// </remarks>
+    Task WithdrawAppendedAsync(
+        ImapUidValidity uidValidity,
+        ImapUid uid,
         CancellationToken cancellationToken);
 }

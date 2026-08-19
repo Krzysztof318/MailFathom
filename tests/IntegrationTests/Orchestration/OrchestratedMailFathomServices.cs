@@ -19,6 +19,7 @@ using MailFathom.Application.Folders;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -162,6 +163,11 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// no scanner. Absent everywhere but the class that scores, exactly as a deployment which never switched the scanner
     /// on registers no implementation of the port.
     /// </param>
+    /// <param name="filesSentCopies">
+    /// Whether this account files a copy of what it sends into a folder of its own, and therefore maps one to the sent
+    /// role. Off everywhere but the class proving that the copy is appended once and comes back recognized, because a
+    /// deployment that files one appends a message on every send the collection makes.
+    /// </param>
     /// <param name="contactCollection">
     /// What this deployment decided about collecting contacts from arriving mail, or <see langword="null" /> for the
     /// shipped default of collecting nobody. Stated only by the class that collects, because every other class stores
@@ -181,7 +187,8 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         IReadOnlyList<MailFolderIdentity>? foldersNotMirrored = null,
         SpamClassificationSettings? spamClassification = null,
         SpamAssassinScannerProfile? spamScanner = null,
-        ContactCollectionSettings? contactCollection = null)
+        ContactCollectionSettings? contactCollection = null,
+        bool filesSentCopies = false)
     {
         var builder = new HostApplicationBuilder();
         var account = new SyntheticMailAccount(
@@ -191,7 +198,8 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             answeringAuditTrailEnabled,
             foldersWithoutEmbeddings,
             foldersHiddenFromTools,
-            foldersNotMirrored);
+            foldersNotMirrored,
+            filesSentCopies);
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
@@ -208,6 +216,10 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // section. Every delivery attempt reads it before it opens anything, so an account without it delivers nothing
         // rather than delivering as somebody unnamed.
         builder.Services.AddSingleton<IOutgoingSenderIdentityReader>(account);
+        // Whether an account files a copy of what it sends, registered by the composition root from the same options
+        // section. Every outbox pass resolves it after an attempt settles, so a harness without it would fail to
+        // compose rather than behave like a deployment that files nothing.
+        builder.Services.AddSingleton<IOutgoingMailFilingPolicyReader>(account);
         // What one pass over an account's outbox is allowed to do, which a composition root validates out of the
         // MailDelivery section. The values are the deployed defaults with the two the suite has to be able to reach
         // narrowed: a batch small enough for a test to fill, and a retry ceiling a test can exhaust without waiting.

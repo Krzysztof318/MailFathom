@@ -73,16 +73,39 @@ public sealed partial class MailboxMutationTelemetry
     /// <param name="accountId">The account whose mailbox is being changed.</param>
     /// <param name="folderAlias">The folder the change is performed in.</param>
     /// <returns>The scope, which the caller must dispose; a scope disposed without <see cref="MailboxMutationScope.Completed" /> reports a failure.</returns>
-    internal MailboxMutationScope Begin(MailboxMutation mutation, MailAccountId accountId, MailFolderAlias folderAlias)
+    internal MailboxMutationScope Begin(MailboxMutation mutation, MailAccountId accountId, MailFolderAlias folderAlias) =>
+        this.BeginFiling(mutation.Name, accountId, folderAlias);
+
+    /// <summary>Begins reporting one operation that is not a mutation of an existing message, under its own name.</summary>
+    /// <param name="operationName">The name of the operation, which names the span, the log line, and the counter dimension.</param>
+    /// <param name="accountId">The account whose mailbox is being changed.</param>
+    /// <param name="folderAlias">The folder the operation is performed in.</param>
+    /// <returns>The scope, which the caller must dispose; a scope disposed without <see cref="MailboxMutationScope.Completed" /> reports a failure.</returns>
+    /// <remarks>
+    /// Filing a copy of an outgoing message and taking that copy back out are changes to a mailbox and belong in the
+    /// same record as the mutations — an operator asking what MailFathom changed wants one answer rather than two
+    /// dashboards. They carry no <see cref="MailboxMutation" /> because they are not one: the permitted mutations are a
+    /// closed set of changes to a message that is already there, and neither of these is that.
+    /// </remarks>
+    internal MailboxMutationScope BeginFiling(
+        string operationName,
+        MailAccountId accountId,
+        MailFolderAlias folderAlias)
     {
-        var activity = Telemetry.ActivitySource.StartActivity(mutation.Name, ActivityKind.Client);
-        activity?.SetTag(MutationTagName, mutation.Name);
+        var activity = Telemetry.ActivitySource.StartActivity(operationName, ActivityKind.Client);
+        activity?.SetTag(MutationTagName, operationName);
         activity?.SetTag(AccountTagName, accountId.Value);
         activity?.SetTag(FolderAliasTagName, folderAlias.Value);
 
-        this.LogMutationStarted(mutation.Name, accountId.Value, folderAlias.Value);
+        this.LogMutationStarted(operationName, accountId.Value, folderAlias.Value);
 
-        return new MailboxMutationScope(this, mutation, accountId, folderAlias, activity, this.timeProvider.GetTimestamp());
+        return new MailboxMutationScope(
+            this,
+            operationName,
+            accountId,
+            folderAlias,
+            activity,
+            this.timeProvider.GetTimestamp());
     }
 
     [LoggerMessage(
@@ -127,21 +150,21 @@ public sealed partial class MailboxMutationTelemetry
         string imapCommand);
 
     internal void RecordProtocolPath(
-        MailboxMutation mutation,
+        string operationName,
         MailAccountId accountId,
         MailFolderAlias folderAlias,
         string protocolPath) =>
-        this.LogProtocolPathChosen(mutation.Name, accountId.Value, folderAlias.Value, protocolPath);
+        this.LogProtocolPathChosen(operationName, accountId.Value, folderAlias.Value, protocolPath);
 
     internal void RecordCommand(
-        MailboxMutation mutation,
+        string operationName,
         MailAccountId accountId,
         MailFolderAlias folderAlias,
         string imapCommand) =>
-        this.LogCommandIssued(mutation.Name, accountId.Value, folderAlias.Value, imapCommand);
+        this.LogCommandIssued(operationName, accountId.Value, folderAlias.Value, imapCommand);
 
     internal void RecordOutcome(
-        MailboxMutation mutation,
+        string operationName,
         MailAccountId accountId,
         MailFolderAlias folderAlias,
         bool succeeded,
@@ -150,7 +173,7 @@ public sealed partial class MailboxMutationTelemetry
         var outcome = succeeded ? "success" : "failure";
         var tags = new TagList
         {
-            { MutationTagName, mutation.Name },
+            { MutationTagName, operationName },
             { AccountTagName, accountId.Value },
             { FolderAliasTagName, folderAlias.Value },
             { OutcomeTagName, outcome },
@@ -161,11 +184,11 @@ public sealed partial class MailboxMutationTelemetry
 
         if (succeeded)
         {
-            this.LogMutationCompleted(mutation.Name, accountId.Value, folderAlias.Value, elapsed.TotalMilliseconds);
+            this.LogMutationCompleted(operationName, accountId.Value, folderAlias.Value, elapsed.TotalMilliseconds);
         }
         else
         {
-            this.LogMutationFailed(mutation.Name, accountId.Value, folderAlias.Value, elapsed.TotalMilliseconds);
+            this.LogMutationFailed(operationName, accountId.Value, folderAlias.Value, elapsed.TotalMilliseconds);
         }
     }
 

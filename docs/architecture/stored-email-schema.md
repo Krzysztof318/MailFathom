@@ -803,6 +803,40 @@ a single message's bytes. It is written **once** and read back for every attempt
 optimization — a message rebuilt between attempts carries a different `Message-ID` and would thread as a second message
 in every recipient's client. A second enqueue of the same identity therefore leaves the stored payload exactly as it is.
 
+### The copies of an outgoing message that are in the mailbox
+
+`outgoing_email_filings` holds one row per place a copy of an outgoing message has been put, keyed by the record and
+the filing — `draft`, `held`, or `sent` — so an account's own Sent folder and its outbox folder are two rows of one
+send rather than two records. It exists because an `APPEND` cannot be corrected by repeating it: every mutation
+elsewhere in this schema names a message the server already holds, while an append *creates* one, so a second attempt
+is a second copy in somebody's folder that nothing afterwards can tell from the first.
+
+| Column | What it records |
+|---|---|
+| `OutgoingEmailId`, `Filing` | The send and which of its places this row is, which together are the key. A cascade from the record removes them with it |
+| `MailboxAccountId` | The account whose mailbox holds the copy, carried here so the read that recognizes a copy coming back is answered without joining the record |
+| `FolderAlias`, `FolderPath` | The folder the copy was appended to, as the alias an operator wrote and the path that alias named at the time. Both are kept because the alias is what a failure is reported by and the path is what a discovery is matched against |
+| `Stage` | `Issued` before the command went out, `Confirmed` once the server answered, `Withdrawn` once the copy was taken back or given up on |
+| `PlacementUidValidity`, `PlacementUid` | Where the server said it put the copy, both null on a server that advertises no RFC 4315 `UIDPLUS` and therefore said nothing |
+| `InternetMessageId` | The identity read back off the appended bytes, which is what recognizes the copy where the server named no placement |
+| `AppendedAt`, `ObservedAt`, `WithdrawnAt` | When the append was issued, when the copy was seen coming back through synchronization, and when it was removed. The second is what stops the recognizing read from going on looking for a copy already accounted for |
+| `xmin` | The concurrency token, as everywhere else |
+
+**A row at `Issued` is the undecidable window, and it is left undecided.** The row is written before the command goes
+out precisely so a process that died in between leaves something behind; nothing appends again on the strength of it,
+and nothing moves it forward either, because either choice would be this system claiming to know something about
+somebody's folder that it cannot. `outgoing_emails.LastFilingFailureCode` carries the reason beside the send, which is
+where an operator reads why a message they sent is not in their Sent folder. It is a column on the record rather than
+on this table because a failure may have to be recorded where no row exists at all — a destination that resolves to
+nothing is the ordinary case — and because it must never be mistaken for something about the delivery, which is
+untouched by any of it.
+
+`stored_emails.FiledFromOutgoingEmailId` is the other half of the same fact, written when a synchronization recognizes
+a discovery as one of these copies. It is a plain column rather than a foreign key: the two rows have different
+lifetimes, and a send whose record is erased must not take the message in somebody's folder with it. Everything
+reacting to newly arrived mail filters on it — [the rule queue](../features/mail-rules.md#when-rules-run) both in its
+predicate and in its own partial index — so a copy of what the owner just sent never reads as mail that arrived.
+
 ### The claim a delivery attempt holds
 
 An attempt takes a batch of an account's outbox with a single statement: the rows are selected `FOR UPDATE SKIP LOCKED`
@@ -830,7 +864,7 @@ attempt it had counted. A send whose transmission had begun is the one case noth
 | `ix_stored_emails_folder_timeline` | `(mail_folder_id, received_at DESC NULLS LAST, id DESC)` | The per-folder timeline |
 | `ix_stored_emails_awaiting_content` | `(mail_folder_id, uid_validity, uid)` over the rows whose `content_availability` is `AwaitingStorageHeadroom` | The queue of occurrences stored without their payload, which every folder run reads once. The filter is what keeps the index proportionate to that queue rather than to the mailbox: on a deployment that has never reached its storage ceiling the index is empty, and the read costs nothing instead of walking a folder's whole occurrence index to discover that no row qualifies |
 | `ix_stored_emails_account_identity` | `(mailbox_account_id, id)` | The order a whole-mailbox rule run walks an account's mail in. The identity rather than the timeline, because a walk that has to resume needs a total order no later write disturbs and a position that is one column rather than a nullable timestamp paired with a tie-breaker |
-| `ix_stored_emails_awaiting_rule_evaluation` | `(mailbox_account_id, id)` over the rows whose `rules_evaluated_at` is null | The queue of mail no rule pass has evaluated, read once per account run. The filter is the point: in steady state almost every row of an account has been evaluated, so without it the read would walk the account's whole index to find the handful that qualify, on every run of every account |
+| `ix_stored_emails_awaiting_rule_evaluation` | `(mailbox_account_id, id)` over the rows whose `rules_evaluated_at` **and** `FiledFromOutgoingEmailId` are both null | The queue of mail no rule pass has evaluated, read once per account run. The filter is the point: in steady state almost every row of an account has been evaluated, so without it the read would walk the account's whole index to find the handful that qualify, on every run of every account. The second clause is what keeps a copy of this deployment's own outgoing mail out of that queue permanently — such a row is never stamped as evaluated, because it never was, so excluding it anywhere else would leave it at the head of the queue for good |
 | `ix_stored_emails_thread` | `(EmailThreadId, Id)` | One conversation's messages, in the total order a read assembles them from. The identity is in the key because the order a conversation is published in is computed rather than stored, and the read needs a stable one to bound and page the raw set by |
 | `IX_stored_emails_ParentStoredEmailId` | `(ParentStoredEmailId)` | The self-referencing key back to the message a reply answers, which is what erasing a message reaches its replies by rather than scanning |
 | `pk_email_thread_identifiers` | `(MailboxAccountId, IdentifierHash)`, unique | Which conversation an identifier belongs to, which is the question every arriving message asks once per identifier it names. Uniqueness is also the race: two messages binding one identifier at once leave one writer to retry against what the other wrote |
@@ -853,6 +887,8 @@ attempt it had counted. A send whose transmission had begun is the one case noth
 | `ix_mailbox_mutation_audit_entries_mutation` | `(MutationRecordId)`, unique | One audit entry per mutation ending, whatever a repeated append attempts |
 | `ix_outgoing_emails_identity` | `(MailboxAccountId, RequesterOrigin, RequesterIdentity)`, unique | An outgoing message's idempotency identity, which is what makes the same authored request twice one delivery. It spans terminal rows deliberately: a row that was sent is what stops the same request asking again |
 | `ix_outgoing_emails_claimable` | `(MailboxAccountId, AvailableAt, Id)` where the stage is `Recorded` | The batch a delivery pass claims, oldest first. The filter is what keeps it proportionate to the outbox rather than to everything the deployment has ever sent: a claim reads only rows nothing has transmitted for, and in steady state that is almost none of the table. The identity is in the key because two sends recorded in one instant need a total order for the claim to be deterministic |
+| `ix_outgoing_email_filings_placement` | `(MailboxAccountId, FolderPath, PlacementUidValidity, PlacementUid)` where `ObservedAt` is null | The question every synchronized batch asks: is one of these UIDs a copy this deployment filed. The filter is what keeps it the size of the copies not yet seen coming back rather than of everything ever sent |
+| `ix_outgoing_email_filings_message_id` | `(MailboxAccountId, InternetMessageId)` where `ObservedAt` is null | The same question on a server that advertises no `UIDPLUS` and therefore named no placement, answered by the identity in the appended bytes |
 | `ix_outgoing_emails_outstanding` | `(MailboxAccountId, RecordedAt)` where the stage is none of `Sent`, `Refused`, or `Cancelled` | The outbox a restart reads and an operator asks about: what is queued, what is in flight, and what has stopped. The filter names the three terminal stages rather than the successful one alone, so a refused send stays visible while the deployment's whole sending history does not |
 | `ix_mail_rule_executions_account_evaluated` | `(MailboxAccountId, EvaluatedAt, Id)` | An account's rule history newest first, and the retention pass that erases what has outlived its window. The identifier is in the key because two executions of one batch share an instant and a keyset page needs a total order to continue from |
 | `ix_mail_rule_executions_account_rule_evaluated` | `(MailboxAccountId, RuleName, EvaluatedAt, Id)` | What one rule has been concluding, which is the question a rule that never seems to fire is investigated with |

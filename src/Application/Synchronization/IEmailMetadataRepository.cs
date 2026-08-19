@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Synchronization;
@@ -73,5 +74,32 @@ public interface IEmailMetadataRepository
         IPersistenceSession session,
         StoredEmailId storedEmailId,
         EmailOccurrenceId occurrenceId,
+        CancellationToken cancellationToken);
+
+    /// <summary>Records that one stored email is the copy MailFathom itself filed of a message it sent.</summary>
+    /// <param name="session">The explicit persistence session this write participates in, which is the one storing the email.</param>
+    /// <param name="storedEmailId">The email that was just stored.</param>
+    /// <param name="outgoingEmailId">The outgoing record the copy was filed from.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>A task that completes when the join is written.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no stored email carries <paramref name="storedEmailId" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// The copy is stored like any other message — the owner searches it, reads it, and sees it in a mailbox listing —
+    /// and this is the one thing that has to be different about it: everything that reacts to newly synchronized mail
+    /// must not react to a message this deployment itself put there. A rule conditioned on arriving mail would
+    /// otherwise fire on the owner's own outgoing message the moment its sent copy came back.
+    /// </para>
+    /// <para>
+    /// It is a join to the outgoing record rather than a flag, because the useful question is which send this copy is
+    /// of. A flag would answer only the narrow question the rule engine asks, and would have to be joined back to the
+    /// record anyway by whatever asked the wider one.
+    /// </para>
+    /// </remarks>
+    Task RecordFiledFromOutgoingAsync(
+        IPersistenceSession session,
+        StoredEmailId storedEmailId,
+        OutgoingEmailId outgoingEmailId,
         CancellationToken cancellationToken);
 }

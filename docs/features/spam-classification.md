@@ -377,6 +377,13 @@ signal instead of stalling the pass that produced it, and it is watched where ev
 per job type saturates at exactly the bound enqueuing is refused at, which
 [telemetry](../operations/telemetry.md#durable-background-work) states in full.
 
+**A copy of this deployment's own outgoing mail is not asked for either**, and it is the one message whose scoring is
+decided by where it came from rather than by what it holds. A message MailFathom
+[filed](mail-delivery.md#the-copy-in-the-accounts-own-folders) into the account's own sent or outbox folder was composed
+here and sent from here, so a verdict about whether somebody sent it unsolicited says nothing — and one calling it spam
+would withhold everything derived from a message the owner wrote and, where the operator switched filing on, move their
+own send into their junk folder.
+
 **Two messages are deliberately not asked for.** One whose folder the configured scope does not cover, and one stored
 without its content — a message above the fetch size limit, or one waiting for storage headroom — because a message
 whose payload is not stored is reported unclassifiable rather than fetched. The second becomes classifiable the moment a

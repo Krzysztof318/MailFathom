@@ -11,6 +11,7 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam;
@@ -21,6 +22,9 @@ using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Contacts.Collection;
+using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
@@ -1930,6 +1934,63 @@ public sealed class MailboxSynchronizerTests
             new RecordingContactCollectionTelemetry());
     }
 
+    /// <summary>Builds a reader whose messages all carry one sender, so a run that collects contacts has somebody to record.</summary>
+    /// <remarks>
+    /// The reader every other test uses extracts no participants at all, which is enough for what those tests assert
+    /// and would make a contact book empty whatever the run decided. A test whose subject is that nobody was collected
+    /// needs the opposite arrangement.
+    /// </remarks>
+    private static IEmailMimeReader CreateMimeReaderThatExtractsOneSender()
+    {
+        Assert.True(EmailAddress.TryCreate("Anna Kowalska", "anna@example.test", out var sender));
+
+        var mimeReader = Substitute.For<IEmailMimeReader>();
+        mimeReader
+            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(
+                CreateExtractedMetadata(call.Arg<RemoteEmailContent>()!.OccurrenceId) with
+                {
+                    Participants = [new EmailParticipant(EmailAddressRole.From, sender)],
+                })));
+
+        return mimeReader;
+    }
+
+    /// <summary>Builds the collector a run reaches on an account that collects everybody it sees, first sight included.</summary>
+    /// <remarks>
+    /// The one case that needs it is the discovery a filing accounts for: an account collecting nothing would record no
+    /// contact whatever the run decided, so the absence would prove nothing. The threshold is one so the arrangement
+    /// needs no history behind it.
+    /// </remarks>
+    private static MailContactCollector CreateCollectorThatCollectsEveryone(
+        InMemoryContactBookStore book,
+        IPersistenceSessionFactory persistenceSessionFactory,
+        TimeProvider timeProvider)
+    {
+        var principals = Substitute.For<IAuthorizedPrincipalSource>();
+        principals.Current.Returns(AuthorizedPrincipal.Process);
+
+        return new MailContactCollector(
+            new ContactBook(
+                book,
+                book,
+                new OptimisticConcurrencyRetryPolicy(
+                    persistenceSessionFactory,
+                    new PersistenceConcurrencyOptions(),
+                    timeProvider),
+                timeProvider,
+                new AccessAuthorization(principals)),
+            new StubContactCollectionSettingsReader(new ContactCollectionSettings
+            {
+                IsEnabled = true,
+                MinimumMessagesFromSender = 1,
+                MaxContactsPerRun = 50,
+                Policy = ContactCollectionPolicy.Create([], []),
+            }),
+            StubAuthoredMailTally.NobodyHasWritten,
+            new RecordingContactCollectionTelemetry());
+    }
+
     /// <summary>Builds a resolver whose alias is already bound to the folder the server advertises, so no run rebinds it.</summary>
     /// <remarks>
     /// These tests are about what synchronization does once a folder is known. Resolution has tests of its own, and
@@ -2465,6 +2526,76 @@ public sealed class MailboxSynchronizerTests
         return checkpointStore;
     }
 
+    /// <summary>
+    /// A server that advertised <c>UIDPLUS</c> named the occurrence its <c>APPEND</c> produced, so the copy coming back
+    /// is joined to the send by the server's own statement and marked as this deployment's own.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_ACopyThisDeploymentFiledWhereTheServerNamedThePlacement_IsJoinedToTheSend()
+    {
+        // Arrange
+        var context = new FiledCopyContext(uid: ImapUid.Create(31));
+        context.FileCopyAtPlacement();
+
+        // Act
+        var result = await context.SynchronizeAsync();
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        await context.AssertJoinedToTheSendAsync();
+    }
+
+    /// <summary>
+    /// A server advertising no <c>UIDPLUS</c> named nothing, so the identity MailFathom minted and read back off the
+    /// appended bytes is what recognizes the copy — and it is recognized just as certainly.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_ACopyThisDeploymentFiledWhereTheServerNamedNoPlacement_IsJoinedByTheMessageIdentity()
+    {
+        // Arrange
+        var context = new FiledCopyContext(uid: ImapUid.Create(32));
+        context.FileCopyByMessageIdentity();
+
+        // Act
+        var result = await context.SynchronizeAsync();
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        await context.AssertJoinedToTheSendAsync();
+    }
+
+    /// <summary>Somebody else's message in the same folder is ordinary arriving mail, whatever this deployment has filed.</summary>
+    [Fact]
+    public async Task SynchronizeAsync_AMessageNoFilingAccountsFor_IsStoredAsOrdinaryArrivingMail()
+    {
+        // Arrange
+        var context = new FiledCopyContext(uid: ImapUid.Create(33));
+
+        // Act
+        var result = await context.SynchronizeAsync();
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        await context.AssertStoredAsArrivingMailAsync();
+    }
+
+    /// <summary>Answers as a deployment that has never filed a copy of its own outgoing mail, which is most of them.</summary>
+    private static IOutgoingMailFilingStore CreateFilingStoreWithNothingFiled()
+    {
+        var filings = Substitute.For<IOutgoingMailFilingStore>();
+        filings
+            .ReadFilingsAtAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<RemoteFolderPath>(),
+                Arg.Any<ImapUidValidity>(),
+                Arg.Any<IReadOnlyCollection<ImapUid>>(),
+                Arg.Any<IReadOnlyCollection<string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ => []);
+
+        return filings;
+    }
+
     private static MailboxSynchronizer CreateSynchronizer(
         IMailboxSessionFactory mailboxSessionFactory,
         ISynchronizationCheckpointStore checkpointStore,
@@ -2487,7 +2618,8 @@ public sealed class MailboxSynchronizerTests
         IDerivedWorkGateTelemetry? gateTelemetry = null,
         IMailSynchronizationPhaseTelemetry? phaseTelemetry = null,
         IJobStore? jobStore = null,
-        MailContactCollector? contactCollector = null)
+        MailContactCollector? contactCollector = null,
+        IOutgoingMailFilingStore? filingStore = null)
     {
         var concurrencyRetryPolicy = new OptimisticConcurrencyRetryPolicy(
             persistenceSessionFactory,
@@ -2509,6 +2641,7 @@ public sealed class MailboxSynchronizerTests
             rawMimeMemoryBudget ?? new RawMimeMemoryBudget(long.MaxValue),
             mimeReader ?? CreateMimeReaderThatExtractsEverything(),
             mutations,
+            filingStore ?? CreateFilingStoreWithNothingFiled(),
             new MailboxReconciler(
                 reconciliationStore ?? CreateReconciliationStoreWithNothingToDo(),
                 mutations,
@@ -3019,4 +3152,183 @@ public sealed class MailboxSynchronizerTests
         }
     }
 
+    /// <summary>Arranges one discovery in a folder this deployment has filed a copy of its own outgoing mail into.</summary>
+    /// <remarks>
+    /// The store is a substitute rather than a fake, because what these tests are about is the join the run performs
+    /// over what the store answered — which row a discovery is attributed to, and what is written when one is.
+    /// </remarks>
+    private sealed class FiledCopyContext
+    {
+        private const string MintedMessageId = "mint-1@mailfathom.invalid";
+
+        private static readonly MailAccountId Account = MailAccountId.Create("primary");
+
+        private static readonly OutgoingEmailId Send =
+            OutgoingEmailId.Create(Guid.Parse("0198f0a0-3333-7000-8000-000000000001"));
+
+        private readonly ImapUidValidity uidValidity = ImapUidValidity.Create(5);
+        private readonly ImapUid uid;
+        private readonly IEmailMetadataRepository metadataRepository = Substitute.For<IEmailMetadataRepository>();
+        private readonly IOutgoingMailFilingStore filings = Substitute.For<IOutgoingMailFilingStore>();
+        private readonly IJobStore jobStore = Substitute.For<IJobStore>();
+        private readonly InMemoryContactBookStore contacts = new();
+        private readonly IPersistenceSession persistenceSession = Substitute.For<IPersistenceSession>();
+        private readonly StoredEmailId storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
+        private readonly FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 19, 9, 0, 0, TimeSpan.Zero));
+        private readonly MailboxSynchronizer synchronizer;
+
+        internal FiledCopyContext(ImapUid uid)
+        {
+            this.uid = uid;
+
+            var occurrence = EmailOccurrenceId.Create(Account, InboxFolder.Id, this.uidValidity, uid);
+            var metadata = new RemoteEmailMetadata(
+                occurrence,
+                MintedMessageId,
+                "Subject",
+                new DateTimeOffset(2026, 8, 19, 8, 0, 0, TimeSpan.Zero),
+                128);
+
+            var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
+            checkpointStore
+                .GetCheckpointAsync(Account, InboxFolder.Id, CancellationToken.None)
+                .Returns(SynchronizationCheckpoint.None(this.uidValidity));
+
+            var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
+            sessionScopeFactory.BeginSessionAsync(CancellationToken.None).Returns(this.persistenceSession);
+
+            var mailboxSession = Substitute.For<IMailboxSession>();
+            mailboxSession.GetUidValidityAsync(CancellationToken.None).Returns(this.uidValidity);
+            mailboxSession
+                .GetEmailBatchAfterAsync(null, 25, MailSynchronizationWindow.Unbounded, CancellationToken.None)
+                .Returns(new RemoteEmailMetadataBatch([metadata], uid, HasMore: false));
+            mailboxSession
+                .FetchEmailContentWithoutSettingSeenAsync(occurrence, 1024, CancellationToken.None)
+                .Returns(RemoteEmailContentFetchResult.Retrieved(
+                    new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]))));
+
+            var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+            sessionFactory
+                .OpenReadOnlyAsync(Account, InboxFolder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None)
+                .Returns(mailboxSession);
+
+            this.metadataRepository
+                .UpsertMetadataAsync(
+                    this.persistenceSession,
+                    metadata,
+                    Arg.Any<ExtractedEmailMetadata?>(),
+                    StoredEmailContentAvailability.Available,
+                    CancellationToken.None)
+                .Returns(this.storedEmailId);
+
+            this.AnswerWith([]);
+
+            this.synchronizer = CreateSynchronizer(
+                sessionFactory,
+                checkpointStore,
+                sessionScopeFactory,
+                this.metadataRepository,
+                Substitute.For<IEmailContentStore>(),
+                this.clock,
+                new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 },
+                mimeReader: CreateMimeReaderThatExtractsOneSender(),
+                classificationSettings: ClassifyingTheInbox(),
+                jobStore: this.jobStore,
+                contactCollector: CreateCollectorThatCollectsEveryone(
+                    this.contacts,
+                    sessionScopeFactory,
+                    this.clock),
+                filingStore: this.filings);
+        }
+
+        /// <summary>Says that this deployment filed a copy the server named the occurrence of.</summary>
+        internal void FileCopyAtPlacement() =>
+            this.AnswerWith([this.Filed(RemoteEmailPlacement.Reported(this.uidValidity, this.uid), messageId: null)]);
+
+        /// <summary>Says that this deployment filed a copy into a server that named no occurrence at all.</summary>
+        internal void FileCopyByMessageIdentity() =>
+            this.AnswerWith([this.Filed(RemoteEmailPlacement.NotReported(), MintedMessageId)]);
+
+        internal Task<MailboxSynchronizationResult> SynchronizeAsync() =>
+            this.synchronizer.SynchronizeAsync(Account, InboxMapping, CancellationToken.None);
+
+        /// <summary>Asserts that the discovery was recorded as this deployment's own and the filing marked as met.</summary>
+        internal async Task AssertJoinedToTheSendAsync()
+        {
+            // Nothing this deployment composed and sent is scored: a verdict about whether somebody sent it
+            // unsolicited says nothing, and one calling it spam would withhold everything derived from a message the
+            // owner wrote.
+            Assert.Empty(EnqueuedJobs(this.jobStore));
+
+            // Collection is deliberately not suppressed with it. Which header a message contributes is decided by the
+            // role of the folder it is in, so a copy in a sent folder contributes the people the owner wrote to and one
+            // anywhere else contributes its author — the same answer the copy would get if the provider had filed it.
+            Assert.Equal(1, this.contacts.ContactCount);
+
+            await this.metadataRepository.Received(1).RecordFiledFromOutgoingAsync(
+                this.persistenceSession,
+                this.storedEmailId,
+                Send,
+                Arg.Any<CancellationToken>());
+
+            await this.filings.Received(1).RecordFilingObservedAsync(
+                this.persistenceSession,
+                Send,
+                OutgoingMailFiling.Sent,
+                this.clock.GetUtcNow(),
+                Arg.Any<CancellationToken>());
+        }
+
+        /// <summary>Asserts that nothing marked the discovery as this deployment's own.</summary>
+        /// <remarks>
+        /// It is the control the absence above needs. The same run, the same folder, and the same observation channel
+        /// produce a join when a filing accounts for the discovery, so an assertion that nothing was written here
+        /// reports a mechanism that stopped writing altogether rather than passing on it.
+        /// </remarks>
+        internal async Task AssertStoredAsArrivingMailAsync()
+        {
+            // The control the absence above needs. The same run, the same folder, and the same settings offer an
+            // ordinary discovery for scoring, so an assertion that a filed copy was not offered reports a run that
+            // stopped offering anything rather than passing on a suppression that never happened.
+            Assert.Single(EnqueuedJobs(this.jobStore));
+
+            await this.metadataRepository.DidNotReceive().RecordFiledFromOutgoingAsync(
+                Arg.Any<IPersistenceSession>(),
+                Arg.Any<StoredEmailId>(),
+                Arg.Any<OutgoingEmailId>(),
+                Arg.Any<CancellationToken>());
+
+            await this.filings.DidNotReceive().RecordFilingObservedAsync(
+                Arg.Any<IPersistenceSession>(),
+                Arg.Any<OutgoingEmailId>(),
+                Arg.Any<OutgoingMailFiling>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<CancellationToken>());
+        }
+
+        private void AnswerWith(IReadOnlyList<OutgoingMailFilingRecord> found) =>
+            this.filings
+                .ReadFilingsAtAsync(
+                    Arg.Any<MailAccountId>(),
+                    Arg.Any<RemoteFolderPath>(),
+                    Arg.Any<ImapUidValidity>(),
+                    Arg.Any<IReadOnlyCollection<ImapUid>>(),
+                    Arg.Any<IReadOnlyCollection<string>>(),
+                    Arg.Any<CancellationToken>())
+                .Returns(found);
+
+        private OutgoingMailFilingRecord Filed(RemoteEmailPlacement placement, string? messageId) => new()
+        {
+            OutgoingEmailId = Send,
+            Filing = OutgoingMailFiling.Sent,
+            FolderAlias = InboxFolder.Alias,
+            FolderPath = InboxFolder.RemotePath,
+            Stage = OutgoingMailFilingStage.Confirmed,
+            Placement = placement,
+            InternetMessageId = messageId,
+            AppendedAt = this.clock.GetUtcNow(),
+            ObservedAt = null,
+            WithdrawnAt = null,
+        };
+    }
 }
