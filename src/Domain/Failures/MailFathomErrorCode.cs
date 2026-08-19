@@ -628,9 +628,11 @@ public readonly record struct MailFathomErrorCode
     /// <remarks>
     /// It sits beside the answering budget rather than with the capability failures for the reason that one does:
     /// nothing is degraded and nothing is misconfigured, the operator declared how much may leave in a period and that
-    /// much has been asked for, so waiting for the period to roll over is an act that changes the answer. One code
-    /// covers all four ceilings — messages and recipients, for an account and for the deployment — because the message
-    /// names which was reached and the remedy is the same for each.
+    /// much has been asked for, so waiting for the period to roll over is an act that changes the answer. One code covers
+    /// all six ceilings — messages and recipients, for an account, for the deployment, and for one caller — because the
+    /// message names which was reached and the remedy is the same for each. It answers one bound nobody configured as
+    /// well, a period already counting as many distinct callers as this deployment holds counts for, for that same
+    /// reason: the period rolling over is what changes the answer there too.
     /// </remarks>
     public static MailFathomErrorCode OutgoingMailCeilingReached { get; } = new(57002);
 

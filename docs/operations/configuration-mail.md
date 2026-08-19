@@ -468,7 +468,7 @@ rolling window would have to retain every send for the length of the window and 
 What is counted is what was **written down** rather than what was delivered, since a fault above produces records
 whether or not a submission server ever accepts them. The message being asked for is weighed by the people it names, so
 one message can reach a recipient ceiling on its own, and the message that exactly fills a ceiling is admitted — a
-ceiling states what a period may send. A refused send names which of the four ceilings it reached and never the number,
+ceiling states what a period may send. A refused send names which of the six ceilings it reached and never the number,
 which is the operator's own configuration and nothing a caller could have influenced.
 
 A per-account ceiling above the deployment's own fails startup, because it is a bound this installation could never
