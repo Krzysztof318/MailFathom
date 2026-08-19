@@ -19,7 +19,10 @@ MailFathom synchronizes your IMAP accounts into a PostgreSQL database you run, i
 ```bash
 git clone https://github.com/Krzysztof318/MailFathom.git
 cd MailFathom
+scripts/quick-start-compose.sh
 ```
+
+That third line is the quick way to *try* it and not the way to run it: [the script](https://github.com/Krzysztof318/MailFathom/blob/main/scripts/quick-start-compose.sh) asks where your mailbox lives, generates the credentials, writes the configuration, starts the stack, offers the schema step, and hands you the address a chat client connects to — and what it prepares serves that one machine over plain HTTP, keeps its credentials in files under the checkout, and backs nothing up. It prints that list when it finishes. [Trying it first, with one command](https://krzysztof318.github.io/MailFathom/operations/deployment-compose.html#trying-it-first-with-one-command) is the whole of what it does and does not decide. Leave it out to install by hand, which is what the rest of this section describes.
 
 From there, [installing MailFathom](https://krzysztof318.github.io/MailFathom/users/installation.html) covers what every shape needs — Linux, PostgreSQL with the `vector` extension, an IMAP account, an explicit schema step — and routes you to the guide for Compose, [Podman Quadlet](https://krzysztof318.github.io/MailFathom/operations/deployment-quadlet.html), Kubernetes, or a native systemd process. [Getting started](https://krzysztof318.github.io/MailFathom/users/getting-started.html) then walks from an installed instance to a first successful tool call: provisioning the secrets, configuring a mailbox, applying the schema, verifying health, enabling the MCP endpoint, and connecting a client.
 
