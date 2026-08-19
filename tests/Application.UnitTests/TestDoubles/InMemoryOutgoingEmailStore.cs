@@ -147,6 +147,14 @@ internal sealed class InMemoryOutgoingEmailStore(
         return Task.FromResult(recorded);
     }
 
+    /// <summary>Gets or sets what a read of one record raises, which is how a store that failed outright is reached.</summary>
+    /// <remarks>
+    /// It is the read filing begins with, so setting it during a delivery is what puts a failure between the send being
+    /// settled and any place for its copy having been chosen — the one shape in which filing fails without naming a
+    /// folder. Left unset, every read answers as it always did.
+    /// </remarks>
+    internal Func<Exception>? ReadFailure { get; set; }
+
     public Task<OutgoingEmailRecord?> FindAsync(
         OutgoingEmailId outgoingEmailId,
         CancellationToken cancellationToken)
@@ -154,6 +162,11 @@ internal sealed class InMemoryOutgoingEmailStore(
         // Honoured rather than ignored, unlike the reads around it, because one caller runs after a host has begun
         // stopping and what it does then is a behavior a test has to be able to reach.
         cancellationToken.ThrowIfCancellationRequested();
+
+        if (this.ReadFailure is { } raise)
+        {
+            throw raise();
+        }
 
         return Task.FromResult(this.rows.TryGetValue(outgoingEmailId, out var row) ? row.Record : null);
     }

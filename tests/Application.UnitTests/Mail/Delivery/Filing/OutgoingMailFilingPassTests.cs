@@ -7,8 +7,8 @@ using System.Text;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
-using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
@@ -113,11 +113,10 @@ public sealed class OutgoingMailFilingPassTests
                 Arg.Any<AppendedMailFlags>(),
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<CancellationToken>())
-            .ThrowsAsync(new MailboxMutationUnsupportedException(
+            .ThrowsAsync(new MailboxUnavailableException(
                 Account,
                 MailFolderAlias.Create("sent"),
-                "withdraw-outgoing-copy",
-                "UIDPLUS"));
+                new TimeoutException("The append was issued and the server never answered.")));
         var delivered = await context.DeliverAsync();
 
         // Act
@@ -312,6 +311,54 @@ public sealed class OutgoingMailFilingPassTests
 
         var mirrored = Assert.Single(context.Filing.Filings.Read(waiting));
         Assert.Equal(OutgoingMailFilingStage.Withdrawn, mirrored.Stage);
+    }
+
+    /// <summary>
+    /// A mirror whose append was never answered is left exactly where it is. Nobody knows whether the copy reached the
+    /// folder, so recording it withdrawn would be MailFathom stating that it did not — and it would take the one row
+    /// that still reports the ambiguity out of every reading of the record.
+    /// </summary>
+    [Fact]
+    public async Task SettleFiledCopiesAsync_AMirrorWhoseAppendWasNeverAnswered_IsNeitherWithdrawnNorResolved()
+    {
+        // Arrange
+        var context = new FilingContext();
+        context.Filing.Map(Account, MailFolderSpecialUse.Outbox, "outbox", "INBOX.Outbox");
+        context.Filing.WriteSession
+            .AppendAsync(
+                Arg.Any<ReadOnlyMemory<byte>>(),
+                Arg.Any<AppendedMailFlags>(),
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new MailboxUnavailableException(
+                Account,
+                MailFolderAlias.Create("outbox"),
+                new TimeoutException("The append was issued and the server never answered.")));
+        var waiting = await context.EnqueueAsync(availableIn: TimeSpan.FromHours(4));
+        await context.Filing.Pass.MirrorWaitingSendsAsync(Account, TestContext.Current.CancellationToken);
+        context.Advance(TimeSpan.FromHours(5));
+        await context.MarkDeliveredAsync(waiting);
+
+        // Act
+        var results = await context.Filing.Pass.SettleFiledCopiesAsync(
+            waiting,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [OutgoingMailFilingOutcome.OutcomeUnknown, OutgoingMailFilingOutcome.NotRequested],
+            results.Select(result => result.Outcome));
+
+        // Nothing is asked of the server, because the row names no placement to ask about: a copy the server never
+        // reported cannot be reached, and searching the folder for something that looks like the message is a guess.
+        await context.Filing.WriteSession.DidNotReceiveWithAnyArgs().WithdrawAppendedAsync(
+            Arg.Any<ImapUidValidity>(),
+            Arg.Any<ImapUid>(),
+            Arg.Any<CancellationToken>());
+
+        var mirrored = Assert.Single(context.Filing.Filings.Read(waiting));
+        Assert.Equal(OutgoingMailFilingStage.Issued, mirrored.Stage);
+        Assert.True(mirrored.HasUnknownOutcome);
     }
 
     /// <summary>A send nothing has settled yet has nothing to say about its copies.</summary>

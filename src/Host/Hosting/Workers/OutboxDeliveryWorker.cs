@@ -215,17 +215,17 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
             switch (filing.Outcome)
             {
                 case OutgoingMailFilingOutcome.DestinationUnavailable:
-                    this.LogCopyDestinationUnavailable(accountId.Value, filing.Filing.Name);
+                    this.LogCopyDestinationUnavailable(accountId.Value, filing.FilingName);
 
                     break;
 
                 case OutgoingMailFilingOutcome.OutcomeUnknown:
-                    this.LogCopyOutcomeUnknown(accountId.Value, filing.Filing.Name);
+                    this.LogCopyOutcomeUnknown(accountId.Value, filing.FilingName);
 
                     break;
 
                 case OutgoingMailFilingOutcome.Failed:
-                    this.LogCopyNotFiled(accountId.Value, filing.Filing.Name, filing.Failure?.Value);
+                    this.LogCopyNotFiled(accountId.Value, filing.FilingName, filing.Failure?.Value);
 
                     break;
 

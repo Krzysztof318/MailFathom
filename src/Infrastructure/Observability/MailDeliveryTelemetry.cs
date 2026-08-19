@@ -113,7 +113,7 @@ public sealed class MailDeliveryTelemetry
                 new TagList
                 {
                     { AccountTagName, accountId.Value },
-                    { FilingTagName, filing.Filing.Name },
+                    { FilingTagName, filing.FilingName },
                     { FilingOutcomeTagName, NameOf(filing.Outcome) },
                 });
         }

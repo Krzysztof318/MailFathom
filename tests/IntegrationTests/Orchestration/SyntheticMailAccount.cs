@@ -301,9 +301,11 @@ internal sealed class SyntheticMailAccount(
 
     /// <inheritdoc />
     /// <remarks>
-    /// Only the inbox is mapped, and only for the served account, because that is the one folder every test's
-    /// arrangement shares; the folders a test creates for itself are named by alias everywhere they are used. Answering
-    /// for an alias nothing mapped would make a role look answerable when nothing configured one.
+    /// Answered from the folders this account configured, and only for the served account. That is the inbox alone
+    /// unless the account was built to file sent copies, which adds the folder playing the <c>Sent</c> role — because
+    /// filing resolves its destination by role and would otherwise find nothing to append into. Everything else a test
+    /// creates for itself is named by alias wherever it is used, so a role nothing configured stays unanswerable rather
+    /// than looking available.
     /// </remarks>
     public MailFolderMapping? FindFolderPlayingRole(MailAccountId accountId, MailFolderSpecialUse role) =>
         accountId == AccountId

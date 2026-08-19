@@ -154,6 +154,13 @@ public sealed class OutgoingMailFiler
     /// A folder that no longer holds the copy is not a failure. The owner deleting it themselves is the ordinary case,
     /// and what the withdrawal asked for is already true.
     /// </para>
+    /// <para>
+    /// An append whose answer never came back is the one thing this does not settle, for the reason nothing appends it
+    /// again: nobody knows whether the copy is in the folder, and recording it withdrawn would be MailFathom stating
+    /// that it is not. The row stays where the issued write left it and the outcome says so, which is the same answer
+    /// filing gives about the same row — the ambiguity is what an operator has to see, and it is visible only while
+    /// something still reports it.
+    /// </para>
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A copy that could not be withdrawn is one message left in a folder the operator mapped; raising would end the pass that was settling the send it belongs to, over a failure that says nothing about the send.")]
     public async Task<OutgoingMailFilingResult> WithdrawAsync(
@@ -167,6 +174,11 @@ public sealed class OutgoingMailFiler
         if (record.FindFiling(filing) is not { IsStanding: true } standing)
         {
             return Result(record, filing, OutgoingMailFilingOutcome.NotRequested, failure: null);
+        }
+
+        if (standing.HasUnknownOutcome)
+        {
+            return Result(record, filing, OutgoingMailFilingOutcome.OutcomeUnknown, failure: null);
         }
 
         try

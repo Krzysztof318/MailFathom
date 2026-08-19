@@ -5,7 +5,6 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Domain.Accounts;
-using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Transport;
 
@@ -146,11 +145,14 @@ public sealed class MailOutboxPass
         }
         catch (Exception failure)
         {
+            // No place is named, because none was chosen: what can fail past the filer's own catches is the read of
+            // the record itself, which happens before the withdrawal and the append are even decided between. Reporting
+            // it against the sent copy would tag a counter and a log line with a place this failure never reached.
             return
             [
                 new OutgoingMailFilingResult(
                     result.OutgoingEmailId,
-                    OutgoingMailFiling.Sent,
+                    Filing: default,
                     OutgoingMailFilingOutcome.Failed,
                     (failure as MailFathomException)?.ErrorCode
                         ?? MailFathomErrorCode.OutgoingEmailFilingFailedUnexpectedly),

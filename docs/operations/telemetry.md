@@ -727,7 +727,8 @@ not an outbox to act on.
 
 **Can the owner see what they sent?** `mailfathom.mail.filing.attempts` counts every attempt to put a copy of an
 outgoing message into one of this account's own folders, tagged with the account alias, `mailfathom.mail.filing.place`
-— `draft`, `held`, or `sent` — and `mailfathom.mail.filing.outcome`, whose values are `filed`, `already-filed`,
+— `draft`, `held`, `sent`, or `undetermined` where a failure ended before any place was chosen — and
+`mailfathom.mail.filing.outcome`, whose values are `filed`, `already-filed`,
 `not-requested`, `destination-unavailable`, `outcome-unknown`, `failed`, and `withdrawn`. Most of them are ordinary:
 `not-requested` is an account that files no copy, `already-filed` is a settlement asked for twice, and `withdrawn` is a
 mirror going away because its message left. Two are worth a dashboard. `destination-unavailable` is a deployment whose

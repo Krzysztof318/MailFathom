@@ -7,6 +7,7 @@ using System.Text;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Transmission;
 using MailFathom.Application.Persistence;
@@ -137,6 +138,43 @@ public sealed class MailOutboxPassTests
         Assert.Equal(OutgoingEmailStage.Sent, context.Store.Read(queued).Stage);
         Assert.Empty(report.FilingResults);
         Assert.Null(context.Store.Read(queued).LastFilingFailure);
+    }
+
+    /// <summary>
+    /// A filing that failed before any place was chosen names none. The read filing begins with is what fails here, and
+    /// it happens before the withdrawal and the append are even decided between — so reporting the failure against the
+    /// sent copy would put a word into a log line and a metric dimension that nothing about this failure established.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_FilingFailsBeforeAPlaceIsChosen_ReportsTheFailureAgainstNoPlace()
+    {
+        // Arrange
+        var context = new PassContext();
+        var queued = context.Enqueue();
+        context.Transmit = (request, envelope, _) =>
+        {
+            foreach (var recipient in request.Recipients)
+            {
+                envelope.Record(new MailRecipientReply(recipient.Address, 250, MailRecipientAcceptance.Accepted));
+            }
+
+            context.Store.ReadFailure = () => new InvalidOperationException("The record could not be read.");
+
+            return Task.FromResult(new MailTransmission(MailTransmissionOutcome.Accepted, 250));
+        };
+
+        // Act
+        var report = await context.RunAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        context.Store.ReadFailure = null;
+        Assert.Equal(OutgoingEmailStage.Sent, context.Store.Read(queued).Stage);
+
+        var filing = Assert.Single(report.FilingResults);
+        Assert.Equal(OutgoingMailFilingOutcome.Failed, filing.Outcome);
+        Assert.False(filing.Filing.IsSpecified);
+        Assert.Equal(OutgoingMailFilingResult.UndeterminedFilingName, filing.FilingName);
+        Assert.Equal(MailFathomErrorCode.OutgoingEmailFilingFailedUnexpectedly, filing.Failure);
     }
 
     /// <summary>A send a stopped process left mid-transmission is stamped with the reason before anything is claimed.</summary>

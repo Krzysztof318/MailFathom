@@ -648,7 +648,9 @@ that — and the message is untouched either way.
 The withdrawal of an outbox mirror reaches that copy and nothing else: `\Deleted` followed by `UID EXPUNGE` against the
 UID the append reported. A server without `UIDPLUS` leaves the copy standing rather than expunging the folder, and so
 does a copy the server never named — one copy of the owner's own message in a folder they mapped, deletable with the
-gesture they would have used anyway. A sent copy is withdrawn by nothing: it is what the owner keeps.
+gesture they would have used anyway. A mirror whose append the server never answered is left alone entirely: nobody
+knows whether that copy reached the folder, so the record goes on reporting the outcome as unknown rather than claiming
+the copy was taken back out. A sent copy is withdrawn by nothing: it is what the owner keeps.
 
 [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 is where appending became something MailFathom may do at all, and holds the authorization review that admitted it.
