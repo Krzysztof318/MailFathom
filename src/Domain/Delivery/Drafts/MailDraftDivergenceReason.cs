@@ -13,9 +13,9 @@ namespace MailFathom.Domain.Delivery.Drafts;
 /// so an operator reading the record is not left to guess which of these happened.
 /// </para>
 /// <para>
-/// Each member is a different fact with a different remedy, which is why they are not collapsed into one. Two of them
-/// are the deployment's own configuration moving, one is the server renumbering a folder, and one is a command whose
-/// answer never came back.
+/// Each member is a different fact with a different remedy, which is why they are not collapsed into one. One is the
+/// deployment's own configuration moving, one is a server capability that was always this way, one is the server
+/// renumbering a folder, and one is a command whose answer never came back.
 /// </para>
 /// <para>
 /// The reason is stored as its name, for the reason every stage in this system is.

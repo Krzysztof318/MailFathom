@@ -940,6 +940,14 @@ tightened one of those is refused by the tightened one. A draft addressed to nob
 draft this deployment does not hold — never written, already given up, or another account's — answers `53008`
 `MailDraftNotFound` whichever of the three it is, so nothing learns which drafts exist by asking about them.
 
+**Promoting one draft sends one message, however many callers ask.** A draft that already names its record answers with
+that record, which is what a caller whose first answer never reached it is told. Two callers arriving together are the
+case that read cannot settle — neither of them can see a write that has not happened yet — so the request's identity is
+the draft rather than a key whoever asked supplies: their two asks compose one identity, and the outbox answers the
+second with the record the first opened. It is the same mechanism [an occasion of a repeated
+send](#a-message-the-owner-asked-to-be-sent-again) is keyed by, and it is here for the same reason: a message put in
+somebody's mailbox twice is the one duplication nothing downstream can withdraw.
+
 **A promotion that fails leaves the draft exactly as it was.** Nothing about the draft is written until the outgoing
 record exists, so a refusal is a message the owner still has. And the draft is given up on **delivery** rather than on
 promotion: a send that is refused, deferred, or left with an unknown outcome leaves the draft standing, so an owner
@@ -1069,7 +1077,10 @@ a replacement, which withdraws the copy that was replaced and only that one; a t
 no longer names, which is left standing with the divergence written onto the draft; giving up a draft this system never
 wrote, which is refused before any folder is opened because nothing holds it under an identifier the call accepts; and
 a promotion, including the bound and the recipient policy asked at the promotion rather than at the writing, the second
-ask answering with the record the first produced, and a delivery that failed leaving the draft where it was.
+ask answering with the record the first produced, two callers who both found the draft unpromoted queueing one message
+between them, and a delivery that failed leaving the draft where it was. The pass that delivers is covered where it is
+assembled: that it settles an outstanding draft before it claims anything, and that a delivered send takes the draft it
+came from out of the drafts folder.
 
 The integration suite runs the whole loop once against the orchestrated server, with the owner's own draft appended
 beside MailFathom's as the control: a written draft reaches the folder under the UID the record names, an edit leaves

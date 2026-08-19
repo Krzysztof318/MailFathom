@@ -313,6 +313,15 @@ internal sealed class MailFathomDbContext : DbContext
     /// <remarks>Named for the reason above: the composed name would be truncated and permanent.</remarks>
     internal const string MailDraftCopyForeignKeyName = "fk_mail_draft_copies_drafts";
 
+    /// <summary>The revision of one draft only one writer may record an append for, kept at EF Core's conventional name.</summary>
+    /// <remarks>
+    /// Stated by the mapping for the reason the account's key is: a losing writer is recognized by the constraint its
+    /// insert violated, and a name only the convention knew about would turn a resolvable race into a failure. Two
+    /// passes settling one account can both read that a revision has no copy row and both insert one, which is exactly
+    /// the race the retry converges on.
+    /// </remarks>
+    internal const string MailDraftCopyPrimaryKeyConstraintName = "PK_mail_draft_copies";
+
     /// <summary>The foreign key that removes the stored MIME with the draft it is the current revision of.</summary>
     /// <remarks>Named for the reason above: the composed name would be truncated and permanent.</remarks>
     internal const string MailDraftContentForeignKeyName = "fk_mail_draft_contents_drafts";
@@ -1878,7 +1887,8 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.Entity<MailDraftCopyEntity>(entity =>
         {
             entity.ToTable("mail_draft_copies");
-            entity.HasKey(copy => new { copy.MailDraftId, copy.Revision });
+            entity.HasKey(copy => new { copy.MailDraftId, copy.Revision })
+                .HasName(MailDraftCopyPrimaryKeyConstraintName);
             entity.Property(copy => copy.FolderAlias).HasMaxLength(128).IsRequired();
             entity.Property(copy => copy.FolderPath)
                 .HasMaxLength(MailDraftCopyEntity.MaximumFolderPathLength)

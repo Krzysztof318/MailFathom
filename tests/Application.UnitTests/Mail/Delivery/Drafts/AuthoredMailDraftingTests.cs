@@ -116,6 +116,7 @@ public sealed class AuthoredMailDraftingTests
 
         // Assert
         Assert.Equal(MailFathomErrorCode.AuthoredMailBoundExceeded, refusal.ErrorCode);
+        Assert.Equal(0, book.BatchedLookupCount);
         Assert.Empty(harness.Drafts.Drafts);
     }
 

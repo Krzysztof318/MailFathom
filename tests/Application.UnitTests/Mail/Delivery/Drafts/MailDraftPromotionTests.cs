@@ -45,10 +45,7 @@ public sealed class MailDraftPromotionTests
         var promotion = PromotionOver(harness, contentStore: contentStore);
 
         // Act
-        var record = await promotion.PromoteAsync(
-            draft.Id,
-            OutgoingEmailRequester.Command("mfctl-9c31"),
-            CancellationToken.None);
+        var record = await promotion.PromoteAsync(draft.Id, CancellationToken.None);
 
         // Assert
         Assert.Equal(OutgoingEmailStage.Recorded, record.Stage);
@@ -71,19 +68,38 @@ public sealed class MailDraftPromotionTests
         var draft = await SaveAsync(harness, "the message as written");
         var outgoingEmails = new InMemoryOutgoingEmailStore();
         var promotion = PromotionOver(harness, outgoingEmails);
-        var first = await promotion.PromoteAsync(
-            draft.Id,
-            OutgoingEmailRequester.Command("mfctl-9c31"),
-            CancellationToken.None);
+        var first = await promotion.PromoteAsync(draft.Id, CancellationToken.None);
 
         // Act
-        var second = await promotion.PromoteAsync(
-            draft.Id,
-            OutgoingEmailRequester.Command("mfctl-0000"),
-            CancellationToken.None);
+        var second = await promotion.PromoteAsync(draft.Id, CancellationToken.None);
 
         // Assert
         Assert.Equal(first.Id, second.Id);
+    }
+
+    /// <summary>
+    /// Two callers arriving together both find the draft unpromoted, because a read cannot see a write that has not
+    /// happened yet. What makes their two asks one message is the request's identity, which is the draft itself.
+    /// </summary>
+    [Fact]
+    public async Task PromoteAsync_TwoCallersBothFindingTheDraftUnpromoted_QueueOneMessage()
+    {
+        // Arrange
+        var harness = Harness();
+        var draft = await SaveAsync(harness, "the message as written");
+        var outgoingEmails = new InMemoryOutgoingEmailStore();
+        var promotion = PromotionOver(harness, outgoingEmails);
+        var first = await promotion.PromoteAsync(draft.Id, CancellationToken.None);
+        harness.Drafts.ForgetPromotion(draft.Id);
+
+        // Act
+        var second = await promotion.PromoteAsync(draft.Id, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(first.Id, second.Id);
+        Assert.Equal(
+            [OutgoingEmailRequester.Draft(draft.Id), OutgoingEmailRequester.Draft(draft.Id)],
+            outgoingEmails.OpenRequests.Select(request => request.Requester));
     }
 
     /// <summary>A draft addressed to nobody has no envelope to build, so it is refused rather than queued.</summary>
@@ -97,10 +113,7 @@ public sealed class MailDraftPromotionTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
-            () => promotion.PromoteAsync(
-                draft.Id,
-                OutgoingEmailRequester.Command("mfctl-9c31"),
-                CancellationToken.None));
+            () => promotion.PromoteAsync(draft.Id, CancellationToken.None));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.MailDraftNotAddressed, refusal.ErrorCode);
@@ -121,10 +134,7 @@ public sealed class MailDraftPromotionTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
-            () => promotion.PromoteAsync(
-                draft.Id,
-                OutgoingEmailRequester.Command("mfctl-9c31"),
-                CancellationToken.None));
+            () => promotion.PromoteAsync(draft.Id, CancellationToken.None));
 
         // Assert
         Assert.Equal(MailFathomErrorCode.AuthoredMailBoundExceeded, refusal.ErrorCode);
@@ -149,10 +159,7 @@ public sealed class MailDraftPromotionTests
                 recipientPolicy: OutgoingRecipientPolicy.Create([], [denied])));
 
         // Act
-        var refusal = () => promotion.PromoteAsync(
-            draft.Id,
-            OutgoingEmailRequester.Command("mfctl-9c31"),
-            CancellationToken.None);
+        var refusal = () => promotion.PromoteAsync(draft.Id, CancellationToken.None);
 
         // Assert
         await Assert.ThrowsAsync<OutgoingMailRefusedException>(refusal);
@@ -172,10 +179,7 @@ public sealed class MailDraftPromotionTests
             governor: OutgoingMailGovernors.Governing(refusal: OutgoingSendRefusalReason.DeploymentIsReadOnly));
 
         // Act
-        var refusal = () => promotion.PromoteAsync(
-            draft.Id,
-            OutgoingEmailRequester.Command("mfctl-9c31"),
-            CancellationToken.None);
+        var refusal = () => promotion.PromoteAsync(draft.Id, CancellationToken.None);
 
         // Assert
         await Assert.ThrowsAsync<OutgoingMailRefusedException>(refusal);
@@ -194,7 +198,6 @@ public sealed class MailDraftPromotionTests
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
             () => promotion.PromoteAsync(
                 MailDraftId.Create(Guid.CreateVersion7(Moment)),
-                OutgoingEmailRequester.Command("mfctl-9c31"),
                 CancellationToken.None));
 
         // Assert
@@ -216,11 +219,8 @@ public sealed class MailDraftPromotionTests
         var harness = Harness(outgoingEmails);
         var draft = await SaveAsync(harness, "the message as written");
         var promotion = PromotionOver(harness, outgoingEmails);
-        var record = await promotion.PromoteAsync(
-            draft.Id,
-            OutgoingEmailRequester.Command("mfctl-9c31"),
-            CancellationToken.None);
-        outgoingEmails.SetStage(record.Id, stage);
+        var record = await promotion.PromoteAsync(draft.Id, CancellationToken.None);
+        outgoingEmails.Arrange(record.Id, stage);
 
         // Act
         var results = await harness.Pass.SettlePromotedAsync(record.Id, CancellationToken.None);

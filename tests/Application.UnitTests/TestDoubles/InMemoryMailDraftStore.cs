@@ -31,6 +31,16 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
     internal MailDraftRecord? Peek(MailDraftId draftId) =>
         this.drafts.TryGetValue(draftId, out var draft) ? draft : null;
 
+    /// <summary>States a draft as a second caller reaching it before the first caller's promotion committed reads it.</summary>
+    /// <param name="draftId">The draft that promotion is about.</param>
+    /// <remarks>
+    /// It arranges the one state a sequential test cannot reach: two promotions of one draft that both find nothing
+    /// promoted, because neither read can see a write that has not been committed yet. What settles that is the
+    /// request's own identity rather than this read, and this is how a test reaches the case that proves it.
+    /// </remarks>
+    internal void ForgetPromotion(MailDraftId draftId) =>
+        this.drafts[draftId] = this.Require(draftId) with { PromotedTo = null };
+
     /// <inheritdoc />
     public Task<MailDraftRecord> OpenAsync(
         IPersistenceSession session,
@@ -154,6 +164,15 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
         CancellationToken cancellationToken)
     {
         var draft = this.Require(draftId);
+
+        // Asked the way the real store asks it: a confirmation follows an issued append and nothing else, so a double
+        // confirmation and a confirmation of a copy already standing are refused here rather than quietly accepted by
+        // a double the production write would have stopped.
+        if (draft.FindCopy(draft.Revision) is not { Stage: MailDraftCopyStage.Issued })
+        {
+            throw new InvalidOperationException(
+                $"Revision {draft.Revision} of mail draft {draftId} has no copy awaiting confirmation.");
+        }
 
         this.Replace(
             draft,

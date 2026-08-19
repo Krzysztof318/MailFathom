@@ -106,6 +106,14 @@ internal static class PersistenceConcurrencyConflicts
     /// withdraw.
     /// </para>
     /// <para>
+    /// The next is one revision of one draft appended by two passes, which is the filing case for a message nobody is
+    /// sending. Recording the append guards the revision with a read before it writes, and two passes settling one
+    /// account — a worker's interval and that account's own run — read the same draft before either commits. The retry
+    /// re-reads, finds the row the winner issued for that revision, and appends nothing, which is what keeps the guard
+    /// sound; unrecognized, the loser would report a filing that failed while the owner's drafts folder is exactly
+    /// right.
+    /// </para>
+    /// <para>
     /// The last is one message identifier bound to a thread by two arrivals. Two runs storing two messages of one
     /// conversation read that nothing binds the identifier yet, and each assembles a thread and binds it; the loser
     /// violates the key. The retry is what converges them: it re-reads, finds the winner's thread bound to the
@@ -133,6 +141,7 @@ internal static class PersistenceConcurrencyConflicts
                 or MailFathomDbContext.OutgoingEmailIdentityUniqueIndexName
                 or MailFathomDbContext.RecurringSendIdentityUniqueIndexName
                 or MailFathomDbContext.OutgoingEmailFilingPrimaryKeyConstraintName
+                or MailFathomDbContext.MailDraftCopyPrimaryKeyConstraintName
                 or MailFathomDbContext.EmailThreadIdentifierPrimaryKeyConstraintName,
         };
 }

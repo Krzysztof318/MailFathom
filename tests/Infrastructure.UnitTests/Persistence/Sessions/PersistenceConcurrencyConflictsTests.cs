@@ -29,6 +29,7 @@ public sealed class PersistenceConcurrencyConflictsTests
         MailFathomDbContext.MailRederivationPositionPrimaryKeyConstraintName,
         MailFathomDbContext.MailRederivationRunPrimaryKeyConstraintName,
         MailFathomDbContext.ContactAddressUniqueIndexName,
+        MailFathomDbContext.MailDraftCopyPrimaryKeyConstraintName,
     ];
 
     [Theory]

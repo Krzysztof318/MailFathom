@@ -129,21 +129,6 @@ internal sealed class InMemoryOutgoingEmailStore(
         row.Record = row.Record with { Filings = filings, LastFilingFailure = lastFilingFailure };
     }
 
-    /// <summary>Puts one record at a stage outright, which is how a test states an outcome it did not deliver.</summary>
-    /// <param name="outgoingEmailId">The record to move.</param>
-    /// <param name="stage">The stage it is to read as.</param>
-    /// <remarks>
-    /// It bypasses the transitions the store enforces on purpose, because what it arranges is what a later reader finds
-    /// rather than how the record got there. Reach for it only where the delivery itself is somebody else's test.
-    /// </remarks>
-    internal void SetStage(OutgoingEmailId outgoingEmailId, OutgoingEmailStage stage)
-    {
-        if (this.rows.TryGetValue(outgoingEmailId, out var row))
-        {
-            row.Record = row.Record with { Stage = stage, StageChangedAt = this.clock.GetUtcNow() };
-        }
-    }
-
     /// <summary>Answers whether one record is held by an attempt at all.</summary>
     /// <param name="outgoingEmailId">The record to read.</param>
     /// <returns><see langword="true" /> while a lease owner is stamped on it.</returns>

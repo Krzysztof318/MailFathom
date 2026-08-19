@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260819223346_AddMailDrafts")]
+    [Migration("20260819233300_AddMailDrafts")]
     partial class AddMailDrafts
     {
         /// <inheritdoc />
@@ -776,7 +776,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
-                    b.HasKey("MailDraftId", "Revision");
+                    b.HasKey("MailDraftId", "Revision")
+                        .HasName("PK_mail_draft_copies");
 
                     b.ToTable("mail_draft_copies", (string)null);
                 });

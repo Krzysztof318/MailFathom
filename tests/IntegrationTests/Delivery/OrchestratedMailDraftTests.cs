@@ -166,10 +166,7 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
         OrchestratedMailFathomServices services,
         MailDraftId draftId,
         CancellationToken cancellationToken) => services.AsCallerInScopeAsync(
-            (scope, token) => scope.GetRequiredService<MailDraftPromotion>().PromoteAsync(
-                draftId,
-                OutgoingEmailRequester.Command($"promote-{draftId.Value:N}"),
-                token),
+            (scope, token) => scope.GetRequiredService<MailDraftPromotion>().PromoteAsync(draftId, token),
             [MailFathomPermission.MailSend],
             cancellationToken);
 

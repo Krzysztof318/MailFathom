@@ -7,6 +7,7 @@ using System.Text;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Transmission;
@@ -14,6 +15,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Transport;
@@ -319,11 +321,61 @@ public sealed class MailOutboxPassTests
         Assert.True(report.AccountDeferred);
     }
 
+    /// <summary>
+    /// The drafts are reached before anything is claimed, so a draft whose folder was unreachable when it was written
+    /// is in front of its owner by the time this pass has delivered anything.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_DraftNothingCouldAppendYet_AppendsItBeforeTheBatchIsClaimed()
+    {
+        // Arrange
+        var context = new PassContext();
+        var draft = await context.SaveDraftAsync();
+        Assert.Equal(0, context.DraftSide.AppendCount);
+        context.DraftSide.MapDraftsFolder(Account);
+        context.Enqueue();
+
+        // Act
+        var report = await context.RunAsync();
+
+        // Assert
+        Assert.Equal(MailDraftFilingOutcome.Filed, Assert.Single(report.DraftResults).Outcome);
+        Assert.Equal(1, context.DraftSide.AppendCount);
+        Assert.Equal(MailDraftStage.Filed, context.DraftSide.Drafts.Peek(draft.Id)!.Stage);
+    }
+
+    /// <summary>
+    /// A delivered send takes the draft it was promoted from out of the drafts folder, in the pass that filed the sent
+    /// copy — which is what leaves the message in one of the owner's folders rather than in two.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_PromotedDraftWhoseSendIsDelivered_WithdrawsTheDraftCopy()
+    {
+        // Arrange
+        var context = new PassContext();
+        context.DraftSide.MapDraftsFolder(Account);
+        var draft = await context.SaveDraftAsync();
+        var appended = Assert.Single(context.DraftSide.Drafts.Peek(draft.Id)!.Copies);
+        await context.PromoteDraftAsync(draft.Id, context.Enqueue());
+
+        // Act
+        var report = await context.RunAsync();
+
+        // Assert
+        Assert.Equal(MailDraftFilingOutcome.Discarded, Assert.Single(report.DraftResults).Outcome);
+        Assert.Equal(
+            [(appended.Placement.UidValidity!.Value, appended.Placement.Uid!.Value)],
+            context.DraftSide.Withdrawn);
+        Assert.Null(context.DraftSide.Drafts.Peek(draft.Id));
+    }
+
     /// <summary>Assembles one pass over an in-memory outbox, with the exchange the test writes.</summary>
     private sealed class PassContext
     {
         private readonly FakeTimeProvider clock = new(RanAt);
-        private readonly MailOutboxPass pass;
+        private readonly MailOutboxDelivery delivery;
+        private readonly IMailTransportSecurityPolicyReader policyReader;
+        private readonly MailOutboxSettings settings;
 
         internal PassContext(bool submits = true, int maxDeliveriesPerPass = 10)
         {
@@ -350,7 +402,7 @@ public sealed class MailOutboxPassTests
                 return persistenceSession;
             });
 
-            var settings = MailOutboxSettings.Create(
+            this.settings = MailOutboxSettings.Create(
                 maxDeliveriesPerPass,
                 TimeSpan.FromMinutes(10),
                 TimeSpan.FromMinutes(7),
@@ -359,29 +411,23 @@ public sealed class MailOutboxPassTests
                 TimeSpan.FromHours(1),
                 TimeSpan.FromHours(8));
 
-            var policyReader = Substitute.For<IMailTransportSecurityPolicyReader>();
-            policyReader.GetDeliveryPolicy(Account).Returns(submits ? TransportSecurityPolicy() : null);
+            this.policyReader = Substitute.For<IMailTransportSecurityPolicyReader>();
+            this.policyReader.GetDeliveryPolicy(Account).Returns(submits ? TransportSecurityPolicy() : null);
 
-            this.Filing = new OutgoingMailFilingHarness(this.Store, contentStore, settings, this.clock);
-            this.DraftSide = new MailDraftHarness(this.clock, this.Store, settings);
+            this.Filing = new OutgoingMailFilingHarness(this.Store, contentStore, this.settings, this.clock);
+            this.DraftSide = new MailDraftHarness(this.clock, this.Store, this.settings);
 
-            this.pass = new MailOutboxPass(
+            this.delivery = new MailOutboxDelivery(
+                this.Session,
                 this.Store,
-                new MailOutboxDelivery(
-                    this.Session,
-                    this.Store,
-                    contentStore,
-                    senderIdentities,
-                    new OptimisticConcurrencyRetryPolicy(
-                        sessionFactory,
-                        new PersistenceConcurrencyOptions(),
-                        this.clock),
-                    settings,
+                contentStore,
+                senderIdentities,
+                new OptimisticConcurrencyRetryPolicy(
+                    sessionFactory,
+                    new PersistenceConcurrencyOptions(),
                     this.clock),
-                this.Filing.Pass,
-                this.DraftSide.Pass,
-                policyReader,
-                settings);
+                this.settings,
+                this.clock);
         }
 
         internal InMemoryOutgoingEmailStore Store { get; }
@@ -461,8 +507,45 @@ public sealed class MailOutboxPassTests
             return stranded;
         }
 
+        /// <summary>Runs one pass, assembled where the worker assembles one: from the work units this run will use.</summary>
+        /// <remarks>
+        /// Built per run rather than once, because the draft side rebuilds its own work unit whenever a test states a
+        /// folder mapping, and a pass holding the unit from before that would settle drafts against a mailbox the test
+        /// no longer describes.
+        /// </remarks>
         internal Task<MailOutboxPassReport> RunAsync(CancellationToken? stoppingToken = null) =>
-            this.pass.RunAsync(Account, stoppingToken ?? TestContext.Current.CancellationToken);
+            new MailOutboxPass(
+                    this.Store,
+                    this.delivery,
+                    this.Filing.Pass,
+                    this.DraftSide.Pass,
+                    this.policyReader,
+                    this.settings)
+                .RunAsync(Account, stoppingToken ?? TestContext.Current.CancellationToken);
+
+        /// <summary>Writes one draft of this account, which the pass is then expected to reach on its own.</summary>
+        internal Task<MailDraftRecord> SaveDraftAsync()
+        {
+            Assert.True(EmailAddress.TryCreate(displayName: null, "anna@example.test", out var recipient));
+
+            return this.DraftSide.Book.SaveAsync(
+                Account,
+                OutgoingEmailRequester.Command($"mfctl-{Guid.CreateVersion7()}"),
+                new ComposedMailDraft(
+                    [OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To)],
+                    InternetMessageId.Mint("example.test"),
+                    RawMime),
+                revises: null,
+                TestContext.Current.CancellationToken);
+        }
+
+        /// <summary>Records one draft as promoted to one queued send, which is what a promotion leaves behind it.</summary>
+        internal Task PromoteDraftAsync(MailDraftId draftId, OutgoingEmailId promotedTo) =>
+            this.DraftSide.Drafts.RecordPromotedAsync(
+                Substitute.For<IPersistenceSession>(),
+                draftId,
+                promotedTo,
+                TestContext.Current.CancellationToken);
 
         private static MailTransportSecurityPolicy TransportSecurityPolicy() => MailTransportSecurityPolicy.Create(
             MailConnectionSecurity.StartTlsRequired,

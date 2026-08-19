@@ -358,26 +358,46 @@ internal sealed class EmailContentStore(
                 "Raw MIME cannot be stored without the draft record it is a revision of.");
 
         var bytes = GetCompleteArray(rawMime);
+        var byteLength = bytes.LongLength;
+        var hash = SHA256.HashData(rawMime.Span);
         var storedAt = timeProvider.GetUtcNow();
 
         // A draft still being inserted can carry no persisted message, so the database pass is skipped for one — the
         // change-tracker pass is the whole answer there.
         var isDraftPending = writeContext.Entry(draft).State == EntityState.Added;
 
-        var stored = writeContext.MailDraftContents.Local.FirstOrDefault(
-                candidate => candidate.MailDraftId == draft.Id)
-            ?? (isDraftPending
-                ? null
-                : await writeContext.MailDraftContents
-                    .FirstOrDefaultAsync(candidate => candidate.MailDraftId == draft.Id, cancellationToken));
+        Expression<Func<MailDraftContentEntity, bool>> matchesDraft =
+            candidate => candidate.MailDraftId == draft.Id;
 
-        if (stored is not null)
+        var trackedContent = writeContext.MailDraftContents.Local.AsQueryable().SingleOrDefault(matchesDraft);
+        if (trackedContent is not null)
         {
-            stored.RawMime = bytes;
-            stored.MimeByteLength = bytes.LongLength;
-            stored.Sha256Hash = SHA256.HashData(rawMime.Span);
-            stored.StoredAt = storedAt;
+            trackedContent.RawMime = bytes;
+            trackedContent.MimeByteLength = byteLength;
+            trackedContent.Sha256Hash = hash;
+            trackedContent.StoredAt = storedAt;
 
+            return;
+        }
+
+        // Every revision after the first meets a stored message, and reading it back would materialize the whole
+        // previous payload into memory and into the change tracker to overwrite every column of it. Editing a draft is
+        // an ordinary, repeated act, so the overwrite is issued as a set-based update inside the caller's open
+        // transaction — the same reasoning the incoming write above records.
+        var updatedRowCount = isDraftPending
+            ? 0
+            : await writeContext.MailDraftContents
+                .Where(matchesDraft)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(candidate => candidate.RawMime, bytes)
+                        .SetProperty(candidate => candidate.MimeByteLength, byteLength)
+                        .SetProperty(candidate => candidate.Sha256Hash, hash)
+                        .SetProperty(candidate => candidate.StoredAt, storedAt),
+                    cancellationToken);
+
+        if (updatedRowCount > 0)
+        {
             return;
         }
 
@@ -386,8 +406,8 @@ internal sealed class EmailContentStore(
             MailDraftId = draft.Id,
             MailDraft = draft,
             RawMime = bytes,
-            MimeByteLength = bytes.LongLength,
-            Sha256Hash = SHA256.HashData(rawMime.Span),
+            MimeByteLength = byteLength,
+            Sha256Hash = hash,
             StoredAt = storedAt,
         });
     }
