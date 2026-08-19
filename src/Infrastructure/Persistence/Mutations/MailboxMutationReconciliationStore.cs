@@ -107,8 +107,11 @@ internal sealed partial class MailboxMutationReconciliationStore(
         var perValue = IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsPerValue;
 
         // One row past the budget, so a value whose tail was cut is told apart from one that exactly fills it. Without
-        // the extra row the count alone cannot say which happened, and the warning below would report a misattribution
-        // that could not have occurred.
+        // the extra row the count alone cannot say which happened, and the warning below would fire on a value that
+        // dropped nothing. It cannot say more than that: the bound is the earliest reading across the whole window, so
+        // a value's group admits stores older than its own occurrence's last reading, and every comparison the caller
+        // makes rejects those. What the count establishes is that stores past the window's bound went unread, not that
+        // one of them could have explained the value.
         var probed = perValue + 1;
 
         // Reached through the prefix of the identity index — folder, UIDVALIDITY, UID — which is why this question needs
@@ -253,9 +256,10 @@ internal sealed partial class MailboxMutationReconciliationStore(
     [LoggerMessage(
         Level = LogLevel.Warning,
         Message = "{TruncatedValueCount} values of changed occurrences of account {AccountId} in folder {FolderAlias} "
-            + "carry more than the {Ceiling} stores an attribution reads for one value of one occurrence, so an older "
-            + "store that could still explain a value went unread and that value may be attributed to the mailbox "
-            + "owner.")]
+            + "carry more stores past this window's age bound than the {Ceiling} an attribution reads for one value of "
+            + "one occurrence, so any of those beyond the newest went unread — and a store issued after that "
+            + "occurrence's own last reading which went unread with them would leave its value attributed to the "
+            + "mailbox owner.")]
     private static partial void LogFlagChangeCeilingReached(
         ILogger logger,
         int ceiling,

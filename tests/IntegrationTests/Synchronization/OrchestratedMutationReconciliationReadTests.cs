@@ -174,6 +174,70 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
         Assert.Empty(afterTheStoreWasIssued);
     }
 
+    /// <summary>
+    /// The per-value budget is spent inside each occurrence's each value, and only a database settles that: the limit
+    /// rides a lateral join whose <c>ORDER BY</c> and <c>LIMIT</c> run per group, and a translation that spent it
+    /// across the answer, or ranked the rows after they had crossed the boundary, is invisible in any arrangement where
+    /// every group holds one row. So one occurrence is given more stores of one value than the budget and a second is
+    /// given a single older one. A budget spent window-wide returns the six newest and drops the second occurrence's
+    /// record — which would leave that occurrence's flag credited to the mailbox owner and the rule that wrote it
+    /// re-firing on the mail it had just marked.
+    /// </summary>
+    [Fact]
+    public async Task ReadFlagChangesOnAsync_AnOccurrenceCarryingMoreStoresOfOneValueThanTheBudget_LeavesAnotherOccurrencesStoreAlone()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+
+        var crowdedOccurrence = SyntheticEmail.OccurrenceIn(binding, uid: 5011);
+        var quietOccurrence = SyntheticEmail.OccurrenceIn(binding, uid: 5012);
+        var crowdedEmailId = await StoreMetadataAsync(services, crowdedOccurrence, "triaged", cancellationToken);
+        var quietEmailId = await StoreMetadataAsync(services, quietOccurrence, "read once", cancellationToken);
+
+        // Written down and completed first, so it is the oldest stage change of the lot and therefore the row a
+        // newest-first truncation across the whole answer drops.
+        var quietRecordId = await CompletedSeenStoreAsync(
+            services,
+            MailboxMutationRequest.SetSeen(quietEmailId, quietOccurrence, Requester, isSeen: true),
+            cancellationToken);
+        var crowdedRecordIds = new List<MailboxMutationRecordId>();
+
+        for (var call = 0; call <= IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsPerValue; call++)
+        {
+            crowdedRecordIds.Add(await CompletedSeenStoreAsync(
+                services,
+                MailboxMutationRequest.SetSeen(
+                    crowdedEmailId,
+                    crowdedOccurrence,
+                    MailboxMutationRequester.Command($"triage-{call}"),
+                    isSeen: call % 2 == 0),
+                cancellationToken));
+        }
+
+        // Act
+        var flagChanges = await ReadFlagChangesAsync(
+            services,
+            binding.Id,
+            crowdedOccurrence.UidValidity,
+            [crowdedOccurrence.Uid, quietOccurrence.Uid],
+            BeforeEveryRecord,
+            cancellationToken);
+
+        // Assert
+        Assert.Equal(
+            IMailboxMutationReconciliationStore.MaximumFlagChangeRecordsPerValue,
+            flagChanges.Count(change => change.Request.Occurrence.Uid == crowdedOccurrence.Uid));
+        Assert.Equal(
+            quietRecordId,
+            Assert.Single(flagChanges, change => change.Request.Occurrence.Uid == quietOccurrence.Uid).Id);
+
+        // The five kept are the newest of the six, which is what makes the budget the recent history of the value
+        // rather than an arbitrary five of it.
+        Assert.DoesNotContain(crowdedRecordIds[0], flagChanges.Select(change => change.Id));
+    }
+
     private static Task<IReadOnlyList<MailboxMutationRecord>> ReadFlagChangesAsync(
         OrchestratedMailFathomServices services,
         MailFolderResolutionId folderResolutionId,
