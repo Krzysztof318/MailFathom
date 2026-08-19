@@ -1248,6 +1248,13 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
 
+                    b.Property<DateTimeOffset?>("DueAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DueZoneId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<int?>("LastFailureCode")
                         .HasColumnType("integer");
 
@@ -1421,6 +1428,122 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.HasKey("OutgoingEmailId", "Ordinal");
 
                     b.ToTable("outgoing_email_recipients", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.RecurringSendDraftEntity", b =>
+                {
+                    b.Property<Guid>("RecurringSendId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("DraftByteLength")
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("DraftMime")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<byte[]>("Sha256Hash")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("bytea");
+
+                    b.Property<DateTimeOffset>("StoredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("RecurringSendId");
+
+                    b.ToTable("recurring_send_drafts", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.RecurringSendEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("ConcurrencyVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<DateTimeOffset>("DeclaredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("DraftByteLength")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("LastOccurrenceAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastOccurrenceEmailId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MailboxAccountId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("RequesterIdentity")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("RequesterOrigin")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Schedule")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeclaredAt")
+                        .HasDatabaseName("ix_recurring_sends_active")
+                        .HasFilter("\"CancelledAt\" IS NULL");
+
+                    b.HasIndex("MailboxAccountId", "RequesterOrigin", "RequesterIdentity")
+                        .IsUnique()
+                        .HasDatabaseName("ix_recurring_sends_identity");
+
+                    b.ToTable("recurring_sends", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.RecurringSendRecipientEntity", b =>
+                {
+                    b.Property<Guid>("RecurringSendId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<uint>("ConcurrencyVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<Guid?>("ContactId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("RecurringSendId", "Ordinal");
+
+                    b.ToTable("recurring_send_recipients", (string)null);
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.SpamClassificationRunEntity", b =>
@@ -2046,6 +2169,30 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("OutgoingEmail");
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.RecurringSendDraftEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.RecurringSendEntity", "RecurringSend")
+                        .WithOne("Draft")
+                        .HasForeignKey("MailFathom.Infrastructure.Persistence.Entities.RecurringSendDraftEntity", "RecurringSendId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_recurring_send_drafts_sends");
+
+                    b.Navigation("RecurringSend");
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.RecurringSendRecipientEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.RecurringSendEntity", "RecurringSend")
+                        .WithMany("Recipients")
+                        .HasForeignKey("RecurringSendId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_recurring_send_recipients_sends");
+
+                    b.Navigation("RecurringSend");
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.StoredEmailEntity", b =>
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.EmailThreadEntity", null)
@@ -2125,6 +2272,13 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("Content");
 
                     b.Navigation("Filings");
+
+                    b.Navigation("Recipients");
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.RecurringSendEntity", b =>
+                {
+                    b.Navigation("Draft");
 
                     b.Navigation("Recipients");
                 });

@@ -4,6 +4,8 @@
 
 using MailFathom.Application.Jobs;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Jobs;
@@ -62,6 +64,50 @@ public sealed class JobPayloadDocumentTests
         // Assert
         Assert.Equal("""{"accountId":"account-a"}""", document);
         Assert.Equal(payload, JobPayloadDocument.Deserialize(JobType.RunScheduledMailRules, document));
+    }
+
+    /// <summary>
+    /// A message waiting for the time it was written to leave at is named by the account and the record, and by nothing
+    /// about the message — a queued job an operator reads must say which send it is for and no more than that.
+    /// </summary>
+    [Fact]
+    public void Serialize_AHeldSendPayload_WritesTheRecordAndReadsItBackAsTheSameReferences()
+    {
+        // Arrange
+        var payload = HeldSendJobPayload.For(
+            MailAccountId.Create("account-a"),
+            OutgoingEmailId.Create(Guid.Parse("6f9619ff-8b86-d011-b42d-00c04fc964ff")));
+
+        // Act
+        var document = JobPayloadDocument.Serialize(payload);
+
+        // Assert
+        Assert.Equal(
+            """{"accountId":"account-a","outgoingRecordId":"6f9619ff-8b86-d011-b42d-00c04fc964ff"}""",
+            document);
+        Assert.Equal(payload, JobPayloadDocument.Deserialize(JobType.DispatchHeldSend, document));
+    }
+
+    /// <summary>
+    /// A recurring dispatch names the declaration rather than the occasion, so its document is the same for the life of
+    /// the declaration and carries nothing about the message the occasions repeat.
+    /// </summary>
+    [Fact]
+    public void Serialize_ARecurringSendPayload_WritesTheDeclarationAndReadsItBackAsTheSameReferences()
+    {
+        // Arrange
+        var payload = RecurringSendJobPayload.For(
+            MailAccountId.Create("account-a"),
+            RecurringSendId.Create(Guid.Parse("6f9619ff-8b86-d011-b42d-00c04fc964ff")));
+
+        // Act
+        var document = JobPayloadDocument.Serialize(payload);
+
+        // Assert
+        Assert.Equal(
+            """{"accountId":"account-a","declarationId":"6f9619ff-8b86-d011-b42d-00c04fc964ff"}""",
+            document);
+        Assert.Equal(payload, JobPayloadDocument.Deserialize(JobType.SendRecurringOccurrence, document));
     }
 
     /// <summary>

@@ -229,7 +229,9 @@ public sealed class JobWorkerTests
     {
         // Arrange
         using var world = CreateWorld(new JobQueueOptions(), WithAHandler);
-        world.Schedules.ReadSchedules().Returns([ScheduledJobFor("mail-rules:work:housekeeping")]);
+        world.Schedules.ReadSchedulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ScheduledJob>>(
+                [ScheduledJobFor("mail-rules:work:housekeeping")]));
 
         // Act
         await world.Worker.StartAsync(TestContext.Current.CancellationToken);
@@ -261,8 +263,9 @@ public sealed class JobWorkerTests
                 return Task.FromResult<IReadOnlyList<LeasedJob>>([]);
             });
         world.Schedules
-            .ReadSchedules()
-            .Returns(_ => throw new InvalidOperationException("the rules are unreadable"));
+            .ReadSchedulesAsync(Arg.Any<CancellationToken>())
+            .Returns<Task<IReadOnlyList<ScheduledJob>>>(
+                _ => throw new InvalidOperationException("the rules are unreadable"));
 
         // Act
         await world.Worker.StartAsync(TestContext.Current.CancellationToken);
@@ -324,7 +327,8 @@ public sealed class JobWorkerTests
         world.DepthReader
             .ReadWaitingDepthsAsync(Arg.Any<IReadOnlyList<JobType>>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<JobQueueDepthReading>>([]));
-        world.Schedules.ReadSchedules().Returns([]);
+        world.Schedules.ReadSchedulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ScheduledJob>>([]));
 
         var queueTelemetry = new JobQueueTelemetry();
 

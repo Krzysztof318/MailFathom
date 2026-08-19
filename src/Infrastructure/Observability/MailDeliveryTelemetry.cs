@@ -233,6 +233,7 @@ public sealed class MailDeliveryTelemetry
         MailOutboxDeliveryOutcome.ReleasedForShutdown => "released",
         MailOutboxDeliveryOutcome.LeaseLost => "lease-lost",
         MailOutboxDeliveryOutcome.NotRecorded => "not-recorded",
+        MailOutboxDeliveryOutcome.MissedItsDueTime => "missed-due-time",
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "No metric dimension is defined for this delivery outcome."),
     };
 

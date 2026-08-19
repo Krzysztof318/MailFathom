@@ -20,7 +20,8 @@ public sealed class MailOutboxSettingsTests
             attemptTimeout: TimeSpan.FromMinutes(7),
             maxAttempts: 5,
             retryBaseDelay: TimeSpan.FromMinutes(1),
-            retryMaxDelay: TimeSpan.FromHours(1));
+            retryMaxDelay: TimeSpan.FromHours(1),
+            allowedLateness: TimeSpan.FromHours(8));
 
         // Assert
         Assert.Equal(10, settings.MaxDeliveriesPerPass);
@@ -29,6 +30,7 @@ public sealed class MailOutboxSettingsTests
         Assert.Equal(5, settings.MaxAttempts);
         Assert.Equal(TimeSpan.FromMinutes(1), settings.RetryBaseDelay);
         Assert.Equal(TimeSpan.FromHours(1), settings.RetryMaxDelay);
+        Assert.Equal(TimeSpan.FromHours(8), settings.AllowedLateness);
     }
 
     /// <summary>
@@ -47,7 +49,8 @@ public sealed class MailOutboxSettingsTests
             TimeSpan.FromMinutes(timeoutMinutes),
             maxAttempts: 5,
             TimeSpan.FromMinutes(1),
-            TimeSpan.FromHours(1)));
+            TimeSpan.FromHours(1),
+            TimeSpan.FromHours(8)));
 
         // Assert
         Assert.Equal("attemptTimeout", thrown.ParamName);
@@ -64,7 +67,8 @@ public sealed class MailOutboxSettingsTests
             TimeSpan.FromMinutes(7),
             maxAttempts: 5,
             TimeSpan.FromMinutes(5),
-            TimeSpan.FromMinutes(1)));
+            TimeSpan.FromMinutes(1),
+            TimeSpan.FromHours(8)));
 
         // Assert
         Assert.Equal("retryMaxDelay", thrown.ParamName);
@@ -83,9 +87,30 @@ public sealed class MailOutboxSettingsTests
             TimeSpan.FromMinutes(7),
             maxAttempts,
             TimeSpan.FromMinutes(1),
-            TimeSpan.FromHours(1)));
+            TimeSpan.FromHours(1),
+            TimeSpan.FromHours(8)));
 
         // Assert
         Assert.Equal(expectedParameter, thrown.ParamName);
+    }
+
+    /// <summary>A lateness bound of nothing would refuse every held send at the instant it became due, so it is stated wrongly.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Create_AllowedLatenessIsNotPositive_IsRefused(int minutes)
+    {
+        // Act
+        var thrown = Assert.Throws<ArgumentOutOfRangeException>(() => MailOutboxSettings.Create(
+            maxDeliveriesPerPass: 10,
+            TimeSpan.FromMinutes(10),
+            TimeSpan.FromMinutes(7),
+            maxAttempts: 5,
+            TimeSpan.FromMinutes(1),
+            TimeSpan.FromHours(1),
+            TimeSpan.FromMinutes(minutes)));
+
+        // Assert
+        Assert.Equal("allowedLateness", thrown.ParamName);
     }
 }

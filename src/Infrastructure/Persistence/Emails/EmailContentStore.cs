@@ -9,6 +9,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -242,6 +243,83 @@ internal sealed class EmailContentStore(
                 storedContent.RawMime.AsMemory(),
                 storedContent.MimeByteLength,
                 storedContent.Sha256Hash.AsMemory());
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The same "written once" arrangement the outgoing message's has, for a payload nothing transmits: a draft is what
+    /// every occasion of a declaration is composed from, so rewriting it under a running declaration would change what
+    /// the next occasion sends without changing anything a reader of the declaration can see.
+    /// </remarks>
+    public async Task SaveRecurringSendDraftAsync(
+        IPersistenceSession session,
+        RecurringSendId recurringSendId,
+        ReadOnlyMemory<byte> draftMime,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        if (draftMime.IsEmpty)
+        {
+            throw new ArgumentException(
+                "A recurring send is declared with the draft its occurrences are composed from.",
+                nameof(draftMime));
+        }
+
+        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+
+        // The declaration is added earlier in this same uncommitted session, so FindAsync resolves it from the change
+        // tracker without a query there and falls back to the database otherwise.
+        var declaration = await writeContext.RecurringSends.FindAsync([recurringSendId.Value], cancellationToken)
+            ?? throw new InvalidOperationException(
+                "A draft cannot be stored without the recurring send declaration it belongs to.");
+
+        Expression<Func<RecurringSendDraftEntity, bool>> matchesDeclaration =
+            candidate => candidate.RecurringSendId == declaration.Id;
+
+        if (writeContext.RecurringSendDrafts.Local.AsQueryable().Any(matchesDeclaration))
+        {
+            return;
+        }
+
+        var isDeclarationPending = writeContext.Entry(declaration).State == EntityState.Added;
+        if (!isDeclarationPending
+            && await writeContext.RecurringSendDrafts.AnyAsync(matchesDeclaration, cancellationToken))
+        {
+            return;
+        }
+
+        var bytes = GetCompleteArray(draftMime);
+
+        writeContext.RecurringSendDrafts.Add(new RecurringSendDraftEntity
+        {
+            RecurringSendId = declaration.Id,
+            RecurringSend = declaration,
+            DraftMime = bytes,
+            DraftByteLength = bytes.LongLength,
+            Sha256Hash = SHA256.HashData(draftMime.Span),
+            StoredAt = timeProvider.GetUtcNow(),
+        });
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Read once per occasion rather than once per attempt, which is rarer still than the outgoing read; it is projected the same way for the same reason.</remarks>
+    public async Task<StoredEmailContent?> FindRecurringSendDraftAsync(
+        RecurringSendId recurringSendId,
+        CancellationToken cancellationToken)
+    {
+        var storedDraft = await dbContext.RecurringSendDrafts
+            .AsNoTracking()
+            .Where(draft => draft.RecurringSendId == recurringSendId.Value)
+            .Select(draft => new StoredEmailContentRow(draft.DraftMime, draft.DraftByteLength, draft.Sha256Hash))
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return storedDraft is null
+            ? null
+            : new StoredEmailContent(
+                storedDraft.RawMime.AsMemory(),
+                storedDraft.MimeByteLength,
+                storedDraft.Sha256Hash.AsMemory());
     }
 
     private static void EnsureOccurrenceMatches(

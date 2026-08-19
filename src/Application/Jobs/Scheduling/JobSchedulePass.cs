@@ -34,19 +34,19 @@ namespace MailFathom.Application.Jobs.Scheduling;
 /// </remarks>
 public sealed class JobSchedulePass
 {
-    private readonly IScheduledJobSource schedules;
+    private readonly IReadOnlyList<IScheduledJobSource> schedules;
     private readonly IJobScheduleStore scheduleStore;
     private readonly IJobStore jobStore;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes the pass from the schedules it reads and the queue it dispatches into.</summary>
-    /// <param name="schedules">Declares which recurring dispatches this instance has.</param>
+    /// <param name="schedules">Declare which recurring dispatches this instance has, one source per part of the system that has any.</param>
     /// <param name="scheduleStore">Keeps what each schedule has already dispatched.</param>
     /// <param name="jobStore">Enqueues the occasion and answers what became of the previous one.</param>
     /// <param name="timeProvider">Supplies the instant the occasions are read against.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public JobSchedulePass(
-        IScheduledJobSource schedules,
+        IEnumerable<IScheduledJobSource> schedules,
         IJobScheduleStore scheduleStore,
         IJobStore jobStore,
         TimeProvider timeProvider)
@@ -56,7 +56,7 @@ public sealed class JobSchedulePass
         ArgumentNullException.ThrowIfNull(jobStore);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        this.schedules = schedules;
+        this.schedules = [.. schedules];
         this.scheduleStore = scheduleStore;
         this.jobStore = jobStore;
         this.timeProvider = timeProvider;
@@ -72,7 +72,7 @@ public sealed class JobSchedulePass
     /// </remarks>
     public async Task<IReadOnlyList<JobScheduleDispatch>> RunAsync(CancellationToken cancellationToken)
     {
-        var declared = this.schedules.ReadSchedules();
+        var declared = await this.ReadDeclaredAsync(cancellationToken);
 
         if (declared.Count == 0)
         {
@@ -95,6 +95,24 @@ public sealed class JobSchedulePass
         }
 
         return dispatches;
+    }
+
+    /// <summary>Reads what every source declares, in the order the sources were registered.</summary>
+    /// <remarks>
+    /// One source after another rather than together, because a source reads either nothing or one bounded query and
+    /// the order the schedules are then decided in is the order they are declared in — which is what makes a queue
+    /// reaching its depth bound refuse a defined set rather than whichever source happened to answer first.
+    /// </remarks>
+    private async Task<IReadOnlyList<ScheduledJob>> ReadDeclaredAsync(CancellationToken cancellationToken)
+    {
+        var declared = new List<ScheduledJob>();
+
+        foreach (var source in this.schedules)
+        {
+            declared.AddRange(await source.ReadSchedulesAsync(cancellationToken));
+        }
+
+        return declared;
     }
 
     /// <summary>Decides about one schedule and writes down whatever the decision moved.</summary>

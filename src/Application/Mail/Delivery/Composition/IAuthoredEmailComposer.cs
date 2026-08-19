@@ -36,4 +36,38 @@ public interface IAuthoredEmailComposer
         OutgoingEmailRequester requester,
         AuthoredEmail authored,
         MailDeliveryCapabilities capabilities);
+
+    /// <summary>Composes one occasion's message from the draft a recurring send was declared with, or refuses it.</summary>
+    /// <param name="accountId">The account the message is sent as, which decides the <c>From</c> address again.</param>
+    /// <param name="requester">The occasion asking, which is what makes one occasion's message one delivery.</param>
+    /// <param name="recipients">The people this occasion is offered to, as the declaration recorded them.</param>
+    /// <param name="draftMime">The stored draft, exactly as the declaration was made with.</param>
+    /// <param name="capabilities">What the submission server said it will accept, or what holds before one has spoken.</param>
+    /// <returns>The composed message, or the refusal that stopped it.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="requester" />, <paramref name="recipients" />, or <paramref name="capabilities" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="draftMime" /> is empty.</exception>
+    /// <remarks>
+    /// <para>
+    /// Every occasion is a message of its own, and this is where that becomes true rather than aspirational: the draft
+    /// is stamped with an identity and a date of this occasion's, so a year of Mondays is a year of messages instead of
+    /// one message a client threads over itself and a server may refuse as a duplicate.
+    /// </para>
+    /// <para>
+    /// What the draft says the message is from is replaced rather than kept, because a message is sent as the account
+    /// that sends it and an operator may have changed what that account writes as since the declaration was made. The
+    /// rest of the draft is transmitted as it stands, hidden recipients included: the addresses this occasion is
+    /// offered to come from the declaration beside it, because a blind recipient is by construction not in the bytes.
+    /// </para>
+    /// <para>
+    /// The bounds are applied again here, against the message this occasion actually became. A deployment that has
+    /// since tightened what it will send refuses the occasion rather than transmitting under the bound that was in
+    /// force when somebody wrote the draft.
+    /// </para>
+    /// </remarks>
+    AuthoredEmailComposition RecomposeAsOccurrence(
+        MailAccountId accountId,
+        OutgoingEmailRequester requester,
+        IReadOnlyList<OutgoingRecipient> recipients,
+        ReadOnlyMemory<byte> draftMime,
+        MailDeliveryCapabilities capabilities);
 }

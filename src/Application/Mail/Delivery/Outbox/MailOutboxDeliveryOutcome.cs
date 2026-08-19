@@ -40,4 +40,13 @@ public enum MailOutboxDeliveryOutcome
     /// refused at all.
     /// </remarks>
     NotRecorded = 6,
+
+    /// <summary>The send was written for a time that had passed by further than this deployment delivers late, so nothing was transmitted.</summary>
+    /// <remarks>
+    /// The record ends refused, because nothing offers the message again, and the ending is reported separately because
+    /// nobody refused anything: the message is intact, its recipients are reachable, and what stopped it is a bound the
+    /// deployment set. That is the one refusal an operator answers by sending the message themselves, which is why it
+    /// must not read as a provider that would not take it.
+    /// </remarks>
+    MissedItsDueTime = 7,
 }

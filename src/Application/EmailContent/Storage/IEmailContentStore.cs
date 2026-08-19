@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.EmailContent.Storage;
@@ -92,5 +93,38 @@ public interface IEmailContentStore
     /// </remarks>
     Task<StoredEmailContent?> FindOutgoingContentAsync(
         OutgoingEmailId outgoingEmailId,
+        CancellationToken cancellationToken);
+
+    /// <summary>Saves the draft every occurrence of one recurring send is composed from, once and only once.</summary>
+    /// <param name="session">The explicit persistence session this content write participates in.</param>
+    /// <param name="recurringSendId">The declaration the draft belongs to.</param>
+    /// <param name="draftMime">The composed RFC 822 bytes the occurrences are made from.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>A task that completes after durable storage.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="draftMime" /> is empty.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no declaration carries <paramref name="recurringSendId" />.</exception>
+    /// <remarks>
+    /// A draft is RFC 822 and therefore lives here rather than in a table of its own, which is what keeps every piece
+    /// of mail content this system holds behind one port with one set of retention, erasure, and export obligations. It
+    /// is not a message: nothing transmits it, and what each occasion transmits is composed from it with an identity
+    /// and a date of that occasion's own.
+    /// </remarks>
+    Task SaveRecurringSendDraftAsync(
+        IPersistenceSession session,
+        RecurringSendId recurringSendId,
+        ReadOnlyMemory<byte> draftMime,
+        CancellationToken cancellationToken);
+
+    /// <summary>Reads back the draft stored for one recurring send.</summary>
+    /// <param name="recurringSendId">The declaration whose draft is read.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>The stored draft, or <see langword="null" /> when the declaration has none.</returns>
+    /// <remarks>
+    /// Absent content is a defect rather than an ordinary answer, as it is for an outgoing record: a declaration is
+    /// written together with its draft, so one without a draft describes occasions that could never produce a message.
+    /// </remarks>
+    Task<StoredEmailContent?> FindRecurringSendDraftAsync(
+        RecurringSendId recurringSendId,
         CancellationToken cancellationToken);
 }

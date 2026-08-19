@@ -25,6 +25,7 @@ using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Application.Mail.Delivery.Outbox;
+using MailFathom.Application.Mail.Delivery.Scheduling;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -617,7 +618,8 @@ internal static class HostComposition
                 deliverySettings.AttemptTimeout,
                 deliverySettings.MaxAttempts,
                 deliverySettings.RetryBaseDelay,
-                deliverySettings.RetryMaxDelay);
+                deliverySettings.RetryMaxDelay,
+                deliverySettings.AllowedSendLateness);
         });
         // A singleton for a different reason: it carries accounts from the scope that wrote a record to the loop that
         // delivers it, so a queue per scope would be a queue nobody reads.
@@ -736,6 +738,14 @@ internal static class HostComposition
         // execution timeout allows, and hands what it did not reach to a segment of its own rather than holding a
         // worker for as long as a mailbox takes.
         builder.Services.AddScoped<IJobHandler, StoredMailRederivationHandler>();
+        // The two the outbox owns. The first carries nothing but the moment a held message becomes due, which is why a
+        // scheduled send needs no timer; the second composes one occasion of a message that repeats and writes it into
+        // the outbox, where it becomes an ordinary send.
+        builder.Services.AddScoped<IJobHandler, HeldSendDispatchHandler>();
+        builder.Services.AddScoped<IJobHandler, RecurringSendOccurrenceHandler>();
+        // The second source of recurring dispatches, beside the rules': the repetitions an owner declared, read from
+        // the database rather than from configuration because that is where somebody makes and stops one.
+        builder.Services.AddScoped<IScheduledJobSource, RecurringSendScheduleSource>();
         // A singleton rather than a scoped value: the bound is a deployment-wide privacy control, so every search in the
         // process applies the one an operator configured rather than whichever snapshot a scope happened to open under.
         builder.Services.AddSingleton(provider =>

@@ -382,6 +382,7 @@ how long it holds it, and how patient this deployment is with a submission serve
 | `MailDelivery:MaxAttempts` | int | `5` | 1 – 100; `1` leaves no retry at all | restart |
 | `MailDelivery:RetryBaseDelay` | TimeSpan | `00:01:00` | 1 s – 1 h | restart |
 | `MailDelivery:RetryMaxDelay` | TimeSpan | `01:00:00` | 1 s – 24 h, and never below `RetryBaseDelay` | restart |
+| `MailDelivery:AllowedSendLateness` | TimeSpan | `08:00:00` | 1 min – 30 d | restart |
 | `MailDelivery:SignalQueueCapacity` | int | `64` | 1 – 1000 | restart |
 
 **`AttemptTimeout` below `LeaseDuration` is one of the two orderings startup refuses rather than warns about**, the
@@ -396,6 +397,16 @@ A send that spends `MaxAttempts` stops being attempted and stands in the outbox 
 than being retried forever; a permanent refusal is terminal at the first answer and never spends the remaining
 attempts. Between attempts the delay doubles from `RetryBaseDelay`, drawn with jitter so a provider that refused every
 account at once is not offered all of them back together, and is capped at `RetryMaxDelay`.
+
+**`AllowedSendLateness` applies to a message written to leave at a named time and to nothing else.** A send that named
+no time is never late, however long a retry or an unreachable provider has held it, so raising or lowering this key
+changes nothing about ordinary correspondence. What it decides is the case where the moment came and went with nothing
+running — an instance that was down, a queue that was full — where delivering and dropping are both wrong answers. Up to
+this much lateness the message is delivered as written; past it the send is refused, stands in the outbox where an
+operator sees it, and reports the outcome `missed-due-time` on
+[the delivery counter](telemetry.md). Neither outcome is silent. The default is a working day, which is the span over
+which a message written for nine in the morning still reads as the message its author meant; what to do about one later
+than that is a person's decision rather than a bound's.
 
 `SignalQueueCapacity` bounds only how promptly a send leaves, never whether it leaves. The queue holds accounts rather
 than messages and an account already waiting is not queued twice, so it cannot grow past the number of configured

@@ -14,10 +14,12 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
+using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Application.Persistence;
@@ -590,8 +592,11 @@ public sealed class AuthoredResponseSubmissionTests
                 new PersistenceConcurrencyOptions(),
                 new FakeTimeProvider()),
             new MailOutboxSignal(capacity: 8),
+            Substitute.For<IJobStore>(),
+            Substitute.For<IOutboxOperationStore>(),
             granted,
-            OutgoingMailGovernors.Permitting());
+            OutgoingMailGovernors.Permitting(),
+            new FakeTimeProvider(Recorded));
     }
 
     /// <summary>An outgoing store that keeps one record per idempotency identity, which is what the retry claim rests on.</summary>
@@ -624,6 +629,7 @@ public sealed class AuthoredResponseSubmissionTests
                         RecordedAt = Recorded,
                         StageChangedAt = Recorded,
                         AvailableAt = Recorded,
+                        DueAt = null,
                         LastFailure = null,
                         LastReplyCode = null,
                         Filings = [],

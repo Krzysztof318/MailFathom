@@ -5,8 +5,10 @@
 using System.Text;
 using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Governance;
+using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
@@ -14,9 +16,12 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Governance;
+using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
+using MailFathom.Domain.Scheduling;
 using MailFathom.TestSupport;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
@@ -25,6 +30,10 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery;
 public sealed class MailOutboxTests
 {
     private static readonly MailAccountId Account = MailAccountId.Create("work");
+
+    private static readonly DateTimeOffset Authored = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
+
+    private static readonly DateTimeOffset DueAt = new(2026, 8, 19, 18, 0, 0, TimeSpan.Zero);
 
     private static readonly ReadOnlyMemory<byte> RawMime =
         Encoding.ASCII.GetBytes("Message-ID: <one@example.test>\r\n\r\nHello.").AsMemory();
@@ -138,8 +147,11 @@ public sealed class MailOutboxTests
             contentStore,
             CreateRetryPolicy(sessionFactory),
             new MailOutboxSignal(capacity: 8),
+            Substitute.For<IJobStore>(),
+            Substitute.For<IOutboxOperationStore>(),
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
-            OutgoingMailGovernors.Permitting());
+            OutgoingMailGovernors.Permitting(),
+            TimeProvider.System);
 
         // Act
         var record = await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None);
@@ -395,6 +407,167 @@ public sealed class MailOutboxTests
         Assert.Empty(store.OpenRequests);
     }
 
+    /// <summary>
+    /// A send written for a later time is not announced but queued for the moment it names, which is the whole of what
+    /// holding one costs: no timer, no scheduler, and no queue of this feature's own.
+    /// </summary>
+    [Fact]
+    public async Task EnqueueAsync_ASendWrittenForALaterTime_QueuesTheMomentItIsDueInsteadOfSignalling()
+    {
+        // Arrange
+        var jobs = Substitute.For<IJobStore>();
+        var signal = new MailOutboxSignal(capacity: 4);
+        var outbox = CreateOutbox(
+            new InMemoryOutgoingEmailStore(),
+            Substitute.For<IEmailContentStore>(),
+            signal: signal,
+            jobs: jobs,
+            timeProvider: new FakeTimeProvider(Authored));
+
+        // Act
+        var record = await outbox.EnqueueAsync(HeldRequest("mfctl-4f2a", DueAt), RawMime, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, signal.Depth);
+        Assert.Equal(DueAt, record.AvailableAt);
+        await jobs.Received(1).EnqueueAsync(
+            Arg.Is<JobEnqueueRequest>(request =>
+                request != null
+                && request.Key.Value == $"held-send:{record.Id}"
+                && request.JobType == JobType.DispatchHeldSend
+                && request.AvailableAt == DueAt
+                && request.AccountId == Account),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A send whose named time has already come is an ordinary send, so it is announced rather than queued for later.</summary>
+    [Fact]
+    public async Task EnqueueAsync_ASendWhoseNamedTimeHasCome_SignalsRatherThanQueuingAMoment()
+    {
+        // Arrange
+        var jobs = Substitute.For<IJobStore>();
+        var signal = new MailOutboxSignal(capacity: 4);
+        var outbox = CreateOutbox(
+            new InMemoryOutgoingEmailStore(),
+            Substitute.For<IEmailContentStore>(),
+            signal: signal,
+            jobs: jobs,
+            timeProvider: new FakeTimeProvider(DueAt));
+
+        // Act
+        await outbox.EnqueueAsync(HeldRequest("mfctl-4f2a", DueAt), RawMime, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, signal.Depth);
+        await jobs.DidNotReceive().EnqueueAsync(Arg.Any<JobEnqueueRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A message is withdrawable for the whole of the hold, through the one statement that writes the withdrawal.</summary>
+    /// <remarks>
+    /// What the outcome means is the operation store's own suite and the integration suite's, because the stage rule
+    /// and the live lease are conditions of a single statement rather than decisions this use case takes. What belongs
+    /// here is that the use case reaches that statement for the record the caller named, and answers with what it said.
+    /// </remarks>
+    [Fact]
+    public async Task CancelAsync_ASendStillBeingHeld_AsksTheOneWithdrawalForThatRecord()
+    {
+        // Arrange
+        var operations = Substitute.For<IOutboxOperationStore>();
+        var store = new InMemoryOutgoingEmailStore();
+        var outbox = CreateOutbox(
+            store,
+            Substitute.For<IEmailContentStore>(),
+            outboxOperations: operations,
+            timeProvider: new FakeTimeProvider(Authored));
+        var record = await outbox.EnqueueAsync(HeldRequest("mfctl-4f2a", DueAt), RawMime, CancellationToken.None);
+        operations.CancelAsync(record.Id, Arg.Any<CancellationToken>()).Returns(OutboxDecisionOutcome.Accepted);
+
+        // Act
+        var outcome = await outbox.CancelAsync(record.Id, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(OutboxDecisionOutcome.Accepted, outcome);
+        await operations.Received(1).CancelAsync(record.Id, Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A refusal is answered rather than raised over, because a caller acting on a stale reading cannot tell the cases apart.</summary>
+    [Theory]
+    [InlineData(OutboxDecisionOutcome.RecordUnknown)]
+    [InlineData(OutboxDecisionOutcome.StageDoesNotAllowIt)]
+    [InlineData(OutboxDecisionOutcome.AttemptUnderWay)]
+    public async Task CancelAsync_AWithdrawalTheRecordDoesNotAllow_AnswersWithWhatTheStoreSaid(
+        OutboxDecisionOutcome refusal)
+    {
+        // Arrange
+        var operations = Substitute.For<IOutboxOperationStore>();
+        operations.CancelAsync(Arg.Any<OutgoingEmailId>(), Arg.Any<CancellationToken>()).Returns(refusal);
+        var outbox = CreateOutbox(
+            new InMemoryOutgoingEmailStore(),
+            Substitute.For<IEmailContentStore>(),
+            outboxOperations: operations);
+
+        // Act
+        var outcome = await outbox.CancelAsync(
+            OutgoingEmailId.Create(Guid.CreateVersion7()),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(refusal, outcome);
+    }
+
+    /// <summary>Stopping somebody's mail is a decision about their correspondents exactly as sending it is, so it asks for the same grant.</summary>
+    [Fact]
+    public async Task CancelAsync_CallerWithoutTheSendGrant_RefusesAndWithdrawsNothing()
+    {
+        // Arrange
+        var operations = Substitute.For<IOutboxOperationStore>();
+        var outbox = CreateOutbox(
+            new InMemoryOutgoingEmailStore(),
+            Substitute.For<IEmailContentStore>(),
+            authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead),
+            outboxOperations: operations);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => outbox.CancelAsync(OutgoingEmailId.Create(Guid.CreateVersion7()), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailSend, refusal.RequiredPermission);
+        await operations.DidNotReceiveWithAnyArgs().CancelAsync(default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>An occurrence of a recurring send is composed with nobody present, so it is admitted exactly as a rule's message is.</summary>
+    [Fact]
+    public async Task EnqueueAsync_AnOccurrenceOfARecurringSendUnderTheProcessIdentity_RecordsTheSend()
+    {
+        // Arrange
+        var outbox = CreateOutbox(
+            new InMemoryOutgoingEmailStore(),
+            Substitute.For<IEmailContentStore>(),
+            authorization: AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process),
+            timeProvider: new FakeTimeProvider(Authored));
+
+        // Act
+        var record = await outbox.EnqueueAsync(CreateOccurrenceRequest(), RawMime, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(OutgoingEmailStage.Recorded, record.Stage);
+        Assert.Equal(OutgoingEmailOrigin.Schedule, record.Requester.Origin);
+    }
+
+    private static OutgoingEmailRequest HeldRequest(string invocationIdentity, DateTimeOffset dueAt) =>
+        CreateRequest(invocationIdentity).HeldUntil(ZonedInstant.At(dueAt));
+
+    private static OutgoingEmailRequest CreateOccurrenceRequest()
+    {
+        Assert.True(EmailAddress.TryCreate(displayName: null, "anna@example.test", out var address));
+
+        return OutgoingEmailRequest.Create(
+            Account,
+            OutgoingEmailRequester.Schedule(RecurringSendId.Create(Guid.CreateVersion7()), DueAt),
+            [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]);
+    }
+
     private static OutgoingEmailRequest CreateRuleRequest()
     {
         Assert.True(EmailAddress.TryCreate(displayName: null, "anna@example.test", out var address));
@@ -430,7 +603,10 @@ public sealed class MailOutboxTests
         List<IPersistenceSession>? stagedSessions = null,
         MailOutboxSignal? signal = null,
         AccessAuthorization? authorization = null,
-        OutgoingMailGovernor? governor = null)
+        OutgoingMailGovernor? governor = null,
+        IJobStore? jobs = null,
+        IOutboxOperationStore? outboxOperations = null,
+        TimeProvider? timeProvider = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ =>
@@ -447,8 +623,11 @@ public sealed class MailOutboxTests
             contentStore,
             CreateRetryPolicy(sessionFactory),
             signal ?? new MailOutboxSignal(capacity: 8),
+            jobs ?? Substitute.For<IJobStore>(),
+            outboxOperations ?? Substitute.For<IOutboxOperationStore>(),
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
-            governor ?? OutgoingMailGovernors.Permitting());
+            governor ?? OutgoingMailGovernors.Permitting(),
+            timeProvider ?? TimeProvider.System);
     }
 
     /// <summary>Builds the policy the outbox commits through, over the real clock the policy's own tests use.</summary>

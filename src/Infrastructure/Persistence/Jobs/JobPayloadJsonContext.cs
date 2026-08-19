@@ -29,6 +29,8 @@ namespace MailFathom.Infrastructure.Persistence.Jobs;
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(EmailOccurrenceJobPayload))]
+[JsonSerializable(typeof(HeldSendJobPayload))]
+[JsonSerializable(typeof(RecurringSendJobPayload))]
 [JsonSerializable(typeof(MailAccountJobPayload))]
 [JsonSerializable(typeof(StoredMailScopeJobPayload))]
 internal sealed partial class JobPayloadJsonContext : JsonSerializerContext;

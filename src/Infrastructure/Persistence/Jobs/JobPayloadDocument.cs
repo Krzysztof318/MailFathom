@@ -55,6 +55,10 @@ internal static class JobPayloadDocument
                 JsonSerializer.Serialize(account, JobPayloadJsonContext.Default.MailAccountJobPayload),
             StoredMailScopeJobPayload scope =>
                 JsonSerializer.Serialize(scope, JobPayloadJsonContext.Default.StoredMailScopeJobPayload),
+            HeldSendJobPayload heldSend =>
+                JsonSerializer.Serialize(heldSend, JobPayloadJsonContext.Default.HeldSendJobPayload),
+            RecurringSendJobPayload recurringSend =>
+                JsonSerializer.Serialize(recurringSend, JobPayloadJsonContext.Default.RecurringSendJobPayload),
             _ => throw new ArgumentException(
                 $"A '{payload.JobType}' job payload has no serialization contract in this store.",
                 nameof(payload)),
@@ -103,6 +107,14 @@ internal static class JobPayloadDocument
                             $"A '{jobType}' job carries a document that describes no payload."),
                 _ when jobType == JobType.RederiveStoredMail =>
                     JsonSerializer.Deserialize(document, JobPayloadJsonContext.Default.StoredMailScopeJobPayload)
+                        ?? throw new InvalidOperationException(
+                            $"A '{jobType}' job carries a document that describes no payload."),
+                _ when jobType == JobType.DispatchHeldSend =>
+                    JsonSerializer.Deserialize(document, JobPayloadJsonContext.Default.HeldSendJobPayload)
+                        ?? throw new InvalidOperationException(
+                            $"A '{jobType}' job carries a document that describes no payload."),
+                _ when jobType == JobType.SendRecurringOccurrence =>
+                    JsonSerializer.Deserialize(document, JobPayloadJsonContext.Default.RecurringSendJobPayload)
                         ?? throw new InvalidOperationException(
                             $"A '{jobType}' job carries a document that describes no payload."),
                 _ => throw new InvalidOperationException(

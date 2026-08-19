@@ -239,7 +239,8 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             attemptTimeout: TimeSpan.FromMinutes(1),
             maxAttempts: 2,
             retryBaseDelay: TimeSpan.FromMinutes(1),
-            retryMaxDelay: TimeSpan.FromMinutes(5)));
+            retryMaxDelay: TimeSpan.FromMinutes(5),
+            allowedLateness: TimeSpan.FromHours(8)));
         // The queue an authored send is announced on. Nothing in this suite reads it — the pass is invoked directly —
         // so it is here because the outbox writes to it, and its depth is what a test reads to see that the write
         // announced anything at all.

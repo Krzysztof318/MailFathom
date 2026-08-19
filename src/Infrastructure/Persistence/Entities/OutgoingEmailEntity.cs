@@ -50,6 +50,22 @@ internal sealed class OutgoingEmailEntity
     /// </remarks>
     public DateTimeOffset AvailableAt { get; set; }
 
+    /// <summary>Gets or sets the instant the author asked the message to leave at, and <see langword="null" /> when they asked for it to leave at once.</summary>
+    /// <remarks>
+    /// It is a column of its own rather than the available instant read differently, because a failed attempt moves
+    /// that one and nothing moves this. Without it a message written for nine in the morning and deferred twice would
+    /// have no record of what nine in the morning was, which is the value the lateness bound is measured from.
+    /// </remarks>
+    public DateTimeOffset? DueAt { get; set; }
+
+    /// <summary>Gets or sets the zone the due instant was named in, and <see langword="null" /> when the record names no due time.</summary>
+    /// <remarks>
+    /// Kept beside the instant rather than resolved from it, because an instant alone cannot say which nine in the
+    /// morning was meant once the offset changes. Nothing re-derives the instant from it: the resolution happened where
+    /// the time was named, and this is what makes the answer readable afterwards.
+    /// </remarks>
+    public string? DueZoneId { get; set; }
+
     /// <summary>Gets or sets the attempt currently holding this send, and <see langword="null" /> while none does.</summary>
     /// <remarks>
     /// Every write an attempt makes is conditional on this value still matching it, which is what makes a late writer

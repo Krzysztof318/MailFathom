@@ -42,6 +42,7 @@ using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
+using MailFathom.Application.Mail.Delivery.Scheduling;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Mail.Mutations;
@@ -744,6 +745,10 @@ public static class ServiceCollectionExtensions
         // governed without anything here changing.
         services.AddScoped<IOutboxOperationStore, OutboxOperationStore>();
         services.AddScoped<OutboxOperations>();
+        // A message an owner asked to have sent again is a declaration beside the outbox rather than a queue of its
+        // own: it produces an ordinary record on every occasion, through the outbox above, and the occasions come from
+        // the job model's recurring dispatch.
+        services.AddScoped<IRecurringSendStore, RecurringSendStore>();
         // The attempt and the pass over it are scoped like every other work unit, because each opens a submission
         // session and commits through the caller's persistence scope. The signal they answer is not: it carries accounts
         // between a scope that wrote a record and the loop that delivers it, so it belongs to the process.
@@ -777,6 +782,11 @@ public static class ServiceCollectionExtensions
         // registered above rather than from an account and a recipient list: a reply is addressed by the message it
         // answers. It holds no delivery session either, for the same reason the submission beside it does not.
         services.AddScoped<AuthoredResponseSubmission>();
+        // Declaring a message that repeats, out of the same account catalog, resolver, and composer the one-off
+        // submission uses. It queues nothing, because nothing is due when a repetition is declared; what turns an
+        // occasion into a message is the handler below, reached through the job model like every other recurring
+        // dispatch this deployment has.
+        services.AddScoped<RecurringMailSubmission>();
         // Read by synchronization rather than by the performer, so that a relocation coming back through an ordinary
         // run is recognized as MailFathom's own instead of being stored as a second email.
         services.AddScoped<IMailboxMutationReconciliationStore, MailboxMutationReconciliationStore>();

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
+using MailFathom.Domain.Scheduling;
 
 namespace MailFathom.Application.Jobs.Scheduling;
 
@@ -57,15 +58,8 @@ public sealed class JobRecurrence
     private const string EveryKeyword = "every";
     private const string DailyKeyword = "daily";
     private const string AtKeyword = "at";
-    private const string CoordinatedZoneName = "UTC";
+    private const string CoordinatedZoneName = ZonedInstant.CoordinatedZoneId;
     private const string TimeOfDayFormat = "HH\\:mm";
-
-    /// <summary>How far a resolution walks forward out of a gap the local clock skipped over.</summary>
-    /// <remarks>
-    /// A daylight-saving gap is an hour in every zone anybody has, so a day is far more than the walk ever needs and is
-    /// short enough that a zone with an implausible rule ends the walk rather than running it out.
-    /// </remarks>
-    private static readonly TimeSpan LongestSkippedSpan = TimeSpan.FromDays(1);
 
     private readonly TimeSpan? interval;
     private readonly TimeOnly timeOfDay;
@@ -87,7 +81,13 @@ public sealed class JobRecurrence
         ? string.Create(CultureInfo.InvariantCulture, $"every:{every:c}")
         : string.Create(CultureInfo.InvariantCulture, $"daily:{this.timeOfDay.ToString(TimeOfDayFormat, CultureInfo.InvariantCulture)}:{this.ZoneName}");
 
-    private string ZoneName => this.zone?.Id ?? CoordinatedZoneName;
+    /// <summary>Gets the zone the occasions are read in, which is the coordinated one when the declaration named none.</summary>
+    /// <remarks>
+    /// It is published because an occasion is more than an instant to whoever reads it afterwards: a message sent on
+    /// the occasion of a schedule declared in Warsaw went out at nine in Warsaw, and a record keeping only the instant
+    /// would leave that unreadable the moment the offset changed.
+    /// </remarks>
+    public string ZoneName => this.zone?.Id ?? CoordinatedZoneName;
 
     /// <summary>Reads a declared schedule, reporting what is wrong with one this system cannot use.</summary>
     /// <param name="declaration">The schedule as an operator wrote it.</param>
@@ -305,30 +305,11 @@ public sealed class JobRecurrence
 
     /// <summary>Resolves one local date's declared time to the instant it names.</summary>
     /// <remarks>
-    /// The two daylight-saving cases are the whole of this. A time the clock skipped is walked forward to the first
-    /// minute that exists, which is the instant the gap ends; a time the clock passed through twice takes the larger of
-    /// the two offsets, which is the earlier of the two instants.
+    /// The two daylight-saving cases are <see cref="ZonedInstant" />'s rather than this type's, because a schedule and
+    /// a message held until a named time meet the same two and have to answer them identically: a time the clock
+    /// skipped is the instant the gap ends, and a time it passed through twice is the earlier of the two readings.
     /// </remarks>
-    private DateTimeOffset ResolveLocal(DateOnly date)
-    {
-        var declared = date.ToDateTime(this.timeOfDay);
-
-        if (this.zone is null)
-        {
-            return new DateTimeOffset(declared, TimeSpan.Zero);
-        }
-
-        var local = declared;
-
-        while (this.zone.IsInvalidTime(local) && local - declared < LongestSkippedSpan)
-        {
-            local = local.AddMinutes(1);
-        }
-
-        var offset = this.zone.IsAmbiguousTime(local)
-            ? this.zone.GetAmbiguousTimeOffsets(local).Max()
-            : this.zone.GetUtcOffset(local);
-
-        return new DateTimeOffset(local, offset);
-    }
+    private DateTimeOffset ResolveLocal(DateOnly date) => this.zone is null
+        ? new DateTimeOffset(date.ToDateTime(this.timeOfDay), TimeSpan.Zero)
+        : ZonedInstant.Resolve(date.ToDateTime(this.timeOfDay), this.zone).Instant;
 }

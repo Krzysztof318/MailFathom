@@ -83,6 +83,19 @@ internal sealed class InMemoryOutgoingEmailStore(
         return recorded;
     }
 
+    /// <summary>Moves one record to a stage, the way whatever settled it would have left it.</summary>
+    /// <param name="outgoingEmailId">The record to move.</param>
+    /// <param name="stage">The stage it now stands at.</param>
+    /// <remarks>
+    /// This is how a test arranges a send that ended while something else was still holding a reference to it — a
+    /// message withdrawn during its hold, or one an earlier pass already sent — without driving a whole delivery.
+    /// </remarks>
+    internal void Arrange(OutgoingEmailId outgoingEmailId, OutgoingEmailStage stage)
+    {
+        var row = this.rows[outgoingEmailId];
+        row.Record = row.Record with { Stage = stage, StageChangedAt = this.clock.GetUtcNow() };
+    }
+
     /// <summary>Reads back exactly what the store holds for one record, whatever stage it has reached.</summary>
     /// <param name="outgoingEmailId">The record to read.</param>
     /// <returns>The record.</returns>
@@ -507,7 +520,12 @@ internal sealed class InMemoryOutgoingEmailStore(
         AttemptCount = 0,
         RecordedAt = this.clock.GetUtcNow(),
         StageChangedAt = this.clock.GetUtcNow(),
-        AvailableAt = this.clock.GetUtcNow(),
+
+        // The real store seeds this from the due time, which is the whole of what holding a send costs: the claim
+        // already refuses a record whose availability is in the future, so a held message is unclaimable without any
+        // rule of its own. A double that stamped it with the current time would make every held send claimable at once.
+        AvailableAt = request.DueAt?.Instant ?? this.clock.GetUtcNow(),
+        DueAt = request.DueAt,
         LastFailure = null,
         LastReplyCode = null,
         Filings = [],

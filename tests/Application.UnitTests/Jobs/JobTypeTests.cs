@@ -23,6 +23,8 @@ public sealed class JobTypeTests
             JobType.ClassifyEmailSpam,
             JobType.RunScheduledMailRules,
             JobType.RederiveStoredMail,
+            JobType.DispatchHeldSend,
+            JobType.SendRecurringOccurrence,
         ];
 
         // Act

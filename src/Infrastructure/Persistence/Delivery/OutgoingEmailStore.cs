@@ -87,7 +87,13 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
             AttemptCount = 0,
             RecordedAt = recordedAt,
             StageChangedAt = recordedAt,
-            AvailableAt = recordedAt,
+
+            // The instant a claim may first take the record is the instant the author asked the message to leave at,
+            // which is the whole of how a message is held: the claim already compares this column, so a send written
+            // for Monday needs no state of its own and no second predicate to be skipped by every pass until Monday.
+            AvailableAt = request.DueAt?.Instant ?? recordedAt,
+            DueAt = request.DueAt?.Instant,
+            DueZoneId = request.DueAt?.ZoneId,
         };
 
         // Added through the navigation rather than through their own set, so the recipients are inserted with the

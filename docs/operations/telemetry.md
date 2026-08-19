@@ -720,7 +720,7 @@ whole of it is counted.
 
 **Is mail leaving?** `mailfathom.mail.delivery.attempts` counts every attempt that ended, tagged with the account alias
 and `mailfathom.mail.delivery.outcome`, whose values are `sent`, `refused`, `deferred`, `outcome-unknown`, `released`,
-`lease-lost`, and `not-recorded`. One measurement per send rather than per pass, because a pass routinely ends in
+`lease-lost`, `not-recorded`, and `missed-due-time`. One measurement per send rather than per pass, because a pass routinely ends in
 several of them. A send a stopped process left mid-transmission is counted too, under `outcome-unknown`, at the pass
 that finds it: the attempt was made by a process that never lived to report it, and it is stamped once, so counting it
 where it becomes knowable is the only place it can be counted at all.
@@ -734,7 +734,11 @@ provider that is briefly busy and is only interesting when it stops turning into
 `lease-lost` is an attempt that had already been taken over, so neither counts against a deployment's health.
 `not-recorded` is the store refusing to take an attempt's answer rather than a server refusing the message: the record
 stands where the failed write left it and its lease is what frees it, so a rate above zero is a database to look at and
-not an outbox to act on.
+not an outbox to act on. `missed-due-time` is a message written to leave at a named time that a pass reached later than
+`MailDelivery:AllowedSendLateness` allows — nothing was running when the moment came, or the queue was full — and it is
+the value that says a held send ended without being transmitted. It stands in the outbox like any other refusal, so a
+measurement above zero is a message somebody has to decide about rather than a provider to investigate;
+[the mail configuration](configuration-mail.md#maildelivery) states the bound and its default.
 
 `mailfathom.mail.delivery.retries` counts the same measurements again, narrowed to the attempts that were not a
 message's first, under the same two dimensions. It is a counter of its own rather than a dimension of the one above,

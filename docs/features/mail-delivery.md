@@ -1,6 +1,6 @@
 # Mail delivery
 
-<!-- describes: src/Application/Mail/Delivery/**, src/Domain/Delivery/**, src/Infrastructure/Mail/MailKit/Delivery/**, src/Infrastructure/Mail/Mime/Composition/**, src/Infrastructure/Persistence/Delivery/**, src/Infrastructure/Mail/MailAccountDeliveryOptions.cs, src/Infrastructure/Mail/SmtpAccountSettings.cs, src/Host/Configuration/Mail/ConfiguredSmtpAccountSettingsProvider.cs, src/Host/Configuration/Mail/ConfiguredOutgoingSendPermissionReader.cs, src/Host/Configuration/Mail/MailDeliveryOptions.cs, src/Host/Configuration/Mail/MailSynchronizationOptions.cs, src/Host/Hosting/Workers/OutboxDeliveryWorker.cs -->
+<!-- describes: src/Application/Mail/Delivery/**, src/Domain/Delivery/**, src/Domain/Scheduling/**, src/Infrastructure/Mail/MailKit/Delivery/**, src/Infrastructure/Mail/Mime/Composition/**, src/Infrastructure/Persistence/Delivery/**, src/Infrastructure/Mail/MailAccountDeliveryOptions.cs, src/Infrastructure/Mail/SmtpAccountSettings.cs, src/Host/Configuration/Mail/ConfiguredSmtpAccountSettingsProvider.cs, src/Host/Configuration/Mail/ConfiguredOutgoingSendPermissionReader.cs, src/Host/Configuration/Mail/MailDeliveryOptions.cs, src/Host/Configuration/Mail/MailSynchronizationOptions.cs, src/Host/Hosting/Workers/OutboxDeliveryWorker.cs -->
 
 Reading a mailbox and submitting to one are two capabilities against two servers, and MailFathom holds them apart. The
 submission half is whole: an account declares where its mail is submitted, a **delivery session** is opened against that
@@ -509,6 +509,116 @@ is not, and that distinction stays where it is useful. What crosses to a caller 
 sentence, joining the withheld folder and the unserved account the authoring had already collapsed into the first — so
 none of the four situations can be told from another by asking. The repair request is still recorded on the way out.
 
+## Holding a send until the time it names
+
+A submission may carry a **due time**: the instant the message is to leave, together with the zone whoever named it was
+thinking in. The record is written down at once, exactly as any other send is, and the one thing that changes is when it
+may be claimed — the instant a delivery pass compares against is the due time rather than the moment it was recorded.
+Nothing else about the send differs, so a message held until Monday rides the same lease, the same retry policy, the
+same capacity bounds, and the same restart behaviour as a message sent now.
+
+**The zone is kept beside the instant rather than folded into it.** A person names a time in a place: nine in the
+morning in Warsaw is nine in the morning on both sides of a daylight-saving transition, and the two are different
+instants. The wall-clock time is resolved once, where it is named, so a zone whose rules change afterwards cannot move a
+decision that was already taken — and the two cases a clock creates are answered rather than left to whatever
+arithmetic happens next. A time the clock springs over does not occur at all and is taken at the instant the gap ends,
+so the occasion happens rather than being lost; a time the clock passes through twice is taken at the earlier of the two
+readings, so it happens once. `JobRecurrence` answers both the same way and through the same code, because a schedule
+and a held message meet the same two questions.
+
+**Noticing that the moment has arrived is a job on the durable queue.** No timer, no scheduler, and no queue of this
+feature's own: the record is already unclaimable until its instant, so what was missing was something to say the instant
+had come, and that is what the queue already does for every other kind of deferred work. The outbox enqueues one
+`dispatch-held-send` job per record, made available at the due time and keyed by the record, so the same send has one
+such job however many identical requests reach the outbox. Running it twice is running it once — it announces an
+account, a pass reads the outbox rather than the job, and an account already waiting is not queued twice. A send
+withdrawn or already settled during the hold announces nothing.
+
+**A queue that is full costs the send its punctuality rather than the send itself.** The record is durable and its
+instant is written on it, so the account's next delivery pass claims it whether or not any job ran. That is the same
+thing a refused signal costs an ordinary send, and it is why neither refusal is raised to whoever asked for the message.
+
+**A due time that has already passed is refused where the author is still there to be told.** The two readings of a past
+time are opposite — somebody who meant tomorrow and typed yesterday's date wants to fix it, and somebody who meant now
+would not have named a time — so a system that guessed would sometimes send a message its author was still writing. The
+refusal states the rule and never repeats the instant, the address, or the subject.
+
+**A moment that came and went while nothing was running is the case with no obviously right answer**, and the deployment
+decides it. `MailDelivery:AllowedSendLateness` is how much later than its due time a message may still be delivered as
+written; the default is a working day. Up to that, the pass sends it. Past it, the send is refused with `28016`, stands
+in the outbox where an operator can see it, and counts under the delivery outcome `missed-due-time` — neither outcome is
+silent, and nothing decides on the owner's behalf that a message which missed its moment should still go out. The bound
+applies to a message written for a named time and to nothing else: a send that named none is never late, however long a
+retry or an unreachable provider has held it.
+
+The decision is taken in the delivery pass rather than in the dispatch job, because the pass is what holds the lease the
+decision has to be recorded under — and because a record reaches the pass by other routes than that job, including the
+account's own synchronization run and a restart that found the outbox unclaimed.
+
+**A held message is withdrawable for the whole of the hold**, because the hold is the `Recorded` stage and that is
+exactly the stage [a withdrawal](#what-an-operator-sees-while-mail-is-leaving) applies at. `MailOutbox.CancelAsync` is the same withdrawal
+asked for by whoever wrote the message rather than by an operator: it asks for the grant that lets a caller send —
+stopping somebody's message is a decision about their correspondents exactly as sending one is — and then reaches the
+one conditional statement that writes the transition, so neither caller can withdraw a message the other could not, and
+a record an attempt holds a live lease on is refused to both. During the hold the message is also visible as a copy in
+[the mapped outbox folder](#the-copy-in-the-accounts-own-folders), and deleting that copy in a mail client cancels
+nothing — the record is the truth about what will be sent.
+
+Today the due time is a property of the application-level submission rather than an argument on an MCP tool:
+[`send_email`](mcp-tools.md#send_email) names no time, so every message a tool call submits is due at once.
+
+## A message the owner asked to be sent again
+
+A **recurring send** is one message written once and sent again on every occasion a schedule names.
+`RecurringMailSubmission` is the use case, and it is the authored submission's counterpart stopping one step earlier:
+nothing is queued, because nothing is due. What it leaves is a declaration and the draft its occasions are composed
+from, written in one transaction for the reason the record and its message are — a declaration whose draft was never
+stored describes occasions that can produce no message.
+
+**The repetition is written in the same syntax a scheduled rule declares one in** — `Every hh:mm:ss`, or
+`Daily at HH:mm` with an optional IANA zone, as [mail rules](mail-rules.md) states it. Reusing it is deliberate: a
+second syntax for the same idea would be a second set of rules about daylight saving, about how short an interval may
+be, and about what an operator has to learn. It is parsed before anything is read or composed, so a repetition nobody
+can resolve is refused while the author is present, naming what was wrong with it in the syntax's own words, and nothing
+durable ever states an occasion nothing can resolve.
+
+**Each occasion produces an ordinary send.** The dispatch is the same one recurring rules ride: the declarations are
+read as schedules beside them, the worker that already polls the job queue decides which occasions have passed, and the
+occasion enqueues a `send-recurring-occurrence` job. The handler composes that occasion's message from the stored draft,
+stamps it with an identity and a date of its own, and writes it into the outbox as a send held until the occasion
+itself — which is what leaves the lateness bound holding for a repetition exactly as it holds for a message somebody
+scheduled by hand. The message is re-stamped rather than reused because a repeated `Message-ID` would thread a year of
+Mondays as one message in every recipient's client.
+
+**Which occasion a dispatch is running for is read from the schedule rather than carried in the job.** The most recent
+occasion at or before now is the one composed, so a run that started late produces the message that was due rather than
+one for a moment that has not come — and two runs reaching the same occasion compose the same idempotency identity, so
+the outbox answers the second with the record the first one wrote.
+
+**Only one occurrence is in flight at a time, and that is enforced rather than assumed.** The message the last occasion
+produced is asked about first, and while it is still queued or transmitting this occasion is answered instead of
+started: a weekly message whose provider has been unreachable all week must not put a second week's copy behind the
+first, and a message whose outcome nobody knows must not be followed by another until somebody has looked at it. The
+declaration still advances past the occasion it passed over, so the next one is not offered it again.
+
+**Stopping a declaration and withdrawing a message are two acts.** `RecurringMailSubmission.CancelAsync` stops every
+occasion still to come and touches no message: an occurrence already written down goes out as it was going to, because
+it is a message the owner asked for at a moment that has already come, and stopping that one is asked for against its
+own record. A stopped declaration is read by nothing that dispatches, from the moment it is stopped, and keeps its row —
+what it last did and when it was stopped are the account of a mailbox that used to send something every week, and
+deleting the row would make that indistinguishable from a repetition nobody ever declared.
+
+**A stored schedule that no longer parses is left out rather than raised over.** The syntax was read where the
+declaration was made, so such a row is a damaged payload rather than a decision to take at dispatch time, and one of
+them must not stop every other repetition the deployment holds. `RecurringSendBounds.MaximumActiveDeclarations` bounds
+how many declarations dispatch at all, at 500, which is a ceiling rather than a page: a deployment approaching it has
+something wrong with it rather than a bound to raise.
+
+The declaration is derived personal data of the same kind an outgoing record is, and inherits the same retention,
+deletion, and export obligations —
+[the stored email schema](../architecture/stored-email-schema.md#what-an-owner-asked-to-be-sent-again) holds the
+columns and says why it says more about a relationship than a single send does.
+
 ## How a written-down send reaches a server
 
 Two things start a delivery pass over one account's outbox, and they answer different questions.
@@ -659,7 +769,7 @@ cannot arrive as unread mail somebody has to open. The copy's internal date is t
 which is the same clock everything else in this system is stamped from.
 
 **The outgoing record stays the truth about what will be sent.** A copy in a folder is a view of it: deleting the copy
-in a mail client cancels nothing, cancelling is [a command of its own](#the-record-a-send-is-written-down-as-before-anything-is-sent),
+in a mail client cancels nothing, cancelling is [a command of its own](#holding-a-send-until-the-time-it-names),
 and nothing reads a folder to decide what to send. That is what makes the copy safe to write and safe to leave out — a
 deployment that appends nothing loses visibility and loses no mail.
 

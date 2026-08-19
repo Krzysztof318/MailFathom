@@ -15,9 +15,10 @@ namespace MailFathom.Application.Jobs.Scheduling;
 /// rather than a schedule.
 /// </para>
 /// <para>
-/// Declared rather than stored. What the deployment's configuration says is the whole of which schedules exist, and the
-/// only durable state a schedule has is the occasion it last dispatched — which is state rather than settings, and lives
-/// where every other piece of state does.
+/// Declared rather than stored, whichever source declared it. A deployment's configuration is one source of schedules
+/// and the declarations an owner made are another, so what exists is whatever the sources answer with on the pass that
+/// asks. The only durable state a schedule itself has is the occasion it last dispatched — which is state rather than
+/// settings, and lives where every other piece of state does.
 /// </para>
 /// </remarks>
 /// <param name="Id">The identity the schedule's durable state is keyed by.</param>

@@ -173,6 +173,37 @@ public sealed class MailSubmissionRefusedException : MailFathomException
             CultureInfo.InvariantCulture,
             $"The idempotency key a send is asked under carries 1 to {OutgoingEmailRequester.MaximumIdentityLength} characters and no control character."));
 
+    /// <summary>Reports a message asked to leave at a time that has already gone.</summary>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// It is refused rather than sent at once, because the two readings of a time in the past are opposite — somebody
+    /// who meant tomorrow and wrote yesterday's date wants to fix it, and somebody who meant now would not have named a
+    /// time — and a system that guessed would sometimes send a message the author was still writing. The instant the
+    /// caller sent is not repeated back: it is theirs, and a message stating a clock reading would say nothing they do
+    /// not already know.
+    /// </remarks>
+    public static MailSubmissionRefusedException DueTimeAlreadyPassed() => new(
+        MailFathomErrorCode.AuthoredMailScheduleRefused,
+        "A message is held until a time still to come; the time this send names has already passed.");
+
+    /// <summary>Reports a repetition written in a form the schedule syntax does not name.</summary>
+    /// <param name="described">What is wrong with the declaration, in the words the syntax itself states its rules in.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="described" /> is blank.</exception>
+    /// <remarks>
+    /// The description is the schedule syntax's own, carried through rather than restated, so a caller reads one
+    /// account of the forms a repetition may be written in wherever they meet the refusal. It names the forms and the
+    /// bounds and never the message, which is the same rule every refusal here obeys.
+    /// </remarks>
+    public static MailSubmissionRefusedException ScheduleUnreadable(string described)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(described);
+
+        return new MailSubmissionRefusedException(
+            MailFathomErrorCode.AuthoredMailScheduleRefused,
+            $"The repetition a send declares is unusable: {described}");
+    }
+
     /// <summary>Reports a reply whose audience names neither of the two acts a reply may be.</summary>
     /// <returns>The failure to raise.</returns>
     /// <remarks>
