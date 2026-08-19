@@ -72,13 +72,6 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `…:TrustedSenders:<n>:Domain` | string | unset | A domain this account recognizes. Exactly one of `Domain` and `Address` is written, and an entry writing neither or both fails startup naming the account and the entry's position | reload |
 | `…:TrustedSenders:<n>:Address` | string | unset | A single mailbox this account recognizes. It matches when the established author's domain is that address's own **and** the message's `From` displays exactly that address | reload |
 | `…:TrustedSenders:<n>:IncludeSubdomains` | bool | `false` | Whether a domain entry also reaches the names beneath that domain. Refused on an address entry, where it could mean nothing | reload |
-| `…:ContactCollection:Enabled` | bool | `false` | Whether this account records the people it corresponds with as its mail is synchronized | reload; the next folder run collects under it |
-| `…:ContactCollection:MinimumMessagesFromSender` | int | `2` | 1 – 100; how many messages an address must have written to this account before the person behind it is recorded. One records every admitted sender on first sight. It bounds only that direction — an address the owner wrote to is recorded at once | reload; the next folder run |
-| `…:ContactCollection:MaxContactsPerRun` | int | `50` | 0 – 1000; how many contacts one folder run may record, bounded per folder exactly as `MaxContentBytesPerRun` is, so an account synchronizing several folders may reach it once for each. Zero records nobody while leaving collection on | reload; the run after the one in flight |
-| `…:ContactCollection:Exclusions` | list | empty | The addresses and domains this account never records a contact from; each entry below | reload; the next folder run |
-| `…:ContactCollection:Exclusions:<n>:Domain` | string | unset | A domain this account collects nobody at. Exactly one of `Domain` and `AddressPattern` is written, and an entry writing neither or both fails startup naming the account and the entry's position | reload |
-| `…:ContactCollection:Exclusions:<n>:AddressPattern` | string | unset | A pattern over the whole address, where `*` stands for any run of characters including none and `?` for exactly one; at most 320 characters, and a pattern whose only characters are those two and the at-sign is refused, because `*@*` takes every address and `*@` takes none | reload |
-| `…:ContactCollection:Exclusions:<n>:IncludeSubdomains` | bool | `false` | Whether a domain entry also reaches the names beneath that domain. Refused on a pattern entry, which writes its own | reload |
 | `…:Folders` | list | inbox by role | Aliases unique; each entry below | reload |
 
 `TrustedAuthenticationServiceIdentifier` names the one server whose `Authentication-Results` headers this account
@@ -239,6 +232,16 @@ and a deployment reading a work mailbox and a personal one decides separately fo
 the author of mail arriving in its ordinary folders and the primary recipients of mail in the folder mapped as `Sent`,
 as those messages are synchronized.
 
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `…:ContactCollection:Enabled` | bool | `false` | Whether this account records the people it corresponds with as its mail is synchronized | reload; the next folder run collects under it |
+| `…:ContactCollection:MinimumMessagesFromSender` | int | `2` | 1 – 100; how many messages an address must have written to this account before the person behind it is recorded. One records every admitted sender on first sight. It bounds only that direction — an address the owner wrote to is recorded at once | reload; the next folder run |
+| `…:ContactCollection:MaxContactsPerRun` | int | `50` | 0 – 1000; how many contacts one folder run may record, bounded per folder exactly as `MaxContentBytesPerRun` is, so an account synchronizing several folders may reach it once for each. Zero records nobody while leaving collection on | reload; the run after the one in flight |
+| `…:ContactCollection:Exclusions` | list | empty | The addresses and domains this account never records a contact from; each entry below | reload; the next folder run |
+| `…:ContactCollection:Exclusions:<n>:Domain` | string | unset | A domain this account collects nobody at. Exactly one of `Domain` and `AddressPattern` is written, and an entry writing neither or both fails startup naming the account and the entry's position | reload |
+| `…:ContactCollection:Exclusions:<n>:AddressPattern` | string | unset | A pattern over the whole address, where `*` stands for any run of characters including none and `?` for exactly one; everything else is the literal text of an address. At most 320 characters, and a pattern whose only characters are those two wildcards and the at-sign is refused, because `*@*` takes every address and `*@` takes none | reload |
+| `…:ContactCollection:Exclusions:<n>:IncludeSubdomains` | bool | `false` | Whether a domain entry also reaches the names beneath that domain. Refused on a pattern entry, which writes its own | reload |
+
 The two numbers bound who is written down and how fast. `MinimumMessagesFromSender` is the evidence an address that
 wrote to the owner needs — two by default, because one message from a stranger is not correspondence — and it says
 nothing about an address the owner wrote to, which is recorded on first sight. `MaxContactsPerRun` paces the first
@@ -252,6 +255,11 @@ asking to include subdomains on a pattern, or writing a pattern that selects on 
 carries, **fails startup** naming the
 account and the entry's position and never the value it holds — because a domain and a pattern over an address are both
 personal data, and a validation failure is written to a log.
+
+**Both ranges and every entry are judged whatever `Enabled` holds.** The block is always there — an account naming
+none of it is bound to the defaults above — so a number outside its range, or an entry nobody could read, refuses
+the start of an account this feature never touches. That is the deliberate half of it: a bound nothing reads today
+is the bound switching collection on tomorrow adopts, and startup is the last moment anybody is looking at it.
 
 [Contacts § Collecting contacts from arriving mail](../features/contacts.md#collecting-contacts-from-arriving-mail)
 states which header each folder contributes, what is never collected, and how an owner takes back everything a
