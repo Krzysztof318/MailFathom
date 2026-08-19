@@ -105,6 +105,71 @@ internal sealed class MimeKitAuthoredEmailComposer(
         return this.Build(accountId, requester, authored, sender, placements, capabilities);
     }
 
+    /// <inheritdoc />
+    public AuthoredEmailComposition RecomposeAsOccurrence(
+        MailAccountId accountId,
+        OutgoingEmailRequester requester,
+        IReadOnlyList<OutgoingRecipient> recipients,
+        ReadOnlyMemory<byte> draftMime,
+        MailDeliveryCapabilities capabilities)
+    {
+        ArgumentNullException.ThrowIfNull(requester);
+        ArgumentNullException.ThrowIfNull(recipients);
+        ArgumentNullException.ThrowIfNull(capabilities);
+
+        if (draftMime.IsEmpty)
+        {
+            throw new ArgumentException("A recurring send's occasion is composed from the stored draft.", nameof(draftMime));
+        }
+
+        if (senderIdentities.FindSenderIdentity(accountId) is not { } sender)
+        {
+            return AuthoredEmailComposition.Refused(
+                AuthoredEmailRefusalReason.SenderUnconfigured,
+                AuthoredEmailField.Sender);
+        }
+
+        if (RefuseInternationalizedSender(sender, capabilities) is { } senderRefusal)
+        {
+            return senderRefusal;
+        }
+
+        using var draft = new MemoryStream(draftMime.ToArray(), writable: false);
+
+        MimeMessage message;
+        try
+        {
+            message = MimeMessage.Load(draft);
+        }
+        catch (FormatException)
+        {
+            // The draft is this system's own composition rather than anything a remote server sent, so a draft that no
+            // longer parses is a stored payload that was damaged. The occasion is refused rather than repaired: a
+            // partial message sent to somebody is worse than an occasion an operator is told about.
+            return AuthoredEmailComposition.Refused(
+                AuthoredEmailRefusalReason.FieldUnusable,
+                AuthoredEmailField.Message);
+        }
+
+        using (message)
+        {
+            var messageId = InternetMessageId.Mint(sender.Domain);
+
+            // Replaced rather than kept, because a message is sent as the account that sends it and the address that
+            // account writes as may have been reconfigured since the declaration was made.
+            message.From.Clear();
+            message.From.Add(MailboxOf(sender.Address.DisplayName, sender.Address.Address));
+
+            // The two headers that make this occasion a message of its own. A draft transmitted unchanged every week
+            // would carry one identity for every occasion, which threads a year of them as one message in a recipient's
+            // client and reads to a server as the same message arriving again.
+            message.Date = timeProvider.GetUtcNow();
+            message.MessageId = messageId.Value;
+
+            return this.Serialize(accountId, requester, message, messageId, sender, recipients, capabilities);
+        }
+    }
+
     /// <summary>Refuses a sending address the submission server cannot carry.</summary>
     /// <remarks>
     /// The account's own address is checked beside the recipients rather than trusted, because a deployment may
@@ -366,12 +431,38 @@ internal sealed class MimeKitAuthoredEmailComposer(
         PlaceInThread(message, authored.Threading);
         message.Body = BuildBody(authored);
 
+        return this.Serialize(
+            accountId,
+            requester,
+            message,
+            messageId,
+            sender,
+            [.. placements.Select(static placement => placement.Recipient)],
+            capabilities);
+    }
+
+    /// <summary>Writes an assembled message out, measures what it became, and refuses it against every size bound.</summary>
+    /// <remarks>
+    /// It is the half of composing that is the same for a message somebody has just written and for one occasion of a
+    /// message they wrote weeks ago: what a submission server will read is decided by the server rather than by where
+    /// the message came from, and a second copy of these decisions would be a second set of answers about blind
+    /// recipients, line endings, and transfer encoding.
+    /// </remarks>
+    private AuthoredEmailComposition Serialize(
+        MailAccountId accountId,
+        OutgoingEmailRequester requester,
+        MimeMessage message,
+        InternetMessageId messageId,
+        OutgoingSenderIdentity sender,
+        IReadOnlyList<OutgoingRecipient> recipients,
+        MailDeliveryCapabilities capabilities)
+    {
         var format = FormatOptions.Default.Clone();
 
         // Every address was refused above unless the server carries it, so the only question left is whether the
         // message needs the format at all: an all-ASCII message is written the way every server understands.
         format.International = !Ascii.IsValid(sender.Address.Address)
-            || placements.Any(static placement => !Ascii.IsValid(placement.Recipient.Address.Address));
+            || recipients.Any(static recipient => !Ascii.IsValid(recipient.Address.Address));
 
         // The bytes are stored and transmitted verbatim rather than re-serialized per attempt, so they carry the line
         // ending SMTP requires rather than the platform's.
@@ -406,10 +497,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
                 capabilities.MaxMessageBytes);
         }
 
-        var request = OutgoingEmailRequest.Create(
-            accountId,
-            requester,
-            [.. placements.Select(static placement => placement.Recipient)]);
+        var request = OutgoingEmailRequest.Create(accountId, requester, recipients);
 
         return AuthoredEmailComposition.Composed(new ComposedOutgoingEmail(request, messageId, composed.ToArray()));
     }

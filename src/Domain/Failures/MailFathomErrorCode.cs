@@ -267,6 +267,16 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode OutgoingEmailContactAddressNotHeld { get; } = new(28015);
 
+    /// <summary>Gets subcategory 8, message composition: a send reached its delivery attempt later than the deployment is willing to deliver a message written for a time that has passed.</summary>
+    /// <remarks>
+    /// It reports a message that was never transmitted rather than one that failed. A send held for a named time and
+    /// reached long after it — because nothing was running, or because a provider was unreachable for the whole window
+    /// — is left for a person, on the reasoning that a message delivered days after the moment it was written for says
+    /// something its author did not mean. How late is still timely is the deployment's, and the record stands where an
+    /// operator sees it either way.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailDueTimeMissed { get; } = new(28016);
+
     /// <summary>Gets subcategory 9, message filing: there is no folder to put a copy of an outgoing message into.</summary>
     /// <remarks>
     /// It covers a role the account maps no folder to, a mapped folder the server does not advertise, and a mapping
@@ -436,6 +446,15 @@ public readonly record struct MailFathomErrorCode
     /// less. What was measured is deliberately absent: the size of somebody's message says how much they wrote.
     /// </remarks>
     public static MailFathomErrorCode AuthoredMailBoundExceeded { get; } = new(51014);
+
+    /// <summary>Gets subcategory 1, request validation: a caller asked for a message to leave at a time this system cannot hold it for.</summary>
+    /// <remarks>
+    /// It covers a time that has already passed and a repetition written in a form the schedule syntax does not parse —
+    /// one code because the remedy is the same, which is to name a time this deployment can still act on. The message
+    /// carries what was wrong with the time and the form a schedule is written in, and never a recipient or a subject:
+    /// what a caller has to change is when the message goes, not who it goes to.
+    /// </remarks>
+    public static MailFathomErrorCode AuthoredMailScheduleRefused { get; } = new(51015);
 
     /// <summary>Gets subcategory 2, pagination: a continuation cursor is not one this system issued.</summary>
     public static MailFathomErrorCode MailboxQueryCursorMalformed { get; } = new(52001);
@@ -687,6 +706,7 @@ public readonly record struct MailFathomErrorCode
         OutgoingEmailContactUnknown,
         OutgoingEmailContactNameAmbiguous,
         OutgoingEmailContactAddressNotHeld,
+        OutgoingEmailDueTimeMissed,
         OutgoingEmailFilingDestinationUnavailable,
         OutgoingEmailFilingOutcomeUnknown,
         OutgoingEmailFilingFailedUnexpectedly,
@@ -711,6 +731,7 @@ public readonly record struct MailFathomErrorCode
         MailFlagChangeInvalid,
         AuthoredMailFieldRefused,
         AuthoredMailBoundExceeded,
+        AuthoredMailScheduleRefused,
         MailboxQueryCursorMalformed,
         MailboxQueryCursorFilterMismatch,
         ContactCursorMalformed,

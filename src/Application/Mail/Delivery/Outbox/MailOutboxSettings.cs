@@ -27,7 +27,8 @@ public sealed record MailOutboxSettings
         TimeSpan attemptTimeout,
         int maxAttempts,
         TimeSpan retryBaseDelay,
-        TimeSpan retryMaxDelay)
+        TimeSpan retryMaxDelay,
+        TimeSpan allowedLateness)
     {
         this.MaxDeliveriesPerPass = maxDeliveriesPerPass;
         this.LeaseDuration = leaseDuration;
@@ -35,6 +36,7 @@ public sealed record MailOutboxSettings
         this.MaxAttempts = maxAttempts;
         this.RetryBaseDelay = retryBaseDelay;
         this.RetryMaxDelay = retryMaxDelay;
+        this.AllowedLateness = allowedLateness;
     }
 
     /// <summary>Gets the greatest number of queued sends one pass claims.</summary>
@@ -60,6 +62,15 @@ public sealed record MailOutboxSettings
     /// <summary>Gets the ceiling a grown retry delay never exceeds.</summary>
     public TimeSpan RetryMaxDelay { get; }
 
+    /// <summary>Gets how long after the time a send was written for this deployment will still deliver it.</summary>
+    /// <remarks>
+    /// It bounds nothing an ordinary send meets, because a send that named no time is never late. What it decides is
+    /// the one case a held message reaches after the moment it was written for — a process that was down, a queue that
+    /// was full, a provider that was unreachable for the whole window — where delivering and dropping are both wrong
+    /// answers and the deployment says which side of them a message falls on.
+    /// </remarks>
+    public TimeSpan AllowedLateness { get; }
+
     /// <summary>States the bounds one pass runs under.</summary>
     /// <param name="maxDeliveriesPerPass">The greatest number of queued sends one pass claims.</param>
     /// <param name="leaseDuration">How long a claim holds each record it takes.</param>
@@ -67,6 +78,7 @@ public sealed record MailOutboxSettings
     /// <param name="maxAttempts">How many attempts one send may be handed out for.</param>
     /// <param name="retryBaseDelay">The delay the first retry is drawn around.</param>
     /// <param name="retryMaxDelay">The ceiling a grown retry delay never exceeds.</param>
+    /// <param name="allowedLateness">How long after the time a send was written for this deployment will still deliver it.</param>
     /// <returns>The validated bounds.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when a count is not positive, when a duration is not positive, when <paramref name="attemptTimeout" /> is not shorter than <paramref name="leaseDuration" />, or when <paramref name="retryMaxDelay" /> is below <paramref name="retryBaseDelay" />.</exception>
     public static MailOutboxSettings Create(
@@ -75,7 +87,8 @@ public sealed record MailOutboxSettings
         TimeSpan attemptTimeout,
         int maxAttempts,
         TimeSpan retryBaseDelay,
-        TimeSpan retryMaxDelay)
+        TimeSpan retryMaxDelay,
+        TimeSpan allowedLateness)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxDeliveriesPerPass);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(leaseDuration, TimeSpan.Zero);
@@ -84,6 +97,7 @@ public sealed record MailOutboxSettings
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxAttempts);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(retryBaseDelay, TimeSpan.Zero);
         ArgumentOutOfRangeException.ThrowIfLessThan(retryMaxDelay, retryBaseDelay);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(allowedLateness, TimeSpan.Zero);
 
         return new MailOutboxSettings(
             maxDeliveriesPerPass,
@@ -91,6 +105,7 @@ public sealed record MailOutboxSettings
             attemptTimeout,
             maxAttempts,
             retryBaseDelay,
-            retryMaxDelay);
+            retryMaxDelay,
+            allowedLateness);
     }
 }

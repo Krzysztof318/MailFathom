@@ -10,6 +10,7 @@ using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
+using MailFathom.Domain.Scheduling;
 using MailFathom.Infrastructure.Persistence.Entities;
 
 namespace MailFathom.Infrastructure.Persistence.Delivery;
@@ -48,6 +49,7 @@ internal static class OutgoingEmailRecordMapping
             RecordedAt = entity.RecordedAt,
             StageChangedAt = entity.StageChangedAt,
             AvailableAt = entity.AvailableAt,
+            DueAt = ToDueTime(entity),
             LastFailure = ToFailure(entity.LastFailureCode),
             LastReplyCode = entity.LastReplyCode,
             Filings = [.. entity.Filings.Select(ToFiling).OrderBy(filing => filing.Filing.Name, StringComparer.Ordinal)],
@@ -126,6 +128,17 @@ internal static class OutgoingEmailRecordMapping
     /// </remarks>
     private static ContactId? ContactOf(OutgoingEmailRecipientEntity entity) =>
         entity.ContactId is { } contactId && contactId != Guid.Empty ? ContactId.Create(contactId) : null;
+
+    /// <summary>Reads back the time the message was written to leave at, where one was named.</summary>
+    /// <remarks>
+    /// The two columns are written together and read together, and a row carrying an instant with no zone is read as
+    /// naming no due time at all. The zone is what makes the instant answerable — which nine in the morning was meant —
+    /// so reading such a row as a due time would state a moment nobody can check against the schedule it came from.
+    /// </remarks>
+    private static ZonedInstant? ToDueTime(OutgoingEmailEntity entity) =>
+        entity is { DueAt: { } dueAt, DueZoneId: { Length: > 0 } zoneId }
+            ? ZonedInstant.Restore(dueAt, zoneId)
+            : null;
 
     /// <summary>Reads back the code of the failure the last attempt ended in.</summary>
     /// <remarks>

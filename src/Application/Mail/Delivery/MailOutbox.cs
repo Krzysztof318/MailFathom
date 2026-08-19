@@ -2,9 +2,12 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail.Delivery.Governance;
+using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
@@ -47,21 +50,38 @@ namespace MailFathom.Application.Mail.Delivery;
 /// happens: a signal raised before the commit would point a delivery pass at a record that does not exist yet, and a
 /// signal that is refused or lost costs the send the wait until that run rather than the send itself.
 /// </para>
+/// <para>
+/// A send written for a later time says so differently, and this is the whole of what holding one costs. The record is
+/// already unclaimable until that instant, so what is missing is somebody to notice the instant arriving — and that is
+/// a job on the durable queue, made available at the time the message is due. No timer, no scheduler, and no queue of
+/// this feature's own: a message held until Monday rides the same lease, the same capacity bounds, and the same restart
+/// behaviour as every other piece of background work, and an instance that was down when the moment came finds the job
+/// claimable the second it starts.
+/// </para>
 /// </remarks>
 /// <param name="outgoingEmails">Holds the durable record and its idempotency identity.</param>
 /// <param name="contentStore">Holds the composed MIME the record points at.</param>
 /// <param name="retryPolicy">Commits both writes together and resolves a lost race for the same identity.</param>
 /// <param name="signal">Tells the delivery loop that this account has something to send.</param>
+/// <param name="jobs">Carries the moment a held send becomes due, without a timer of this feature's own.</param>
+/// <param name="outboxOperations">Writes the withdrawal of a message that has not begun to leave, which is one transition however it was asked for.</param>
 /// <param name="authorization">Answers whether whoever reached this is admitted to ask for the send the request states it is.</param>
 /// <param name="governor">Answers whether this deployment may send this message at all, whoever is asking.</param>
+/// <param name="timeProvider">Says whether a recorded send is due now or is being held for later.</param>
 public sealed class MailOutbox(
     IOutgoingEmailStore outgoingEmails,
     IEmailContentStore contentStore,
     OptimisticConcurrencyRetryPolicy retryPolicy,
     MailOutboxSignal signal,
+    IJobStore jobs,
+    IOutboxOperationStore outboxOperations,
     AccessAuthorization authorization,
-    OutgoingMailGovernor governor)
+    OutgoingMailGovernor governor,
+    TimeProvider timeProvider)
 {
+    /// <summary>The word every held send's dispatch job is keyed by, so one record has one such job however often it is enqueued.</summary>
+    private const string HeldSendKeyPrefix = "held-send";
+
     /// <summary>Writes down a message to be sent, or answers with the record an identical request already left.</summary>
     /// <param name="request">The send that was asked for.</param>
     /// <param name="rawMime">The composed RFC 822 bytes to transmit, stored once and read back for every attempt.</param>
@@ -118,6 +138,13 @@ public sealed class MailOutbox(
             },
             cancellationToken);
 
+        if (record.IsWaitingAt(timeProvider.GetUtcNow()))
+        {
+            await this.DispatchWhenDueAsync(record, cancellationToken);
+
+            return record;
+        }
+
         // A record already delivered by an earlier identical request is signalled all the same. The pass reads the
         // outbox rather than this call, so an account with nothing outstanding costs it one claim that takes nothing —
         // which is cheaper than working out here whether the record this call read back still needs sending.
@@ -125,6 +152,61 @@ public sealed class MailOutbox(
 
         return record;
     }
+
+    /// <summary>Withdraws a message that has not begun to leave, and says what became of the request.</summary>
+    /// <param name="outgoingEmailId">The record to withdraw.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>What became of the request, which is an answer rather than a failure in every case.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailSend" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// The grant asked for is the one that lets a caller send, because stopping a message is a decision about somebody
+    /// else's mail exactly as sending one is: whoever may write to this mailbox's correspondents is who may decide that
+    /// a message they wrote will not go. That is the whole of what separates this from the operator's withdrawal, which
+    /// asks the same question of the same record under an administrative grant; the transition itself is written once,
+    /// by the statement behind <see cref="IOutboxOperationStore.CancelAsync" />, so neither caller can withdraw a
+    /// message the other could not.
+    /// </para>
+    /// <para>
+    /// It withdraws one message and never a declaration behind it. A cancelled occurrence of a recurring send stops
+    /// that occurrence, and the next occasion produces a message as it always would — which is why stopping the
+    /// declaration is an act of its own with a name of its own, rather than something this call could be asked to mean
+    /// as well.
+    /// </para>
+    /// </remarks>
+    public Task<OutboxDecisionOutcome> CancelAsync(
+        OutgoingEmailId outgoingEmailId,
+        CancellationToken cancellationToken)
+    {
+        authorization.RequirePermission(MailFathomPermission.MailSend);
+
+        return outboxOperations.CancelAsync(outgoingEmailId, cancellationToken);
+    }
+
+    /// <summary>Puts the moment a held send becomes due onto the durable queue, so nothing has to watch a clock for it.</summary>
+    /// <remarks>
+    /// <para>
+    /// The key names the record, so the same send has one dispatch however many identical requests reach the outbox,
+    /// and a job the queue already holds answers the second one instead of queuing a second moment for one message.
+    /// </para>
+    /// <para>
+    /// A queue that is full refuses the job, and that costs the send its punctuality rather than the send itself: the
+    /// record is already durable and already due at the instant it names, so the account's next delivery pass claims it
+    /// — the same thing a refused signal costs an ordinary send, and the reason neither refusal is raised to whoever
+    /// asked for the message.
+    /// </para>
+    /// </remarks>
+    private Task<JobEnqueueResult> DispatchWhenDueAsync(
+        OutgoingEmailRecord record,
+        CancellationToken cancellationToken) =>
+        jobs.EnqueueAsync(
+            JobEnqueueRequest.CreateAvailableAt(
+                JobIdempotencyKey.Create(
+                    string.Create(CultureInfo.InvariantCulture, $"{HeldSendKeyPrefix}:{record.Id}")),
+                HeldSendJobPayload.For(record.AccountId, record.Id),
+                record.AccountId,
+                record.AvailableAt),
+            cancellationToken);
 
     /// <summary>Requires that whatever reached this outbox is the kind of act the request says asked for the send.</summary>
     /// <param name="origin">What the request states asked.</param>
@@ -144,6 +226,11 @@ public sealed class MailOutbox(
     /// borrow a rule's idempotency identity, and work no caller requested cannot enqueue as a command however the grant
     /// is written, because the process identity holds no permission at all.
     /// </para>
+    /// <para>
+    /// An occurrence of a recurring send is admitted exactly as a rule's message is, and for the same reason: nobody is
+    /// present when it is composed. What the owner authorized was the declaration, at a boundary that asked them for
+    /// the grant then, and the occasion that follows is this process acting on what they wrote down.
+    /// </para>
     /// </remarks>
     private void RequireAdmittedToSend(OutgoingEmailOrigin origin)
     {
@@ -155,6 +242,7 @@ public sealed class MailOutbox(
                 break;
 
             case OutgoingEmailOrigin.Rule:
+            case OutgoingEmailOrigin.Schedule:
                 authorization.RequireProcessIdentity();
 
                 break;

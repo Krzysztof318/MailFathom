@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
 using Xunit;
 
@@ -12,6 +13,11 @@ public sealed class OutgoingEmailRequesterTests
 {
     private static readonly StoredEmailId AnsweredEmail =
         StoredEmailId.Create(Guid.Parse("0198f0a0-0000-7000-8000-000000000001"));
+
+    private static readonly RecurringSendId Declaration =
+        RecurringSendId.Create(Guid.Parse("0198f0a0-2222-7000-8000-000000000001"));
+
+    private static readonly DateTimeOffset Occurrence = new(2026, 8, 17, 9, 0, 0, TimeSpan.Zero);
 
     /// <summary>A retried command carries the key the first call carried, so it is one request and one delivery.</summary>
     [Fact]
@@ -59,6 +65,57 @@ public sealed class OutgoingEmailRequesterTests
         // Assert
         Assert.NotEqual(first, second);
         Assert.Equal(OutgoingEmailOrigin.Rule, second.Origin);
+    }
+
+    /// <summary>
+    /// Two occasions of one declaration are two requesters, which is what makes a year of Mondays a year of messages
+    /// rather than one message a repeat delivery keeps reading back.
+    /// </summary>
+    [Fact]
+    public void Schedule_TwoOccasionsOfOneDeclaration_AreDifferentRequesters()
+    {
+        // Arrange
+        var monday = OutgoingEmailRequester.Schedule(Declaration, Occurrence);
+
+        // Act
+        var theMondayAfter = OutgoingEmailRequester.Schedule(Declaration, Occurrence.AddDays(7));
+
+        // Assert
+        Assert.NotEqual(monday, theMondayAfter);
+        Assert.Equal(OutgoingEmailOrigin.Schedule, theMondayAfter.Origin);
+    }
+
+    /// <summary>
+    /// Two dispatches reaching one occasion compose one requester, which is what makes the outbox answer the second
+    /// with the record the first one wrote instead of sending the occasion twice.
+    /// </summary>
+    [Fact]
+    public void Schedule_OneOccasionReachedTwice_IsOneRequester()
+    {
+        // Arrange
+        var first = OutgoingEmailRequester.Schedule(Declaration, Occurrence);
+
+        // Act
+        var second = OutgoingEmailRequester.Schedule(Declaration, Occurrence.ToOffset(TimeSpan.FromHours(2)));
+
+        // Assert
+        Assert.Equal(first, second);
+    }
+
+    /// <summary>Two declarations reaching the same occasion are two requesters, so one mailbox's repetitions stay separate.</summary>
+    [Fact]
+    public void Schedule_TwoDeclarationsAtOneOccasion_AreDifferentRequesters()
+    {
+        // Arrange
+        var first = OutgoingEmailRequester.Schedule(Declaration, Occurrence);
+
+        // Act
+        var second = OutgoingEmailRequester.Schedule(
+            RecurringSendId.Create(Guid.Parse("0198f0a0-2222-7000-8000-000000000002")),
+            Occurrence);
+
+        // Assert
+        Assert.NotEqual(first, second);
     }
 
     /// <summary>What a record holds is what comes back, so a restored requester compares equal to the one that was written.</summary>

@@ -36,6 +36,12 @@ namespace MailFathom.Application.Mail.Delivery.Submission;
 /// by not asking now.
 /// </para>
 /// <para>
+/// A message asked to leave at a named time is composed exactly as one asked to leave at once, and differs only in what
+/// the outbox is told. Nothing about the time reaches the MIME — a held message is byte-for-byte the message it would
+/// have been — so the hold is a property of the record rather than of the mail, and a caller reading the answer sees
+/// the same queued identifier either way.
+/// </para>
+/// <para>
 /// The grant is asked for here and again by the outbox, and the two are not a duplicate. This one refuses before the
 /// contact book is read and before anything is composed, so a caller without it spends nothing and learns nothing about
 /// who is in the book; the outbox's is the authority, asked with no boundary in the picture so that an entrypoint added
@@ -47,12 +53,14 @@ namespace MailFathom.Application.Mail.Delivery.Submission;
 /// <param name="composer">Builds the MIME, and decides every header this system owns rather than the author.</param>
 /// <param name="outbox">Writes the record and the message down together, and says the account has something to send.</param>
 /// <param name="authorization">Answers whether the caller that reached this holds the grant that lets it send.</param>
+/// <param name="timeProvider">Says whether a time the author named is still one a message can be held until.</param>
 public sealed class AuthoredMailSubmission(
     IMailAccountCatalog accountCatalog,
     NamedRecipientResolver recipientResolver,
     IAuthoredEmailComposer composer,
     MailOutbox outbox,
-    AccessAuthorization authorization)
+    AccessAuthorization authorization,
+    TimeProvider timeProvider)
 {
     /// <summary>Queues one message, or refuses it naming what the caller has to change.</summary>
     /// <param name="request">The message that was asked for.</param>
@@ -61,7 +69,7 @@ public sealed class AuthoredMailSubmission(
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailSend" />.</exception>
     /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account this deployment does not serve.</exception>
-    /// <exception cref="MailSubmissionRefusedException">Thrown when a recipient names nobody, a field cannot be composed, a bound is exceeded, or the account configures no address to send from.</exception>
+    /// <exception cref="MailSubmissionRefusedException">Thrown when a recipient names nobody, a field cannot be composed, a bound is exceeded, the account configures no address to send from, or the message is asked to leave at a time that has passed.</exception>
     public async Task<OutgoingEmailRecord> SubmitAsync(
         MailSubmissionRequest request,
         CancellationToken cancellationToken)
@@ -72,6 +80,15 @@ public sealed class AuthoredMailSubmission(
 
         var account = accountCatalog.ServedAccounts.FirstOrDefault(served => served.IsNamedBy(request.Account))
             ?? throw new MailAccountNotAccessibleException(request.Account);
+
+        // Before the contact book is read and before anything is composed, because a time that has gone is the
+        // caller's own input and refusing it costs them nothing but the refusal. What it must not do is arrive at the
+        // outbox: a record written for a moment in the past is one the next delivery pass takes immediately, which is
+        // the opposite of what somebody naming a time asked for.
+        if (request.DueAt is { } dueAt && dueAt.Instant <= timeProvider.GetUtcNow())
+        {
+            throw MailSubmissionRefusedException.DueTimeAlreadyPassed();
+        }
 
         // Ahead of the resolution rather than left to it, because the reads it performs carry what the caller supplied
         // and because a list this long describes a send no record could be written for however the book answered. The
@@ -107,6 +124,8 @@ public sealed class AuthoredMailSubmission(
             throw MailSubmissionRefusedException.From(composition.Refusal!);
         }
 
-        return await outbox.EnqueueAsync(composed.Request, composed.RawMime, cancellationToken);
+        var send = request.DueAt is { } heldUntil ? composed.Request.HeldUntil(heldUntil) : composed.Request;
+
+        return await outbox.EnqueueAsync(send, composed.RawMime, cancellationToken);
     }
 }

@@ -201,7 +201,7 @@ public sealed class JobSchedulePassTests
     public async Task RunAsync_NoScheduleDeclared_ReadsNothingAndDispatchesNothing()
     {
         // Arrange
-        var pass = new JobSchedulePass(new StubScheduledJobSource([]), this.schedules, this.jobs, this.clock);
+        var pass = new JobSchedulePass([new StubScheduledJobSource([])], this.schedules, this.jobs, this.clock);
 
         // Act
         var dispatches = await pass.RunAsync(TestContext.Current.CancellationToken);
@@ -234,10 +234,12 @@ public sealed class JobSchedulePassTests
         this.jobs.EnqueueAsync(Arg.Any<JobEnqueueRequest>(), Arg.Any<CancellationToken>()).Returns(result);
 
     private JobSchedulePass CreatePass(string declaration) => new(
-        new StubScheduledJobSource(
         [
-            new ScheduledJob(ScheduleId, MailAccountJobPayload.For(Account), Parse(declaration), Account),
-        ]),
+            new StubScheduledJobSource(
+            [
+                new ScheduledJob(ScheduleId, MailAccountJobPayload.For(Account), Parse(declaration), Account),
+            ]),
+        ],
         this.schedules,
         this.jobs,
         this.clock);
@@ -245,6 +247,7 @@ public sealed class JobSchedulePassTests
     /// <summary>Declares a fixed set of schedules, which is what a configuration-backed source does to a pass.</summary>
     private sealed class StubScheduledJobSource(IReadOnlyList<ScheduledJob> declared) : IScheduledJobSource
     {
-        public IReadOnlyList<ScheduledJob> ReadSchedules() => declared;
+        public Task<IReadOnlyList<ScheduledJob>> ReadSchedulesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(declared);
     }
 }

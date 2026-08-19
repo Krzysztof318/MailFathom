@@ -728,7 +728,8 @@ withdrawn from the mailbox it reached.
 | `Stage` | How far the submission has durably got, in the vocabulary below |
 | `MimeByteLength` | How many bytes of MIME were stored. Kept beside the record as well as on the message, so the size bound a submission server advertised can be compared against it — and the outbox listed — without reading a single queued message's `bytea` |
 | `AttemptCount` | Counted by the claim itself rather than after the attempt, so an attempt that kills the process still counted |
-| `AvailableAt` | The instant the record may next be claimed. It is the backoff written down: a transient failure moves it forward by the delay that attempt earned, and a send nothing has deferred carries the instant it was recorded |
+| `AvailableAt` | The instant the record may next be claimed. It is the backoff written down: a transient failure moves it forward by the delay that attempt earned, a send nothing has deferred carries the instant it was recorded, and a send written to leave at a named time carries that time — which is the whole of what holding one costs, since the claim below already refuses a row whose availability has not arrived |
+| `DueAt`, `DueZoneId` | The time the message was written to leave at and the zone whoever named it was thinking in, both null for a send that named none. Kept beside `AvailableAt` rather than derived from it, because a retry moves availability and lateness has to be measured from the authored time; the zone is kept because nine in the morning is nine in the morning on both sides of a daylight-saving transition and the offset alone would not say which nine was meant |
 | `LeaseOwner`, `LeaseExpiresAt` | Who is attempting it and until when, both null while nobody is. The pair is what makes a crash recoverable without anything being told the process died |
 | `RecordedAt`, `StageChangedAt` | When the intent was written, and when the record last moved. The second is what says how long a stuck send has been stuck |
 | `LastFailureCode` | The code of the failure the last attempt ended in, null while none has. The code is kept and the message is not, because a failure message is assembled at the failure site and may repeat what a remote server wrote |
@@ -743,7 +744,7 @@ reads:
 | `TransmissionBegun` | The body has begun to go out and the server's answer to it was never read |
 | `Sent` | The server accepted the message for every recipient it had accepted |
 | `Refused` | Nothing will offer it again, and `LastFailureCode` says what ended it |
-| `Cancelled` | The send was withdrawn before anything was transmitted for it |
+| `Cancelled` | The send was withdrawn before anything was transmitted for it, which is what a message held until a named time is withdrawable for the whole of |
 
 `TransmissionBegun` is written **before** the transmission rather than after it, which is the whole point: announcing it
 afterwards would announce it only in the case where the crash it exists for did not happen. A record found there is not
@@ -859,6 +860,45 @@ A lease is released by the attempt that ends: a settled send has no need of one,
 `AvailableAt` moved forward, and a send the host stopped before it transmitted anything gives it back together with the
 attempt it had counted. A send whose transmission had begun is the one case nothing releases.
 
+## What an owner asked to be sent again
+
+`recurring_sends` holds one row per message an owner wrote once and asked to be sent again on every occasion a schedule
+names. It is a declaration rather than a queue: nothing in it is due and nothing in it is transmitted. Each occasion the
+schedule reaches produces an ordinary `outgoing_emails` row with its own identity, its own attempts, and its own ending,
+so one Monday's provider outage is not the next Monday's and a message refused for good stops one occurrence rather than
+the declaration behind it.
+
+It is a table rather than a section of the deployment's configuration for the reason [configuration is
+read-only](../decisions/0002-configuration-reading-mapping-and-reload-boundary.md): what repeats is a message somebody
+wrote, at a moment they chose, and it is stopped by them.
+
+| Column | What it records |
+|---|---|
+| `Id` | The declaration's identity, which every occurrence and every later act names it by. A cascade from it removes the recipients and the draft with it |
+| `MailboxAccountId` | The account every occurrence is submitted through and sent as, a plain column for the reason the outgoing record's is |
+| `RequesterOrigin`, `RequesterIdentity` | The authored act that asked, in the same vocabulary an outgoing record uses. It is the idempotency identity, so a retried command reads back the declaration it already made instead of doubling what a mailbox sends |
+| `Schedule` | The repetition as it was written, in the syntax [a mail rule declares one in](../features/mail-rules.md). It is kept as text and parsed above this table, because the syntax belongs to the dispatch mechanism rather than to the mail domain — and a schedule that does not parse is refused where the declaration is made, so nothing durable states an occasion nothing can resolve |
+| `DraftByteLength` | How many bytes of MIME were stored as the draft, kept beside the declaration so listing what repeats never loads a single draft's `bytea` |
+| `DeclaredAt` | When the declaration was written down |
+| `LastOccurrenceAt`, `LastOccurrenceEmailId` | The occasion this declaration last produced a message for and the message it produced, both null while it has produced none. The first is the occasion's own instant rather than the moment a dispatch noticed it, so a run that was late does not move the declaration off the schedule it declared; the second is what makes one occurrence at a time enforceable rather than assumed — the next occasion asks what became of that message and stands down while it is still queued |
+| `CancelledAt` | When the declaration was stopped, null while it still produces occurrences. An instant rather than a flag, because stopping a repetition is an act somebody took and a mailbox that used to send something every week is worth reading in the order it happened |
+| `xmin` | The concurrency token, as everywhere else |
+
+A stopped declaration keeps its row. Deleting it would make a repetition somebody ran for a year indistinguishable from
+one nobody ever declared, and the row is what an operator reads to see that it stopped and when.
+
+`recurring_send_recipients` holds one row per person every occurrence is offered to, keyed by the declaration and the
+position in its list, and carrying the `Address`, the `Role`, and the `ContactId` where the author named a contact. It
+is the outgoing recipient table minus the state, and for a reason: a declaration transmits nothing, so nothing is ever
+answered about one of its recipients. What the rows hold is the envelope every occasion is built from, in the order the
+declaration named them.
+
+`recurring_send_drafts` is the message itself, in the same one-to-one arrangement `outgoing_email_contents` has with
+`outgoing_emails` and with the same `DraftMime`, `DraftByteLength`, `Sha256Hash`, and `StoredAt` columns. Every occasion
+composes its own message from these bytes rather than reusing them: a repeated `Message-ID` would thread a year of
+Mondays as one message in every recipient's client, so each occurrence is re-stamped with an identity and a date of its
+own before it reaches the outbox.
+
 ## Indexes
 
 | Index | Columns | Purpose |
@@ -895,6 +935,8 @@ attempt it had counted. A send whose transmission had begun is the one case noth
 | `ix_outgoing_email_filings_message_id` | `(MailboxAccountId, InternetMessageId)` where `ObservedAt` is null and the stage is `Confirmed` | The same question on a server that advertises no `UIDPLUS` and therefore named no placement, answered by the identity in the appended bytes, and bounded the same way |
 | `ix_outgoing_emails_outstanding` | `(MailboxAccountId, RecordedAt)` where the stage is none of `Sent`, `Refused`, or `Cancelled` | The outbox a restart reads and an operator asks about: what is queued, what is in flight, and what has stopped. The filter names the three terminal stages rather than the successful one alone, so a refused send stays visible while the deployment's whole sending history does not |
 | `ix_outgoing_emails_period_usage` | `(RecordedAt, MailboxAccountId)` | What a send ceiling counts: the messages one period was asked for, for one account and for the whole deployment. It carries no filter, because a period counts every message it was asked for whatever became of it, and the account is behind the instant rather than in front of it so one index answers both questions — the deployment's count reads a range of it and an account's count reads the same range narrowed |
+| `ix_recurring_sends_identity` | `(MailboxAccountId, RequesterOrigin, RequesterIdentity)`, unique | A declaration's idempotency identity, which is what makes the same authored act twice one declaration. It spans stopped rows deliberately: a declaration that was stopped is what keeps the act that made it from quietly declaring a second one |
+| `ix_recurring_sends_active` | `(DeclaredAt)` where `CancelledAt` is null | The declarations a dispatch pass reads, oldest first. The filter is what keeps that read proportionate to what still repeats rather than to every repetition the deployment has ever declared |
 | `ix_mail_rule_executions_account_evaluated` | `(MailboxAccountId, EvaluatedAt, Id)` | An account's rule history newest first, and the retention pass that erases what has outlived its window. The identifier is in the key because two executions of one batch share an instant and a keyset page needs a total order to continue from |
 | `ix_mail_rule_executions_account_rule_evaluated` | `(MailboxAccountId, RuleName, EvaluatedAt, Id)` | What one rule has been concluding, which is the question a rule that never seems to fire is investigated with |
 | `ix_mail_rule_executions_email_evaluated` | `(StoredEmailId, EvaluatedAt, Id)` | Why one message is where it is, and the rows the cascade removes when that message is erased |
@@ -993,6 +1035,13 @@ personal data, it is the same identifier a failure is allowed to name, and it po
 so erasing a contact leaves the send saying who it went to rather than rewriting it. Nothing in any of the three reaches
 a log, a metric, a trace, or an exception message — an exception about a recipient names the record, and the position
 where the row it was reading has one, rather than the address.
+
+`recurring_sends`, `recurring_send_recipients`, and `recurring_send_drafts` inherit every word of that and add one fact
+of their own: a declaration says not only who this mailbox's owner writes to but how often, which is a statement about a
+relationship rather than about a message. They are classified, retained, exported, and erased exactly as the three above
+are, and the same two cascades make erasure structural — deleting a declaration destroys its recipients and its draft
+with it. Nothing in any of them reaches a log, a metric, a trace, or an exception message either; a failure about a
+declaration names the declaration, and the schedule it carries is an operator's own phrase rather than anybody's data.
 
 `embedding_profiles` is the exception on this page: it holds no personal data at all. It describes a model, and the credential that reaches that model is configuration rather than a column here, so nothing in this table is a secret or is derived from anybody's mail.
 

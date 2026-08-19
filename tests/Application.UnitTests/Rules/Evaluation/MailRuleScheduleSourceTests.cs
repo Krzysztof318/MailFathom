@@ -23,14 +23,14 @@ public sealed class MailRuleScheduleSourceTests
 
     /// <summary>A rule reaching three mailboxes is three walks, each able to be under way or behind independently.</summary>
     [Fact]
-    public void ReadSchedules_AnUnscopedScheduledRule_DeclaresOneScheduleForEachServedAccount()
+    public async Task ReadSchedulesAsync_AnUnscopedScheduledRule_DeclaresOneScheduleForEachServedAccount()
     {
         // Arrange
         this.ArrangeAccounts("personal", "work");
         var source = this.CreateSource(ScheduledRule("housekeeping", "Daily at 03:00"));
 
         // Act
-        var schedules = source.ReadSchedules();
+        var schedules = await source.ReadSchedulesAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
@@ -41,14 +41,14 @@ public sealed class MailRuleScheduleSourceTests
 
     /// <summary>A rule scoped to one account asks for a walk of that mailbox and of no other.</summary>
     [Fact]
-    public void ReadSchedules_AScheduledRuleScopedToOneAccount_DeclaresOnlyThatAccountsSchedule()
+    public async Task ReadSchedulesAsync_AScheduledRuleScopedToOneAccount_DeclaresOnlyThatAccountsSchedule()
     {
         // Arrange
         this.ArrangeAccounts("personal", "work");
         var source = this.CreateSource(ScheduledRule("housekeeping", "Daily at 03:00", accounts: ["work"]));
 
         // Act
-        var schedules = source.ReadSchedules();
+        var schedules = await source.ReadSchedulesAsync(TestContext.Current.CancellationToken);
 
         // Assert
         var schedule = Assert.Single(schedules);
@@ -58,7 +58,7 @@ public sealed class MailRuleScheduleSourceTests
 
     /// <summary>A rule declaring no schedule asks for no dispatch, which is every rule a deployment wrote before schedules existed.</summary>
     [Fact]
-    public void ReadSchedules_RulesDeclaringNoSchedule_AskForNoRecurringDispatch()
+    public async Task ReadSchedulesAsync_RulesDeclaringNoSchedule_AskForNoRecurringDispatch()
     {
         // Arrange
         this.ArrangeAccounts("personal");
@@ -67,7 +67,7 @@ public sealed class MailRuleScheduleSourceTests
             MailRule.Create("manual-only", Matching()));
 
         // Act
-        var schedules = source.ReadSchedules();
+        var schedules = await source.ReadSchedulesAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(schedules);
@@ -75,7 +75,7 @@ public sealed class MailRuleScheduleSourceTests
 
     /// <summary>The occasions are the rule's own, so two rules with different intervals declare two schedules.</summary>
     [Fact]
-    public void ReadSchedules_TwoScheduledRules_DeclareTheirOwnOccasionsSeparately()
+    public async Task ReadSchedulesAsync_TwoScheduledRules_DeclareTheirOwnOccasionsSeparately()
     {
         // Arrange
         this.ArrangeAccounts("personal");
@@ -84,7 +84,7 @@ public sealed class MailRuleScheduleSourceTests
             ScheduledRule("hourly", "Every 01:00:00"));
 
         // Act
-        var schedules = source.ReadSchedules();
+        var schedules = await source.ReadSchedulesAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(

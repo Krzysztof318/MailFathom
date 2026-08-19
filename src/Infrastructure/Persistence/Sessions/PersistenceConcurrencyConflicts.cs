@@ -125,6 +125,7 @@ internal static class PersistenceConcurrencyConflicts
                 or MailFathomDbContext.MailRederivationRunPrimaryKeyConstraintName
                 or MailFathomDbContext.ContactAddressUniqueIndexName
                 or MailFathomDbContext.OutgoingEmailIdentityUniqueIndexName
+                or MailFathomDbContext.RecurringSendIdentityUniqueIndexName
                 or MailFathomDbContext.OutgoingEmailFilingPrimaryKeyConstraintName
                 or MailFathomDbContext.EmailThreadIdentifierPrimaryKeyConstraintName,
         };

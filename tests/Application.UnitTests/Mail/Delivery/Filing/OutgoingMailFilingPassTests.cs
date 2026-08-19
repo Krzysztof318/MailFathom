@@ -430,7 +430,8 @@ public sealed class OutgoingMailFilingPassTests
                 TimeSpan.FromMinutes(7),
                 maxAttempts: 5,
                 TimeSpan.FromMinutes(1),
-                TimeSpan.FromHours(1));
+                TimeSpan.FromHours(1),
+                TimeSpan.FromHours(8));
 
             this.Filing = new OutgoingMailFilingHarness(this.Store, this.Content, settings, this.clock);
         }

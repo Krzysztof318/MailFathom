@@ -4,6 +4,7 @@
 
 using System.Buffers;
 using System.Globalization;
+using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Domain.Delivery;
@@ -15,7 +16,8 @@ namespace MailFathom.Domain.Delivery;
 /// It has to answer one question: would asking again be the same request or a new one. A rule answers it with its own
 /// name and the revision it was evaluated at, so re-evaluating an unchanged rule sends nothing a second time and
 /// changing the rule asks afresh. Somebody present answers it with a key of their own, so a retried command is the same
-/// request and a second command is a second one.
+/// request and a second command is a second one. A recurring send answers it with the declaration and the occasion, so
+/// every Monday is a request of its own and one Monday reached twice is not.
 /// </para>
 /// <para>
 /// A duplicated delivery cannot be withdrawn, so the key is what the caller is answerable for rather than something
@@ -81,6 +83,23 @@ public sealed record OutgoingEmailRequester
 
         return new OutgoingEmailRequester(OutgoingEmailOrigin.Rule, identity);
     }
+
+    /// <summary>Names one occasion of a recurring send the owner declared, which is the declaration and the occasion together.</summary>
+    /// <param name="declaration">The recurring send whose occasion came round.</param>
+    /// <param name="occurrence">The occasion itself, which is what makes one Monday's message a different request from the next.</param>
+    /// <returns>A requester naming that occasion of that declaration.</returns>
+    /// <remarks>
+    /// Nobody is present when an occurrence is composed, so there is no key for a caller to supply and the identity is
+    /// derived instead. The occasion is written to the second in UTC, so two instances reaching one occasion compose
+    /// the same identity and the unique index answers the second with the message the first wrote — the same reasoning
+    /// the recurring dispatch itself is keyed by, restated where a duplicate would be a second message in somebody's
+    /// mailbox rather than a second row.
+    /// </remarks>
+    public static OutgoingEmailRequester Schedule(RecurringSendId declaration, DateTimeOffset occurrence) => new(
+        OutgoingEmailOrigin.Schedule,
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"{declaration.Value:D}@{occurrence.ToUniversalTime():yyyy-MM-ddTHH:mm:ssZ}"));
 
     /// <summary>Names one act somebody asked for, by the key they supplied for it.</summary>
     /// <param name="invocationIdentity">The key that decides whether asking again is the same request: the same for a retry of one act and different for a second act.</param>

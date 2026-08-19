@@ -116,6 +116,23 @@ internal sealed class MailDeliveryOptions : IValidatableObject
     /// </remarks>
     public OutgoingMailCeilingOptions SendCeilings { get; set; } = new();
 
+    /// <summary>Gets or sets how long after the time a message was written for this deployment will still deliver it.</summary>
+    /// <remarks>
+    /// <para>
+    /// It applies to a message written to leave at a named time and to nothing else: a send that named no time is never
+    /// late, however long a retry or an unreachable provider has held it. What it decides is the case where the moment
+    /// came and went with nothing running — an instance that was down, a queue that was full — where delivering and
+    /// dropping are both wrong answers.
+    /// </para>
+    /// <para>
+    /// The default is a working day, which is the span over which a message written for nine in the morning still reads
+    /// as the message its author meant. A message later than that is refused rather than sent, and stands where an
+    /// operator sees it: what to do about a message that missed its moment is a person's decision, not a bound's.
+    /// </para>
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:01:00", "30.00:00:00")]
+    public TimeSpan AllowedSendLateness { get; set; } = TimeSpan.FromHours(8);
+
     /// <summary>Gets or sets how many accounts may be waiting for a prompt delivery pass at once.</summary>
     /// <remarks>
     /// The queue holds accounts rather than messages, and an account already waiting is not queued twice, so it cannot

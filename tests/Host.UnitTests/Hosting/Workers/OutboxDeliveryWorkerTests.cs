@@ -203,7 +203,8 @@ public sealed class OutboxDeliveryWorkerTests
                 TimeSpan.FromMinutes(1),
                 maxAttempts: 3,
                 TimeSpan.FromMinutes(1),
-                TimeSpan.FromMinutes(5)));
+                TimeSpan.FromMinutes(5),
+                TimeSpan.FromHours(8)));
             collection.AddScoped<OptimisticConcurrencyRetryPolicy>();
             collection.AddScoped<MailOutboxDelivery>();
 
@@ -309,6 +310,7 @@ public sealed class OutboxDeliveryWorkerTests
                 RecordedAt = DateTimeOffset.UnixEpoch,
                 StageChangedAt = DateTimeOffset.UnixEpoch,
                 AvailableAt = DateTimeOffset.UnixEpoch,
+                DueAt = null,
                 LastFailure = null,
                 LastReplyCode = null,
                 Filings = [],

@@ -176,6 +176,11 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
 
                     break;
 
+                case MailOutboxDeliveryOutcome.MissedItsDueTime:
+                    this.LogSendMissedItsDueTime(accountId.Value);
+
+                    break;
+
                 case MailOutboxDeliveryOutcome.LeaseLost:
                     this.LogSendLeaseLost(accountId.Value, result.AttemptCount);
 
@@ -291,6 +296,17 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
         Level = LogLevel.Error,
         Message = "A message queued for account {AccountId} went out on attempt {AttemptCount} and its submission server never answered, so whether the recipients received it is unknown. It is not transmitted again, and it stays visible in the outbox until somebody decides what to do with it.")]
     private partial void LogSendOutcomeUnknown(string accountId, int attemptCount);
+
+    /// <summary>Reports a message this deployment declined to deliver late, which is the second ending that waits for a person.</summary>
+    /// <remarks>
+    /// The attempt count is deliberately absent: nothing was attempted, and naming one would read as a send that had
+    /// been tried. What an operator acts on is that the message exists, was never transmitted, and is theirs to send by
+    /// hand if it is still worth sending.
+    /// </remarks>
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "A message queued for account {AccountId} was written to leave at a time that has since passed by more than this deployment delivers late, so it was not transmitted. It stays visible in the outbox until somebody decides what to do with it.")]
+    private partial void LogSendMissedItsDueTime(string accountId);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

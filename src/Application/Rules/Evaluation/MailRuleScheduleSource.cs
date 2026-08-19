@@ -53,11 +53,15 @@ public sealed class MailRuleScheduleSource : IScheduledJobSource
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<ScheduledJob> ReadSchedules()
+    /// <remarks>The rules and the accounts are both already in memory, so this source waits for nothing and answers with a completed task.</remarks>
+    public Task<IReadOnlyList<ScheduledJob>> ReadSchedulesAsync(CancellationToken cancellationToken)
     {
         var servedAccounts = this.accounts.ServedAccounts;
 
-        return [.. this.ruleSetSource.Current.Rules.SelectMany(rule => SchedulesOf(rule, servedAccounts))];
+        IReadOnlyList<ScheduledJob> declared =
+            [.. this.ruleSetSource.Current.Rules.SelectMany(rule => SchedulesOf(rule, servedAccounts))];
+
+        return Task.FromResult(declared);
     }
 
     /// <summary>Reads the schedules one rule declares, which is one per account it reaches and none where it declares no schedule.</summary>

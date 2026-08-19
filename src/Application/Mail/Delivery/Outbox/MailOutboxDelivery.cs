@@ -154,6 +154,20 @@ public sealed class MailOutboxDelivery
             return LeaseLost(claimed);
         }
 
+        // Before anything is opened and before the account is even asked what it sends as, because a message written
+        // for a morning that is long past is not sent by this pass whatever the rest of the deployment would allow.
+        // Asked here rather than at the claim so the decision is taken under the lease that will record it: a claim
+        // that skipped such a record would leave it queued and unreadable, waiting for a pass that never acts on it.
+        if (record.HasMissedItsDueTime(this.timeProvider.GetUtcNow(), this.settings.AllowedLateness))
+        {
+            return await this.RefuseAsync(
+                claimed,
+                outcomes: [],
+                MailFathomErrorCode.OutgoingEmailDueTimeMissed,
+                replyCode: null,
+                MailOutboxDeliveryOutcome.MissedItsDueTime);
+        }
+
         if (this.senderIdentities.FindSenderIdentity(record.AccountId) is not { } sender)
         {
             // The account configures no address to send from, so there is no reverse path to write and no later
@@ -280,11 +294,18 @@ public sealed class MailOutboxDelivery
     }
 
     /// <summary>Ends a send nothing will offer again, with the reason on the record.</summary>
+    /// <remarks>
+    /// The reported ending is a parameter while the recorded stage is not, because a message this deployment declined
+    /// to send late is refused in exactly the sense the stage means — nothing offers it again, and the reason is on the
+    /// record — while being a different thing to whoever reads the log: a provider refused nothing, and what an
+    /// operator does about it is decide whether the message is still worth sending by hand.
+    /// </remarks>
     private async Task<MailOutboxDeliveryResult> RefuseAsync(
         ClaimedOutgoingEmail claimed,
         IReadOnlyList<OutgoingRecipientOutcome> outcomes,
         MailFathomErrorCode failure,
-        int? replyCode)
+        int? replyCode,
+        MailOutboxDeliveryOutcome reportedAs = MailOutboxDeliveryOutcome.Refused)
     {
         await this.CommitAsync(async (session, token) =>
         {
@@ -300,7 +321,7 @@ public sealed class MailOutboxDelivery
                 token);
         });
 
-        return Result(claimed, MailOutboxDeliveryOutcome.Refused, failure, replyCode);
+        return Result(claimed, reportedAs, failure, replyCode);
     }
 
     /// <summary>Gives a send back for another attempt, or ends it when it has spent the attempts it was allowed.</summary>

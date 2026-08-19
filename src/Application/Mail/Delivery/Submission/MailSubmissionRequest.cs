@@ -5,6 +5,7 @@
 using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Scheduling;
 
 namespace MailFathom.Application.Mail.Delivery.Submission;
 
@@ -46,4 +47,13 @@ public sealed record MailSubmissionRequest
 
     /// <summary>Gets the authored act asking, which is what makes the same submission twice one delivery.</summary>
     public required OutgoingEmailRequester Requester { get; init; }
+
+    /// <summary>Gets the time the author asked the message to leave at, or <see langword="null" /> when they asked for it to leave at once.</summary>
+    /// <remarks>
+    /// It arrives resolved, as an instant together with the zone it was named in, because a wall-clock time and a zone
+    /// have to become an instant exactly once and the boundary that took them from a person is where the answer to
+    /// "which nine in the morning" is still available. What the use case decides is only whether the instant is one it
+    /// may still hold a message for.
+    /// </remarks>
+    public ZonedInstant? DueAt { get; init; }
 }

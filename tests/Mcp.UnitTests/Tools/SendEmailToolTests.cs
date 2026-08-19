@@ -8,9 +8,11 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Application.Persistence;
@@ -409,9 +411,13 @@ public sealed class SendEmailToolTests
                     new PersistenceConcurrencyOptions(),
                     new FakeTimeProvider()),
                 new MailOutboxSignal(capacity: 8),
+                Substitute.For<IJobStore>(),
+                Substitute.For<IOutboxOperationStore>(),
                 granted,
-                OutgoingMailGovernors.Permitting()),
-            granted));
+                OutgoingMailGovernors.Permitting(),
+                new FakeTimeProvider(Recorded)),
+            granted,
+            new FakeTimeProvider(Recorded)));
     }
 
     /// <summary>An outgoing store that keeps one record per idempotency identity, which is what the tool's retry claim rests on.</summary>
@@ -449,6 +455,7 @@ public sealed class SendEmailToolTests
                         RecordedAt = Recorded,
                         StageChangedAt = Recorded,
                         AvailableAt = Recorded,
+                        DueAt = null,
                         LastFailure = null,
                         LastReplyCode = null,
                         Filings = [],

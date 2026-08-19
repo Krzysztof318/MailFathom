@@ -356,7 +356,8 @@ public sealed class MailOutboxPassTests
                 TimeSpan.FromMinutes(7),
                 maxAttempts: 5,
                 TimeSpan.FromMinutes(1),
-                TimeSpan.FromHours(1));
+                TimeSpan.FromHours(1),
+                TimeSpan.FromHours(8));
 
             var policyReader = Substitute.For<IMailTransportSecurityPolicyReader>();
             policyReader.GetDeliveryPolicy(Account).Returns(submits ? TransportSecurityPolicy() : null);

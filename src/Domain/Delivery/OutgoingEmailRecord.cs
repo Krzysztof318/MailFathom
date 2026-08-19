@@ -5,6 +5,7 @@
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Failures;
+using MailFathom.Domain.Scheduling;
 
 namespace MailFathom.Domain.Delivery;
 
@@ -77,6 +78,22 @@ public sealed record OutgoingEmailRecord
     /// </remarks>
     public required DateTimeOffset AvailableAt { get; init; }
 
+    /// <summary>Gets the time the send was written to leave at, or <see langword="null" /> when it was written to leave at once.</summary>
+    /// <remarks>
+    /// <para>
+    /// It is the author's own statement of when the message should go, and it is kept beside
+    /// <see cref="AvailableAt" /> rather than folded into it because the two answer different questions. The available
+    /// instant says when a claim may take the record next, and a failed attempt moves it; this one says what the author
+    /// asked for and nothing moves it, which is what makes lateness measurable at all.
+    /// </para>
+    /// <para>
+    /// The zone travels with the instant because a person names a time in a place. A message written on Saturday to
+    /// leave at nine on Monday means nine as the clock in that place will read it, daylight saving included, and the
+    /// resolution happened once where the time was named rather than being re-derived by whatever reads the record.
+    /// </para>
+    /// </remarks>
+    public required ZonedInstant? DueAt { get; init; }
+
     /// <summary>Gets the failure the last attempt ended in, or <see langword="null" /> while no attempt has failed.</summary>
     /// <remarks>
     /// The code is kept and the message is not. A code is a stable identity an operator can look up, while a message is
@@ -134,6 +151,26 @@ public sealed record OutgoingEmailRecord
     /// </remarks>
     public bool IsWaitingAt(DateTimeOffset asOf) =>
         this.Stage == OutgoingEmailStage.Recorded && asOf < this.AvailableAt;
+
+    /// <summary>Reports whether the time this send was written to leave at has passed by further than a deployment allows.</summary>
+    /// <param name="asOf">The instant the question is asked at.</param>
+    /// <param name="allowedLateness">How late a deployment is willing to deliver a message whose time has passed.</param>
+    /// <returns><see langword="true" /> when the message was written for a time long enough ago that it must not be sent unasked.</returns>
+    /// <remarks>
+    /// <para>
+    /// A message is not a housekeeping pass, so a time that came round while nothing was running is not skipped: it was
+    /// written to be delivered, and dropping it silently loses correspondence. But a message delivered a week after the
+    /// morning it was meant for can be worse than one never sent — it answers a question nobody is still asking, and it
+    /// tells its recipient the sender was not paying attention — so the deployment states how late is still timely and
+    /// what falls outside that is left for a person to decide about.
+    /// </para>
+    /// <para>
+    /// A send that named no time is never late. Its author asked for it to go as soon as it could, and however long a
+    /// retry backoff or an unreachable provider has held it, nothing about when it leaves was ever promised.
+    /// </para>
+    /// </remarks>
+    public bool HasMissedItsDueTime(DateTimeOffset asOf, TimeSpan allowedLateness) =>
+        this.DueAt is { } due && asOf - due.Instant > allowedLateness;
 
     /// <summary>Finds the copy of this message filed into one place, if one was.</summary>
     /// <param name="filing">The place to look for.</param>

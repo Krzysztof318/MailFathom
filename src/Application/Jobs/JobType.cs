@@ -54,9 +54,33 @@ public readonly record struct JobType
     /// </remarks>
     public static JobType RederiveStoredMail { get; } = new("rederive-stored-mail");
 
+    /// <summary>Gets the type whose work is telling one account's outbox that a message it holds is now due to leave.</summary>
+    /// <remarks>
+    /// Its payload contract is <see cref="HeldSendJobPayload" />, which names the account and the record and nothing in
+    /// the message. The work is short and transmits nothing: a send held until a named time is already durable, and
+    /// what this job carries is the moment, so the queue's own available-at column is what holds the message and no
+    /// timer exists anywhere for it to be held by.
+    /// </remarks>
+    public static JobType DispatchHeldSend { get; } = new("dispatch-held-send");
+
+    /// <summary>Gets the type whose work is composing one occurrence of a recurring send and writing it into the outbox.</summary>
+    /// <remarks>
+    /// Its payload contract is <see cref="RecurringSendJobPayload" />, which names the account and the declaration. Each
+    /// occasion produces an outgoing record of its own, from the draft the declaration was made with, so one
+    /// occurrence's failure is not another's and no two occasions carry one message identity.
+    /// </remarks>
+    public static JobType SendRecurringOccurrence { get; } = new("send-recurring-occurrence");
+
     /// <summary>Gets every declared job type.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
-    public static IReadOnlyList<JobType> All { get; } = [ClassifyEmailSpam, RunScheduledMailRules, RederiveStoredMail];
+    public static IReadOnlyList<JobType> All { get; } =
+    [
+        ClassifyEmailSpam,
+        RunScheduledMailRules,
+        RederiveStoredMail,
+        DispatchHeldSend,
+        SendRecurringOccurrence,
+    ];
 
     /// <summary>Gets whether this value names a declared job type rather than the unusable struct default.</summary>
     public bool IsSpecified => this.name is not null;

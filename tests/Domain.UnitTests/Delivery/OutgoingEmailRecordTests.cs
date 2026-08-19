@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Scheduling;
 using Xunit;
 
 namespace MailFathom.Domain.UnitTests.Delivery;
@@ -143,4 +144,82 @@ public sealed class OutgoingEmailRecordTests
             250,
             Answered));
     }
+
+    /// <summary>A send held for an instant that has not arrived is waiting; the same send once it has is not.</summary>
+    [Theory]
+    [InlineData("2026-08-16T09:59:59Z", true)]
+    [InlineData("2026-08-16T10:00:00Z", false)]
+    [InlineData("2026-08-16T10:00:01Z", false)]
+    public void IsWaitingAt_ARecordedSend_ReportsWhetherItsInstantHasArrived(string asOf, bool expected)
+    {
+        // Arrange
+        var record = Held(OutgoingEmailStage.Recorded, "2026-08-16T10:00:00Z");
+
+        // Act, Assert
+        Assert.Equal(expected, record.IsWaitingAt(Instant(asOf)));
+    }
+
+    /// <summary>A send that has begun to be answered for is not waiting, whatever instant it names.</summary>
+    [Theory]
+    [InlineData(OutgoingEmailStage.TransmissionBegun)]
+    [InlineData(OutgoingEmailStage.Sent)]
+    [InlineData(OutgoingEmailStage.Cancelled)]
+    public void IsWaitingAt_ASendPastTheRecordedStage_IsNotWaiting(OutgoingEmailStage stage)
+    {
+        // Arrange
+        var record = Held(stage, "2026-08-16T10:00:00Z");
+
+        // Act, Assert
+        Assert.False(record.IsWaitingAt(Instant("2026-08-16T09:00:00Z")));
+    }
+
+    /// <summary>Either side of the lateness bound, including the instant the bound itself names, which is still in time.</summary>
+    /// <remarks>
+    /// The boundary is the case worth stating: a message exactly as late as the deployment allows is delivered, so the
+    /// bound reads as "up to this much" rather than as "less than this much".
+    /// </remarks>
+    [Theory]
+    [InlineData("2026-08-16T17:59:59Z", false)]
+    [InlineData("2026-08-16T18:00:00Z", false)]
+    [InlineData("2026-08-16T18:00:01Z", true)]
+    public void HasMissedItsDueTime_ASendWrittenForANamedTime_ReportsWhichSideOfTheBoundItIsOn(
+        string asOf,
+        bool expected)
+    {
+        // Arrange
+        var record = Held(OutgoingEmailStage.Recorded, "2026-08-16T10:00:00Z");
+
+        // Act, Assert
+        Assert.Equal(expected, record.HasMissedItsDueTime(Instant(asOf), TimeSpan.FromHours(8)));
+    }
+
+    /// <summary>A send that named no time is never late, however long anything else has held it.</summary>
+    [Fact]
+    public void HasMissedItsDueTime_ASendThatNamedNoTime_IsNeverLate()
+    {
+        // Arrange
+        var record = OutgoingDeliveryFixture.Record(
+            OutgoingEmailStage.Recorded,
+            OutgoingRecipientOutcome.Unanswered(
+                OutgoingDeliveryFixture.Recipient("anna@example.test", OutgoingRecipientRole.To)));
+
+        // Act, Assert
+        Assert.False(record.HasMissedItsDueTime(Instant("2027-01-01T00:00:00Z"), TimeSpan.FromHours(8)));
+    }
+
+    /// <summary>Builds a record written to leave at one instant, at the stage the scenario is about.</summary>
+    private static OutgoingEmailRecord Held(OutgoingEmailStage stage, string dueAt)
+    {
+        var record = OutgoingDeliveryFixture.Record(
+            stage,
+            OutgoingRecipientOutcome.Unanswered(
+                OutgoingDeliveryFixture.Recipient("anna@example.test", OutgoingRecipientRole.To)));
+
+        return record with { AvailableAt = Instant(dueAt), DueAt = ZonedInstant.At(Instant(dueAt)) };
+    }
+
+    private static DateTimeOffset Instant(string value) => DateTimeOffset.Parse(
+        value,
+        CultureInfo.InvariantCulture,
+        DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal);
 }

@@ -16,6 +16,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
+using MailFathom.Domain.Scheduling;
 using MailFathom.Domain.Transport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -496,6 +497,83 @@ public sealed class MailOutboxDeliveryTests
         }
     }
 
+    /// <summary>
+    /// A message whose moment came and went while nothing was running is delivered while it is still timely, which is
+    /// the near side of the deployment's lateness bound.
+    /// </summary>
+    [Fact]
+    public async Task DeliverAsync_AHeldSendReachedInsideTheLatenessBound_IsStillDelivered()
+    {
+        // Arrange
+        var context = new DeliveryContext(allowedLateness: TimeSpan.FromHours(8));
+        var claimed = await context.ClaimHeldAsync(dueAt: ClaimedAt, reachedAt: ClaimedAt.AddHours(8));
+        context.Transmit = (request, envelope, _) =>
+        {
+            AcceptEveryRecipient(request, envelope);
+
+            return Task.FromResult(new MailTransmission(MailTransmissionOutcome.Accepted, 250));
+        };
+
+        // Act
+        var result = await context.DeliverAsync(claimed, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailOutboxDeliveryOutcome.Sent, result.Outcome);
+        Assert.Equal(OutgoingEmailStage.Sent, context.Store.Read(claimed.Record.Id).Stage);
+    }
+
+    /// <summary>
+    /// Past that bound the message is not sent unasked. It ends where an operator can see it and says why, because what
+    /// to do about a message that missed its moment is a person's decision rather than a bound's.
+    /// </summary>
+    [Fact]
+    public async Task DeliverAsync_AHeldSendReachedPastTheLatenessBound_IsRefusedWithoutTransmitting()
+    {
+        // Arrange
+        var context = new DeliveryContext(allowedLateness: TimeSpan.FromHours(8));
+        var claimed = await context.ClaimHeldAsync(dueAt: ClaimedAt, reachedAt: ClaimedAt.AddHours(8).AddSeconds(1));
+        var transmitted = false;
+        context.Transmit = (_, _, _) =>
+        {
+            transmitted = true;
+
+            return Task.FromResult(new MailTransmission(MailTransmissionOutcome.Accepted, 250));
+        };
+
+        // Act
+        var result = await context.DeliverAsync(claimed, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailOutboxDeliveryOutcome.MissedItsDueTime, result.Outcome);
+        Assert.False(transmitted);
+        var record = context.Store.Read(claimed.Record.Id);
+        Assert.Equal(OutgoingEmailStage.Refused, record.Stage);
+        Assert.Equal(MailFathomErrorCode.OutgoingEmailDueTimeMissed, record.LastFailure);
+        Assert.False(context.Store.IsLeased(claimed.Record.Id));
+    }
+
+    /// <summary>A send that named no time is never late, so however long anything else has held it, it still leaves.</summary>
+    [Fact]
+    public async Task DeliverAsync_ASendThatNamedNoTimeHeldPastTheBound_IsNotTreatedAsLate()
+    {
+        // Arrange
+        var context = new DeliveryContext(allowedLateness: TimeSpan.FromMinutes(1));
+        var claimed = await context.ClaimAsync("anna@example.test");
+        context.Advance(TimeSpan.FromMinutes(5));
+        context.Transmit = (request, envelope, _) =>
+        {
+            AcceptEveryRecipient(request, envelope);
+
+            return Task.FromResult(new MailTransmission(MailTransmissionOutcome.Accepted, 250));
+        };
+
+        // Act
+        var result = await context.DeliverAsync(claimed, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailOutboxDeliveryOutcome.Sent, result.Outcome);
+    }
+
     /// <summary>Assembles one attempt over an in-memory outbox, with the exchange the test writes.</summary>
     private sealed class DeliveryContext
     {
@@ -506,7 +584,8 @@ public sealed class MailOutboxDeliveryTests
             int maxAttempts = 5,
             MailDeliveryCapabilities? capabilities = null,
             bool storeContent = true,
-            string? sender = "me@example.test")
+            string? sender = "me@example.test",
+            TimeSpan? allowedLateness = null)
         {
             this.Store = new InMemoryOutgoingEmailStore(timeProvider: this.clock);
             this.Session = new ScriptedMailDeliverySession(
@@ -544,7 +623,8 @@ public sealed class MailOutboxDeliveryTests
                     TimeSpan.FromMinutes(7),
                     maxAttempts,
                     TimeSpan.FromMinutes(1),
-                    TimeSpan.FromHours(1)),
+                    TimeSpan.FromHours(1),
+                    allowedLateness ?? TimeSpan.FromHours(8)),
                 this.clock);
         }
 
@@ -562,6 +642,25 @@ public sealed class MailOutboxDeliveryTests
         internal async Task<ClaimedOutgoingEmail> ClaimAsync(params string[] recipientAddresses)
         {
             this.Store.Publish(RequestFor(recipientAddresses), RawMime.Length);
+
+            var claimed = await this.Store.ClaimAsync(
+                OutgoingEmailClaimRequest.Create(Account, batchSize: 10, TimeSpan.FromMinutes(10)),
+                CancellationToken.None);
+
+            return claimed.Single();
+        }
+
+        /// <summary>Claims a send that was written for a named time, at the instant the pass reaches it.</summary>
+        /// <remarks>
+        /// The clock is moved rather than the record being made claimable another way, because what a lateness test is
+        /// about is the distance between the time the message was written for and the time a pass got to it.
+        /// </remarks>
+        internal async Task<ClaimedOutgoingEmail> ClaimHeldAsync(DateTimeOffset dueAt, DateTimeOffset reachedAt)
+        {
+            this.Store.Publish(
+                RequestFor(["anna@example.test"]).HeldUntil(ZonedInstant.At(dueAt)),
+                RawMime.Length);
+            this.clock.SetUtcNow(reachedAt);
 
             var claimed = await this.Store.ClaimAsync(
                 OutgoingEmailClaimRequest.Create(Account, batchSize: 10, TimeSpan.FromMinutes(10)),

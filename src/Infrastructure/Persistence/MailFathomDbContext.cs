@@ -11,10 +11,12 @@ using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Filing;
+using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Mutations;
+using MailFathom.Domain.Scheduling;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -266,6 +268,24 @@ internal sealed class MailFathomDbContext : DbContext
     /// <summary>The index the same join falls back to where the server named no placement to look the copy up by.</summary>
     internal const string OutgoingEmailFilingMessageIdIndexName = "ix_outgoing_email_filings_message_id";
 
+    /// <summary>The uniqueness a declaration that a message repeats rests on, which is the same identity a send's is.</summary>
+    /// <remarks>
+    /// A caller that retried the command it declared a repetition with reads back the declaration it already made,
+    /// rather than declaring a second one that would send everything twice for as long as both stood.
+    /// </remarks>
+    internal const string RecurringSendIdentityUniqueIndexName = "ix_recurring_sends_identity";
+
+    /// <summary>The index the recurring dispatch reads the declarations through, filtered to the ones still producing occurrences.</summary>
+    internal const string RecurringSendActiveIndexName = "ix_recurring_sends_active";
+
+    /// <summary>The foreign key that removes a declaration's recipients with the declaration.</summary>
+    /// <remarks>Named for the reason the outgoing keys are: EF's composed name would be truncated at 63 characters and permanent.</remarks>
+    internal const string RecurringSendRecipientForeignKeyName = "fk_recurring_send_recipients_sends";
+
+    /// <summary>The foreign key that removes the stored draft with the declaration it belongs to.</summary>
+    /// <remarks>Named for the reason above: the composed name would be truncated and permanent.</remarks>
+    internal const string RecurringSendDraftForeignKeyName = "fk_recurring_send_drafts_sends";
+
     /// <summary>The uniqueness a job's idempotency rests on, which spans every state a row can reach.</summary>
     internal const string JobIdentityUniqueIndexName = "ix_jobs_identity";
 
@@ -371,6 +391,13 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<OutgoingEmailFilingEntity> OutgoingEmailFilings =>
         this.Set<OutgoingEmailFilingEntity>();
+
+    internal DbSet<RecurringSendEntity> RecurringSends => this.Set<RecurringSendEntity>();
+
+    internal DbSet<RecurringSendRecipientEntity> RecurringSendRecipients =>
+        this.Set<RecurringSendRecipientEntity>();
+
+    internal DbSet<RecurringSendDraftEntity> RecurringSendDrafts => this.Set<RecurringSendDraftEntity>();
 
     internal DbSet<MailboxMutationAuditEntryEntity> MailboxMutationAuditEntries =>
         this.Set<MailboxMutationAuditEntryEntity>();
@@ -769,6 +796,9 @@ internal sealed class MailFathomDbContext : DbContext
         ConfigureOutgoingEmailRecipient(modelBuilder);
         ConfigureOutgoingEmailContent(modelBuilder);
         ConfigureOutgoingEmailFiling(modelBuilder);
+        ConfigureRecurringSend(modelBuilder);
+        ConfigureRecurringSendRecipient(modelBuilder);
+        ConfigureRecurringSendDraft(modelBuilder);
         ConfigureMailboxMutationAuditEntry(modelBuilder);
         ConfigureMailAnsweringAuditEntry(modelBuilder);
         ConfigureMailRuleExecution(modelBuilder);
@@ -1410,6 +1440,11 @@ internal sealed class MailFathomDbContext : DbContext
             entity.Property(message => message.RequesterOrigin).HasConversion<string>().HasMaxLength(64).IsRequired();
             entity.Property(message => message.Stage).HasConversion<string>().HasMaxLength(64).IsRequired();
 
+            // The zone the due time was written in, bounded by what the IANA database can name. It is stored beside the
+            // instant rather than derived from it, because a message written for nine in the morning was written in a
+            // place, and only the zone says which nine that was after the offset there changes.
+            entity.Property(message => message.DueZoneId).HasMaxLength(ZonedInstant.MaximumZoneIdLength);
+
             // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
             entity.Property(message => message.ConcurrencyVersion).IsRowVersion();
 
@@ -1443,6 +1478,109 @@ internal sealed class MailFathomDbContext : DbContext
 
             entity.HasIndex(message => new { message.RecordedAt, message.MailboxAccountId })
                 .HasDatabaseName(OutgoingEmailPeriodUsageIndexName);
+        });
+
+    /// <summary>Declares the messages an owner asked to have sent again, and the repetitions they named.</summary>
+    /// <remarks>
+    /// <para>
+    /// A table rather than a section of the deployment's configuration, because a declaration is state: it is made by
+    /// the mailbox's owner out of a message they wrote, and it is stopped by them. The identity it is refused a
+    /// duplicate of is the sending account and the authoring act, exactly as an outgoing record's is and for the same
+    /// reason — a retried command must read back what it already declared rather than double what a mailbox sends.
+    /// </para>
+    /// <para>
+    /// A stopped declaration keeps its row. What it last did and when it was stopped are the account of a mailbox that
+    /// used to send something every week, and deleting the row would make that indistinguishable from a repetition
+    /// nobody ever declared.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureRecurringSend(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<RecurringSendEntity>(entity =>
+        {
+            entity.ToTable("recurring_sends");
+            entity.HasKey(declaration => declaration.Id);
+            entity.Property(declaration => declaration.Id).ValueGeneratedNever();
+            entity.Property(declaration => declaration.MailboxAccountId).HasMaxLength(128).IsRequired();
+            entity.Property(declaration => declaration.RequesterIdentity)
+                .HasMaxLength(OutgoingEmailRequester.MaximumIdentityLength)
+                .IsRequired();
+            entity.Property(declaration => declaration.Schedule)
+                .HasMaxLength(RecurringSend.MaximumScheduleLength)
+                .IsRequired();
+
+            // Stored as text for the reason the outgoing record's origin is: it stays readable in an ad-hoc audit query
+            // and survives any later reordering of the enum.
+            entity.Property(declaration => declaration.RequesterOrigin)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .IsRequired();
+
+            // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
+            entity.Property(declaration => declaration.ConcurrencyVersion).IsRowVersion();
+
+            entity.HasIndex(declaration => new
+            {
+                declaration.MailboxAccountId,
+                declaration.RequesterOrigin,
+                declaration.RequesterIdentity,
+            })
+                .IsUnique()
+                .HasDatabaseName(RecurringSendIdentityUniqueIndexName);
+
+            // Filtered to the declarations that still produce occurrences and ordered the way the dispatch reads them,
+            // so a pass over what repeats is a range read rather than a scan over every repetition ever declared.
+            entity.HasIndex(declaration => declaration.DeclaredAt)
+                .HasDatabaseName(RecurringSendActiveIndexName)
+                .HasFilter($"\"{nameof(RecurringSendEntity.CancelledAt)}\" IS NULL");
+        });
+
+    /// <summary>Declares the people every occurrence of one recurring send is offered to.</summary>
+    /// <remarks>
+    /// A separate table for the reason an outgoing record's recipients are one, minus the state: nothing is ever
+    /// answered about a declaration's recipient, because a declaration transmits nothing. What the rows hold is the
+    /// envelope every occasion is built from, in the order the declaration named them, which is also the order the
+    /// occasion's composed message writes its headers in.
+    /// </remarks>
+    private static void ConfigureRecurringSendRecipient(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<RecurringSendRecipientEntity>(entity =>
+        {
+            entity.ToTable("recurring_send_recipients");
+            entity.HasKey(recipient => new { recipient.RecurringSendId, recipient.Ordinal });
+            entity.Property(recipient => recipient.Address)
+                .HasMaxLength(OutgoingRecipient.MaximumAddressLength)
+                .IsRequired();
+
+            entity.Property(recipient => recipient.Role).HasConversion<string>().HasMaxLength(64).IsRequired();
+            entity.Property(recipient => recipient.ConcurrencyVersion).IsRowVersion();
+
+            entity.HasOne(recipient => recipient.RecurringSend)
+                .WithMany(declaration => declaration.Recipients)
+                .HasForeignKey(recipient => recipient.RecurringSendId)
+                .HasConstraintName(RecurringSendRecipientForeignKeyName)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+    /// <summary>Declares the draft every occurrence of one recurring send is composed from.</summary>
+    /// <remarks>
+    /// The same one-to-one arrangement the outgoing content table uses, and for the same reason: the bytes stay out of
+    /// every query that reads what repeats. What differs is that nothing transmits these bytes — each occasion composes
+    /// a message of its own from them — and the cascade is the erasure obligation, so a draft cannot outlive the
+    /// declaration that says who it was for.
+    /// </remarks>
+    private static void ConfigureRecurringSendDraft(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<RecurringSendDraftEntity>(entity =>
+        {
+            entity.ToTable("recurring_send_drafts");
+            entity.HasKey(draft => draft.RecurringSendId);
+            entity.Property(draft => draft.RecurringSendId).ValueGeneratedNever();
+            entity.Property(draft => draft.DraftMime).IsRequired();
+            entity.Property(draft => draft.Sha256Hash).HasMaxLength(32).IsRequired();
+
+            entity.HasOne(draft => draft.RecurringSend)
+                .WithOne(declaration => declaration.Draft)
+                .HasForeignKey<RecurringSendDraftEntity>(draft => draft.RecurringSendId)
+                .HasConstraintName(RecurringSendDraftForeignKeyName)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
     /// <summary>Declares the people one outgoing email is offered to, and what the server said about each.</summary>

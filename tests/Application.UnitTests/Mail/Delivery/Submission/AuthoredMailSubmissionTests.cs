@@ -6,9 +6,11 @@ using System.Text;
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Application.Persistence;
@@ -19,6 +21,7 @@ using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
+using MailFathom.Domain.Scheduling;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -398,6 +401,75 @@ public sealed class AuthoredMailSubmissionTests
         .Single(call => call.GetMethodInfo().Name == nameof(IAuthoredEmailComposer.Compose))
         .GetArguments()[2]!;
 
+    /// <summary>
+    /// A message written for a time that has already gone is refused where the author is still present to be told,
+    /// rather than sent at once — the two readings of a past time are opposite and a system that guessed would
+    /// sometimes send a message somebody was still writing.
+    /// </summary>
+    [Fact]
+    public async Task SubmitAsync_ADueTimeThatHasAlreadyPassed_IsRefusedBeforeAnythingIsComposed()
+    {
+        // Arrange
+        var store = new InMemoryOutgoingEmailStore();
+        var submission = SubmissionOver(store, out var composer, out var signal);
+        var request = RequestTo("anna@example.test") with
+        {
+            DueAt = ZonedInstant.At(Recorded),
+        };
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailSubmissionRefusedException>(
+            () => submission.SubmitAsync(request, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.AuthoredMailScheduleRefused, refusal.ErrorCode);
+        Assert.Empty(store.OpenRequests);
+        Assert.Equal(0, signal.Depth);
+        composer.DidNotReceiveWithAnyArgs().Compose(default!, default!, default!, default!);
+    }
+
+    /// <summary>The refusal states the rule and never repeats the time, the address, or anything else the caller sent.</summary>
+    [Fact]
+    public async Task SubmitAsync_ADueTimeThatHasAlreadyPassed_SaysNothingAboutTheMessage()
+    {
+        // Arrange
+        var submission = SubmissionOver(new InMemoryOutgoingEmailStore(), out _, out _);
+        var request = RequestTo("anna@example.test") with
+        {
+            Subject = "Quarterly figures",
+            DueAt = ZonedInstant.At(Recorded.AddDays(-1)),
+        };
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailSubmissionRefusedException>(
+            () => submission.SubmitAsync(request, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.DoesNotContain("anna", refusal.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Quarterly", refusal.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("2026", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A time still to come is written onto the record, which is what makes the send unclaimable until it arrives.</summary>
+    [Fact]
+    public async Task SubmitAsync_ADueTimeStillToCome_RecordsTheSendHeldUntilIt()
+    {
+        // Arrange
+        var store = new InMemoryOutgoingEmailStore();
+        var submission = SubmissionOver(store, out _, out var signal);
+        var dueAt = ZonedInstant.At(Recorded.AddHours(9));
+        var request = RequestTo("anna@example.test") with { DueAt = dueAt };
+
+        // Act
+        var record = await submission.SubmitAsync(request, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(dueAt, record.DueAt);
+        Assert.Equal(dueAt.Instant, record.AvailableAt);
+        Assert.True(record.IsWaitingAt(Recorded));
+        Assert.Equal(0, signal.Depth);
+    }
+
     private static MailSubmissionRequest RequestTo(string address) => new()
     {
         Account = MailAccountSelector.For(Account),
@@ -441,9 +513,13 @@ public sealed class AuthoredMailSubmissionTests
                     new PersistenceConcurrencyOptions(),
                     new FakeTimeProvider()),
                 signal,
+                Substitute.For<IJobStore>(),
+                Substitute.For<IOutboxOperationStore>(),
                 authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
-                OutgoingMailGovernors.Permitting()),
-            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend));
+                OutgoingMailGovernors.Permitting(),
+                new FakeTimeProvider(Recorded)),
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
+            new FakeTimeProvider(Recorded));
     }
 
     /// <summary>A composer that produces a message from whatever it is handed, so a test says nothing about MIME.</summary>
