@@ -376,8 +376,9 @@ untested. [Mailbox queries](mailbox-queries.md#what-a-summary-carries) records w
 Six parts of it are worth reading before a caller writes against them:
 
 - **`senderVerification` is two answers, never one.** `senderAddress` beside it is a claim the email wrote about itself,
-  and nothing on the way to a listing verified it. `authorAuthentication` is what the receiving mail server established
-  about the author the email displays — `authenticated`, `failed`, or `notEstablished` — and `deploymentTrust` is
+  and nothing on the way to a listing verified it. `authorAuthentication` is what was established about the author the
+  email displays — by the receiving mail server, or, where that server wrote nothing, by this deployment verifying the
+  message's own DKIM signatures — `authenticated`, `failed`, or `notEstablished`, and `deploymentTrust` is
   whether this deployment's own trusted-sender configuration names that author — `trusted` or `unknown`. Neither is
   derived from the other and no field merges them, because **`authenticated` beside `unknown` is the ordinary state of
   legitimate mail from a correspondent nobody has named** and must not read as a finding against the message. `unknown`
@@ -529,13 +530,14 @@ in it.
 | `remoteFlags` | The flags a server last showed, and when they were read |
 | `thread` | The conversation this email belongs to, or `null` when nothing has assembled one for it |
 
-Nine parts of it are worth reading before a caller writes against them:
+Ten parts of it are worth reading before a caller writes against them:
 
 - **The verdict is beside the headers and its evidence is inside them.** `senderVerification` is the pair a listing, a
   search match, and a citation all publish, in one shape, so a client reads one thing everywhere. What only this read
   adds is `headers.senderAuthentication`: `authenticatedDomain`, the domain that actually authenticated;
   `displayedAuthorDomain`, the domain the `From` header wrote; `authenticatedBy`, the check that established the first —
-  `dkim`, `spf`, or `none`; and `dmarc`, the result the trusted server reported. Both domains are published in the
+  `dkim`, `spf`, or `none`; `dmarc`, the result the trusted server reported; and `verdictSource`, naming which of the
+  two readings produced all of it. Both domains are published in the
   comparison form MailFathom stores — upper-cased, and an internationalized name in its ASCII form. **A difference
   between them is not by itself a spoofed author:** `authenticatedDomain` is whichever identity authenticated the
   transport, and `dkim` is reported where both checks produced one, so an email sent through a provider that signs as
@@ -544,6 +546,15 @@ Nine parts of it are worth reading before a caller writes against them:
   authenticated rather than against the one published here. A `null` domain is an ordinary
   outcome rather than missing data: nothing authenticated, or the email wrote no usable `From` mailbox. Nothing here is
   evaluated on the read path, and an email whose raw MIME was never stored carries the same stored verdict as any other.
+- **`verdictSource` says who reached the verdict, and it changes what the other fields can hold.** `receivingServer` is
+  the reading this shape was written for: a trusted `Authentication-Results` header, or nothing found at all, which is
+  reported the same way because both are the receiving server's answer. `localVerification` means no such header was
+  found and MailFathom verified the message's own DKIM signatures against the keys their domains publish, which is the
+  fallback a deployment whose server writes no header depends on. On that verdict `authenticatedBy` is `dkim` or `none`
+  and never `spf`, because no SPF check is attempted, and `dmarc` is always `notReported`, because no policy is looked
+  up — neither absence is evidence about the message. A caller that treats a verdict as the receiving infrastructure's
+  own statement reads this field first; one that only asks whether the displayed author authenticated can ignore it,
+  since `senderVerification.authorAuthentication` is reached the same way from either source.
 - **The authorship reading is beside its evidence, and only this read carries the evidence.** `machineAuthorship` is the
   band and the number a listing, a search match, and a citation all publish. What only this read adds is
   `authorshipEvidence`: `signals`, naming what the text carried, strongest first; and `profileRevision`, an opaque

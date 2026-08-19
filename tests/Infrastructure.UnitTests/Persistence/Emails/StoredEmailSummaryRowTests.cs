@@ -107,6 +107,7 @@ public sealed class StoredEmailSummaryRowTests
         DisplayedAuthorDomain: null,
         SenderAuthenticationMethod.None,
         DmarcOutcome.NotReported,
+        SenderAuthenticationSource.ReceivingServer,
         band,
         likelihood,
         MachineAuthorshipSignals.HiddenCharacters,

@@ -440,7 +440,7 @@ comparison, operator, and function checks below are made against.
 | `senderDomain` | text | The part of the sender's address after the at sign; absent when there is no sender |
 | `recipientAddresses` | text set | The addresses the email was sent to and copied to, in their comparison form |
 | `recipientDomains` | text set | The distinct domains of every recipient address |
-| `authorAuthentication` | text | What the receiving server established about the author the email displays — `authenticated`, `failed`, or `notEstablished` |
+| `authorAuthentication` | text | What was established about the author the email displays — `authenticated`, `failed`, or `notEstablished`. Reached by the receiving server, or by local DKIM verification where that server wrote nothing; a rule reads the conclusion and not which of the two produced it |
 | `senderTrust` | text | Whether this deployment recognizes that author — `trusted` or `unknown` |
 | `receivedAt` | timestamp | When the last receiving hop recorded the email; absent when no hop recorded one |
 | `sentAt` | timestamp | When the sender's client stamped the email; absent when it carries no such header |

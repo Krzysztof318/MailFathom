@@ -45,7 +45,7 @@
   description: How a credential that arrived in a mailbox is kept out of a provider's context window, a retrieval snippet, and a log line.
 - name: Sender authentication
   href: sender-authentication.md
-  description: How the domain that actually sent a message is established from what the receiving server authenticated rather than from the From header anybody can write, and whether the message's author is one this deployment recognizes.
+  description: How the domain that actually sent a message is established from what the receiving server authenticated — or, where it wrote nothing, from verifying the message's own DKIM signatures — rather than from the From header anybody can write, and whether the message's author is one this deployment recognizes.
 - name: Machine authorship
   href: machine-authorship.md
   description: How much a message's own text reads as machine written, read from characters the message already carries — including the invisible ones a payload is hidden in — and published as an observation rather than a warning.

@@ -27,4 +27,25 @@ public sealed class EmailMimeExtractionOptions
     /// subject and participant addresses that share the same document.
     /// </remarks>
     public int MaxExtractedTextCharacters { get; set; } = 100_000;
+
+    /// <summary>Gets or sets whether extraction verifies a message's own DKIM signatures where no trusted server did.</summary>
+    /// <remarks>
+    /// <para>
+    /// It defaults to on because the deployment it exists for is one whose receiving server writes no
+    /// <c>Authentication-Results</c> header at all. There, the sender verdict is not established on every message and
+    /// the trusted-sender list has no identity to match against, so this is not an extra check over a working verdict —
+    /// it is the only thing between that mailbox and a verdict that says nothing.
+    /// </para>
+    /// <para>
+    /// It is a fallback and never a supplement: an account whose server does write the header goes on believing that
+    /// server and verifies nothing here, whatever this says.
+    /// </para>
+    /// <para>
+    /// Turning it off is what an operator who wants no egress at all from the extraction path sets, and it returns
+    /// exactly the behaviour of a deployment that never had it. What is on the wire when it is on is
+    /// <c>&lt;selector&gt;._domainkey.&lt;domain&gt;</c> — a name the signing domain published to be asked for, resolved
+    /// when a message is stored rather than when one is read.
+    /// </para>
+    /// </remarks>
+    public bool VerifyDkimLocally { get; set; } = true;
 }

@@ -25,6 +25,18 @@
           "OpenTelemetry.Extensions.Hosting": "1.15.3"
         }
       },
+      "BouncyCastle.Cryptography": {
+        "type": "Direct",
+        "requested": "[2.6.2, )",
+        "resolved": "2.6.2",
+        "contentHash": "7oWOcvnntmMKNzDLsdxAYqApt+AjpRpP2CShjMfIa3umZ42UQMvH0tl1qAliYPNYO6vTdcGMqnRrCPmsfzTI1w=="
+      },
+      "DnsClient": {
+        "type": "Direct",
+        "requested": "[1.8.0, )",
+        "resolved": "1.8.0",
+        "contentHash": "RRwtaCXkXWsx0mmsReGDqCbRLtItfUbkRJlet1FpdciVhyMGKcPd57T1+8Jki9ojHlq9fntVhXQroOOgRak8DQ=="
+      },
       "HtmlSanitizer": {
         "type": "Direct",
         "requested": "[9.1.974, )",
@@ -256,11 +268,6 @@
         "dependencies": {
           "AngleSharp": "[1.5.0, 2.0.0)"
         }
-      },
-      "BouncyCastle.Cryptography": {
-        "type": "Transitive",
-        "resolved": "2.6.2",
-        "contentHash": "7oWOcvnntmMKNzDLsdxAYqApt+AjpRpP2CShjMfIa3umZ42UQMvH0tl1qAliYPNYO6vTdcGMqnRrCPmsfzTI1w=="
       },
       "ExtendedNumerics.BigDecimal": {
         "type": "Transitive",

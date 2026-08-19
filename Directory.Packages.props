@@ -33,6 +33,15 @@
          AngleSharp 0.17.1 pin the 9.0 line carried, so nothing here forecloses referencing AngleSharp directly, and
          AngleSharp 1.6.0 publishes a net10.0 target of its own. -->
     <PackageVersion Include="HtmlSanitizer" Version="9.1.974" />
+    <!-- The DNS client the local DKIM verification resolves published keys with. The platform offers no TXT lookup at
+         all — System.Net.Dns resolves addresses and nothing else — so the alternative was a hand-written resolver
+         parsing untrusted wire data. It is Apache-2.0, carries no dependencies of its own on its net8.0 target, and
+         reads the operating system's own resolver configuration rather than naming a nameserver of its own. -->
+    <PackageVersion Include="DnsClient" Version="1.8.0" />
+    <!-- MimeKit brings this in transitively and the DKIM key locator names one of its types, because that is what
+         MimeKit's locator contract returns. Pinned directly for the reason MimeKit itself is: a version the code
+         compiles against is decided here rather than inherited from another package's dependency range. -->
+    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.2" />
     <PackageVersion Include="MailKit" Version="4.17.0" />
     <PackageVersion Include="MimeKit" Version="4.17.0" />
     <PackageVersion Include="Microsoft.Agents.AI" Version="1.15.0" />

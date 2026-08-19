@@ -1017,7 +1017,7 @@ write. Nothing is fetched twice, and no extraction path can select a folder or s
 | Subject | `Subject` | Decoded; control characters removed so it cannot span lines it never spanned. |
 | Thread identifiers | `Message-ID`, `In-Reply-To`, `References` | Angle brackets and the whitespace around them removed; `References` keeps header order and collapses duplicates. |
 | Attachment summary | the message structure | Counts, total decoded size, inline-resource count, three markers, and one record per attachment. |
-| Sender-authentication verdict | the trusted `Authentication-Results` header | What the receiving server established about who sent the message. Only the header carrying the account's configured authserv-id is read, and only the topmost such header; everything else yields the not-established verdict. [Sender authentication](sender-authentication.md) holds the whole rule. |
+| Sender-authentication verdict | the trusted `Authentication-Results` header, or the message's own DKIM signatures | What was established about who sent the message, and which of the two readings established it. Only the header carrying the account's configured authserv-id is read, and only the topmost such header. Where no such header is found, extraction verifies the message's DKIM signatures itself against the keys their domains publish, which is the one step of a run that queries DNS; the verdict records which of the two readings produced it. [Sender authentication](sender-authentication.md) holds the whole rule. |
 | Automation claim | `List-Id`, `List-Post`, `List-Unsubscribe`, `Auto-Submitted`, `Precedence` | What the message says about itself: a list posting, something submitted automatically, or bulk. It is read for [contact collection](contacts.md#collecting-contacts-from-arriving-mail), which refuses the whole message rather than one of its addresses, and it is deliberately not persisted — it is a claim one message makes rather than a property of the mail, and a reader wanting it has the headers. |
 
 An address is normalized to an upper-cased comparison form and keeps what the message wrote alongside it, and that
@@ -1511,7 +1511,7 @@ the day it arrived. Two commands answer that, because the properties have two so
 **Which one a property needs is decided by where its value comes from.** A property the stored payload already carries —
 the [sender-authentication
 verdict](../architecture/stored-email-schema.md#the-sender-authentication-verdict) is the worked example, read out of
-the headers a receiving server wrote — is re-derivable from the MIME on this deployment's own disk. A property only the mailbox knows
+the headers and signatures the message itself carries — is re-derivable from the MIME on this deployment's own disk. A property only the mailbox knows
 — the [remote flags and keywords](#reconciling-against-the-server), the internal date, anything a later release starts
 recording from the envelope — exists nowhere locally, so nothing short of fetching the message again produces it.
 

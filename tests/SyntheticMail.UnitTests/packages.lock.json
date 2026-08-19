@@ -101,11 +101,6 @@
           "xunit.v3.core.mtp-v2": "[3.2.2]"
         }
       },
-      "BouncyCastle.Cryptography": {
-        "type": "Transitive",
-        "resolved": "2.6.2",
-        "contentHash": "7oWOcvnntmMKNzDLsdxAYqApt+AjpRpP2CShjMfIa3umZ42UQMvH0tl1qAliYPNYO6vTdcGMqnRrCPmsfzTI1w=="
-      },
       "Castle.Core": {
         "type": "Transitive",
         "resolved": "5.1.1",
@@ -300,6 +295,12 @@
           "MimeKit": "[4.17.0, )",
           "System.CommandLine": "[2.0.10, )"
         }
+      },
+      "BouncyCastle.Cryptography": {
+        "type": "CentralTransitive",
+        "requested": "[2.6.2, )",
+        "resolved": "2.6.2",
+        "contentHash": "7oWOcvnntmMKNzDLsdxAYqApt+AjpRpP2CShjMfIa3umZ42UQMvH0tl1qAliYPNYO6vTdcGMqnRrCPmsfzTI1w=="
       },
       "Microsoft.Extensions.Configuration": {
         "type": "CentralTransitive",

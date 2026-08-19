@@ -37,6 +37,7 @@ public sealed record SenderAuthenticationEvidence
     {
         AuthenticatedBy = SenderAuthenticationMethod.None,
         Dmarc = DmarcOutcome.NotReported,
+        Source = SenderAuthenticationSource.ReceivingServer,
     };
 
     /// <summary>Gets the domain that authenticated, or <see langword="null" /> where none did.</summary>
@@ -54,4 +55,13 @@ public sealed record SenderAuthenticationEvidence
 
     /// <summary>Gets the DMARC result the trusted header reported, or that it reported none.</summary>
     public required DmarcOutcome Dmarc { get; init; }
+
+    /// <summary>Gets who reached the verdict this is the evidence for.</summary>
+    /// <remarks>
+    /// It is what tells a reader how much the rest of this is worth. A receiving server observed the connection the
+    /// message arrived on; a verdict reached here has the signed bytes and a published key and nothing else, so
+    /// <see cref="Dmarc" /> is never reported and no SPF identity is ever named on one. Neither absence is a finding
+    /// about the message.
+    /// </remarks>
+    public required SenderAuthenticationSource Source { get; init; }
 }

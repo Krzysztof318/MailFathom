@@ -76,6 +76,7 @@ using MailFathom.Infrastructure.Embeddings;
 using MailFathom.Infrastructure.Folders;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.Attachments;
+using MailFathom.Infrastructure.Mail.Dkim;
 using MailFathom.Infrastructure.Mail.MailKit;
 using MailFathom.Infrastructure.Mail.MailKit.Delivery;
 using MailFathom.Infrastructure.Mail.MailKit.Writes;
@@ -109,6 +110,7 @@ using MailFathom.Infrastructure.Spam;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -466,13 +468,36 @@ public static class ServiceCollectionExtensions
         // message carried rather than the words a scanner rewrote in it. It is wrapped unconditionally as well: a
         // deployment that turned the reading off resolves the profile that reads nothing, which records the same
         // not-assessed state as a message with no readable body.
+        // The DNS client and the record cache are singletons because what they hold describes the process rather than a
+        // work unit: a cache per scope would ask the same signing domain for the same selector once per folder run, and
+        // a client per scope would rebuild the resolver configuration each time. The client names no nameserver of its
+        // own, so a deployment that routes DNS through its own resolver is followed rather than bypassed.
+        // The resolver is registered only where nothing supplied one, so the one place this system reaches the network
+        // to judge a sender can be replaced without the parse changing — which is what a test that must not resolve
+        // anything relies on.
+        services.AddSingleton(provider => new DkimPublicKeyRecordCache(provider.GetRequiredService<TimeProvider>()));
+        services.TryAddSingleton<IDkimPublicKeyRecordResolver>(provider => new DnsDkimPublicKeyRecordResolver(
+            DnsDkimPublicKeyRecordResolver.CreateLookupClient(),
+            provider.GetRequiredService<DkimPublicKeyRecordCache>(),
+            provider.GetRequiredService<TimeProvider>()));
         services.AddScoped(provider =>
         {
+            // The local verification is handed to the parse only where this deployment verifies for itself, so a
+            // deployment that switched it off makes no lookup rather than making one whose result is discarded. Where
+            // it is on it is still a fallback: the parse asks it only for a message no trusted header was found for.
+            var extractionOptions = provider.GetRequiredService<EmailMimeExtractionOptions>();
+            var localSenderVerifier = extractionOptions.VerifyDkimLocally
+                ? new DkimLocalSenderVerifier(
+                    provider.GetRequiredService<IDkimPublicKeyRecordResolver>(),
+                    provider.GetRequiredService<TimeProvider>())
+                : null;
+
             IEmailMimeReader reader = new MachineAuthorshipEvaluatingEmailMimeReader(
                 new SenderTrustEvaluatingEmailMimeReader(
                     new MimeKitEmailMimeReader(
-                        provider.GetRequiredService<EmailMimeExtractionOptions>(),
-                        provider.GetRequiredService<ITrustedAuthenticationAuthorityReader>()),
+                        extractionOptions,
+                        provider.GetRequiredService<ITrustedAuthenticationAuthorityReader>(),
+                        localSenderVerifier),
                     provider.GetRequiredService<ISenderTrustPolicyReader>()),
                 provider.GetRequiredService<MachineAuthorshipProfile>());
 

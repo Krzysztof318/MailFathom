@@ -115,14 +115,17 @@ fact whether it named one email or ten.
 | `RemoteFlags` | The flags a server last showed, and when they were read |
 | `Thread` | The conversation this email belongs to, with the other messages named rather than reproduced, or absent when nothing has assembled one |
 | `SenderVerification` | What was established about the author the message displays, and what this deployment made of them |
-| `SenderAuthenticationEvidence` | What that conclusion was reached from: the authenticated domain, the displayed author's domain, the check that established the first, and the DMARC result |
+| `SenderAuthenticationEvidence` | What that conclusion was reached from: the authenticated domain, the displayed author's domain, the check that established the first, the DMARC result, and which reading produced all of it |
 
 ### The sender verdict is read from the row, and only here is its evidence published
 
 Both values come from the summary the read already loaded rather than from the parse, because both are conclusions
 reached when the message was stored. A read evaluates nothing: it resolves no DNS, verifies no signature, and does not
-re-read the `Authentication-Results` header the verdict came from. That holds for a message whose raw MIME was never
-stored too — the body says why there is none, and the verdict beside it is the same one a listing publishes.
+re-read the `Authentication-Results` header the verdict came from. That is worth stating twice now that extraction may
+do all three — verifying a message's own DKIM signatures where its server wrote no verdict is a step of storing a
+message, never of answering a call, so no read this page describes puts anything on the wire. The evidence names which
+of the two readings produced the verdict, so a caller weighing one never has to infer it from what is missing. That
+holds for a message whose raw MIME was never stored too — the body says why there is none, and the verdict beside it is the same one a listing publishes.
 
 The verdict pair is what every read tool publishes. The evidence is what only this one does, because it is how a reader
 judges a verdict rather than what a reader acts on, and a listing exists to let somebody recognize a message rather than

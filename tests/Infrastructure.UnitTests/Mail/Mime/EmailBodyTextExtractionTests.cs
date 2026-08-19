@@ -442,7 +442,7 @@ public sealed class EmailBodyTextExtractionTests
 
     /// <summary>Builds a reader that believes no server, because nothing here is about sender authentication.</summary>
     private static MimeKitEmailMimeReader CreateReader(EmailMimeExtractionOptions options) =>
-        new(options, Substitute.For<ITrustedAuthenticationAuthorityReader>());
+        new(options, Substitute.For<ITrustedAuthenticationAuthorityReader>(), localSenderVerifier: null);
 
     private static async Task<ExtractedEmailText> ExtractTextAsync(
         RemoteEmailContent content,

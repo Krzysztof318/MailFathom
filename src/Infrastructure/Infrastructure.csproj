@@ -7,6 +7,12 @@
     <!-- The HTML sanitizer for message bodies. It is referenced by this project alone, so the AngleSharp stack it
          carries stays inside the adapter that owns sanitization and reaches no other boundary. -->
     <PackageReference Include="HtmlSanitizer" />
+    <!-- The DNS lookups the local DKIM verification makes. Referenced by this project alone, so the resolver stays
+         behind the application port that names the one place this system reaches the network to judge a sender. -->
+    <PackageReference Include="DnsClient" />
+    <!-- Named directly because the DKIM key locator declares the key type MimeKit's locator contract returns. It is the
+         one type of this package MailFathom compiles against, and it never leaves the adapter that verifies signatures. -->
+    <PackageReference Include="BouncyCastle.Cryptography" />
     <PackageReference Include="MailKit" />
     <!-- Referenced directly rather than relied on through MailKit, because message parsing uses MimeKit's own API and
          the version that compiles must be pinned here instead of inherited from another package's dependency range. -->

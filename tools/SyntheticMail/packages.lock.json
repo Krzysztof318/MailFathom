@@ -63,15 +63,16 @@
         "resolved": "2.0.10",
         "contentHash": "6i1D6/U3i1f/PiXTt9pDvbJwdXEe0F2DZPup6BHzeIu5yPk/lkFzgtrJnPbj54JWUh8Y9vJeKG/TZIT6MkF8TA=="
       },
-      "BouncyCastle.Cryptography": {
-        "type": "Transitive",
-        "resolved": "2.6.2",
-        "contentHash": "7oWOcvnntmMKNzDLsdxAYqApt+AjpRpP2CShjMfIa3umZ42UQMvH0tl1qAliYPNYO6vTdcGMqnRrCPmsfzTI1w=="
-      },
       "System.Security.Cryptography.Pkcs": {
         "type": "Transitive",
         "resolved": "10.0.0",
         "contentHash": "UPWqLSygJlFerRi9XNIuM0a1VC8gHUIufyP24xQ0sc+XimqUAEcjpOz9DhKpyDjH+5B/wO3RpC0KpkEeDj/ddg=="
+      },
+      "BouncyCastle.Cryptography": {
+        "type": "CentralTransitive",
+        "requested": "[2.6.2, )",
+        "resolved": "2.6.2",
+        "contentHash": "7oWOcvnntmMKNzDLsdxAYqApt+AjpRpP2CShjMfIa3umZ42UQMvH0tl1qAliYPNYO6vTdcGMqnRrCPmsfzTI1w=="
       }
     }
   }

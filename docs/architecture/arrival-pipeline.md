@@ -65,7 +65,7 @@ flowchart TD
     sweeps --> worker
 ```
 
-**Two judgements sit between the parse and the commit.** Whether the author a receiving server established is one the
+**Two judgements sit between the parse and the commit.** Whether the author extraction established is one the
 account recognizes, and how much the message's own text reads as machine written, are decisions this deployment makes
 rather than facts read out of the message's bytes — so each is a decorator over the reader that parses raw MIME rather
 than a step inside it, which is what puts them on every path that produces a reading rather than only on this one. Both

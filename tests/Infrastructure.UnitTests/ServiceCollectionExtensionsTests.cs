@@ -25,6 +25,7 @@ using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Infrastructure.SensitiveContent.PersonalData;
+using MailFathom.Infrastructure.UnitTests.TestDoubles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -432,6 +433,91 @@ public sealed class ServiceCollectionExtensionsTests
 
         // Assert
         Assert.Equal(policy.Revision, extraction.Metadata?.SenderTrust.PolicyRevision);
+    }
+
+    /// <summary>A deployment verifying for itself reaches the resolver, which is where the whole feature's egress is.</summary>
+    /// <remarks>
+    /// Asserted through the composed reader's behavior and against a substituted resolver, so the test proves the
+    /// wiring without a single DNS query. The substitute is registered first because the resolver is the one
+    /// registration this composition leaves replaceable.
+    /// </remarks>
+    [Fact]
+    public async Task AddInfrastructure_WithLocalDkimVerification_ResolvesAMimeReaderThatVerifiesForItself()
+    {
+        // Arrange
+        var signed = DkimFixtures.Sign();
+        var resolver = Substitute.For<IDkimPublicKeyRecordResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(signed.PublicKeyRecord);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(new EmailMimeExtractionOptions { VerifyDkimLocally = true });
+        services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
+        services.AddSingleton(TrustPolicyReader());
+        services.AddSingleton(MachineAuthorshipProfile.Standard);
+        services.AddSingleton(resolver);
+
+        services.AddInfrastructure(
+            _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default);
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        // Act
+        var extraction = await scope.ServiceProvider
+            .GetRequiredService<IEmailMimeReader>()
+            .ReadMetadataAsync(MimeFixtures.RawContent(signed.RawMime), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            SenderAuthenticationSource.LocalVerification,
+            extraction.Metadata?.SenderAuthentication.Source);
+        Assert.Equal(
+            SenderAuthenticationOutcome.Authenticated,
+            extraction.Metadata?.SenderAuthentication.Outcome);
+    }
+
+    /// <summary>A deployment that turned it off makes no lookup at all, which is what the switch owes an operator.</summary>
+    [Fact]
+    public async Task AddInfrastructure_WithoutLocalDkimVerification_ResolvesNothingAndVerifiesNothing()
+    {
+        // Arrange
+        var signed = DkimFixtures.Sign();
+        var resolver = Substitute.For<IDkimPublicKeyRecordResolver>();
+
+        var services = new ServiceCollection();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(new EmailMimeExtractionOptions { VerifyDkimLocally = false });
+        services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
+        services.AddSingleton(TrustPolicyReader());
+        services.AddSingleton(MachineAuthorshipProfile.Standard);
+        services.AddSingleton(resolver);
+
+        services.AddInfrastructure(
+            _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
+            PostgresTextSearchConfiguration.Default,
+            MailAnsweringBudget.Default);
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        // Act
+        var extraction = await scope.ServiceProvider
+            .GetRequiredService<IEmailMimeReader>()
+            .ReadMetadataAsync(MimeFixtures.RawContent(signed.RawMime), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            SenderAuthenticationSource.ReceivingServer,
+            extraction.Metadata?.SenderAuthentication.Source);
+        await resolver.DidNotReceive().ResolveAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>

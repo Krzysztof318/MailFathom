@@ -74,14 +74,7 @@ public static class SenderAuthenticationReading
         // An account that trusts no server believes no header, so the search below is skipped rather than run against
         // an authority that matches nothing. The two paths reach the same verdict; separating them is what keeps the
         // reason readable when a deployment finds every message unauthenticated.
-        if (!authority.NamesAServer)
-        {
-            return SenderAuthentication.NotEstablished(fromDomain);
-        }
-
-        var trustedHeader = headers.FirstOrDefault(header => authority.Produced(header.AuthorityIdentifier));
-
-        if (trustedHeader is null)
+        if (FindTrustedHeader(headers, authority) is not { } trustedHeader)
         {
             return SenderAuthentication.NotEstablished(fromDomain);
         }
@@ -99,6 +92,35 @@ public static class SenderAuthenticationReading
             ? SenderAuthentication.Failed(fromDomain, dmarc)
             : SenderAuthentication.NotEstablished(fromDomain, dmarc);
     }
+
+    /// <summary>Answers whether the account's trusted server wrote a statement about this message at all.</summary>
+    /// <param name="headers">Every <c>Authentication-Results</c> header the message carried, topmost first.</param>
+    /// <param name="authority">The one server this account believes, which may name none.</param>
+    /// <returns><see langword="true" /> when a header this account trusts was found; otherwise <see langword="false" />.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="headers" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// This is the condition local verification is a fallback for, and it deliberately asks whether a trusted statement
+    /// <em>exists</em> rather than whether it established anything. A server that evaluated the message and reported a
+    /// failure has spoken about it with network context nothing here can recover, so verifying the same message again
+    /// locally would put a second verdict of a different provenance beside the first — which is exactly what recording
+    /// only one of them, from the stronger position, avoids.
+    /// </remarks>
+    public static bool FindsTrustedStatement(
+        IReadOnlyList<AuthenticationResultsHeader> headers,
+        TrustedAuthenticationAuthority authority)
+    {
+        ArgumentNullException.ThrowIfNull(headers);
+
+        return FindTrustedHeader(headers, authority) is not null;
+    }
+
+    /// <summary>Selects the topmost header the account's trusted server produced, or none where it wrote nothing.</summary>
+    private static AuthenticationResultsHeader? FindTrustedHeader(
+        IReadOnlyList<AuthenticationResultsHeader> headers,
+        TrustedAuthenticationAuthority authority) =>
+        authority.NamesAServer
+            ? headers.FirstOrDefault(header => authority.Produced(header.AuthorityIdentifier))
+            : null;
 
     /// <summary>Reads the domain of every DKIM signature the server verified, in header order.</summary>
     /// <remarks>

@@ -430,7 +430,7 @@ internal sealed class MailFathomDbContext : DbContext
             entity.Property(email => email.ContentAvailability).HasConversion<string>().HasMaxLength(64).IsRequired();
 
             // The sender-authentication verdict — what authenticated, and separately what that establishes about the
-            // displayed author — whose four enums are stored as text for the same reason and whose domains are bounded
+            // displayed author — whose five enums are stored as text for the same reason and whose domains are bounded
             // by the length a resolver accepts, which the domain value already refuses to exceed. Each enum carries a
             // database default naming the value that establishes nothing, because that is what is true of a row written
             // before this deployment read the header: the migration that adds the columns fills every stored message in
@@ -454,6 +454,13 @@ internal sealed class MailFathomDbContext : DbContext
                 .HasConversion<string>()
                 .HasMaxLength(64)
                 .HasDefaultValue(AuthorAuthenticationOutcome.NotEstablished)
+                .IsRequired();
+            // Who reached that verdict, stored the same way and defaulted to the receiving server: every row written
+            // before this deployment verified anything itself came from the trusted-header reading, whatever it found.
+            entity.Property(email => email.SenderAuthenticationSource)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .HasDefaultValue(SenderAuthenticationSource.ReceivingServer)
                 .IsRequired();
             entity.Property(email => email.AuthenticatedSenderDomain).HasMaxLength(StoredEmailEntity.MaximumDomainLength);
             entity.Property(email => email.DkimSignerDomain).HasMaxLength(StoredEmailEntity.MaximumDomainLength);

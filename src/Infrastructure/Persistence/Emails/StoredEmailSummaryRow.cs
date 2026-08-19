@@ -68,6 +68,7 @@ internal sealed record StoredEmailSummaryRow(
     string? DisplayedAuthorDomain,
     SenderAuthenticationMethod SenderAuthenticationMethod,
     DmarcOutcome DmarcOutcome,
+    SenderAuthenticationSource SenderAuthenticationSource,
     MachineAuthorshipBand MachineAuthorshipBand,
     double MachineAuthorshipLikelihood,
     MachineAuthorshipSignals MachineAuthorshipSignals,
@@ -108,6 +109,7 @@ internal sealed record StoredEmailSummaryRow(
             email.DisplayedAuthorDomain,
             email.SenderAuthenticationMethod,
             email.DmarcOutcome,
+            email.SenderAuthenticationSource,
             email.MachineAuthorshipBand,
             email.MachineAuthorshipLikelihood,
             email.MachineAuthorshipSignals,
@@ -159,6 +161,7 @@ internal sealed record StoredEmailSummaryRow(
             DisplayedAuthorDomain = StoredDomain(this.DisplayedAuthorDomain),
             AuthenticatedBy = this.SenderAuthenticationMethod,
             Dmarc = this.DmarcOutcome,
+            Source = this.SenderAuthenticationSource,
         },
         MachineAuthorship = this.StoredAuthorship(),
     };

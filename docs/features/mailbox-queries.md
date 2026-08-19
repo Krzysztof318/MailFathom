@@ -229,15 +229,17 @@ points](sensitive-content-scanning.md#the-guarded-egress-points) holds the contr
 ### The sender verdict a summary carries
 
 The sender's address is what the message wrote about itself, so the summary carries beside it what somebody else
-established: `SenderVerification`, the pair of *what the receiving mail server concluded about the displayed author* and
-*whether this deployment recognizes that author*. Both are read from the columns synchronization wrote. A listing
-evaluates no policy, resolves no DNS, and re-reads no header — a query that reached a verdict of its own would answer a
-different question from the one the message was stored with.
+established: `SenderVerification`, the pair of *what was concluded about the displayed author* and *whether this
+deployment recognizes that author*. Both are read from the columns synchronization wrote. A listing evaluates no policy,
+resolves no DNS, and re-reads no header — a query that reached a verdict of its own would answer a different question
+from the one the message was stored with. That holds unchanged now that a verdict may have been reached here rather than
+by the receiving server: verifying a signature is a step of storing a message, never of answering a query.
 
 The summary carries a second value the listing does not publish: `SenderAuthenticationEvidence`, the domain that
-authenticated, the domain the `From` header displayed, which check established the first, and the DMARC result. One
-projection reads both because the single-email read is built from this same summary and is where the evidence is
-published; a second query for it would let the two reads disagree about one message. [Sender
+authenticated, the domain the `From` header displayed, which check established the first, the DMARC result, and which of
+the two readings produced all of it — the receiving server's `Authentication-Results` header, or MailFathom's own
+verification of the message's DKIM signatures where no such header was found. One projection reads both because the
+single-email read is built from this same summary and is where the evidence is published; a second query for it would let the two reads disagree about one message. [Sender
 authentication](sender-authentication.md#what-the-read-tools-publish) holds what each value means, and
 [MCP tools](mcp-tools.md#list_emails) holds the published shape.
 

@@ -405,15 +405,19 @@ and no less right.
 
 ## Whether your server says who sent a message
 
-MailFathom verifies no sender itself. It resolves no DNS, evaluates no SPF policy, and verifies no DKIM signature — it
-reads back the `Authentication-Results` header that the server receiving your mail wrote, because that server is the
-only party in the chain that observed the connection. So whether sender verification works at all is your provider's
-decision rather than yours, and it is settled before any setting of yours is consulted.
+MailFathom would rather not verify a sender itself. What it reads first is the `Authentication-Results` header that the
+server receiving your mail wrote, because that server is the only party in the chain that observed the connection, saw
+the sending address the envelope carried, and could evaluate SPF at all. So how well sender verification works is
+mostly your provider's decision rather than yours, and where that server writes a verdict it is the verdict MailFathom
+records — nothing on this side is consulted, and nothing on this side overrides it.
 
-**A server that records no results leaves every message stating that nothing was established**, and no account setting
-changes that. `TrustedSenders` is the least useful thing to reach for: the list is held against an established author,
-so on a message that has none it is never consulted at all and its entries cannot match. `TrustOwnAccountDomains` is in
-the same position, since it too recognizes an author rather than a `From` header.
+**Where no such header is found, MailFathom verifies the message's own DKIM signatures for itself**, against the keys
+the signing domains publish in DNS. That is a fallback rather than a second opinion: it happens only for an account
+whose server wrote nothing MailFathom trusts, and it establishes a signing domain where there would otherwise be no
+author to hold `TrustedSenders` or `TrustOwnAccountDomains` against at all. It is what makes those settings work on a
+mailbox whose provider records nothing, and it is on by default. What it cannot reach is the part that needed the
+connection: no SPF result, and no DMARC outcome. It is also the one thing in MailFathom that sends a DNS query, so an
+operator who wants none turns it off — see [the mail configuration](../operations/configuration-mail.md#mailsynchronization).
 
 Check the mail you were actually delivered rather than the provider's documentation. Open a recently arrived message in
 any mail client, view its source or full headers, and look for `Authentication-Results`:
@@ -422,11 +426,13 @@ any mail client, view its source or full headers, and look for `Authentication-R
 | --- | --- |
 | `Authentication-Results: some.host; dkim=pass …` | `some.host`, the first token after the colon, is the authserv-id and is what `TrustedAuthenticationServiceIdentifier` takes. A server may write a version number after it, as `some.host 1;` — that digit belongs to the header rather than to the identifier, and a configured value carrying whitespace fails startup |
 | Only `ARC-Authentication-Results` | An upstream hop's findings preserved across forwarding, which is a claim a relay signed rather than something your own server observed. It is deliberately never read, and there is nothing to configure from it |
-| No such header at all | Your server either does not check the sender or does not record what it found. Nothing on this side substitutes for it |
+| No such header at all | Your server either does not check the sender or does not record what it found. MailFathom then verifies the message's DKIM signatures itself, which recovers the author but not SPF or DMARC |
 
-The third case is a question for whoever runs that server: SPF, DKIM, and DMARC have to be evaluated as mail is
-delivered, and the outcome written into the message as an RFC 8601 header carrying that server's own identifier. Which
-software does it, and how it is switched on, is that server's own documentation.
+The third case is still worth raising with whoever runs that server, because local verification recovers only part of
+what a receiving server sees: SPF, DKIM, and DMARC have to be evaluated as mail is delivered, and the outcome written
+into the message as an RFC 8601 header carrying that server's own identifier. Which software does it, and how it is
+switched on, is that server's own documentation. An account whose server starts writing the header stops verifying
+locally on the mail that carries it, without anything being reconfigured.
 
 Two things are worth knowing before asking for it. It reaches mail delivered afterwards and cannot reach mail already
 delivered, because the header is part of the message and nobody can add one to a message that has already arrived. And
@@ -434,8 +440,8 @@ the verdict is recorded when a message is extracted rather than worked out when 
 synchronized keeps the answer it was stored with until [a re-derivation](administering.md#filling-in-what-a-newer-version-records)
 re-reads it — which is also what applies a newly configured authserv-id to the mail you already hold.
 
-[Sender authentication](../features/sender-authentication.md) states what the verdict records and how the header is
-chosen; [the mail configuration](../operations/configuration-mail.md#one-account--mailsynchronizationaccountsn) states
+[Sender authentication](../features/sender-authentication.md) states what the verdict records, how the header is chosen,
+what local verification reaches and deliberately does not, and how a reader tells the two verdicts apart; [the mail configuration](../operations/configuration-mail.md#one-account--mailsynchronizationaccountsn) states
 where the setting lives.
 
 ## Related

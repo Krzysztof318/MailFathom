@@ -23,11 +23,13 @@ namespace MailFathom.Mcp.Tools.Senders;
 /// says its displayed author was not established is the verdict.
 /// </para>
 /// <para>
-/// Every value was read back out of one header the receiving mail server wrote, whose result was recorded when the
-/// email was stored. Nothing here is evaluated, re-read, or recomputed when the email is read.
+/// One of two readings produced these values and <see cref="VerdictSource" /> says which: the header the receiving mail
+/// server wrote, or MailFathom's own verification of the email's DKIM signatures where no such header was available.
+/// Either way the result was recorded when the email was stored, and nothing here is evaluated, re-read, resolved, or
+/// recomputed when the email is read.
 /// </para>
 /// </remarks>
-[Description("What the author conclusion was reached from, read back from the header the receiving mail server wrote when the email arrived. Evidence for judging senderVerification rather than something to act on.")]
+[Description("What the author conclusion was reached from, recorded when the email arrived. verdictSource says whether it came from the receiving mail server's header or from MailFathom verifying the email's own DKIM signatures. Evidence for judging senderVerification rather than something to act on.")]
 internal sealed record ReportedSenderAuthentication
 {
     /// <summary>Gets the domain that authenticated, or <see langword="null" /> where none did.</summary>
@@ -43,8 +45,12 @@ internal sealed record ReportedSenderAuthentication
     public required SenderAuthenticationCheck AuthenticatedBy { get; init; }
 
     /// <summary>Gets the DMARC result the trusted header reported.</summary>
-    [Description("The DMARC result the receiving mail server reported: 'pass', 'fail', 'noPolicyPublished' when the evaluation ran and the displayed domain publishes no DMARC record, 'temporaryError' or 'permanentError' when it could not complete, and 'notReported' when the server stated no DMARC result at all. MailFathom evaluates no policy and resolves no DNS; this is read back from what the server wrote.")]
+    [Description("The DMARC result the receiving mail server reported: 'pass', 'fail', 'noPolicyPublished' when the evaluation ran and the displayed domain publishes no DMARC record, 'temporaryError' or 'permanentError' when it could not complete, and 'notReported' when the server stated no DMARC result at all. Always 'notReported' when verdictSource is 'localVerification', because reporting a DMARC result needs the displayed domain's published policy and MailFathom resolves none.")]
     public required DmarcResult Dmarc { get; init; }
+
+    /// <summary>Gets who reached the verdict this is the evidence for.</summary>
+    [Description("Who reached the verdict: 'receivingServer' when it was read back from the Authentication-Results header the receiving mail server wrote, or 'localVerification' when MailFathom verified the email's own DKIM signatures itself because no trusted server statement was available. A server observed the connection the email arrived on and could evaluate spf and dmarc against it; local verification has the signed bytes and a published key only, so on such a verdict authenticatedBy is never 'spf' and dmarc is never anything but 'notReported'. Neither absence is a finding about the email.")]
+    public required SenderVerdictSource VerdictSource { get; init; }
 
     /// <summary>Publishes the evidence a read returned.</summary>
     /// <param name="evidence">The stored evidence to publish.</param>
@@ -60,8 +66,25 @@ internal sealed record ReportedSenderAuthentication
             DisplayedAuthorDomain = evidence.DisplayedAuthorDomain?.NormalizedValue,
             AuthenticatedBy = PublishedCheck(evidence.AuthenticatedBy),
             Dmarc = PublishedDmarcResult(evidence.Dmarc),
+            VerdictSource = PublishedVerdictSource(evidence.Source),
         };
     }
+
+    /// <summary>Reads the published value the stored verdict source names.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when a stored source has no published value, which means one was added to the domain without deciding
+    /// what a client should be told about it.
+    /// </exception>
+    private static SenderVerdictSource PublishedVerdictSource(SenderAuthenticationSource source) =>
+        source switch
+        {
+            SenderAuthenticationSource.ReceivingServer => SenderVerdictSource.ReceivingServer,
+            SenderAuthenticationSource.LocalVerification => SenderVerdictSource.LocalVerification,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(source),
+                source,
+                "The stored sender-authentication source has no published protocol value."),
+        };
 
     /// <summary>Reads the published value the stored method names.</summary>
     /// <exception cref="ArgumentOutOfRangeException">
