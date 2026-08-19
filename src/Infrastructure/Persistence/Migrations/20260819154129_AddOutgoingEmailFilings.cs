@@ -70,13 +70,13 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                 name: "ix_outgoing_email_filings_message_id",
                 table: "outgoing_email_filings",
                 columns: new[] { "MailboxAccountId", "InternetMessageId" },
-                filter: "\"ObservedAt\" IS NULL");
+                filter: "\"ObservedAt\" IS NULL AND \"Stage\" = 'Confirmed'");
 
             migrationBuilder.CreateIndex(
                 name: "ix_outgoing_email_filings_placement",
                 table: "outgoing_email_filings",
                 columns: new[] { "MailboxAccountId", "FolderPath", "PlacementUidValidity", "PlacementUid" },
-                filter: "\"ObservedAt\" IS NULL");
+                filter: "\"ObservedAt\" IS NULL AND \"Stage\" = 'Confirmed'");
         }
 
         /// <inheritdoc />

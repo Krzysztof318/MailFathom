@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260819135644_AddOutgoingEmailFilings")]
+    [Migration("20260819154129_AddOutgoingEmailFilings")]
     partial class AddOutgoingEmailFilings
     {
         /// <inheritdoc />
@@ -1371,11 +1371,11 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("MailboxAccountId", "InternetMessageId")
                         .HasDatabaseName("ix_outgoing_email_filings_message_id")
-                        .HasFilter("\"ObservedAt\" IS NULL");
+                        .HasFilter("\"ObservedAt\" IS NULL AND \"Stage\" = 'Confirmed'");
 
                     b.HasIndex("MailboxAccountId", "FolderPath", "PlacementUidValidity", "PlacementUid")
                         .HasDatabaseName("ix_outgoing_email_filings_placement")
-                        .HasFilter("\"ObservedAt\" IS NULL");
+                        .HasFilter("\"ObservedAt\" IS NULL AND \"Stage\" = 'Confirmed'");
 
                     b.ToTable("outgoing_email_filings", (string)null);
                 });

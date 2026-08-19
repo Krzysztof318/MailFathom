@@ -10,6 +10,7 @@ using MailFathom.Application.Rules.History;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Emails.Authorship;
@@ -235,6 +236,11 @@ internal sealed class MailFathomDbContext : DbContext
     /// <summary>The foreign key that removes the record of what was filed where with the record it was filed from.</summary>
     /// <remarks>Named for the reason above: the composed name would be truncated and permanent.</remarks>
     internal const string OutgoingEmailFilingForeignKeyName = "fk_outgoing_email_filings_emails";
+
+    /// <summary>What both filing indexes are filtered to, which is exactly the rows the join they serve can match.</summary>
+    private const string JoinableFilingIndexFilter =
+        $"\"{nameof(OutgoingEmailFilingEntity.ObservedAt)}\" IS NULL "
+        + $"AND \"{nameof(OutgoingEmailFilingEntity.Stage)}\" = '{nameof(OutgoingMailFilingStage.Confirmed)}'";
 
     /// <summary>The composite key one filing row is refused a duplicate of, named so a lost race is recognized as one.</summary>
     internal const string OutgoingEmailFilingPrimaryKeyConstraintName = "pk_outgoing_email_filings";
@@ -1549,8 +1555,12 @@ internal sealed class MailFathomDbContext : DbContext
             // token would not notice two passes settling one copy differently.
             entity.Property(filing => filing.ConcurrencyVersion).IsRowVersion();
 
-            // The join a synchronized batch runs, filtered to what is still being looked for. A copy is met once, and
-            // stamping it observed is what takes it out of both this structure and the work the join does.
+            // The join a synchronized batch runs, filtered to exactly the rows that join can still match. A copy is met
+            // once, and stamping it observed is what takes it out of both this structure and the work the join does;
+            // the stage is the other half of the same bound, because a row is only ever a candidate while it is
+            // confirmed. Without it a mirror withdrawn before any run saw it, and an append the server never answered,
+            // would each leave a row nothing can match sitting in both structures for the life of the deployment —
+            // which would make them grow with everything ever sent rather than with what is in flight.
             entity.HasIndex(filing => new
             {
                 filing.MailboxAccountId,
@@ -1559,11 +1569,11 @@ internal sealed class MailFathomDbContext : DbContext
                 filing.PlacementUid,
             })
                 .HasDatabaseName(OutgoingEmailFilingPlacementIndexName)
-                .HasFilter($"\"{nameof(OutgoingEmailFilingEntity.ObservedAt)}\" IS NULL");
+                .HasFilter(JoinableFilingIndexFilter);
 
             entity.HasIndex(filing => new { filing.MailboxAccountId, filing.InternetMessageId })
                 .HasDatabaseName(OutgoingEmailFilingMessageIdIndexName)
-                .HasFilter($"\"{nameof(OutgoingEmailFilingEntity.ObservedAt)}\" IS NULL");
+                .HasFilter(JoinableFilingIndexFilter);
 
             entity.HasOne(filing => filing.OutgoingEmail)
                 .WithMany(message => message.Filings)
