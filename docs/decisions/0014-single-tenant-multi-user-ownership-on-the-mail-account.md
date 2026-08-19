@@ -9,7 +9,7 @@ informed:
 
 # Serve several users from one deployment, hang ownership on the mail account rather than on the mail, and answer multi-tenancy with a second instance
 
-<!-- describes: src/Application/Access/**, src/Application/Accounts/**, src/Application/Emails/Mailboxes/**, src/Application/Emails/GetEmailContent/**, src/Application/Emails/DownloadAttachment/**, src/Application/Mail/Delivery/Authoring/**, src/Application/Mail/Mutations/Authoring/**, src/Infrastructure/Persistence/Emails/StoredEmailSelectionPredicate.cs, src/Infrastructure/Persistence/Emails/Threads/**, src/Infrastructure/Persistence/Entities/**, src/Infrastructure/Persistence/MailFathomDbContext.cs -->
+<!-- describes: src/Application/Access/**, src/Application/Accounts/**, src/Application/Emails/Mailboxes/**, src/Application/Emails/GetEmailContent/**, src/Application/Emails/DownloadAttachment/**, src/Application/Mail/Delivery/Authoring/**, src/Application/Mail/Delivery/Submission/**, src/Application/Mail/Mutations/Authoring/**, src/Infrastructure/Persistence/Emails/StoredEmailSelectionPredicate.cs, src/Infrastructure/Persistence/Emails/Threads/**, src/Infrastructure/Persistence/Entities/**, src/Infrastructure/Persistence/MailFathomDbContext.cs -->
 
 ## Context and Problem Statement
 
@@ -25,7 +25,7 @@ The decision was taken after reading the persistence layer, the read paths, the 
 
 **The approximate vector index already exists, and the ranking query cannot use it.** `EmbeddingProfileVectorIndex` builds a partial HNSW index per embedding profile at activation, and `EmailVectorSearchIndexReader` ranks emails by a correlated minimum over each message's chunks with the structural filters joined — a shape that index cannot serve, as that class says in its own remarks. So *what a filtered vector search does once an ANN index exists* is not a future question; it has an answer today, and ownership neither causes it nor changes it.
 
-**Two ceilings, a queue, and a cursor are deployment-wide with no owner in them.** The embedding spend ledger is keyed by period alone; the stored-content ceiling is `pg_total_relation_size` over one table; the job claim orders by `AvailableAt` and nothing else; and each named backfill keeps one cursor for the whole deployment.
+**Two ceilings, a queue, and a cursor are deployment-wide with no owner in them.** The embedding spend ledger is keyed by period alone; the stored-content ceiling is `pg_total_relation_size` over one table; the job claim orders by `AvailableAt` and the identifier, which is pure FIFO across every owner; and each named backfill keeps one cursor for the whole deployment.
 
 ## Decision Drivers
 
@@ -83,7 +83,7 @@ This is still what makes the option cheap where the alternatives are not: the ir
 
 ### Ownership is not part of the permission vocabulary, and here is where the check runs
 
-No permission names an account. ADR 0012's set is untouched and stays closed. The scoping check runs in three places and each is named, because between them they are every path that returns mail:
+No permission names an account. ADR 0012's set is untouched and stays closed. The scoping check runs in four places and each is named, because between them they are every path that resolves an account for a caller. That is deliberately wider than *every path that returns mail*, which was the first enumeration this record attempted and which is what let the send fall outside it:
 
 **The resolution, for every scoped read.** `IMailAccountCatalog` splits in two. A caller-scoped catalog answers with the accounts the request's user owns and is what `MailboxScopeResolver` reads; a process-wide catalog answers with every served account and is what the synchronization coordinator and the workers read. **The two are told apart by name rather than by reach, and that is a limit on what the split can enforce.** Both have to be resolvable from `Application`, because use cases there need each: `MailboxScopeResolver` needs the caller-scoped one, while `MailSynchronizationStatusReader` and `MailRuleScheduleSource` answer for the deployment and need the process-wide one. `IMailAccountCatalog` is registered once today, in the one container every use case resolves from, so nothing about the composition stops a read model injecting the wrong catalog — it compiles and it answers across owners. The split makes the wrong one *nameable* rather than unreachable, and what holds a caller-facing read to the right one is a test rather than the compiler.
 
@@ -91,7 +91,9 @@ No permission names an account. ADR 0012's set is untouched and stays closed. Th
 
 **The identifier reads, for the four paths that reach an email without building a scope.** `EmailContentReader`, `EmailAttachmentDownloadReader`, `StoredEmailResponseAuthoring`, and `MailFlagChangeRecorder` each look an email up by its stored identifier and then ask `MailboxScopeResolver.IsReadableByTools` whether the account and folder it turned out to be in are readable. That question is answered from configuration today and becomes a question about the caller's user as well. It is one method, asked in four places, and it stays one method for the reason it already is one: a fifth path added later asks the same question or does not read mail.
 
-**Three of those four run for a caller. The attachment download does not, and it is the only path that streams an attachment's octets.** `EmailAttachmentDownloadReader` calls `RequireSignedCapability`, and `EmailAttachmentDownloadEndpoint` assumes `AuthorizedPrincipal.SignedCapability` on a route with no authenticated caller — so there is no caller's user for it to ask about, and the amended `IsReadableByTools` cannot be what bounds it. **Ownership reaches it through the ticket instead:** a signed capability records the user it was minted for, and redemption checks that the email the ticket names is owned by that user, so a ticket minted before ownership existed does not redeem and one minted for one user does not serve another who holds the URL. That is a property of the capability rather than of the read, which is why it is stated here rather than folded into the sentence above.
+**The send, which returns no mail and is therefore the path an enumeration of reads misses.** `AuthoredMailSubmission.SubmitAsync` takes the account the caller named and resolves it straight off `IMailAccountCatalog.ServedAccounts`, reaching neither `MailboxScopeResolver` nor `IsReadableByTools`; the only thing it checks first is that the caller holds `MailFathomPermission.MailSend`. Under one owner that is complete, because every served account is theirs. Under this record it is not: a caller holding `MailSend` could name another user's account and mail would leave as them, which is a worse outcome than any read this section bounds. So the submission resolves against the caller-scoped catalog like every other caller-facing resolution, and an account the caller's user does not own is refused exactly as one the deployment does not serve. The reply and forward paths need nothing added — `StoredEmailResponseAuthoring` derives the account from an email it has already put through `IsReadableByTools` — so it is the new-message path alone that this names.
+
+**Three of the four identifier reads run for a caller. The attachment download does not, and it is the only path that streams an attachment's octets.** `EmailAttachmentDownloadReader` calls `RequireSignedCapability`, and `EmailAttachmentDownloadEndpoint` assumes `AuthorizedPrincipal.SignedCapability` on a route with no authenticated caller — so there is no caller's user for it to ask about, and the amended `IsReadableByTools` cannot be what bounds it. **Ownership reaches it through the ticket instead:** a signed capability records the user it was minted for, and redemption checks that the email the ticket names is owned by that user, so a ticket minted before ownership existed does not redeem and one minted for one user does not serve another who holds the URL. That is a property of the capability rather than of the read, which is why it is stated here rather than folded into the sentence above.
 
 A request naming an account the caller's user does not own is answered exactly as one naming an account this deployment does not serve — the same failure, with nothing in it that separates *not yours* from *not here*, so a refusal cannot enumerate what exists.
 
@@ -175,7 +177,7 @@ So the honest statement is the narrower one: **ownership on the account makes th
 
 ### The administrative surface gains a deployment administrator
 
-An administrative entry that writes no grant reaches every administrative operation. That is the default rather than the whole posture: ADR 0012 shipped, every route under `src/Host/Api/` chains a `RequirePermission`, and an entry that narrows its grant is already bounded — so the published permissions distinguish operations, and what they do not distinguish is principals. Several users require an administrator distinct from a user — issue 889 calls it a tenant administrator, and since this record refuses tenants it is a **deployment administrator**.
+An administrative entry that writes no grant reaches every administrative operation. That is the default rather than the whole posture: ADR 0012 shipped, the administrative group carries a filter that refuses a route mapped without stating a permission (`AdminApiEndpoints`, on the group rather than on each route, so forgetting to decide fails closed), and an entry that narrows its grant is already bounded — so the published permissions distinguish operations, and what they do not distinguish is principals. Several users require an administrator distinct from a user — issue 889 calls it a tenant administrator, and since this record refuses tenants it is a **deployment administrator**.
 
 This is what the record adds beside ADR 0012 rather than an edit to it. That record is not reopened, reworded, or corrected: it publishes a closed set of named capabilities, and a deployment administrator is a principal holding administrative ones while an ordinary user holds none of them. A user's own maintenance operations — reindexing their mail, reading their own histories, disposing of their own folders — are scoped to their accounts by the same resolution every other read uses.
 
@@ -183,7 +185,7 @@ This is what the record adds beside ADR 0012 rather than an edit to it. That rec
 
 1. **The owner on the account**, with the user it names. This is the irreversible one and it goes first.
 2. **The principal carries the user, and the account catalog splits** into a caller-scoped and a process-wide answer.
-3. **The four identifier reads** ask about the caller's user as well as about configuration.
+3. **The four identifier reads and the send** ask about the caller's user as well as about configuration. The send belongs with them rather than later, because it is the one path where getting ownership wrong sends mail as somebody else rather than showing it to the wrong reader.
 4. **The contact book gains an owner**, which is the one schema change that is genuinely awkward and is described on its own issue.
 5. **The ceilings and the job claim** gain the owner axis.
 6. **Accounts, users, and credentials leave configuration** into the database and an administrative surface.
@@ -207,7 +209,7 @@ Steps 1 through 3 are what make isolation true. Steps 4 through 7 are what make 
 
 ## Validation
 
-- A test asserts that every caller-facing read composes the caller-scoped account catalog, and that the operations answering for the deployment compose the process-wide one. Both are resolvable from `Application` because use cases there need each, so injecting the wrong one compiles — which is exactly why this is a test rather than a property of the composition.
+- A test asserts that every caller-facing use case resolving an account composes the caller-scoped account catalog — the reads and the send alike, since the send returns no mail and an assertion about reads would pass while it resolved across owners — and that the operations answering for the deployment compose the process-wide one. Both are resolvable from `Application` because use cases there need each, so injecting the wrong one compiles — which is exactly why this is a test rather than a property of the composition.
 - A unit test asserts that all three selection-driven mailbox read models — the timeline, the lexical ranking, and the vector ranking — compose `StoredEmailSelectionPredicate.Matching`, which is what makes the owner narrowing a property of the system rather than of each query. The thread read is held to the same narrowing by a test of its own, because it composes that predicate nowhere and is the fourth path that returns mail.
 - A unit test asserts that a caller whose user owns no account reads nothing from every one of those four paths, rather than reading everything a non-empty account list would have restricted.
 - A unit test per identifier read asserts that an email belonging to another user's account is answered as absent, in the same shape as one that does not exist.
@@ -222,7 +224,7 @@ Steps 1 through 3 are what make isolation true. Steps 4 through 7 are what make 
 The user owns accounts, the account carries the owner, and the resolution that already narrows a mailbox read narrows it to the caller's accounts.
 
 - Good, because the data model reaches every mail table from the account already, so the discriminator lands in one place.
-- Good, because the scoped reads share one predicate and the identifier reads share one method, so the number of places ownership has to be got right is five and they are all named.
+- Good, because the scoped reads share one predicate and the identifier reads share one method, so the number of places ownership has to be got right is small and each is named: the shared predicate, the thread read that keeps its own copy of it, the one method the four identifier reads ask, the ticket the attachment download redeems, and the account the send resolves.
 - Good, because it leaves one database, which keeps the schema contract, the pooling assumptions, and the upgrade artifact exactly as they are.
 - Neutral, because it does not answer narrowing one credential within its user's accounts, which stays open on issue 588.
 - Bad, because isolation is enforced by the application rather than by the database, so a mail-reading path written outside the shared predicate would bypass it.
