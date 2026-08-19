@@ -162,6 +162,26 @@ public sealed class PublishedToolsTests
         Assert.Equal(MailFathomPermission.MailSend, permission);
     }
 
+    /// <summary>An answer to stored mail is a send, so it is withheld from every credential the send grant was not written for.</summary>
+    /// <remarks>
+    /// The use case beneath asks for the reading grant as well, because an answer quotes the message it answers — but
+    /// the listing is narrowed by the sending one, since that is the grant whose absence must hide the tool rather than
+    /// merely refuse the call. A credential holding one and not the other meets the use case's refusal, which is the
+    /// deployment's own grant to correct.
+    /// </remarks>
+    [Theory]
+    [InlineData(ReplyToEmailTool.ToolName)]
+    [InlineData(ForwardEmailTool.ToolName)]
+    public void TryGetRequiredPermission_AToolThatAnswersStoredMail_RequiresTheSendGrant(string toolName)
+    {
+        // Act
+        var declared = PublishedTools.TryGetRequiredPermission(toolName, out var permission);
+
+        // Assert
+        Assert.True(declared);
+        Assert.Equal(MailFathomPermission.MailSend, permission);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

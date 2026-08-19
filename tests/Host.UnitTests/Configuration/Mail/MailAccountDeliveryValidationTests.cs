@@ -234,6 +234,45 @@ public sealed class MailAccountDeliveryValidationTests
         Assert.Same(delivery.Secrets, delivery.ResolveSecrets(accountSecrets));
     }
 
+    /// <summary>
+    /// A deployment that reads no mailbox and only sends from one is an ordinary shape, and it is what the composed
+    /// host in the integration-test topology configures: synchronization off, no reading endpoint, and a submission
+    /// endpoint carrying its own login and credential.
+    /// </summary>
+    /// <remarks>
+    /// The delivery credentials are validated exactly when synchronization is off, because that is when the account's
+    /// own reading block is not there to supply one. So this is the shape where a missing submission credential is
+    /// caught at startup, and the one a topology gets wrong by configuring an endpoint without the login it needs.
+    /// </remarks>
+    [Fact]
+    public void Validate_SendingOnlyAccountWithSynchronizationOff_ReportsNoError()
+    {
+        // Arrange
+        var account = new MailSynchronizationAccountOptions
+        {
+            AccountId = "primary",
+            DisplayName = "The primary mailbox",
+            UserName = "mailfathom@example.test",
+            Delivery = new MailAccountDeliveryOptions
+            {
+                Host = "smtp.example.test",
+                FromAddress = "mailfathom@example.test",
+                Secrets = new MailAccountSecretOptions
+                {
+                    Password = new ConfiguredSecret { SecretReference = "plaintext:submission-password" },
+                },
+            },
+        };
+        var options = new MailSynchronizationOptions { Enabled = false, Accounts = [account] };
+
+        // Act
+        var results = Validate(options);
+
+        // Assert
+        Assert.Empty(results);
+        Assert.NotNull(options.FindSenderIdentity(MailAccountId.Create("primary")));
+    }
+
     private static IReadOnlyList<ValidationResult> Validate(MailSynchronizationOptions options) =>
         [.. options.Validate(new ValidationContext(options))];
 

@@ -11,8 +11,10 @@ MailFathom is a self-hosted service that synchronizes mail from your IMAP accoun
 indexes it for search, and serves it to AI agents as tools over the
 [Model Context Protocol](https://modelcontextprotocol.io/). An agent connected to it can list, read, and search your
 mail, it can mark, star, and label one message at a time through `set_mail_flags`, and it can send a message through
-`send_email`. Each of those two is offered only to a credential granted its own name —
-`mailfathom.mail.flags.write` and `mailfathom.mail.send` — and neither comes with being able to read. It cannot delete
+`send_email` — or answer one it already holds through `reply_to_email` and `forward_email`. Each of those is offered
+only to a credential granted its own name —
+`mailfathom.mail.flags.write` and `mailfathom.mail.send` — and neither comes with being able to read; the two answering
+tools need both names, because an answer is derived from the message it answers. It cannot delete
 or move mail. What it can write besides is MailFathom's own contact book — the people you or your
 deployment wrote down — which six tools read and maintain, one of them by erasing a record for good.
 
@@ -24,8 +26,9 @@ Two properties hold everywhere and are worth knowing before anything is installe
   shows as unread in your mail client until you read it there. Three things write to your mailbox: a mail rule whose
   action moves, copies, deletes, or marks a message read, the spam actions that file junk and mark it read, and the
   `set_mail_flags` tool. The first two are off until you turn them on; the third needs a grant that reading mail does
-  not carry. A fourth path leaves your deployment altogether rather than writing to your mailbox: `send_email`, behind
-  a grant of its own, and it is the one act here nothing can take back.
+  not carry. A fourth path leaves your deployment altogether rather than writing to your mailbox: `send_email`,
+  `reply_to_email`, and `forward_email`, behind
+  a grant of its own, and they are the acts here nothing can take back.
 
 ## The state of the release
 

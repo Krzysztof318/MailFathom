@@ -2,20 +2,22 @@
 
 <!-- describes: src/Mcp/Tools/** -->
 
-MailFathom publishes thirteen MCP tools, and together they are the whole surface: an agent can see which mailboxes
-exist, list mail, read one message, search, ask a question, mark and label a message, send a message, and keep the
+MailFathom publishes fifteen MCP tools, and together they are the whole surface: an agent can see which mailboxes
+exist, list mail, read one message, search, ask a question, mark and label a message, send a message, reply to or
+forward one it already holds, and keep the
 deployment's own contact book — nothing else. This
 page is the user's view of that surface: what each tool answers, what every result carries, what the deliberate limits
 are, and how to read a failure. The full contracts — every argument, every field, every bound — live in
 [MCP tools](../features/mcp-tools.md) and the feature pages it links, and this page does not restate them.
 
-Six of the seven mailbox tools are always within the deployment's reach. `ask_mail` needs a chat model and an embedding
+Eight of the nine mailbox tools are always within the deployment's reach. `ask_mail` needs a chat model and an embedding
 model configured and working, so a deployment that has neither does not offer it at all; its absence from a tool listing
-is that deployment saying it cannot answer questions rather than something being broken. `send_email` is always offered
-to a caller granted it and refuses the call where the account it names has no sending configuration, because whether a
+is that deployment saying it cannot answer questions rather than something being broken. The three sending tools are
+always offered to a caller granted them and refuse the call where the account behind the message has no sending
+configuration, because whether a
 particular mailbox can send is a question about that account rather than about the deployment.
 
-Which of the thirteen *you* are offered is a second question, and its answer is the grant on the credential you connected
+Which of the fifteen *you* are offered is a second question, and its answer is the grant on the credential you connected
 with. A tool that grant does not permit is absent from the listing, and calling it anyway is answered as though no such
 tool existed — nothing names the permission that was missing, so a shorter tool list than this page describes is a
 question for whoever configured the deployment:
@@ -27,9 +29,10 @@ which is the default, offers everything it has, and the six contact tools are pa
 A mailbox tool call reads the **local copy** that synchronization maintains. Nothing in a request reaches a mail
 server, so a call is fast, works while the server is unreachable, and reading mail can never mark it as read — locally
 or remotely. That holds for the contact tools too, including the three that write: what they change is a table in
-MailFathom's own database, and no mail and no mail server is touched by any of them. `set_mail_flags` and `send_email` are the two calls
-whose effects are meant to leave this deployment, and neither reaches a server while you wait: the first writes the
-change down and the next synchronization run carries it, and the second writes the message down and a delivery pass
+MailFathom's own database, and no mail and no mail server is touched by any of them. `set_mail_flags` and the three
+sending tools are the calls
+whose effects are meant to leave this deployment, and none of them reaches a server while you wait: the first writes the
+change down and the next synchronization run carries it, and the others write the message down and a delivery pass
 offers it to a mail server seconds later. The price
 of that model is freshness, which is why every listing and every search carries `folderFreshness`: one entry per
 folder in scope, stating when synchronization last committed progress there, or that it never has. An agent that reads
@@ -243,7 +246,8 @@ that offers the reading tools and not this one has been configured that way on p
 
 ## `send_email` — sending a message
 
-The one tool whose effect reaches somebody who is not you, and the only one no later call can undo. It sends a real
+The first of the three tools whose effect reaches somebody who is not you, and which no later call can undo. It sends a
+real
 message from one of your mailboxes to the people you address it to, and once it has left, nothing here recalls it,
 edits it, or deletes it. Treat every call as final, and ask the person you are acting for before sending on their
 behalf.
@@ -274,12 +278,55 @@ produced by stripping tags out of markup arrives as damage in every client that 
 wrote.
 
 What this tool will not do, and says so in its own description rather than leaving you to discover it: it attaches
-nothing, it replies to and forwards nothing, it schedules nothing, and it is not a mailing list — a message reaches at
+nothing, it replies to and forwards nothing — `reply_to_email` and `forward_email` are those two acts — it schedules
+nothing, and it is not a mailing list — a message reaches at
 most the few dozen people the deployment configures.
 
 It needs its own grant, `mailfathom.mail.send`, which comes with neither reading mail nor writing flags. It is the one
 grant on this surface whose effect leaves the deployment, so a deployment that offers every other tool and not this one
 has been configured that way deliberately.
+
+## `reply_to_email` — answering mail you already hold
+
+Sends a real reply to one message this deployment holds. Everything above about `send_email` holds here: the call does
+not send while you wait and answers `queued`, you never say who it is from, `idempotencyKey` is required and is what
+makes a retry safe, and nothing recalls what has left.
+
+**What you write is the only thing you supply.** You name the message with its `storedEmailId` — the identifier a
+listing, a search, a read, or an answer already gave you — and write `plainTextBody`. Who the reply goes to, the
+subject, the headers that put it in the right conversation, and the quotation beneath your words are all read from the
+stored copy. So there is no `to`, no `subject`, no `inReplyTo` or `references`, no quoted text, and no `from`. Do not
+paste or paraphrase the message you are answering; it is quoted for you.
+
+**`audience` is required and there is no default.** `senderOnly` answers whoever asked for answers and nobody else;
+`everyone` also answers everybody the original named in `To` and `Cc`. Getting it wrong publishes a private answer to a
+room, or drops the rest of a conversation — and no later call fixes either, which is why it is two names you must
+choose between rather than a flag that quietly defaults.
+
+`cc` is the only way to widen it, and it *adds* to whoever the audience already reaches. There is no way to re-address a
+reply and no way to add a hidden recipient.
+
+## `forward_email` — passing one on
+
+Sends a real message this deployment holds on to people the original never named, with the files it carried. `to` is
+required, because a forward addresses nobody on its own; `cc` and `bcc` behave as they do on `send_email`. The subject,
+the forwarded message beneath what you write, and the attachments are read from the stored copy — there is no
+attachment argument anywhere on this surface.
+
+It passes on somebody else's correspondence, so it is the call to be most deliberate about: ask before forwarding
+somebody's mail. A message carrying more or larger files than the deployment sends is refused naming the limit rather
+than forwarded without them.
+
+## What both of them refuse
+
+Both need `mailfathom.mail.send` **and** `mailfathom.mail.read` — an answer is derived from the message it answers, and
+neither grant implies the other. A credential holding only the sending grant is offered both tools and refused by the
+call, so a deployment meant to let an agent reply grants both names.
+
+**A message you cannot answer is one answer, whatever the reason.** An identifier nothing is held under, mail of an
+account this deployment no longer serves, mail in a folder the operator withheld from tools, and a message whose stored
+content is no longer readable all come back as `53005`, worded identically. Nothing tells you which — otherwise
+replying to identifiers one at a time would map out what the deployment holds and what was withheld from you.
 
 ## `ask_mail` — a question, answered with its sources
 
@@ -400,7 +447,7 @@ The codes a user meets in practice:
 | --- | --- | --- |
 | `51001` / `51003` | A page size or result limit outside the served range | Stay within 1–100 pages, 1–50 search results |
 | `51002` | A filter value the query does not accept — too long, malformed, or a range that ends before it starts | Fix the argument; the message names the filter and its limit, never the value |
-| `51004` | A `storedEmailIds` entry, or the `storedEmailId` a flag change names, is no identifier this system issues — blank, truncated, or invented | Pass the identifiers a listing or search actually returned; never construct or guess one |
+| `51004` | A `storedEmailIds` entry, or the `storedEmailId` a flag change, a reply, or a forward names, is no identifier this system issues — blank, truncated, or invented | Pass the identifiers a listing or search actually returned; never construct or guess one |
 | `51005` | A content read named no messages, or more than the ten one call serves | Split the list into calls of at most ten |
 | `51006` | A content read named the same message twice | Remove the repeat; results are not served twice |
 | `51007` | A content read named both `storedEmailIds` and `threadId`, or neither | Name exactly one of them; which you meant is not something the server guesses |
@@ -410,12 +457,13 @@ The codes a user meets in practice:
 | `51011` | A contact record breaks a rule the book holds | The message names the rule: a missing name, no address, a preferred address the record does not name, a value over its limit |
 | `51012` | A flag change asked for nothing, stated half a keyword change, named a keyword no mail server would keep, carried a `requestId` that is no identifier, or reused one that already asked for a different value | Name at least one of `seen`, `flagged`, and the keyword pair; send `keywordChange` and `keywords` together; keep each keyword to one word of plain ASCII and name at most 64; keep `requestId` to at most 128 printable characters, or leave it out and let the server issue one; send a new one when you mean a new change |
 | `51013` | A field of a message you authored carries a value no message can be composed from — a line break in a subject or a recipient, an address outside ASCII, text naming no account, or an `account` or `idempotencyKey` that is blank, too long, or not printable | Fix the field the message names; it names the field and never the value you sent |
-| `51014` | A message you authored is larger than this deployment composes — more people than the recipient bound allows, or a body over its character bound | The message names the bound and the configured number: send to fewer people, or send a shorter body |
+| `51014` | A message you authored is larger than this deployment composes — more people than the recipient bound allows, a body over its character bound, or a forward whose original carries more files or larger ones than this deployment sends | The message names the bound and the configured number: send to fewer people, send a shorter body, or accept that the message cannot be forwarded from here |
 | `52001` / `52002` | A cursor this system did not issue, or one reused after the filters changed | Restart the walk from the first page |
 | `52003` | A contact listing's cursor is not one this system issued | Restart the walk; changing the search or the origin mid-walk is allowed and is not what caused it |
 | `53001` | The named account is not served here | Call `list_accounts` and use an `accountId` or `displayName` it returns |
 | `53002` | No such email in the local copy | The identifier is stale, or the mail was removed; list again |
 | `53003` | A folder was named by a role no folder in scope carries | Name the folder's alias instead, or ask the operator to map the role on that account |
+| `53005` | There is no email here you can reply to or forward under that identifier | One answer for four situations, deliberately: no such identifier, an account no longer served, a folder withheld from tools, or content no longer readable. Nothing tells you which — list again, and ask the operator if the message is one you expected to be able to answer |
 | `55001` | The email exists but its stored content is currently unreadable; a repair has been queued | Retry later — this is a local-consistency state, not a mail-server problem |
 | `56001` | This deployment cannot answer questions about mail, either at all or for now | Nothing about the question caused it; the message says which, and only the operator can change it |
 | `56002` | This deployment cannot send as the account you named | The account is served and readable, and sending from it is the part nobody configured; only the operator can add its delivery configuration |
@@ -426,7 +474,8 @@ The codes a user meets in practice:
 the message they concern, because a content read answers for each message it was given rather than failing whole.
 
 Refusals are deliberately uninformative in one direction: an account that does not exist and an account that is not
-yours are the same answer, so the tool surface cannot be used to discover what a deployment serves. A contact tool your
+yours are the same answer, so the tool surface cannot be used to discover what a deployment serves. `53005` is the same
+rule over mail rather than accounts, and it collapses four situations instead of two. A contact tool your
 credential was not granted follows the same rule from the other end — it is missing from the tool listing, and calling
 it anyway is answered as an unknown tool rather than as a permission you lack.
 

@@ -761,6 +761,10 @@ public static class ServiceCollectionExtensions
         // every one of them. It holds no delivery session and cannot open one, which is what keeps asking to send from
         // ever becoming transmitting.
         services.AddScoped<AuthoredMailSubmission>();
+        // The same three steps for the two sends that begin from mail already held, composed from the authoring
+        // registered above rather than from an account and a recipient list: a reply is addressed by the message it
+        // answers. It holds no delivery session either, for the same reason the submission beside it does not.
+        services.AddScoped<AuthoredResponseSubmission>();
         // Read by synchronization rather than by the performer, so that a relocation coming back through an ordinary
         // run is recognized as MailFathom's own instead of being stored as a second email.
         services.AddScoped<IMailboxMutationReconciliationStore, MailboxMutationReconciliationStore>();

@@ -18,7 +18,7 @@ namespace MailFathom.Mcp.UnitTests.Tools;
 /// </remarks>
 public sealed class RegisteredToolSurfaceTests
 {
-    /// <summary>The mailbox tools and the contact tools of this release, so a fourteenth arriving unnoticed is a change to the published contract.</summary>
+    /// <summary>The mailbox tools and the contact tools of this release, so a sixteenth arriving unnoticed is a change to the published contract.</summary>
     /// <remarks>
     /// Registration is not advertisement. <c>ask_mail</c> is registered by every deployment and listed only by one that
     /// can answer, and every tool here is listed only to a caller whose grant reaches it — so this set is the ceiling a
@@ -39,12 +39,14 @@ public sealed class RegisteredToolSurfaceTests
                 AskMailTool.ToolName,
                 CreateContactTool.ToolName,
                 DeleteContactTool.ToolName,
+                ForwardEmailTool.ToolName,
                 GetContactTool.ToolName,
                 GetEmailContentTool.ToolName,
                 ListAccountsTool.ToolName,
                 ListContactsTool.ToolName,
                 ListEmailsTool.ToolName,
                 PromoteContactTool.ToolName,
+                ReplyToEmailTool.ToolName,
                 SearchEmailsTool.ToolName,
                 SendEmailTool.ToolName,
                 SetMailFlagsTool.ToolName,

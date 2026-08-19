@@ -260,11 +260,13 @@ given client is one of them, and each has an answer above rather than a setting 
 
 Whichever client was configured, a connected one lists at least six tools. Four of them — `list_accounts`,
 `list_emails`, `get_email_content`, and `search_emails` — advertise themselves as read-only, non-destructive, and
-idempotent. Two are not read-only. `set_mail_flags`
+idempotent. Four are not read-only. `set_mail_flags`
 changes your mailbox on the mail server rather than MailFathom's copy of it, and it advertises itself as destructive too
 — a keyword replacement states the whole set, so a label the caller did not list comes off. `send_email` sends a real
 message and advertises itself as destructive for the opposite reason: it takes nothing away, and nothing takes it back,
-so a client that asks before a destructive call asks before this one. Both also announce that they reach outside this
+so a client that asks before a destructive call asks before this one. `reply_to_email` and `forward_email` answer mail
+this deployment already holds and carry exactly the same four annotations, for exactly the same reasons. All of them
+also announce that they reach outside this
 process, which is the annotation most clients read before deciding whether to prompt. Where
 that list is shown is the one client-specific part: `claude mcp list` or the `/mcp` panel for the command-line tool, the
 server's entry in the editor's MCP view for Visual Studio Code and for Cursor, the connector's own settings page for the

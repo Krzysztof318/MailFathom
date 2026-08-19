@@ -24,7 +24,7 @@ surfaces draw from disjoint halves, and the prefix after `mailfathom.` says whic
 | `mailfathom.mail.read` | MCP | The tools that read the local mailbox copy: `list_accounts`, `list_emails`, `get_email_content`, `search_emails`. Where semantic retrieval is configured, searching places the caller's own query text with the embedding provider, so this is not an egress-free grant |
 | `mailfathom.mail.ask` | MCP | `ask_mail`, which answers from mail content by sending it to a model provider. It does not imply `mailfathom.mail.read`, and granting it is granting access to mail |
 | `mailfathom.mail.flags.write` | MCP | `set_mail_flags`, which marks mail read or unread, stars or unstars it, and writes its keywords. It is the one MCP grant whose effect reaches the owner's mail server, and it does not follow from reading mail: a deployment that lets an agent read has not thereby let it change anything |
-| `mailfathom.mail.send` | MCP | Asking this deployment to send mail from an account it holds. It is the one grant here whose effect leaves the deployment and cannot be recalled, which is why it follows from nothing: reading a mailbox is not writing from it, and marking mail reaches the owner's own server rather than a stranger's. It covers `send_email`, which queues a message for a mailbox this deployment holds, and it is asked for again by the use case behind it and by the outbox beneath that, so it governs the act rather than only the tool |
+| `mailfathom.mail.send` | MCP | Asking this deployment to send mail from an account it holds. It is the one grant here whose effect leaves the deployment and cannot be recalled, which is why it follows from nothing: reading a mailbox is not writing from it, and marking mail reaches the owner's own server rather than a stranger's. It covers `send_email`, which queues a message for a mailbox this deployment holds, and `reply_to_email` and `forward_email`, which queue one anchored to mail it already holds — those two also need `mailfathom.mail.read`, because an answer is derived from the message it answers. It is asked for again by the use cases behind all three and by the outbox beneath them, so it governs the act rather than only the tool |
 | `mailfathom.mail.contacts.read` | MCP | `list_contacts` and `get_contact`, which read the deployment's own contact book: names, addresses, and the notes an owner wrote about identified third parties |
 | `mailfathom.mail.contacts.write` | MCP | `create_contact`, `update_contact`, `delete_contact`, and `promote_contact`, which record, amend, erase, and take on a person in that book. The erasure is here rather than apart, because a grant that cannot edit the book cannot be trusted to take somebody out of it |
 | `mailfathom.admin.read` | administrative | The reads reporting the deployment's own state and no mail: what synchronization is doing per account and per folder, embedding status and the activation preview, the loaded rules, a run's progress, what a rewind would cost, where a re-derivation has got to, the stopped-job list |
@@ -84,6 +84,8 @@ call.
 | `search_emails` | `mailfathom.mail.read` |
 | `set_mail_flags` | `mailfathom.mail.flags.write` |
 | `send_email` | `mailfathom.mail.send` |
+| `reply_to_email` | `mailfathom.mail.send`, and `mailfathom.mail.read` beneath it |
+| `forward_email` | `mailfathom.mail.send`, and `mailfathom.mail.read` beneath it |
 | `ask_mail` | `mailfathom.mail.ask` |
 | `list_contacts` | `mailfathom.mail.contacts.read` |
 | `get_contact` | `mailfathom.mail.contacts.read` |
@@ -92,11 +94,19 @@ call.
 | `delete_contact` | `mailfathom.mail.contacts.write` |
 | `promote_contact` | `mailfathom.mail.contacts.write` |
 
-The row for `send_email` is the one worth reading twice. It is the only grant here whose effect leaves this deployment
-and cannot be recalled, and the mapping is what withholds the tool from every other credential: a caller without the
-name is not offered the descriptor and is answered as if the tool did not exist. Two further checks stand behind it —
-the use case, and the outbox it writes through — so an entrypoint added later meets the same refusal without passing
-this table.
+The three sending rows are the ones worth reading twice. `mailfathom.mail.send` is the only grant here whose effect
+leaves this deployment and cannot be recalled, and the mapping is what withholds those tools from every other
+credential: a caller without the name is not offered the descriptor and is answered as if the tool did not exist. Two
+further checks stand behind it — the use case, and the outbox it writes through — so an entrypoint added later meets the
+same refusal without passing this table.
+
+**`reply_to_email` and `forward_email` are the two rows that name a second grant, and it is a requirement rather than a
+note.** The sending grant is what the descriptor declares and what narrows the listing, because sending is the effect
+that leaves. What the use case beneath asks for as well is `mailfathom.mail.read`, since an answer is derived from the
+message it answers — it quotes it, threads it, addresses it from its headers, and carries its files. No permission here
+implies another, so a credential holding only the sending grant is offered both tools and refused by the use case behind
+them: a deployment that means an agent to reply grants both names on the same entry. Which of the two refused is not a
+distinction the caller is given, and the deployment's own counter and warning are where it is read.
 
 ## Which administrative route each name covers
 
@@ -173,7 +183,7 @@ Where that would be wrong, write the names out. `mailfathom.mail.flags.write` is
 check a written grant against: an entry reading `mailfathom.mail.*` used to reach nothing that leaves this deployment,
 and on upgrade it reaches the tool that writes to the owner's mail server. `mailfathom.mail.send` is the second and the
 sharper one, since the same pattern now also carries the grant to send from the owner's address to anybody, through
-`send_email`. Everything that reads a grant back states
+`send_email` and through the two tools that answer stored mail. Everything that reads a grant back states
 what a pattern resolved to and never the pattern — the startup line, `GET /api/admin/session`, and `scopes_supported` —
 so no reader has to expand one by hand.
 

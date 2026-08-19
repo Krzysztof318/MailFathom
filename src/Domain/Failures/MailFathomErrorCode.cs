@@ -478,6 +478,17 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode AuthoredMailRecipientUnresolved { get; } = new(53004);
 
+    /// <summary>Gets subcategory 3, access: a request asked to answer an email this deployment will not answer.</summary>
+    /// <remarks>
+    /// One code covers four situations on purpose: an identifier naming nothing, an account this deployment stopped
+    /// serving, a folder an operator withheld from tools, and a local copy whose content cannot be read. A caller that
+    /// could tell them apart would learn which mail exists by asking to reply to it, and an email nothing may read is
+    /// an email nothing may forward — so the answer is the same one a read of that email gives, whichever of the four
+    /// it was. It is separate from <see cref="StoredEmailNotFound" /> and <see cref="EmailContentUnavailable" /> for
+    /// that reason rather than despite it: those two say which case it is, which is exactly what a send may not.
+    /// </remarks>
+    public static MailFathomErrorCode AnsweredEmailUnavailable { get; } = new(53005);
+
     /// <summary>Gets subcategory 4, undiagnosed failure: a tool call failed for a reason the boundary deliberately does not describe.</summary>
     /// <remarks>
     /// This is the one code every failure that is not already an allocated one collapses into, so a client learns that
@@ -677,6 +688,7 @@ public readonly record struct MailFathomErrorCode
         StoredEmailNotFound,
         MailFolderRoleUnmapped,
         AuthoredMailRecipientUnresolved,
+        AnsweredEmailUnavailable,
         McpToolFailedUnexpectedly,
         EmailContentUnavailable,
         MailAnsweringUnavailable,
