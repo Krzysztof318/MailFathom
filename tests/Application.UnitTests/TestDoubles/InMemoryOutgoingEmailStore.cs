@@ -58,6 +58,13 @@ internal sealed class InMemoryOutgoingEmailStore(
     /// </remarks>
     internal Func<OutgoingEmailId, bool> RefusesWrites { get; set; } = _ => false;
 
+    /// <summary>Gets or sets whether counting what is outstanding fails, and lets it answer by default.</summary>
+    /// <remarks>
+    /// It stands in for a database that refused the last read of a pass, which is the failure that must cost a
+    /// measurement rather than the outcomes the pass had already settled.
+    /// </remarks>
+    internal bool RefusesOutstandingCount { get; set; }
+
     /// <summary>Writes a record the way a writer that has already committed left it, without going through a session.</summary>
     /// <param name="request">The request the other writer recorded.</param>
     /// <param name="mimeByteLength">How many bytes of MIME it stored.</param>
@@ -200,6 +207,11 @@ internal sealed class InMemoryOutgoingEmailStore(
         MailAccountId accountId,
         CancellationToken cancellationToken)
     {
+        if (this.RefusesOutstandingCount)
+        {
+            throw new InvalidOperationException("The store would not count what is outstanding.");
+        }
+
         var standing = this.rows.Values
             .Select(row => row.Record)
             .Where(record => record.AccountId == accountId && !record.IsTerminal)

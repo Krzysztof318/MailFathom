@@ -638,6 +638,11 @@ internal sealed class AdminApiClient
     /// <returns>The send.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment holds no such send, refused the request or the credential, could not be reached, or answered with something that is not a send.</exception>
+    /// <remarks>
+    /// The one route here whose <c>404</c> means the record rather than the port, so it carries a sentence of its own:
+    /// an operator acting on a listing a few minutes old reaches an identifier the deployment no longer holds, and
+    /// sending them to check the endpoint's port would be advice about a deployment that answered them correctly.
+    /// </remarks>
     internal Task<OutboxSend> ReadOutboxSendAsync(
         string token,
         Guid outgoingEmail,
@@ -647,7 +652,9 @@ internal sealed class AdminApiClient
             AdminEndpointRoutes.OutboxSendPath(outgoingEmail),
             token,
             CliJsonContext.Default.OutboxSend,
-            cancellationToken);
+            cancellationToken,
+            absenceMessage:
+                $"This deployment holds no queued message {outgoingEmail:D}. It may have been erased since the listing that named it was read.");
 
     /// <summary>Asks the deployment to withdraw one send before it leaves.</summary>
     /// <param name="token">The bearer credential to present.</param>
@@ -977,6 +984,13 @@ internal sealed class AdminApiClient
     /// reindex already running, an estimate above the ceiling — and inventing a sentence here would lose the two numbers
     /// the operator needs.
     /// </para>
+    /// <para>
+    /// <c>404</c> means the port serves no administrative endpoint on every route but one, because a route addressing a
+    /// single record answers <c>200</c> with a nullable field where the deployment holds nothing. The outbox's own
+    /// single-record reading is the exception and says so through <paramref name="absenceMessage" />: it addresses a
+    /// send by identity, so its absence is the absence of the thing addressed, and telling that operator to check the
+    /// port would send them after a deployment that is answering perfectly well.
+    /// </para>
     /// </remarks>
     private async Task<TAnswer> RequestAsync<TAnswer>(
         HttpMethod method,
@@ -984,7 +998,8 @@ internal sealed class AdminApiClient
         string token,
         JsonTypeInfo<TAnswer> answerContract,
         CancellationToken cancellationToken,
-        HttpContent? content = null)
+        HttpContent? content = null,
+        string? absenceMessage = null)
         where TAnswer : class
     {
         ArgumentNullException.ThrowIfNull(token);
@@ -1009,7 +1024,8 @@ internal sealed class AdminApiClient
         if (response.StatusCode is HttpStatusCode.NotFound)
         {
             throw new CliFailure(
-                $"The address answered, but serves no administrative endpoint at {path}. Check the port: the administrative endpoint binds a listener of its own, and it is disabled unless the deployment enabled it.");
+                absenceMessage
+                ?? $"The address answered, but serves no administrative endpoint at {path}. Check the port: the administrative endpoint binds a listener of its own, and it is disabled unless the deployment enabled it.");
         }
 
         if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Conflict)

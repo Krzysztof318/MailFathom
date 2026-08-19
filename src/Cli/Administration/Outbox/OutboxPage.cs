@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Globalization;
 using System.Text.Json.Serialization;
 
 namespace MailFathom.Cli.Administration.Outbox;
@@ -39,31 +38,11 @@ internal sealed record OutboxEntryReading(
     [property: JsonPropertyName("lastFailureCode")] int? LastFailureCode,
     [property: JsonPropertyName("lastReplyCode")] int? LastReplyCode)
 {
-    /// <summary>The stage a send stands at while nobody can say what its recipients received.</summary>
-    /// <remarks>
-    /// Compared by the deployment's own word rather than by an enumeration of this command's, because the command
-    /// prints what the deployment says and the two are versioned separately. A stage this build has never heard of
-    /// still prints under its own name.
-    /// </remarks>
-    internal const string UnknownOutcomeStage = "TransmissionBegun";
-
     /// <summary>Gets whether this is the send that waits for a person rather than for another attempt.</summary>
-    internal bool HasUnknownOutcome =>
-        string.Equals(this.Stage, UnknownOutcomeStage, StringComparison.Ordinal);
+    internal bool HasUnknownOutcome => OutboxReading.StandsAtUnknownOutcome(this.Stage);
 
     /// <summary>Describes what the last attempt ended in, as the codes an operator looks up.</summary>
     /// <returns>The failure code and the reply code, or a word saying the deployment recorded neither.</returns>
-    /// <remarks>
-    /// Codes rather than sentences, and by design: a failure a submission server described is that server's text about
-    /// somebody's message, and MailFathom's own five-digit code is what the documentation is indexed by.
-    /// </remarks>
-    internal string DescribeFailure() => (this.LastFailureCode, this.LastReplyCode) switch
-    {
-        (null, null) => "none recorded",
-        ({ } failure, null) => string.Create(CultureInfo.InvariantCulture, $"failure {failure}"),
-        (null, { } reply) => string.Create(CultureInfo.InvariantCulture, $"reply {reply}"),
-        ({ } failure, { } reply) => string.Create(
-            CultureInfo.InvariantCulture,
-            $"failure {failure}, reply {reply}"),
-    };
+    internal string DescribeFailure() =>
+        OutboxReading.DescribeFailure(this.LastFailureCode, this.LastReplyCode);
 }

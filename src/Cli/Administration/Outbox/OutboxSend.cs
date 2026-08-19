@@ -38,7 +38,16 @@ internal sealed record OutboxSend(
     [property: JsonPropertyName("availableAt")] DateTimeOffset AvailableAt,
     [property: JsonPropertyName("lastFailureCode")] int? LastFailureCode,
     [property: JsonPropertyName("lastReplyCode")] int? LastReplyCode,
-    [property: JsonPropertyName("recipients")] IReadOnlyList<OutboxRecipientReading> Recipients);
+    [property: JsonPropertyName("recipients")] IReadOnlyList<OutboxRecipientReading> Recipients)
+{
+    /// <summary>Gets whether this is the send that waits for a person rather than for another attempt.</summary>
+    internal bool HasUnknownOutcome => OutboxReading.StandsAtUnknownOutcome(this.Stage);
+
+    /// <summary>Describes what the last attempt ended in, as the codes an operator looks up.</summary>
+    /// <returns>The failure code and the reply code, or a word saying the deployment recorded neither.</returns>
+    internal string DescribeFailure() =>
+        OutboxReading.DescribeFailure(this.LastFailureCode, this.LastReplyCode);
+}
 
 /// <summary>One person a message is offered to, and what the server said about them.</summary>
 /// <param name="Address">The address the envelope names.</param>

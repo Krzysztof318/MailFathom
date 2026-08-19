@@ -744,9 +744,10 @@ to, and `mfctl outbox show` answers about one of them with its recipients and wh
 decisions are the only points at which this path is steered by hand: `mfctl outbox cancel` withdraws a send that has
 not begun transmitting, and `mfctl outbox requeue` offers one again — one named message at a time, never a selection,
 and never a permanently refused message without the refusal being restated. None of the five is reachable from the MCP
-surface: they are administrative, they are bounded by the administrative credential's `mailfathom.admin.read` and
-`mailfathom.admin.operate` grants, and putting a message back on its way to somebody's mailbox is not a decision to
-leave to a model. [The administrative endpoint § Reading what is in the outbox, and deciding about one
+surface: they are administrative, they are bounded by the administrative credential's `mailfathom.admin.read`,
+`mailfathom.admin.audit.read` — which is what `outbox show` needs, because it is the one of the five that names people
+— and `mailfathom.admin.operate` grants, and putting a message back on its way to somebody's mailbox is not a decision
+to leave to a model. [The administrative endpoint § Reading what is in the outbox, and deciding about one
 message](../operations/admin-endpoint.md#reading-what-is-in-the-outbox-and-deciding-about-one-message) holds the
 routes, the outcomes, and the stage table.
 

@@ -112,7 +112,7 @@ internal static class OutboxListCommand
         if (sends.Any(send => send.HasUnknownOutcome))
         {
             context.Console.WriteLine(
-                $"A message at {OutboxEntryReading.UnknownOutcomeStage} went out and its server never answered, so whether its recipients received it is unknown. Nothing transmits it again on its own; read it with '{CliRootCommand.CommandName} outbox show --message <id>' and decide.");
+                $"A message at {OutboxReading.UnknownOutcomeStage} went out and its server never answered, so whether its recipients received it is unknown. Nothing transmits it again on its own; read it with '{CliRootCommand.CommandName} outbox show --message <id>' and decide.");
         }
 
         context.Console.WriteLine(

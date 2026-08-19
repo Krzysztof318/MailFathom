@@ -130,8 +130,12 @@ public sealed class MailOutboxPass
     /// Counted after the batch is settled rather than before it, so what is published is the backlog this pass left
     /// rather than a restatement of what it claimed. It is the last thing the pass does and the only one whose answer
     /// nothing acts on, so a host that stopped between the sends and the count costs a measurement: reporting the
-    /// cancellation instead would discard every outcome this pass had already written down and already settled.
+    /// cancellation instead would discard every outcome this pass had already written down and already settled. A
+    /// database that refused the count costs the same measurement and for the same reason, which is why the guard is
+    /// the broad one the two steps above it use rather than cancellation alone — an unmeasured level is a gauge that
+    /// stands still until the next pass, while a thrown count is a whole pass reported as failed.
     /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The count is the last step of the pass and the only one nothing acts on; letting it throw would discard the delivery and filing outcomes this pass had already durably settled, and report a pass that worked as one that failed.")]
     private async Task<IReadOnlyList<OutboxStageCount>> MeasureOutstandingAsync(
         MailAccountId accountId,
         CancellationToken stoppingToken)
@@ -142,6 +146,12 @@ public sealed class MailOutboxPass
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
+            return [];
+        }
+        catch (Exception)
+        {
+            // A database that refused the count, or a timeout it raised as something else. The answer is the same as
+            // the one above, because the alternative is not a better measurement but a settled pass reported as failed.
             return [];
         }
     }

@@ -72,12 +72,12 @@ internal static class ShowOutgoingMailCommand
         details.Add("Recorded", $"{send.RecordedAt:u}");
         details.Add("Stage since", $"{send.StageChangedAt:u}");
         details.Add("Due", $"{send.AvailableAt:u}");
-        details.Add("Failed", DescribeFailure(send));
+        details.Add("Failed", send.DescribeFailure());
         details.Add("Recipients", DescribeRecipients(send));
 
         context.Console.Write(details);
 
-        if (string.Equals(send.Stage, OutboxEntryReading.UnknownOutcomeStage, StringComparison.Ordinal))
+        if (send.HasUnknownOutcome)
         {
             context.Console.WriteLine(string.Empty);
             context.Console.WriteLine(
@@ -86,17 +86,6 @@ internal static class ShowOutgoingMailCommand
 
         return CliExitCode.Success;
     }
-
-    /// <summary>Describes what the last attempt ended in, as the codes an operator looks up.</summary>
-    private static string DescribeFailure(OutboxSend send) => (send.LastFailureCode, send.LastReplyCode) switch
-    {
-        (null, null) => "none recorded",
-        ({ } failure, null) => string.Create(CultureInfo.InvariantCulture, $"failure {failure}"),
-        (null, { } reply) => string.Create(CultureInfo.InvariantCulture, $"reply {reply}"),
-        ({ } failure, { } reply) => string.Create(
-            CultureInfo.InvariantCulture,
-            $"failure {failure}, reply {reply}"),
-    };
 
     /// <summary>Writes one line per recipient: the address, its role, and what the server said about it.</summary>
     /// <remarks>

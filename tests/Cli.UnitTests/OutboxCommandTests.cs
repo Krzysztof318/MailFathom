@@ -219,6 +219,37 @@ public sealed class OutboxCommandTests : IDisposable
             line => line.Contains("second copy", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// This is the one route whose <c>404</c> is about the record rather than the port, and an operator acting on a
+    /// listing a few minutes old reaches it ordinarily. Telling them to check the endpoint's port would send them after
+    /// a deployment that answered them correctly.
+    /// </summary>
+    [Fact]
+    public async Task Show_ASendThisDeploymentDoesNotHold_SaysSoRatherThanBlamingTheEndpoint()
+    {
+        // Arrange
+        using var deployment = FakeOutboxDeployment.Serving();
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "outbox",
+            "show",
+            "--message",
+            Message.ToString("D"),
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(
+            this.console.Errors,
+            line => line.Contains("holds no queued message", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            this.console.Errors,
+            line => line.Contains("Check the port", StringComparison.Ordinal));
+    }
+
     /// <summary>The decision reaches the deployment, and the command says what it means for the message.</summary>
     [Fact]
     public async Task Cancel_ASendThatHasNotLeft_AsksTheDeploymentAndReportsThatNobodyReceivedIt()

@@ -133,6 +133,28 @@ public sealed class MailOutboxPassTests
         Assert.All(report.OutstandingByStage, stage => Assert.Equal(0, stage.Count));
     }
 
+    /// <summary>
+    /// The measurement is the last step and the only one nothing acts on, so a database that refused it costs the
+    /// level rather than the outcomes this pass had already settled and durably written down.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_TheStoreWillNotCountWhatIsOutstanding_StillReportsWhatThePassSettled()
+    {
+        // Arrange
+        var context = new PassContext();
+        var queued = context.Enqueue();
+        context.Store.RefusesOutstandingCount = true;
+
+        // Act
+        var report = await context.RunAsync();
+
+        // Assert
+        Assert.Equal([queued], report.Results.Select(result => result.OutgoingEmailId));
+        Assert.Equal(1, report.SentCount);
+        Assert.Empty(report.OutstandingByStage);
+        Assert.Equal(OutgoingEmailStage.Sent, context.Store.Read(queued).Stage);
+    }
+
     /// <summary>A send whose outcome the store would not take ends alone, and the send behind it in the batch is still reached.</summary>
     [Fact]
     public async Task RunAsync_TheStoreWillNotRecordOneSendsOutcome_StillReachesTheSendBehindIt()
