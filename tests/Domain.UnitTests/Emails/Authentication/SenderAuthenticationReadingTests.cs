@@ -212,9 +212,14 @@ public sealed class SenderAuthenticationReadingTests
         Assert.Equal("MAIL.BANK.TEST", authentication.AuthenticatedDomain?.NormalizedValue);
     }
 
-    /// <summary>Without a usable DMARC result, a signing subdomain leaves the author unestablished rather than refused.</summary>
+    /// <summary>A signing subdomain establishes the displayed author even where no DMARC result interprets it.</summary>
+    /// <remarks>
+    /// The trusted reading reaches this the same way the local one does, from the two names alone, so a deployment
+    /// whose server reports no DMARC result concludes what one reporting <c>pass</c> concludes about the same message.
+    /// The established domain stays the displayed one while the identity that authenticated stays the signer.
+    /// </remarks>
     [Fact]
-    public void Read_SigningSubdomainWithoutDmarc_EstablishesNoAuthor()
+    public void Read_SigningSubdomainWithoutDmarc_EstablishesTheDisplayedAuthor()
     {
         // Arrange
         var headers = new[] { Header(TrustedIdentifier, Dkim("pass", "mail.bank.test")) };
@@ -223,8 +228,9 @@ public sealed class SenderAuthenticationReadingTests
         var authentication = SenderAuthenticationReading.Read(headers, TrustedAuthority, "alerts@bank.test");
 
         // Assert
-        Assert.Equal(AuthorAuthenticationOutcome.NotEstablished, authentication.AuthorAuthentication);
-        Assert.Null(authentication.AuthenticatedAuthorDomain);
+        Assert.Equal(AuthorAuthenticationOutcome.Authenticated, authentication.AuthorAuthentication);
+        Assert.Equal("BANK.TEST", authentication.AuthenticatedAuthorDomain?.NormalizedValue);
+        Assert.Equal("MAIL.BANK.TEST", authentication.AuthenticatedDomain?.NormalizedValue);
     }
 
     /// <summary>DKIM is the authoritative identity where both checks produced one, and both are still recorded.</summary>

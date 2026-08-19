@@ -199,17 +199,72 @@ public sealed class SenderAuthenticationTests
         Assert.Equal(attacker, authentication.AuthenticatedDomain);
     }
 
-    /// <summary>Without a usable DMARC result, a signing subdomain of the displayed domain establishes nothing.</summary>
+    /// <summary>Without a usable DMARC result, an identity one within the other establishes the displayed author.</summary>
     /// <remarks>
-    /// Whether the sender's policy permits the relaxed form is written in a DNS record MailFathom never reads, so the
-    /// honest answer is that this reading does not know. It is deliberately not a failure: legitimate mail is signed
-    /// this way, and the receiving server said nothing against it.
+    /// Both directions are the same fact about the naming tree: a zone was delegated, downwards, by whoever holds the
+    /// name above it. What is established stays the displayed domain rather than the signing one, because the
+    /// trusted-sender list is held against what the reader is shown.
     /// </remarks>
-    [Fact]
-    public void AuthorAuthentication_SigningSubdomainWithoutDmarc_IsNotEstablished()
+    [Theory]
+    [InlineData("mail.partner.test", "partner.test")]
+    [InlineData("p1.mail.partner.test", "partner.test")]
+    [InlineData("partner.test", "notice.partner.test")]
+    public void AuthorAuthentication_IdentityWithinTheDisplayedDomainsBranch_IsAuthenticated(
+        string signingDomain,
+        string displayedDomain)
     {
         // Arrange
-        SenderDomain.TryCreate("mail.partner.test", out var signer);
+        SenderDomain.TryCreate(signingDomain, out var signer);
+        SenderDomain.TryCreate(displayedDomain, out var displayed);
+
+        // Act
+        var authentication = SenderAuthentication.Authenticated(
+            [signer],
+            spfDomains: [],
+            displayed,
+            DmarcOutcome.NotReported);
+
+        // Assert
+        Assert.Equal(AuthorAuthenticationOutcome.Authenticated, authentication.AuthorAuthentication);
+        Assert.Equal(displayed, authentication.AuthenticatedAuthorDomain);
+    }
+
+    /// <summary>Two names under one parent are unrelated, whichever of them signed the message.</summary>
+    /// <remarks>
+    /// This is the line between a delegation and DMARC's relaxed alignment. Calling siblings aligned needs the
+    /// organizational domain they share, which needs a public suffix list — neither of which exists here, and a shared
+    /// parent is no evidence that either name was ever permitted to speak for the other.
+    /// </remarks>
+    [Fact]
+    public void AuthorAuthentication_SiblingOfTheDisplayedDomain_IsNotEstablished()
+    {
+        // Arrange
+        SenderDomain.TryCreate("a.partner.test", out var signer);
+        SenderDomain.TryCreate("b.partner.test", out var displayed);
+
+        // Act
+        var authentication = SenderAuthentication.Authenticated(
+            [signer],
+            spfDomains: [],
+            displayed,
+            DmarcOutcome.NotReported);
+
+        // Assert
+        Assert.Equal(AuthorAuthenticationOutcome.NotEstablished, authentication.AuthorAuthentication);
+        Assert.Null(authentication.AuthenticatedAuthorDomain);
+    }
+
+    /// <summary>A name that merely ends in the displayed one as text is a different domain and establishes nothing.</summary>
+    /// <remarks>
+    /// The widened comparison is on whole labels, so <c>notpartner.test</c> is somebody else's registration rather than
+    /// a zone <c>partner.test</c> delegated. Anything less would hand every displayed domain to whoever registers a
+    /// name ending in its characters.
+    /// </remarks>
+    [Fact]
+    public void AuthorAuthentication_IdentitySharingOnlyASuffixOfCharacters_IsNotEstablished()
+    {
+        // Arrange
+        SenderDomain.TryCreate("notpartner.test", out var signer);
         SenderDomain.TryCreate("partner.test", out var displayed);
 
         // Act
@@ -221,6 +276,30 @@ public sealed class SenderAuthenticationTests
 
         // Assert
         Assert.Equal(AuthorAuthenticationOutcome.NotEstablished, authentication.AuthorAuthentication);
+        Assert.Null(authentication.AuthenticatedAuthorDomain);
+    }
+
+    /// <summary>A DMARC failure ends the question before the widened comparison is reached.</summary>
+    /// <remarks>
+    /// The receiving server refused the displayed domain under that domain's own published policy, which outranks a
+    /// delegation this reading inferred from two names. Widening the comparison must not reopen a question DMARC closed.
+    /// </remarks>
+    [Fact]
+    public void AuthorAuthentication_IdentityWithinTheDisplayedDomainsBranchButDmarcFailed_IsFailed()
+    {
+        // Arrange
+        SenderDomain.TryCreate("mail.partner.test", out var signer);
+        SenderDomain.TryCreate("partner.test", out var displayed);
+
+        // Act
+        var authentication = SenderAuthentication.Authenticated(
+            [signer],
+            spfDomains: [],
+            displayed,
+            DmarcOutcome.Fail);
+
+        // Assert
+        Assert.Equal(AuthorAuthenticationOutcome.Failed, authentication.AuthorAuthentication);
         Assert.Null(authentication.AuthenticatedAuthorDomain);
     }
 

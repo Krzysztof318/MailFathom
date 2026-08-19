@@ -110,10 +110,11 @@ public sealed record SenderAuthentication
     /// <see cref="AuthorAuthenticationOutcome.Authenticated" /> is reached two ways and neither of them believes the
     /// <c>From</c> header on its own. A trusted <see cref="DmarcOutcome.Pass" /> is the receiving server's own statement
     /// that the displayed domain passed under its published policy, so the displayed domain is the answer. Failing
-    /// that, an authenticated identity whose domain is exactly the displayed one is the same claim reached without
-    /// DMARC — exactly, because a differing
-    /// subdomain would need the sender's own policy to say whether relaxed alignment is permitted, and reading that
-    /// policy is not something MailFathom does.
+    /// that, an authenticated identity that is the displayed domain, sits beneath it, or holds it beneath itself is
+    /// the same claim reached without DMARC. A suffix relation at a label boundary means whoever publishes the signing
+    /// key was delegated that zone by the displayed domain or delegated the displayed domain themselves, so it rests
+    /// on DNS control flowing down the tree rather than on a policy nobody read. Two names that merely share a parent
+    /// stay unrelated, and no organizational domain and no public suffix list is computed to reach any of it.
     /// </para>
     /// <para>
     /// <see cref="AuthorAuthenticationOutcome.Failed" /> comes from <see cref="DmarcOutcome.Fail" /> alone, and it ends
@@ -306,8 +307,8 @@ public sealed record SenderAuthentication
     /// decided here outranks it. A message displaying no usable domain has no author to conclude anything about, which
     /// is why it stops at not established rather than at an identity comparison against nothing — but a DMARC failure
     /// still stands above that, since the server evaluated a displayed domain whether or not this reading could parse
-    /// one. What is left is the two routes that establish an author, and the exact comparison is over every identity
-    /// that authenticated rather than over the one kept as evidence.
+    /// one. What is left is the two routes that establish an author, and the comparison is over every identity that
+    /// authenticated rather than over the one kept as evidence.
     /// </remarks>
     private static (AuthorAuthenticationOutcome Outcome, SenderDomain? Domain) EstablishAuthor(
         SenderDomain? fromDomain,
@@ -324,8 +325,23 @@ public sealed record SenderAuthentication
             return (AuthorAuthenticationOutcome.NotEstablished, null);
         }
 
-        return dmarc == DmarcOutcome.Pass || authenticatedIdentities.Contains(displayed)
+        return dmarc == DmarcOutcome.Pass
+            || authenticatedIdentities.Any(identity => SpeaksForDisplayedDomain(identity, displayed))
             ? (AuthorAuthenticationOutcome.Authenticated, displayed)
             : (AuthorAuthenticationOutcome.NotEstablished, null);
     }
+
+    /// <summary>Answers whether an authenticated identity is close enough to the displayed domain to be its author.</summary>
+    /// <remarks>
+    /// The two names have to be one within the other at a label boundary, in either direction. Whoever publishes a key
+    /// under <c>p1.mail.example.test</c> was delegated that zone by <c>example.test</c>, and whoever publishes one for
+    /// <c>example.test</c> delegated <c>notice.example.test</c> themselves, so the relation rests on DNS control
+    /// flowing down the naming tree rather than on a DMARC policy nothing here reads. Siblings are therefore not
+    /// related — <c>a.example.test</c> and <c>b.example.test</c> are two names whose only connection is a parent
+    /// neither of them signed for — and DMARC's relaxed alignment, which would call them aligned, stays
+    /// unreconstructed. What the widening assumes without confirming is what <c>adkim=r</c> permits by default: a
+    /// subdomain delegated to a third party can speak for its parent.
+    /// </remarks>
+    private static bool SpeaksForDisplayedDomain(SenderDomain identity, SenderDomain displayed) =>
+        identity == displayed || identity.IsSubdomainOf(displayed) || displayed.IsSubdomainOf(identity);
 }

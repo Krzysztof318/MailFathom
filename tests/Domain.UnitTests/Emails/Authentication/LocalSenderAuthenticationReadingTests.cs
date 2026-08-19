@@ -69,13 +69,32 @@ public sealed class LocalSenderAuthenticationReadingTests
         Assert.Equal("SIGNER.EXAMPLE.TEST", verdict.AuthenticatedAuthorDomain?.NormalizedValue);
     }
 
-    /// <summary>A signing subdomain establishes nothing about the author, because no DMARC result says whether it may.</summary>
+    /// <summary>A signing subdomain establishes the displayed author here exactly as it does on the trusted path.</summary>
+    /// <remarks>
+    /// The two readings must reach the same conclusion about the same message, so the widened comparison is the domain
+    /// type's rather than either reading's. What is established stays the displayed domain, not the signing one.
+    /// </remarks>
     [Fact]
-    public void Read_ASignatureFromASubdomainOfTheDisplayedOne_LeavesTheAuthorUnestablished()
+    public void Read_ASignatureFromASubdomainOfTheDisplayedOne_EstablishesTheAuthor()
     {
         // Act
         var verdict = LocalSenderAuthenticationReading.Read(
             [DomainOf("mail.signer.example.test")],
+            anySignatureRejected: false,
+            "anna@signer.example.test");
+
+        // Assert
+        Assert.Equal(AuthorAuthenticationOutcome.Authenticated, verdict.AuthorAuthentication);
+        Assert.Equal("SIGNER.EXAMPLE.TEST", verdict.AuthenticatedAuthorDomain?.NormalizedValue);
+    }
+
+    /// <summary>A signature from an unrelated third party still establishes nothing, which is the bound on the widening.</summary>
+    [Fact]
+    public void Read_ASignatureFromAThirdPartyDomain_LeavesTheAuthorUnestablished()
+    {
+        // Act
+        var verdict = LocalSenderAuthenticationReading.Read(
+            [DomainOf("tenant.provider.example.test")],
             anySignatureRejected: false,
             "anna@signer.example.test");
 

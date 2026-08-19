@@ -20,9 +20,10 @@ namespace MailFathom.Domain.Emails.Authentication;
 /// the stronger of the two: a key the signing domain publishes signed exactly these octets.
 /// </para>
 /// <para>
-/// The author conclusion follows from the same rule the trusted reading uses and is not relaxed for running here. With
-/// no DMARC result to interpret a signing subdomain, an author is established only by a verified signature whose domain
-/// is exactly the displayed one — which is what MailFathom can honestly conclude without a policy in hand.
+/// The author conclusion follows from the same rule the trusted reading uses and is neither relaxed nor tightened for
+/// running here. An author is established by a verified signature whose domain is the displayed one or is one within
+/// the other at a label boundary, which is a delegation in the naming tree rather than a policy — and a policy is what
+/// MailFathom still has none of, so a signer outside that branch establishes nothing.
 /// </para>
 /// </remarks>
 public static class LocalSenderAuthenticationReading
