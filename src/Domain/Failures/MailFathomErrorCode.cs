@@ -489,6 +489,16 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode AnsweredEmailUnavailable { get; } = new(53005);
 
+    /// <summary>Gets subcategory 3, access: a message named a recipient the deployment's recipient policy does not admit.</summary>
+    /// <remarks>
+    /// It is allocated beside the account a deployment does not serve because it is the same kind of answer — the
+    /// caller named somebody this deployment will not write to, and naming somebody else is the remedy — rather than
+    /// beside the capability failures, which say that nothing the caller writes reaches an answer at all. The message
+    /// names which half of the policy refused and never the address it judged, since an address echoed back would
+    /// publish a recipient into a log and a policy answered address by address would be a list a caller could map.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingRecipientRefusedByPolicy { get; } = new(53006);
+
     /// <summary>Gets subcategory 4, undiagnosed failure: a tool call failed for a reason the boundary deliberately does not describe.</summary>
     /// <remarks>
     /// This is the one code every failure that is not already an allocated one collapses into, so a client learns that
@@ -528,6 +538,16 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode MailSendingUnavailable { get; } = new(56002);
 
+    /// <summary>Gets subcategory 6, capability: this deployment holds no capability to send as the account a message names.</summary>
+    /// <remarks>
+    /// It is separate from the account that configures no way to send because the two are different facts about the
+    /// same deployment: one has no submission endpoint, and this one has an endpoint nobody turned on — or is running
+    /// read-only, in which no account of it may send whatever its own switch says. One code covers both because a
+    /// caller acts on neither and the message says which, and it is separate from the grant a caller holds, since that
+    /// refusal is about who is asking rather than about what this installation may do.
+    /// </remarks>
+    public static MailFathomErrorCode MailSendingNotEnabled { get; } = new(56003);
+
     /// <summary>Gets subcategory 7, spend ceilings: answering a question would exceed a ceiling this deployment configured on what it spends.</summary>
     /// <remarks>
     /// Separate from the capability failure above because the deployment is working and nothing is degraded: the
@@ -537,6 +557,16 @@ public readonly record struct MailFathomErrorCode
     /// says which and neither names a number the caller could have influenced.
     /// </remarks>
     public static MailFathomErrorCode MailAnsweringBudgetExhausted { get; } = new(57001);
+
+    /// <summary>Gets subcategory 7, ceilings: sending a message would carry a period past a ceiling this deployment configured on how much mail may leave.</summary>
+    /// <remarks>
+    /// It sits beside the answering budget rather than with the capability failures for the reason that one does:
+    /// nothing is degraded and nothing is misconfigured, the operator declared how much may leave in a period and that
+    /// much has been asked for, so waiting for the period to roll over is an act that changes the answer. One code
+    /// covers all four ceilings — messages and recipients, for an account and for the deployment — because the message
+    /// names which was reached and the remedy is the same for each.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingMailCeilingReached { get; } = new(57002);
 
     #endregion
 
@@ -689,11 +719,14 @@ public readonly record struct MailFathomErrorCode
         MailFolderRoleUnmapped,
         AuthoredMailRecipientUnresolved,
         AnsweredEmailUnavailable,
+        OutgoingRecipientRefusedByPolicy,
         McpToolFailedUnexpectedly,
         EmailContentUnavailable,
         MailAnsweringUnavailable,
         MailSendingUnavailable,
+        MailSendingNotEnabled,
         MailAnsweringBudgetExhausted,
+        OutgoingMailCeilingReached,
         EmbeddingProviderCredentialRejected,
         EmbeddingProviderUnavailable,
         EmbeddingVectorShapeUnexpected,

@@ -23,6 +23,7 @@ using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Filing;
+using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Mail.Mutations;
@@ -531,6 +532,7 @@ internal static class HostComposition
             provider.GetRequiredService<MailSynchronizationOptions>().MachineAuthorshipProfile);
         builder.Services.AddScoped<IOutgoingSenderIdentityReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         builder.Services.AddScoped<IOutgoingMailFilingPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
+        builder.Services.AddScoped<IOutgoingSendPermissionReader, ConfiguredOutgoingSendPermissionReader>();
         builder.Services.AddScoped<IMailFolderParticipationReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         builder.Services.AddScoped<IJunkMailFolderCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         builder.Services.AddScoped<IMailFolderMappingReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
@@ -621,6 +623,14 @@ internal static class HostComposition
         // delivers it, so a queue per scope would be a queue nobody reads.
         builder.Services.AddSingleton(provider => new MailOutboxSignal(
             provider.GetRequiredService<IOptions<MailDeliveryOptions>>().Value.SignalQueueCapacity));
+        // Singletons, because both are one answer for the installation rather than for a work unit: who this deployment
+        // may write to and how much may leave it are bounds an operator holds once, and reading them per scope would
+        // let two sends arriving together be judged against two different sets of numbers. Both are therefore read at
+        // startup, which the configuration reference marks as needing a restart.
+        builder.Services.AddSingleton(provider =>
+            provider.GetRequiredService<IOptions<MailDeliveryOptions>>().Value.RecipientPolicy.ToPolicy());
+        builder.Services.AddSingleton(provider =>
+            provider.GetRequiredService<IOptions<MailDeliveryOptions>>().Value.SendCeilings.ToCeilings());
         builder.Services.AddScoped(provider =>
         {
             var deliverySettings = provider.GetRequiredService<IOptions<MailDeliveryOptions>>().Value;

@@ -563,6 +563,17 @@ internal sealed class MailSynchronizationOptions
     public bool FilesSentCopy(MailAccountId accountId) =>
         this.FindConfiguredAccount(accountId)?.Delivery.FileSentCopy ?? true;
 
+    /// <summary>Reports whether an operator has turned sending on for one account.</summary>
+    /// <param name="accountId">The account a message would be sent as.</param>
+    /// <returns><see langword="true" /> when this deployment may send as that account.</returns>
+    /// <remarks>
+    /// An account this snapshot does not name reads as one nobody turned sending on for, which is what it is: the
+    /// switch that would admit it exists on no account of this installation. That is also what a reload removing an
+    /// account means for a send arriving a moment later.
+    /// </remarks>
+    public bool SendingEnabled(MailAccountId accountId) =>
+        this.FindConfiguredAccount(accountId)?.Delivery.Enabled ?? false;
+
     /// <inheritdoc />
     public MailSynchronizationWindow GetWindow(MailAccountId accountId)
     {
@@ -1691,6 +1702,16 @@ internal sealed class MailSynchronizationAccountOptions : IValidatableObject
 
         if (!this.Delivery.IsConfigured)
         {
+            // Refused rather than left to the first send, because an operator who turned sending on has decided this
+            // account may write to people and would read a configuration that binds as one that did so. The remedy is
+            // an endpoint or a switch turned back off, and both are edits to this block.
+            if (this.Delivery.Enabled)
+            {
+                yield return new ValidationResult(
+                    $"Account '{this.AccountId}': sending is enabled and no submission host is configured, so nothing could ever carry a message.",
+                    [$"{nameof(this.Delivery)}.{nameof(MailAccountDeliveryOptions.Enabled)}"]);
+            }
+
             // A credential or a login provisioned for an endpoint that does not exist is the shape an operator reads
             // as working, so it is refused rather than left silently unused.
             if (this.Delivery.Secrets is not null || !string.IsNullOrWhiteSpace(this.Delivery.UserName))

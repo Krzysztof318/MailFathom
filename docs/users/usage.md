@@ -262,6 +262,13 @@ account you name, from the address that account's configuration declares, which 
 from making a message claim to be from somebody else. An account with no sending configuration refuses the call with
 `56002` rather than sending from something else.
 
+**Sending is something the operator turned on, per account.** It is off by default everywhere, so a deployment that has
+never been configured for it answers `56003` however well-formed the call is. The same code answers a deployment running
+read-only, in which nothing sends from any account. Two further bounds are the operator's as well and are worth knowing
+before a call is retried: a recipient policy, under which naming one refused recipient refuses the **whole** message
+with `53006` rather than sending it to the rest, and per-period ceilings on how many messages and recipients may leave,
+which answer `57002` until the period rolls over.
+
 **`idempotencyKey` is required, and it is the argument to get right.** It is your own name for this message. Retrying a
 call that may have gone through — a timeout, a dropped connection — with the *same* value sends one message and answers
 with the record the first attempt wrote. A *new* value is a new message. So reuse the value verbatim when retrying, and
@@ -464,10 +471,13 @@ The codes a user meets in practice:
 | `53002` | No such email in the local copy | The identifier is stale, or the mail was removed; list again |
 | `53003` | A folder was named by a role no folder in scope carries | Name the folder's alias instead, or ask the operator to map the role on that account |
 | `53005` | There is no email here you can reply to or forward under that identifier | One answer for four situations, deliberately: no such identifier, an account no longer served, a folder withheld from tools, or content no longer readable. Nothing tells you which — list again, and ask the operator if the message is one you expected to be able to answer |
+| `53006` | A recipient is one this deployment may not write to | The whole message was refused rather than sent to the rest; write to somebody the policy admits, or ask the operator to widen it. The answer never repeats the address |
 | `55001` | The email exists but its stored content is currently unreadable; a repair has been queued | Retry later — this is a local-consistency state, not a mail-server problem |
 | `56001` | This deployment cannot answer questions about mail, either at all or for now | Nothing about the question caused it; the message says which, and only the operator can change it |
 | `56002` | This deployment cannot send as the account you named | The account is served and readable, and sending from it is the part nobody configured; only the operator can add its delivery configuration |
+| `56003` | Sending is not turned on for the account you named, or this deployment is running read-only | The message says which; both are the operator's switch, and nothing you rewrite reaches an answer |
 | `57001` | Answering would cost more than this deployment allows | The message says which ceiling: a spent period is worth asking again once it turns over, while a question that reached what one question may cost needs to be narrower |
+| `57002` | Sending would carry this period past a ceiling the operator configured | The message names which ceiling; the period rolling over is when the same send can be asked for again |
 | `54001` | Something failed for a reason the boundary deliberately does not describe | The server log has the detail, correlated by the request's trace |
 
 `53002` and `55001` also reach you inside a *successful* `get_email_content` result, as the `failure` on the entry for

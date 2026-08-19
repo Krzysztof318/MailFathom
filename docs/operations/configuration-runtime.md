@@ -74,13 +74,14 @@ makes those values unopenable, and the failure appears at the next read rather t
 
 ## `Deployment`
 
-What this installation is, rather than what any one surface it serves does. One key today, and a root of its own for
-that reason: the address clients reach this deployment at is not a property of the feature that first needed it, so an
-operator answers it once and whatever else has to hand back an absolute address later reads the same key.
+What this installation is, rather than what any one surface it serves does. A root of its own for that reason: the
+address clients reach this deployment at is not a property of the feature that first needed it, so an operator answers
+it once and whatever else has to hand back an absolute address later reads the same key.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `Deployment:PublicBaseAddress` | url | — | Absolute, `https` unless the host is loopback, no path, no query, no fragment | restart |
+| `Deployment:ReadOnly` | bool | `false` | — | reload |
 
 **It has no default on purpose.** Only an operator knows which name a client reaches this process by, and a guess would
 produce addresses that resolve to nothing or, worse, to somebody else. Nothing derives it from a request either: an
@@ -90,6 +91,16 @@ It carries no path because this process serves its routes at its root, and clear
 because what is composed beneath it may be a capability — a secret in transit. Today the one consumer is the
 [attachment download link](../features/email-content.md#what-a-download-link-is-and-what-bounds-it); a deployment that
 declares no address issues none, which is a supported posture rather than a misconfiguration.
+
+**`ReadOnly` is what a deployment holds rather than what it is currently configured to do.** In it MailFathom sends no
+mail from any account, whatever an account's own
+[`Delivery:Enabled`](configuration-mail.md#submission-endpoint--delivery) says and whoever asked — a tool call, a rule,
+a command. The refusal happens where the outgoing record would be written, which is the one place every author passes
+through, so nothing is queued and nothing waits for the mode to be turned off;
+[mail delivery](../features/mail-delivery.md#what-a-deployment-must-turn-on-before-it-can-send) states what a caller is
+told. What it reaches is sending, which is what leaves this installation for somebody else's mailbox; changes to a
+mailbox this deployment reads are governed by the account's own
+[rule action permissions](configuration-mail.md#one-account--mailsynchronizationaccountsn) and by the grant a caller holds.
 
 
 ## `Jobs`

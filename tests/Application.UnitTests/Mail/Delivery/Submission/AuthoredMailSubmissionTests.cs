@@ -441,7 +441,8 @@ public sealed class AuthoredMailSubmissionTests
                     new PersistenceConcurrencyOptions(),
                     new FakeTimeProvider()),
                 signal,
-                authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend)),
+                authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
+                OutgoingMailGovernors.Permitting()),
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend));
     }
 

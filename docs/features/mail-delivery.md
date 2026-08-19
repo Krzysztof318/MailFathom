@@ -1,6 +1,6 @@
 # Mail delivery
 
-<!-- describes: src/Application/Mail/Delivery/**, src/Domain/Delivery/**, src/Infrastructure/Mail/MailKit/Delivery/**, src/Infrastructure/Mail/Mime/Composition/**, src/Infrastructure/Persistence/Delivery/**, src/Infrastructure/Mail/MailAccountDeliveryOptions.cs, src/Infrastructure/Mail/SmtpAccountSettings.cs, src/Host/Configuration/Mail/ConfiguredSmtpAccountSettingsProvider.cs, src/Host/Configuration/Mail/MailDeliveryOptions.cs, src/Host/Configuration/Mail/MailSynchronizationOptions.cs, src/Host/Hosting/Workers/OutboxDeliveryWorker.cs -->
+<!-- describes: src/Application/Mail/Delivery/**, src/Domain/Delivery/**, src/Infrastructure/Mail/MailKit/Delivery/**, src/Infrastructure/Mail/Mime/Composition/**, src/Infrastructure/Persistence/Delivery/**, src/Infrastructure/Mail/MailAccountDeliveryOptions.cs, src/Infrastructure/Mail/SmtpAccountSettings.cs, src/Host/Configuration/Mail/ConfiguredSmtpAccountSettingsProvider.cs, src/Host/Configuration/Mail/ConfiguredOutgoingSendPermissionReader.cs, src/Host/Configuration/Mail/MailDeliveryOptions.cs, src/Host/Configuration/Mail/MailSynchronizationOptions.cs, src/Host/Hosting/Workers/OutboxDeliveryWorker.cs -->
 
 Reading a mailbox and submitting to one are two capabilities against two servers, and MailFathom holds them apart. The
 submission half is whole: an account declares where its mail is submitted, a **delivery session** is opened against that
@@ -8,7 +8,7 @@ server — connected, encrypted, authenticated, and asked what it will accept �
 **resolved against the contact book**, an authored message is **composed into
 MIME**, a **reply or a forward is authored** from mail this deployment already holds, the send is written down durably
 before anything acts on it, and it is then **claimed, transmitted, and settled** against the record it was written as. A
-deployment that configures a submission endpoint sends mail, and `send_email` on
+deployment that configures a submission endpoint and turns sending on for the account sends mail, and `send_email` on
 [the MCP surface](mcp-tools.md#send_email) is how a caller asks it to.
 
 Each of those is a piece the ones after it rest on, and each is provable on its own: the session is the piece with a
@@ -86,6 +86,59 @@ The credential is the account's too, unless the block names another. `UserName` 
 deployment where submission goes through a relay in front of the provider and authenticates as somebody else; a
 `Secrets` block present but naming no password reference reads as absent, so `"Secrets": {}` falls back to the
 account's credential rather than resolving nothing.
+
+## What a deployment must turn on before it can send
+
+An endpoint says where mail would be submitted. It does not say that this deployment may send, and four separate
+answers stand between a configured endpoint and a message leaving the process. All four are the operator's rather than
+any author's, and all four are asked **where the outgoing record is created**, which is the one place every author
+passes through: a tool call, a rule, a command, and whatever asks next meet them identically, and a send either of them
+refuses leaves nothing written down, nothing queued, and nothing for a delivery pass to find.
+
+**Sending is off until an account is turned on.** `Delivery:Enabled` is `false` on every account of every deployment, so
+an installation upgrading into a release that can send does not thereby become able to — the release meets a
+configuration that never asked for the capability. It is per account because an owner may want one identity able to
+write and another purely archival. An account enabled with no submission host fails startup, since it is a permission
+nothing could act on.
+
+**A read-only deployment sends nothing at all.** `Deployment:ReadOnly` is a posture the whole process holds rather than
+a setting an account can argue with: in it every send is refused whatever any account enabled. It is off by default,
+which changes nothing for an existing deployment, and what it buys is the kind of assurance — from a reading of the
+account list, which has to be re-read after every edit, into an answer that holds however the list is edited.
+
+**A recipient policy bounds who may be written to.** `MailDelivery:RecipientPolicy` names allowed and denied domains
+and addresses, and every recipient of every message is judged against it before the record exists. A domain entry
+reaches the names beneath it, the denied lists are read first and win, and a policy naming nobody restricts nobody. **A
+message naming one refused recipient is refused whole** rather than delivered to the rest, because a message written to
+four people and sent to three is a message its author never wrote. What the caller is told names which half of the
+policy refused; the address never appears, in the answer or in a log.
+
+**Ceilings bound how much may leave in a period.** `MailDelivery:SendCeilings` counts messages and recipients, per
+account and per deployment, over a fixed window anchored at the Unix epoch. What is counted is what was written down
+rather than what was delivered, which is what makes the ceiling bound the fault it exists for: a rule matching more mail
+than expected and a caller in a loop both produce records whether or not any server accepts them. The message being
+asked for is weighed by the people it names, so one message can reach a recipient ceiling on its own; a refused send
+names which ceiling it reached, and the period's roll-over is when asking again can succeed. Every ceiling is zero —
+no ceiling — by default.
+
+The refusals a caller can meet are coded, and each says what would change the answer:
+
+| Code | Raised when | What resolves it |
+| --- | --- | --- |
+| `56003` `MailSendingNotEnabled` | The account has sending off, or the deployment is read-only | An operator's edit; nothing a caller writes reaches an answer |
+| `53006` `OutgoingRecipientRefusedByPolicy` | A recipient is denied, or is outside the allowed set | Writing to somebody the policy admits, or widening it |
+| `57002` `OutgoingMailCeilingReached` | The period has no room for this message | Waiting for the period to roll over, or raising the ceiling |
+
+Each of the three is refused before anything is composed into a record, so a refusal costs the asker nothing but the
+answer — and a request whose idempotency identity already has a record is judged the same way, which keeps the bounds a
+statement about the present rather than about whenever a caller first asked. That a full period can therefore refuse a
+retry of a send already recorded costs nothing: the record stands, its message is still delivered, and no answer here
+can produce a second one.
+
+[The mail configuration](../operations/configuration-mail.md#maildelivery) holds every key, its default, and its
+constraint; [the runtime configuration](../operations/configuration-runtime.md#deployment) holds the read-only posture.
+What a *caller* must hold to ask at all is a different question with a different answer —
+[`mailfathom.mail.send`](../operations/permissions.md), a grant on a credential rather than a policy on a deployment.
 
 ## Transport security is judged by the account's rules
 

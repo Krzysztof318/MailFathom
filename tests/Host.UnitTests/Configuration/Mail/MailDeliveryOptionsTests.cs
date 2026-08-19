@@ -4,6 +4,8 @@
 
 using System.ComponentModel.DataAnnotations;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Governance;
+using MailFathom.Domain.Emails;
 using MailFathom.Host.Configuration.Mail;
 using Xunit;
 
@@ -213,6 +215,160 @@ public sealed class MailDeliveryOptionsTests
         Assert.True(options.MaxAttempts > 0);
         Assert.True(options.SignalQueueCapacity > 0);
         Assert.Empty(ValidateWithDataAnnotations(options));
+    }
+
+    /// <summary>A section that names nobody and no ceiling is the default posture: everybody may be written to, and nothing is counted.</summary>
+    [Fact]
+    public void Defaults_UnconfiguredSection_RestrictNobodyAndCountNothing()
+    {
+        // Act
+        var options = new MailDeliveryOptions();
+
+        // Assert
+        Assert.False(options.RecipientPolicy.ToPolicy().RestrictsRecipients);
+        Assert.True(options.SendCeilings.ToCeilings().IsUnbounded);
+        Assert.Empty(Validate(options));
+    }
+
+    /// <summary>The four lists become one policy, and a denied entry outranks an allowed one that names the same mailbox.</summary>
+    [Fact]
+    public void RecipientPolicy_ListsAnOperatorWrote_BecomeThePolicyEveryRecipientIsJudgedAgainst()
+    {
+        // Arrange
+        var options = new MailDeliveryOptions
+        {
+            RecipientPolicy = new OutgoingRecipientPolicyOptions
+            {
+                AllowedDomains = ["example.test"],
+                DeniedAddresses = ["bruno@example.test"],
+            },
+        };
+
+        // Act
+        var policy = options.RecipientPolicy.ToPolicy();
+
+        // Assert
+        Assert.Empty(Validate(options));
+        Assert.Null(policy.Judge(Mailbox("anna@example.test")));
+        Assert.Equal(OutgoingRecipientRefusalReason.DeniedByPolicy, policy.Judge(Mailbox("bruno@example.test")));
+        Assert.Equal(
+            OutgoingRecipientRefusalReason.OutsideAllowedRecipients,
+            policy.Judge(Mailbox("chris@elsewhere.test")));
+    }
+
+    /// <summary>An entry that names nobody is a restriction an operator believes they wrote, so startup refuses it.</summary>
+    [Theory]
+    [InlineData("not a domain..test", null)]
+    [InlineData(null, "not an address")]
+    public void Validate_RecipientPolicyEntryNamingNobody_IsRefused(string? domain, string? address)
+    {
+        // Arrange
+        var options = new MailDeliveryOptions
+        {
+            RecipientPolicy = new OutgoingRecipientPolicyOptions
+            {
+                AllowedDomains = domain is null ? null : [domain],
+                DeniedAddresses = address is null ? null : [address],
+            },
+        };
+
+        // Act
+        var results = Validate(options);
+
+        // Assert
+        var refusal = Assert.Single(results);
+        Assert.Contains("RecipientPolicy", refusal.ErrorMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain(domain ?? address!, refusal.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>A per-account ceiling above the deployment's own could never bind, so it is refused rather than ignored.</summary>
+    [Theory]
+    [InlineData(10, 4, 0, 0, "MaxMessagesPerAccount")]
+    [InlineData(0, 0, 10, 4, "MaxRecipientsPerAccount")]
+    public void Validate_AccountCeilingAboveTheDeploymentsOwn_IsRefused(
+        long accountMessages,
+        long deploymentMessages,
+        long accountRecipients,
+        long deploymentRecipients,
+        string expectedSetting)
+    {
+        // Arrange
+        var options = new MailDeliveryOptions
+        {
+            SendCeilings = new OutgoingMailCeilingOptions
+            {
+                MaxMessagesPerAccount = accountMessages,
+                MaxMessagesPerDeployment = deploymentMessages,
+                MaxRecipientsPerAccount = accountRecipients,
+                MaxRecipientsPerDeployment = deploymentRecipients,
+            },
+        };
+
+        // Act
+        var results = Validate(options);
+
+        // Assert
+        Assert.Contains(expectedSetting, Assert.Single(results).ErrorMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>The ceilings an operator wrote are the ones a send is weighed against, over the window they named.</summary>
+    [Fact]
+    public void SendCeilings_CeilingsAnOperatorWrote_BecomeTheCeilingsASendIsWeighedAgainst()
+    {
+        // Arrange
+        var options = new MailDeliveryOptions
+        {
+            SendCeilings = new OutgoingMailCeilingOptions
+            {
+                Period = TimeSpan.FromHours(1),
+                MaxMessagesPerAccount = 2,
+                MaxMessagesPerDeployment = 5,
+            },
+        };
+
+        // Act
+        var ceilings = options.SendCeilings.ToCeilings();
+
+        // Assert
+        Assert.Empty(Validate(options));
+        Assert.False(ceilings.IsUnbounded);
+        Assert.Equal(TimeSpan.FromHours(1), ceilings.Period);
+        Assert.Equal(
+            OutgoingMailCeiling.AccountMessages,
+            ceilings.FindReachedCeiling(new OutgoingMailUsage(2, 2, 2, 2), recipientCount: 1));
+    }
+
+    /// <summary>A window this deployment does not count over is refused, and so is a ceiling written as a negative number.</summary>
+    [Theory]
+    [InlineData(1, 0, "Period")]
+    [InlineData(3600, -1, "MaxMessagesPerAccount")]
+    public void Validate_CeilingBlockNamingAWindowOrACountThisDeploymentCannotApply_IsRefused(
+        int periodSeconds,
+        long maxMessagesPerAccount,
+        string expectedSetting)
+    {
+        // Arrange
+        var options = new MailDeliveryOptions
+        {
+            SendCeilings = new OutgoingMailCeilingOptions
+            {
+                Period = TimeSpan.FromSeconds(periodSeconds),
+                MaxMessagesPerAccount = maxMessagesPerAccount,
+            },
+        };
+
+        // Act
+        var results = Validate(options);
+
+        // Assert
+        Assert.Contains(expectedSetting, Assert.Single(results).ErrorMessage, StringComparison.Ordinal);
+    }
+
+    private static EmailAddress Mailbox(string address)
+    {
+        Assert.True(EmailAddress.TryCreate(displayName: null, address, out var mailbox));
+
+        return mailbox;
     }
 
     private static IReadOnlyList<ValidationResult> Validate(MailDeliveryOptions options) =>

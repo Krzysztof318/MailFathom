@@ -20,6 +20,7 @@ using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Filing;
+using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -33,6 +34,7 @@ using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Delivery.Governance;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure;
@@ -220,6 +222,14 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // section. Every outbox pass resolves it after an attempt settles, so a harness without it would fail to
         // compose rather than behave like a deployment that files nothing.
         builder.Services.AddSingleton<IOutgoingMailFilingPolicyReader>(account);
+        // What this deployment may send at all, registered by the composition root from the Deployment section and the
+        // account's own switch. The three below are one decision the outbox asks before it writes anything down, so a
+        // harness without them would fail to compose rather than behave like a deployment that turned sending on: this
+        // suite is the installation that did, writes to anybody, and declares no ceiling. A test about any of the three
+        // states its own posture rather than reading it from here.
+        builder.Services.AddSingleton<IOutgoingSendPermissionReader>(account);
+        builder.Services.AddSingleton(OutgoingRecipientPolicy.Unrestricted);
+        builder.Services.AddSingleton(OutgoingMailCeilings.Unbounded);
         // What one pass over an account's outbox is allowed to do, which a composition root validates out of the
         // MailDelivery section. The values are the deployed defaults with the two the suite has to be able to reach
         // narrowed: a batch small enough for a test to fill, and a retry ceiling a test can exhaust without waiting.

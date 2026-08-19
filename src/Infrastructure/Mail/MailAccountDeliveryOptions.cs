@@ -25,6 +25,24 @@ namespace MailFathom.Infrastructure.Mail;
 /// </remarks>
 public sealed class MailAccountDeliveryOptions
 {
+    /// <summary>Gets or sets whether this deployment may send as this account at all.</summary>
+    /// <remarks>
+    /// <para>
+    /// Off unless an operator turns it on, and turned on one account at a time. That is what keeps an upgrade from
+    /// making a deployment able to send: a release that gained the capability meets a configuration that never asked
+    /// for it, and gaining it is therefore something an operator did rather than something that happened to them. It is
+    /// per account rather than per deployment because an owner may want one identity able to write and another purely
+    /// archival, which no single switch can express.
+    /// </para>
+    /// <para>
+    /// It is separate from <see cref="Host" />, which says where mail would be submitted. An account may be configured
+    /// to send and not permitted to, which is the ordinary shape of an endpoint an operator provisioned before deciding
+    /// to use it; the reverse is refused at startup, because an account permitted to send with nowhere to submit is a
+    /// permission that could never be acted on.
+    /// </para>
+    /// </remarks>
+    public bool Enabled { get; set; }
+
     /// <summary>Gets or sets the submission server host name, whose presence is what configures the endpoint.</summary>
     public string Host { get; set; } = string.Empty;
 
