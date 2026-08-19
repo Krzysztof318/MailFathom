@@ -145,6 +145,23 @@ public sealed class PublishedToolsTests
         Assert.Equal(MailFathomPermission.MailFlagsWrite, permission);
     }
 
+    /// <summary>Sending is the one grant whose effect leaves the deployment, and this mapping is what withholds the tool from everyone else.</summary>
+    /// <remarks>
+    /// A mapping naming any weaker grant would offer <c>send_email</c> to a credential the operator gave a mailbox to
+    /// read or to write flags on, and the offer alone is the defect: the use case refuses the call, but the descriptor
+    /// has already told a client that this deployment will send mail on that credential's behalf.
+    /// </remarks>
+    [Fact]
+    public void TryGetRequiredPermission_TheToolThatSendsMail_RequiresTheSendGrant()
+    {
+        // Act
+        var declared = PublishedTools.TryGetRequiredPermission(SendEmailTool.ToolName, out var permission);
+
+        // Assert
+        Assert.True(declared);
+        Assert.Equal(MailFathomPermission.MailSend, permission);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

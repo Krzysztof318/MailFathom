@@ -39,6 +39,7 @@ using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Outbox;
+using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -748,6 +749,10 @@ public static class ServiceCollectionExtensions
         // Registered beside the composition it produces work for, and scoped for the reason every mailbox read is: it
         // reads stored mail through the same ports a read of that mail uses, and answers with what the composer takes.
         services.AddScoped<StoredEmailResponseAuthoring>();
+        // The one way a boundary asks for a new message to be sent, composed from the three registrations above it and
+        // scoped with them. It holds no delivery session and cannot open one, which is what keeps asking to send from
+        // ever becoming transmitting.
+        services.AddScoped<AuthoredMailSubmission>();
         // Read by synchronization rather than by the performer, so that a relocation coming back through an ordinary
         // run is recognized as MailFathom's own instead of being stored as a second email.
         services.AddScoped<IMailboxMutationReconciliationStore, MailboxMutationReconciliationStore>();

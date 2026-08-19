@@ -1,0 +1,235 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Mail.Delivery.Addressing;
+using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Submission;
+using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Failures;
+using MailFathom.Mcp.Tools.Results;
+using ModelContextProtocol.Server;
+
+namespace MailFathom.Mcp.Tools;
+
+/// <summary>Publishes the <c>send_email</c> tool over the <see cref="AuthoredMailSubmission" /> use case.</summary>
+/// <param name="submission">Queues the message, and refuses it where it cannot be queued.</param>
+/// <remarks>
+/// <para>
+/// It is the first tool on this surface whose effect reaches somebody who is not this mailbox's owner, and the whole of
+/// what that changes is in the annotations and the description rather than in what this class does. A wrong
+/// <c>set_mail_flags</c> is a star the owner takes off again; a wrong send is in a stranger's mailbox and cannot be
+/// recalled. So <c>destructiveHint</c> is <see langword="true" /> for irreversibility rather than for destruction, and
+/// <c>openWorldHint</c> points for the first time at a server this deployment does not own — both as
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md">ADR 0013</see>
+/// settles them.
+/// </para>
+/// <para>
+/// <c>idempotentHint</c> is <see langword="true" /> because this tool makes the key required, which is the one condition
+/// that record allows it under. An optional key would make the annotation true of a careful caller rather than of the
+/// tool: a retry after a timeout is exactly the call a model makes without thinking about it, and the message it would
+/// mail twice cannot be taken back. The cost is one value a caller has to choose per message, which is cheap against
+/// the outcome it prevents.
+/// </para>
+/// <para>
+/// <b>The call never transmits.</b> The use case writes a durable record and the account's delivery pass offers it to a
+/// submission server afterwards, so the result names the record and the state it has reached — <c>queued</c> for
+/// everything this tool queues — and a caller reading it must not report that mail arrived. That is fixed rather than
+/// configured, and it is structural: nothing this project references from <c>Mcp</c> can reach a delivery session at
+/// all, which <c>Boundaries.UnitTests</c> asserts against the compiled intermediate language.
+/// </para>
+/// <para>
+/// Nothing is composed here. The <c>From</c> address is not an argument and never becomes one — it belongs to the
+/// sending account's own configuration — and every header, bound, and refusal is the composition's, which is what keeps
+/// this class to the one thing a protocol adapter owes: turning the text a caller sent into the request a use case
+/// takes.
+/// </para>
+/// </remarks>
+[McpServerToolType]
+[SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The MCP server materializes this tool type per tool call.")]
+internal sealed class SendEmailTool(AuthoredMailSubmission submission)
+{
+    /// <summary>The name the tool is advertised and called under.</summary>
+    /// <remarks>Snake case because it is the naming the Model Context Protocol tool ecosystem uses; the C# member naming stops at the boundary.</remarks>
+    public const string ToolName = "send_email";
+
+    /// <summary>The capability a caller must hold to be offered this tool and to reach the use case behind it.</summary>
+    /// <remarks>Sending is the one grant on this surface whose effect leaves the deployment and cannot be recalled, so it follows from nothing: a deployment that lets an agent read a mailbox has not thereby let it write from one. Declaring it beside the name is what keeps <see cref="PublishedTools" /> able to answer for every tool this surface publishes.</remarks>
+    public static MailFathomPermission RequiredPermission => MailFathomPermission.MailSend;
+
+    /// <summary>Queues one message to be sent from an account this deployment holds.</summary>
+    /// <param name="account">The account to send as, named as <c>list_accounts</c> publishes it.</param>
+    /// <param name="to">The addresses the message is addressed to.</param>
+    /// <param name="subject">The subject line.</param>
+    /// <param name="plainTextBody">The plain-text body every recipient can read.</param>
+    /// <param name="idempotencyKey">The caller's own identity for this message, which makes a retry the same message.</param>
+    /// <param name="cc">The addresses to copy, or absent to copy nobody.</param>
+    /// <param name="bcc">The addresses to copy without naming them to anybody else, or absent to blind-copy nobody.</param>
+    /// <param name="htmlBody">The HTML alternative, or absent to send the plain text alone.</param>
+    /// <param name="cancellationToken">Cancels the write when the caller disconnects or the host shuts down.</param>
+    /// <returns>The record the message was queued as.</returns>
+    /// <exception cref="MailSubmissionRefusedException">Thrown when the account is not named at all, the idempotency key is not one a record can be written under, or a recipient carries no address.</exception>
+    /// <exception cref="MailFathomException">
+    /// Raised by the use case for a grant, an account, a recipient, a field, or a bound it refuses. The call-tool filter
+    /// turns every one of them into the coded result a client reads, so this tool neither catches nor re-describes any.
+    /// </exception>
+    [McpServerTool(
+        Name = ToolName,
+        Title = "Send email",
+        ReadOnly = false,
+        Destructive = true,
+        Idempotent = true,
+        OpenWorld = true,
+        UseStructuredContent = true)]
+    [Description(
+        "Sends a real email from a mailbox this deployment holds to the people you address it to. The message reaches "
+        + "strangers' mailboxes and CANNOT be recalled, edited, or deleted once it has left — treat every call as "
+        + "final, and ask the person you are acting for before sending on their behalf. The call itself transmits "
+        + "nothing: the message is written down durably and a delivery pass offers it to a mail server seconds later, "
+        + "so the result says queued and never that anything was delivered. idempotencyKey is required and is what "
+        + "makes a retry safe: send the same value again for the same message and one message goes out; a new value is "
+        + "a new message. The From address is not an argument — the message is sent as the account you name, from the "
+        + "address its configuration declares — and the account must be one this deployment configured for sending, or "
+        + "the call is refused. This tool will not attach files, will not reply to or forward an existing message, "
+        + "will not schedule a send for later, and will not send to a mailing list: a message is addressed to at most a "
+        + "few dozen people, which the deployment configures. Recipients are named by address; naming somebody from "
+        + "the contact book is not accepted here. Nothing here can be undone by another call.")]
+    public async Task<SendEmailToolResult> SendEmailAsync(
+        [Description("The account to send as, named by the accountId or the display name list_accounts returned. Its configuration decides the From address, which you never supply. An account this deployment does not serve, or serves without a sending configuration, refuses the call.")]
+        string account,
+        [Description("The addresses the message is addressed to, one entry per person, each a plain mail address such as person@example.com without a display name. At least one recipient is required across to, cc, and bcc.")]
+        IReadOnlyList<string> to,
+        [Description("The subject line, as the recipients will read it. A line break in it is refused, because a subject is written into a header.")]
+        string subject,
+        [Description("The message body as plain text, which every recipient can read. It is required even when you also send htmlBody: a plain text derived by stripping markup reads as damage in the clients that show it, so the text you write here is what is sent.")]
+        string plainTextBody,
+        [Description("Your own identifier for this message, at most 128 characters — a UUID is a good choice. Send the same value again when retrying a call that may have gone through, and the message is sent once rather than twice. A new value means a new message, so never reuse one for a message you actually want to send again, and never generate a fresh value while retrying.")]
+        string idempotencyKey,
+        [Description("The addresses to copy, each a plain mail address. Everybody the message reaches can see them. Omit it to copy nobody.")]
+        IReadOnlyList<string>? cc = null,
+        [Description("The addresses to copy without naming them to anybody else. They receive the message and no other recipient sees that they did. Omit it to blind-copy nobody.")]
+        IReadOnlyList<string>? bcc = null,
+        [Description("An HTML alternative to plainTextBody, sent beside it so each client shows the one it prefers. Omit it to send the plain text alone. It is the same message written twice, not a second message: write the same content you wrote as plain text.")]
+        string? htmlBody = null,
+        CancellationToken cancellationToken = default)
+    {
+        var request = new MailSubmissionRequest
+        {
+            Account = NamedAccount(account),
+            Recipients = NamedRecipients(to, cc, bcc),
+            Subject = subject,
+            PlainTextBody = plainTextBody,
+            HtmlBody = htmlBody,
+            Requester = Requester(idempotencyKey),
+        };
+
+        var record = await submission.SubmitAsync(request, cancellationToken);
+
+        return SendEmailToolResult.From(record);
+    }
+
+    /// <summary>Reads the account the caller's text names.</summary>
+    /// <remarks>
+    /// Whether an account answers to the text is the use case's question, asked against the accounts this deployment
+    /// serves. What is answered here is whether the text could name one at all, so a caller that sent nothing meets a
+    /// statement about its own argument rather than a refusal implying the account exists somewhere.
+    /// </remarks>
+    /// <exception cref="MailSubmissionRefusedException">Thrown when the text is not one an account could be named by.</exception>
+    private static MailAccountSelector NamedAccount(string account)
+    {
+        if (account is null
+            || string.IsNullOrWhiteSpace(account)
+            || account.Length > MailAccountSelector.MaximumLength
+            || account.Any(char.IsControl))
+        {
+            throw MailSubmissionRefusedException.AccountNotNamed();
+        }
+
+        return MailAccountSelector.Create(account);
+    }
+
+    /// <summary>Names the invocation asking, from the key the caller supplied for it.</summary>
+    /// <remarks>
+    /// The rules are checked here rather than left to the domain so a caller meets a refusal about the argument it sent
+    /// rather than an argument failure naming a parameter it never wrote. The domain checks them again where the
+    /// record's column is bounded, which is where they stay enforced for every requester whatever boundary it arrived by.
+    /// </remarks>
+    /// <exception cref="MailSubmissionRefusedException">Thrown when the key is not one a record can be written under.</exception>
+    private static OutgoingEmailRequester Requester(string idempotencyKey)
+    {
+        if (idempotencyKey is null
+            || string.IsNullOrWhiteSpace(idempotencyKey)
+            || idempotencyKey.Length > OutgoingEmailRequester.MaximumIdentityLength
+            || idempotencyKey.Any(char.IsControl))
+        {
+            throw MailSubmissionRefusedException.IdempotencyKeyUnusable();
+        }
+
+        return OutgoingEmailRequester.Command(idempotencyKey);
+    }
+
+    /// <summary>Collects the three headers into the one recipient list every author writes.</summary>
+    /// <remarks>
+    /// The order is the order the headers are read in, which is the order the composition writes them in. Nothing is
+    /// deduplicated or parsed here: whether text names a mailbox is the composition's question, and how many people a
+    /// message may actually reach is the deployment's number, both asked once for every way a message is authored. What
+    /// is answered here is only how long the caller's own lists are, because that is what decides whether they are
+    /// expanded at all, and the check therefore belongs in front of the expansion rather than after it.
+    /// </remarks>
+    /// <exception cref="MailSubmissionRefusedException">Thrown when the three headers name more people than a record holds.</exception>
+    private static List<NamedRecipient> NamedRecipients(
+        IReadOnlyList<string> to,
+        IReadOnlyList<string>? cc,
+        IReadOnlyList<string>? bcc)
+    {
+        var count = (to?.Count ?? 0) + (cc?.Count ?? 0) + (bcc?.Count ?? 0);
+
+        if (count > OutgoingEmailRequest.MaximumRecipientCount)
+        {
+            throw MailSubmissionRefusedException.TooManyRecipients();
+        }
+
+        var named = new List<NamedRecipient>(count);
+
+        AddNamed(named, to, OutgoingRecipientRole.To, AuthoredEmailField.To);
+        AddNamed(named, cc, OutgoingRecipientRole.Cc, AuthoredEmailField.Cc);
+        AddNamed(named, bcc, OutgoingRecipientRole.Bcc, AuthoredEmailField.Bcc);
+
+        return named;
+    }
+
+    /// <summary>Adds one header's addresses, refusing an entry that names nobody at all.</summary>
+    /// <remarks>
+    /// Blank text is refused here because an authored recipient is built from an address and a blank one names nothing
+    /// to build from — a defect in whoever called rather than an author's mistake, and this is the boundary that keeps
+    /// it from becoming one. Everything else the text may be wrong about travels unparsed to the composition, which is
+    /// the single place an address is read and refused.
+    /// </remarks>
+    /// <exception cref="MailSubmissionRefusedException">Thrown when an entry carries no address.</exception>
+    private static void AddNamed(
+        List<NamedRecipient> named,
+        IReadOnlyList<string>? addresses,
+        OutgoingRecipientRole role,
+        AuthoredEmailField field)
+    {
+        if (addresses is null)
+        {
+            return;
+        }
+
+        foreach (var address in addresses)
+        {
+            if (string.IsNullOrWhiteSpace(address))
+            {
+                throw MailSubmissionRefusedException.From(
+                    new AuthoredEmailRefusal(AuthoredEmailRefusalReason.FieldUnusable, field));
+            }
+
+            named.Add(NamedRecipient.AtAddress(role, address));
+        }
+    }
+}

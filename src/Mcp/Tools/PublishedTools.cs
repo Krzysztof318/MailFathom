@@ -41,6 +41,7 @@ internal static class PublishedTools
             [GetEmailContentTool.ToolName] = GetEmailContentTool.RequiredPermission,
             [SearchEmailsTool.ToolName] = SearchEmailsTool.RequiredPermission,
             [SetMailFlagsTool.ToolName] = SetMailFlagsTool.RequiredPermission,
+            [SendEmailTool.ToolName] = SendEmailTool.RequiredPermission,
             [AskMailTool.ToolName] = AskMailTool.RequiredPermission,
             [ListContactsTool.ToolName] = ListContactsTool.RequiredPermission,
             [GetContactTool.ToolName] = GetContactTool.RequiredPermission,

@@ -58,4 +58,29 @@ public sealed class MailDeliveryCapabilitiesTests
         // Act, Assert
         Assert.Throws<ArgumentOutOfRangeException>(() => capabilities.PermitsMessageOfSize(-1));
     }
+
+    /// <summary>
+    /// A message written down before any submission server has been opened is held to what stays correct whatever one
+    /// turns out to say: no declared size, seven-bit content, and ASCII addresses.
+    /// </summary>
+    /// <remarks>
+    /// The two negatives are the safe direction rather than a pessimistic guess. Content encoded to seven bits is
+    /// accepted by a server that would also have taken eight, while the reverse produces a message that can never be
+    /// delivered; and an address outside ASCII is refused while the caller is still there rather than queued to fail
+    /// against a server hours later. The absent size is the one that costs nothing at all, because the deployment's own
+    /// bound is applied at composition and the server's is checked against the stored length before the message is
+    /// offered.
+    /// </remarks>
+    [Fact]
+    public void BeforeAnyServerHasSpoken_DeclaresNoSizeAndAssumesNeitherCapability()
+    {
+        // Arrange, Act
+        var capabilities = MailDeliveryCapabilities.BeforeAnyServerHasSpoken;
+
+        // Assert
+        Assert.Null(capabilities.MaxMessageBytes);
+        Assert.False(capabilities.AcceptsEightBitContent);
+        Assert.False(capabilities.AcceptsInternationalizedAddresses);
+        Assert.True(capabilities.PermitsMessageOfSize(long.MaxValue));
+    }
 }

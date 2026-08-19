@@ -8,7 +8,8 @@ server — connected, encrypted, authenticated, and asked what it will accept �
 **resolved against the contact book**, an authored message is **composed into
 MIME**, a **reply or a forward is authored** from mail this deployment already holds, the send is written down durably
 before anything acts on it, and it is then **claimed, transmitted, and settled** against the record it was written as. A
-deployment that configures a submission endpoint sends mail.
+deployment that configures a submission endpoint sends mail, and `send_email` on
+[the MCP surface](mcp-tools.md#send_email) is how a caller asks it to.
 
 Each of those is a piece the ones after it rest on, and each is provable on its own: the session is the piece with a
 protocol, a credential, and a channel to get wrong; the composer is the piece that decides who a message says it is from
@@ -384,7 +385,7 @@ requested cannot enqueue as a command however a grant is written. The question i
 picture, which is what makes it hold for an entrypoint added later — a command, a gateway, a second protocol — rather
 than only for a request that passed a filter. Nothing has been written down when it is asked, so a refusal leaves no
 record and no stored message behind. [What a credential may do](../operations/permissions.md#the-published-set) is the
-grant, and no MCP tool reaches this yet.
+grant, and `send_email` is the one tool that reaches it.
 
 **The same authored request arriving twice delivers once.** The identity is the sending account together with the act
 that asked — a rule with its name, its revision, and the email it acted on; or a caller with a key of their own — and it
@@ -404,6 +405,41 @@ A recipient a server temporarily rejected stays outstanding with the reply that 
 
 [The stored email schema](../architecture/stored-email-schema.md#the-outgoing-messages-waiting-to-be-sent) holds the
 columns, the stages, and which of them each terminal stage may follow.
+
+## Asking for a message to be sent
+
+`AuthoredMailSubmission` is the one use case a boundary reaches to send a message that answers nothing, and it composes
+the three steps above it rather than adding a fourth: the account a caller named is resolved against the accounts this
+deployment serves, the people named become addresses, the addresses and the text become MIME, and the MIME and the
+request become the durable record. Composing them in one place is what keeps a second entrypoint from doing two of the
+three and inventing the middle one, and it is what `send_email` calls and the whole of what that tool does.
+
+**Nothing here transmits, and no configuration makes it.** The use case holds no delivery session and no factory for
+one, so there is nothing in it that could open a submission channel; what it answers with is the record, at the stage a
+delivery pass reads and continues from.
+[ADR 0013](../decisions/0013-what-a-caller-must-do-before-mail-leaves.md) is the decision that fixes this, and it fixes
+the wording a caller is given with it — queued, never sent.
+
+**The message is composed before any submission server has spoken**, because the record has to exist before a connection
+is worth opening. `MailDeliveryCapabilities.BeforeAnyServerHasSpoken` is what the composition is held to in that gap,
+and each of its three values is the answer that stays correct whatever the server turns out to say:
+
+| Fact | Value | Why that one |
+| --- | --- | --- |
+| Maximum message bytes | None declared | The deployment's own bound is applied at composition regardless, and the server's is checked against the stored length before the message is offered, so assuming a number here would refuse a message a server would have taken without protecting one it would not. |
+| Eight-bit content accepted | No | Content encoded to seven bits is accepted by a server that would also have taken it unencoded, at a fraction more size. Composing eight-bit and meeting a server that takes none produces a message that can never be delivered. |
+| Internationalized addresses accepted | No | This one is a refusal rather than a cost. An address outside ASCII is refused while the caller is still there to be told, instead of being queued to fail against the server hours later with nobody to answer for it. |
+
+**The grant is asked for twice on the way in, and neither ask is the duplicate.** The use case asks first, so a caller
+without `mailfathom.mail.send` spends nothing and learns nothing about who the contact book holds; the outbox asks
+again with no boundary in the picture, which is the authority and is what an entrypoint added later meets whatever it
+did first.
+
+**What a refusal costs is nothing.** A message this deployment will not compose is refused before the outbox is
+reached, so no record, no stored MIME, and no signal to a delivery pass is left behind, and the caller is told which
+field, bound, or count decided it and never what was in it. The codes are the MCP boundary's rather than this
+category's, because that is where they surface;
+[MCP tools](mcp-tools.md#error-reporting) holds the table.
 
 ## How a written-down send reaches a server
 
