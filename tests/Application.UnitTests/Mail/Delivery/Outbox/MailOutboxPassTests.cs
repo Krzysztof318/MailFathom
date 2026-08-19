@@ -7,6 +7,7 @@ using System.Text;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Transmission;
 using MailFathom.Application.Persistence;
@@ -104,6 +105,76 @@ public sealed class MailOutboxPassTests
         Assert.Equal(1, report.NotRecordedCount);
         Assert.Equal(1, report.SentCount);
         Assert.Equal(OutgoingEmailStage.Sent, context.Store.Read(behind).Stage);
+    }
+
+    /// <summary>
+    /// A host that begins stopping while a delivered send's copies are being settled records nothing against the send.
+    /// Filing never reached a mail server, so a failure written here would leave a delivered message saying its copy
+    /// could not be filed — a statement about somebody's mailbox that nothing observed.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_TheHostStopsWhileASettledSendsCopiesAreFiled_RecordsNoFilingFailure()
+    {
+        // Arrange
+        var context = new PassContext();
+        var queued = context.Enqueue();
+        using var stopping = new CancellationTokenSource();
+        context.Transmit = (request, envelope, _) =>
+        {
+            foreach (var recipient in request.Recipients)
+            {
+                envelope.Record(new MailRecipientReply(recipient.Address, 250, MailRecipientAcceptance.Accepted));
+            }
+
+            stopping.Cancel();
+
+            return Task.FromResult(new MailTransmission(MailTransmissionOutcome.Accepted, 250));
+        };
+
+        // Act
+        var report = await context.RunAsync(stopping.Token);
+
+        // Assert
+        Assert.Equal(OutgoingEmailStage.Sent, context.Store.Read(queued).Stage);
+        Assert.Empty(report.FilingResults);
+        Assert.Null(context.Store.Read(queued).LastFilingFailure);
+    }
+
+    /// <summary>
+    /// A filing that failed before any place was chosen names none. The read filing begins with is what fails here, and
+    /// it happens before the withdrawal and the append are even decided between — so reporting the failure against the
+    /// sent copy would put a word into a log line and a metric dimension that nothing about this failure established.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_FilingFailsBeforeAPlaceIsChosen_ReportsTheFailureAgainstNoPlace()
+    {
+        // Arrange
+        var context = new PassContext();
+        var queued = context.Enqueue();
+        context.Transmit = (request, envelope, _) =>
+        {
+            foreach (var recipient in request.Recipients)
+            {
+                envelope.Record(new MailRecipientReply(recipient.Address, 250, MailRecipientAcceptance.Accepted));
+            }
+
+            context.Store.ReadFailure = () => new InvalidOperationException("The record could not be read.");
+
+            return Task.FromResult(new MailTransmission(MailTransmissionOutcome.Accepted, 250));
+        };
+
+        // Act
+        var report = await context.RunAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        context.Store.ReadFailure = null;
+        Assert.Equal(OutgoingEmailStage.Sent, context.Store.Read(queued).Stage);
+
+        var filing = Assert.Single(report.FilingResults);
+        Assert.Equal(OutgoingMailFilingOutcome.Failed, filing.Outcome);
+        Assert.False(filing.Filing.IsSpecified);
+        Assert.Equal(OutgoingMailFilingResult.UndeterminedFilingName, filing.FilingName);
+        Assert.Equal(MailFathomErrorCode.OutgoingEmailFilingFailedUnexpectedly, filing.Failure);
     }
 
     /// <summary>A send a stopped process left mid-transmission is stamped with the reason before anything is claimed.</summary>
@@ -221,6 +292,8 @@ public sealed class MailOutboxPassTests
             var policyReader = Substitute.For<IMailTransportSecurityPolicyReader>();
             policyReader.GetDeliveryPolicy(Account).Returns(submits ? TransportSecurityPolicy() : null);
 
+            this.Filing = new OutgoingMailFilingHarness(this.Store, contentStore, settings, this.clock);
+
             this.pass = new MailOutboxPass(
                 this.Store,
                 new MailOutboxDelivery(
@@ -234,11 +307,15 @@ public sealed class MailOutboxPassTests
                         this.clock),
                     settings,
                     this.clock),
+                this.Filing.Pass,
                 policyReader,
                 settings);
         }
 
         internal InMemoryOutgoingEmailStore Store { get; }
+
+        /// <summary>Gets the filing side of the pass, which files nothing until a test asks it to.</summary>
+        internal OutgoingMailFilingHarness Filing { get; }
 
         internal ScriptedMailDeliverySession Session { get; }
 
@@ -309,8 +386,8 @@ public sealed class MailOutboxPassTests
             return stranded;
         }
 
-        internal Task<MailOutboxPassReport> RunAsync() =>
-            this.pass.RunAsync(Account, TestContext.Current.CancellationToken);
+        internal Task<MailOutboxPassReport> RunAsync(CancellationToken? stoppingToken = null) =>
+            this.pass.RunAsync(Account, stoppingToken ?? TestContext.Current.CancellationToken);
 
         private static MailTransportSecurityPolicy TransportSecurityPolicy() => MailTransportSecurityPolicy.Create(
             MailConnectionSecurity.StartTlsRequired,

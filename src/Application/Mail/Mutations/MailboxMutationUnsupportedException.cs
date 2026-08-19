@@ -5,7 +5,6 @@
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
-using MailFathom.Domain.Mutations;
 
 namespace MailFathom.Application.Mail.Mutations;
 
@@ -25,8 +24,13 @@ namespace MailFathom.Application.Mail.Mutations;
 /// to, and refusing is the only answer that keeps a mail tool from deleting mail nobody asked it to.
 /// </para>
 /// <para>
-/// The message names the account alias, the folder alias, the mutation, and the missing extension. All four are
+/// The message names the account alias, the folder alias, the operation, and the missing extension. All four are
 /// MailFathom's own configured or protocol-registered names, and none of them is mail content or a remote path.
+/// </para>
+/// <para>
+/// The operation is a name rather than a <c>MailboxMutation</c>, because not everything a write session refuses is one:
+/// withdrawing a copy MailFathom itself filed needs the same extension and is deliberately outside the closed set of
+/// mutations, so borrowing a mutation's identity for it would report a delete nobody asked for.
 /// </para>
 /// </remarks>
 public sealed class MailboxMutationUnsupportedException : MailboxMutationRefusedException
@@ -34,19 +38,19 @@ public sealed class MailboxMutationUnsupportedException : MailboxMutationRefused
     /// <summary>Initializes a new refusal naming the mutation and the extension the server does not advertise.</summary>
     /// <param name="accountId">The account whose mail server advertises no way to carry the mutation.</param>
     /// <param name="folderAlias">The folder the mutation was to be performed in.</param>
-    /// <param name="mutation">The mutation that was asked for.</param>
-    /// <param name="requiredCapabilityName">The IMAP extension the mutation needs and the server does not advertise.</param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="requiredCapabilityName" /> is blank.</exception>
+    /// <param name="operation">The name of the operation that was asked for.</param>
+    /// <param name="requiredCapabilityName">The IMAP extension the operation needs and the server does not advertise.</param>
+    /// <exception cref="ArgumentException">Thrown when an argument is blank.</exception>
     public MailboxMutationUnsupportedException(
         MailAccountId accountId,
         MailFolderAlias folderAlias,
-        MailboxMutation mutation,
+        string operation,
         string requiredCapabilityName)
-        : base(DescribeUnsupportedMutation(accountId, folderAlias, mutation, requiredCapabilityName))
+        : base(DescribeUnsupportedOperation(accountId, folderAlias, operation, requiredCapabilityName))
     {
         this.AccountId = accountId;
         this.FolderAlias = folderAlias;
-        this.Mutation = mutation;
+        this.Operation = operation;
         this.RequiredCapabilityName = requiredCapabilityName;
     }
 
@@ -59,21 +63,22 @@ public sealed class MailboxMutationUnsupportedException : MailboxMutationRefused
     /// <summary>Gets the folder the mutation was to be performed in.</summary>
     public MailFolderAlias FolderAlias { get; }
 
-    /// <summary>Gets the mutation that was asked for.</summary>
-    public MailboxMutation Mutation { get; }
+    /// <summary>Gets the name of the operation that was asked for.</summary>
+    public string Operation { get; }
 
-    /// <summary>Gets the IMAP extension the mutation needs and the server does not advertise.</summary>
+    /// <summary>Gets the IMAP extension the operation needs and the server does not advertise.</summary>
     public string RequiredCapabilityName { get; }
 
-    private static string DescribeUnsupportedMutation(
+    private static string DescribeUnsupportedOperation(
         MailAccountId accountId,
         MailFolderAlias folderAlias,
-        MailboxMutation mutation,
+        string operation,
         string requiredCapabilityName)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(operation);
         ArgumentException.ThrowIfNullOrWhiteSpace(requiredCapabilityName);
 
         return $"The mail server for {accountId.Value}/{folderAlias.Value} advertises no {requiredCapabilityName}, "
-            + $"which a {mutation.Name} needs in order to change only the email it was asked about.";
+            + $"which a {operation} needs in order to change only the email it was asked about.";
     }
 }

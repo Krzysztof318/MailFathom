@@ -14,6 +14,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Scheduling;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Mail.Mutations.Convergence;
@@ -28,6 +29,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
@@ -549,6 +551,13 @@ public sealed class TelemetrySurfaceContractTests
                         MailFathomErrorCode.OutgoingEmailRefused,
                         ReplyCode: 550,
                         AttemptCount: 1)),
+                ],
+                [
+                    .. Enum.GetValues<OutgoingMailFilingOutcome>().Select(outcome => new OutgoingMailFilingResult(
+                        OutgoingEmailId.Create(Guid.CreateVersion7()),
+                        OutgoingMailFiling.Sent,
+                        outcome,
+                        MailFathomErrorCode.OutgoingEmailFilingFailedUnexpectedly)),
                 ],
                 MarkedUnknownCount: 1,
                 BatchFilled: true));

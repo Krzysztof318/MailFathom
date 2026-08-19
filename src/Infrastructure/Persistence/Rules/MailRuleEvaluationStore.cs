@@ -37,6 +37,12 @@ namespace MailFathom.Infrastructure.Persistence.Rules;
 /// having evaluated it.
 /// </para>
 /// <para>
+/// Both walks also leave out the copies MailFathom filed of this account's own outgoing mail, which is the one
+/// exclusion that is about authorship rather than about readiness. Such a message is stored, searchable, and readable
+/// like any other; what it is not is arriving mail, and a rule that moved or flagged what the owner just sent would be
+/// reacting to this deployment's own act.
+/// </para>
+/// <para>
 /// Both walks also leave out the mail classification is withholding, which is the ordering between the two mechanisms
 /// rather than a filter of the rule engine's own. An authored rule filing a sender's mail into a folder and a
 /// classification filing the same message into junk are two fates for one occurrence; classification decides first, so
@@ -169,6 +175,11 @@ internal sealed class MailRuleEvaluationStore(
                 derivedWorkGate.ReadTerms())
             .AsNoTracking()
             .Where(StoredEmailTombstone.IsNotTombstoned)
+            // The copies this deployment filed of its own outgoing mail. They are stored, searchable, and readable like
+            // any other message, and they are the one thing a rule must never act on: a rule conditioned on arriving
+            // mail would otherwise fire on the owner's own message the moment its sent copy came back. Both walks leave
+            // them out, so a requested whole-mailbox run reaches the same conclusion an arrival did.
+            .Where(email => email.FiledFromOutgoingEmailId == null)
             .Where(email => email.MailboxAccountId == mailboxAccountId
                 && (resumeAfterId == null || email.Id > resumeAfterId))
             .OrderBy(email => email.Id)

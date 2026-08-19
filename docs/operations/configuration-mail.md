@@ -159,7 +159,12 @@ display name that another account's identifier or display name already carries; 
 
 A folder entry names `Alias` (required — your stable name for the folder) and **at least one** of `RemotePath` (the
 server's own path) or `SpecialUse` (`Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`,
-`Important`). Configuring no folder synchronizes the inbox by role.
+`Important`, `Outbox`). Configuring no folder synchronizes the inbox by role.
+
+`Outbox` is the one role that cannot be written alone: no mail server advertises one, so it names a folder only beside
+a `RemotePath` and startup refuses it without one, naming the alias. It is the folder a message waiting for an instant
+still ahead is [mirrored into](../features/mail-delivery.md#the-copy-in-the-accounts-own-folders); mapping none is the
+default and mirrors nothing.
 
 **This list is what the deployment has.** A folder no entry names does not exist for any reader: nothing lists, searches,
 reads, or answers from it, no rule is evaluated against its mail, nothing cuts it into passages or embeds it, and no
@@ -314,6 +319,13 @@ what it does not.
 | `…:Delivery:Secrets:Password` | secret block | unset (the account's) | A block naming no reference reads as absent and falls back to the account's credential | reload; material per connection |
 | `…:Delivery:FromAddress` | string | unset (the account's `UserName` when it is a mailbox address) | A mailbox address; startup refuses an endpoint that resolves to none | reload |
 | `…:Delivery:FromDisplayName` | string | unset (the address alone) | The name recipients see this mailbox sign itself with; deliberately not the account's `DisplayName` | reload |
+| `…:Delivery:FileSentCopy` | bool | `true` | Whether a delivered message is appended to the folder this account maps to the `Sent` role | reload |
+
+`FileSentCopy` is on because a submission server files nothing: without it the owner's own mail client shows a Sent
+folder that is empty however much this account sends. Turn it off for a provider that files the copy itself, which is
+the one case leaving it on produces two copies of every message.
+[The copy in the account's own folders](../features/mail-delivery.md#the-copy-in-the-accounts-own-folders) states why
+this is configured rather than detected, and what an account that maps no `Sent` folder does instead.
 
 The permitted mechanisms, both weakenings, and the certificate authority are **not** repeated here: they are one
 decision the account makes about itself in `TransportSecurity` above, and both endpoints are reached under it. What

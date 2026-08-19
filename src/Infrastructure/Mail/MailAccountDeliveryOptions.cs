@@ -69,6 +69,22 @@ public sealed class MailAccountDeliveryOptions
     /// </remarks>
     public string? FromDisplayName { get; set; }
 
+    /// <summary>Gets or sets whether a copy of each delivered message is put into this account's sent folder.</summary>
+    /// <remarks>
+    /// <para>
+    /// It defaults to on, because a submission server does not file anything: SMTP carries the message to its
+    /// recipients and says nothing about the sender's own mailbox, so a deployment that appends nothing leaves the
+    /// owner with mail they sent and no record of it in the client they read.
+    /// </para>
+    /// <para>
+    /// It is turned off for the account whose provider files the copy itself, which several webmail providers do for
+    /// mail submitted through their own servers. That is configured rather than detected: a provider files the copy
+    /// asynchronously, so looking in the folder after a delivery cannot tell a copy that is about to appear from one
+    /// that never will, and guessing wrong leaves either a duplicate or a gap.
+    /// </para>
+    /// </remarks>
+    public bool FileSentCopy { get; set; } = true;
+
     /// <summary>Gets or sets the submission credential, or nothing to present the account's reading credential.</summary>
     /// <remarks>
     /// The block is nullable and defaults to absent rather than to an empty block, for the reason

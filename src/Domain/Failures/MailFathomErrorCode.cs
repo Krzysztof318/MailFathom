@@ -267,6 +267,30 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode OutgoingEmailContactAddressNotHeld { get; } = new(28015);
 
+    /// <summary>Gets subcategory 9, message filing: there is no folder to put a copy of an outgoing message into.</summary>
+    /// <remarks>
+    /// It covers a role the account maps no folder to, a mapped folder the server does not advertise, and a mapping
+    /// several advertised folders answer. All three are the same thing to act on — the account's folder mapping is what
+    /// changes the answer — and the message itself is untouched either way, which is why filing has a subcategory of its
+    /// own rather than borrowing the delivery codes above it.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailFilingDestinationUnavailable { get; } = new(29001);
+
+    /// <summary>Gets subcategory 9, message filing: an append went out and the server's answer to it never came back.</summary>
+    /// <remarks>
+    /// The folder may or may not hold the copy. Appending again would put a second one there and nothing the folder
+    /// shows afterwards tells them apart, so the filing row carries this code and stands, exactly as a transmission
+    /// nobody answered does.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailFilingOutcomeUnknown { get; } = new(29002);
+
+    /// <summary>Gets subcategory 9, message filing: a filing attempt ended in a failure this system does not recognize.</summary>
+    /// <remarks>
+    /// A send whose copy could not be filed is a send that happened. The code goes on the outgoing record beside a stage
+    /// that still says the message was delivered, and nothing about the delivery is attempted again because of it.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailFilingFailedUnexpectedly { get; } = new(29003);
+
     #endregion
 
     #region Category 3 — Persistence
@@ -622,6 +646,9 @@ public readonly record struct MailFathomErrorCode
         OutgoingEmailContactUnknown,
         OutgoingEmailContactNameAmbiguous,
         OutgoingEmailContactAddressNotHeld,
+        OutgoingEmailFilingDestinationUnavailable,
+        OutgoingEmailFilingOutcomeUnknown,
+        OutgoingEmailFilingFailedUnexpectedly,
         PersistenceConcurrencyConflict,
         DatabaseSchemaOutOfDate,
         DatabaseSchemaStateUnreadable,

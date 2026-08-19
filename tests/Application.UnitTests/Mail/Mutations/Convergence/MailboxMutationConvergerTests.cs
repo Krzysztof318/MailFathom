@@ -153,7 +153,7 @@ public sealed class MailboxMutationConvergerTests
             ? new MailboxMutationUnsupportedException(
                 Account,
                 InboxFolder.Alias,
-                MailboxMutation.Relocate,
+                MailboxMutation.Relocate.Name,
                 "UIDPLUS extension (RFC 4315)")
             : new MailboxDestinationFolderMissingException(
                 Account,

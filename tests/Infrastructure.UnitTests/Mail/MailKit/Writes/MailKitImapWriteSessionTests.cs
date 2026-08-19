@@ -287,7 +287,7 @@ public sealed class MailKitImapWriteSessionTests
             CancellationToken.None));
 
         // Assert
-        Assert.Equal(MailboxMutation.AddKeywords, refusal.Mutation);
+        Assert.Equal(MailboxMutation.AddKeywords.Name, refusal.Operation);
         await openFolder.DidNotReceive().StoreAsync(
             Arg.Any<IList<UniqueId>>(),
             Arg.Any<IStoreFlagsRequest>(),
@@ -317,7 +317,7 @@ public sealed class MailKitImapWriteSessionTests
             CancellationToken.None));
 
         // Assert
-        Assert.Equal(MailboxMutation.SetKeywords, refusal.Mutation);
+        Assert.Equal(MailboxMutation.SetKeywords.Name, refusal.Operation);
         await openFolder.DidNotReceive().FetchAsync(
             Arg.Any<IList<UniqueId>>(),
             Arg.Any<IFetchRequest>(),
@@ -477,7 +477,7 @@ public sealed class MailKitImapWriteSessionTests
             () => session.RelocateAsync(CreateOccurrenceId(42U), Archive, new RecordingMailboxMutationJournal(), CancellationToken.None));
 
         // Assert
-        Assert.Equal(MailboxMutation.Relocate, refusal.Mutation);
+        Assert.Equal(MailboxMutation.Relocate.Name, refusal.Operation);
         Assert.Equal(MailFathomErrorCode.MailboxMutationUnsupported, refusal.ErrorCode);
         await openFolder.DidNotReceive().CopyToAsync(
             Arg.Any<IList<UniqueId>>(),
@@ -632,7 +632,7 @@ public sealed class MailKitImapWriteSessionTests
             () => session.DeleteAsync(CreateOccurrenceId(42U), new RecordingMailboxMutationJournal(), CancellationToken.None));
 
         // Assert
-        Assert.Equal(MailboxMutation.Delete, refusal.Mutation);
+        Assert.Equal(MailboxMutation.Delete.Name, refusal.Operation);
         await openFolder.DidNotReceive().ExpungeAsync(Arg.Any<CancellationToken>());
         await openFolder.DidNotReceive().StoreAsync(
             Arg.Any<IList<UniqueId>>(),

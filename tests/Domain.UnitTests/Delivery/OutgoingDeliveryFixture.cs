@@ -38,7 +38,10 @@ internal static class OutgoingDeliveryFixture
             AttemptCount = 1,
             RecordedAt = DateTimeOffset.Parse("2026-08-16T10:00:00Z", CultureInfo.InvariantCulture),
             StageChangedAt = DateTimeOffset.Parse("2026-08-16T10:00:05Z", CultureInfo.InvariantCulture),
+            AvailableAt = DateTimeOffset.Parse("2026-08-16T10:00:00Z", CultureInfo.InvariantCulture),
             LastFailure = null,
             LastReplyCode = null,
+            Filings = [],
+            LastFilingFailure = null,
         };
 }

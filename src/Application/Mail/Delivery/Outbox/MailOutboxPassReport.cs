@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Mail.Delivery.Filing;
+
 namespace MailFathom.Application.Mail.Delivery.Outbox;
 
 /// <summary>Reports what one pass over an account's outbox did.</summary>
@@ -10,15 +12,31 @@ namespace MailFathom.Application.Mail.Delivery.Outbox;
 /// one measurement per send rather than a total that hides which one needs a person.
 /// </remarks>
 /// <param name="Results">What each claimed send ended in.</param>
+/// <param name="FilingResults">What each attempt to put a copy of one of these messages into a folder did.</param>
 /// <param name="MarkedUnknownCount">How many records this pass found stuck mid-transmission and stamped with the reason.</param>
 /// <param name="BatchFilled">Whether the claim took as much as it was allowed, which means there is more waiting.</param>
 public sealed record MailOutboxPassReport(
     IReadOnlyList<MailOutboxDeliveryResult> Results,
+    IReadOnlyList<OutgoingMailFilingResult> FilingResults,
     int MarkedUnknownCount,
     bool BatchFilled)
 {
     /// <summary>An account with no submission endpoint, or with nothing outstanding, produces this.</summary>
-    public static MailOutboxPassReport Empty { get; } = new([], MarkedUnknownCount: 0, BatchFilled: false);
+    public static MailOutboxPassReport Empty { get; } = new([], [], MarkedUnknownCount: 0, BatchFilled: false);
+
+    /// <summary>Gets how many copies this pass put into a folder of the mailbox.</summary>
+    public int FiledCount => this.FilingResults.Count(result => result.Outcome == OutgoingMailFilingOutcome.Filed);
+
+    /// <summary>Gets how many copies this pass could not put where the account asked for them.</summary>
+    /// <remarks>
+    /// It is deliberately not part of <see cref="AccountDeferred" /> and of nothing else that decides what happens
+    /// next. A copy that was not filed is a message the owner cannot see in their own client; it is never a message
+    /// that failed to reach anybody, and no send is attempted again because of it.
+    /// </remarks>
+    public int NotFiledCount => this.FilingResults.Count(result => result.Outcome
+        is OutgoingMailFilingOutcome.DestinationUnavailable
+        or OutgoingMailFilingOutcome.OutcomeUnknown
+        or OutgoingMailFilingOutcome.Failed);
 
     /// <summary>Gets how many of the claimed sends the server acknowledged.</summary>
     public int SentCount => this.CountOf(MailOutboxDeliveryOutcome.Sent);

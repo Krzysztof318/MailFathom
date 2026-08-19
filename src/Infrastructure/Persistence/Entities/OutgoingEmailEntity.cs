@@ -78,6 +78,22 @@ internal sealed class OutgoingEmailEntity
 
     public ICollection<OutgoingEmailRecipientEntity> Recipients { get; } = [];
 
+    /// <summary>Gets the copies of this message MailFathom has put into folders of the mailbox.</summary>
+    /// <remarks>
+    /// Loaded with the record wherever a caller asks what became of a send, because where the copies are is part of that
+    /// answer rather than a second question. At most one row per place, which is the identity that keeps asking to file
+    /// the same message twice from producing a second copy in somebody's folder.
+    /// </remarks>
+    public ICollection<OutgoingEmailFilingEntity> Filings { get; } = [];
+
+    /// <summary>Gets or sets the code of the failure the last filing attempt ended in, and <see langword="null" /> while none has.</summary>
+    /// <remarks>
+    /// Separate from <see cref="LastFailureCode" /> because the two say different things to whoever reads the record: a
+    /// delivery failure means somebody did not receive the message, and this one means the owner cannot see it in their
+    /// own mail client. Writing either over the other would lose whichever happened first.
+    /// </remarks>
+    public int? LastFilingFailureCode { get; set; }
+
     /// <summary>Gets or sets the stored MIME this record points at, loaded only where a caller asked for it.</summary>
     /// <remarks>
     /// The navigation exists so the payload is erased with the record it belongs to. Nothing that lists or advances a

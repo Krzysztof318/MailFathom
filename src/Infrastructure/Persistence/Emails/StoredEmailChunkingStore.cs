@@ -125,10 +125,10 @@ internal sealed class StoredEmailChunkingStore(
             emails
                 .Where(StoredEmailTombstone.IsNotTombstoned)
                 .Where(email => email.MailboxAccountId == mailboxAccountId
-                    && email.RulesEvaluatedAt != null
                     && !email.Chunks.Any()
                     && email.SearchDocument != null
                     && email.SearchDocument.BodyText != null)
+                .Where(MailAwaitingRuleEvaluation.IsFinishedWith)
                 .Where(MailAwaitingRelocation.IsSettledWhereItIs),
             embeddedFolders),
         terms);

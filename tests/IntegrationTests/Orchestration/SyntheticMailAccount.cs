@@ -8,6 +8,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Retrieval.AskMail.Audit;
@@ -47,7 +48,8 @@ internal sealed class SyntheticMailAccount(
     bool answeringAuditTrailEnabled = false,
     IReadOnlyList<MailFolderIdentity>? foldersWithoutEmbeddings = null,
     IReadOnlyList<MailFolderIdentity>? foldersHiddenFromTools = null,
-    IReadOnlyList<MailFolderIdentity>? foldersNotMirrored = null)
+    IReadOnlyList<MailFolderIdentity>? foldersNotMirrored = null,
+    bool filesSentCopies = false)
     : IImapAccountSettingsProvider,
     IMailTransportSecurityPolicyReader,
     IMailSynchronizationWindowReader,
@@ -60,7 +62,8 @@ internal sealed class SyntheticMailAccount(
     IMailFolderMappingReader,
     IJunkMailFolderCatalog,
     ITrustedAuthenticationAuthorityReader,
-    IOutgoingSenderIdentityReader
+    IOutgoingSenderIdentityReader,
+    IOutgoingMailFilingPolicyReader
 {
     /// <summary>Every folder alias this suite's configuration maps, which is every alias its tests bind one to.</summary>
     /// <remarks>
@@ -108,6 +111,7 @@ internal sealed class SyntheticMailAccount(
         "mutation-reconciliation",
         "mutation-record-inbox",
         "occurrence-identity",
+        OutgoingCopyFolderAlias,
         "persistence-session",
         "persistence-session-race",
         "persistence-session-retry",
@@ -145,9 +149,26 @@ internal sealed class SyntheticMailAccount(
     public static MailAccountId AccountId { get; } =
         MailAccountId.Create(OrchestrationContract.ServedMailAccountId);
 
+    /// <summary>The alias the one class that files a copy of its own outgoing mail maps the sent role onto.</summary>
+    internal const string OutgoingCopyFolderAlias = "outgoing-copy";
+
+    /// <summary>The path that alias names on the orchestrated server, which the same class creates before it sends.</summary>
+    internal const string OutgoingCopyFolderPath = "OutgoingCopy";
+
     private static readonly MailFolderMapping Inbox = MailFolderMapping.ToSpecialUse(
         MailFolderAlias.Create(nameof(MailFolderSpecialUse.Inbox)),
         MailFolderSpecialUse.Inbox);
+
+    /// <summary>The folder a filed copy of this account's own outgoing mail goes into, mapped only where a test asks.</summary>
+    /// <remarks>
+    /// A path carrying the role rather than the role alone, which is the only shape that resolves: no server advertises
+    /// a folder for the sent role here, so a role-only mapping would name nothing and every append would report its
+    /// destination as unavailable.
+    /// </remarks>
+    private static readonly MailFolderMapping OutgoingCopyFolder = MailFolderMapping.ToRemotePath(
+        MailFolderAlias.Create(OutgoingCopyFolderAlias),
+        RemoteFolderPath.Create(OutgoingCopyFolderPath, hierarchyDelimiter: '.'),
+        specialUse: MailFolderSpecialUse.Sent);
 
     private static readonly IReadOnlyList<MailFolderIdentity> MappedFolders =
     [
@@ -280,16 +301,35 @@ internal sealed class SyntheticMailAccount(
 
     /// <inheritdoc />
     /// <remarks>
-    /// Only the inbox is mapped, and only for the served account, because that is the one folder every test's
-    /// arrangement shares; the folders a test creates for itself are named by alias everywhere they are used. Answering
-    /// for an alias nothing mapped would make a role look answerable when nothing configured one.
+    /// Answered from the folders this account configured, and only for the served account. That is the inbox alone
+    /// unless the account was built to file sent copies, which adds the folder playing the <c>Sent</c> role — because
+    /// filing resolves its destination by role and would otherwise find nothing to append into. Everything else a test
+    /// creates for itself is named by alias wherever it is used, so a role nothing configured stays unanswerable rather
+    /// than looking available.
     /// </remarks>
     public MailFolderMapping? FindFolderPlayingRole(MailAccountId accountId, MailFolderSpecialUse role) =>
-        accountId == AccountId && Inbox.Plays(role) ? Inbox : null;
+        accountId == AccountId
+            ? this.ConfiguredFolders.FirstOrDefault(folder => folder.Plays(role))
+            : null;
 
     /// <inheritdoc />
     public MailFolderMapping? FindFolderNamed(MailAccountId accountId, MailFolderAlias folderAlias) =>
-        accountId == AccountId && Inbox.Alias == folderAlias ? Inbox : null;
+        accountId == AccountId
+            ? this.ConfiguredFolders.FirstOrDefault(folder => folder.Alias == folderAlias)
+            : null;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Off unless a test asks for it, which is the opposite of the deployed default and deliberate: a deployment files
+    /// the copy, and an account that filed one on every class in this collection would append a message to a folder
+    /// nothing else here maps, on every send the suite makes. The class that files states it, and states the mapping
+    /// with it.
+    /// </remarks>
+    public bool FilesSentCopy(MailAccountId accountId) => accountId == AccountId && filesSentCopies;
+
+    /// <summary>The folders this account's configuration names, which is the inbox and, where a test asked, the sent folder.</summary>
+    private IReadOnlyList<MailFolderMapping> ConfiguredFolders =>
+        filesSentCopies ? [Inbox, OutgoingCopyFolder] : [Inbox];
 
     /// <inheritdoc />
     /// <remarks>

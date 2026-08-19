@@ -4,19 +4,26 @@
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Common.Observability;
 using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Infrastructure.Observability;
 
-/// <summary>Reports what a deployment's outbox is doing, as the two questions an operator actually asks of it.</summary>
+/// <summary>Reports what a deployment's outbox is doing, as the questions an operator actually asks of it.</summary>
 /// <remarks>
 /// <para>
 /// The first is whether mail is leaving, which the attempt counter answers by account and by outcome. The second is
 /// whether one particular submission is the slow part, which the span answers by covering the exchange with the server
 /// and nothing else — the claim, the record movements, and the backoff are local work and would blur what the span is
 /// for.
+/// </para>
+/// <para>
+/// The third is whether the owner can see what they sent in their own mail client, which the filing counter answers by
+/// account, by the place a copy was meant for, and by outcome. It is a counter of its own rather than a dimension of
+/// the attempts, because the two say different things about the same message: a copy that could not be filed never
+/// means the message failed to reach anybody, and summing them would produce a failure rate nobody could act on.
 /// </para>
 /// <para>
 /// The one outcome worth alerting on is the unknown one, and it is a dimension of the same counter rather than an
@@ -33,11 +40,14 @@ public sealed class MailDeliveryTelemetry
 {
     private const string AccountTagName = "mailfathom.mail.account";
     private const string OutcomeTagName = "mailfathom.mail.delivery.outcome";
+    private const string FilingTagName = "mailfathom.mail.filing.place";
+    private const string FilingOutcomeTagName = "mailfathom.mail.filing.outcome";
     /// <summary>The span one submission to a provider is reported under.</summary>
     internal const string SubmissionSpanName = "submit_outgoing_email";
 
     private readonly TimeProvider timeProvider;
     private readonly Counter<long> attemptCount;
+    private readonly Counter<long> filingCount;
     private readonly Histogram<double> submissionDuration;
 
     /// <summary>Initializes the instruments every delivery attempt reports through.</summary>
@@ -52,6 +62,10 @@ public sealed class MailDeliveryTelemetry
             "mailfathom.mail.delivery.attempts",
             unit: "{attempt}",
             description: "Attempts to deliver a queued outgoing message, by account and outcome.");
+        this.filingCount = Telemetry.Meter.CreateCounter<long>(
+            "mailfathom.mail.filing.attempts",
+            unit: "{attempt}",
+            description: "Attempts to put a copy of an outgoing message into a folder, by account, place, and outcome.");
         this.submissionDuration = Telemetry.Meter.CreateHistogram<double>(
             "mailfathom.mail.delivery.submission.duration",
             unit: "s",
@@ -89,6 +103,18 @@ public sealed class MailDeliveryTelemetry
                 {
                     { AccountTagName, accountId.Value },
                     { OutcomeTagName, NameOf(result.Outcome) },
+                });
+        }
+
+        foreach (var filing in report.FilingResults)
+        {
+            this.filingCount.Add(
+                1,
+                new TagList
+                {
+                    { AccountTagName, accountId.Value },
+                    { FilingTagName, filing.FilingName },
+                    { FilingOutcomeTagName, NameOf(filing.Outcome) },
                 });
         }
 
@@ -130,5 +156,18 @@ public sealed class MailDeliveryTelemetry
         MailOutboxDeliveryOutcome.LeaseLost => "lease-lost",
         MailOutboxDeliveryOutcome.NotRecorded => "not-recorded",
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "No metric dimension is defined for this delivery outcome."),
+    };
+
+    /// <summary>Names a filing outcome as the dimension a dashboard groups by, under the same rule as the one above.</summary>
+    private static string NameOf(OutgoingMailFilingOutcome outcome) => outcome switch
+    {
+        OutgoingMailFilingOutcome.Filed => "filed",
+        OutgoingMailFilingOutcome.AlreadyFiled => "already-filed",
+        OutgoingMailFilingOutcome.NotRequested => "not-requested",
+        OutgoingMailFilingOutcome.DestinationUnavailable => "destination-unavailable",
+        OutgoingMailFilingOutcome.OutcomeUnknown => "outcome-unknown",
+        OutgoingMailFilingOutcome.Failed => "failed",
+        OutgoingMailFilingOutcome.Withdrawn => "withdrawn",
+        _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "No metric dimension is defined for this filing outcome."),
     };
 }

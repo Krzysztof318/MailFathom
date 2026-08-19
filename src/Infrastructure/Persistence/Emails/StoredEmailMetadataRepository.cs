@@ -9,6 +9,7 @@ using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.Synchronization;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence.Emails.Threads;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -148,6 +149,24 @@ internal sealed class StoredEmailMetadataRepository(
         entity.IsRetainedAfterAuthoredDelete = false;
 
         return true;
+    }
+
+    /// <inheritdoc />
+    public async Task RecordFiledFromOutgoingAsync(
+        IPersistenceSession session,
+        StoredEmailId storedEmailId,
+        OutgoingEmailId outgoingEmailId,
+        CancellationToken cancellationToken)
+    {
+        var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+
+        // The email was inserted by this same session and may not be committed yet, which is exactly what FindAsync
+        // resolves from the change tracker.
+        var entity = await dbContext.StoredEmails.FindAsync([storedEmailId.Value], cancellationToken)
+            ?? throw new InvalidOperationException(
+                $"No stored email carries the identifier {storedEmailId}, so no outgoing record can be joined to it.");
+
+        entity.FiledFromOutgoingEmailId = outgoingEmailId.Value;
     }
 
     /// <summary>Reads whatever row already occupies one occurrence, including one this session has staged and not committed.</summary>

@@ -447,8 +447,11 @@ public sealed class SendEmailToolTests
                         AttemptCount = 0,
                         RecordedAt = Recorded,
                         StageChangedAt = Recorded,
+                        AvailableAt = Recorded,
                         LastFailure = null,
                         LastReplyCode = null,
+                        Filings = [],
+                        LastFilingFailure = null,
                     };
 
                     recordsByIdentity[identity] = opened;

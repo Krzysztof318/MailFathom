@@ -38,6 +38,7 @@ using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Application.Mail.Maintenance;
@@ -735,6 +736,12 @@ public static class ServiceCollectionExtensions
         // session and commits through the caller's persistence scope. The signal they answer is not: it carries accounts
         // between a scope that wrote a record and the loop that delivers it, so it belongs to the process.
         services.AddScoped<MailOutboxDelivery>();
+        // The copies of an outgoing message this deployment puts into its own folders. They are registered beside the
+        // pass that drives them rather than with the mail adapters, because each one is a write session opened per
+        // append through the same pool every other mutation goes through.
+        services.AddScoped<IOutgoingMailFilingStore, OutgoingMailFilingStore>();
+        services.AddScoped<OutgoingMailFiler>();
+        services.AddScoped<OutgoingMailFilingPass>();
         services.AddScoped<MailOutboxPass>();
         // Scoped beside the outbox and beside the sending identities it reads, which are the account snapshot's and
         // therefore belong to one work unit. The composer itself holds nothing across a call.

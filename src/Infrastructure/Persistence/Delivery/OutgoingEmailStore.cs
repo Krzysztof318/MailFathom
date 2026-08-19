@@ -57,9 +57,11 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         if (existing is not null)
         {
             // The change-tracker pass can answer with a record this session loaded by key for another write, and such a
-            // record carries no recipients until they are asked for. Rebuilding it without them would report a send
-            // addressed to nobody rather than the one that is already there.
+            // record carries no recipients and no filings until they are asked for. Rebuilding it without them would
+            // report a send addressed to nobody, and one whose copies were never filed — which is what a later pass
+            // would act on by filing them a second time.
             await LoadRecipientsAsync(session, existing, cancellationToken);
+            await LoadFilingsAsync(session, existing, cancellationToken);
 
             return OutgoingEmailRecordMapping.ToRecord(existing);
         }
@@ -108,6 +110,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         var entity = await readContext.OutgoingEmails
             .AsNoTracking()
             .Include(message => message.Recipients)
+            .Include(message => message.Filings)
             .SingleOrDefaultAsync(message => message.Id == outgoingEmailId.Value, cancellationToken);
 
         return entity is null ? null : OutgoingEmailRecordMapping.ToRecord(entity);
@@ -130,6 +133,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         var entities = await readContext.OutgoingEmails
             .AsNoTracking()
             .Include(message => message.Recipients)
+            .Include(message => message.Filings)
             .Where(message => message.MailboxAccountId == accountValue
                 && message.Stage != OutgoingEmailStage.Sent
                 && message.Stage != OutgoingEmailStage.Refused
@@ -169,6 +173,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         var claimed = await readContext.OutgoingEmails
             .AsNoTracking()
             .Include(message => message.Recipients)
+            .Include(message => message.Filings)
             .Where(message => claimedIds.Contains(message.Id))
             .OrderBy(message => message.AvailableAt)
             .ThenBy(message => message.Id)
@@ -480,6 +485,33 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         }
     }
 
+    /// <summary>Makes the filing rows available on a record the session may have loaded without them.</summary>
+    /// <remarks>
+    /// The recipients' case exactly, one collection over: a record resolved from the change tracker carries whatever an
+    /// earlier write in this session asked for, and a record mapped without its filings reports that nothing was ever
+    /// filed for it. What acts on that answer is the pass deciding whether to append a copy, so the omission would put
+    /// a second copy of one send in the owner's own mailbox rather than merely under-reporting.
+    /// </remarks>
+    private static async Task LoadFilingsAsync(
+        IPersistenceSession session,
+        OutgoingEmailEntity entity,
+        CancellationToken cancellationToken)
+    {
+        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var entry = writeContext.Entry(entity);
+
+        if (entry.State == EntityState.Added)
+        {
+            return;
+        }
+
+        var filings = entry.Collection(message => message.Filings);
+        if (!filings.IsLoaded)
+        {
+            await filings.LoadAsync(cancellationToken);
+        }
+    }
+
     private static async Task<OutgoingEmailEntity?> FindByIdentityAsync(
         MailFathomDbContext writeContext,
         OutgoingEmailRequest request,
@@ -494,7 +526,9 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         // carries the recipients, because a record read back is a record about to be returned whole.
         return await TrackedEntityLookup.SinglePendingOrPersistedAsync(
             writeContext.OutgoingEmails,
-            writeContext.OutgoingEmails.Include(message => message.Recipients),
+            writeContext.OutgoingEmails
+                .Include(message => message.Recipients)
+                .Include(message => message.Filings),
             message => message.MailboxAccountId == accountValue
                 && message.RequesterOrigin == origin
                 && message.RequesterIdentity == identity,

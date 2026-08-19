@@ -1251,6 +1251,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<int?>("LastFailureCode")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("LastFilingFailureCode")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("LastReplyCode")
                         .HasColumnType("integer");
 
@@ -1304,6 +1307,74 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_outgoing_emails_identity");
 
                     b.ToTable("outgoing_emails", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OutgoingEmailFilingEntity", b =>
+                {
+                    b.Property<Guid>("OutgoingEmailId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Filing")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("AppendedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("ConcurrencyVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("FolderAlias")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("FolderPath")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("InternetMessageId")
+                        .HasMaxLength(998)
+                        .HasColumnType("character varying(998)");
+
+                    b.Property<string>("MailboxAccountId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset?>("ObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("PlacementUid")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("PlacementUidValidity")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Stage")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("WithdrawnAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("OutgoingEmailId", "Filing")
+                        .HasName("pk_outgoing_email_filings");
+
+                    b.HasIndex("MailboxAccountId", "InternetMessageId")
+                        .HasDatabaseName("ix_outgoing_email_filings_message_id")
+                        .HasFilter("\"ObservedAt\" IS NULL AND \"Stage\" = 'Confirmed'");
+
+                    b.HasIndex("MailboxAccountId", "FolderPath", "PlacementUidValidity", "PlacementUid")
+                        .HasDatabaseName("ix_outgoing_email_filings_placement")
+                        .HasFilter("\"ObservedAt\" IS NULL AND \"Stage\" = 'Confirmed'");
+
+                    b.ToTable("outgoing_email_filings", (string)null);
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OutgoingEmailRecipientEntity", b =>
@@ -1481,6 +1552,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasDefaultValue("NotReported");
 
                     b.Property<Guid?>("EmailThreadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("FiledFromOutgoingEmailId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("InReplyTo")
@@ -1706,7 +1780,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "MailboxAccountId", "Id" }, "ix_stored_emails_awaiting_rule_evaluation")
                         .HasDatabaseName("ix_stored_emails_awaiting_rule_evaluation")
-                        .HasFilter("\"RulesEvaluatedAt\" IS NULL");
+                        .HasFilter("\"RulesEvaluatedAt\" IS NULL AND \"FiledFromOutgoingEmailId\" IS NULL");
 
                     b.ToTable("stored_emails", (string)null);
                 });
@@ -1945,6 +2019,18 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("OutgoingEmail");
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OutgoingEmailFilingEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.OutgoingEmailEntity", "OutgoingEmail")
+                        .WithMany("Filings")
+                        .HasForeignKey("OutgoingEmailId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_outgoing_email_filings_emails");
+
+                    b.Navigation("OutgoingEmail");
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OutgoingEmailRecipientEntity", b =>
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.OutgoingEmailEntity", "OutgoingEmail")
@@ -2034,6 +2120,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OutgoingEmailEntity", b =>
                 {
                     b.Navigation("Content");
+
+                    b.Navigation("Filings");
 
                     b.Navigation("Recipients");
                 });

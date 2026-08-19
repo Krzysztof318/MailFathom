@@ -662,6 +662,15 @@ mailbox state nobody here is still reading.
 [What a mapping decides beyond where the folder is](imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
 states what each of the two is and what makes both unreachable everywhere else too.
 
+**A copy of this deployment's own outgoing mail is not arriving mail.** A message MailFathom
+[filed](mail-delivery.md#the-copy-in-the-accounts-own-folders) into the account's own sent or outbox folder comes back
+through the next synchronization like anything else, and it is recognized as this system's own and joined to the send
+it is a copy of. Neither pass ever offers it to a rule: a rule conditioned on mail arriving would otherwise fire on
+what the owner just sent, and a rule that files or deletes would act on the copy of a message the record above it still
+governs. The exclusion is a column on the row, applied where the candidates are read and repeated in the queue's own
+partial index, so such a message leaves the queue rather than sitting at the head of it — and it is never stamped as
+evaluated, because it was not.
+
 **Junk is not offered to the rule set at all.** Where spam classification is switched on, a message in the account's
 junk folder and a message a verdict called spam are left out of both passes, so a rule set is never fired by mail
 somebody else chose to send. A message no verdict has been reached about is left out too and stays a candidate, so the

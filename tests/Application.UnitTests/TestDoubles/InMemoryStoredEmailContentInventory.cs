@@ -17,7 +17,7 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 /// </remarks>
 internal sealed class InMemoryStoredEmailContentInventory : IStoredEmailContentInventory
 {
-    private readonly List<RemoteEmailMetadata> awaitingContent = [];
+    private readonly List<EmailAwaitingContent> awaitingContent = [];
 
     /// <summary>Gets or sets how much local storage the stored content is reported to occupy.</summary>
     public long StoredContentBytes { get; set; }
@@ -27,7 +27,9 @@ internal sealed class InMemoryStoredEmailContentInventory : IStoredEmailContentI
 
     /// <summary>Records that one occurrence is stored without its content and is waiting for room.</summary>
     /// <param name="metadata">What the deferring run stored the occurrence from.</param>
-    public void AddAwaitingContent(RemoteEmailMetadata metadata) => this.awaitingContent.Add(metadata);
+    /// <param name="isFiledCopy">Whether the stored row is joined to an outgoing send this deployment filed a copy of.</param>
+    public void AddAwaitingContent(RemoteEmailMetadata metadata, bool isFiledCopy = false) =>
+        this.awaitingContent.Add(new EmailAwaitingContent(metadata, isFiledCopy));
 
     /// <inheritdoc />
     public Task<long> GetStoredContentBytesAsync(CancellationToken cancellationToken)
@@ -38,20 +40,20 @@ internal sealed class InMemoryStoredEmailContentInventory : IStoredEmailContentI
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<RemoteEmailMetadata>> GetEmailsAwaitingContentAsync(
+    public Task<IReadOnlyList<EmailAwaitingContent>> GetEmailsAwaitingContentAsync(
         MailAccountId accountId,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         int maxEmailCount,
         CancellationToken cancellationToken)
     {
-        IReadOnlyList<RemoteEmailMetadata> awaiting =
+        IReadOnlyList<EmailAwaitingContent> awaiting =
         [
             .. this.awaitingContent
-                .Where(candidate => candidate.OccurrenceId.AccountId == accountId
-                    && candidate.OccurrenceId.FolderResolutionId == folderResolutionId
-                    && candidate.OccurrenceId.UidValidity == uidValidity)
-                .OrderBy(candidate => candidate.OccurrenceId.Uid.Value)
+                .Where(candidate => candidate.Metadata.OccurrenceId.AccountId == accountId
+                    && candidate.Metadata.OccurrenceId.FolderResolutionId == folderResolutionId
+                    && candidate.Metadata.OccurrenceId.UidValidity == uidValidity)
+                .OrderBy(candidate => candidate.Metadata.OccurrenceId.Uid.Value)
                 .Take(maxEmailCount),
         ];
 

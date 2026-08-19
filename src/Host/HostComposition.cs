@@ -22,6 +22,7 @@ using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Mail.Mutations;
@@ -529,6 +530,7 @@ internal static class HostComposition
         builder.Services.AddScoped(provider =>
             provider.GetRequiredService<MailSynchronizationOptions>().MachineAuthorshipProfile);
         builder.Services.AddScoped<IOutgoingSenderIdentityReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
+        builder.Services.AddScoped<IOutgoingMailFilingPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         builder.Services.AddScoped<IMailFolderParticipationReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         builder.Services.AddScoped<IJunkMailFolderCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
         builder.Services.AddScoped<IMailFolderMappingReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());

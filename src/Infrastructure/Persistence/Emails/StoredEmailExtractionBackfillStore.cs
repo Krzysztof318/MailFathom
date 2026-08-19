@@ -297,13 +297,14 @@ internal sealed class StoredEmailExtractionBackfillStore(
         CancellationToken cancellationToken)
     {
         var terms = derivedWorkGate.ReadTerms();
-        // Written inline rather than through MailAwaitingRelocation's expression, because it is one branch of a larger
-        // predicate here: the two orderings hold a first cut back together, and a re-cut answers past both of them.
+        // Written inline rather than through MailAwaitingRelocation's and MailAwaitingRuleEvaluation's expressions,
+        // because both are one branch of a larger predicate here: the two orderings hold a first cut back together, and
+        // a re-cut answers past both of them.
         var email = sessionContext.StoredEmails
             .AsNoTracking()
             .Where(candidate => candidate.Id == storedEmailId.Value)
             .Where(candidate => candidate.Chunks.Any()
-                || (candidate.RulesEvaluatedAt != null
+                || ((candidate.RulesEvaluatedAt != null || candidate.FiledFromOutgoingEmailId != null)
                     && !candidate.Mutations.Any(mutation =>
                         mutation.Mutation == MailAwaitingRelocation.RelocateMutationName
                         && mutation.Stage != MailboxMutationStage.Completed

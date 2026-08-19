@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
@@ -197,10 +198,72 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
                         "No log line is defined for this delivery outcome.");
             }
         }
+
+        this.ReportFilings(accountId, report);
+    }
+
+    /// <summary>Says what became of the copies this pass put into folders, at the level each ending deserves.</summary>
+    /// <remarks>
+    /// Only the endings that leave a copy missing are written. A copy that was filed, one that was already there, and a
+    /// place the account asked for nothing in are the ordinary states of every pass, and a line for each would be the
+    /// whole log — while the failure is what an owner notices as mail they sent and cannot find.
+    /// </remarks>
+    private void ReportFilings(MailAccountId accountId, MailOutboxPassReport report)
+    {
+        foreach (var filing in report.FilingResults)
+        {
+            switch (filing.Outcome)
+            {
+                case OutgoingMailFilingOutcome.DestinationUnavailable:
+                    this.LogCopyDestinationUnavailable(accountId.Value, filing.FilingName);
+
+                    break;
+
+                case OutgoingMailFilingOutcome.OutcomeUnknown:
+                    this.LogCopyOutcomeUnknown(accountId.Value, filing.FilingName);
+
+                    break;
+
+                case OutgoingMailFilingOutcome.Failed:
+                    this.LogCopyNotFiled(accountId.Value, filing.FilingName, filing.Failure?.Value);
+
+                    break;
+
+                case OutgoingMailFilingOutcome.Filed:
+                case OutgoingMailFilingOutcome.AlreadyFiled:
+                case OutgoingMailFilingOutcome.NotRequested:
+                case OutgoingMailFilingOutcome.Withdrawn:
+                    break;
+
+                default:
+                    throw new ArgumentOutOfRangeException(
+                        nameof(report),
+                        filing.Outcome,
+                        "No log line is defined for this filing outcome.");
+            }
+        }
     }
 
     /// <summary>Names the failure a send ended on, as the code an operator looks up rather than as a message.</summary>
     private static int? FailureCodeOf(MailOutboxDeliveryResult result) => result.Failure?.Value;
+
+    /// <summary>Reports a copy with nowhere to go, which the account's folder mapping is what changes.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "A copy of a message sent for account {AccountId} could not be filed as '{Filing}', because the account maps no folder to that role. The message was delivered; map a folder to the role to see it in a mail client.")]
+    private partial void LogCopyDestinationUnavailable(string accountId, string filing);
+
+    /// <summary>Reports the one filing ending nothing attempts again.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "A copy of a message sent for account {AccountId} was appended as '{Filing}' and the mail server never answered, so whether the copy is in the folder is unknown. Nothing appends it again, because a second append would be a second copy.")]
+    private partial void LogCopyOutcomeUnknown(string accountId, string filing);
+
+    /// <summary>Reports a copy that never reached the folder, on a send nothing claims again.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "A copy of a message sent for account {AccountId} could not be filed as '{Filing}' [failure {FailureCode}]. The message was delivered and is never sent again, and nothing files the copy again on its own.")]
+    private partial void LogCopyNotFiled(string accountId, string filing, int? failureCode);
 
     [LoggerMessage(
         Level = LogLevel.Information,

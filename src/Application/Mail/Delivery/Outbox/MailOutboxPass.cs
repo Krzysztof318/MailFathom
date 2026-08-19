@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Transport;
@@ -43,28 +44,33 @@ public sealed class MailOutboxPass
 {
     private readonly IOutgoingEmailStore outgoingEmails;
     private readonly MailOutboxDelivery delivery;
+    private readonly OutgoingMailFilingPass filings;
     private readonly IMailTransportSecurityPolicyReader transportSecurityPolicyReader;
     private readonly MailOutboxSettings settings;
 
     /// <summary>Initializes the pass from the outbox it claims out of and the attempt it runs.</summary>
     /// <param name="outgoingEmails">Claims the batch this pass settles.</param>
     /// <param name="delivery">Attempts one claimed send.</param>
+    /// <param name="filings">Keeps the mailbox's own copies of these messages in step with what the pass does.</param>
     /// <param name="transportSecurityPolicyReader">Supplies the policy every submission obeys, and says whether the account submits at all.</param>
     /// <param name="settings">Bounds how much one pass claims and how long it holds it.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public MailOutboxPass(
         IOutgoingEmailStore outgoingEmails,
         MailOutboxDelivery delivery,
+        OutgoingMailFilingPass filings,
         IMailTransportSecurityPolicyReader transportSecurityPolicyReader,
         MailOutboxSettings settings)
     {
         ArgumentNullException.ThrowIfNull(outgoingEmails);
         ArgumentNullException.ThrowIfNull(delivery);
+        ArgumentNullException.ThrowIfNull(filings);
         ArgumentNullException.ThrowIfNull(transportSecurityPolicyReader);
         ArgumentNullException.ThrowIfNull(settings);
 
         this.outgoingEmails = outgoingEmails;
         this.delivery = delivery;
+        this.filings = filings;
         this.transportSecurityPolicyReader = transportSecurityPolicyReader;
         this.settings = settings;
     }
@@ -89,6 +95,12 @@ public sealed class MailOutboxPass
 
         var markedUnknownCount = await this.outgoingEmails.MarkUnknownOutcomesAsync(accountId, stoppingToken);
 
+        // Before the claim rather than after it, so a send that is waiting for an instant still ahead is mirrored while
+        // it waits rather than after whatever eventually takes it. A send this claim is about to take is not waiting at
+        // all and is mirrored nowhere.
+        var filingResults = new List<OutgoingMailFilingResult>(
+            await this.filings.MirrorWaitingSendsAsync(accountId, stoppingToken));
+
         var claimed = await this.outgoingEmails.ClaimAsync(
             OutgoingEmailClaimRequest.Create(accountId, this.settings.MaxDeliveriesPerPass, this.settings.LeaseDuration),
             stoppingToken);
@@ -96,13 +108,56 @@ public sealed class MailOutboxPass
         var results = new List<MailOutboxDeliveryResult>(claimed.Count);
         foreach (var send in claimed)
         {
-            results.Add(await this.AttemptAsync(send, transportSecurityPolicy, stoppingToken));
+            var result = await this.AttemptAsync(send, transportSecurityPolicy, stoppingToken);
+            results.Add(result);
+
+            filingResults.AddRange(await this.FileCopiesOfAsync(result, stoppingToken));
         }
 
         return new MailOutboxPassReport(
             results,
+            filingResults,
             markedUnknownCount,
             claimed.Count >= this.settings.MaxDeliveriesPerPass);
+    }
+
+    /// <summary>Brings the mailbox's own copies of one settled send up to date, and never lets that end the pass.</summary>
+    /// <remarks>
+    /// A copy that could not be filed says nothing about whether the message was delivered, so it must not stop the
+    /// sends behind it in the batch — which is the same reason a send whose outcome could not be recorded does not. A
+    /// send that is still queued reaches this and does nothing, because nothing about its copies has changed.
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Filing a copy of a message that was already delivered must not end the pass; every failure the filer itself classifies is already a result, so what is caught here is a store or a resolver that failed outright, and the record still says what became of the send.")]
+    private async Task<IReadOnlyList<OutgoingMailFilingResult>> FileCopiesOfAsync(
+        MailOutboxDeliveryResult result,
+        CancellationToken stoppingToken)
+    {
+        try
+        {
+            return await this.filings.SettleFiledCopiesAsync(result.OutgoingEmailId, stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // The host is stopping, which says nothing about the copy: filing never reached a mail server, so reporting
+            // a failure here would leave a delivered send recorded as one whose copy could not be filed. The next pass
+            // settles it.
+            return [];
+        }
+        catch (Exception failure)
+        {
+            // No place is named, because none was chosen: what can fail past the filer's own catches is the read of
+            // the record itself, which happens before the withdrawal and the append are even decided between. Reporting
+            // it against the sent copy would tag a counter and a log line with a place this failure never reached.
+            return
+            [
+                new OutgoingMailFilingResult(
+                    result.OutgoingEmailId,
+                    Filing: default,
+                    OutgoingMailFilingOutcome.Failed,
+                    (failure as MailFathomException)?.ErrorCode
+                        ?? MailFathomErrorCode.OutgoingEmailFilingFailedUnexpectedly),
+            ];
+        }
     }
 
     /// <summary>Attempts one claimed send, and reports a failure the attempt could not record instead of raising it.</summary>

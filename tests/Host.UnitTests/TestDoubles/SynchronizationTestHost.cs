@@ -13,6 +13,7 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
@@ -34,6 +35,7 @@ using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
@@ -131,6 +133,7 @@ internal static class SynchronizationTestHost
         services.AddSingleton(CreateMimeReaderThatExtractsEverything());
         services.AddSingleton(CreateReconciliationStoreWithNothingToDo());
         services.AddSingleton(CreateMutationStoreWithNothingRecorded());
+        services.AddSingleton(CreateFilingStoreWithNothingFiled());
         services.AddSingleton(new PersistenceConcurrencyOptions());
         services.AddSingleton(new MailboxSynchronizationOptions());
         services.AddSingleton(timeProvider);
@@ -471,6 +474,28 @@ internal static class SynchronizationTestHost
             .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingReconciliation>>([]));
 
         return reconciliationStore;
+    }
+
+    /// <summary>Builds a store in which this deployment has filed no copy, so every message a run meets is somebody else's.</summary>
+    /// <remarks>
+    /// A run asks this of every batch it discovers, to tell a copy it filed itself from mail that arrived. These tests
+    /// send nothing, so the answer is always empty — and an unconfigured substitute would answer with a null task the
+    /// folder's own work unit then faults on, which surfaces as a supervision that never signals.
+    /// </remarks>
+    private static IOutgoingMailFilingStore CreateFilingStoreWithNothingFiled()
+    {
+        var filingStore = Substitute.For<IOutgoingMailFilingStore>();
+        filingStore
+            .ReadFilingsAtAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<RemoteFolderPath>(),
+                Arg.Any<ImapUidValidity>(),
+                Arg.Any<IReadOnlyCollection<ImapUid>>(),
+                Arg.Any<IReadOnlyCollection<string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<OutgoingMailFilingRecord>>([]));
+
+        return filingStore;
     }
 
     /// <summary>Builds a store holding no mutations, so nothing a run discovers is one MailFathom itself made.</summary>

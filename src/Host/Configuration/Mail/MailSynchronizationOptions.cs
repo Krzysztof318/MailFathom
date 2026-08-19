@@ -10,6 +10,7 @@ using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Retrieval.AskMail.Audit;
@@ -47,6 +48,7 @@ internal sealed class MailSynchronizationOptions
         ITrustedAuthenticationAuthorityReader,
         ISenderTrustPolicyReader,
         IOutgoingSenderIdentityReader,
+        IOutgoingMailFilingPolicyReader,
         IMailFolderParticipationReader,
         IJunkMailFolderCatalog,
         IMailFolderMappingReader,
@@ -551,6 +553,15 @@ internal sealed class MailSynchronizationOptions
             ? OutgoingSenderIdentity.Create(accountId, address)
             : null;
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// An account this deployment does not configure is answered as though it files the copy, which is the same
+    /// direction the port's own default takes: nothing can send as an account nobody configured, so the answer is
+    /// reached only by a caller asking about a message that cannot exist.
+    /// </remarks>
+    public bool FilesSentCopy(MailAccountId accountId) =>
+        this.FindConfiguredAccount(accountId)?.Delivery.FileSentCopy ?? true;
 
     /// <inheritdoc />
     public MailSynchronizationWindow GetWindow(MailAccountId accountId)

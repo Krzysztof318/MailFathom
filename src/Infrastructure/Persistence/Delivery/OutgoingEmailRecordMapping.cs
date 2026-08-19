@@ -5,8 +5,11 @@
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Persistence.Entities;
 
 namespace MailFathom.Infrastructure.Persistence.Delivery;
@@ -44,10 +47,54 @@ internal static class OutgoingEmailRecordMapping
             AttemptCount = entity.AttemptCount,
             RecordedAt = entity.RecordedAt,
             StageChangedAt = entity.StageChangedAt,
-            LastFailure = ToFailure(entity),
+            AvailableAt = entity.AvailableAt,
+            LastFailure = ToFailure(entity.LastFailureCode),
             LastReplyCode = entity.LastReplyCode,
+            Filings = [.. entity.Filings.Select(ToFiling).OrderBy(filing => filing.Filing.Name, StringComparer.Ordinal)],
+            LastFilingFailure = ToFailure(entity.LastFilingFailureCode),
         };
     }
+
+    /// <summary>Rebuilds what one row says about a copy of the message this deployment put into a folder.</summary>
+    /// <exception cref="InvalidOperationException">Thrown when the row names a place or a folder this build cannot read.</exception>
+    /// <remarks>
+    /// A row naming a place this build does not know fails the read rather than being dropped, which is the opposite of
+    /// how the failure code beside it is treated and for a reason: a code is diagnostic detail, while a filing that
+    /// disappears from the record is a copy in somebody's mailbox that nothing afterwards accounts for — and the next
+    /// pass would file a second one.
+    /// </remarks>
+    internal static OutgoingMailFilingRecord ToFiling(OutgoingEmailFilingEntity entity)
+    {
+        if (!OutgoingMailFiling.TryParseName(entity.Filing, out var filing))
+        {
+            throw new InvalidOperationException(
+                $"Outgoing email record {entity.OutgoingEmailId} carries a filing named '{entity.Filing}', which is no place this build files into.");
+        }
+
+        return new OutgoingMailFilingRecord
+        {
+            OutgoingEmailId = OutgoingEmailId.Create(entity.OutgoingEmailId),
+            Filing = filing,
+            FolderAlias = MailFolderAlias.Create(entity.FolderAlias),
+            FolderPath = RemoteFolderPath.Create(entity.FolderPath),
+            Stage = entity.Stage,
+            Placement = ToPlacement(entity),
+            InternetMessageId = entity.InternetMessageId,
+            AppendedAt = entity.AppendedAt,
+            ObservedAt = entity.ObservedAt,
+            WithdrawnAt = entity.WithdrawnAt,
+        };
+    }
+
+    /// <summary>Reads back where the server said it put the copy, which on most servers is nowhere it named.</summary>
+    /// <remarks>
+    /// The two columns are written together and read together. A row carrying one of them is a row no code path here
+    /// can produce, and reading it as a placement would put a UID into a join with no UID space to interpret it in.
+    /// </remarks>
+    private static RemoteEmailPlacement ToPlacement(OutgoingEmailFilingEntity entity) =>
+        entity is { PlacementUidValidity: { } uidValidity, PlacementUid: { } uid }
+            ? RemoteEmailPlacement.Reported(ImapUidValidity.Create(uidValidity), ImapUid.Create(uid))
+            : RemoteEmailPlacement.NotReported();
 
     /// <summary>Restores one recipient and what the server last said about them.</summary>
     /// <remarks>
@@ -86,9 +133,9 @@ internal static class OutgoingEmailRecordMapping
     /// detail rather than something acted on, so it is reported as absent instead of failing the read of a send that is
     /// otherwise perfectly readable.
     /// </remarks>
-    private static MailFathomErrorCode? ToFailure(OutgoingEmailEntity entity)
+    private static MailFathomErrorCode? ToFailure(int? storedCode)
     {
-        if (entity.LastFailureCode is not { } failureCode)
+        if (storedCode is not { } failureCode)
         {
             return null;
         }

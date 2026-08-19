@@ -3,13 +3,17 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
+using MailFathom.Infrastructure.Mail.Mime;
 using MailFathom.Infrastructure.Observability;
 using MailKit;
 using MailKit.Net.Imap;
+using MimeKit;
 
 namespace MailFathom.Infrastructure.Mail.MailKit.Writes;
 
@@ -51,6 +55,8 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
     private const string NativeProtocolPath = "native";
     private const string FallbackProtocolPath = "fallback";
     private const string UidPlusCapabilityName = "UIDPLUS extension (RFC 4315)";
+    private const string FileOperationName = "file-outgoing-copy";
+    private const string WithdrawOperationName = "withdraw-outgoing-copy";
     private const string PermanentKeywordsCapabilityName = "persistent keywords (RFC 9051 PERMANENTFLAGS)";
 
     private readonly MailboxWriteConnectionLease lease;
@@ -112,7 +118,7 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
                 RequireCapability(
                     client,
                     ImapCapabilities.UidPlus,
-                    MailboxMutation.Delete,
+                    MailboxMutation.Delete.Name,
                     UidPlusCapabilityName,
                     this.SessionAccountId,
                     this.folder.Alias);
@@ -340,7 +346,140 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
             cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task<AppendedMailCopy> AppendAsync(
+        ReadOnlyMemory<byte> rawMime,
+        AppendedMailFlags flags,
+        DateTimeOffset internalDate,
+        CancellationToken cancellationToken)
+    {
+        if (rawMime.IsEmpty)
+        {
+            throw new ArgumentException("A message is appended with the bytes it was composed as.", nameof(rawMime));
+        }
+
+        using var scope = this.telemetry.BeginFiling(FileOperationName, this.SessionAccountId, this.folder.Alias);
+
+        var copy = await this.lease.Connection.ExecuteMutationAsync(
+            async (_, openFolder, attemptToken) =>
+            {
+                // Parsed rather than recomposed: the bytes are the ones the submission carried, and MimeKit writes the
+                // headers and the body back as it read them. What the parse is for is the identity the message already
+                // states, which is what recognizes the copy again on a server that names no placement.
+                using var storedMime = RawMimeStream.Open(rawMime);
+                using var message = await MimeMessage.LoadAsync(storedMime, attemptToken);
+
+                scope.CommandIssued("APPEND");
+                var appendedUid = await openFolder.AppendAsync(
+                    new AppendRequest(message, MessageFlagsOf(flags), internalDate),
+                    attemptToken);
+
+                return new AppendedMailCopy(
+                    PlacementOfAppend(openFolder, appendedUid),
+                    NormalizedMessageIdOf(message));
+            },
+            cancellationToken);
+
+        scope.Completed();
+
+        return copy;
+    }
+
+    /// <inheritdoc />
+    public async Task WithdrawAppendedAsync(
+        ImapUidValidity uidValidity,
+        ImapUid uid,
+        CancellationToken cancellationToken)
+    {
+        using var scope = this.telemetry.BeginFiling(WithdrawOperationName, this.SessionAccountId, this.folder.Alias);
+
+        await this.lease.Connection.ExecuteMutationAsync(
+            async (client, openFolder, attemptToken) =>
+            {
+                // The folder is compared as it is selected right now rather than as it was when the copy was appended,
+                // so a folder recreated in between has nothing removed from it: every UID in it names a different
+                // message than the one this withdrawal was recorded against.
+                if (openFolder.UidValidity != uidValidity.Value)
+                {
+                    throw new MailboxFolderRecreatedException(
+                        this.SessionAccountId,
+                        this.folder.Alias,
+                        uidValidity,
+                        ImapUidValidity.Create(openFolder.UidValidity));
+                }
+
+                // Named as the withdrawal it is rather than as a delete: the copy being removed is one MailFathom
+                // filed, which the mutation boundary deliberately holds outside the closed set, so a refusal reported
+                // as a delete would name a mutation nobody asked for.
+                RequireCapability(
+                    client,
+                    ImapCapabilities.UidPlus,
+                    WithdrawOperationName,
+                    UidPlusCapabilityName,
+                    this.SessionAccountId,
+                    this.folder.Alias);
+
+                UniqueId[] targetUid = [new UniqueId(uid.Value)];
+
+                scope.CommandIssued("UID STORE +FLAGS (\\Deleted)");
+                await openFolder.StoreAsync(
+                    targetUid,
+                    new StoreFlagsRequest(StoreAction.Add, MessageFlags.Deleted) { Silent = true },
+                    attemptToken);
+
+                scope.CommandIssued("UID EXPUNGE");
+                await openFolder.ExpungeAsync(targetUid, attemptToken);
+
+                return true;
+            },
+            cancellationToken);
+
+        scope.Completed();
+    }
+
     private MailAccountId SessionAccountId => this.lease.AccountId;
+
+    /// <summary>Turns the two flags a filed copy may carry into the flag set the protocol takes.</summary>
+    private static MessageFlags MessageFlagsOf(AppendedMailFlags flags)
+    {
+        var messageFlags = MessageFlags.None;
+
+        if (flags.IsDraft)
+        {
+            messageFlags |= MessageFlags.Draft;
+        }
+
+        if (flags.IsSeen)
+        {
+            messageFlags |= MessageFlags.Seen;
+        }
+
+        return messageFlags;
+    }
+
+    /// <summary>Reads where an <c>APPENDUID</c> response says the folder put the copy.</summary>
+    /// <remarks>
+    /// The UID comes from the response and the UIDVALIDITY from the folder this session has selected, which is the same
+    /// folder the append went into and is open — so unlike the copy destination this one reports a real validity. A
+    /// server advertising no <c>UIDPLUS</c> answers with no UID at all, and that absence is reported as itself rather
+    /// than turned into a search of the folder for something that looks like the message.
+    /// </remarks>
+    private static RemoteEmailPlacement PlacementOfAppend(IMailFolder openFolder, UniqueId? appendedUid) =>
+        appendedUid is { Id: > 0U } placedUid && openFolder.UidValidity > 0U
+            ? RemoteEmailPlacement.Reported(
+                ImapUidValidity.Create(openFolder.UidValidity),
+                ImapUid.Create(placedUid.Id))
+            : RemoteEmailPlacement.NotReported();
+
+    /// <summary>Reads the identity the appended message states, in the form a mail server reports it back.</summary>
+    /// <remarks>
+    /// MimeKit strips the angle brackets that delimit the header, which is the same form synchronization stores for
+    /// arriving mail, so the two compare directly. A message stating none is recorded as stating none rather than as
+    /// an empty string.
+    /// </remarks>
+    private static string? NormalizedMessageIdOf(MimeMessage message) =>
+        string.IsNullOrWhiteSpace(message.MessageId) ? null : message.MessageId.Trim();
+
 
     /// <summary>Issues one keyword <c>STORE</c>, and issues nothing at all when the set it was given is empty.</summary>
     /// <remarks>
@@ -434,7 +573,7 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
         throw new MailboxMutationUnsupportedException(
             this.SessionAccountId,
             this.folder.Alias,
-            mutation,
+            mutation.Name,
             PermanentKeywordsCapabilityName);
     }
 
@@ -499,14 +638,14 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
     private static void RequireCapability(
         IImapClient client,
         ImapCapabilities capability,
-        MailboxMutation mutation,
+        string operation,
         string capabilityName,
         MailAccountId accountId,
         MailFolderAlias folderAlias)
     {
         if (!client.Capabilities.HasFlag(capability))
         {
-            throw new MailboxMutationUnsupportedException(accountId, folderAlias, mutation, capabilityName);
+            throw new MailboxMutationUnsupportedException(accountId, folderAlias, operation, capabilityName);
         }
     }
 
@@ -552,7 +691,7 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
             RequireCapability(
                 client,
                 ImapCapabilities.UidPlus,
-                MailboxMutation.Relocate,
+                MailboxMutation.Relocate.Name,
                 UidPlusCapabilityName,
                 this.SessionAccountId,
                 this.folder.Alias);
@@ -592,7 +731,7 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
         RequireCapability(
             client,
             ImapCapabilities.UidPlus,
-            MailboxMutation.Relocate,
+            MailboxMutation.Relocate.Name,
             UidPlusCapabilityName,
             this.SessionAccountId,
             this.folder.Alias);

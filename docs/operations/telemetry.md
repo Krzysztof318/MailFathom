@@ -162,7 +162,10 @@ What publishes to that name is documented with the subsystem that does it.
 
 Every change MailFathom makes to a remote mailbox opens a span named after the mutation, and is counted by
 `mailfathom.mailbox.mutations` and timed by `mailfathom.mailbox.mutation.duration`, both broken down by the mutation,
-the account, the folder alias, and whether it succeeded. It is deliberately
+the account, the folder alias, and whether it succeeded. Two of those names are not mutations —
+`file-outgoing-copy` and `withdraw-outgoing-copy`, which put a copy of this deployment's own outgoing message into a
+folder and take it back out — and they report here regardless, because an operator asking what MailFathom changed about
+a mailbox wants one answer rather than two dashboards. It is deliberately
 **not** broken down by which IMAP commands carried the change — a relocation is one operation whether the server
 offered RFC 6851 `MOVE` or the copy-flag-expunge sequence was used instead, and a dimension telling the two apart is
 exactly what would make a missing server extension look like a different operation on a dashboard. Which path ran is in
@@ -721,6 +724,18 @@ provider that is briefly busy and is only interesting when it stops turning into
 `not-recorded` is the store refusing to take an attempt's answer rather than a server refusing the message: the record
 stands where the failed write left it and its lease is what frees it, so a rate above zero is a database to look at and
 not an outbox to act on.
+
+**Can the owner see what they sent?** `mailfathom.mail.filing.attempts` counts every attempt to put a copy of an
+outgoing message into one of this account's own folders, tagged with the account alias, `mailfathom.mail.filing.place`
+— `draft`, `held`, `sent`, or `undetermined` where a failure ended before any place was chosen — and
+`mailfathom.mail.filing.outcome`, whose values are `filed`, `already-filed`,
+`not-requested`, `destination-unavailable`, `outcome-unknown`, `failed`, and `withdrawn`. Most of them are ordinary:
+`not-requested` is an account that files no copy, `already-filed` is a settlement asked for twice, and `withdrawn` is a
+mirror going away because its message left. Two are worth a dashboard. `destination-unavailable` is a deployment whose
+`Sent` folder mapping resolves to nothing, so every message it sends goes unrecorded in the mailbox — a configuration
+answer rather than a server one. And `outcome-unknown` means the same here as it does above and for the same reason:
+the append may or may not have reached the folder, nothing will attempt it again, and repeating it would put a second
+copy of somebody's own message in front of them.
 
 **Is one submission the slow part?** Each opens **`submit_outgoing_email`** as a client span, tagged with the account
 alias, and `mailfathom.mail.delivery.submission.duration` records how long it took. Both cover the exchange with the

@@ -163,6 +163,17 @@ internal sealed class MailFolderMappingOptions : IValidatableObject
                 [nameof(this.CreateIfMissing)]);
         }
 
+        // The one role no server ever advertises. RFC 6154 declares no outbox attribute and MailFathom does not invent
+        // one from a folder's name, so a mapping that expects discovery to find it would resolve to nothing and the
+        // deployment would learn that from mail it never saw mirrored. Written beside a path the role is a label like
+        // any other, which is exactly how an operator says which of their folders holds what is waiting to go out.
+        if (!namesRemotePath && this.DeclaredRole == MailFolderSpecialUse.Outbox)
+        {
+            yield return new ValidationResult(
+                $"Folder alias '{this.Alias}' names the '{nameof(MailFolderSpecialUse.Outbox)}' role without a remote path, and no mail server advertises an outbox folder for discovery to find. Name the folder the role applies to in 'RemotePath'.",
+                [nameof(this.SpecialUse)]);
+        }
+
         foreach (var result in this.ValidateConfiguredValues(namesRemotePath))
         {
             yield return result;

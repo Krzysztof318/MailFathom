@@ -3,10 +3,14 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
+using MailFathom.Application.Mail.Mutations;
+using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
@@ -202,6 +206,24 @@ public sealed class OutboxDeliveryWorkerTests
                 TimeSpan.FromMinutes(5)));
             collection.AddScoped<OptimisticConcurrencyRetryPolicy>();
             collection.AddScoped<MailOutboxDelivery>();
+
+            // A pass files the copies of whatever it settles, so it cannot be composed without the filing side of it.
+            // Every one of these substitutes answers that the account maps no folder to file into and asks for no sent
+            // copy, which is the arrangement these tests are written against: what the loop decides is when to take a
+            // pass, and where a copy ends up belongs to the pass's own tests.
+            collection.AddSingleton(Substitute.For<IMailFolderMappingReader>());
+            collection.AddSingleton(Substitute.For<IMailFolderResolutionStore>());
+            collection.AddSingleton(Substitute.For<IMailFolderMappingChangeAuditor>());
+            collection.AddSingleton(Substitute.For<IRemoteFolderCatalog>());
+            collection.AddSingleton(Substitute.For<IRemoteFolderCreator>());
+            collection.AddSingleton(Substitute.For<IMailboxWriteSessionFactory>());
+            collection.AddSingleton(Substitute.For<IOutgoingMailFilingStore>());
+            collection.AddSingleton(Substitute.For<IOutgoingMailFilingPolicyReader>());
+            collection.AddScoped<MailFolderReferenceResolver>();
+            collection.AddScoped<MailFolderResolver>();
+            collection.AddScoped<MailboxDestinationResolver>();
+            collection.AddScoped<OutgoingMailFiler>();
+            collection.AddScoped<OutgoingMailFilingPass>();
             collection.AddScoped<MailOutboxPass>();
 
             this.services = collection.BuildServiceProvider();
@@ -286,8 +308,11 @@ public sealed class OutboxDeliveryWorkerTests
                 AttemptCount = 1,
                 RecordedAt = DateTimeOffset.UnixEpoch,
                 StageChangedAt = DateTimeOffset.UnixEpoch,
+                AvailableAt = DateTimeOffset.UnixEpoch,
                 LastFailure = null,
                 LastReplyCode = null,
+                Filings = [],
+                LastFilingFailure = null,
             };
         }
 

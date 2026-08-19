@@ -5,7 +5,6 @@
 using System.Diagnostics;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
-using MailFathom.Domain.Mutations;
 
 namespace MailFathom.Infrastructure.Observability;
 
@@ -25,7 +24,7 @@ namespace MailFathom.Infrastructure.Observability;
 internal sealed class MailboxMutationScope : IDisposable
 {
     private readonly MailboxMutationTelemetry telemetry;
-    private readonly MailboxMutation mutation;
+    private readonly string operationName;
     private readonly MailAccountId accountId;
     private readonly MailFolderAlias folderAlias;
     private readonly Activity? activity;
@@ -36,14 +35,14 @@ internal sealed class MailboxMutationScope : IDisposable
 
     internal MailboxMutationScope(
         MailboxMutationTelemetry telemetry,
-        MailboxMutation mutation,
+        string operationName,
         MailAccountId accountId,
         MailFolderAlias folderAlias,
         Activity? activity,
         long startingTimestamp)
     {
         this.telemetry = telemetry;
-        this.mutation = mutation;
+        this.operationName = operationName;
         this.accountId = accountId;
         this.folderAlias = folderAlias;
         this.activity = activity;
@@ -53,7 +52,7 @@ internal sealed class MailboxMutationScope : IDisposable
     /// <summary>Records which protocol path is carrying the mutation, as debug detail and nowhere else.</summary>
     /// <param name="protocolPath">A short name for the path, such as <c>native</c> or <c>fallback</c>.</param>
     internal void ProtocolPathChosen(string protocolPath) =>
-        this.telemetry.RecordProtocolPath(this.mutation, this.accountId, this.folderAlias, protocolPath);
+        this.telemetry.RecordProtocolPath(this.operationName, this.accountId, this.folderAlias, protocolPath);
 
     /// <summary>Records one IMAP command the mutation issued, as debug detail and nowhere else.</summary>
     /// <param name="imapCommand">The command name, such as <c>UID COPY</c>.</param>
@@ -62,7 +61,7 @@ internal sealed class MailboxMutationScope : IDisposable
     /// record answers — which step a broken fallback reached — is answered by the command alone.
     /// </remarks>
     internal void CommandIssued(string imapCommand) =>
-        this.telemetry.RecordCommand(this.mutation, this.accountId, this.folderAlias, imapCommand);
+        this.telemetry.RecordCommand(this.operationName, this.accountId, this.folderAlias, imapCommand);
 
     /// <summary>Marks the mutation as having done what it was asked to do.</summary>
     internal void Completed()
@@ -87,7 +86,7 @@ internal sealed class MailboxMutationScope : IDisposable
         }
 
         this.telemetry.RecordOutcome(
-            this.mutation,
+            this.operationName,
             this.accountId,
             this.folderAlias,
             this.succeeded,

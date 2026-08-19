@@ -73,13 +73,16 @@ public sealed class OrchestratedStoredEmailContentInventoryTests(MailFathomOrche
             cancellationToken);
 
         // Assert
-        var reportedUids = reported.Select(metadata => metadata.OccurrenceId.Uid.Value).ToArray();
+        var reportedUids = reported.Select(candidate => candidate.Metadata.OccurrenceId.Uid.Value).ToArray();
         Assert.Equal([AwaitingUid], reportedUids);
 
         // The projection is what a refetch is committed under, so it has to carry back what the row was stored with.
         var onlyOne = Assert.Single(reported);
-        Assert.Equal(awaiting, onlyOne.OccurrenceId);
-        Assert.Equal(SyntheticEmail.RemoteMetadataOf(awaiting, "awaiting-content", 4096).SizeOctets, onlyOne.SizeOctets);
+        Assert.Equal(awaiting, onlyOne.Metadata.OccurrenceId);
+        Assert.Equal(SyntheticEmail.RemoteMetadataOf(awaiting, "awaiting-content", 4096).SizeOctets, onlyOne.Metadata.SizeOctets);
+
+        // Nothing filed this occurrence, and the join has to say so rather than defaulting to whatever suppresses least.
+        Assert.False(onlyOne.IsFiledCopy);
     }
 
     /// <summary>A folder the server recreated is a different UID space, so its stored occurrences are not fetchable.</summary>

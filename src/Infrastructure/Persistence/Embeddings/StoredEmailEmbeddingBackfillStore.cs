@@ -198,7 +198,9 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
                 .Where(email => email.Chunks.Any(chunk =>
                         !chunk.Embeddings.Any(vector => vector.EmbeddingProfileId == profileId))
                     || (!email.Chunks.Any()
-                        && email.RulesEvaluatedAt != null
+                        // Both clauses of MailAwaitingRuleEvaluation, written inline for the reason the relocation
+                        // reading below is: this is one disjunct of a larger predicate rather than a whole query.
+                        && (email.RulesEvaluatedAt != null || email.FiledFromOutgoingEmailId != null)
                         && email.SearchDocument != null
                         && email.SearchDocument.BodyText != null
                         // Composed inline rather than as a second Where, so it narrows the uncut group alone: a message
