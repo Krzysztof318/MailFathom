@@ -14,8 +14,8 @@ MailFathom synchronizes your IMAP accounts into a PostgreSQL database you run, i
 
 Two properties hold everywhere:
 
-- **Reading is local.** A tool call answers from your copy and never contacts a mail server, so it is fast, it works while the server is down, and it cannot change anything remotely.
-- **Synchronization never writes to your mailbox.** Fetching mail never sets the remote `\Seen` flag, so mail MailFathom has copied still shows as unread in your own mail client.
+- **Reading is local.** A read answers from your copy and never contacts a mail server, so it is fast, it works while the server is down, and it changes nothing remotely.
+- **Synchronization never writes to your mailbox.** Fetching mail never sets the remote `\Seen` flag, so mail MailFathom has copied still shows as unread in your own mail client. One tool writes, behind a grant of its own, and it is named below.
 
 An agent gets twelve tools, and they are the whole surface. Five of them read your mail:
 

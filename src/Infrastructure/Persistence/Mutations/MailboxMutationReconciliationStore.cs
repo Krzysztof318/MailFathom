@@ -93,6 +93,7 @@ internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext rea
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
+        DateTimeOffset issuedAfter,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(uids);
@@ -118,12 +119,21 @@ internal sealed class MailboxMutationReconciliationStore(MailFathomDbContext rea
                 && mutation.MailFolder.ResolutionGeneration == generation
                 && mutation.UidValidity == uidValidityValue
                 && changedUids.Contains(mutation.Uid)
-                && FlagWritingMutationNames.Contains(mutation.Mutation))
-            .OrderBy(mutation => mutation.RecordedAt)
-            .ThenBy(mutation => mutation.Id)
+                && FlagWritingMutationNames.Contains(mutation.Mutation)
+                && mutation.StageChangedAt > issuedAfter)
+            .OrderByDescending(mutation => mutation.RecordedAt)
+            .ThenByDescending(mutation => mutation.Id)
+            .Take(IMailboxMutationReconciliationStore.MaximumFlagChangeRecords)
             .ToArrayAsync(cancellationToken);
 
-        return [.. entities.Select(static entity => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder))];
+        // Read newest first so the ceiling drops the records least able to account for anything, and handed back oldest
+        // first because that is the order the caller credits a value to the earliest store that explains it.
+        return
+        [
+            .. entities
+                .Reverse()
+                .Select(static entity => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder)),
+        ];
     }
 
     /// <inheritdoc />

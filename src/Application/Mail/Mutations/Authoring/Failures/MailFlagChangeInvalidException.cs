@@ -62,6 +62,17 @@ public sealed class MailFlagChangeInvalidException : MailFathomException
             "A request identity carries between one and {0} characters and no control character.",
             MailboxMutationRequester.MaximumIdentityLength));
 
+    /// <summary>Refuses a request identity that already names this change on this email with different terms.</summary>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// The identity is what makes a retry the same request, so a second call sending it with a different value is
+    /// either a caller reusing an identity it should have replaced or two callers that picked the same text. Answering
+    /// with the earlier record would report the change as written down while the mailbox never moves, and the result
+    /// publishes the record rather than the terms, so nothing the caller receives would say otherwise.
+    /// </remarks>
+    public static MailFlagChangeInvalidException RequestIdAlreadyAskedForAnother() =>
+        new("A request identity already names this change on this email with different terms. Retry with the value the earlier call sent, or send a new request identity.");
+
     /// <summary>Refuses a keyword a mail server could not be asked to store.</summary>
     /// <returns>The failure to raise.</returns>
     public static MailFlagChangeInvalidException KeywordNotWritable() => new(

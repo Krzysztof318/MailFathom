@@ -49,6 +49,14 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
     /// </remarks>
     internal int FlagChangeReadCount { get; private set; }
 
+    /// <summary>Gets the age bound the last flag-change read was narrowed by.</summary>
+    /// <remarks>
+    /// The bound is what keeps that read from growing without limit as one occurrence accumulates records, and passing
+    /// one that is too late would silently withhold the record that explains a value. Nothing in the answer reports
+    /// which bound produced it, so the argument is recorded here instead.
+    /// </remarks>
+    internal DateTimeOffset? LastFlagChangeReadIssuedAfter { get; private set; }
+
     /// <summary>Puts a record into the state a completed mutation would have left.</summary>
     internal void Add(MailboxMutationRecord record) => this.recordsById[record.Id] = record;
 
@@ -90,11 +98,13 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
+        DateTimeOffset issuedAfter,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(uids);
 
         this.FlagChangeReadCount++;
+        this.LastFlagChangeReadIssuedAfter = issuedAfter;
 
         IReadOnlyList<MailboxMutationRecord> writing =
         [
@@ -103,9 +113,12 @@ internal sealed class InMemoryMailboxMutationReconciliationStore : IMailboxMutat
                     && record.Request.Occurrence.FolderResolutionId == folderResolutionId
                     && record.Request.Occurrence.UidValidity == uidValidity
                     && uids.Contains(record.Request.Occurrence.Uid)
-                    && FlagWritingMutations.Contains(record.Request.Mutation))
-                .OrderBy(record => record.RecordedAt)
-                .ThenBy(record => record.Id.Value),
+                    && FlagWritingMutations.Contains(record.Request.Mutation)
+                    && record.StageChangedAt > issuedAfter)
+                .OrderByDescending(record => record.RecordedAt)
+                .ThenByDescending(record => record.Id.Value)
+                .Take(IMailboxMutationReconciliationStore.MaximumFlagChangeRecords)
+                .Reverse(),
         ];
 
         return Task.FromResult(writing);

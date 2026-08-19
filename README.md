@@ -91,7 +91,7 @@ The screenshot at the top of this page is `list_emails`. Two of the other tools,
 
 ![One message opened by subject, answered with its sender, recipient, timestamps, folder, attachment state, and full plain-text body](https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/mcp-tools/read-email-content.png)
 
-A connected agent can list, read, search, and ask about your mail. It cannot send, delete, move, or mark any of it, because no tool on the surface writes to a mailbox — including inside an answering run, which is composed with one capability and that capability searches. That describes this stage rather than a permanent limit: writing to a mailbox is on the roadmap, starting with sending, and each such capability will arrive as its own tool behind a reviewed authorization and confirmation flow — never as a setting that loosens a tool you already trust. The contact book is the one thing an agent already writes, and it is deliberately not that: it lives in your own database and reaches no mail server.
+A connected agent can list, read, search, and ask about your mail, and it can mark, star, and label one message at a time through `set_mail_flags`. It cannot send, delete, or move any of it, and the one writing tool is offered only to a credential granted `mailfathom.mail.flags.write`, which reading mail does not carry — an answering run is composed with one capability and that capability searches, so nothing inside it writes either. That describes this stage rather than a permanent limit: the rest of writing to a mailbox is on the roadmap, starting with sending, and each such capability arrives as its own tool behind a reviewed authorization and confirmation flow — never as a setting that loosens a tool you already trust. The contact book is what an agent writes without reaching a mail server at all: it lives in your own database.
 
 ## Project status
 
@@ -119,10 +119,10 @@ Both registries carry the same manifest list under the same digest, so the one t
 
 MailFathom is built as an enterprise-grade system from the first line, even while its feature scope is still small. Every claim below is a property of the code and the deployment assets today, and each links to the page that documents it.
 
-### Nothing on the surface writes to your mailbox, and no setting changes that
+### One tool writes to your mailbox, behind a grant of its own
 
-- No tool on the MCP surface writes to a mailbox, and there is none to enable: nothing a client sends can send, delete, move, or mark your mail. What a client can write is MailFathom's own contact book, which is a table in your database rather than anything at your mail provider.
-- Retrieval is incapable of marking remote mail as read. A change to your mailbox happens only where your own configuration asks for one — a rule action, or a spam action — never because a caller asked.
+- One tool on the MCP surface writes to a mailbox, and it is `set_mail_flags`: it marks a message read or unread, stars or unstars it, and changes its keywords. Nothing a client sends can send, delete, or move your mail, and the writing tool is offered only to a credential granted `mailfathom.mail.flags.write`, which reading mail does not carry and which narrowing a credential's entry withholds. What a client can write besides is MailFathom's own contact book, which is a table in your database rather than anything at your mail provider.
+- Retrieval is incapable of marking remote mail as read. A change to your mailbox happens only where your own configuration asks for one — a rule action, or a spam action — or where a caller holding that one grant asks for one; nothing else on the surface reaches your mail server.
 - No response carries an attachment's bytes. A call that asks for them by name receives a signed link per file instead, valid for minutes, scoped to that one attachment, and resolved through the live mailbox so it dies with the message it points at.
 - Configuration is read-only to the process, permanently. No request, command, or tool changes a setting, and the service never rewrites the file it was configured from. So the file you provisioned is the file in force: how an instance is configured is reviewable as a diff and restorable from a backup, and nothing reachable over the network can move it out from under you. What the service itself has to modify lives in the database instead.
 

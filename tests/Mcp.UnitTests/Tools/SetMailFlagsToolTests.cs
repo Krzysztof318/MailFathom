@@ -17,6 +17,7 @@ using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Mcp.Tools;
+using MailFathom.Mcp.Tools.Results;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -56,7 +57,7 @@ public sealed class SetMailFlagsToolTests
             storedEmailId.ToString(),
             seen: true,
             flagged: true,
-            MailKeywordChangeDirection.Add,
+            SetMailFlagsKeywordChange.Add,
             ["$Todo"],
             requestId: "triage-1",
             TestContext.Current.CancellationToken);
@@ -239,6 +240,54 @@ public sealed class SetMailFlagsToolTests
         var refusal = await Assert.ThrowsAsync<MailFlagChangeInvalidException>(() =>
             tool.SetMailFlagsAsync(
                 Guid.CreateVersion7().ToString(),
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.MailFlagChangeInvalid, refusal.ErrorCode);
+        Assert.Empty(records.OpenedRequests);
+    }
+
+    /// <summary>The keyword list is bounded here, before anything normalizes and sorts what the caller sent.</summary>
+    /// <remarks>
+    /// The domain's own ceiling is compared against the deduplicated set, so a list naming one keyword many times would
+    /// be expanded in full and then accepted. The count the caller sent is what this refuses, which is the only reading
+    /// of the list that costs nothing.
+    /// </remarks>
+    [Fact]
+    public async Task SetMailFlagsAsync_MoreKeywordsThanAMessageMayCarry_IsRefusedBeforeTheyAreRead()
+    {
+        // Arrange
+        var repeatedKeyword = Enumerable
+            .Repeat("$Todo", RemoteEmailKeywords.MaximumKeywords + 1)
+            .ToArray();
+        var tool = ToolOver(out var records);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailFlagChangeInvalidException>(() =>
+            tool.SetMailFlagsAsync(
+                Guid.CreateVersion7().ToString(),
+                keywordChange: SetMailFlagsKeywordChange.Add,
+                keywords: repeatedKeyword,
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.MailFlagChangeInvalid, refusal.ErrorCode);
+        Assert.Empty(records.OpenedRequests);
+    }
+
+    /// <summary>A keyword direction outside the published set is the caller's own input and is refused as one.</summary>
+    [Fact]
+    public async Task SetMailFlagsAsync_AKeywordDirectionThisSurfaceDoesNotPublish_IsRefused()
+    {
+        // Arrange
+        var tool = ToolOver(out var records);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailFlagChangeInvalidException>(() =>
+            tool.SetMailFlagsAsync(
+                Guid.CreateVersion7().ToString(),
+                keywordChange: (SetMailFlagsKeywordChange)99,
+                keywords: ["$Todo"],
                 cancellationToken: TestContext.Current.CancellationToken));
 
         // Assert

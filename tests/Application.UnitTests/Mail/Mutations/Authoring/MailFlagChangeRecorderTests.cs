@@ -179,10 +179,74 @@ public sealed class MailFlagChangeRecorderTests
         Assert.Equal(2, records.OpenedRecordCount);
     }
 
+    /// <summary>The same request identity asking for the opposite value is refused rather than answered with the earlier record.</summary>
+    /// <remarks>
+    /// The idempotency identity carries the occurrence, the requester, and the mutation, and none of the three carries
+    /// the value. Reporting the first record as this call's would tell a caller its unstar was written down while the
+    /// star stays on the message, and nothing the caller receives states the terms it would have to compare.
+    /// </remarks>
+    [Fact]
+    public async Task RecordAsync_TheSameRequestIdentityAskingForTheOppositeValue_IsRefused()
+    {
+        // Arrange
+        var records = new InMemoryMailboxMutationRecordStore();
+        var recorder = RecorderOver(records, TargetIn(Inbox));
+        var starred = AuthoredMailFlagChange.Create(LocalEmail, null, flagged: true, null, null);
+        var unstarred = AuthoredMailFlagChange.Create(LocalEmail, null, flagged: false, null, null);
+        await recorder.RecordAsync(starred, Requester, TestContext.Current.CancellationToken);
+
+        // Act
+        var thrown = await Assert.ThrowsAsync<MailFlagChangeInvalidException>(
+            () => recorder.RecordAsync(unstarred, Requester, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.MailFlagChangeInvalid, thrown.ErrorCode);
+        Assert.Equal(1, records.OpenedRecordCount);
+        Assert.True(Assert.Single(records.OpenedRequests).DesiredFlaggedState);
+    }
+
+    /// <summary>A conflicting commit re-opens every record, and the call still publishes one per value asked for.</summary>
+    /// <remarks>
+    /// The staging callback runs once per attempt, so an implementation that accumulated across attempts would publish
+    /// the losing attempt's records beside the winner's — and both attempts open the same rows, so the answer would
+    /// name each change twice with the suite otherwise green.
+    /// </remarks>
+    [Fact]
+    public async Task RecordAsync_ACommitThatConflictsBeforeItSucceeds_PublishesOneRecordPerValue()
+    {
+        // Arrange
+        var records = new InMemoryMailboxMutationRecordStore();
+        var attempts = 0;
+        var recorder = RecorderOver(
+            records,
+            TargetIn(Inbox),
+            sessionFactory: () => new StubPersistenceSession(
+                ++attempts == 1
+                    ? PersistenceCommitResult.ConcurrencyConflict
+                    : PersistenceCommitResult.Committed));
+        var change = AuthoredMailFlagChange.Create(
+            LocalEmail,
+            seen: true,
+            flagged: true,
+            MailKeywordChangeDirection.Add,
+            ["$Todo"]);
+
+        // Act
+        var result = await recorder.RecordAsync(change, Requester, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(2, attempts);
+        Assert.Equal(
+            [MailboxMutation.SetSeen, MailboxMutation.SetFlagged, MailboxMutation.AddKeywords],
+            result.Recorded.Select(recorded => recorded.Mutation));
+        Assert.Equal(3, records.OpenedRecordCount);
+    }
+
     private static MailFlagChangeRecorder RecorderOver(
         InMemoryMailboxMutationRecordStore records,
         AuthoredMailboxTarget? target,
-        AccessAuthorization? authorization = null)
+        AccessAuthorization? authorization = null,
+        Func<IPersistenceSession>? sessionFactory = null)
     {
         var accountCatalog = Substitute.For<IMailAccountCatalog>();
         accountCatalog.ServedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
@@ -190,9 +254,16 @@ public sealed class MailFlagChangeRecorderTests
         var targets = Substitute.For<IAuthoredMailboxTargetReader>();
         targets.FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(target));
 
-        var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
-        sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());
+        var sessions = Substitute.For<IPersistenceSessionFactory>();
+        sessions
+            .BeginSessionAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => sessionFactory is null
+                ? new StubPersistenceSession(PersistenceCommitResult.Committed)
+                : sessionFactory());
 
+        // A conflicting attempt waits out the policy's jittered backoff, which is at most 50 milliseconds for the first
+        // one. The system clock is what makes that wait end: a fake would have to be advanced from outside the call, and
+        // the advance would race the registration of the delay it is meant to end.
         return new MailFlagChangeRecorder(
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailFlagsWrite),
             new MailboxScopeResolver(
@@ -205,9 +276,9 @@ public sealed class MailFlagChangeRecorderTests
             targets,
             records,
             new OptimisticConcurrencyRetryPolicy(
-                sessionFactory,
+                sessions,
                 new PersistenceConcurrencyOptions(),
-                new FakeTimeProvider()));
+                sessionFactory is null ? new FakeTimeProvider() : TimeProvider.System));
     }
 
     private static AuthoredMailboxTarget TargetIn(MailFolderAlias folderAlias)
@@ -219,11 +290,11 @@ public sealed class MailFlagChangeRecorderTests
             folder);
     }
 
-    /// <summary>A session that commits, which is what a call writing several records has to be given.</summary>
-    private sealed class CommittingSession : IPersistenceSession
+    /// <summary>A session that reports the outcome its attempt was arranged with, which is what drives the retry.</summary>
+    private sealed class StubPersistenceSession(PersistenceCommitResult outcome) : IPersistenceSession
     {
         public Task<PersistenceCommitResult> CommitAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(PersistenceCommitResult.Committed);
+            Task.FromResult(outcome);
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

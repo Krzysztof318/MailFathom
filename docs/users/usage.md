@@ -229,7 +229,10 @@ answered or draft flags, never deletes mail, and never sends anything.
 
 `requestId` is worth sending. It is your own name for the call, and repeating a call with the `requestId` the first one
 carried is the *same* request rather than a second one, which is what makes a retry after a timeout safe. A new value,
-or none, is a new request — which is what lets you star a message, unstar it, and star it again.
+or none, is a new request — which is what lets you star a message, unstar it, and star it again. Send a *different*
+value each time you mean a different change: reusing one to ask for the opposite of what it already asked for is
+refused with `51012` rather than quietly answered with the earlier call's record, because a change reported as written
+down while the mailbox never moves is the one failure you could not see from the answer.
 
 It needs its own grant, `mailfathom.mail.flags.write`, which does not come with being able to read mail. A deployment
 that offers the reading tools and not this one has been configured that way on purpose.
@@ -361,7 +364,7 @@ The codes a user meets in practice:
 | `51009` | A contact listing's page size, origin, or search text is not one the book serves | Stay within 1–200 contacts, name `asserted` or `collected`, keep the search to at most 320 characters |
 | `51010` | A contact was named with text that is no identifier and no usable address | Pass a `contactId` a listing or a write returned, or an address on its own — and exactly one of the two |
 | `51011` | A contact record breaks a rule the book holds | The message names the rule: a missing name, no address, a preferred address the record does not name, a value over its limit |
-| `51012` | A flag change asked for nothing, stated half a keyword change, or named a keyword no mail server would keep | Name at least one of `seen`, `flagged`, and the keyword pair; send `keywordChange` and `keywords` together; keep each keyword to one word of plain ASCII |
+| `51012` | A flag change asked for nothing, stated half a keyword change, named a keyword no mail server would keep, carried a `requestId` that is no identifier, or reused one that already asked for a different value | Name at least one of `seen`, `flagged`, and the keyword pair; send `keywordChange` and `keywords` together; keep each keyword to one word of plain ASCII and name at most 64; keep `requestId` to at most 128 printable characters, or leave it out and let the server issue one; send a new one when you mean a new change |
 | `52001` / `52002` | A cursor this system did not issue, or one reused after the filters changed | Restart the walk from the first page |
 | `52003` | A contact listing's cursor is not one this system issued | Restart the walk; changing the search or the origin mid-walk is allowed and is not what caused it |
 | `53001` | The named account is not served here | Call `list_accounts` and use an `accountId` or `displayName` it returns |

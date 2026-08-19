@@ -308,11 +308,20 @@ public sealed class MailboxReconciler
             return ReconciledFlagChanges.None;
         }
 
+        // The earliest reading any of these occurrences carries is the point before which no record can account for
+        // anything, because every comparison below requires a store whose stage moved after the value was last read.
+        // Nothing is left with no reading at all, since a value can only have moved against one.
+        if (changed.Select(static observed => observed.Candidate.LastObservation?.ObservedAt).Min() is not { } issuedAfter)
+        {
+            return ReconciledFlagChanges.None;
+        }
+
         var records = await this.mutationStore.ReadFlagChangesOnAsync(
             accountId,
             folderResolutionId,
             uidValidity,
             [.. changed.Select(static observed => observed.Candidate.Uid)],
+            issuedAfter,
             cancellationToken);
 
         var attributions = changed

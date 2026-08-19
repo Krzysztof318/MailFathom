@@ -21,9 +21,15 @@ namespace MailFathom.Infrastructure.Persistence.Mutations;
 /// lookup that discards most of what it loaded.
 /// </para>
 /// <para>
-/// A tombstoned row answers as an absent email, on the same terms every read of stored mail applies. The occurrence it
-/// names is one the server no longer holds, so a change recorded against it could only be attempted and fail — and
-/// answering about mail no listing serves would make the write surface a way to learn that a row exists.
+/// A tombstoned row answers as an absent email, on the same terms every read of stored mail applies, so answering about
+/// mail no listing serves cannot make the write surface a way to learn that a row exists.
+/// </para>
+/// <para>
+/// An occurrence the server no longer holds answers as absent too, and that is the stricter of the two conditions
+/// rather than the same one said twice. A local copy retained after an authored delete is not a tombstone — a listing
+/// serves it, so a caller can see it and name it — while the UID it carries names a message the server expunged.
+/// Recording a change against one would open durable records that convergence could only attempt and fail, so this read
+/// refuses it where a read of the mail itself does not.
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
@@ -40,6 +46,7 @@ internal sealed class AuthoredMailboxTargetReader(MailFathomDbContext readContex
             .AsNoTracking()
             .Where(email => email.Id == emailId)
             .Where(StoredEmailTombstone.IsNotTombstoned)
+            .Where(email => email.RemoteExpungeObservedAt == null)
             .Select(email => new
             {
                 email.MailboxAccountId,

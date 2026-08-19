@@ -54,6 +54,9 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
     /// <summary>The instant a run writes down that it recognized its own work, stated so the row is comparable.</summary>
     private static readonly DateTimeOffset ObservedAt = new(2026, 5, 4, 9, 0, 0, TimeSpan.Zero);
 
+    /// <summary>An age bound every record this class writes is newer than, which is what a window whose reading predates them passes.</summary>
+    private static readonly DateTimeOffset BeforeEveryRecord = new(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
     private static readonly MailboxMutationRequester Requester =
         MailboxMutationRequester.Rule("reconciliation-read", "1");
 
@@ -112,10 +115,12 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
     /// A run reading the flags of a window has to tell a <c>\Seen</c> this instance set from one a person set in their
     /// client, and the mutation's name is the whole of that distinction. The relocation seeded beside it is what makes
     /// the narrowing decidable: it shares the folder and the UIDVALIDITY, so a read that ignored the name would return
-    /// it.
+    /// it. The age bound is asserted in the same test, because it is the other half of what this query excludes and it
+    /// is a comparison against a timestamp column that only a database performs: a bound at the record's own stage
+    /// change must return nothing, which is what keeps an occurrence's accumulated stores off every later window.
     /// </summary>
     [Fact]
-    public async Task ReadSeenStateChangesOnAsync_AWindowHoldingBothKindsOfMutation_ReturnsOnlyTheSeenStores()
+    public async Task ReadSeenStateChangesOnAsync_AWindowHoldingBothKindsOfMutation_ReturnsOnlyTheSeenStoresIssuedAfterTheBound()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -137,19 +142,42 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
             cancellationToken);
 
         // Act
-        var seenStateChanges = await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IMailboxMutationReconciliationStore>()
-                .ReadFlagChangesOnAsync(
-                    SyntheticMailAccount.AccountId,
-                    binding.Id,
-                    seenOccurrence.UidValidity,
-                    [seenOccurrence.Uid, relocatedOccurrence.Uid],
-                    token),
+        var seenStateChanges = await ReadFlagChangesAsync(
+            services,
+            binding.Id,
+            seenOccurrence.UidValidity,
+            [seenOccurrence.Uid, relocatedOccurrence.Uid],
+            BeforeEveryRecord,
+            cancellationToken);
+        var afterTheStoreWasWrittenDown = await ReadFlagChangesAsync(
+            services,
+            binding.Id,
+            seenOccurrence.UidValidity,
+            [seenOccurrence.Uid, relocatedOccurrence.Uid],
+            seenStateChanges[0].StageChangedAt,
             cancellationToken);
 
         // Assert
         Assert.Equal(seenRecordId, Assert.Single(seenStateChanges).Id);
+        Assert.Empty(afterTheStoreWasWrittenDown);
     }
+
+    private static Task<IReadOnlyList<MailboxMutationRecord>> ReadFlagChangesAsync(
+        OrchestratedMailFathomServices services,
+        MailFolderResolutionId folderResolutionId,
+        ImapUidValidity uidValidity,
+        IReadOnlyCollection<ImapUid> uids,
+        DateTimeOffset issuedAfter,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IMailboxMutationReconciliationStore>()
+                .ReadFlagChangesOnAsync(
+                    SyntheticMailAccount.AccountId,
+                    folderResolutionId,
+                    uidValidity,
+                    uids,
+                    issuedAfter,
+                    token),
+            cancellationToken);
 
     private static Task<IReadOnlyList<MailboxMutationRecord>> ReadPlacementsAsync(
         OrchestratedMailFathomServices services,

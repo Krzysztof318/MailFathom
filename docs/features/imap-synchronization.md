@@ -422,8 +422,9 @@ guarantee that synchronization and content retrieval never mark mail read is a p
 [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 records in full — and the push session is never taken out of `IDLE` to carry a change.
 
-A rule's action and the `set_mail_flags` MCP tool are what ask for a change today, so an account whose rules write
-nothing and whose mail no caller has changed holds no such connection and this setting costs nothing.
+A rule's action, a spam verdict's action, and the `set_mail_flags` MCP tool are what ask for a change today, so an
+account whose rules write nothing, whose spam actions are off, and whose mail no caller has changed holds no such
+connection and this setting costs nothing.
 
 ### Every change is written down before it is issued
 

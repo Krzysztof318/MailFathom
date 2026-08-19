@@ -470,18 +470,24 @@ public sealed class MailboxReconcilerTests
     }
 
     /// <summary>Keywords standing as MailFathom's own addition asked for are that addition completing.</summary>
+    /// <remarks>
+    /// The occurrence already carried a label of the owner's, so the set the addition would have left is the earlier
+    /// reading plus <c>$Todo</c> rather than whatever the server now reports. That is what makes this test able to fail:
+    /// an attribution computing the expected set from the observed keywords would suppress this whatever the record
+    /// asked for.
+    /// </remarks>
     [Fact]
     public async Task ReconcileAsync_KeywordsMailFathomWroteItself_WithholdsTheChange()
     {
         // Arrange
-        var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: true));
+        var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: true, isFlagged: false, "$Invoice"));
         var mutationStore = new InMemoryMailboxMutationReconciliationStore();
         var record = MutationAddingKeywords(store.StoredEmailIdOf(10), uid: 10, "$Todo");
         mutationStore.Add(record);
         await using var mailboxSession = CreateSessionReportingFlags(
             isSeen: true,
             isFlagged: false,
-            RemoteEmailKeywords.Create(["$Todo"]),
+            RemoteEmailKeywords.Create(["$Invoice", "$Todo"]),
             10);
         var reconciler = CreateReconciler(
             store,
@@ -505,7 +511,45 @@ public sealed class MailboxReconcilerTests
         Assert.Equal(record.Id, suppressed.MutationRecordId);
 
         // The stored keywords still follow the server, which is what keeps the column a mirror of the last observation.
-        Assert.Equal(RemoteEmailKeywords.Create(["$Todo"]), store.RowOf(10).Snapshot!.Keywords);
+        Assert.Equal(RemoteEmailKeywords.Create(["$Invoice", "$Todo"]), store.RowOf(10).Snapshot!.Keywords);
+    }
+
+    /// <summary>An addition accounts for the set it would have left and never for a set the owner also took a label off.</summary>
+    /// <remarks>
+    /// This is the direction the attribution has to fail in. The record asked for <c>$Todo</c> and the owner dropped
+    /// <c>$Invoice</c> in the same interval, so what the server now reports is nobody's single act; crediting the record
+    /// with it would withhold the owner's removal from rule evaluation as MailFathom's own doing, and nothing later
+    /// would report that it had.
+    /// </remarks>
+    [Fact]
+    public async Task ReconcileAsync_KeywordsMailFathomAddedBesideALabelTheOwnerRemoved_RaisesTheChange()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: true, isFlagged: false, "$Invoice"));
+        var mutationStore = new InMemoryMailboxMutationReconciliationStore();
+        mutationStore.Add(MutationAddingKeywords(store.StoredEmailIdOf(10), uid: 10, "$Todo"));
+        await using var mailboxSession = CreateSessionReportingFlags(
+            isSeen: true,
+            isFlagged: false,
+            RemoteEmailKeywords.Create(["$Todo"]),
+            10);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            mutationStore: mutationStore);
+
+        // Act
+        var result = await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.KeywordsChangedEmailCount);
+        Assert.Empty(result.SuppressedChanges);
     }
 
     /// <summary>Labelling mail in a client is the mailbox owner's act, and it stays a change to react to.</summary>
@@ -513,11 +557,11 @@ public sealed class MailboxReconcilerTests
     public async Task ReconcileAsync_OwnerLabelledMailThemselves_RaisesTheChange()
     {
         // Arrange
-        var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: true));
+        var store = new FakeReconciliationStore(ObservedOccurrence(10, isSeen: true, isFlagged: false, "$Invoice"));
         await using var mailboxSession = CreateSessionReportingFlags(
             isSeen: true,
             isFlagged: false,
-            RemoteEmailKeywords.Create(["$Waiting"]),
+            RemoteEmailKeywords.Create(["$Invoice", "$Waiting"]),
             10);
         var reconciler = CreateReconciler(store, RemotelyDeletedEmailDisposition.RetainTombstone);
 
@@ -551,6 +595,7 @@ public sealed class MailboxReconcilerTests
             store,
             RemotelyDeletedEmailDisposition.RetainTombstone,
             mutationStore: mutationStore);
+        var readingTheWindowStartedFrom = store.RowOf(10).ObservedAt;
 
         // Act
         var result = await reconciler.ReconcileAsync(
@@ -566,6 +611,10 @@ public sealed class MailboxReconcilerTests
         Assert.Equal(1, result.SeenStateChangedEmailCount);
         Assert.Equal(1, result.FlaggedStateChangedEmailCount);
         Assert.Equal(1, result.KeywordsChangedEmailCount);
+
+        // The read is narrowed to the stores that could still account for a value, which is the reading the window
+        // started from. A bound later than that would withhold the record that explains a change.
+        Assert.Equal(readingTheWindowStartedFrom, mutationStore.LastFlagChangeReadIssuedAfter);
     }
 
     /// <summary>Marking mail read by hand is the mailbox owner's act, and it stays a change to react to.</summary>

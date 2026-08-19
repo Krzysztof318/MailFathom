@@ -77,7 +77,7 @@ internal sealed class SetMailFlagsTool(MailFlagChangeRecorder flagChangeRecorder
     /// <param name="cancellationToken">Cancels the write when the caller disconnects or the host shuts down.</param>
     /// <returns>The durable record opened for each value asked for.</returns>
     /// <exception cref="StoredEmailIdentifierMalformedException">Thrown when the text names no email this system issued an identifier for.</exception>
-    /// <exception cref="MailFlagChangeInvalidException">Thrown when the call asks for nothing, states half a keyword change, or names a keyword a mail server could not be asked to store.</exception>
+    /// <exception cref="MailFlagChangeInvalidException">Thrown when the call asks for nothing, states half a keyword change, names more keywords than a message may carry or one a mail server could not be asked to store, carries a request identity no record could be written under, or reuses one that already asked for a different value.</exception>
     /// <exception cref="MailFathomException">
     /// Raised by the use case for a grant or an email it refuses. The call-tool filter turns every one of them into the
     /// coded result a client reads, so this tool neither catches nor re-describes any.
@@ -108,10 +108,10 @@ internal sealed class SetMailFlagsTool(MailFlagChangeRecorder flagChangeRecorder
         [Description("true stars the email, false unstars it. This is the flag a mail client draws as a star or a flag, and it is what the owner will see in their own client.")]
         bool? flagged = null,
         [Description("What to do with keywords: add puts the listed ones on beside whatever the email already carries, remove takes the listed ones off and leaves the rest, replace makes the keywords exactly the listed ones. Send it together with keywords; either one alone is refused.")]
-        MailKeywordChangeDirection? keywordChange = null,
+        SetMailFlagsKeywordChange? keywordChange = null,
         [Description("The keywords the change names, at most 64, each at most 64 characters. A keyword is an IMAP atom: no space, no control character, none of ( ) { % * \" \\ ], nothing above plain ASCII, and no leading backslash, which is how system flags are spelled. Two spellings differing only in case are one keyword. An empty list is accepted only with replace, where it clears every keyword.")]
         IReadOnlyList<string>? keywords = null,
-        [Description("Your own identifier for this request, at most 128 characters. Send the same one when retrying a call that may have gone through: the change is then the same request and is not made twice. A call with a new value, or with none, is a new request — which is what lets you star a message, unstar it, and star it again.")]
+        [Description("Your own identifier for this request, at most 128 characters. Send the same one when retrying a call that may have gone through: the change is then the same request and is not made twice. A call with a new value, or with none, is a new request — which is what lets you star a message, unstar it, and star it again. Reusing one to ask for a different value is refused, so send a new identifier whenever you mean a new change.")]
         string? requestId = null,
         CancellationToken cancellationToken = default)
     {
@@ -119,8 +119,8 @@ internal sealed class SetMailFlagsTool(MailFlagChangeRecorder flagChangeRecorder
             NamedEmail(storedEmailId),
             seen,
             flagged,
-            keywordChange,
-            keywords);
+            AuthoredDirection(keywordChange),
+            NamedKeywords(keywords));
 
         var result = await flagChangeRecorder.RecordAsync(change, Requester(requestId), cancellationToken);
 
@@ -145,6 +145,41 @@ internal sealed class SetMailFlagsTool(MailFlagChangeRecorder flagChangeRecorder
         }
 
         return StoredEmailId.Create(parsed);
+    }
+
+    /// <summary>Reads the application's keyword direction the protocol value names.</summary>
+    /// <remarks>
+    /// The refusal is the coded one this surface publishes rather than an argument failure, because an undeclared value
+    /// arriving here is a caller's own input: the SDK's schema binding refuses an unknown name before this is reached,
+    /// and what remains is a numeric value outside the set.
+    /// </remarks>
+    /// <exception cref="MailFlagChangeInvalidException">Thrown when the protocol value names no keyword direction.</exception>
+    private static MailKeywordChangeDirection? AuthoredDirection(SetMailFlagsKeywordChange? keywordChange) =>
+        keywordChange switch
+        {
+            null => null,
+            SetMailFlagsKeywordChange.Add => MailKeywordChangeDirection.Add,
+            SetMailFlagsKeywordChange.Remove => MailKeywordChangeDirection.Remove,
+            SetMailFlagsKeywordChange.Replace => MailKeywordChangeDirection.Replace,
+            _ => throw MailFlagChangeInvalidException.UnknownKeywordDirection(),
+        };
+
+    /// <summary>Hands the keyword list on once it is short enough for reading each element to be bounded work.</summary>
+    /// <remarks>
+    /// The count is checked here rather than left to <see cref="AuthoredMailKeywords" />, which normalizes and sorts
+    /// every element before it compares what survived against the same ceiling. That comparison is on the deduplicated
+    /// set, so a list of a hundred thousand copies of one keyword would be normalized in full and then accepted; the
+    /// bound belongs in front of the expansion, where the caller's own list is still the only thing that has been read.
+    /// </remarks>
+    /// <exception cref="MailFlagChangeInvalidException">Thrown when the list names more keywords than a message may carry.</exception>
+    private static IReadOnlyList<string>? NamedKeywords(IReadOnlyList<string>? keywords)
+    {
+        if (keywords is { Count: > RemoteEmailKeywords.MaximumKeywords })
+        {
+            throw MailFlagChangeInvalidException.KeywordNotWritable();
+        }
+
+        return keywords;
     }
 
     /// <summary>Names the invocation asking, from what the caller supplied or from an identity of MailFathom's own.</summary>

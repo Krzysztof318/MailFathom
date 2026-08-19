@@ -82,11 +82,14 @@ public sealed class MailFlagChangeRecorder
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="change" /> or <paramref name="requester" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the writing grant.</exception>
     /// <exception cref="MailFlagChangeTargetNotFoundException">Thrown when this deployment serves no readable email under that identity.</exception>
+    /// <exception cref="MailFlagChangeInvalidException">Thrown when the requester identity already names one of these mutations on this occurrence with a different value.</exception>
     /// <remarks>
     /// A change asked for twice under one requester identity is one change: the record store admits one record per
     /// occurrence, requester, and mutation, and the second call is answered with the record the first opened. That is
     /// what makes a retried call safe to make, and it is why the identity is the invocation's rather than the change's —
     /// a caller that starred a message, unstarred it, and starred it again has made three requests and means all three.
+    /// A second call is a retry only when it asks for what the first asked for, which is why the terms are compared
+    /// rather than assumed from the identity.
     /// </remarks>
     public async Task<AuthoredMailFlagChangeResult> RecordAsync(
         AuthoredMailFlagChange change,
@@ -123,6 +126,11 @@ public sealed class MailFlagChangeRecorder
                 {
                     var record = await this.records.OpenAsync(session, request, attemptCancellationToken);
 
+                    if (!StatesTheSameChangeAs(record.Request, request))
+                    {
+                        throw MailFlagChangeInvalidException.RequestIdAlreadyAskedForAnother();
+                    }
+
                     opened.Add(new RecordedMailFlagMutation(request.Mutation, record.Id, record.Lifecycle));
                 }
             },
@@ -135,6 +143,20 @@ public sealed class MailFlagChangeRecorder
             opened);
     }
 
+    /// <summary>Reports whether the record this call was answered with asks for what this call asked for.</summary>
+    /// <remarks>
+    /// The idempotency identity is the occurrence, the requester, and the mutation, and none of the three carries the
+    /// value asked for. That was enough while every requester encoded its terms in its own identity — a rule carries its
+    /// revision, a classification its corpus and threshold — but a caller-authored request is identified by text the
+    /// caller picked, so starring and then unstarring one message under one identity would be answered twice with the
+    /// first record and the star would never come off. Comparing the terms is what turns that into a refusal the caller
+    /// can act on rather than a success that changed nothing.
+    /// </remarks>
+    private static bool StatesTheSameChangeAs(MailboxMutationRequest recorded, MailboxMutationRequest asked) =>
+        recorded.DesiredSeenState == asked.DesiredSeenState
+        && recorded.DesiredFlaggedState == asked.DesiredFlaggedState
+        && recorded.Keywords == asked.Keywords;
+
     /// <summary>Builds the durable request one value of a change is written down as.</summary>
     /// <remarks>
     /// The parameters are already the ones that mutation needs, because the change decided which value produced which
@@ -144,48 +166,40 @@ public sealed class MailFlagChangeRecorder
         AuthoredMailFlagChange change,
         AuthoredMailFlagMutation mutation,
         AuthoredMailboxTarget target,
-        MailboxMutationRequester requester)
-    {
-        if (mutation.Mutation == MailboxMutation.SetSeen)
+        MailboxMutationRequester requester) =>
+
+        // Matched with `when` clauses rather than constant patterns, because a closed enumeration's members are static
+        // properties and a switch arm cannot pattern-match against one.
+        mutation.Mutation switch
         {
-            return MailboxMutationRequest.SetSeen(
+            _ when mutation.Mutation == MailboxMutation.SetSeen => MailboxMutationRequest.SetSeen(
                 change.StoredEmailId,
                 target.Occurrence,
                 requester,
-                mutation.DesiredSeenState!.Value);
-        }
-
-        if (mutation.Mutation == MailboxMutation.SetFlagged)
-        {
-            return MailboxMutationRequest.SetFlagged(
+                mutation.DesiredSeenState!.Value),
+            _ when mutation.Mutation == MailboxMutation.SetFlagged => MailboxMutationRequest.SetFlagged(
                 change.StoredEmailId,
                 target.Occurrence,
                 requester,
-                mutation.DesiredFlaggedState!.Value);
-        }
-
-        if (mutation.Mutation == MailboxMutation.AddKeywords)
-        {
-            return MailboxMutationRequest.AddKeywords(
+                mutation.DesiredFlaggedState!.Value),
+            _ when mutation.Mutation == MailboxMutation.AddKeywords => MailboxMutationRequest.AddKeywords(
                 change.StoredEmailId,
                 target.Occurrence,
                 requester,
-                mutation.Keywords!);
-        }
-
-        if (mutation.Mutation == MailboxMutation.RemoveKeywords)
-        {
-            return MailboxMutationRequest.RemoveKeywords(
+                mutation.Keywords!),
+            _ when mutation.Mutation == MailboxMutation.RemoveKeywords => MailboxMutationRequest.RemoveKeywords(
                 change.StoredEmailId,
                 target.Occurrence,
                 requester,
-                mutation.Keywords!);
-        }
-
-        return MailboxMutationRequest.SetKeywords(
-            change.StoredEmailId,
-            target.Occurrence,
-            requester,
-            mutation.Keywords!);
-    }
+                mutation.Keywords!),
+            _ when mutation.Mutation == MailboxMutation.SetKeywords => MailboxMutationRequest.SetKeywords(
+                change.StoredEmailId,
+                target.Occurrence,
+                requester,
+                mutation.Keywords!),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(mutation),
+                mutation.Mutation,
+                "An authored flag change names a mutation this use case writes down."),
+        };
 }

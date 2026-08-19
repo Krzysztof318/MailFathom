@@ -87,7 +87,7 @@ call naming a tool that does not exist: the same JSON-RPC error, the same code, 
 credential, the permission, or what a different caller would have been served.
 
 [Which tool each name covers](../operations/permissions.md#which-tool-each-name-covers) is the mapping, one row per
-tool, and the page around it is the model those four names belong to: what each one reaches, and why no permission here
+tool, and the page around it is the model those five names belong to: what each one reaches, and why no permission here
 implies another. Which grant a credential holds is written on the entry that admits it, and
 [the MCP endpoint](../operations/mcp-endpoint.md#what-a-credential-may-do) is where that is configured; a deployment
 whose entries write no grant serves every permission to every caller, which is what makes this invisible until an
@@ -861,7 +861,7 @@ Three things follow, and the tool's description states each of them:
 | `seen` | `boolean` | `true` marks the email read, `false` marks it unread. Omitted leaves the flag where it stands. Reading mail through MailFathom never sets it, so this is the only way it moves from here |
 | `flagged` | `boolean` | `true` stars the email, `false` unstars it — the flag a mail client draws as a star or a flag |
 | `keywordChange` | `string` | `add`, `remove`, or `replace`. Sent together with `keywords`; either one alone is refused with `51012` |
-| `keywords` | `string[]` | The keywords the change names, at most 64, each at most 64 characters and each an IMAP atom. Two spellings differing only in case are one keyword. An empty list is accepted only with `replace`, where it clears every keyword |
+| `keywords` | `string[]` | The keywords the change names, at most 64, each at most 64 characters and each an IMAP atom. The count is checked as sent, before anything normalizes the list, so a longer one is refused with `51012` rather than deduplicated first. Two spellings differing only in case are one keyword. An empty list is accepted only with `replace`, where it clears every keyword |
 | `requestId` | `string` | The caller's own identity for this request, up to 128 characters. The same value on a retry makes it the same request; a new value, or none, is a new request |
 
 At least one of `seen`, `flagged`, and the keyword pair has to be given. A call that names an email and asks for nothing
@@ -899,6 +899,13 @@ star it again. A call that sent none is given an identity of MailFathom's own, p
 whether it was a retry is honestly read as a new one, and collapsing two of them would silently discard the second of a
 star and an unstar.
 
+A `requestId` reused for a *different* value is refused with `51012` rather than answered. The record's identity
+carries the occurrence, the mutation, and who asked, and none of the three carries the value asked for, so
+`set_mail_flags(X, seen: true, requestId: "1")` followed by `set_mail_flags(X, seen: false, requestId: "1")` would
+otherwise be answered with the first call's record while the mailbox is never unmarked — and the result publishes the
+record rather than the terms, so nothing the caller receives would say so. Two callers that happened to pick the same
+text collide the same way and get the same refusal.
+
 The records for one call are written in one commit, so a call either records everything it asked for or nothing. A
 partially recorded triage is the outcome worth avoiding: a caller told its call failed while one of the three values is
 already on its way to the server has no way to find out which.
@@ -915,6 +922,11 @@ Which mail may be written is the same question as which mail may be read, answer
 account this deployment does not serve, an email in a folder mapped `VisibleToTools: false`, and an email no row is held
 for are one answer — `53002`, the same one a read gives — so a write surface is neither a way round a withheld folder
 nor a way to learn which identifiers exist by asking about them.
+
+One case answers `53002` here that a read still serves: a local copy kept after MailFathom deleted the message under
+`RetainLocalCopy`. A listing serves it, because the mail is still readable, while the UID it carries names a message the
+server expunged — so recording a change against it would open records convergence could only attempt and fail.
+[The local copy kept without a remote occurrence](../architecture/stored-email-schema.md) is what that row is.
 
 Only these three values can be written. `\Answered` and `\Draft` each assert that an act was performed rather than
 describing the message, nothing here deletes mail, and nothing here sends any;

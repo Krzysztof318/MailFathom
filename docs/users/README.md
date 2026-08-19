@@ -10,18 +10,20 @@ repository root and [`docs/`](https://github.com/Krzysztof318/MailFathom/blob/ma
 MailFathom is a self-hosted service that synchronizes mail from your IMAP accounts into a local PostgreSQL copy,
 indexes it for search, and serves it to AI agents as tools over the
 [Model Context Protocol](https://modelcontextprotocol.io/). An agent connected to it can list, read, and search your
-mail; it cannot send, delete, move, or mark any of it, because no tool on the surface writes to a mailbox. What it can
-write is MailFathom's own contact book — the people you or your deployment wrote down — which six tools read and
-maintain, one of them by erasing a record for good.
+mail, and it can mark, star, and label one message at a time through `set_mail_flags`, which is the only tool on the
+surface that writes to a mailbox and is offered only to a credential granted `mailfathom.mail.flags.write`. It cannot
+send, delete, or move any of it. What it can write besides is MailFathom's own contact book — the people you or your
+deployment wrote down — which six tools read and maintain, one of them by erasing a record for good.
 
 Two properties hold everywhere and are worth knowing before anything is installed:
 
-- **Reading is local.** A tool call answers from the local copy and never contacts a mail server, so it is fast, works
-  while the server is down, and cannot change anything remotely. Every result states how fresh the local copy is.
+- **Reading is local.** A read answers from the local copy and never contacts a mail server, so it is fast, works while
+  the server is down, and changes nothing remotely. Every result states how fresh the local copy is.
 - **Retrieval is read-only.** Fetching mail never sets the remote `\Seen` flag, so mail MailFathom has copied still
-  shows as unread in your mail client until you read it there. What can write to your mailbox is what you configured to:
-  a mail rule whose action moves, copies, deletes, or marks a message read, and the spam actions that file junk and mark
-  it read. Both are off until you turn them on.
+  shows as unread in your mail client until you read it there. Three things write to your mailbox: a mail rule whose
+  action moves, copies, deletes, or marks a message read, the spam actions that file junk and mark it read, and the
+  `set_mail_flags` tool. The first two are off until you turn them on; the third needs a grant that reading mail does
+  not carry.
 
 ## The state of the release
 

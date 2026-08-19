@@ -54,11 +54,21 @@ public interface IMailboxMutationReconciliationStore
         IReadOnlyCollection<ImapUid> uids,
         CancellationToken cancellationToken);
 
+    /// <summary>The greatest number of flag and keyword stores one window's attribution reads.</summary>
+    /// <remarks>
+    /// It is a ceiling rather than a page: the narrowing below already drops every record that could not account for
+    /// anything, so reaching this number means one window's occurrences carry more unspent stores than a reconciliation
+    /// pass has any use for. The newest are the ones kept, because a store can only account for a reading taken after
+    /// its own stage last moved.
+    /// </remarks>
+    const int MaximumFlagChangeRecords = 500;
+
     /// <summary>Reads the flag and keyword stores issued against any of the occurrences a reconciliation window found moved.</summary>
     /// <param name="accountId">The account whose mutations are read.</param>
     /// <param name="folderResolutionId">The alias binding the occurrences were stored under.</param>
     /// <param name="uidValidity">The UIDVALIDITY the window was opened for.</param>
     /// <param name="uids">The UIDs whose <c>\Seen</c> flag, <c>\Flagged</c> flag, or keywords the window found standing somewhere new.</param>
+    /// <param name="issuedAfter">The earliest previous observation among those occurrences, before which no record can account for anything.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>Every store of one of those values issued against one of those occurrences, which may be none.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="uids" /> is <see langword="null" />.</exception>
@@ -77,8 +87,12 @@ public interface IMailboxMutationReconciliationStore
     /// </para>
     /// <para>
     /// Only the occurrences where something actually moved are asked about, so a window that found the mailbox unchanged
-    /// — which is most windows — asks nothing. The answer is bounded by <paramref name="uids" /> and by the idempotency
-    /// identity, which admits one record per occurrence, requester, and mutation.
+    /// — which is most windows — asks nothing. The idempotency identity no longer bounds what one occurrence can carry:
+    /// the requester of a caller-authored change is the invocation, so an agent that stars and unstars one message
+    /// leaves a record per call and nothing ever deletes one. What bounds the answer instead is stated rather than
+    /// assumed — the UIDs and <paramref name="issuedAfter" />, which drops only records that could account for nothing,
+    /// since all three comparisons require a record whose stage moved after the occurrence was last read. What survives
+    /// both is capped at <see cref="MaximumFlagChangeRecords" />.
     /// </para>
     /// <para>
     /// Every such record is returned, spent or not, because whether one still accounts for anything is settled against
@@ -93,6 +107,7 @@ public interface IMailboxMutationReconciliationStore
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
+        DateTimeOffset issuedAfter,
         CancellationToken cancellationToken);
 
     /// <summary>Reads the mutations issued against any of the source occurrences a reconciliation window found gone.</summary>

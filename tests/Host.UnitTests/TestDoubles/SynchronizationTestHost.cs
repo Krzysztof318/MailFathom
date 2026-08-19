@@ -546,6 +546,7 @@ internal static class SynchronizationTestHost
                 Arg.Any<MailFolderResolutionId>(),
                 Arg.Any<ImapUidValidity>(),
                 Arg.Any<IReadOnlyCollection<ImapUid>>(),
+                Arg.Any<DateTimeOffset>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<MailboxMutationRecord>>([]));
 
