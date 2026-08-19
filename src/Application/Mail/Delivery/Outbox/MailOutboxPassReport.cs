@@ -30,10 +30,12 @@ public sealed record MailOutboxPassReport(
     bool BatchFilled,
     IReadOnlyList<OutboxStageCount> OutstandingByStage)
 {
-    /// <summary>An account with no submission endpoint, or with nothing outstanding, produces this.</summary>
+    /// <summary>A pass that never ran produces this: an account with no submission endpoint, and one whose pass ended in a shutdown, a conflict, or a failure.</summary>
     /// <remarks>
-    /// It measures no depth rather than reporting zero. An account this pass never reached says nothing about how much
-    /// is waiting for it, and publishing a zero would clear a backlog on a dashboard that nothing had drained.
+    /// An account with nothing outstanding does not produce this. Its pass runs, settles nothing, and reports a real
+    /// measurement of zero at every unfinished stage — which is the distinction the empty list here carries: it
+    /// measures no depth rather than reporting zero, because an account this pass never reached says nothing about how
+    /// much is waiting for it, and publishing a zero would clear a backlog on a dashboard that nothing had drained.
     /// </remarks>
     public static MailOutboxPassReport Empty { get; } =
         new([], [], MarkedUnknownCount: 0, BatchFilled: false, OutstandingByStage: []);
