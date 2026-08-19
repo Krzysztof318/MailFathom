@@ -86,6 +86,53 @@ public sealed class MailOutboxPassTests
         Assert.Equal(OutgoingEmailStage.Recorded, context.Store.Read(behind).Stage);
     }
 
+    /// <summary>
+    /// What the pass leaves behind is measured after it has settled its batch, which is what makes the level an
+    /// operator alerts on the backlog rather than a restatement of what the pass had just claimed.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_MoreIsQueuedThanTheBatchTakes_ReportsWhatStandsAtEachUnfinishedStage()
+    {
+        // Arrange
+        var context = new PassContext(maxDeliveriesPerPass: 1);
+        context.Enqueue();
+        context.Enqueue();
+
+        // Act
+        var report = await context.RunAsync();
+
+        // Assert
+        Assert.Equal(
+            [OutgoingEmailStage.Recorded, OutgoingEmailStage.TransmissionBegun],
+            report.OutstandingByStage.Select(stage => stage.Stage));
+
+        // One is left waiting and the one the batch took has finished, so a level published from this says a message is
+        // outstanding rather than that two are.
+        Assert.Equal(1, report.OutstandingByStage.Single(stage => stage.Stage == OutgoingEmailStage.Recorded).Count);
+        Assert.Equal(
+            0,
+            report.OutstandingByStage.Single(stage => stage.Stage == OutgoingEmailStage.TransmissionBegun).Count);
+    }
+
+    /// <summary>
+    /// A drained account is measured as zero rather than as nothing, because the level it publishes has to bring a
+    /// dashboard's backlog back down instead of leaving the last non-empty measurement standing.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_TheAccountHasNothingLeft_ReportsZeroAtEveryUnfinishedStage()
+    {
+        // Arrange
+        var context = new PassContext();
+        context.Enqueue();
+
+        // Act
+        var report = await context.RunAsync();
+
+        // Assert
+        Assert.NotEmpty(report.OutstandingByStage);
+        Assert.All(report.OutstandingByStage, stage => Assert.Equal(0, stage.Count));
+    }
+
     /// <summary>A send whose outcome the store would not take ends alone, and the send behind it in the batch is still reached.</summary>
     [Fact]
     public async Task RunAsync_TheStoreWillNotRecordOneSendsOutcome_StillReachesTheSendBehindIt()

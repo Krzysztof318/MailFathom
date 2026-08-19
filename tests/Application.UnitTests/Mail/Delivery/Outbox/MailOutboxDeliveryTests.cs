@@ -461,6 +461,33 @@ public sealed class MailOutboxDeliveryTests
         Assert.Empty(context.Session.Transmitted);
     }
 
+    /// <summary>
+    /// The record travels with the request, which is what lets the adapter name it on the span it opens. Without it a
+    /// slow or failed submission is a duration with nothing an operator can read the message it belongs to by.
+    /// </summary>
+    [Fact]
+    public async Task DeliverAsync_ASendClaimedFromTheOutbox_NamesTheRecordInTheTransmissionRequest()
+    {
+        // Arrange
+        var context = new DeliveryContext();
+        var claimed = await context.ClaimAsync("anna@example.test");
+        MailTransmissionRequest? submitted = null;
+        context.Transmit = (request, envelope, _) =>
+        {
+            submitted = request;
+            AcceptEveryRecipient(request, envelope);
+
+            return Task.FromResult(new MailTransmission(MailTransmissionOutcome.Accepted, 250));
+        };
+
+        // Act
+        await context.DeliverAsync(claimed, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(submitted);
+        Assert.Equal(claimed.Record.Id, submitted.OutgoingEmailId);
+    }
+
     private static void AcceptEveryRecipient(MailTransmissionRequest request, MailEnvelopeLedger envelope)
     {
         foreach (var recipient in request.Recipients)

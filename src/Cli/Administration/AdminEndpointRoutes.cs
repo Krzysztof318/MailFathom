@@ -88,6 +88,28 @@ internal static class AdminEndpointRoutes
     /// </remarks>
     internal const string JobDropPath = $"{JobDeadLettersPath}/drop";
 
+    /// <summary>Where one page of what a deployment has been asked to send is read.</summary>
+    internal const string OutboxPath = $"{Prefix}/outbox";
+
+    /// <summary>Where the counts by stage are read.</summary>
+    /// <remarks>
+    /// A literal segment where the single-send path takes an identifier, which a deployment's routing prefers over a
+    /// parameter, so the two cannot be confused. It answers one figure per stage rather than a page, which is why it is
+    /// a path of its own rather than a filter on the listing.
+    /// </remarks>
+    internal const string OutboxSummaryPath = $"{OutboxPath}/summary";
+
+    /// <summary>Where one send is withdrawn before it leaves.</summary>
+    internal const string OutboxCancellationPath = $"{OutboxPath}/cancellation";
+
+    /// <summary>Where one send is put back for another attempt.</summary>
+    /// <remarks>
+    /// A path of its own rather than a field on the cancellation request, because the two are opposite decisions and a
+    /// body carrying which one was meant would make a mistyped value the difference between withdrawing a message and
+    /// sending it a second time.
+    /// </remarks>
+    internal const string OutboxRequeuePath = $"{OutboxPath}/requeue";
+
     /// <summary>Where a deployment is asked to erase one bounded pass of a folder's stored mail.</summary>
     /// <remarks>
     /// One pass per request, so the command repeats it until the folder is empty. That is what makes an erasure the
@@ -113,6 +135,11 @@ internal static class AdminEndpointRoutes
     /// disposed of is the half of the book the owner did not write.
     /// </remarks>
     internal const string CollectedContactsPath = $"{ContactsPath}/collected";
+
+    /// <summary>Where one recorded send is read, with what each of its recipients was told.</summary>
+    /// <param name="outgoingEmailId">The send the path names.</param>
+    /// <returns>The path, with the identity written the way a deployment's route constraint reads one.</returns>
+    internal static string OutboxSendPath(Guid outgoingEmailId) => $"{OutboxPath}/{outgoingEmailId:D}";
 
     /// <summary>Where one contact is read, amended, and erased.</summary>
     /// <param name="contactId">The contact the path names.</param>

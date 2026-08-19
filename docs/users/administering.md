@@ -470,6 +470,57 @@ it](../operations/admin-endpoint.md#reading-the-background-work-that-stopped-and
 operator's reference, and [durable background work](../operations/telemetry.md#durable-background-work) is what your
 monitoring can watch instead of you reading this by hand.
 
+## Mail you asked it to send
+
+Sending is the one thing MailFathom does that somebody else notices going wrong before you do. A message that will not
+leave waits quietly: nothing retries it forever, nothing pages you, and the first sign is usually a person asking why
+they never heard back. The `outbox` commands are how you look:
+
+| What you want | Command |
+| --- | --- |
+| See whether anything is stuck | `mfctl outbox status` |
+| See what is queued, newest first | `mfctl outbox list` |
+| See only what is waiting | `mfctl outbox list --stage Recorded` |
+| See who one message is for, and what their server said | `mfctl outbox show --message <id>` |
+| Take one back before it leaves | `mfctl outbox cancel --message <id>` |
+| Offer one again | `mfctl outbox requeue --message <id>` |
+
+```console
+$ mfctl outbox status
+Stage              Messages
+Recorded           2
+TransmissionBegun  1
+Sent               418
+Refused            3
+Cancelled          0
+
+3 message(s) are still waiting. See which with 'mfctl outbox list'.
+```
+
+**The stage is what tells you which command is right.** `Recorded` is a message waiting for its next attempt — leave it
+alone unless it stops moving, and it is the only stage `cancel` applies at. `Sent` and `Cancelled` are finished.
+`Refused` is a message a server will not take, so offering it again is a decision to disbelieve that and the command
+makes you say so: `mfctl outbox requeue --message <id> --despite-refusal`.
+
+`TransmissionBegun` is the one that needs you. The message began to go out and the server never answered, so **nobody
+knows whether it arrived** — and MailFathom will not guess on your behalf, because attempting it again might put a
+second copy in somebody's mailbox rather than fix a failure. Read it with `outbox show`, decide, and then either
+`requeue` it or leave it where it is.
+
+`cancel` means the message reached nobody: the deployment refuses to withdraw one that has begun transmitting rather
+than racing the worker sending it. `requeue` gives the attempts back and offers the message only to the addresses still
+outstanding, so nobody a server already accepted it for gets it twice. Neither command waits for anything — the
+deployment writes the decision down and the next delivery pass carries it out.
+
+`mfctl outbox list` names no recipient and no subject, deliberately: a listing of who you write to and when is not
+something to leave in a terminal. Ask `outbox show` about a message when you need to know who it was for.
+
+[Reading what is in the outbox, and deciding about one
+message](../operations/admin-endpoint.md#reading-what-is-in-the-outbox-and-deciding-about-one-message) is the
+operator's reference, and [what delivering the outbox
+emits](../operations/telemetry.md#what-delivering-the-outbox-emits) is what your monitoring can watch instead of you
+reading this by hand.
+
 ## Keeping your contact book
 
 MailFathom holds a contact book of its own — people, the addresses each of them uses, and what you wrote about them —

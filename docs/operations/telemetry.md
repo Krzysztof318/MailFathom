@@ -705,7 +705,18 @@ instrument from collection: the outcome is a decision about a person and never t
 
 Sending is the other direction of the same absence: the mail library publishes nothing of its own here either, and a
 message that fails to leave is invisible in a way an unsynchronized mailbox is not — nobody refreshes an outbox waiting
-for it. Two questions are worth answering, and each has one signal.
+for it. Four questions are worth answering, and each has one signal.
+
+**Is anything piling up?** `mailfathom.mail.outbox.depth` reports how many messages stand at each stage a send can still
+move from, tagged with the account alias and `mailfathom.mail.delivery.stage`, whose values are `recorded` and
+`transmission-begun`. It is a gauge fed by the delivery pass rather than a query the collector runs on its own
+interval, exactly as [the job queue's depth](#durable-background-work) is: an outbox is read per account by the worker
+that already reads it, and asking the database again on a schedule would count the same rows a second time for nothing.
+A level that rises and does not come back down is mail that is not leaving; a `transmission-begun` level that does not
+return to zero is the one an operator acts on, because nothing moves those messages without a person. The gauge covers
+the two unfinished stages alone — what has been sent, refused, or withdrawn is history rather than backlog, and
+[`mfctl outbox status`](admin-endpoint.md#reading-what-is-in-the-outbox-and-deciding-about-one-message) is where the
+whole of it is counted.
 
 **Is mail leaving?** `mailfathom.mail.delivery.attempts` counts every attempt that ended, tagged with the account alias
 and `mailfathom.mail.delivery.outcome`, whose values are `sent`, `refused`, `deferred`, `outcome-unknown`, `released`,
@@ -725,6 +736,12 @@ provider that is briefly busy and is only interesting when it stops turning into
 stands where the failed write left it and its lease is what frees it, so a rate above zero is a database to look at and
 not an outbox to act on.
 
+`mailfathom.mail.delivery.retries` counts the same measurements again, narrowed to the attempts that were not a
+message's first, under the same two dimensions. It is a counter of its own rather than a dimension of the one above,
+because the question it answers is about the ratio between them: attempts rising while retries stay flat is a busier
+deployment, and retries rising while attempts do not is the same mail being offered over and over. A first attempt is
+never counted here, so the two series are read together rather than one being a subset a dashboard has to subtract.
+
 **Can the owner see what they sent?** `mailfathom.mail.filing.attempts` counts every attempt to put a copy of an
 outgoing message into one of this account's own folders, tagged with the account alias, `mailfathom.mail.filing.place`
 — `draft`, `held`, `sent`, or `undetermined` where a failure ended before any place was chosen — and
@@ -738,7 +755,12 @@ the append may or may not have reached the folder, nothing will attempt it again
 copy of somebody's own message in front of them.
 
 **Is one submission the slow part?** Each opens **`submit_outgoing_email`** as a client span, tagged with the account
-alias, and `mailfathom.mail.delivery.submission.duration` records how long it took. Both cover the exchange with the
+alias and with `mailfathom.mail.delivery.record` naming the outbox record it is submitting, and
+`mailfathom.mail.delivery.submission.duration` records how long it took. The record identifier is what joins the trace
+to the row an operator then reads with
+[`mfctl outbox show`](admin-endpoint.md#reading-what-is-in-the-outbox-and-deciding-about-one-message): a slow or failed
+submission is otherwise a duration with nothing to act on. It is MailFathom's own identifier for a queued message and
+names neither the message nor anybody it is addressed to. Both cover the exchange with the
 server and nothing else: the claim, the record movements, and the backoff are local work, and including them would blur
 the one thing the span exists to attribute. A span that ends without the server having answered is marked as an error,
 which is what makes the trace and the `outcome-unknown` measurement the same event read two ways. A caller that stopped
@@ -749,9 +771,12 @@ There is deliberately no span or instrument per recipient. A message is offered 
 time series per person this deployment writes to; what each recipient was told is on the send's own record, where it is
 reached by identity rather than exported.
 
-Nothing here is derived from a message. The dimensions are the account's configured alias and a closed set of
-MailFathom's own words — no address, no subject, no message identifier, no recipient count, and no line of what a
-submission server wrote, since a server's refusal text routinely repeats the address it is refusing. As with reading,
+Nothing here is derived from a message. Every instrument's dimensions are the account's configured alias and a closed
+set of MailFathom's own words — no address, no subject, no identifier, no recipient count, and no line of what a
+submission server wrote, since a server's refusal text routinely repeats the address it is refusing. The one identifier
+anything carries is the outbox record on the span, which is a row number this deployment issued rather than anything
+read out of the message, and it is on a span rather than on a metric precisely because a per-message dimension would
+open a time series apiece. As with reading,
 every SMTP client this deployment opens is constructed without a protocol logger, so the commands and responses of a
 submission are written nowhere that a log level could expose.
 

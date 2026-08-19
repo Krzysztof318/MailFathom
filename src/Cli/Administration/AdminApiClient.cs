@@ -13,6 +13,7 @@ using MailFathom.Cli.Administration.Embeddings;
 using MailFathom.Cli.Administration.Folders;
 using MailFathom.Cli.Administration.Jobs;
 using MailFathom.Cli.Administration.Mailboxes;
+using MailFathom.Cli.Administration.Outbox;
 using MailFathom.Cli.Administration.Rules;
 using MailFathom.Cli.Administration.Spam;
 using MailFathom.Cli.Transport;
@@ -589,6 +590,114 @@ internal sealed class AdminApiClient
             cancellationToken,
             JsonContent.Create(new JobRecoveryRequest(job), CliJsonContext.Default.JobRecoveryRequest));
 
+    /// <summary>Reads how much the deployment has standing at each stage of its outbox.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="account">The account to narrow to, or <see langword="null" /> for every account.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>One count per stage, and how many sends nothing has finished with.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a summary.</exception>
+    internal Task<OutboxStatus> ReadOutboxStatusAsync(
+        string token,
+        string? account,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            $"{AdminEndpointRoutes.OutboxSummaryPath}{AccountQuery(account)}",
+            token,
+            CliJsonContext.Default.OutboxStatus,
+            cancellationToken);
+
+    /// <summary>Reads one page of what the deployment has been asked to send.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="query">How the page is narrowed and continued.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>One page of the sends, and the cursor the next page is asked with where one exists.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a page.</exception>
+    /// <remarks>The page names no recipient and no subject, because a listing of an outbox would otherwise be an export of who this owner writes to, a page at a time.</remarks>
+    internal Task<OutboxPage> ReadOutboxAsync(
+        string token,
+        OutboxQuery query,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        return this.RequestAsync(
+            HttpMethod.Get,
+            $"{AdminEndpointRoutes.OutboxPath}{query.ToQueryString()}",
+            token,
+            CliJsonContext.Default.OutboxPage,
+            cancellationToken);
+    }
+
+    /// <summary>Reads one recorded send, with what each of its recipients was told.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="outgoingEmail">The send to read.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The send.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment holds no such send, refused the request or the credential, could not be reached, or answered with something that is not a send.</exception>
+    internal Task<OutboxSend> ReadOutboxSendAsync(
+        string token,
+        Guid outgoingEmail,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            AdminEndpointRoutes.OutboxSendPath(outgoingEmail),
+            token,
+            CliJsonContext.Default.OutboxSend,
+            cancellationToken);
+
+    /// <summary>Asks the deployment to withdraw one send before it leaves.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="outgoingEmail">The send to withdraw.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What became of the send.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    internal Task<OutboxDecision> CancelOutboxSendAsync(
+        string token,
+        Guid outgoingEmail,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.OutboxCancellationPath,
+            token,
+            CliJsonContext.Default.OutboxDecision,
+            cancellationToken,
+            JsonContent.Create(
+                new OutboxCancellationRequest(outgoingEmail),
+                CliJsonContext.Default.OutboxCancellationRequest));
+
+    /// <summary>Asks the deployment to offer one send again.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="outgoingEmail">The send to offer again.</param>
+    /// <param name="refusalRestated">Whether the operator has restated a permanent refusal.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What became of the send.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    /// <remarks>
+    /// It returns as soon as the deployment has written the decision down. The message is transmitted by whichever
+    /// delivery pass claims it next, so this command is never what carries it out and closing the terminal cannot stop
+    /// it.
+    /// </remarks>
+    internal Task<OutboxDecision> RequeueOutboxSendAsync(
+        string token,
+        Guid outgoingEmail,
+        bool refusalRestated,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.OutboxRequeuePath,
+            token,
+            CliJsonContext.Default.OutboxDecision,
+            cancellationToken,
+            JsonContent.Create(
+                new OutboxRequeueRequest(outgoingEmail, refusalRestated),
+                CliJsonContext.Default.OutboxRequeueRequest));
+
     /// <summary>Asks the deployment to erase one bounded pass of a folder's stored mail.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="account">The account the folder belongs to, as the deployment's configuration names it.</param>
@@ -809,6 +918,12 @@ internal sealed class AdminApiClient
             token,
             CliJsonContext.Default.ContactExport,
             cancellationToken);
+
+    /// <summary>Writes the one account filter a summary takes as a query string.</summary>
+    /// <remarks>An absent account is left out rather than sent empty, so the deployment reads it as every account it serves rather than as one more shape to have an opinion about.</remarks>
+    private static string AccountQuery(string? account) => account is { Length: > 0 } narrowed
+        ? $"?account={Uri.EscapeDataString(narrowed)}"
+        : string.Empty;
 
     /// <summary>Writes the narrowing an operator asked a listing for as a query string.</summary>
     /// <remarks>

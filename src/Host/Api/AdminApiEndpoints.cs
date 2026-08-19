@@ -76,6 +76,14 @@ namespace MailFathom.Host.Api;
 /// state is an operator's problem rather than anything a model reasons over.
 /// </para>
 /// <para>
+/// The next five are what an operator does about the outbox, which <see cref="OutboxEndpoints" /> describes: reading
+/// how much stands at each stage, listing what is queued and what failed, reading one send and what each of its
+/// recipients was told, withdrawing one that has not begun transmitting, and offering one again. They are here because
+/// putting a message back on its way to somebody's mailbox should be bounded by the same credential as asking for the
+/// send in the first place — and because the one send nothing will decide for itself, whose server never answered, is a
+/// question for a person rather than anything a model reasons over.
+/// </para>
+/// <para>
 /// The next takes a folder's local mail away, which <see cref="MailFolderErasureEndpoint" /> describes. It is the only
 /// route that disposes of stored mail, which is why it is bounded by the same credential as everything else here and
 /// reachable from nowhere a model can write to.
@@ -133,6 +141,7 @@ internal static class AdminApiEndpoints
         api.MapMailRules();
         api.MapSpamClassification();
         api.MapJobDeadLetters();
+        api.MapOutbox();
         api.MapMailFolderErasure();
         api.MapContacts();
 

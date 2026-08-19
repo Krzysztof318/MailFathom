@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Mail.Delivery;
+using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
@@ -36,6 +37,10 @@ internal sealed class InMemoryOutgoingEmailStore(
     TimeProvider? timeProvider = null)
     : IOutgoingEmailStore
 {
+    /// <summary>The stages a send can still move from, which are the ones a level is measured over.</summary>
+    private static readonly OutgoingEmailStage[] NonTerminalStages =
+        [OutgoingEmailStage.Recorded, OutgoingEmailStage.TransmissionBegun];
+
     private readonly Dictionary<(string Account, OutgoingEmailOrigin Origin, string Identity), OutgoingEmailId>
         identities = [];
 
@@ -189,6 +194,28 @@ internal sealed class InMemoryOutgoingEmailStore(
         ];
 
         return Task.FromResult(outstanding);
+    }
+
+    public Task<IReadOnlyList<OutboxStageCount>> CountOutstandingByStageAsync(
+        MailAccountId accountId,
+        CancellationToken cancellationToken)
+    {
+        var standing = this.rows.Values
+            .Select(row => row.Record)
+            .Where(record => record.AccountId == accountId && !record.IsTerminal)
+            .GroupBy(record => record.Stage)
+            .ToDictionary(group => group.Key, group => group.Count());
+
+        // Every non-terminal stage is answered for, zeros included, exactly as the real store does: whoever publishes
+        // the level has to be able to tell a drained account from one nothing measured.
+        IReadOnlyList<OutboxStageCount> counted =
+        [
+            .. NonTerminalStages.Select(stage => new OutboxStageCount(
+                stage,
+                standing.TryGetValue(stage, out var count) ? count : 0)),
+        ];
+
+        return Task.FromResult(counted);
     }
 
     public Task<IReadOnlyList<ClaimedOutgoingEmail>> ClaimAsync(

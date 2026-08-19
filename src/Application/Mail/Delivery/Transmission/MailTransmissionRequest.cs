@@ -23,14 +23,24 @@ namespace MailFathom.Application.Mail.Delivery.Transmission;
 public sealed record MailTransmissionRequest
 {
     private MailTransmissionRequest(
+        OutgoingEmailId outgoingEmailId,
         EmailAddress sender,
         IReadOnlyList<OutgoingRecipient> recipients,
         ReadOnlyMemory<byte> rawMime)
     {
+        this.OutgoingEmailId = outgoingEmailId;
         this.Sender = sender;
         this.Recipients = recipients;
         this.RawMime = rawMime;
     }
+
+    /// <summary>Gets the record this submission belongs to.</summary>
+    /// <remarks>
+    /// It travels with the submission so that what an adapter reports about the exchange can be joined to the send an
+    /// operator reads. It is MailFathom's own identifier and names nothing outside this deployment, which is what makes
+    /// it the value a span may carry where the message's own identifier may not.
+    /// </remarks>
+    public OutgoingEmailId OutgoingEmailId { get; }
 
     /// <summary>Gets the address the envelope names as the reverse path.</summary>
     public EmailAddress Sender { get; }
@@ -42,6 +52,7 @@ public sealed record MailTransmissionRequest
     public ReadOnlyMemory<byte> RawMime { get; }
 
     /// <summary>States a submission to make.</summary>
+    /// <param name="outgoingEmailId">The record this submission belongs to.</param>
     /// <param name="sender">The address the envelope names as the reverse path.</param>
     /// <param name="recipients">The people this attempt offers the message to.</param>
     /// <param name="rawMime">The composed RFC 822 bytes to transmit.</param>
@@ -49,6 +60,7 @@ public sealed record MailTransmissionRequest
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="recipients" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="sender" /> names no mailbox, when <paramref name="recipients" /> is empty, or when <paramref name="rawMime" /> is empty.</exception>
     public static MailTransmissionRequest Create(
+        OutgoingEmailId outgoingEmailId,
         EmailAddress sender,
         IReadOnlyList<OutgoingRecipient> recipients,
         ReadOnlyMemory<byte> rawMime)
@@ -72,7 +84,7 @@ public sealed record MailTransmissionRequest
             throw new ArgumentException("A submission transmits the stored MIME of the message.", nameof(rawMime));
         }
 
-        return new MailTransmissionRequest(sender, [.. recipients], rawMime);
+        return new MailTransmissionRequest(outgoingEmailId, sender, [.. recipients], rawMime);
     }
 
     /// <summary>Describes the submission by its size, and never by the people it is between.</summary>
