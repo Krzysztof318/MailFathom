@@ -53,9 +53,11 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts)
     /// </para>
     /// <para>
     /// The identities named and the names are each read in groups of at most a page of the book, so a message costs one
-    /// read per way its recipients were named and a second of that way only past two hundred distinct people — at most
-    /// four for the longest list an outgoing record can hold, against one per recipient. What addressing costs therefore
-    /// follows from how a message was addressed rather than from how many people it goes to. The count is
+    /// read per way its recipients were named, and a second of one such way only past two hundred distinct people in it.
+    /// Both ways are named out of one recipient list, and that list is bounded below twice two hundred, so at most one of
+    /// them ever reaches its second read: three for the longest list an outgoing record can hold, against one per
+    /// recipient. What addressing costs therefore follows from how a message was addressed rather than from how many
+    /// people it goes to. The count is
     /// bounded before the first lookup all the same, because the reads carry what the caller supplied: the bound is the
     /// greatest number of recipients an outgoing record can hold at all, so a longer list describes a send that could not
     /// be written down whatever the book answered — and the deployment's own, smaller recipient bound is still the

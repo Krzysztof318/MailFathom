@@ -252,9 +252,10 @@ person rather than to a mailbox.
 out while the person they cared about never receives it.
 
 **The identities named and the names are each read in groups of at most a page of the book**, so a message costs one read
-per way its recipients were named and a second of that way only past two hundred distinct people — four reads for the
-longest recipient list an outgoing record can hold, against one per recipient. What addressing costs therefore follows
-from how a message was addressed rather than from how many people it goes to. The recipient count is
+per way its recipients were named, and a second of one such way only past two hundred distinct people in it. Both ways are
+named out of one recipient list bounded below twice that, so at most one of them ever reaches its second read: three reads
+for the longest recipient list an outgoing record can hold, against one per recipient. What addressing costs therefore
+follows from how a message was addressed rather than from how many people it goes to. The recipient count is
 bounded before the first of those reads at the most an outgoing record can hold, because the reads carry what the caller
 supplied. A name resolving to one person comes back with the count that decided it, which is what stops a namesake
 written down while the read ran from turning an ambiguous name into an arbitrary one of two people.
