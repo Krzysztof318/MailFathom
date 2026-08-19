@@ -369,7 +369,7 @@ reference, including what goes with the mail and what survives it.
 
 ## Filling in what a newer version records
 
-An upgrade sometimes teaches MailFathom to record something new about a message — who a receiving server established
+An upgrade sometimes teaches MailFathom to record something new about a message — who was established
 sent it, which keywords its folder carries. New mail gets it because it arrives after the upgrade. **The mail you
 already have does not**, and nothing fills it in on its own: synchronization resumes from where it left off in each
 folder, so a message it has already stored is never looked at again.

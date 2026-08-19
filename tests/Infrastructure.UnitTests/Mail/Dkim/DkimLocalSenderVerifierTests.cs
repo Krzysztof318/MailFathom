@@ -22,7 +22,7 @@ public sealed class DkimLocalSenderVerifierTests
         // Arrange
         var signed = DkimFixtures.Sign();
         using var message = DkimFixtures.Parse(signed.RawMime);
-        var verifier = new DkimLocalSenderVerifier(ResolverAnswering(signed.PublicKeyRecord), TimeProvider.System);
+        var verifier = new DkimLocalSenderVerifier(ResolverAnswering(signed.PublicKeyRecord), new FakeTimeProvider());
 
         // Act
         var verdict = await verifier.VerifyAsync(message, "anna@signer.example.test", CancellationToken.None);
@@ -42,7 +42,7 @@ public sealed class DkimLocalSenderVerifierTests
         // Arrange
         var signed = DkimFixtures.Sign();
         using var message = DkimFixtures.Parse(signed.RawMime);
-        var verifier = new DkimLocalSenderVerifier(ResolverAnswering(signed.PublicKeyRecord), TimeProvider.System);
+        var verifier = new DkimLocalSenderVerifier(ResolverAnswering(signed.PublicKeyRecord), new FakeTimeProvider());
 
         // Act
         var verdict = await verifier.VerifyAsync(message, "anna@signer.example.test", CancellationToken.None);
@@ -59,7 +59,7 @@ public sealed class DkimLocalSenderVerifierTests
         // Arrange
         var signed = DkimFixtures.Sign(fromAddress: "anna@bank.example.test", signingDomain: "relay.example.test");
         using var message = DkimFixtures.Parse(signed.RawMime);
-        var verifier = new DkimLocalSenderVerifier(ResolverAnswering(signed.PublicKeyRecord), TimeProvider.System);
+        var verifier = new DkimLocalSenderVerifier(ResolverAnswering(signed.PublicKeyRecord), new FakeTimeProvider());
 
         // Act
         var verdict = await verifier.VerifyAsync(message, "anna@bank.example.test", CancellationToken.None);
@@ -77,7 +77,7 @@ public sealed class DkimLocalSenderVerifierTests
         // Arrange
         var signed = DkimFixtures.Sign(body: "Dzień dobry.");
         using var message = DkimFixtures.Parse(TamperedBody(signed.RawMime));
-        var verifier = new DkimLocalSenderVerifier(ResolverAnswering(signed.PublicKeyRecord), TimeProvider.System);
+        var verifier = new DkimLocalSenderVerifier(ResolverAnswering(signed.PublicKeyRecord), new FakeTimeProvider());
 
         // Act
         var verdict = await verifier.VerifyAsync(message, "anna@signer.example.test", CancellationToken.None);
@@ -95,7 +95,7 @@ public sealed class DkimLocalSenderVerifierTests
         // Arrange
         var signed = DkimFixtures.Sign();
         using var message = DkimFixtures.Parse(signed.RawMime);
-        var verifier = new DkimLocalSenderVerifier(ResolverAnswering(record: null), TimeProvider.System);
+        var verifier = new DkimLocalSenderVerifier(ResolverAnswering(record: null), new FakeTimeProvider());
 
         // Act
         var verdict = await verifier.VerifyAsync(message, "anna@signer.example.test", CancellationToken.None);
@@ -112,7 +112,7 @@ public sealed class DkimLocalSenderVerifierTests
         // Arrange
         var signed = DkimFixtures.Sign();
         using var message = DkimFixtures.Parse(signed.RawMime);
-        var verifier = new DkimLocalSenderVerifier(ResolverAnswering("v=DKIM1; k=rsa; p=not-a-key"), TimeProvider.System);
+        var verifier = new DkimLocalSenderVerifier(ResolverAnswering("v=DKIM1; k=rsa; p=not-a-key"), new FakeTimeProvider());
 
         // Act
         var verdict = await verifier.VerifyAsync(message, "anna@signer.example.test", CancellationToken.None);
@@ -130,7 +130,7 @@ public sealed class DkimLocalSenderVerifierTests
         var resolver = ResolverAnswering(record: null);
         using var message = DkimFixtures.Parse(
             Encoding.UTF8.GetBytes(string.Join("\r\n", "From: anna@example.test", "Subject: Plain", string.Empty, "Body.")));
-        var verifier = new DkimLocalSenderVerifier(resolver, TimeProvider.System);
+        var verifier = new DkimLocalSenderVerifier(resolver, new FakeTimeProvider());
 
         // Act
         var verdict = await verifier.VerifyAsync(message, "anna@example.test", CancellationToken.None);
@@ -153,7 +153,7 @@ public sealed class DkimLocalSenderVerifierTests
         var resolver = ResolverAnswering(signed.PublicKeyRecord);
 
         // Act
-        await new DkimLocalSenderVerifier(resolver, TimeProvider.System).VerifyAsync(message, "anna@signer.example.test", CancellationToken.None);
+        await new DkimLocalSenderVerifier(resolver, new FakeTimeProvider()).VerifyAsync(message, "anna@signer.example.test", CancellationToken.None);
 
         // Assert
         await resolver.Received(1).ResolveAsync(

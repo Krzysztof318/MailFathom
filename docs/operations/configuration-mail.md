@@ -89,7 +89,7 @@ believes no header and every message it holds records that nothing was establish
 holds.
 
 `TrustedSenders` and `TrustOwnAccountDomains` are the second half of that: they decide whether a message's author is
-somebody this deployment recognizes, which is a separate question from what the receiving server established. Both
+somebody this deployment recognizes, which is a separate question from what was established about them. Both
 lists are held against an **authenticated author** — the domain the receiving server's DMARC result or a matching
 DKIM or SPF identity established for the `From` header — and never against the raw header, so naming a correspondent
 here cannot be exploited by writing their address into a message. Most legitimate mail stays unknown and that is the

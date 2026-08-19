@@ -376,8 +376,9 @@ untested. [Mailbox queries](mailbox-queries.md#what-a-summary-carries) records w
 Six parts of it are worth reading before a caller writes against them:
 
 - **`senderVerification` is two answers, never one.** `senderAddress` beside it is a claim the email wrote about itself,
-  and nothing on the way to a listing verified it. `authorAuthentication` is what the receiving mail server established
-  about the author the email displays — `authenticated`, `failed`, or `notEstablished` — and `deploymentTrust` is
+  and nothing on the way to a listing verified it. `authorAuthentication` is what was established about the author the
+  email displays — by the receiving mail server, or, where that server wrote nothing, by this deployment verifying the
+  message's own DKIM signatures — `authenticated`, `failed`, or `notEstablished`, and `deploymentTrust` is
   whether this deployment's own trusted-sender configuration names that author — `trusted` or `unknown`. Neither is
   derived from the other and no field merges them, because **`authenticated` beside `unknown` is the ordinary state of
   legitimate mail from a correspondent nobody has named** and must not read as a finding against the message. `unknown`
