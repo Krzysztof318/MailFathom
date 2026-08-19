@@ -39,6 +39,7 @@ using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Filing;
+using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Application.Mail.Maintenance;
@@ -731,6 +732,11 @@ public static class ServiceCollectionExtensions
         // is what makes the record and the message it points at one write.
         services.AddSingleton<MailDeliveryTelemetry>();
         services.AddScoped<IOutgoingEmailStore, OutgoingEmailStore>();
+        // The bounds the outbox asks before it writes anything down. The counts they are answered from are read through
+        // the scoped context like every other read, and the governor is scoped with them so one work unit judges a send
+        // against one reload of the account list it was scheduled from.
+        services.AddScoped<IOutgoingMailUsageReader, OutgoingMailUsageReader>();
+        services.AddScoped<OutgoingMailGovernor>();
         services.AddScoped<MailOutbox>();
         // The attempt and the pass over it are scoped like every other work unit, because each opens a submission
         // session and commits through the caller's persistence scope. The signal they answer is not: it carries accounts

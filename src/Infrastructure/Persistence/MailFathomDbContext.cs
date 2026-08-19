@@ -222,6 +222,16 @@ internal sealed class MailFathomDbContext : DbContext
     /// <summary>Names the index one claim over the outbox reads, which is the only query on its hot path.</summary>
     internal const string OutgoingEmailClaimableIndexName = "ix_outgoing_emails_claimable";
 
+    /// <summary>Names the index a period's send ceilings are counted through.</summary>
+    /// <remarks>
+    /// Unfiltered, unlike the two above it, because what a ceiling counts is every message a period was asked for
+    /// whatever became of it: a send that was refused by the server, abandoned, or cancelled was still mail this
+    /// deployment tried to put on the network, and a structure that forgot those would let a period that failed
+    /// entirely be spent twice. It leads on the instant so the deployment-wide count is a range read, and carries the
+    /// account after it so one account's count reads the same range without visiting a record.
+    /// </remarks>
+    internal const string OutgoingEmailPeriodUsageIndexName = "ix_outgoing_emails_period_usage";
+
     /// <summary>The foreign key that removes an outgoing email's recipients with the record.</summary>
     /// <remarks>
     /// Named because EF's convention composes one from both table names and PostgreSQL truncates an identifier at 63
@@ -1430,6 +1440,9 @@ internal sealed class MailFathomDbContext : DbContext
             entity.HasIndex(message => new { message.MailboxAccountId, message.AvailableAt, message.Id })
                 .HasDatabaseName(OutgoingEmailClaimableIndexName)
                 .HasFilter($"\"{nameof(OutgoingEmailEntity.Stage)}\" = '{nameof(OutgoingEmailStage.Recorded)}'");
+
+            entity.HasIndex(message => new { message.RecordedAt, message.MailboxAccountId })
+                .HasDatabaseName(OutgoingEmailPeriodUsageIndexName);
         });
 
     /// <summary>Declares the people one outgoing email is offered to, and what the server said about each.</summary>

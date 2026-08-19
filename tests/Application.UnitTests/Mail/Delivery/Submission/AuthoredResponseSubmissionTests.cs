@@ -590,7 +590,8 @@ public sealed class AuthoredResponseSubmissionTests
                 new PersistenceConcurrencyOptions(),
                 new FakeTimeProvider()),
             new MailOutboxSignal(capacity: 8),
-            granted);
+            granted,
+            OutgoingMailGovernors.Permitting());
     }
 
     /// <summary>An outgoing store that keeps one record per idempotency identity, which is what the retry claim rests on.</summary>

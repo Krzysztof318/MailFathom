@@ -409,7 +409,8 @@ public sealed class SendEmailToolTests
                     new PersistenceConcurrencyOptions(),
                     new FakeTimeProvider()),
                 new MailOutboxSignal(capacity: 8),
-                granted),
+                granted,
+                OutgoingMailGovernors.Permitting()),
             granted));
     }
 

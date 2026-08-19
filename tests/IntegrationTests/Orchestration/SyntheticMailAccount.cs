@@ -9,6 +9,7 @@ using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Filing;
+using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Retrieval.AskMail.Audit;
@@ -63,7 +64,8 @@ internal sealed class SyntheticMailAccount(
     IJunkMailFolderCatalog,
     ITrustedAuthenticationAuthorityReader,
     IOutgoingSenderIdentityReader,
-    IOutgoingMailFilingPolicyReader
+    IOutgoingMailFilingPolicyReader,
+    IOutgoingSendPermissionReader
 {
     /// <summary>Every folder alias this suite's configuration maps, which is every alias its tests bind one to.</summary>
     /// <remarks>
@@ -326,6 +328,17 @@ internal sealed class SyntheticMailAccount(
     /// with it.
     /// </remarks>
     public bool FilesSentCopy(MailAccountId accountId) => accountId == AccountId && filesSentCopies;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// On for this account and off for every other, which is the opposite of the deployed default and is what this
+    /// suite is: an installation whose operator configured a submission endpoint and turned sending on for the one
+    /// mailbox it serves. A test about a deployment that may not send states that posture itself rather than reading
+    /// it here.
+    /// </remarks>
+    public OutgoingSendRefusalReason? FindRefusal(MailAccountId accountId) => accountId == AccountId
+        ? null
+        : OutgoingSendRefusalReason.AccountNotEnabled;
 
     /// <summary>The folders this account's configuration names, which is the inbox and, where a test asked, the sent folder.</summary>
     private IReadOnlyList<MailFolderMapping> ConfiguredFolders =>

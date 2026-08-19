@@ -6,13 +6,16 @@ using System.Text;
 using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail.Delivery;
+using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Governance;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
 using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
@@ -135,7 +138,8 @@ public sealed class MailOutboxTests
             contentStore,
             CreateRetryPolicy(sessionFactory),
             new MailOutboxSignal(capacity: 8),
-            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend));
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
+            OutgoingMailGovernors.Permitting());
 
         // Act
         var record = await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None);
@@ -278,6 +282,119 @@ public sealed class MailOutboxTests
         Assert.False(refusal.RequiredPermission.IsSpecified);
     }
 
+    /// <summary>
+    /// The bounds are asked at the one way into the outbox, so nothing is written down for a deployment that may not
+    /// send — whether because nobody turned the account on, which is every account's default, or because the whole
+    /// installation is running read-only.
+    /// </summary>
+    [Theory]
+    [InlineData(OutgoingSendRefusalReason.AccountNotEnabled)]
+    [InlineData(OutgoingSendRefusalReason.DeploymentIsReadOnly)]
+    public async Task EnqueueAsync_DeploymentThatMayNotSend_RefusesAndWritesNothing(OutgoingSendRefusalReason reason)
+    {
+        // Arrange
+        var store = new InMemoryOutgoingEmailStore();
+        var contentStore = Substitute.For<IEmailContentStore>();
+        var signal = new MailOutboxSignal(capacity: 4);
+        var outbox = CreateOutbox(
+            store,
+            contentStore,
+            signal: signal,
+            governor: OutgoingMailGovernors.Governing(refusal: reason));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
+            () => outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.MailSendingNotEnabled, refusal.ErrorCode);
+        Assert.Empty(store.OpenRequests);
+        Assert.Equal(0, signal.Depth);
+        await contentStore.DidNotReceive().SaveOutgoingContentAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<OutgoingEmailId>(),
+            Arg.Any<ReadOnlyMemory<byte>>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A message naming a recipient the policy refuses is refused whole, and no part of it becomes a record.</summary>
+    [Fact]
+    public async Task EnqueueAsync_RecipientTheDeploymentMayNotWriteTo_RefusesTheWholeMessage()
+    {
+        // Arrange
+        var store = new InMemoryOutgoingEmailStore();
+        Assert.True(OutgoingRecipientRule.TryCreateForDomain("rival.test", out var denied));
+        var outbox = CreateOutbox(
+            store,
+            Substitute.For<IEmailContentStore>(),
+            governor: OutgoingMailGovernors.Governing(
+                recipientPolicy: OutgoingRecipientPolicy.Create([], [denied])));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
+            () => outbox.EnqueueAsync(
+                CreateRequest("mfctl-4f2a", "anna@example.test", "bruno@rival.test"),
+                RawMime,
+                CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.OutgoingRecipientRefusedByPolicy, refusal.ErrorCode);
+        Assert.Empty(store.OpenRequests);
+    }
+
+    /// <summary>A send that would carry the period past a ceiling is refused before anything is written down.</summary>
+    [Fact]
+    public async Task EnqueueAsync_SendBeyondACeiling_RefusesAndWritesNothing()
+    {
+        // Arrange
+        var store = new InMemoryOutgoingEmailStore();
+        var outbox = CreateOutbox(
+            store,
+            Substitute.For<IEmailContentStore>(),
+            governor: OutgoingMailGovernors.Governing(
+                ceilings: OutgoingMailCeilings.Create(
+                    TimeSpan.FromDays(1),
+                    maxMessagesPerAccount: 2,
+                    maxRecipientsPerAccount: 0,
+                    maxMessagesPerDeployment: 0,
+                    maxRecipientsPerDeployment: 0),
+                usage: new OutgoingMailUsage(
+                    AccountMessageCount: 2,
+                    AccountRecipientCount: 2,
+                    DeploymentMessageCount: 2,
+                    DeploymentRecipientCount: 2)));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
+            () => outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.OutgoingMailCeilingReached, refusal.ErrorCode);
+        Assert.Empty(store.OpenRequests);
+    }
+
+    /// <summary>Work no caller requested meets the same bounds, which is what makes them the deployment's rather than a caller's.</summary>
+    [Fact]
+    public async Task EnqueueAsync_RuleAskingUnderADeploymentThatMayNotSend_IsRefusedToo()
+    {
+        // Arrange
+        var store = new InMemoryOutgoingEmailStore();
+        var outbox = CreateOutbox(
+            store,
+            Substitute.For<IEmailContentStore>(),
+            authorization: AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process),
+            governor: OutgoingMailGovernors.Governing(
+                refusal: OutgoingSendRefusalReason.DeploymentIsReadOnly));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
+            () => outbox.EnqueueAsync(CreateRuleRequest(), RawMime, CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.MailSendingNotEnabled, refusal.ErrorCode);
+        Assert.Empty(store.OpenRequests);
+    }
+
     private static OutgoingEmailRequest CreateRuleRequest()
     {
         Assert.True(EmailAddress.TryCreate(displayName: null, "anna@example.test", out var address));
@@ -288,14 +405,23 @@ public sealed class MailOutboxTests
             [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]);
     }
 
-    private static OutgoingEmailRequest CreateRequest(string invocationIdentity)
+    private static OutgoingEmailRequest CreateRequest(
+        string invocationIdentity,
+        params string[] recipientAddresses)
     {
-        Assert.True(EmailAddress.TryCreate(displayName: null, "anna@example.test", out var address));
+        var recipients = (recipientAddresses.Length == 0 ? ["anna@example.test"] : recipientAddresses)
+            .Select(candidate =>
+            {
+                Assert.True(EmailAddress.TryCreate(displayName: null, candidate, out var address));
+
+                return OutgoingRecipient.Create(address, OutgoingRecipientRole.To);
+            })
+            .ToArray();
 
         return OutgoingEmailRequest.Create(
             Account,
             OutgoingEmailRequester.Command(invocationIdentity),
-            [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]);
+            recipients);
     }
 
     private static MailOutbox CreateOutbox(
@@ -303,7 +429,8 @@ public sealed class MailOutboxTests
         IEmailContentStore contentStore,
         List<IPersistenceSession>? stagedSessions = null,
         MailOutboxSignal? signal = null,
-        AccessAuthorization? authorization = null)
+        AccessAuthorization? authorization = null,
+        OutgoingMailGovernor? governor = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ =>
@@ -320,7 +447,8 @@ public sealed class MailOutboxTests
             contentStore,
             CreateRetryPolicy(sessionFactory),
             signal ?? new MailOutboxSignal(capacity: 8),
-            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend));
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
+            governor ?? OutgoingMailGovernors.Permitting());
     }
 
     /// <summary>Builds the policy the outbox commits through, over the real clock the policy's own tests use.</summary>

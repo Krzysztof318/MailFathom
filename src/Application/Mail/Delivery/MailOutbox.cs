@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
@@ -23,6 +24,12 @@ namespace MailFathom.Application.Mail.Delivery;
 /// Being the one way in is also what makes it the place the send grant is asked for a second time. A tool call was
 /// already refused at the transport if it could be, and the same question is put here with no transport in the
 /// picture, so nothing that reaches the outbox by another route reaches it ungoverned.
+/// </para>
+/// <para>
+/// It is the place this deployment's own bounds on sending are asked for the same reason, and for one more: they are
+/// the operator's answer rather than the caller's, so they have to hold for work no caller requested. Whether sending
+/// is on for the account at all, who the deployment may write to, and how much may leave in a period are all decided
+/// before anything is written down, which is what makes a refusal cost nothing and leave nothing behind.
 /// </para>
 /// <para>
 /// Enqueuing is idempotent by the identity the request carries. The same authored request arriving twice — a rule that
@@ -46,12 +53,14 @@ namespace MailFathom.Application.Mail.Delivery;
 /// <param name="retryPolicy">Commits both writes together and resolves a lost race for the same identity.</param>
 /// <param name="signal">Tells the delivery loop that this account has something to send.</param>
 /// <param name="authorization">Answers whether whoever reached this is admitted to ask for the send the request states it is.</param>
+/// <param name="governor">Answers whether this deployment may send this message at all, whoever is asking.</param>
 public sealed class MailOutbox(
     IOutgoingEmailStore outgoingEmails,
     IEmailContentStore contentStore,
     OptimisticConcurrencyRetryPolicy retryPolicy,
     MailOutboxSignal signal,
-    AccessAuthorization authorization)
+    AccessAuthorization authorization,
+    OutgoingMailGovernor governor)
 {
     /// <summary>Writes down a message to be sent, or answers with the record an identical request already left.</summary>
     /// <param name="request">The send that was asked for.</param>
@@ -61,6 +70,7 @@ public sealed class MailOutbox(
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="rawMime" /> is empty.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the act the request names as its origin is not what reached this: a caller granted <see cref="MailFathomPermission.MailSend" /> for a command, and MailFathom's own identity for a rule.</exception>
+    /// <exception cref="OutgoingMailRefusedException">Thrown when sending is not enabled for the account or the deployment is read-only, when a recipient is one the recipient policy refuses, or when the period has reached a ceiling.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when the write lost its race for the same identity on every allowed attempt.</exception>
     /// <remarks>
     /// The message is not recomposed for a request that already has a record, and the bytes supplied here are then
@@ -82,6 +92,12 @@ public sealed class MailOutbox(
                 "An outgoing email is recorded with the MIME it will be transmitted as.",
                 nameof(rawMime));
         }
+
+        // Asked on every enqueue, including one whose identity already has a record. A request repeated after the
+        // deployment was turned read-only, or after its recipient became one the policy refuses, is a request this
+        // deployment may no longer act on — and answering it from the record written under the older posture would make
+        // an idempotency key a way to carry a permission forward.
+        await governor.RequirePermittedAsync(request, cancellationToken);
 
         var record = await retryPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>

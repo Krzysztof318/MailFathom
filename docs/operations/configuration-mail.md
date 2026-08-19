@@ -312,6 +312,7 @@ what it does not.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
+| `…:Delivery:Enabled` | bool | `false` | Startup refuses `true` on an account that names no `Host` | reload |
 | `…:Delivery:Host` | string | unset | Its presence is what configures the endpoint; every other key here has a default or an inherited value | reload |
 | `…:Delivery:Port` | int | `465` | 1 – 65535; the default is the implicit-TLS submission port, agreeing with the default connection security | reload |
 | `…:Delivery:ConnectionSecurity` | enum | `TlsOnConnect` | The same five modes judged by the same rules as the reading endpoint's, against the account's own opt-ins | reload |
@@ -320,6 +321,16 @@ what it does not.
 | `…:Delivery:FromAddress` | string | unset (the account's `UserName` when it is a mailbox address) | A mailbox address; startup refuses an endpoint that resolves to none | reload |
 | `…:Delivery:FromDisplayName` | string | unset (the address alone) | The name recipients see this mailbox sign itself with; deliberately not the account's `DisplayName` | reload |
 | `…:Delivery:FileSentCopy` | bool | `true` | Whether a delivered message is appended to the folder this account maps to the `Sent` role | reload |
+
+**`Enabled` is off on every account of every deployment, and turning it on is the act that makes sending possible.** An
+installation upgrading into a release that can send therefore does not thereby become able to: the release meets a
+configuration that never asked for the capability. It is per account rather than per deployment because an owner may
+want one identity able to write and another purely archival, and it is separate from `Host` because the two are
+different decisions — an endpoint provisioned before anybody decided to use it is an ordinary shape, while an account
+permitted to send with nowhere to submit is a permission that could never be acted on, which startup refuses naming the
+account. What an enabled account may then write, and how much of it, is
+[`MailDelivery`](#maildelivery) below; whether this installation may send at all is
+[`Deployment:ReadOnly`](configuration-runtime.md#deployment).
 
 `FileSentCopy` is on because a submission server files nothing: without it the owner's own mail client shows a Sent
 folder that is empty however much this account sends. Turn it off for a provider that files the copy itself, which is
@@ -390,6 +401,68 @@ account at once is not offered all of them back together, and is capped at `Retr
 than messages and an account already waiting is not queued twice, so it cannot grow past the number of configured
 accounts however much is enqueued: raising it past that buys nothing, and a value below it means a signal is
 occasionally refused and those sends wait for the account's own synchronization run instead.
+
+The last two groups are not about one message but about what may leave this installation at all. Both are judged where
+the outgoing record is written, which is the one place every author passes through, so a rule, a tool call, and a
+command meet them identically and nothing is written down for a send either of them refuses.
+
+### Who this deployment may write to — `MailDelivery:RecipientPolicy`
+
+Four lists, all empty by default, which is the deployment that writes to anybody an enabled account is asked to write
+to. Naming anybody at all narrows every account of the installation at once, because who an instance may correspond
+with is a decision about the instance rather than about a mailbox.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `MailDelivery:RecipientPolicy:AllowedDomains` | string[] | empty | Each entry is a domain name; startup refuses one that is not | restart |
+| `MailDelivery:RecipientPolicy:AllowedAddresses` | string[] | empty | Each entry is a mailbox address; startup refuses one that is not | restart |
+| `MailDelivery:RecipientPolicy:DeniedDomains` | string[] | empty | Each entry is a domain name; startup refuses one that is not | restart |
+| `MailDelivery:RecipientPolicy:DeniedAddresses` | string[] | empty | Each entry is a mailbox address; startup refuses one that is not | restart |
+
+A domain entry names that domain and every name beneath it, on both sides: `example.test` covers
+`anna@team.example.test` as well as `anna@example.test`. **The denied lists are read first and win outright**, so a
+recipient an operator wrote on both is refused. An allowed list is a statement about everybody — write one and every
+recipient it does not name is refused — while a denied list alone restricts only whom it names.
+
+Every recipient of every message is judged, and a message naming one refused recipient is **refused whole** rather than
+delivered to the rest. A message written to four people and sent to three is a message its author never wrote, and
+nothing downstream could tell the two apart afterwards. What the caller is told names which half of the policy refused
+and never the address, because a refusal reaches a log and a recipient is somebody else's personal data.
+
+An entry that names no domain or mailbox fails startup naming its list and its position, without quoting the entry. A
+policy is what stands between a fault above it and somebody's mailbox, so an entry that silently matched nothing would
+be a restriction an operator believes they wrote and a permission this deployment actually holds.
+
+### How much may leave in a period — `MailDelivery:SendCeilings`
+
+The bound that turns a fault above it — a rule matching more mail than its author expected, a caller in a loop — into a
+refusal rather than into a provider suspending the account. Every ceiling is zero by default, which is no ceiling at
+all.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `MailDelivery:SendCeilings:Period` | TimeSpan | `1.00:00:00` | 1 min – 31 days | restart |
+| `MailDelivery:SendCeilings:MaxMessagesPerAccount` | long | `0` | Not negative, and never above `MaxMessagesPerDeployment` where both are declared; `0` is no ceiling | restart |
+| `MailDelivery:SendCeilings:MaxRecipientsPerAccount` | long | `0` | Not negative, and never above `MaxRecipientsPerDeployment` where both are declared; `0` is no ceiling | restart |
+| `MailDelivery:SendCeilings:MaxMessagesPerDeployment` | long | `0` | Not negative; `0` is no ceiling | restart |
+| `MailDelivery:SendCeilings:MaxRecipientsPerDeployment` | long | `0` | Not negative; `0` is no ceiling | restart |
+
+The period is a **fixed window anchored at the Unix epoch**, the same shape the
+[embedding spend ceiling](configuration-ai.md#embeddings) uses: every process of a deployment and every restart of one
+agree on where a period begins with nothing stored to say so, and a refused send has a moment to come back after. A
+rolling window would have to retain every send for the length of the window and would name no such moment.
+
+What is counted is what was **written down** rather than what was delivered, since a fault above produces records
+whether or not a submission server ever accepts them. The message being asked for is weighed by the people it names, so
+one message can reach a recipient ceiling on its own, and the message that exactly fills a ceiling is admitted — a
+ceiling states what a period may send. A refused send names which of the four ceilings it reached and never the number,
+which is the operator's own configuration and nothing a caller could have influenced.
+
+A per-account ceiling above the deployment's own fails startup, because it is a bound this installation could never
+apply: the account would meet the deployment's ceiling first, under a refusal naming a number nobody configured for it.
+Declaring no ceiling at all is a supported posture rather than an oversight — sending is already off until an account is
+turned on — and what a deployment with sending on and no ceiling is exposed to is
+[mail delivery](../features/mail-delivery.md#what-a-deployment-must-turn-on-before-it-can-send).
 
 
 ## `MailboxSearch`

@@ -45,6 +45,22 @@ internal sealed class DeploymentOptions : IValidatableObject
     /// </remarks>
     public Uri? PublicBaseAddress { get; set; }
 
+    /// <summary>Gets or sets whether this deployment is running read-only, in which it sends no mail at all.</summary>
+    /// <remarks>
+    /// <para>
+    /// It is a fact about the installation rather than about an account, which is why it lives here and why no
+    /// per-account setting argues with it: an operator who has said this instance may not write outward has answered
+    /// for everything the instance can do, and a switch a lower level could override would be worth nothing.
+    /// </para>
+    /// <para>
+    /// Off by default, so an existing deployment reaching this version behaves as it did. That is coherent rather than
+    /// a weaker default: sending is off until an account is turned on, so an instance nobody configured to send does
+    /// not send either way. What the mode changes is the kind of assurance — from a reading of the account list, which
+    /// has to be re-read after every edit, into a posture the whole process holds.
+    /// </para>
+    /// </remarks>
+    public bool ReadOnly { get; set; }
+
     /// <summary>Composes the address a consumer's route is served at.</summary>
     /// <param name="routePrefix">The route's path prefix, owned by the endpoint that answers it.</param>
     /// <returns>The prefix an identifier is appended to, or <see langword="null" /> when this deployment declares no address.</returns>
