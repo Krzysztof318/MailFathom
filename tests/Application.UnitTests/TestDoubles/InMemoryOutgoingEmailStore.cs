@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Mail.Delivery;
+using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
@@ -36,6 +37,10 @@ internal sealed class InMemoryOutgoingEmailStore(
     TimeProvider? timeProvider = null)
     : IOutgoingEmailStore
 {
+    /// <summary>The stages a send can still move from, which are the ones a level is measured over.</summary>
+    private static readonly OutgoingEmailStage[] NonTerminalStages =
+        [OutgoingEmailStage.Recorded, OutgoingEmailStage.TransmissionBegun];
+
     private readonly Dictionary<(string Account, OutgoingEmailOrigin Origin, string Identity), OutgoingEmailId>
         identities = [];
 
@@ -52,6 +57,13 @@ internal sealed class InMemoryOutgoingEmailStore(
     /// attempt cannot record its way out of: the recovery write meets the same refusal the write it recovers from did.
     /// </remarks>
     internal Func<OutgoingEmailId, bool> RefusesWrites { get; set; } = _ => false;
+
+    /// <summary>Gets or sets whether counting what is outstanding fails, and lets it answer by default.</summary>
+    /// <remarks>
+    /// It stands in for a database that refused the last read of a pass, which is the failure that must cost a
+    /// measurement rather than the outcomes the pass had already settled.
+    /// </remarks>
+    internal bool RefusesOutstandingCount { get; set; }
 
     /// <summary>Writes a record the way a writer that has already committed left it, without going through a session.</summary>
     /// <param name="request">The request the other writer recorded.</param>
@@ -189,6 +201,33 @@ internal sealed class InMemoryOutgoingEmailStore(
         ];
 
         return Task.FromResult(outstanding);
+    }
+
+    public Task<IReadOnlyList<OutboxStageCount>> CountOutstandingByStageAsync(
+        MailAccountId accountId,
+        CancellationToken cancellationToken)
+    {
+        if (this.RefusesOutstandingCount)
+        {
+            throw new InvalidOperationException("The store would not count what is outstanding.");
+        }
+
+        var standing = this.rows.Values
+            .Select(row => row.Record)
+            .Where(record => record.AccountId == accountId && !record.IsTerminal)
+            .GroupBy(record => record.Stage)
+            .ToDictionary(group => group.Key, group => group.Count());
+
+        // Every non-terminal stage is answered for, zeros included, exactly as the real store does: whoever publishes
+        // the level has to be able to tell a drained account from one nothing measured.
+        IReadOnlyList<OutboxStageCount> counted =
+        [
+            .. NonTerminalStages.Select(stage => new OutboxStageCount(
+                stage,
+                standing.TryGetValue(stage, out var count) ? count : 0)),
+        ];
+
+        return Task.FromResult(counted);
     }
 
     public Task<IReadOnlyList<ClaimedOutgoingEmail>> ClaimAsync(

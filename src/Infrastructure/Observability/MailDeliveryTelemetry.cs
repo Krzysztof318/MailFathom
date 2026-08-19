@@ -2,12 +2,14 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Common.Observability;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Delivery;
 
 namespace MailFathom.Infrastructure.Observability;
 
@@ -31,9 +33,18 @@ namespace MailFathom.Infrastructure.Observability;
 /// would let a dashboard summing successes and failures report a total that quietly omits it.
 /// </para>
 /// <para>
-/// Nothing recorded here is mail. The account alias is MailFathom's own configured name, and the outcome is one of a
-/// closed set of words this system chose; no address, subject, reply text, message identifier, or recipient count
-/// reaches a span, a log, or an exporter.
+/// Two instruments beside those answer questions no rate can. The retries say how much of the attempt count is work
+/// being repeated, which is what separates an instance that is sending a lot from one that is failing and trying again;
+/// the depth is the level all of them are a rate against, so a stalled outbox is visible while it is still small and
+/// long before anybody is told about a message that never arrived. The depth is a gauge over the last figure a pass
+/// measured rather than a live count, for the reason the queue's own is: an exact live count is a query, and making it
+/// a gauge would put that query on whatever interval a collector happened to be configured with.
+/// </para>
+/// <para>
+/// Nothing recorded here is mail. The account alias is MailFathom's own configured name, the outcome and the stage are
+/// closed sets of words this system chose, and the one identifier a span carries is the record's own, which is what an
+/// operator types into <c>mfctl</c> to read the send a slow trace belongs to. No address, subject, reply text, or
+/// recipient count reaches a span, a log, or an exporter.
 /// </para>
 /// </remarks>
 public sealed class MailDeliveryTelemetry
@@ -42,11 +53,26 @@ public sealed class MailDeliveryTelemetry
     private const string OutcomeTagName = "mailfathom.mail.delivery.outcome";
     private const string FilingTagName = "mailfathom.mail.filing.place";
     private const string FilingOutcomeTagName = "mailfathom.mail.filing.outcome";
+    private const string StageTagName = "mailfathom.mail.delivery.stage";
+
     /// <summary>The span one submission to a provider is reported under.</summary>
     internal const string SubmissionSpanName = "submit_outgoing_email";
 
+    /// <summary>The record the submission belongs to, which is what joins a span to the send an operator can read.</summary>
+    /// <remarks>
+    /// The one identifier on the span, and it is MailFathom's own rather than the message's: a <c>Message-ID</c> is
+    /// written into every recipient's mailbox and would follow the correspondence out of this deployment, while this
+    /// value means nothing anywhere but here. It is what makes a slow or failed exchange actionable — the operator
+    /// reads the send it belongs to with <c>mfctl outbox show</c> and decides about that one record.
+    /// </remarks>
+    internal const string RecordTagName = "mailfathom.mail.delivery.record";
+
+    private readonly ConcurrentDictionary<(string Account, string Stage), int> outstandingByAccountAndStage =
+        new();
+
     private readonly TimeProvider timeProvider;
     private readonly Counter<long> attemptCount;
+    private readonly Counter<long> retryCount;
     private readonly Counter<long> filingCount;
     private readonly Histogram<double> submissionDuration;
 
@@ -62,6 +88,10 @@ public sealed class MailDeliveryTelemetry
             "mailfathom.mail.delivery.attempts",
             unit: "{attempt}",
             description: "Attempts to deliver a queued outgoing message, by account and outcome.");
+        this.retryCount = Telemetry.Meter.CreateCounter<long>(
+            "mailfathom.mail.delivery.retries",
+            unit: "{attempt}",
+            description: "Delivery attempts that were not the message's first, by account and outcome.");
         this.filingCount = Telemetry.Meter.CreateCounter<long>(
             "mailfathom.mail.filing.attempts",
             unit: "{attempt}",
@@ -70,15 +100,22 @@ public sealed class MailDeliveryTelemetry
             "mailfathom.mail.delivery.submission.duration",
             unit: "s",
             description: "How long one submission to a mail provider took, by account.");
+        Telemetry.Meter.CreateObservableGauge(
+            "mailfathom.mail.outbox.depth",
+            this.ObserveOutstanding,
+            unit: "{message}",
+            description: "Queued outgoing messages standing at each stage nothing has finished with, by account, as the last delivery pass measured it.");
     }
 
     /// <summary>Begins reporting one submission, and returns the scope that finishes the report.</summary>
     /// <param name="accountId">The account whose message is being submitted.</param>
+    /// <param name="outgoingEmailId">The record the submission belongs to, which the span names so an operator can read it.</param>
     /// <returns>The scope, which the caller must dispose; a scope disposed without <see cref="MailDeliveryScope.Completed" /> reports a failure.</returns>
-    internal MailDeliveryScope BeginSubmission(MailAccountId accountId)
+    internal MailDeliveryScope BeginSubmission(MailAccountId accountId, OutgoingEmailId outgoingEmailId)
     {
         var activity = Telemetry.ActivitySource.StartActivity(SubmissionSpanName, ActivityKind.Client);
         activity?.SetTag(AccountTagName, accountId.Value);
+        activity?.SetTag(RecordTagName, outgoingEmailId.Value.ToString());
 
         return new MailDeliveryScope(this, accountId, activity, this.timeProvider.GetTimestamp());
     }
@@ -97,13 +134,21 @@ public sealed class MailDeliveryTelemetry
 
         foreach (var result in report.Results)
         {
-            this.attemptCount.Add(
-                1,
-                new TagList
-                {
-                    { AccountTagName, accountId.Value },
-                    { OutcomeTagName, NameOf(result.Outcome) },
-                });
+            TagList attemptTags = new()
+            {
+                { AccountTagName, accountId.Value },
+                { OutcomeTagName, NameOf(result.Outcome) },
+            };
+
+            this.attemptCount.Add(1, attemptTags);
+
+            // An attempt past the first is the same measurement read as repetition, so it carries the outcome that
+            // failed rather than a dimension of its own: what a rising retry rate says is which ending keeps coming
+            // back, and a counter without that would only say that something does.
+            if (result.AttemptCount > 1)
+            {
+                this.retryCount.Add(1, attemptTags);
+            }
         }
 
         foreach (var filing in report.FilingResults)
@@ -131,6 +176,14 @@ public sealed class MailDeliveryTelemetry
                     { OutcomeTagName, NameOf(MailOutboxDeliveryOutcome.OutcomeUnknown) },
                 });
         }
+
+        // A pass that measured nothing leaves the account's last known level standing. An account with no submission
+        // endpoint and a pass that failed before it counted both produce an empty measurement, and publishing zero for
+        // either would clear a backlog on a dashboard that nothing had drained.
+        foreach (var counted in report.OutstandingByStage)
+        {
+            this.outstandingByAccountAndStage[(accountId.Value, NameOf(counted.Stage))] = counted.Count;
+        }
     }
 
     /// <summary>Records how long one submission took and whether the server took the message.</summary>
@@ -138,6 +191,31 @@ public sealed class MailDeliveryTelemetry
         this.submissionDuration.Record(elapsed.TotalSeconds, new TagList { { AccountTagName, accountId.Value } });
 
     internal TimeSpan ElapsedSince(long startingTimestamp) => this.timeProvider.GetElapsedTime(startingTimestamp);
+
+    /// <summary>Publishes the level each account was last measured at, one measurement per account and stage.</summary>
+    private IEnumerable<Measurement<int>> ObserveOutstanding() =>
+    [
+        .. this.outstandingByAccountAndStage.Select(level => new Measurement<int>(
+            level.Value,
+            new TagList
+            {
+                { AccountTagName, level.Key.Account },
+                { StageTagName, level.Key.Stage },
+            })),
+    ];
+
+    /// <summary>Names a stage as the dimension a dashboard groups by, under the same rule the outcomes follow.</summary>
+    /// <remarks>
+    /// Only the stages a send can still move from are named. A terminal stage is history rather than depth, and nothing
+    /// counts one into this gauge — a member reaching here would therefore be a defect in what was counted rather than a
+    /// dimension to invent a word for.
+    /// </remarks>
+    private static string NameOf(OutgoingEmailStage stage) => stage switch
+    {
+        OutgoingEmailStage.Recorded => "recorded",
+        OutgoingEmailStage.TransmissionBegun => "transmission-begun",
+        _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, "No outbox depth dimension is defined for this stage."),
+    };
 
     /// <summary>Names an outcome as the dimension a dashboard groups by.</summary>
     /// <remarks>

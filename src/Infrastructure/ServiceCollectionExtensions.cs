@@ -40,6 +40,7 @@ using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Governance;
+using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Application.Mail.Maintenance;
@@ -738,6 +739,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IOutgoingMailUsageReader, OutgoingMailUsageReader>();
         services.AddScoped<OutgoingMailGovernor>();
         services.AddScoped<MailOutbox>();
+        // The operator's view of the same records, registered beside the outbox rather than with the administrative
+        // endpoint that serves it today: the grant is asked in the use case, so a second entrypoint reaching it is
+        // governed without anything here changing.
+        services.AddScoped<IOutboxOperationStore, OutboxOperationStore>();
+        services.AddScoped<OutboxOperations>();
         // The attempt and the pass over it are scoped like every other work unit, because each opens a submission
         // session and commits through the caller's persistence scope. The signal they answer is not: it carries accounts
         // between a scope that wrote a record and the loop that delivers it, so it belongs to the process.

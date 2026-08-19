@@ -36,7 +36,9 @@ internal sealed class MailKitSmtpDeliverySession(
         MailEnvelopeLedger envelope,
         CancellationToken cancellationToken)
     {
-        using var submission = telemetry.BeginSubmission(accountId);
+        ArgumentNullException.ThrowIfNull(request);
+
+        using var submission = telemetry.BeginSubmission(accountId, request.OutgoingEmailId);
 
         try
         {

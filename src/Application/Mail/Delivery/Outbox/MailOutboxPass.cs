@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Mail.Delivery.Filing;
+using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Transport;
@@ -114,11 +115,45 @@ public sealed class MailOutboxPass
             filingResults.AddRange(await this.FileCopiesOfAsync(result, stoppingToken));
         }
 
+        var outstandingByStage = await this.MeasureOutstandingAsync(accountId, stoppingToken);
+
         return new MailOutboxPassReport(
             results,
             filingResults,
             markedUnknownCount,
-            claimed.Count >= this.settings.MaxDeliveriesPerPass);
+            claimed.Count >= this.settings.MaxDeliveriesPerPass,
+            outstandingByStage);
+    }
+
+    /// <summary>Reads how much the pass is leaving behind, and reports nothing rather than losing what the pass did.</summary>
+    /// <remarks>
+    /// Counted after the batch is settled rather than before it, so what is published is the backlog this pass left
+    /// rather than a restatement of what it claimed. It is the last thing the pass does and the only one whose answer
+    /// nothing acts on, so a host that stopped between the sends and the count costs a measurement: reporting the
+    /// cancellation instead would discard every outcome this pass had already written down and already settled. A
+    /// database that refused the count costs the same measurement and for the same reason, which is why the guard is
+    /// the broad one the two steps above it use rather than cancellation alone — an unmeasured level is a gauge that
+    /// stands still until the next pass, while a thrown count is a whole pass reported as failed.
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The count is the last step of the pass and the only one nothing acts on; letting it throw would discard the delivery and filing outcomes this pass had already durably settled, and report a pass that worked as one that failed.")]
+    private async Task<IReadOnlyList<OutboxStageCount>> MeasureOutstandingAsync(
+        MailAccountId accountId,
+        CancellationToken stoppingToken)
+    {
+        try
+        {
+            return await this.outgoingEmails.CountOutstandingByStageAsync(accountId, stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return [];
+        }
+        catch (Exception)
+        {
+            // A database that refused the count, or a timeout it raised as something else. The answer is the same as
+            // the one above, because the alternative is not a better measurement but a settled pass reported as failed.
+            return [];
+        }
     }
 
     /// <summary>Brings the mailbox's own copies of one settled send up to date, and never lets that end the pass.</summary>

@@ -6,6 +6,7 @@ using System.CommandLine;
 using MailFathom.Cli.Commands.Contacts;
 using MailFathom.Cli.Commands.Folders;
 using MailFathom.Cli.Commands.Jobs;
+using MailFathom.Cli.Commands.Outbox;
 using MailFathom.Cli.Commands.Rules;
 using MailFathom.Cli.Commands.Spam;
 using MailFathom.Versioning;
@@ -100,6 +101,19 @@ internal static class CliRootCommand
             DropJobCommand.Create(context),
         };
 
+        // Reading what is queued, and the two decisions about one message. Nothing here composes or sends a message:
+        // what leaves this deployment is decided by a tool call or a rule, and this group is where a send that is stuck
+        // waits for a person. The two decisions are the only points at which a send is reversible and the only point at
+        // which one nothing will attempt again is offered another chance.
+        Command outboxCommand = new("outbox", "Read what this deployment is sending, and decide about a message that is stuck.")
+        {
+            OutboxStatusCommand.Create(context),
+            OutboxListCommand.Create(context),
+            ShowOutgoingMailCommand.Create(context),
+            CancelOutgoingMailCommand.Create(context),
+            RequeueOutgoingMailCommand.Create(context),
+        };
+
         // The one group that disposes of mail. A folder's local copy outlives both the switch that stopped mirroring it
         // and the mapping that named it, deliberately, so that no configuration edit can take somebody's mail away —
         // and this is where an operator who means it says so.
@@ -140,6 +154,7 @@ internal static class CliRootCommand
             rulesCommand,
             spamCommand,
             jobsCommand,
+            outboxCommand,
             folderCommand,
             contactCommand,
         };

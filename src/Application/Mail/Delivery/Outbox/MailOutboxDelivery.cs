@@ -215,7 +215,7 @@ public sealed class MailOutboxDelivery
                 token));
 
         var transmission = await session.TransmitAsync(
-            MailTransmissionRequest.Create(sender.Address, outstanding, content.RawMime),
+            MailTransmissionRequest.Create(record.Id, sender.Address, outstanding, content.RawMime),
             envelope,
             attemptToken.Token);
 

@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/Admin*.cs, src/Host/Api/Contact*.cs, src/Host/Api/Embedding*.cs, src/Host/Api/Job*.cs, src/Host/Api/Mail*.cs, src/Host/Api/Spam*.cs, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, src/Domain/Access/MailFathomPermission.cs, src/Host/Security/Endpoints/AdminRouteAuthorization.cs, src/Host/Security/Endpoints/AdminRoutePermission.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/**, scripts/install-mfctl.sh -->
+<!-- describes: src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, src/Host/Api/Admin*.cs, src/Host/Api/Contact*.cs, src/Host/Api/Embedding*.cs, src/Host/Api/Job*.cs, src/Host/Api/Mail*.cs, src/Host/Api/Outbox*.cs, src/Host/Api/Spam*.cs, src/Host/Hosting/Startup/SurfaceIsolation.cs, src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, src/Domain/Access/MailFathomPermission.cs, src/Host/Security/Endpoints/AdminRouteAuthorization.cs, src/Host/Security/Endpoints/AdminRoutePermission.cs, src/Host/Security/Endpoints/TransportListenerBinder.cs, src/Host/Security/Transport/TransportRateLimiting.cs, src/Cli/**, scripts/install-mfctl.sh -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -172,6 +172,11 @@ what it was never granted is what the record exists to make visible.
 | `GET /api/admin/jobs/dead-letters` | `mailfathom.admin.read` | Reads the background work that stopped and will not be attempted again, newest first, with what ended each piece of it. |
 | `POST /api/admin/jobs/dead-letters/retry` | `mailfathom.admin.operate` | Returns one stopped job to the queue under the identity it was enqueued with. |
 | `POST /api/admin/jobs/dead-letters/drop` | `mailfathom.admin.operate` | Decides one stopped job will never run, keeping the record of it. |
+| `GET /api/admin/outbox/summary` | `mailfathom.admin.read` | Reports how many queued messages stand at each stage of the [outbox](../features/mail-delivery.md), naming no message. |
+| `GET /api/admin/outbox` | `mailfathom.admin.read` | Reads one bounded, keyset-paginated page of what this deployment has been asked to send, newest first. It names no recipient and no subject. |
+| `GET /api/admin/outbox/{id}` | `mailfathom.admin.audit.read` | Reads one queued message by identity, with who it is offered to and what each of them was told. It is the one outbox reading that names people, and is published under the grant every other reading of identified third parties is. |
+| `POST /api/admin/outbox/cancellation` | `mailfathom.admin.operate` | Withdraws one queued message that has not begun transmitting. **This is the only point at which sending is reversible.** |
+| `POST /api/admin/outbox/requeue` | `mailfathom.admin.operate` | Offers one queued message again. **This is the one route that can put a second copy of a message in somebody's mailbox.** |
 | `POST /api/admin/folders/erasure` | `mailfathom.admin.erase` | Erases one bounded pass of the mail stored for a folder the account no longer mirrors. **This is the one route that disposes of mail.** |
 | `GET /api/admin/contacts` | `mailfathom.admin.audit.read` | Reads one bounded, keyset-paginated page of the [contact book](../features/contacts.md), optionally narrowed to one origin. |
 | `POST /api/admin/contacts` | `mailfathom.admin.operate` | Records a person the book does not yet hold, as a contact this deployment's owner asserted. |
@@ -625,6 +630,75 @@ Retrying returns the same row to the queue with its attempts given back, so the 
 enqueued with rather than as a second piece of work; that is safe because a handler is registered on the promise that
 running it twice with one payload is the same as running it once. Dropping removes nothing: the row stays terminal,
 keeps the failure that ended it, and goes on holding the identity that stops the same trigger enqueuing the work again.
+
+### Reading what is in the outbox, and deciding about one message
+
+Five routes, and they are two readings and two decisions. Nothing else makes a delivery problem visible from outside the
+database: a message that will not leave is claimed by nobody, delays nothing, and produces no reply anybody sees, so
+the first an owner would otherwise hear of it is a recipient asking why they never got an answer.
+
+`GET /api/admin/outbox/summary` is the cheapest of the five and the one safe to leave on a screen: one count per stage,
+naming no message. The listing beside it is deployment-wide unless a filter narrows it, and serves one bounded,
+keyset-paginated page, newest first:
+
+| Query parameter | What it does |
+| --- | --- |
+| `account` | Narrows to sends from one configured account. |
+| `stage` | Narrows to one stage, by the stage's own name. A name no send can stand at is refused. |
+| `pageSize` | Between 1 and 200; 50 when omitted. |
+| `cursor` | The `nextCursor` the previous page returned. A cursor issued under different filters is refused. |
+
+```console
+$ mfctl outbox status
+Stage              Messages
+Recorded           2
+TransmissionBegun  1
+Sent               418
+Refused            3
+Cancelled          0
+
+3 message(s) are still waiting. See which with 'mfctl outbox list'.
+
+$ mfctl outbox list --stage Recorded
+Recorded              Message                               Account  Stage     Attempts  Failed                     Due
+2026-08-19 09:00:00Z  0199c3d0-0000-7000-8000-000000000001  work     Recorded  2         failure 27001, reply 451   2026-08-19 09:30:00Z
+
+Withdraw one that has not left with 'mfctl outbox cancel --message <id>', or offer one again with 'mfctl outbox requeue --message <id>'.
+```
+
+A stage is the whole of what a send's position means, and each of the five calls for something different:
+
+| Stage | What it means | What an operator does |
+| --- | --- | --- |
+| `Recorded` | The message and the intent are durable and no SMTP command has been issued for them. | Nothing, unless it stays here — this is where a send waits between attempts. It is the one stage a withdrawal applies at. |
+| `TransmissionBegun` | The body began to go out and the server never answered, so whether anybody received it is unknown. | Decide. Nothing attempts it again on its own, because a repeat may put a second copy in a mailbox rather than retrying a failure. |
+| `Sent` | The server accepted the message for every recipient it had accepted, and nothing more is owed. | Nothing. |
+| `Refused` | The message will not be offered again, and the failure that ended it is on the record. | Read what refused it. Offering it again is possible and needs the refusal restated. |
+| `Cancelled` | The send was withdrawn before delivery, and nothing was transmitted on its behalf. | Nothing. |
+
+**The listing names no recipient and no subject.** A page of an outbox is otherwise a page of who this owner writes to
+and when, a page at a time, and a terminal is exactly where such a page ends up in a screenshot. Who one message was
+for is read with `GET /api/admin/outbox/{id}`, which answers about a send somebody already has the identifier of and
+reports each address with what the server said about it — and which is published under
+`mailfathom.admin.audit.read` for that reason, so a monitoring credential granted `mailfathom.admin.read` watches the
+outbox without ever being served an address. Neither route reads the message: no subject, no body, and no raw MIME is
+loaded on this surface at all.
+
+Both decisions name one send, read at most 4 KB of body, and answer `200` with what happened. `Accepted` is the
+decision having taken effect; `RecordUnknown`, `StageDoesNotAllowIt`, `AttemptUnderWay`, and `RefusalNotRestated` are
+outcomes rather than refusals, because an operator acting on a listing a few minutes old reaches them ordinarily and
+the deployment can answer either way. `400` is kept for a body naming no send at all.
+
+Withdrawing is refused once transmission has begun, and the deployment says so rather than racing the worker: the
+condition is part of the single statement that writes the withdrawal, so an operator and a delivery attempt reaching
+one record produce one change. A success therefore means the message reached nobody. The record stays, holding the
+withdrawal and the identity that stops the same trigger queuing the same message again.
+
+Re-queueing is an explicit act on one named send and never a set — a route that could re-queue a filtered selection
+would be a way to send an unknown number of duplicates with one request. It gives the attempts back, so the next
+delivery pass offers the message to the addresses still outstanding and to no others. A permanently refused send needs
+the refusal restated in the body (`mfctl outbox requeue --message <id> --despite-refusal`), because the record says a
+server will not take the message and offering it again is a decision to disbelieve that rather than a retry.
 
 ### Erasing a folder you have stopped mirroring
 

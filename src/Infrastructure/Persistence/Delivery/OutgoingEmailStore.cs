@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Mail.Delivery;
+using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
@@ -40,6 +41,14 @@ namespace MailFathom.Infrastructure.Persistence.Delivery;
 internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimeProvider timeProvider)
     : IOutgoingEmailStore
 {
+    /// <summary>The stages a send can still move from, which are the ones a level is measured over.</summary>
+    /// <remarks>
+    /// Written out rather than derived by excluding the terminal ones, so a stage added later has to be placed in this
+    /// list deliberately: a new non-terminal stage that nobody counted would be a backlog invisible to every dashboard.
+    /// </remarks>
+    private static readonly OutgoingEmailStage[] NonTerminalStages =
+        [OutgoingEmailStage.Recorded, OutgoingEmailStage.TransmissionBegun];
+
     /// <inheritdoc />
     public async Task<OutgoingEmailRecord> OpenAsync(
         IPersistenceSession session,
@@ -144,6 +153,40 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
             .ToArrayAsync(cancellationToken);
 
         return [.. entities.Select(OutgoingEmailRecordMapping.ToRecord)];
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Grouped in the database rather than counted here, so the rows themselves never leave it: what crosses is one
+    /// number per stage. The predicate is the one the outstanding index is filtered on, which is what keeps the read
+    /// off the history of everything this deployment has ever sent.
+    /// </remarks>
+    public async Task<IReadOnlyList<OutboxStageCount>> CountOutstandingByStageAsync(
+        MailAccountId accountId,
+        CancellationToken cancellationToken)
+    {
+        var accountValue = accountId.Value;
+
+        var counted = await readContext.OutgoingEmails
+            .AsNoTracking()
+            .Where(message => message.MailboxAccountId == accountValue
+                && message.Stage != OutgoingEmailStage.Sent
+                && message.Stage != OutgoingEmailStage.Refused
+                && message.Stage != OutgoingEmailStage.Cancelled)
+            .GroupBy(message => message.Stage)
+            .Select(group => new { Stage = group.Key, Count = group.Count() })
+            .ToArrayAsync(cancellationToken);
+
+        var countsByStage = counted.ToDictionary(group => group.Stage, group => group.Count);
+
+        // Every non-terminal stage is answered for, zeros included, because a stage that vanished when it emptied would
+        // leave whoever publishes the level unable to tell a drained account from one nothing measured.
+        return
+        [
+            .. NonTerminalStages.Select(stage => new OutboxStageCount(
+                stage,
+                countsByStage.TryGetValue(stage, out var count) ? count : 0)),
+        ];
     }
 
     /// <inheritdoc />

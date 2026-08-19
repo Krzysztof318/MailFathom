@@ -9,6 +9,7 @@ using MailFathom.Cli.Administration.Embeddings;
 using MailFathom.Cli.Administration.Folders;
 using MailFathom.Cli.Administration.Jobs;
 using MailFathom.Cli.Administration.Mailboxes;
+using MailFathom.Cli.Administration.Outbox;
 using MailFathom.Cli.Administration.Rules;
 using MailFathom.Cli.Administration.Spam;
 using MailFathom.Cli.Authorization;
@@ -60,6 +61,12 @@ namespace MailFathom.Cli;
 [JsonSerializable(typeof(DeadLetteredJobPage))]
 [JsonSerializable(typeof(JobRecoveryRequest))]
 [JsonSerializable(typeof(JobRecovery))]
+[JsonSerializable(typeof(OutboxStatus))]
+[JsonSerializable(typeof(OutboxPage))]
+[JsonSerializable(typeof(OutboxSend))]
+[JsonSerializable(typeof(OutboxCancellationRequest))]
+[JsonSerializable(typeof(OutboxRequeueRequest))]
+[JsonSerializable(typeof(OutboxDecision))]
 [JsonSerializable(typeof(MailFolderErasureRequest))]
 [JsonSerializable(typeof(MailFolderErasure))]
 [JsonSerializable(typeof(ContactRecordRequest))]

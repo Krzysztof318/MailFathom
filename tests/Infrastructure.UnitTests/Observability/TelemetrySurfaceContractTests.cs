@@ -15,6 +15,7 @@ using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Mail.Delivery.Filing;
+using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Mail.Mutations.Convergence;
@@ -531,12 +532,12 @@ public sealed class TelemetrySurfaceContractTests
 
     private static void DriveDelivery()
     {
-        using (var submission = Delivery.BeginSubmission(Account))
+        using (var submission = Delivery.BeginSubmission(Account, OutgoingEmailId.Create(Guid.CreateVersion7())))
         {
             submission.Completed();
         }
 
-        using (Delivery.BeginSubmission(Account))
+        using (Delivery.BeginSubmission(Account, OutgoingEmailId.Create(Guid.CreateVersion7())))
         {
             // Disposed without being completed, which is the shape a submission nobody got an answer to reports.
         }
@@ -560,7 +561,12 @@ public sealed class TelemetrySurfaceContractTests
                         MailFathomErrorCode.OutgoingEmailFilingFailedUnexpectedly)),
                 ],
                 MarkedUnknownCount: 1,
-                BatchFilled: true));
+                BatchFilled: true,
+                OutstandingByStage:
+                [
+                    new OutboxStageCount(OutgoingEmailStage.Recorded, Count: 2),
+                    new OutboxStageCount(OutgoingEmailStage.TransmissionBegun, Count: 1),
+                ]));
     }
 
     private static void DriveMutations()

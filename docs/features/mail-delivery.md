@@ -730,9 +730,26 @@ its outcome counts under `mailfathom.mail.delivery.attempts` by account. `outcom
 on at any rate above zero, because each measurement is a message nothing will attempt again until a person decides.
 Filing is counted beside it, under `mailfathom.mail.filing.attempts` by account, place, and outcome, and each append
 opens a span of its own in the mailbox-mutation record.
+The span carries the outbox record it is submitting, which is what joins a slow or failed submission to the row an
+operator then reads. `mailfathom.mail.outbox.depth` reports how much stands at each stage a send can still move from,
+as the delivery pass last measured it, and `mailfathom.mail.delivery.retries` counts the attempts that were not a
+message's first.
 [Telemetry § What delivering the outbox emits](../operations/telemetry.md#what-delivering-the-outbox-emits) holds the
 instruments, the tags, and what none of them carries. A failure names the account alias and the folder alias and
 nothing else: no subject, no address, and no line of a message.
+
+What a dashboard cannot answer is *which* message, and that is what the outbox commands are for.
+`mfctl outbox status` counts the stages, `mfctl outbox list` names the sends without naming anybody they are addressed
+to, and `mfctl outbox show` answers about one of them with its recipients and what each of their servers said. The two
+decisions are the only points at which this path is steered by hand: `mfctl outbox cancel` withdraws a send that has
+not begun transmitting, and `mfctl outbox requeue` offers one again — one named message at a time, never a selection,
+and never a permanently refused message without the refusal being restated. None of the five is reachable from the MCP
+surface: they are administrative, they are bounded by the administrative credential's `mailfathom.admin.read`,
+`mailfathom.admin.audit.read` — which is what `outbox show` needs, because it is the one of the five that names people
+— and `mailfathom.admin.operate` grants, and putting a message back on its way to somebody's mailbox is not a decision
+to leave to a model. [The administrative endpoint § Reading what is in the outbox, and deciding about one
+message](../operations/admin-endpoint.md#reading-what-is-in-the-outbox-and-deciding-about-one-message) holds the
+routes, the outcomes, and the stage table.
 
 ## What never leaves the process
 

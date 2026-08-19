@@ -27,9 +27,9 @@ surfaces draw from disjoint halves, and the prefix after `mailfathom.` says whic
 | `mailfathom.mail.send` | MCP | Asking this deployment to send mail from an account it holds. It is the one grant here whose effect leaves the deployment and cannot be recalled, which is why it follows from nothing: reading a mailbox is not writing from it, and marking mail reaches the owner's own server rather than a stranger's. It covers `send_email`, which queues a message for a mailbox this deployment holds, and `reply_to_email` and `forward_email`, which queue one anchored to mail it already holds — those two also need `mailfathom.mail.read`, because an answer is derived from the message it answers. It is asked for again by the use cases behind all three and by the outbox beneath them, so it governs the act rather than only the tool |
 | `mailfathom.mail.contacts.read` | MCP | `list_contacts` and `get_contact`, which read the deployment's own contact book: names, addresses, and the notes an owner wrote about identified third parties |
 | `mailfathom.mail.contacts.write` | MCP | `create_contact`, `update_contact`, `delete_contact`, and `promote_contact`, which record, amend, erase, and take on a person in that book. The erasure is here rather than apart, because a grant that cannot edit the book cannot be trusted to take somebody out of it |
-| `mailfathom.admin.read` | administrative | The reads reporting the deployment's own state and no mail: what synchronization is doing per account and per folder, embedding status and the activation preview, the loaded rules, a run's progress, what a rewind would cost, where a re-derivation has got to, the stopped-job list |
-| `mailfathom.admin.audit.read` | administrative | Everything derived from somebody's mail: the mailbox-mutation audit, the answering audit, the rules history, the spam classifications, and reading the contact book — a listing, one person, or their export |
-| `mailfathom.admin.operate` | administrative | Asking the deployment to do work it can already do: running rules over an account, classifying an account, retrying or dropping a stopped job, cancelling a reindex, rewinding synchronization, re-deriving stored mail, and writing to the contact book |
+| `mailfathom.admin.read` | administrative | The reads reporting the deployment's own state and no mail: what synchronization is doing per account and per folder, embedding status and the activation preview, the loaded rules, a run's progress, what a rewind would cost, where a re-derivation has got to, the stopped-job list, and the outbox counted by stage and listed without naming anybody |
+| `mailfathom.admin.audit.read` | administrative | Everything derived from somebody's mail: the mailbox-mutation audit, the answering audit, the rules history, the spam classifications, one queued message with the addresses it is offered to, and reading the contact book — a listing, one person, or their export |
+| `mailfathom.admin.operate` | administrative | Asking the deployment to do work it can already do: running rules over an account, classifying an account, retrying or dropping a stopped job, cancelling a reindex, rewinding synchronization, re-deriving stored mail, withdrawing or re-queueing one queued message, and writing to the contact book |
 | `mailfathom.admin.credentials.write` | administrative | Storing a mailbox refresh token |
 | `mailfathom.admin.spend` | administrative | Activating the declared embedding model, which is the one operation that starts a provider bill |
 | `mailfathom.admin.erase` | administrative | Disposing of what this deployment holds: the mail stored for a folder an account no longer mirrors, and one person and everything the contact book derived from them |
@@ -133,6 +133,18 @@ which the caller brought or may always ask about itself; and it is what every co
 included. Requiring a permission for it would make that permission a component of every administrative grant, so a
 credential granted only the spend permission could not sign in to use it. A credential granted nothing therefore still
 answers here and nowhere else; an operator who wants nothing answered at all removes the entry.
+
+## The outbox is split by what a reading names
+
+Its five routes take three of the names, and the line between the first two is drawn by what the answer contains rather
+than by what the request asks for. Counting the stages and listing what is queued are `mailfathom.admin.read`, because
+neither answer names a recipient or a subject; reading one queued message is `mailfathom.admin.audit.read`, because it
+reports the addresses the message is offered to and what each of their servers said; withdrawing one and offering one
+again are `mailfathom.admin.operate`, because both change what leaves the deployment and the second may put a copy in
+somebody's mailbox.
+
+A monitoring credential granted `mailfathom.admin.read` therefore watches an outbox it is never served an address from,
+which is the arrangement the split exists for.
 
 ## The contact book draws from both halves
 

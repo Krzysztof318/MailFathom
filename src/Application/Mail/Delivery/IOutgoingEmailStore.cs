@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
@@ -85,6 +86,32 @@ public interface IOutgoingEmailStore
     Task<IReadOnlyList<OutgoingEmailRecord>> ReadOutstandingAsync(
         MailAccountId accountId,
         int limit,
+        CancellationToken cancellationToken);
+
+    /// <summary>Counts how many of the account's sends stand at each stage nothing has finished with.</summary>
+    /// <param name="accountId">The account whose sends are counted.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>One count per non-terminal stage, including the stages nothing stands at.</returns>
+    /// <remarks>
+    /// <para>
+    /// It is a count rather than a reading because what it answers is a level: how much this account has waiting, which
+    /// is the figure a delivery rate is a rate against. Nothing about any individual send reaches the answer, so it is
+    /// publishable as the dimensions of a gauge.
+    /// </para>
+    /// <para>
+    /// A stage nothing stands at is reported as zero rather than left out, so an empty answer means the level was never
+    /// measured and not that it is nothing. Whoever publishes it depends on that difference: a drained account has to
+    /// report zero, while an account a pass never reached must keep whatever was last known about it rather than have
+    /// its backlog cleared by a pass that did nothing.
+    /// </para>
+    /// <para>
+    /// Only the non-terminal stages are counted, which is what keeps it bounded: those are the rows the outstanding
+    /// index covers, while everything this deployment has ever sent is history that grows without limit and would make
+    /// a per-pass count a scan of it.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<OutboxStageCount>> CountOutstandingByStageAsync(
+        MailAccountId accountId,
         CancellationToken cancellationToken);
 
     /// <summary>Takes up to a batch of the account's due sends and leases each of them to one attempt.</summary>

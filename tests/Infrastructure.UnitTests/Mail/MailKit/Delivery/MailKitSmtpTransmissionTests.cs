@@ -307,6 +307,7 @@ public sealed class MailKitSmtpTransmissionTests
             Assert.True(EmailAddress.TryCreate(displayName: null, "anna@example.test", out var recipient));
 
             return MailTransmissionRequest.Create(
+                OutgoingEmailId.Create(Guid.CreateVersion7()),
                 sender,
                 [OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To)],
                 RawMime);
