@@ -111,11 +111,17 @@ public sealed class AuthoredResponseSubmission(
             composed.Request,
             cancellationToken);
 
-        var record = await outbox.EnqueueAsync(composed.Request, composed.RawMime, cancellationToken);
+        var opened = await outbox.EnqueueAsync(composed.Request, composed.RawMime, cancellationToken);
 
-        await governor.RecordAsync(permit, ActOf(request.Act), record, cancellationToken);
+        // Only where this call is what wrote the record down, for the reason the same line carries on a new message: a
+        // retry answered from the record an earlier call left is one answer sent once, and a second audit entry for it
+        // would say otherwise.
+        if (opened.WasRecordedNow)
+        {
+            await governor.RecordAsync(permit, ActOf(request.Act), opened.Record, cancellationToken);
+        }
 
-        return record;
+        return opened.Record;
     }
 
     /// <summary>Names the send an answer is, in the terms the record of it is written in.</summary>

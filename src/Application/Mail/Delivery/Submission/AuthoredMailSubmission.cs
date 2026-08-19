@@ -135,10 +135,16 @@ public sealed class AuthoredMailSubmission(
         // to judge. Nothing has been written down yet, so a refusal here costs the caller the answer alone.
         var permit = await governor.RequirePermittedAsync(authored.Recipients, send, cancellationToken);
 
-        var record = await outbox.EnqueueAsync(send, composed.RawMime, cancellationToken);
+        var opened = await outbox.EnqueueAsync(send, composed.RawMime, cancellationToken);
 
-        await governor.RecordAsync(permit, AuthoredSendAct.NewMessage, record, cancellationToken);
+        // Only where this call is what wrote the record down. A retry under the key it first asked under is the same
+        // send, and the outbox answers it with the record it already has, so auditing it again would report one
+        // message as having left twice to whoever reads the trail for a send they did not expect.
+        if (opened.WasRecordedNow)
+        {
+            await governor.RecordAsync(permit, AuthoredSendAct.NewMessage, opened.Record, cancellationToken);
+        }
 
-        return record;
+        return opened.Record;
     }
 }

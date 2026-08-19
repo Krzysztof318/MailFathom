@@ -172,10 +172,12 @@ public sealed class RecurringSendOccurrenceHandler : IJobHandler
             throw MailSubmissionRefusedException.From(composition.Refusal!);
         }
 
-        return await this.outbox.EnqueueAsync(
+        var opened = await this.outbox.EnqueueAsync(
             composed.Request.HeldUntil(ZonedInstant.Restore(occurrence, zoneName)),
             composed.RawMime,
             cancellationToken);
+
+        return opened.Record;
     }
 
     /// <summary>Answers whether the message the previous occasion produced is still on its way.</summary>

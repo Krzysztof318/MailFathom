@@ -46,7 +46,7 @@ public interface IOutgoingEmailStore
     /// <param name="principal">Whoever asked for it, as the record will remember them.</param>
     /// <param name="mimeByteLength">How many bytes of MIME are being stored for this message.</param>
     /// <param name="cancellationToken">Cancels the write or the read that precedes it.</param>
-    /// <returns>The record for this request, whether this call created it or an earlier one did.</returns>
+    /// <returns>The record for this request, and whether this call is what wrote it down.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" />, <paramref name="request" />, or <paramref name="principal" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="mimeByteLength" /> is not positive.</exception>
     /// <remarks>
@@ -56,7 +56,7 @@ public interface IOutgoingEmailStore
     /// under — because the message a retry transmits has to be the one a previous attempt may already have begun
     /// transmitting.
     /// </remarks>
-    Task<OutgoingEmailRecord> OpenAsync(
+    Task<OpenedOutgoingEmail> OpenAsync(
         IPersistenceSession session,
         OutgoingEmailRequest request,
         OutgoingEmailPrincipal principal,

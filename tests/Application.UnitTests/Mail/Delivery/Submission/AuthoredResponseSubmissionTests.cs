@@ -232,6 +232,28 @@ public sealed class AuthoredResponseSubmissionTests
         Assert.Equal(first.Id, second.Id);
     }
 
+    /// <summary>The retry above is one answer sent once, so what records the send records it once as well.</summary>
+    [Fact]
+    public async Task SubmitAsync_TheSameIdempotencyKeyTwice_RecordsTheSendOnce()
+    {
+        // Arrange
+        var auditor = Substitute.For<IAuthoredSendAuditor>();
+        var submission = SubmissionOver(
+            Rendering(),
+            out _,
+            governor: AuthoredSendGovernors.Governing(auditor: auditor));
+        var request = Request();
+        await submission.SubmitAsync(request, TestContext.Current.CancellationToken);
+
+        // Act
+        await submission.SubmitAsync(request, TestContext.Current.CancellationToken);
+
+        // Assert
+        await auditor.Received(1).RecordAuthoredSendAsync(
+            Arg.Any<AuthoredSend>(),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>
     /// Sending is refused first, because a caller that may not send has no business reaching a use case that reads the
     /// mail it would have quoted.
@@ -725,9 +747,11 @@ public sealed class AuthoredResponseSubmissionTests
                     };
 
                     recordsByIdentity[identity] = opened;
+
+                    return OpenedOutgoingEmail.RecordedNow(opened);
                 }
 
-                return opened;
+                return OpenedOutgoingEmail.AlreadyRecorded(opened);
             });
 
         return store;

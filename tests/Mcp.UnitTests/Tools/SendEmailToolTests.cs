@@ -466,9 +466,11 @@ public sealed class SendEmailToolTests
                     };
 
                     recordsByIdentity[identity] = opened;
+
+                    return OpenedOutgoingEmail.RecordedNow(opened);
                 }
 
-                return opened;
+                return OpenedOutgoingEmail.AlreadyRecorded(opened);
             });
 
         return store;

@@ -50,7 +50,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         [OutgoingEmailStage.Recorded, OutgoingEmailStage.TransmissionBegun];
 
     /// <inheritdoc />
-    public async Task<OutgoingEmailRecord> OpenAsync(
+    public async Task<OpenedOutgoingEmail> OpenAsync(
         IPersistenceSession session,
         OutgoingEmailRequest request,
         OutgoingEmailPrincipal principal,
@@ -74,7 +74,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
             await LoadRecipientsAsync(session, existing, cancellationToken);
             await LoadFilingsAsync(session, existing, cancellationToken);
 
-            return OutgoingEmailRecordMapping.ToRecord(existing);
+            return OpenedOutgoingEmail.AlreadyRecorded(OutgoingEmailRecordMapping.ToRecord(existing));
         }
 
         var recordedAt = timeProvider.GetUtcNow();
@@ -117,7 +117,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
 
         writeContext.OutgoingEmails.Add(entity);
 
-        return OutgoingEmailRecordMapping.ToRecord(entity);
+        return OpenedOutgoingEmail.RecordedNow(OutgoingEmailRecordMapping.ToRecord(entity));
     }
 
     /// <inheritdoc />

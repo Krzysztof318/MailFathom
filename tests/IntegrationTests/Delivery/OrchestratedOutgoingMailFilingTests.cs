@@ -145,15 +145,20 @@ public sealed class OrchestratedOutgoingMailFilingTests(MailFathomOrchestrationF
         Assert.Contains(StoredEmailId.Create(storedArriving.Id), awaitingEvaluation);
     }
 
-    private static Task<OutgoingEmailRecord> EnqueueAsync(
+    private static async Task<OutgoingEmailRecord> EnqueueAsync(
         OrchestratedMailFathomServices services,
         string subject,
-        CancellationToken cancellationToken) => services.InScopeAsync(
+        CancellationToken cancellationToken)
+    {
+        var opened = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailOutbox>().EnqueueAsync(
                 RequestFor(subject),
                 MimeOf(subject),
                 token),
             cancellationToken);
+
+        return opened.Record;
+    }
 
     private static async Task<OutgoingEmailRecord> FindAsync(
         OrchestratedMailFathomServices services,

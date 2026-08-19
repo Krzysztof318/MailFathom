@@ -148,7 +148,7 @@ internal sealed class InMemoryOutgoingEmailStore(
         return lease;
     }
 
-    public Task<OutgoingEmailRecord> OpenAsync(
+    public Task<OpenedOutgoingEmail> OpenAsync(
         IPersistenceSession session,
         OutgoingEmailRequest request,
         OutgoingEmailPrincipal principal,
@@ -163,7 +163,7 @@ internal sealed class InMemoryOutgoingEmailStore(
 
         if (this.identities.TryGetValue(IdentityOf(request), out var existing))
         {
-            return Task.FromResult(this.rows[existing].Record);
+            return Task.FromResult(OpenedOutgoingEmail.AlreadyRecorded(this.rows[existing].Record));
         }
 
         var recorded = this.Record(request, principal, mimeByteLength);
@@ -175,7 +175,7 @@ internal sealed class InMemoryOutgoingEmailStore(
             this.Commit(request, recorded);
         }
 
-        return Task.FromResult(recorded);
+        return Task.FromResult(OpenedOutgoingEmail.RecordedNow(recorded));
     }
 
     /// <summary>Withdraws one record the way the operator's own statement does, and reports what stopped it otherwise.</summary>

@@ -376,6 +376,28 @@ public sealed class AuthoredMailSubmissionTests
         Assert.Single(outstanding);
     }
 
+    /// <summary>A retry is the send it repeats, so the trail of it carries one entry however often the call is made.</summary>
+    [Fact]
+    public async Task SubmitAsync_SameIdempotencyKeyTwice_RecordsTheSendOnce()
+    {
+        // Arrange
+        var auditor = Substitute.For<IAuthoredSendAuditor>();
+        var submission = SubmissionOver(
+            new InMemoryOutgoingEmailStore(),
+            out _,
+            out _,
+            governor: AuthoredSendGovernors.Governing(auditor: auditor));
+        await submission.SubmitAsync(RequestTo("anna@example.test"), TestContext.Current.CancellationToken);
+
+        // Act
+        await submission.SubmitAsync(RequestTo("anna@example.test"), TestContext.Current.CancellationToken);
+
+        // Assert
+        await auditor.Received(1).RecordAuthoredSendAsync(
+            Arg.Any<AuthoredSend>(),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>A key of its own is a message of its own, which is what lets somebody write to the same person twice.</summary>
     [Fact]
     public async Task SubmitAsync_ASecondMessageWithItsOwnKey_IsASecondRecord()

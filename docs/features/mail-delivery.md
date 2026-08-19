@@ -198,7 +198,10 @@ line an owner looking for an odd send is looking for. What is **not** recorded i
 prompt, no mail content, no subject, no body, and no address. The record answers *who asked for this and under what*,
 which turns "an agent sent something odd" from a suspicion into something an owner can read; what was sent is the
 stored MIME the outgoing record already points at. Today it is written to the structured log, under the deployment's
-own log retention; the port behind it is what a durable evidence store would replace without any caller changing.
+own log retention; the port behind it is what a durable evidence store would replace without any caller changing. One
+send is one entry: a call repeated under the idempotency key it first carried is answered with the record the first one
+left and is not recorded again, so a client retrying after a timeout leaves a trail of what it sent rather than of how
+often it asked.
 
 **What none of this is.** Every bound here answers a caller that was *manipulated* — one acting in good faith on text
 somebody else wrote. **None of it is a defence against a caller that is itself hostile.** A client holding
