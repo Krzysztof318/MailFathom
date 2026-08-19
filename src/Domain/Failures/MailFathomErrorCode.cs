@@ -241,6 +241,32 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode OutgoingEmailDeliveryFailedUnexpectedly { get; } = new(28012);
 
+    /// <summary>Gets subcategory 8, message composition: the contact a recipient was named by is not one the book holds.</summary>
+    /// <remarks>
+    /// An identity nothing answers to and a name nobody in the book carries arrive here together, because the caller's
+    /// remedy is the same for both — name somebody the book holds, or write the address down — and the difference between
+    /// them would only say whether the caller had an identifier or a name in hand.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailContactUnknown { get; } = new(28013);
+
+    /// <summary>Gets subcategory 8, message composition: the name a recipient was addressed by is carried by more than one contact.</summary>
+    /// <remarks>
+    /// It is separate from an unknown contact because the answer exists and there are several of it. Nothing ranks them:
+    /// a recipient chosen by a best match is a message delivered to somebody nobody named, so the send is refused and the
+    /// caller names the person by identity instead. The refusal carries how many contacts matched and nothing about any
+    /// of them.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailContactNameAmbiguous { get; } = new(28014);
+
+    /// <summary>Gets subcategory 8, message composition: the address an authored act chose for a contact is not one that contact uses.</summary>
+    /// <remarks>
+    /// Addressing a contact uses the address the owner made their preferred one unless the act names another of theirs,
+    /// and one they do not hold is refused rather than sent to. Reaching an arbitrary mailbox by naming a contact beside
+    /// it would make the book a way around whatever the deployment allows a literal address to be, which is exactly what
+    /// naming a contact must never become.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingEmailContactAddressNotHeld { get; } = new(28015);
+
     #endregion
 
     #region Category 3 — Persistence
@@ -554,6 +580,9 @@ public readonly record struct MailFathomErrorCode
         OutgoingEmailAttemptsExhausted,
         OutgoingEmailOutcomeUnknown,
         OutgoingEmailDeliveryFailedUnexpectedly,
+        OutgoingEmailContactUnknown,
+        OutgoingEmailContactNameAmbiguous,
+        OutgoingEmailContactAddressNotHeld,
         PersistenceConcurrencyConflict,
         DatabaseSchemaOutOfDate,
         DatabaseSchemaStateUnreadable,

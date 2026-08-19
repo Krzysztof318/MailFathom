@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Domain.Accounts;
 
@@ -64,4 +65,36 @@ public sealed record AuthoredResponse
     /// <returns>A refused result.</returns>
     public static AuthoredResponse Refused(AuthoredResponseRefusalReason reason, long? bound = null) =>
         new(default, email: null, new AuthoredResponseRefusal(reason, bound));
+
+    /// <summary>Reports that a recipient the author added addressed nobody, in this result's own terms.</summary>
+    /// <param name="refusal">Why the recipient resolved to nobody.</param>
+    /// <returns>A refused result.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="refusal" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the resolution reason is not one this system declares, which a refusal built from a cast integer is.</exception>
+    /// <remarks>
+    /// The reason is translated rather than carried, because an author of an answer acts on one refusal shape whatever
+    /// part of the send produced it. The two identities stay the same on the other side of the translation: each reason
+    /// maps to the code the resolution itself publishes.
+    /// </remarks>
+    public static AuthoredResponse Refused(RecipientResolutionRefusal refusal)
+    {
+        ArgumentNullException.ThrowIfNull(refusal);
+
+        var reason = refusal.Reason switch
+        {
+            RecipientResolutionRefusalReason.ContactUnknown =>
+                AuthoredResponseRefusalReason.RecipientContactUnknown,
+            RecipientResolutionRefusalReason.ContactNameAmbiguous =>
+                AuthoredResponseRefusalReason.RecipientContactNameAmbiguous,
+            RecipientResolutionRefusalReason.ContactAddressNotHeld =>
+                AuthoredResponseRefusalReason.RecipientContactAddressNotHeld,
+            _ => throw new InvalidOperationException(
+                "The recipient resolution refusal reason is not one this system declares."),
+        };
+
+        return new AuthoredResponse(
+            default,
+            email: null,
+            new AuthoredResponseRefusal(reason, Bound: null, refusal.MatchedContactCount));
+    }
 }

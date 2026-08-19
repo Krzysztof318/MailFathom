@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Domain.Accounts;
@@ -58,6 +59,9 @@ public sealed class AuthoredResponseTests
     [InlineData(AuthoredResponseRefusalReason.AnsweredEmailContentUnavailable, 28007)]
     [InlineData(AuthoredResponseRefusalReason.SenderUnconfigured, 28001)]
     [InlineData(AuthoredResponseRefusalReason.BoundExceeded, 28005)]
+    [InlineData(AuthoredResponseRefusalReason.RecipientContactUnknown, 28013)]
+    [InlineData(AuthoredResponseRefusalReason.RecipientContactNameAmbiguous, 28014)]
+    [InlineData(AuthoredResponseRefusalReason.RecipientContactAddressNotHeld, 28015)]
     public void Failure_DeclaredReason_PublishesItsOwnCode(
         AuthoredResponseRefusalReason reason,
         int expectedCode)
@@ -71,6 +75,47 @@ public sealed class AuthoredResponseTests
         // Assert
         Assert.Equal(expectedCode, failure.Value);
         Assert.True(failure.IsSpecified);
+    }
+
+    /// <summary>
+    /// A recipient that addressed nobody is translated into this result's own terms, so an author acts on one refusal
+    /// shape whatever part of the send produced it — and the identity it publishes stays the resolution's own.
+    /// </summary>
+    [Theory]
+    [InlineData(RecipientResolutionRefusalReason.ContactUnknown, AuthoredResponseRefusalReason.RecipientContactUnknown)]
+    [InlineData(
+        RecipientResolutionRefusalReason.ContactNameAmbiguous,
+        AuthoredResponseRefusalReason.RecipientContactNameAmbiguous)]
+    [InlineData(
+        RecipientResolutionRefusalReason.ContactAddressNotHeld,
+        AuthoredResponseRefusalReason.RecipientContactAddressNotHeld)]
+    public void Refused_ARecipientThatAddressedNobody_TranslatesTheReasonAndKeepsTheIdentity(
+        RecipientResolutionRefusalReason resolved,
+        AuthoredResponseRefusalReason expected)
+    {
+        // Arrange
+        var refusal = new RecipientResolutionRefusal(resolved, MatchedContactCount: 3);
+
+        // Act
+        var response = AuthoredResponse.Refused(refusal);
+
+        // Assert
+        Assert.False(response.IsAuthored);
+        Assert.Equal(expected, response.Refusal!.Reason);
+        Assert.Equal(3, response.Refusal.MatchedContactCount);
+        Assert.Null(response.Refusal.Bound);
+        Assert.Equal(refusal.Failure, response.Refusal.Failure);
+    }
+
+    /// <summary>A resolution reason cast from a number this system never declared cannot be translated either.</summary>
+    [Fact]
+    public void Refused_AResolutionReasonThisSystemDoesNotDeclare_IsRefused()
+    {
+        // Arrange
+        var refusal = new RecipientResolutionRefusal((RecipientResolutionRefusalReason)99);
+
+        // Act and assert
+        Assert.Throws<InvalidOperationException>(() => AuthoredResponse.Refused(refusal));
     }
 
     /// <summary>A reason cast from a number this system never declared has no identity to publish.</summary>

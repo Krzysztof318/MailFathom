@@ -8,6 +8,7 @@ using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
@@ -106,6 +107,44 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
             "The stored outgoing message is not the one the first enqueue wrote.");
         Assert.Null(storedContent.FindIntegrityDefect());
         Assert.Equal(firstMime.Length, retried.MimeByteLength);
+    }
+
+    /// <summary>
+    /// A recipient addressed by naming somebody keeps both facts on the record: the address the send was offered to, and
+    /// the contact it was resolved from. The pair is what makes a send answerable after the book has moved on, and only a
+    /// real column can establish that it round-trips.
+    /// </summary>
+    [Fact]
+    public async Task EnqueueAsync_RecipientResolvedFromAContact_ReadsBackTheAddressAndTheContact()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var contact = ContactId.Create(Guid.CreateVersion7());
+        var request = OutgoingEmailRequest.Create(
+            Account,
+            OutgoingEmailRequester.Command("outbox-contact-recipient"),
+            [
+                RecipientOf("dana@example.test", contact),
+                RecipientOf("erik@example.test"),
+            ]);
+
+        // Act
+        await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<MailOutbox>()
+                .EnqueueAsync(request, MimeOf("contact-recipient"), token),
+            cancellationToken);
+
+        // Assert
+        var record = Assert.Single(await ReadOutstandingAsync(services, request, cancellationToken));
+
+        Assert.Equal(
+            [contact, null],
+            record.Recipients.Select(outcome => outcome.Recipient.Contact));
+
+        Assert.Equal(
+            ["dana@example.test", "erik@example.test"],
+            record.Recipients.Select(outcome => outcome.Recipient.Address.Address));
     }
 
     /// <summary>
@@ -361,11 +400,11 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
             OutgoingEmailRequester.Command(invocationIdentity),
             [.. addresses.Select(address => RecipientOf(address))]);
 
-    private static OutgoingRecipient RecipientOf(string address)
+    private static OutgoingRecipient RecipientOf(string address, ContactId? contact = null)
     {
         Assert.True(EmailAddress.TryCreate(displayName: null, address, out var emailAddress));
 
-        return OutgoingRecipient.Create(emailAddress, OutgoingRecipientRole.To);
+        return OutgoingRecipient.Create(emailAddress, OutgoingRecipientRole.To, contact);
     }
 
     /// <summary>Builds a synthetic outgoing message whose bytes differ per scenario.</summary>

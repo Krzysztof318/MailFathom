@@ -11,6 +11,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Delivery;
@@ -40,6 +41,11 @@ namespace MailFathom.Application.Mail.Delivery.Authoring;
 /// is an email nothing may answer, and the refusal is the same not-found answer a read of it gives.
 /// </para>
 /// <para>
+/// Whoever the author copies in may be named out of the contact book rather than by an address, and is resolved here
+/// through the one resolution every author shares. That keeps a person the answer is addressed to an ordinary address by
+/// the time anything is composed: an answer to a message cannot reach a mailbox a message answering nothing could not.
+/// </para>
+/// <para>
 /// Nothing is written down here and nothing is sent. What comes back is an authored message, which the composition
 /// turns into MIME and the outbox makes durable, exactly as it does for a message answering nothing.
 /// </para>
@@ -53,6 +59,7 @@ public sealed class StoredEmailResponseAuthoring
     private readonly IEmailContentRepairRequestStore repairRequestStore;
     private readonly MailboxScopeResolver scopeResolver;
     private readonly IOutgoingSenderIdentityReader senderIdentities;
+    private readonly NamedRecipientResolver recipientResolver;
     private readonly OutgoingEmailBounds bounds;
     private readonly AccessAuthorization authorization;
 
@@ -64,6 +71,7 @@ public sealed class StoredEmailResponseAuthoring
     /// <param name="repairRequestStore">Records durably that a local copy has to be fetched or read again.</param>
     /// <param name="scopeResolver">Answers whether a tool may read the mailbox the answered email was stored from.</param>
     /// <param name="senderIdentities">Resolves the address the answering account sends from, which is what a reply to all leaves out.</param>
+    /// <param name="recipientResolver">Turns the people the author added into addresses, asking the contact book for the ones named as somebody.</param>
     /// <param name="bounds">What this deployment is willing to compose, which decides how much history and how many files an answer carries.</param>
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
@@ -75,6 +83,7 @@ public sealed class StoredEmailResponseAuthoring
         IEmailContentRepairRequestStore repairRequestStore,
         MailboxScopeResolver scopeResolver,
         IOutgoingSenderIdentityReader senderIdentities,
+        NamedRecipientResolver recipientResolver,
         OutgoingEmailBounds bounds,
         AccessAuthorization authorization)
     {
@@ -85,6 +94,7 @@ public sealed class StoredEmailResponseAuthoring
         ArgumentNullException.ThrowIfNull(repairRequestStore);
         ArgumentNullException.ThrowIfNull(scopeResolver);
         ArgumentNullException.ThrowIfNull(senderIdentities);
+        ArgumentNullException.ThrowIfNull(recipientResolver);
         ArgumentNullException.ThrowIfNull(bounds);
         ArgumentNullException.ThrowIfNull(authorization);
 
@@ -95,6 +105,7 @@ public sealed class StoredEmailResponseAuthoring
         this.repairRequestStore = repairRequestStore;
         this.scopeResolver = scopeResolver;
         this.senderIdentities = senderIdentities;
+        this.recipientResolver = recipientResolver;
         this.bounds = bounds;
         this.authorization = authorization;
     }
@@ -185,6 +196,15 @@ public sealed class StoredEmailResponseAuthoring
             return attachmentRefusal;
         }
 
+        // Before any attachment is read, because a recipient nobody can be found for refuses the answer whatever it
+        // would have carried, and the book is one indexed lookup against a forward's worth of decoded files.
+        var recipients = await this.recipientResolver.ResolveAsync(request.Recipients, cancellationToken);
+
+        if (recipients.Refusal is { } recipientRefusal)
+        {
+            return AuthoredResponse.Refused(recipientRefusal);
+        }
+
         IReadOnlyList<AuthoredEmailAttachment>? attachments = request.Act is AuthoredResponseAct.Forward
             ? await this.CarryAttachmentsAsync(content, rendering.Attachments, cancellationToken)
             : [];
@@ -205,7 +225,7 @@ public sealed class StoredEmailResponseAuthoring
                 request.Act,
                 rendering.Headers,
                 new HashSet<EmailAddress> { sender.Address },
-                request.Recipients),
+                recipients.Recipients),
             Subject = request.Act is AuthoredResponseAct.Forward
                 ? ResponseSubject.ForForward(rendering.Headers.Subject)
                 : ResponseSubject.ForReply(rendering.Headers.Subject),

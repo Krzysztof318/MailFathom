@@ -35,6 +35,7 @@ using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery;
+using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Outbox;
@@ -734,6 +735,10 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<IOutgoingSenderIdentityReader>(),
             provider.GetRequiredService<OutgoingEmailBounds>(),
             provider.GetRequiredService<TimeProvider>()));
+        // Scoped because the book it reads is read through the scoped context, and registered beside the composition
+        // rather than beside the book: it is the step every author passes through on the way to an outgoing record, so
+        // whatever authors a message resolves the people it names here and nowhere else.
+        services.AddScoped<NamedRecipientResolver>();
         // Registered beside the composition it produces work for, and scoped for the reason every mailbox read is: it
         // reads stored mail through the same ports a read of that mail uses, and answers with what the composer takes.
         services.AddScoped<StoredEmailResponseAuthoring>();

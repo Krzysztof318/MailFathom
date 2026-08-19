@@ -9,13 +9,18 @@ namespace MailFathom.Application.Mail.Delivery.Authoring;
 /// <summary>States why no answer was authored, in terms that carry nothing of the message it was about.</summary>
 /// <param name="Reason">What stopped it.</param>
 /// <param name="Bound">The number that was exceeded, when the reason is a bound; otherwise <see langword="null" />.</param>
+/// <param name="MatchedContactCount">How many contacts carried the name, when the reason is an ambiguous one; otherwise <see langword="null" />.</param>
 /// <remarks>
-/// The pair is the whole of what a refusal may carry. Everything an authoring attempt knows besides them — the
-/// addresses it resolved, the subject it would have written, the text it would have quoted, the files it would have
-/// carried — is the correspondence of the people the message is between, so a refusal that named any of it would put
-/// mail content into every log line and exception that travelled with it.
+/// The three together are the whole of what a refusal may carry, and each number belongs to the reasons it says
+/// something about. Everything an authoring attempt knows besides them — the addresses it resolved, the subject it would
+/// have written, the text it would have quoted, the files it would have carried, the people a shared name matched — is
+/// the correspondence of the people the message is between, so a refusal that named any of it would put mail content
+/// into every log line and exception that travelled with it.
 /// </remarks>
-public sealed record AuthoredResponseRefusal(AuthoredResponseRefusalReason Reason, long? Bound = null)
+public sealed record AuthoredResponseRefusal(
+    AuthoredResponseRefusalReason Reason,
+    long? Bound = null,
+    int? MatchedContactCount = null)
 {
     /// <summary>Gets the published identity of this refusal.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the reason is not one this system declares, which a refusal built from a cast integer is.</exception>
@@ -26,6 +31,11 @@ public sealed record AuthoredResponseRefusal(AuthoredResponseRefusalReason Reaso
             MailFathomErrorCode.AnsweredEmailContentUnavailable,
         AuthoredResponseRefusalReason.SenderUnconfigured => MailFathomErrorCode.OutgoingEmailSenderUnconfigured,
         AuthoredResponseRefusalReason.BoundExceeded => MailFathomErrorCode.OutgoingEmailBoundExceeded,
+        AuthoredResponseRefusalReason.RecipientContactUnknown => MailFathomErrorCode.OutgoingEmailContactUnknown,
+        AuthoredResponseRefusalReason.RecipientContactNameAmbiguous =>
+            MailFathomErrorCode.OutgoingEmailContactNameAmbiguous,
+        AuthoredResponseRefusalReason.RecipientContactAddressNotHeld =>
+            MailFathomErrorCode.OutgoingEmailContactAddressNotHeld,
         _ => throw new InvalidOperationException("The authoring refusal reason is not one this system declares."),
     };
 }

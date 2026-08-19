@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
@@ -64,11 +65,20 @@ internal static class OutgoingEmailRecordMapping
         }
 
         return OutgoingRecipientOutcome.Create(
-            OutgoingRecipient.Create(address, entity.Role),
+            OutgoingRecipient.Create(address, entity.Role, ContactOf(entity)),
             entity.Status,
             entity.LastReplyCode,
             entity.AnsweredAt);
     }
+
+    /// <summary>Reads back which contact the recipient's address was resolved from, where one was.</summary>
+    /// <remarks>
+    /// An empty identifier is read as no contact rather than failing the read. The value is a record of how the address
+    /// came to be on the send and nothing offers the message by it, so a row written with one would cost the read of an
+    /// otherwise perfectly deliverable send.
+    /// </remarks>
+    private static ContactId? ContactOf(OutgoingEmailRecipientEntity entity) =>
+        entity.ContactId is { } contactId && contactId != Guid.Empty ? ContactId.Create(contactId) : null;
 
     /// <summary>Reads back the code of the failure the last attempt ended in.</summary>
     /// <remarks>

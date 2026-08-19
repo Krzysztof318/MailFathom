@@ -315,7 +315,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
             if (alreadyPlaced.Add(address))
             {
                 placed.Add(new PlacedRecipient(
-                    OutgoingRecipient.Create(address, authoredRecipient.Role),
+                    OutgoingRecipient.Create(address, authoredRecipient.Role, authoredRecipient.Contact),
                     address.DisplayName));
             }
         }

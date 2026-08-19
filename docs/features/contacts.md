@@ -15,6 +15,12 @@ deployment itself: [§ Collecting contacts from arriving mail](#collecting-conta
 account records on its own, and it is off until an owner switches it on, so an instance nobody has written to and nobody
 switched collection on for holds no contacts at all.
 
+**One reader is not a surface at all.** A message may be addressed by naming somebody in the book rather than by writing
+an address, and the send resolves that name against the book on its way to the outgoing record; [mail delivery §
+Addressing a message by naming a contact](mail-delivery.md#addressing-a-message-by-naming-a-contact) holds how a name
+becomes an address, which name refuses to, and what the record then keeps. Nothing about that writes the book: addressing
+somebody is not a fact about them, so no contact is created, amended, or promoted by being written to.
+
 ## A contact is a person, not an address
 
 One person uses a work address, a personal one, and an old one they still receive on. A book keyed on the address could
@@ -201,16 +207,31 @@ answered as a contact the book does not hold rather than putting the person back
 
 ## Reading the book
 
-Two lookups and one listing:
+Three lookups and one listing:
 
-- **By identity**, which is what every other part of the system will name a person by.
+- **By identity**, which is what every other part of the system names a person by.
 - **By address**, which answers "who is this from" and is served from the unique index rather than from a scan. At most
   one contact can answer, which is the uniqueness rule above rather than a property of the lookup.
+- **By the whole name**, which answers "who did they mean" and is what addressing a message to somebody reads. It matches
+  the name's comparison form exactly rather than looking for text inside it, so it is served from the listing index the
+  name's key leads, and it answers with the one contact carrying the name or with how many carry it. More than one is not
+  a result to choose from: nothing here ranks people, and [mail delivery §
+  Addressing a message by naming a contact](mail-delivery.md#addressing-a-message-by-naming-a-contact) is where refusing
+  that is argued. The count is exact and comes from the database, and the addresses of the people a shared name matched
+  are never read, so a name a hundred collected contacts happen to share costs one number rather than a hundred records.
+  A name resolving to one person answers with that person and with the count that decided it read together, so the answer
+  can never be one of two people a namesake written down meanwhile made ambiguous.
 - **A page of the book**, bounded and continued by a keyset cursor. The order is the name's comparison form and then the
   identity, which makes it total: two people with one name are still served in a fixed order, so a walk of the book
   serves every contact exactly once. A page holds 50 contacts unless the caller asks for fewer, and never more than 200.
   A listing may be narrowed to one origin, which is the question "what did my instance pick up" and its inverse, and to
   a **search**.
+
+The name lookup and the identity lookup each also answer a **set**, up to a page of the book's worth in one read, because
+one message may name many people and a query per person would let its recipients decide what addressing it costs. What
+comes back is a match for every name asked about — reporting nobody where nobody carries it — and a contact for each of
+the identities the book holds, with nothing standing in for the ones it does not. Both are the same answers the
+single-value lookups give, which is why nothing above changes for a caller with one name in hand.
 
 A search is text a contact has to carry somewhere in its name or in one of its addresses, matched on the same comparison
 forms everything else here is matched on — so the search text is upper-cased once and compared against the stored name
