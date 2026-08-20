@@ -136,7 +136,7 @@ internal sealed class MailFathomDbContext : DbContext
     /// </remarks>
     internal const string MailRuleEvaluationRunPrimaryKeyConstraintName = "pk_mail_rule_evaluation_runs";
 
-    /// <summary>The key that keeps one whole-mailbox classification run per account, and which a second request meets.</summary>
+    /// <summary>The key that keeps one whole-mailbox classification run per account, and which a second request is recognized by.</summary>
     /// <remarks>
     /// Named for the reason the rule run's key is: two requests for one account's first run reach the database together,
     /// one of them violates this key, and the retry reads back the run the winner asked for — which is how asking twice
