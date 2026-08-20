@@ -56,7 +56,7 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
     /// <remarks>It reads the local mailbox copy, which is the retrieval surface a deployment standing an instance up for reading publishes on its own. A category decides what this endpoint offers rather than who may reach it, so it turns nothing on: the tool appears only where the capability behind it is available and the caller's grant reaches it.</remarks>
     public static McpToolCategory Category => McpToolCategory.Mailbox;
 
-    /// <summary>The greatest length text naming an email may carry before anything tries to read an identity out of it.</summary>
+    /// <summary>The greatest length text naming a conversation may carry before anything tries to read an identity out of it.</summary>
     /// <remarks>
     /// The longest form <see cref="Guid.TryParse(string, out Guid)" /> accepts is the 68-character hexadecimal one, so
     /// nothing a client could legitimately send is refused by this. What it stops is work proportional to a request:
@@ -167,33 +167,6 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
             throw new EmailContentReadCountOutOfRangeException(GetEmailContentRequest.MaximumEmails);
         }
 
-        return [.. storedEmailIds.Select(NamedEmail)];
+        return [.. storedEmailIds.Select(AuthoredMailArguments.AnsweredEmail)];
     }
-
-    /// <summary>Reads the email identity one piece of the caller's text names.</summary>
-    /// <remarks>
-    /// <para>
-    /// The conversion happens before the use case is reached, so text that names no email is refused without a lookup.
-    /// The empty UUID is refused with everything else rather than looked up: it is the value a client sends when it has
-    /// no identifier at all, and no email is ever stored under it.
-    /// </para>
-    /// <para>
-    /// The length is checked before the parse for the reason the listing checks its identifier lists before converting
-    /// them: the parse scans what it is handed, and the caller decides how long that is. A ceiling applied afterwards
-    /// would have let a request-sized argument be scanned before being refused for not being a UUID.
-    /// </para>
-    /// <para>
-    /// The refused text is deliberately absent from the failure. It is the caller's own input on its way into a
-    /// client-readable result and the log line beside it, and an identifier a caller invented says nothing an operator
-    /// needs that the code does not already say. Which position in the list was refused is absent for the same reason
-    /// it is unnecessary: the caller holds the list it sent.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="StoredEmailIdentifierMalformedException">Thrown when the text is not an identifier this system issues.</exception>
-    private static StoredEmailId NamedEmail(string storedEmailId) =>
-        storedEmailId is { Length: <= MaximumIdentifierLength }
-        && Guid.TryParse(storedEmailId, out var identity)
-        && identity != Guid.Empty
-            ? StoredEmailId.Create(identity)
-            : throw new StoredEmailIdentifierMalformedException();
 }

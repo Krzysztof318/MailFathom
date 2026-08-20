@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.Tools.Contacts;
 using MailFathom.Mcp.UnitTests.TestDoubles;
 using ModelContextProtocol.Protocol;
@@ -18,6 +19,10 @@ namespace MailFathom.Mcp.UnitTests.Tools.Contacts;
 /// </remarks>
 public sealed class ContactToolMetadataTests
 {
+    /// <summary>What separates one word of a descriptor from the next, so a tool name is read whole and nothing else is.</summary>
+    private static readonly char[] CharactersAroundAName =
+        [' ', '"', ',', '.', ';', ':', '(', ')', '[', ']', '{', '}', '\'', '`', '?', '!', '\n', '\r', '\t'];
+
     [Theory]
     [InlineData(ListContactsTool.ToolName, "List contacts")]
     [InlineData(GetContactTool.ToolName, "Get contact")]
@@ -216,6 +221,48 @@ public sealed class ContactToolMetadataTests
         // Assert
         Assert.NotNull(outputSchema);
         Assert.DoesNotContain($"\"{forbiddenProperty}\"", outputSchema.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A descriptor naming a tool this surface does not publish sends a client looking for a call it cannot make.</summary>
+    /// <remarks>
+    /// The written record was once described as what <c>add_contact_address</c> and <c>remove_contact_address</c>
+    /// answer with, and neither has ever been a tool: they are <c>mfctl</c> commands, so the published schema was
+    /// describing a command-line surface no client can reach. The assertion is therefore against the rule that was
+    /// broken rather than against that wording — every snake-cased name a contact write advertises is a tool
+    /// <see cref="PublishedTools" /> answers for. Snake case is what makes it decidable: this surface names tools that
+    /// way and nothing else in a descriptor, since arguments and result fields are camel-cased.
+    /// </remarks>
+    [Theory]
+    [InlineData(ListContactsTool.ToolName)]
+    [InlineData(GetContactTool.ToolName)]
+    [InlineData(CreateContactTool.ToolName)]
+    [InlineData(UpdateContactTool.ToolName)]
+    [InlineData(DeleteContactTool.ToolName)]
+    [InlineData(PromoteContactTool.ToolName)]
+    public void AddMailFathomServer_NamesOnlyPublishedToolsInWhatAContactToolAdvertises(string toolName)
+    {
+        // Arrange
+        var advertisedTool = AdvertisedTool(toolName);
+        var advertised = advertisedTool.Description
+            + advertisedTool.InputSchema.ToString()
+            + advertisedTool.OutputSchema?.ToString();
+
+        // Act
+        string[] namedTools =
+        [
+            .. advertised
+                .Split(CharactersAroundAName)
+                .Where(token => token.Contains('_', StringComparison.Ordinal))
+                .Distinct(StringComparer.Ordinal),
+        ];
+
+        // Assert
+        Assert.NotEmpty(namedTools);
+        Assert.All(
+            namedTools,
+            named => Assert.True(
+                PublishedTools.Contains(named),
+                $"'{named}' is named by {toolName} and is not a tool this surface publishes."));
     }
 
     private static Tool AdvertisedTool(string toolName) => RegisteredMcpToolSurface.AdvertisedTool(toolName);

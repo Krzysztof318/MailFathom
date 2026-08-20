@@ -114,23 +114,23 @@ internal sealed class SearchEmailsTool(
         string[]? accounts = null,
         [Description("MailFathom folders to search, each named by its alias, such as INBOX, or by the role it plays, written as role:Junk. Roles are Inbox, Archive, Drafts, Sent, Junk, Trash, All, Flagged, Important, and Outbox; naming one searches whichever folder each account in scope maps with that role, whatever it is called there. Omit to search every folder of the accounts in scope. At most 64 may be named. An alias is MailFathom's own name for a folder and is matched without regard to case.")]
         string[]? folders = null,
-        [Description("Return only emails sent from this mail address. Matched as a whole address rather than as a fragment, without regard to case; a non-empty value that is not a usable mail address is refused. Omit to match any sender, which an empty string does too.")]
+        [Description(MailboxFilterDescriptions.SenderAddress)]
         string? senderAddress = null,
-        [Description("Return only emails addressed to this mail address in their To or Cc header. Matched as a whole address rather than as a fragment; Reply-To is not searched. Omit to match any recipient, which an empty string does too.")]
+        [Description(MailboxFilterDescriptions.RecipientAddress)]
         string? recipientAddress = null,
         [Description("Return only emails whose subject contains this text, without regard to case, up to 256 characters. This narrows which emails are eligible before any of them is ranked and is unrelated to queryText, which is what the eligible ones are matched against. Omit to match any subject, which an empty string does too.")]
         string? subjectFragment = null,
-        [Description("Return only emails received at or after this ISO 8601 timestamp. Emails whose received date is unknown are excluded whenever either bound is named. Omit for no lower bound.")]
+        [Description(MailboxFilterDescriptions.ReceivedOnOrAfter)]
         DateTimeOffset? receivedOnOrAfter = null,
-        [Description("Return only emails received strictly before this ISO 8601 timestamp, so consecutive ranges built from one instant neither overlap nor leave a gap. Omit for no upper bound.")]
+        [Description(MailboxFilterDescriptions.ReceivedBefore)]
         DateTimeOffset? receivedBefore = null,
         [Description("Return only emails the mail server last reported as read (true) or unread (false). Omit to match either. Searching never changes this state. An email whose flags no run has observed yet counts as unread.")]
         bool? isRemotelySeen = null,
-        [Description("Return only emails the mail server last reported as flagged (true) or unflagged (false), which is the star most mail clients show. Omit to match either. This is the \\Flagged flag on a message and is unrelated to the Flagged folder role; an email whose flags no run has observed yet counts as unflagged.")]
+        [Description(MailboxFilterDescriptions.IsRemotelyFlagged)]
         bool? isRemotelyFlagged = null,
-        [Description("Return only emails carrying this keyword, which is a flag a mail client or server set rather than one of the five standard ones, such as $Junk or a label. Matched as a whole keyword without regard to case; up to 64 characters, and a value that is not a keyword this system stores is refused. Omit to match any, which an empty string does too. The keywords each email carries are reported in its remoteFlags.")]
+        [Description(MailboxFilterDescriptions.Keyword)]
         string? keyword = null,
-        [Description("Return only emails that carry attachments (true) or that carry none (false). Omit to match either. Inline images and cryptographic signature parts do not count as attachments.")]
+        [Description(MailboxFilterDescriptions.HasAttachments)]
         bool? hasAttachments = null,
         [Description("How many ranked results to return, from 1 to 50. Omit to take the default of 20. A value outside the range is refused rather than clamped, so a window is never smaller than it claims to be.")]
         int? resultLimit = null,

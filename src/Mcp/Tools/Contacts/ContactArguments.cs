@@ -26,10 +26,12 @@ internal static class ContactArguments
 {
     /// <summary>The longest text read before it is refused for not being an identifier.</summary>
     /// <remarks>
-    /// A UUID in its longest accepted spelling is 38 characters. The bound is applied before the parse rather than after
-    /// it, because the parse scans what it is handed and the caller decides how long that is.
+    /// The longest form <see cref="Guid.TryParse(string, out Guid)" /> accepts is the 68-character hexadecimal one, not
+    /// the 38-character braced or parenthesized form, so a shorter ceiling would refuse a spelling of a well-formed UUID
+    /// that every other tool on this surface accepts. The bound is applied before the parse rather than after it,
+    /// because the parse scans what it is handed and the caller decides how long that is.
     /// </remarks>
-    private const int MaximumIdentifierLength = 64;
+    private const int MaximumIdentifierLength = 68;
 
     /// <summary>Reads the contact identity a caller's text names.</summary>
     /// <param name="contactId">The text the caller wrote.</param>

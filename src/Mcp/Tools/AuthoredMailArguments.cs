@@ -15,13 +15,15 @@ using MailFathom.Domain.Emails;
 
 namespace MailFathom.Mcp.Tools;
 
-/// <summary>Reads the arguments the tools that author mail, and the tools that ask about a send, share.</summary>
+/// <summary>Reads the arguments the tools that author mail, the tools that ask about a send, and the tools that anchor a request to one stored email share.</summary>
 /// <remarks>
 /// <para>
 /// Three tools send and two write a draft, and each of them takes a list of addresses in the same shape and refuses the
 /// same values, as the three that send take an idempotency key. Reading them once is what keeps the five from drifting
 /// into five answers to one question: a key a fourth character longer, a blank address admitted by one tool and refused
-/// by the next, a recipient ceiling applied after the list was expanded rather than before it.
+/// by the next, a recipient ceiling applied after the list was expanded rather than before it. The same holds of the
+/// identifiers: an email named for a read, for a flag change, or for an answer is the same identifier, so it is read
+/// here rather than at each tool that takes one.
 /// </para>
 /// <para>
 /// Everything here is checked in front of the use case rather than instead of it. The domain bounds the same key where
@@ -40,11 +42,24 @@ internal static class AuthoredMailArguments
     /// <param name="storedEmailId">The text the caller named the email by.</param>
     /// <returns>The email identity.</returns>
     /// <remarks>
+    /// <para>
     /// The refusal is the malformed-identifier one rather than the answer a missing email gets, and the two are
     /// deliberately different: this one says the request never named an email at all, which is true whatever this
     /// deployment holds, while an email that was named and cannot be answered is answered identically whether it is
     /// absent, withheld, or unreadable. The empty UUID is refused here with everything else, because it is what a
     /// client sends when it holds no identifier.
+    /// </para>
+    /// <para>
+    /// The refused text is deliberately absent from the failure. It is the caller's own input on its way into a
+    /// client-readable result and the log line beside it, and an identifier a caller invented says nothing an operator
+    /// needs that the code does not already say. Which entry of a list was refused is absent for the same reason it is
+    /// unnecessary: the caller holds the list it sent.
+    /// </para>
+    /// <para>
+    /// Every tool that anchors a request to one stored email reads it here — the read, the flag change, and the three
+    /// that author an answer — so what a well-formed identifier is cannot be one thing at one tool and another at the
+    /// next.
+    /// </para>
     /// </remarks>
     /// <exception cref="StoredEmailIdentifierMalformedException">Thrown when the text is not an identifier this system issues.</exception>
     public static StoredEmailId AnsweredEmail(string storedEmailId)

@@ -65,10 +65,6 @@ internal sealed class SetMailFlagsTool(MailFlagChangeRecorder flagChangeRecorder
     /// <remarks>Marking mail reaches the owner's own mail server, which is why it is not part of the retrieval surface a deployment may publish alone. A category decides what this endpoint offers rather than who may reach it, so it turns nothing on: the tool appears only where the capability behind it is available and the caller's grant reaches it.</remarks>
     public static McpToolCategory Category => McpToolCategory.Flags;
 
-    /// <summary>The greatest length text naming an email may carry before anything tries to read an identity out of it.</summary>
-    /// <remarks>The bound and the reason are <c>get_email_content</c>'s: the longest form <see cref="Guid.TryParse(string, out Guid)" /> accepts is 68 characters, and the parse scans whatever it is handed.</remarks>
-    private const int MaximumIdentifierLength = 68;
-
     /// <summary>The greatest length a caller-supplied request identity may carry.</summary>
     /// <remarks>It is the bound the durable record's own requester identity carries, checked here so a caller learns it named too long a value rather than meeting the domain's argument refusal.</remarks>
     private const int MaximumRequestIdLength = MailboxMutationRequester.MaximumIdentityLength;
@@ -123,7 +119,7 @@ internal sealed class SetMailFlagsTool(MailFlagChangeRecorder flagChangeRecorder
         CancellationToken cancellationToken = default)
     {
         var change = AuthoredMailFlagChange.Create(
-            NamedEmail(storedEmailId),
+            AuthoredMailArguments.AnsweredEmail(storedEmailId),
             seen,
             flagged,
             AuthoredDirection(keywordChange),
@@ -132,26 +128,6 @@ internal sealed class SetMailFlagsTool(MailFlagChangeRecorder flagChangeRecorder
         var result = await flagChangeRecorder.RecordAsync(change, Requester(requestId), cancellationToken);
 
         return SetMailFlagsToolResult.From(result);
-    }
-
-    /// <summary>Reads the email identity the caller's text names.</summary>
-    /// <remarks>
-    /// The length is checked before the parse because a parse scans what it is handed, and the refused text is absent
-    /// from the failure because it is the caller's own input on its way into a client-readable result. The empty UUID is
-    /// refused with everything else, because it is what a client sends when it holds no identifier at all.
-    /// </remarks>
-    /// <exception cref="StoredEmailIdentifierMalformedException">Thrown when the text is not an identifier this system issues.</exception>
-    private static StoredEmailId NamedEmail(string storedEmailId)
-    {
-        if (storedEmailId is null
-            || storedEmailId.Length > MaximumIdentifierLength
-            || !Guid.TryParse(storedEmailId, out var parsed)
-            || parsed == Guid.Empty)
-        {
-            throw new StoredEmailIdentifierMalformedException();
-        }
-
-        return StoredEmailId.Create(parsed);
     }
 
     /// <summary>Reads the application's keyword direction the protocol value names.</summary>

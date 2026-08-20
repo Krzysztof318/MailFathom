@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using MailFathom.Application.Contacts.Failures;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
@@ -59,6 +60,32 @@ public sealed class GetContactToolTests
         Assert.Equal("Anna Kowalska", result.Contact?.DisplayName);
         await book.Directory.DidNotReceiveWithAnyArgs()
             .FindByAddressAsync(default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>Every spelling a UUID parse accepts names the same person, which is what the length ceiling has to admit.</summary>
+    /// <remarks>
+    /// MailFathom hands out the 36-character form, so the hexadecimal one is a client's own spelling of an identifier
+    /// this book issued rather than something a caller invented. A ceiling below its 68 characters refused it here
+    /// while every other tool on this surface read it, which made one well-formed identifier mean two different things
+    /// depending on which tool was asked.
+    /// </remarks>
+    [Fact]
+    public async Task GetContactAsync_AnIdentifierInItsLongestSpelling_ResolvesThroughTheIdentityLookup()
+    {
+        // Arrange
+        var contact = StubContactBook.ContactOf("Anna Kowalska", "anna@example.test");
+        var book = new StubContactBook();
+        book.Directory.FindAsync(contact.Id, Arg.Any<CancellationToken>()).Returns(contact);
+
+        var tool = new GetContactTool(book.Reader);
+
+        // Act
+        var result = await tool.GetContactAsync(
+            contact.Id.Value.ToString("X", CultureInfo.InvariantCulture),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("Anna Kowalska", result.Contact?.DisplayName);
     }
 
     /// <summary>A person this deployment has no record of is an answered question rather than a failed call.</summary>

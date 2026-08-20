@@ -38,7 +38,7 @@ internal sealed record ContactWriteToolResult
     public required ContactWriteState State { get; init; }
 
     /// <summary>Gets the record as it now stands, or <see langword="null" /> when the write did not happen.</summary>
-    [Description("The record as the book now holds it, or null. Only a write whose record you supplied publishes one: create_contact, update_contact, add_contact_address, and remove_contact_address answer with the record when they succeed, while promote_contact answers with the outcome alone and is read back with get_contact.")]
+    [Description("The record as the book now holds it, or null. Only a write whose record you supplied publishes one: create_contact and update_contact answer with the record when they succeed, while promote_contact answers with the outcome alone and is read back with get_contact.")]
     public PublishedContact? Contact { get; init; }
 
     /// <summary>Gets the contact already holding an address the write claimed, when that is what refused it.</summary>
