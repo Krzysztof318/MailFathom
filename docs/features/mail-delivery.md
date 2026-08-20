@@ -620,7 +620,7 @@ refusal states the rule and never repeats the instant, the address, or the subje
 **A moment that came and went while nothing was running is the case with no obviously right answer**, and the deployment
 decides it. `MailDelivery:AllowedSendLateness` is how much later than its due time a message may still be delivered as
 written; the default is a working day. Up to that, the pass sends it. Past it, the send is refused with `28016`, stands
-in the outbox where an operator can see it, and counts under the delivery outcome `missed-due-time` — neither outcome is
+in the outbox where an operator can see it, and counts under the delivery outcome `missed_due_time` — neither outcome is
 silent, and nothing decides on the owner's behalf that a message which missed its moment should still go out. The bound
 applies to a message written for a named time and to nothing else: a send that named none is never late, however long a
 retry or an unreachable provider has held it.
@@ -809,7 +809,7 @@ exception that ended it.
 
 Such a send is **visible rather than silent**: it stays in the outbox an operator reads, it says *unknown* rather than
 *stuck*, whichever pass settled it logs it at error level — the signalled worker and the account's own run alike — and
-the delivery counter measures it under `outcome-unknown`. It moves only
+the delivery counter measures it under `outcome_unknown`. It moves only
 when somebody decides what happened; nothing automatic re-queues it.
 
 A pass stamps whatever it finds in that stage before it claims anything, so a send stranded by a process that stopped is
@@ -1057,7 +1057,7 @@ belongs between an agent and a recipient.
 ## What an operator sees while mail is leaving
 
 Each attempt opens the `submit_outgoing_email` span over the exchange with the server, its duration is recorded, and
-its outcome counts under `mailfathom.mail.delivery.attempts` by account. `outcome-unknown` is the value worth alerting
+its outcome counts under `mailfathom.mail.delivery.attempts` by account. `outcome_unknown` is the value worth alerting
 on at any rate above zero, because each measurement is a message nothing will attempt again until a person decides.
 Filing is counted beside it, under `mailfathom.mail.filing.attempts` by account, place, and outcome, and each append
 opens a span of its own in the mailbox-mutation record. Keeping the drafts folder in step is counted separately again,

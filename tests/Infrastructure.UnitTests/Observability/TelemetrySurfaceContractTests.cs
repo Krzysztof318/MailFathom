@@ -580,7 +580,7 @@ public sealed class TelemetrySurfaceContractTests
 
     private static void DriveMutations()
     {
-        using (var scope = Mutation.Begin(MailboxMutation.Relocate, Account, FolderAlias))
+        using (var scope = Mutation.Begin(MailboxMutation.Relocate, Account, FolderAlias, CancellationToken.None))
         {
             scope.ProtocolPathChosen(TelemetryRedactionContract.CallerSuppliedSentinel);
             scope.CommandIssued(TelemetryRedactionContract.CallerSuppliedSentinel);

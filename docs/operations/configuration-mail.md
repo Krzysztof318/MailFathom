@@ -403,7 +403,7 @@ no time is never late, however long a retry or an unreachable provider has held 
 changes nothing about ordinary correspondence. What it decides is the case where the moment came and went with nothing
 running — an instance that was down, a queue that was full — where delivering and dropping are both wrong answers. Up to
 this much lateness the message is delivered as written; past it the send is refused, stands in the outbox where an
-operator sees it, and reports the outcome `missed-due-time` on
+operator sees it, and reports the outcome `missed_due_time` on
 [the delivery counter](telemetry.md). Neither outcome is silent. The default is a working day, which is the span over
 which a message written for nine in the morning still reads as the message its author meant; what to do about one later
 than that is a person's decision rather than a bound's.

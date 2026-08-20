@@ -26,8 +26,16 @@ namespace MailFathom.Infrastructure.Observability;
 /// </remarks>
 public sealed class SensitiveContentDerivationTelemetry : ISensitiveContentDerivationTelemetry
 {
-    private const string CategoryTagName = "mailfathom.sensitive_content.category";
-    private const string ScannerTagName = "mailfathom.sensitive_content.scanner";
+    /// <summary>The category one finding belongs to, which both sensitive-content families are broken down by.</summary>
+    /// <remarks>
+    /// Declared once and read by <see cref="SensitiveContentEgressTelemetry" /> as well. The two publishers are named
+    /// apart by their own instruments, so a dashboard splitting either family by category should split both on one
+    /// dimension — and two identical string literals are two places for that dimension to drift.
+    /// </remarks>
+    internal const string CategoryTagName = "mailfathom.sensitive_content.category";
+
+    /// <summary>The scanner an outcome belongs to, shared with <see cref="SensitiveContentEgressTelemetry" /> for the same reason.</summary>
+    internal const string ScannerTagName = "mailfathom.sensitive_content.scanner";
 
     private readonly Counter<long> derivedTextCount;
     private readonly Counter<long> findingCount;
@@ -93,9 +101,10 @@ public sealed class SensitiveContentDerivationTelemetry : ISensitiveContentDeriv
     /// <remarks>
     /// A closed mapping rather than the member's own name, for the reason every published mapping here is closed: the
     /// tag value is what a dashboard and an alert are written against, so a member added without one has to fail rather
-    /// than silently rename a series.
+    /// than silently rename a series. <see cref="SensitiveContentEgressTelemetry" /> publishes the same dimension and
+    /// calls this rather than restating it, so one scanner has one word wherever it appears.
     /// </remarks>
-    private static string TagOf(SensitiveContentScannerKind scanner) => scanner switch
+    internal static string TagOf(SensitiveContentScannerKind scanner) => scanner switch
     {
         SensitiveContentScannerKind.Secrets => "secrets",
         SensitiveContentScannerKind.Pii => "pii",

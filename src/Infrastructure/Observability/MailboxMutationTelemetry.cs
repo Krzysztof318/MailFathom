@@ -39,8 +39,15 @@ public sealed partial class MailboxMutationTelemetry
 {
     private const string MutationTagName = "mailfathom.mailbox.mutation";
     private const string AccountTagName = "mailfathom.mail.account";
-    private const string FolderAliasTagName = "mailfathom.mail.folder_alias";
+    private const string FolderTagName = "mailfathom.mail.folder";
     private const string OutcomeTagName = "mailfathom.mailbox.mutation.outcome";
+
+    internal const string SucceededOutcomeName = "succeeded";
+
+    /// <summary>Names a mutation nobody waited for the end of, which is shutdown rather than a defect.</summary>
+    internal const string CancelledOutcomeName = "cancelled";
+
+    internal const string FailedOutcomeName = "failed";
 
     private readonly ILogger<MailboxMutationTelemetry> logger;
     private readonly TimeProvider timeProvider;
@@ -72,15 +79,21 @@ public sealed partial class MailboxMutationTelemetry
     /// <param name="mutation">The change the caller asked for, which names the span, the log line, and the counter dimension.</param>
     /// <param name="accountId">The account whose mailbox is being changed.</param>
     /// <param name="folderAlias">The folder the change is performed in.</param>
-    /// <returns>The scope, which the caller must dispose; a scope disposed without <see cref="MailboxMutationScope.Completed" /> reports a failure.</returns>
-    internal MailboxMutationScope Begin(MailboxMutation mutation, MailAccountId accountId, MailFolderAlias folderAlias) =>
-        this.BeginFiling(mutation.Name, accountId, folderAlias);
+    /// <param name="cancellationToken">The token the change runs under, which is what separates a cancelled ending from a failed one.</param>
+    /// <returns>The scope, which the caller must dispose; a scope disposed without <see cref="MailboxMutationScope.Completed" /> reports a failure, or a cancellation where <paramref name="cancellationToken" /> was cancelled.</returns>
+    internal MailboxMutationScope Begin(
+        MailboxMutation mutation,
+        MailAccountId accountId,
+        MailFolderAlias folderAlias,
+        CancellationToken cancellationToken) =>
+        this.BeginFiling(mutation.Name, accountId, folderAlias, cancellationToken);
 
     /// <summary>Begins reporting one operation that is not a mutation of an existing message, under its own name.</summary>
     /// <param name="operationName">The name of the operation, which names the span, the log line, and the counter dimension.</param>
     /// <param name="accountId">The account whose mailbox is being changed.</param>
     /// <param name="folderAlias">The folder the operation is performed in.</param>
-    /// <returns>The scope, which the caller must dispose; a scope disposed without <see cref="MailboxMutationScope.Completed" /> reports a failure.</returns>
+    /// <param name="cancellationToken">The token the operation runs under, which is what separates a cancelled ending from a failed one.</param>
+    /// <returns>The scope, which the caller must dispose; a scope disposed without <see cref="MailboxMutationScope.Completed" /> reports a failure, or a cancellation where <paramref name="cancellationToken" /> was cancelled.</returns>
     /// <remarks>
     /// Filing a copy of an outgoing message and taking that copy back out are changes to a mailbox and belong in the
     /// same record as the mutations — an operator asking what MailFathom changed wants one answer rather than two
@@ -90,12 +103,13 @@ public sealed partial class MailboxMutationTelemetry
     internal MailboxMutationScope BeginFiling(
         string operationName,
         MailAccountId accountId,
-        MailFolderAlias folderAlias)
+        MailFolderAlias folderAlias,
+        CancellationToken cancellationToken)
     {
         var activity = Telemetry.ActivitySource.StartActivity(operationName, ActivityKind.Client);
         activity?.SetTag(MutationTagName, operationName);
         activity?.SetTag(AccountTagName, accountId.Value);
-        activity?.SetTag(FolderAliasTagName, folderAlias.Value);
+        activity?.SetTag(FolderTagName, folderAlias.Value);
 
         this.LogMutationStarted(operationName, accountId.Value, folderAlias.Value);
 
@@ -105,7 +119,8 @@ public sealed partial class MailboxMutationTelemetry
             accountId,
             folderAlias,
             activity,
-            this.timeProvider.GetTimestamp());
+            this.timeProvider.GetTimestamp(),
+            cancellationToken);
     }
 
     [LoggerMessage(
@@ -126,6 +141,15 @@ public sealed partial class MailboxMutationTelemetry
         Level = LogLevel.Warning,
         Message = "Mailbox mutation {Mutation} failed for {AccountId}/{FolderAlias} after {ElapsedMilliseconds} ms.")]
     private partial void LogMutationFailed(
+        string mutation,
+        string accountId,
+        string folderAlias,
+        double elapsedMilliseconds);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Mailbox mutation {Mutation} for {AccountId}/{FolderAlias} was cancelled after {ElapsedMilliseconds} ms. What it left behind is resolved from the change's own record.")]
+    private partial void LogMutationCancelled(
         string mutation,
         string accountId,
         string folderAlias,
@@ -167,28 +191,31 @@ public sealed partial class MailboxMutationTelemetry
         string operationName,
         MailAccountId accountId,
         MailFolderAlias folderAlias,
-        bool succeeded,
+        string outcome,
         TimeSpan elapsed)
     {
-        var outcome = succeeded ? "success" : "failure";
         var tags = new TagList
         {
             { MutationTagName, operationName },
             { AccountTagName, accountId.Value },
-            { FolderAliasTagName, folderAlias.Value },
+            { FolderTagName, folderAlias.Value },
             { OutcomeTagName, outcome },
         };
 
         this.mutationCount.Add(1, tags);
         this.mutationDuration.Record(elapsed.TotalSeconds, tags);
 
-        if (succeeded)
+        switch (outcome)
         {
-            this.LogMutationCompleted(operationName, accountId.Value, folderAlias.Value, elapsed.TotalMilliseconds);
-        }
-        else
-        {
-            this.LogMutationFailed(operationName, accountId.Value, folderAlias.Value, elapsed.TotalMilliseconds);
+            case SucceededOutcomeName:
+                this.LogMutationCompleted(operationName, accountId.Value, folderAlias.Value, elapsed.TotalMilliseconds);
+                break;
+            case CancelledOutcomeName:
+                this.LogMutationCancelled(operationName, accountId.Value, folderAlias.Value, elapsed.TotalMilliseconds);
+                break;
+            default:
+                this.LogMutationFailed(operationName, accountId.Value, folderAlias.Value, elapsed.TotalMilliseconds);
+                break;
         }
     }
 

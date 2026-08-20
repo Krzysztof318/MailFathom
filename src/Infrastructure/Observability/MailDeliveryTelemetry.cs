@@ -237,7 +237,7 @@ public sealed class MailDeliveryTelemetry
     private static string NameOf(OutgoingEmailStage stage) => stage switch
     {
         OutgoingEmailStage.Recorded => "recorded",
-        OutgoingEmailStage.TransmissionBegun => "transmission-begun",
+        OutgoingEmailStage.TransmissionBegun => "transmission_begun",
         _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, "No outbox depth dimension is defined for this stage."),
     };
 
@@ -253,24 +253,24 @@ public sealed class MailDeliveryTelemetry
         MailOutboxDeliveryOutcome.Sent => "sent",
         MailOutboxDeliveryOutcome.Refused => "refused",
         MailOutboxDeliveryOutcome.Deferred => "deferred",
-        MailOutboxDeliveryOutcome.OutcomeUnknown => "outcome-unknown",
+        MailOutboxDeliveryOutcome.OutcomeUnknown => "outcome_unknown",
         MailOutboxDeliveryOutcome.ReleasedForShutdown => "released",
-        MailOutboxDeliveryOutcome.LeaseLost => "lease-lost",
-        MailOutboxDeliveryOutcome.NotRecorded => "not-recorded",
-        MailOutboxDeliveryOutcome.MissedItsDueTime => "missed-due-time",
+        MailOutboxDeliveryOutcome.LeaseLost => "lease_lost",
+        MailOutboxDeliveryOutcome.NotRecorded => "not_recorded",
+        MailOutboxDeliveryOutcome.MissedItsDueTime => "missed_due_time",
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "No metric dimension is defined for this delivery outcome."),
     };
 
     /// <summary>Names a draft outcome as the dimension a dashboard groups by, under the same rule as the one above.</summary>
     private static string NameOf(MailDraftFilingOutcome outcome) => outcome switch
     {
-        MailDraftFilingOutcome.AlreadySettled => "already-settled",
+        MailDraftFilingOutcome.AlreadySettled => "already_settled",
         MailDraftFilingOutcome.Filed => "filed",
         MailDraftFilingOutcome.Replaced => "replaced",
         MailDraftFilingOutcome.Discarded => "discarded",
-        MailDraftFilingOutcome.DestinationUnavailable => "destination-unavailable",
+        MailDraftFilingOutcome.DestinationUnavailable => "destination_unavailable",
         MailDraftFilingOutcome.Diverged => "diverged",
-        MailDraftFilingOutcome.OutcomeUnknown => "outcome-unknown",
+        MailDraftFilingOutcome.OutcomeUnknown => "outcome_unknown",
         MailDraftFilingOutcome.Failed => "failed",
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "No metric dimension is defined for this draft outcome."),
     };
@@ -279,10 +279,10 @@ public sealed class MailDeliveryTelemetry
     private static string NameOf(OutgoingMailFilingOutcome outcome) => outcome switch
     {
         OutgoingMailFilingOutcome.Filed => "filed",
-        OutgoingMailFilingOutcome.AlreadyFiled => "already-filed",
-        OutgoingMailFilingOutcome.NotRequested => "not-requested",
-        OutgoingMailFilingOutcome.DestinationUnavailable => "destination-unavailable",
-        OutgoingMailFilingOutcome.OutcomeUnknown => "outcome-unknown",
+        OutgoingMailFilingOutcome.AlreadyFiled => "already_filed",
+        OutgoingMailFilingOutcome.NotRequested => "not_requested",
+        OutgoingMailFilingOutcome.DestinationUnavailable => "destination_unavailable",
+        OutgoingMailFilingOutcome.OutcomeUnknown => "outcome_unknown",
         OutgoingMailFilingOutcome.Failed => "failed",
         OutgoingMailFilingOutcome.Withdrawn => "withdrawn",
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "No metric dimension is defined for this filing outcome."),

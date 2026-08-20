@@ -358,7 +358,11 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
             throw new ArgumentException("A message is appended with the bytes it was composed as.", nameof(rawMime));
         }
 
-        using var scope = this.telemetry.BeginFiling(FileOperationName, this.SessionAccountId, this.folder.Alias);
+        using var scope = this.telemetry.BeginFiling(
+            FileOperationName,
+            this.SessionAccountId,
+            this.folder.Alias,
+            cancellationToken);
 
         var copy = await this.lease.Connection.ExecuteMutationAsync(
             async (_, openFolder, attemptToken) =>
@@ -391,7 +395,11 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
         ImapUid uid,
         CancellationToken cancellationToken)
     {
-        using var scope = this.telemetry.BeginFiling(WithdrawOperationName, this.SessionAccountId, this.folder.Alias);
+        using var scope = this.telemetry.BeginFiling(
+            WithdrawOperationName,
+            this.SessionAccountId,
+            this.folder.Alias,
+            cancellationToken);
 
         await this.lease.Connection.ExecuteMutationAsync(
             async (client, openFolder, attemptToken) =>
@@ -798,7 +806,7 @@ internal sealed class MailKitImapWriteSession : IMailboxWriteSession
         Func<IImapClient, IMailFolder, MailboxMutationScope, CancellationToken, Task<TResult>> change,
         CancellationToken cancellationToken)
     {
-        using var scope = this.telemetry.Begin(mutation, this.SessionAccountId, this.folder.Alias);
+        using var scope = this.telemetry.Begin(mutation, this.SessionAccountId, this.folder.Alias, cancellationToken);
 
         var result = await this.lease.Connection.ExecuteMutationAsync(
             (client, openFolder, attemptToken) =>

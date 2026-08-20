@@ -54,7 +54,6 @@ internal static class TelemetryRedactionContract
     [
         "mailfathom.mail.account",
         "mailfathom.mail.folder",
-        "mailfathom.mail.folder_alias",
         "mailfathom.answering.endpoint",
     ];
 

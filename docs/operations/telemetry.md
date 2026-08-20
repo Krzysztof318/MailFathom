@@ -158,11 +158,18 @@ impossible rather than merely discouraged: there is no second source to give a d
 because disposing a shared source would silence every other publisher, so a type that reports through them implements
 no disposal on their account.
 
+Every dimension MailFathom names for itself is written in `snake_case`, and an outcome is written as a past
+participle — `succeeded`, `failed`, `cancelled`, `lease_lost`, `outcome_unknown`. That is what lets a panel written
+against one subsystem be reused against the next, so a query grouping the job queue by `lease_lost` groups delivery by
+the same word. A value MailFathom carries in rather than names — a mutation's own name such as `set-seen`, a lifecycle
+such as `dead-lettered` — is published exactly as the contract that owns it spells it, because renaming one for a
+dashboard would put a second spelling of it into the world rather than remove one.
+
 What publishes to that name is documented with the subsystem that does it.
 
 Every change MailFathom makes to a remote mailbox opens a span named after the mutation, and is counted by
 `mailfathom.mailbox.mutations` and timed by `mailfathom.mailbox.mutation.duration`, both broken down by the mutation,
-the account, the folder alias, and whether it succeeded. Two of those names are not mutations —
+the account, the folder, and how it ended. Two of those names are not mutations —
 `file-outgoing-copy` and `withdraw-outgoing-copy`, which put a copy of this deployment's own outgoing message into a
 folder and take it back out — and they report here regardless, because an operator asking what MailFathom changed about
 a mailbox wants one answer rather than two dashboards. It is deliberately
@@ -170,6 +177,15 @@ a mailbox wants one answer rather than two dashboards. It is deliberately
 offered RFC 6851 `MOVE` or the copy-flag-expunge sequence was used instead, and a dimension telling the two apart is
 exactly what would make a missing server extension look like a different operation on a dashboard. Which path ran is in
 the debug log.
+
+The folder is carried on `mailfathom.mail.folder`, the same key every other mail family publishes it under, so a
+mutation panel and a synchronization panel answer for the same folder somebody asked about. The ending is carried on
+`mailfathom.mailbox.mutation.outcome`, whose values are `succeeded`, `failed`, and `cancelled`. The third one is
+shutdown rather than a defect: a change the host stopped waiting for counts as cancelled and leaves its span's status
+unset, for the reason `interrupted` is kept apart from `failed` on the synchronization counter below — a rolling
+restart that reads as a burst of failed writes is a dashboard reporting the deployment's own restart as a mail-server
+problem. What such a change left behind is not folded into success either: the write may have reached the server, and
+which it was is settled from the change's own record, which the two gauges below report the backlog of.
 
 That counter answers what happened; two gauges beside it answer what has not happened yet, which is the question an
 operator opens a dashboard with. `mailfathom.mailbox.mutations.outstanding` reports how many changes an account has
@@ -709,32 +725,32 @@ for it. Five questions are worth answering, and each has one signal.
 
 **Is anything piling up?** `mailfathom.mail.outbox.depth` reports how many messages stand at each stage a send can still
 move from, tagged with the account alias and `mailfathom.mail.delivery.stage`, whose values are `recorded` and
-`transmission-begun`. It is a gauge fed by the delivery pass rather than a query the collector runs on its own
+`transmission_begun`. It is a gauge fed by the delivery pass rather than a query the collector runs on its own
 interval, exactly as [the job queue's depth](#durable-background-work) is: an outbox is read per account by the worker
 that already reads it, and asking the database again on a schedule would count the same rows a second time for nothing.
-A level that rises and does not come back down is mail that is not leaving; a `transmission-begun` level that does not
+A level that rises and does not come back down is mail that is not leaving; a `transmission_begun` level that does not
 return to zero is the one an operator acts on, because nothing moves those messages without a person. The gauge covers
 the two unfinished stages alone — what has been sent, refused, or withdrawn is history rather than backlog, and
 [`mfctl outbox status`](admin-endpoint.md#reading-what-is-in-the-outbox-and-deciding-about-one-message) is where the
 whole of it is counted.
 
 **Is mail leaving?** `mailfathom.mail.delivery.attempts` counts every attempt that ended, tagged with the account alias
-and `mailfathom.mail.delivery.outcome`, whose values are `sent`, `refused`, `deferred`, `outcome-unknown`, `released`,
-`lease-lost`, `not-recorded`, and `missed-due-time`. One measurement per send rather than per pass, because a pass routinely ends in
-several of them. A send a stopped process left mid-transmission is counted too, under `outcome-unknown`, at the pass
+and `mailfathom.mail.delivery.outcome`, whose values are `sent`, `refused`, `deferred`, `outcome_unknown`, `released`,
+`lease_lost`, `not_recorded`, and `missed_due_time`. One measurement per send rather than per pass, because a pass routinely ends in
+several of them. A send a stopped process left mid-transmission is counted too, under `outcome_unknown`, at the pass
 that finds it: the attempt was made by a process that never lived to report it, and it is stamped once, so counting it
 where it becomes knowable is the only place it can be counted at all.
 
-`outcome-unknown` is a dimension of that counter rather than a counter of its own, deliberately: a send whose server
+`outcome_unknown` is a dimension of that counter rather than a counter of its own, deliberately: a send whose server
 never answered is neither a success nor a failure, and giving it an instrument would let a dashboard summing successes
 and failures report a total that quietly omits it. **It is the one value worth alerting on at any rate above zero** —
 each measurement is a message that may or may not have reached somebody and that nothing will attempt again until a
 person decides. `refused` is a terminal failure and worth watching as a rate; `deferred` is the ordinary answer to a
 provider that is briefly busy and is only interesting when it stops turning into `sent`. `released` is shutdown and
-`lease-lost` is an attempt that had already been taken over, so neither counts against a deployment's health.
-`not-recorded` is the store refusing to take an attempt's answer rather than a server refusing the message: the record
+`lease_lost` is an attempt that had already been taken over, so neither counts against a deployment's health.
+`not_recorded` is the store refusing to take an attempt's answer rather than a server refusing the message: the record
 stands where the failed write left it and its lease is what frees it, so a rate above zero is a database to look at and
-not an outbox to act on. `missed-due-time` is a message written to leave at a named time that a pass reached later than
+not an outbox to act on. `missed_due_time` is a message written to leave at a named time that a pass reached later than
 `MailDelivery:AllowedSendLateness` allows — nothing was running when the moment came, or the queue was full — and it is
 the value that says a held send ended without being transmitted. It stands in the outbox like any other refusal, so a
 measurement above zero is a message somebody has to decide about rather than a provider to investigate;
@@ -749,26 +765,26 @@ never counted here, so the two series are read together rather than one being a 
 **Can the owner see what they sent?** `mailfathom.mail.filing.attempts` counts every attempt to put a copy of an
 outgoing message into one of this account's own folders, tagged with the account alias, `mailfathom.mail.filing.place`
 — `draft`, `held`, `sent`, or `undetermined` where a failure ended before any place was chosen — and
-`mailfathom.mail.filing.outcome`, whose values are `filed`, `already-filed`,
-`not-requested`, `destination-unavailable`, `outcome-unknown`, `failed`, and `withdrawn`. Most of them are ordinary:
-`not-requested` is an account that files no copy, `already-filed` is a settlement asked for twice, and `withdrawn` is a
-mirror going away because its message left. Two are worth a dashboard. `destination-unavailable` is a deployment whose
+`mailfathom.mail.filing.outcome`, whose values are `filed`, `already_filed`,
+`not_requested`, `destination_unavailable`, `outcome_unknown`, `failed`, and `withdrawn`. Most of them are ordinary:
+`not_requested` is an account that files no copy, `already_filed` is a settlement asked for twice, and `withdrawn` is a
+mirror going away because its message left. Two are worth a dashboard. `destination_unavailable` is a deployment whose
 `Sent` folder mapping resolves to nothing, so every message it sends goes unrecorded in the mailbox — a configuration
-answer rather than a server one. And `outcome-unknown` means the same here as it does above and for the same reason:
+answer rather than a server one. And `outcome_unknown` means the same here as it does above and for the same reason:
 the append may or may not have reached the folder, nothing will attempt it again, and repeating it would put a second
 copy of somebody's own message in front of them.
 
 **Is the drafts folder showing what is held?** `mailfathom.mail.draft.attempts` counts every attempt to bring a
 mailbox's drafts folder into step with a draft this deployment holds, tagged with the account alias and
-`mailfathom.mail.draft.outcome`, whose values are `filed`, `replaced`, `discarded`, `already-settled`,
-`destination-unavailable`, `diverged`, `outcome-unknown`, and `failed`. It is a counter of its own beside the filing
+`mailfathom.mail.draft.outcome`, whose values are `filed`, `replaced`, `discarded`, `already_settled`,
+`destination_unavailable`, `diverged`, `outcome_unknown`, and `failed`. It is a counter of its own beside the filing
 one above, because a draft was never offered to a submission server: nothing about it is a delivery, and summing the
 two would report an outbox busier than the mail actually leaving it. The first four are ordinary — a draft written, a
-draft edited, a draft given up or sent, and a pass finding nothing owed. `destination-unavailable` is a deployment
+draft edited, a draft given up or sent, and a pass finding nothing owed. `destination_unavailable` is a deployment
 whose drafts-role mapping resolves to nothing, so what an owner writes here is never in front of them in their own mail
 client. `diverged` is the one that names the owner rather than the system: the tracked copy is no longer provably the
 one this deployment appended — the role resolves elsewhere, the folder was recreated, the server named no placement —
-so the message is left exactly where it is and a person decides. `outcome-unknown` means here what it means above and
+so the message is left exactly where it is and a person decides. `outcome_unknown` means here what it means above and
 for the same reason: the append may or may not have reached the folder, nothing will attempt it again, and repeating it
 would put a second draft in front of somebody.
 
@@ -781,7 +797,7 @@ submission is otherwise a duration with nothing to act on. It is MailFathom's ow
 names neither the message nor anybody it is addressed to. Both cover the exchange with the
 server and nothing else: the claim, the record movements, and the backoff are local work, and including them would blur
 the one thing the span exists to attribute. A span that ends without the server having answered is marked as an error,
-which is what makes the trace and the `outcome-unknown` measurement the same event read two ways. A caller that stopped
+which is what makes the trace and the `outcome_unknown` measurement the same event read two ways. A caller that stopped
 waiting and a host that is shutting down are the exception and leave the span unmarked, because neither says anything
 about the provider and marking them would make a rolling restart read as an outage on the rate an operator alerts on.
 

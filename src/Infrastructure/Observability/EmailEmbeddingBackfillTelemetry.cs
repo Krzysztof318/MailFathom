@@ -4,7 +4,6 @@
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Common.Observability;
@@ -137,7 +136,7 @@ public sealed class EmailEmbeddingBackfillTelemetry
         var tags = new TagList
         {
             { OutcomeTagName, OutcomeTagOf(result.Outcome) },
-            { FailureTagName, FailureTagOf(result.Failure) },
+            { FailureTagName, EmailEmbeddingTelemetry.FailureTagOf(result.Failure) },
         };
 
         this.runCount.Add(1, tags);
@@ -181,22 +180,6 @@ public sealed class EmailEmbeddingBackfillTelemetry
         _ => "unknown",
     };
 
-    /// <summary>Names the failure, or says there was none, so the tag stays present on every series.</summary>
-    /// <remarks>
-    /// A tag left off some of the measurements and set on others produces two time series for one instrument, which a
-    /// dashboard reads as a gap rather than as an absence.
-    /// </remarks>
-    private static string FailureTagOf(EmbeddingGenerationFailure? failure) => failure switch
-    {
-        EmbeddingGenerationFailure.CredentialRejected => "credential_rejected",
-        EmbeddingGenerationFailure.RateLimited => "rate_limited",
-        EmbeddingGenerationFailure.RequestTimedOut => "request_timed_out",
-        EmbeddingGenerationFailure.TransportFaulted => "transport_faulted",
-        EmbeddingGenerationFailure.RequestRefused => "request_refused",
-        EmbeddingGenerationFailure.VectorShapeUnexpected => "vector_shape_unexpected",
-        _ => "none",
-    };
-
     /// <summary>Carries one bounded upkeep pass from the span that opens it to the result that ends it.</summary>
     /// <remarks>
     /// A pass that reached no result is published with an error status and no outcome, which is what an unresolved
@@ -223,7 +206,7 @@ public sealed class EmailEmbeddingBackfillTelemetry
             var sweep = result.Sweep;
 
             this.activity?.SetTag(OutcomeTagName, OutcomeTagOf(sweep.Outcome));
-            this.activity?.SetTag(FailureTagName, FailureTagOf(sweep.Failure));
+            this.activity?.SetTag(FailureTagName, EmailEmbeddingTelemetry.FailureTagOf(sweep.Failure));
             this.activity?.SetTag(ChunkedEmailCountTagName, sweep.ChunkedEmailCount);
             this.activity?.SetTag(EmbeddedEmailCountTagName, sweep.EmbeddedEmailCount);
             this.activity?.SetTag(PassageCountTagName, sweep.EmbeddedChunkCount);

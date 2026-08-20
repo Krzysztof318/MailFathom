@@ -36,8 +36,11 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
     internal const string GuardedOperationSpanName = "scan_sensitive_content";
 
     private const string EgressPointTagName = "mailfathom.sensitive_content.egress_point";
-    private const string CategoryTagName = "mailfathom.sensitive_content.category";
-    private const string ScannerTagName = "mailfathom.sensitive_content.scanner";
+    // The category and the scanner are one dimension apiece across both sensitive-content families, so they are read
+    // from the derivation publisher rather than restated here: a dashboard splitting either family by category splits
+    // both on the same key, and a second literal would be the second place for it to drift.
+    private const string CategoryTagName = SensitiveContentDerivationTelemetry.CategoryTagName;
+    private const string ScannerTagName = SensitiveContentDerivationTelemetry.ScannerTagName;
 
     /// <summary>How many texts one guarded operation scanned, which is what its duration has to be read against.</summary>
     private const string GuardedTextCountTagName = "mailfathom.sensitive_content.texts";
@@ -119,7 +122,7 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
             new TagList
             {
                 { EgressPointTagName, TagOf(egressPoint) },
-                { ScannerTagName, TagOf(scanner) },
+                { ScannerTagName, SensitiveContentDerivationTelemetry.TagOf(scanner) },
             });
 
     /// <inheritdoc />
@@ -145,13 +148,6 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
         SensitiveContentEgressPoint.HostedEmbeddingInput => "hosted_embedding_input",
         SensitiveContentEgressPoint.McpSnippet => "mcp_snippet",
         SensitiveContentEgressPoint.McpEmailContent => "mcp_email_content",
-        _ => "unknown",
-    };
-
-    private static string TagOf(SensitiveContentScannerKind scanner) => scanner switch
-    {
-        SensitiveContentScannerKind.Secrets => "secrets",
-        SensitiveContentScannerKind.Pii => "pii",
         _ => "unknown",
     };
 
