@@ -118,7 +118,7 @@ public sealed class MailKitClientLifetimeTests
 
     /// <summary>Abandoning asks the server for nothing, because a server that stopped answering would never reply.</summary>
     [Fact]
-    public void Abandon_ConnectedClient_ReleasesItWithoutLoggingOut()
+    public async Task Abandon_ConnectedClient_ReleasesItWithoutLoggingOut()
     {
         // Arrange
         var client = Substitute.For<IMailService>();
@@ -127,8 +127,9 @@ public sealed class MailKitClientLifetimeTests
         // Act
         MailKitClientLifetime.Abandon(client);
 
-        // Assert
+        // Assert: the asynchronous logout is the one an edit would reach for, so it is the one this has to refuse.
         client.Received(1).Dispose();
+        await client.DidNotReceive().DisconnectAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>());
         client.DidNotReceive().Disconnect(Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }
 }
