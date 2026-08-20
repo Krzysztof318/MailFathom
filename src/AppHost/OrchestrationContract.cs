@@ -389,6 +389,24 @@ public static class OrchestrationContract
     /// </remarks>
     public const string ComposedHostSubmissionHost = "smtp.mailfathom.test";
 
+    /// <summary>The one organization the composed host's recipient policy refuses, whoever a caller says asked for it.</summary>
+    /// <remarks>
+    /// A subdomain of the reserved testing domain the rest of this topology composes under, which is what keeps the
+    /// entry from reaching anything else the suite addresses: a denied domain reaches the names beneath it, and denying
+    /// the parent would refuse the account's own sending address. Declared here because a policy that refuses nobody
+    /// would let a suite pass while the judgement was never reached on the surface a caller uses.
+    /// </remarks>
+    public const string ComposedHostRefusedRecipientDomain = "refused.mailfathom.test";
+
+    /// <summary>The people one caller of the composed host may write to in a period, which one message can exceed.</summary>
+    /// <remarks>
+    /// Counted per calling principal over an epoch-anchored window, so what any test spends stays spent for the rest of
+    /// the run. The number is well above what every other test on this host addresses together, and the refusal is
+    /// reached by naming more people in one message than the ceiling permits at all rather than by exhausting it, so
+    /// neither the order the collection ran in nor a test added later decides the outcome.
+    /// </remarks>
+    public const int ComposedHostCallerRecipientCeiling = 4;
+
     /// <summary>The whole app host argument that selects the integration-test topology.</summary>
     /// <remarks>
     /// Matched against the argument list itself rather than read through <c>IDistributedApplicationBuilder.Configuration</c>,

@@ -751,6 +751,15 @@ public static class ServiceCollectionExtensions
         // own: it produces an ordinary record on every occasion, through the outbox above, and the occasions come from
         // the job model's recurring dispatch.
         services.AddScoped<IRecurringSendStore, RecurringSendStore>();
+        // The bounds that exist only where a caller does, asked by the submission use cases rather than by the outbox
+        // beneath them: what one client may be talked into is a question work no caller requested does not have. The
+        // vouching and the governor are scoped because both read through the scoped context and the caller's own
+        // principal; the ledger is a singleton because a period belongs to the process rather than to a work unit, and
+        // a count per scope would be a count nobody carried to the next call.
+        services.AddScoped<RecipientVouching>();
+        services.AddSingleton<AuthoredSendUsageLedger>();
+        services.AddScoped<IAuthoredSendAuditor, LoggedAuthoredSendAuditor>();
+        services.AddScoped<AuthoredSendGovernor>();
         // The attempt and the pass over it are scoped like every other work unit, because each opens a submission
         // session and commits through the caller's persistence scope. The signal they answer is not: it carries accounts
         // between a scope that wrote a record and the loop that delivers it, so it belongs to the process.

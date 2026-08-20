@@ -115,7 +115,12 @@ internal static class AnsweredMailSubmissions
             Bounds(),
             granted);
 
-        return new AuthoredResponseSubmission(authoring, composer, Outbox(granted), granted);
+        return new AuthoredResponseSubmission(
+            authoring,
+            composer,
+            Outbox(granted),
+            AuthoredSendGovernors.Permitting(granted),
+            granted);
     }
 
     /// <summary>Reads the message an answer was composed from, which is where a tool's mapping becomes observable.</summary>
@@ -310,9 +315,11 @@ internal static class AnsweredMailSubmissions
                     };
 
                     recordsByIdentity[identity] = opened;
+
+                    return OpenedOutgoingEmail.RecordedNow(opened);
                 }
 
-                return opened;
+                return OpenedOutgoingEmail.AlreadyRecorded(opened);
             });
 
         return store;

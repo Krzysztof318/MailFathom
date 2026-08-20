@@ -101,6 +101,23 @@ internal sealed class MailDeliveryOptions : IValidatableObject
     [Range(typeof(TimeSpan), "00:00:01", "24:00:00")]
     public TimeSpan RetryMaxDelay { get; set; } = TimeSpan.FromHours(1);
 
+    /// <summary>Gets or sets what this deployment does about a recipient a caller named that nothing it holds vouches for.</summary>
+    /// <remarks>
+    /// <para>
+    /// The address inside an injected instruction is the address nobody here has corresponded with, and this is the
+    /// setting that decides whether such a recipient is admitted or refused. What vouches for one is the contact book —
+    /// whoever the owner wrote down and whoever collection recorded from mail that arrived — and the mailboxes this
+    /// deployment sends as; a recipient this system derived itself, out of the book or out of the headers of the
+    /// message being answered, is never judged by it, so a plain reply is addressable whatever this says.
+    /// </para>
+    /// <para>
+    /// It admits by default, because refusing is a posture an operator adopts rather than one an installation is handed:
+    /// a deployment whose book is still empty would otherwise refuse the first message it was ever asked for. What the
+    /// default costs is stated on the page an operator reads before enabling sending.
+    /// </para>
+    /// </remarks>
+    public UnvouchedRecipientPosture UnvouchedRecipients { get; set; } = UnvouchedRecipientPosture.Admit;
+
     /// <summary>Gets or sets who this deployment may write to.</summary>
     /// <remarks>
     /// A deployment that names nobody writes to anybody an enabled account is asked to write to, which is the posture
@@ -170,6 +187,15 @@ internal sealed class MailDeliveryOptions : IValidatableObject
             yield return new ValidationResult(
                 "RetryMaxDelay must not be below RetryBaseDelay, because it is the ceiling the growing delay is capped at.",
                 [nameof(this.RetryMaxDelay)]);
+        }
+
+        // A numeric value binds onto an enum without complaint, so a posture nobody declared would otherwise read as
+        // whichever member happens to sit at zero — which here is the admitting one.
+        if (!Enum.IsDefined(this.UnvouchedRecipients))
+        {
+            yield return new ValidationResult(
+                "UnvouchedRecipients must be one of the postures this deployment declares.",
+                [nameof(this.UnvouchedRecipients)]);
         }
 
         foreach (var result in this.RecipientPolicy.Validate())
@@ -337,6 +363,18 @@ internal sealed class OutgoingMailCeilingOptions
     /// <summary>Gets or sets the recipients this deployment may be asked to write to in a period, or zero for no ceiling.</summary>
     public long MaxRecipientsPerDeployment { get; set; }
 
+    /// <summary>Gets or sets the messages one caller may ask for in a period, or zero for no ceiling.</summary>
+    /// <remarks>
+    /// A third pair beside the account's and the deployment's, bounding what one client may ask rather than what one
+    /// mailbox or this installation may send. It is what turns an agent looping into a refusal after a handful of
+    /// messages, which neither of the other two catches: an installation permitted a hundred messages a day has said
+    /// nothing about one client spending all hundred in four minutes.
+    /// </remarks>
+    public long MaxMessagesPerCaller { get; set; }
+
+    /// <summary>Gets or sets the people one caller may ask this deployment to write to in a period, or zero for no ceiling.</summary>
+    public long MaxRecipientsPerCaller { get; set; }
+
     /// <summary>Reads the block as the ceilings every send is weighed against.</summary>
     /// <returns>The ceilings, which are the unbounded ones when the block declares none.</returns>
     internal OutgoingMailCeilings ToCeilings() => OutgoingMailCeilings.Create(
@@ -345,6 +383,17 @@ internal sealed class OutgoingMailCeilingOptions
         this.MaxRecipientsPerAccount,
         this.MaxMessagesPerDeployment,
         this.MaxRecipientsPerDeployment);
+
+    /// <summary>Reads the block as the ceilings one caller's own sends are weighed against.</summary>
+    /// <returns>The ceilings, which are the unbounded ones when the block bounds no caller.</returns>
+    /// <remarks>
+    /// The window is the one the block already declares rather than a second one, because two bounds on a single send
+    /// that rolled over at different instants would refuse a caller for a reason it could not be told how to wait out.
+    /// </remarks>
+    internal AuthoredSendCeilings ToCallerCeilings() => AuthoredSendCeilings.Create(
+        this.Period,
+        this.MaxMessagesPerCaller,
+        this.MaxRecipientsPerCaller);
 
     /// <summary>Reports a window this deployment does not count over, a negative ceiling, and a per-account ceiling above the deployment's own.</summary>
     /// <returns>One result per rule broken, empty when the block is one this deployment can apply.</returns>
@@ -375,6 +424,8 @@ internal sealed class OutgoingMailCeilingOptions
             (this.MaxRecipientsPerAccount, nameof(this.MaxRecipientsPerAccount)),
             (this.MaxMessagesPerDeployment, nameof(this.MaxMessagesPerDeployment)),
             (this.MaxRecipientsPerDeployment, nameof(this.MaxRecipientsPerDeployment)),
+            (this.MaxMessagesPerCaller, nameof(this.MaxMessagesPerCaller)),
+            (this.MaxRecipientsPerCaller, nameof(this.MaxRecipientsPerCaller)),
         })
         {
             if (value < 0)
@@ -401,6 +452,27 @@ internal sealed class OutgoingMailCeilingOptions
             yield return new ValidationResult(
                 "MaxRecipientsPerAccount must not exceed MaxRecipientsPerDeployment, because the deployment's ceiling bounds every account of it.",
                 [$"{nameof(MailDeliveryOptions.SendCeilings)}.{nameof(this.MaxRecipientsPerAccount)}"]);
+        }
+
+        // Compared against the deployment's rather than against an account's, because a caller is not confined to one
+        // account: what bounds every send a caller can possibly make is the figure for the whole installation, and a
+        // per-caller ceiling above it is a number this deployment would never reach.
+        if (this.MaxMessagesPerCaller > 0
+            && this.MaxMessagesPerDeployment > 0
+            && this.MaxMessagesPerCaller > this.MaxMessagesPerDeployment)
+        {
+            yield return new ValidationResult(
+                "MaxMessagesPerCaller must not exceed MaxMessagesPerDeployment, because the deployment's ceiling bounds every caller of it.",
+                [$"{nameof(MailDeliveryOptions.SendCeilings)}.{nameof(this.MaxMessagesPerCaller)}"]);
+        }
+
+        if (this.MaxRecipientsPerCaller > 0
+            && this.MaxRecipientsPerDeployment > 0
+            && this.MaxRecipientsPerCaller > this.MaxRecipientsPerDeployment)
+        {
+            yield return new ValidationResult(
+                "MaxRecipientsPerCaller must not exceed MaxRecipientsPerDeployment, because the deployment's ceiling bounds every caller of it.",
+                [$"{nameof(MailDeliveryOptions.SendCeilings)}.{nameof(this.MaxRecipientsPerCaller)}"]);
         }
     }
 }

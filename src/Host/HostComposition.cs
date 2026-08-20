@@ -633,6 +633,13 @@ internal static class HostComposition
             provider.GetRequiredService<IOptions<MailDeliveryOptions>>().Value.RecipientPolicy.ToPolicy());
         builder.Services.AddSingleton(provider =>
             provider.GetRequiredService<IOptions<MailDeliveryOptions>>().Value.SendCeilings.ToCeilings());
+        // Beside them, and singletons for the same reason: what one caller may be talked into is an answer about the
+        // installation rather than about a request, and the ledger that counts against it holds a period this process
+        // is in. Both are read at startup, which the configuration reference marks as needing a restart.
+        builder.Services.AddSingleton(provider =>
+            provider.GetRequiredService<IOptions<MailDeliveryOptions>>().Value.SendCeilings.ToCallerCeilings());
+        builder.Services.AddSingleton(provider => new AuthoredSendSettings(
+            provider.GetRequiredService<IOptions<MailDeliveryOptions>>().Value.UnvouchedRecipients));
         builder.Services.AddScoped(provider =>
         {
             var deliverySettings = provider.GetRequiredService<IOptions<MailDeliveryOptions>>().Value;

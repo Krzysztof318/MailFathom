@@ -408,14 +408,19 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
     /// composes reports the process identity — correct for a rule and refused for a command — and a test about the
     /// record has to arrive as what a tool call arrives as.
     /// </remarks>
-    private static Task<OutgoingEmailRecord> EnqueueAsync(
+    private static async Task<OutgoingEmailRecord> EnqueueAsync(
         OrchestratedMailFathomServices services,
         OutgoingEmailRequest request,
         ReadOnlyMemory<byte> rawMime,
-        CancellationToken cancellationToken) => services.AsCallerInScopeAsync(
+        CancellationToken cancellationToken)
+    {
+        var opened = await services.AsCallerInScopeAsync(
             (scope, token) => scope.GetRequiredService<MailOutbox>().EnqueueAsync(request, rawMime, token),
             [MailFathomPermission.MailSend],
             cancellationToken);
+
+        return opened.Record;
+    }
 
     /// <summary>Claims whatever the account has due, which is what a pass reads and what a test asserts an absence over.</summary>
     /// <remarks>

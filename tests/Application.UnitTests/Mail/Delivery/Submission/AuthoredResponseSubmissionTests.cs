@@ -19,6 +19,7 @@ using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Submission;
@@ -28,6 +29,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Governance;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
@@ -228,6 +230,28 @@ public sealed class AuthoredResponseSubmissionTests
 
         // Assert
         Assert.Equal(first.Id, second.Id);
+    }
+
+    /// <summary>The retry above is one answer sent once, so what records the send records it once as well.</summary>
+    [Fact]
+    public async Task SubmitAsync_TheSameIdempotencyKeyTwice_RecordsTheSendOnce()
+    {
+        // Arrange
+        var auditor = Substitute.For<IAuthoredSendAuditor>();
+        var submission = SubmissionOver(
+            Rendering(),
+            out _,
+            governor: AuthoredSendGovernors.Governing(auditor: auditor));
+        var request = Request();
+        await submission.SubmitAsync(request, TestContext.Current.CancellationToken);
+
+        // Act
+        await submission.SubmitAsync(request, TestContext.Current.CancellationToken);
+
+        // Assert
+        await auditor.Received(1).RecordAuthoredSendAsync(
+            Arg.Any<AuthoredSend>(),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -513,6 +537,84 @@ public sealed class AuthoredResponseSubmissionTests
             secret => Assert.DoesNotContain(secret, refusal.Message, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// A reply addresses whoever asked for answers, which this deployment derived rather than the caller naming, so the
+    /// strictest posture leaves answering mail working exactly as it did.
+    /// </summary>
+    [Fact]
+    public async Task SubmitAsync_AReplyUnderTheStrictestPosture_IsStillAdmitted()
+    {
+        // Arrange
+        var submission = SubmissionOver(
+            Rendering(participants: Exchange()),
+            out var composer,
+            governor: AuthoredSendGovernors.Governing(
+                settings: new AuthoredSendSettings(UnvouchedRecipientPosture.Refuse)));
+
+        // Act
+        await submission.SubmitAsync(Request(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [(OutgoingRecipientRole.To, "author@example.test")],
+            ComposedMessage(composer).Recipients.Select(recipient => (recipient.Role, recipient.Address)));
+    }
+
+    /// <summary>
+    /// An address the caller added to an answer is the caller's word rather than the conversation's, and under the
+    /// strict posture a deployment holding no record of it refuses the whole message.
+    /// </summary>
+    [Fact]
+    public async Task SubmitAsync_AReplyCopyingInSomebodyNothingVouchesFor_IsRefused()
+    {
+        // Arrange
+        var submission = SubmissionOver(
+            Rendering(participants: Exchange()),
+            out _,
+            governor: AuthoredSendGovernors.Governing(
+                settings: new AuthoredSendSettings(UnvouchedRecipientPosture.Refuse)));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
+            () => submission.SubmitAsync(
+                Request() with
+                {
+                    Recipients = [NamedRecipient.AtAddress(OutgoingRecipientRole.Cc, "accomplice@elsewhere.test")],
+                },
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.OutgoingRecipientUnvouched, refusal.ErrorCode);
+        Assert.DoesNotContain("elsewhere.test", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A forward addresses nobody of its own, so every address on it is the caller's word and is judged — which is the
+    /// instruction the strict posture exists to refuse and the thing an operator has to know before adopting it.
+    /// </summary>
+    [Fact]
+    public async Task SubmitAsync_AForwardToSomebodyNothingVouchesFor_IsRefused()
+    {
+        // Arrange
+        var submission = SubmissionOver(
+            Rendering(participants: Exchange()),
+            out _,
+            governor: AuthoredSendGovernors.Governing(
+                settings: new AuthoredSendSettings(UnvouchedRecipientPosture.Refuse)));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
+            () => submission.SubmitAsync(
+                Request(AuthoredResponseAct.Forward) with
+                {
+                    Recipients = [NamedRecipient.AtAddress(OutgoingRecipientRole.To, "accomplice@elsewhere.test")],
+                },
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.OutgoingRecipientUnvouched, refusal.ErrorCode);
+    }
+
     /// <summary>What a test varies about the email being answered, so the theory above states one case per row.</summary>
     /// <remarks>
     /// It is public because a theory's data crosses the xUnit serialization boundary, and every member is optional
@@ -544,7 +646,8 @@ public sealed class AuthoredResponseSubmissionTests
         IMailFolderParticipationReader? folderParticipation = null,
         IOutgoingSenderIdentityReader? senderIdentities = null,
         IAuthoredEmailComposer? composing = null,
-        AccessAuthorization? authorization = null)
+        AccessAuthorization? authorization = null,
+        AuthoredSendGovernor? governor = null)
     {
         var answered = summary ?? SyntheticEmailSummaries.Create();
         composer = composing ?? ComposerThatComposes();
@@ -570,7 +673,12 @@ public sealed class AuthoredResponseSubmissionTests
             Bounds(),
             granted);
 
-        return new AuthoredResponseSubmission(authoring, composer, OutboxOver(granted), granted);
+        return new AuthoredResponseSubmission(
+            authoring,
+            composer,
+            OutboxOver(granted),
+            governor ?? AuthoredSendGovernors.Permitting(granted),
+            granted);
     }
 
     private static MailOutbox OutboxOver(AccessAuthorization granted)
@@ -639,9 +747,11 @@ public sealed class AuthoredResponseSubmissionTests
                     };
 
                     recordsByIdentity[identity] = opened;
+
+                    return OpenedOutgoingEmail.RecordedNow(opened);
                 }
 
-                return opened;
+                return OpenedOutgoingEmail.AlreadyRecorded(opened);
             });
 
         return store;

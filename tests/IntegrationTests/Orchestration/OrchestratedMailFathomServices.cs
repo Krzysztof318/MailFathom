@@ -249,6 +249,11 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             MaxAttachmentBytes = 10L * 1024 * 1024,
             MaxMessageBytes = 25L * 1024 * 1024,
         });
+        // The two bounds a caller meets, registered by the composition root from the same section. They exist only
+        // where a caller does, which nothing composed here is, so the harness is the deployment that bounded no client
+        // and admits a recipient it holds no record of; a test about either states its own posture.
+        builder.Services.AddSingleton(AuthoredSendCeilings.Unbounded);
+        builder.Services.AddSingleton(AuthoredSendSettings.Permissive);
         // What one pass over an account's outbox is allowed to do, which a composition root validates out of the
         // MailDelivery section. The values are the deployed defaults with the two the suite has to be able to reach
         // narrowed: a batch small enough for a test to fill, and a retry ceiling a test can exhaust without waiting.

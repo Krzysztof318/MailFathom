@@ -554,6 +554,17 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode MailDraftNotFound { get; } = new(53008);
 
+    /// <summary>Gets subcategory 3, access: a caller named a recipient nothing this deployment holds vouches for.</summary>
+    /// <remarks>
+    /// Separate from the policy refusal beside it because the two are different facts and call for different acts: the
+    /// policy is a list an operator wrote, while this says the mailbox has no trace of the person at all — no contact,
+    /// and no address of its own. The remedy is therefore the owner's rather than the operator's, which is why it is
+    /// worth its own code: write the person down, or have the deployment's posture admit somebody it cannot vouch for.
+    /// The message names neither the address nor how many of them were refused, because a refusal that counted them
+    /// would let a caller map the contact book one send at a time.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingRecipientUnvouched { get; } = new(53009);
+
     /// <summary>Gets subcategory 4, undiagnosed failure: a tool call failed for a reason the boundary deliberately does not describe.</summary>
     /// <remarks>
     /// This is the one code every failure that is not already an allocated one collapses into, so a client learns that
@@ -617,9 +628,11 @@ public readonly record struct MailFathomErrorCode
     /// <remarks>
     /// It sits beside the answering budget rather than with the capability failures for the reason that one does:
     /// nothing is degraded and nothing is misconfigured, the operator declared how much may leave in a period and that
-    /// much has been asked for, so waiting for the period to roll over is an act that changes the answer. One code
-    /// covers all four ceilings — messages and recipients, for an account and for the deployment — because the message
-    /// names which was reached and the remedy is the same for each.
+    /// much has been asked for, so waiting for the period to roll over is an act that changes the answer. One code covers
+    /// all six ceilings — messages and recipients, for an account, for the deployment, and for one caller — because the
+    /// message names which was reached and the remedy is the same for each. It answers one bound nobody configured as
+    /// well, a period already counting as many distinct callers as this deployment holds counts for, for that same
+    /// reason: the period rolling over is what changes the answer there too.
     /// </remarks>
     public static MailFathomErrorCode OutgoingMailCeilingReached { get; } = new(57002);
 
@@ -797,6 +810,7 @@ public readonly record struct MailFathomErrorCode
         OutgoingRecipientRefusedByPolicy,
         OutgoingEmailNotFound,
         MailDraftNotFound,
+        OutgoingRecipientUnvouched,
         McpToolFailedUnexpectedly,
         EmailContentUnavailable,
         MailAnsweringUnavailable,

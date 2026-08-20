@@ -223,7 +223,7 @@ public sealed class OrchestratedOutboxOperationStoreTests(MailFathomOrchestratio
     }
 
     /// <summary>Writes one send down as the agent that asked for it, which is the principal the outbox admits a command from.</summary>
-    private static Task<OutgoingEmailRecord> EnqueueAsync(
+    private static async Task<OutgoingEmailRecord> EnqueueAsync(
         OrchestratedMailFathomServices services,
         string invocationIdentity,
         CancellationToken cancellationToken)
@@ -235,11 +235,13 @@ public sealed class OrchestratedOutboxOperationStoreTests(MailFathomOrchestratio
             OutgoingEmailRequester.Command(invocationIdentity),
             [OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To, contact: null)]);
 
-        return services.AsCallerInScopeAsync(
+        var opened = await services.AsCallerInScopeAsync(
             (scope, token) => scope.GetRequiredService<MailOutbox>()
                 .EnqueueAsync(request, MimeOf(invocationIdentity), token),
             [MailFathomPermission.MailSend],
             cancellationToken);
+
+        return opened.Record;
     }
 
     /// <summary>Builds a synthetic outgoing message whose bytes differ per scenario.</summary>

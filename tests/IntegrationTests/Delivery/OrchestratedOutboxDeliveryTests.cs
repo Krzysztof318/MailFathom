@@ -185,17 +185,22 @@ public sealed class OrchestratedOutboxDeliveryTests(MailFathomOrchestrationFixtu
         Assert.DoesNotContain(claims.Second, entry => entry.Record.Id == queued.Id);
     }
 
-    private static Task<OutgoingEmailRecord> EnqueueAsync(
+    private static async Task<OutgoingEmailRecord> EnqueueAsync(
         OrchestratedMailFathomServices services,
         string invocationIdentity,
         string subject,
-        CancellationToken cancellationToken) => services.AsCallerInScopeAsync(
+        CancellationToken cancellationToken)
+    {
+        var opened = await services.AsCallerInScopeAsync(
             (scope, token) => scope.GetRequiredService<MailOutbox>().EnqueueAsync(
                 RequestFor(invocationIdentity),
                 MimeOf(subject),
                 token),
             [MailFathomPermission.MailSend],
             cancellationToken);
+
+        return opened.Record;
+    }
 
     private static Task<MailOutboxPassReport> RunPassAsync(
         OrchestratedMailFathomServices services,

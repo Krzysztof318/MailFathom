@@ -152,6 +152,14 @@ internal sealed class InMemoryContactBookStore : IContactStore, IContactDirector
         IReadOnlyCollection<EmailAddress> addresses,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(addresses);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            addresses.Count,
+            Contact.MaximumAddressCount,
+            nameof(addresses));
+
+        this.BatchedLookupCount++;
+
         IReadOnlyDictionary<EmailAddress, ContactId> holders = addresses
             .Where(address => this.contactsById.Values.Any(contact => contact.Holds(address)))
             .Distinct()

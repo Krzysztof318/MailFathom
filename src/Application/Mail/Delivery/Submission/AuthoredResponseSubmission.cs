@@ -5,6 +5,7 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Delivery;
 
@@ -42,11 +43,13 @@ namespace MailFathom.Application.Mail.Delivery.Submission;
 /// <param name="authoring">Turns the stored email and what somebody wrote into the message to compose.</param>
 /// <param name="composer">Builds the MIME, and decides every header this system owns rather than the author.</param>
 /// <param name="outbox">Writes the record and the message down together, and says the account has something to send.</param>
+/// <param name="governor">Answers what this caller may be talked into sending, and records the send once it is durable.</param>
 /// <param name="authorization">Answers whether the caller that reached this holds the grant that lets it send.</param>
 public sealed class AuthoredResponseSubmission(
     StoredEmailResponseAuthoring authoring,
     IAuthoredEmailComposer composer,
     MailOutbox outbox,
+    AuthoredSendGovernor governor,
     AccessAuthorization authorization)
 {
     /// <summary>Queues one answer to a stored email, or refuses it naming what the caller has to change.</summary>
@@ -56,6 +59,7 @@ public sealed class AuthoredResponseSubmission(
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller holds neither <see cref="MailFathomPermission.MailSend" /> nor, beneath it, <see cref="MailFathomPermission.MailRead" />.</exception>
     /// <exception cref="MailSubmissionRefusedException">Thrown when the answered email cannot be answered, a recipient the author added names nobody, a field cannot be composed, or a bound is exceeded.</exception>
+    /// <exception cref="OutgoingMailRefusedException">Thrown when a recipient is one this deployment may not write to, when this caller has reached a ceiling of its own, or when a recipient it added itself is one nothing here vouches for.</exception>
     public async Task<OutgoingEmailRecord> SubmitAsync(
         MailResponseSubmissionRequest request,
         CancellationToken cancellationToken)
@@ -99,6 +103,37 @@ public sealed class AuthoredResponseSubmission(
             throw MailSubmissionRefusedException.From(composition.Refusal!);
         }
 
-        return await outbox.EnqueueAsync(composed.Request, composed.RawMime, cancellationToken);
+        // The people an answer is addressed to are mostly this system's reading of the message being answered, and the
+        // governance beneath knows which is which: what a caller added itself is judged as its own word, and the rest
+        // is judged by the deployment's recipient policy exactly as it is on a message answering nothing.
+        var permit = await governor.RequirePermittedAsync(
+            response.Email!.Recipients,
+            composed.Request,
+            cancellationToken);
+
+        var opened = await outbox.EnqueueAsync(composed.Request, composed.RawMime, cancellationToken);
+
+        // Only where this call is what wrote the record down, for the reason the same line carries on a new message: a
+        // retry answered from the record an earlier call left is one answer sent once, and a second audit entry for it
+        // would say otherwise.
+        if (opened.WasRecordedNow)
+        {
+            await governor.RecordAsync(permit, ActOf(request.Act), opened.Record, cancellationToken);
+        }
+
+        return opened.Record;
     }
+
+    /// <summary>Names the send an answer is, in the terms the record of it is written in.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the act is one this method was never taught, which is a defect here rather than a refusal.</exception>
+    private static AuthoredSendAct ActOf(AuthoredResponseAct act) => act switch
+    {
+        AuthoredResponseAct.Reply => AuthoredSendAct.Reply,
+        AuthoredResponseAct.ReplyToAll => AuthoredSendAct.ReplyToAll,
+        AuthoredResponseAct.Forward => AuthoredSendAct.Forward,
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(act),
+            act,
+            "The authored response act names no send this system records."),
+    };
 }

@@ -172,12 +172,12 @@ public sealed class MailDraftPromotion
         // Everything this deployment refuses a send for is asked inside this call, with no boundary in the picture, so
         // a draft written before a policy tightened cannot be sent past it. Nothing about the draft has been written
         // yet, which is what leaves it intact when the answer is no.
-        var record = await this.outbox.EnqueueAsync(request, content.RawMime, cancellationToken);
+        var opened = await this.outbox.EnqueueAsync(request, content.RawMime, cancellationToken);
 
         await this.retryPolicy.CommitAsync(
-            (session, token) => this.drafts.RecordPromotedAsync(session, draftId, record.Id, token),
+            (session, token) => this.drafts.RecordPromotedAsync(session, draftId, opened.Record.Id, token),
             cancellationToken);
 
-        return record;
+        return opened.Record;
     }
 }

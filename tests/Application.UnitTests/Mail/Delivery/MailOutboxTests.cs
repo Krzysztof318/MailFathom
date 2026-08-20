@@ -49,7 +49,7 @@ public sealed class MailOutboxTests
         var request = CreateRequest("mfctl-4f2a");
 
         // Act
-        var record = await outbox.EnqueueAsync(request, RawMime, CancellationToken.None);
+        var record = (await outbox.EnqueueAsync(request, RawMime, CancellationToken.None)).Record;
 
         // Assert
         Assert.Equal(OutgoingEmailStage.Recorded, record.Stage);
@@ -76,7 +76,9 @@ public sealed class MailOutboxTests
         var retried = await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None);
 
         // Assert
-        Assert.Equal(first.Id, retried.Id);
+        Assert.Equal(first.Record.Id, retried.Record.Id);
+        Assert.True(first.WasRecordedNow);
+        Assert.False(retried.WasRecordedNow);
         Assert.Equal(2, store.OpenRequests.Count);
         var outstanding = await store.ReadOutstandingAsync(Account, limit: 10, CancellationToken.None);
         Assert.Single(outstanding);
@@ -89,10 +91,10 @@ public sealed class MailOutboxTests
         // Arrange
         var store = new InMemoryOutgoingEmailStore();
         var outbox = CreateOutbox(store, Substitute.For<IEmailContentStore>());
-        var first = await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None);
+        var first = (await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None)).Record;
 
         // Act
-        var second = await outbox.EnqueueAsync(CreateRequest("mfctl-91bd"), RawMime, CancellationToken.None);
+        var second = (await outbox.EnqueueAsync(CreateRequest("mfctl-91bd"), RawMime, CancellationToken.None)).Record;
 
         // Assert
         Assert.NotEqual(first.Id, second.Id);
@@ -154,7 +156,7 @@ public sealed class MailOutboxTests
             TimeProvider.System);
 
         // Act
-        var record = await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None);
+        var record = (await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None)).Record;
 
         // Assert
         Assert.Equal(winnersRecord?.Id, record.Id);
@@ -210,7 +212,7 @@ public sealed class MailOutboxTests
                 AuthorizedPrincipal.Caller("agent-key", [MailFathomPermission.MailSend])));
 
         // Act
-        var record = await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None);
+        var record = (await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None)).Record;
 
         // Assert
         Assert.Equal(OutgoingEmailPrincipal.Of("agent-key"), record.Principal);
@@ -234,7 +236,7 @@ public sealed class MailOutboxTests
             [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]);
 
         // Act
-        var record = await outbox.EnqueueAsync(request, RawMime, CancellationToken.None);
+        var record = (await outbox.EnqueueAsync(request, RawMime, CancellationToken.None)).Record;
 
         // Assert
         Assert.Equal(
@@ -307,7 +309,7 @@ public sealed class MailOutboxTests
             authorization: AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
 
         // Act
-        var record = await outbox.EnqueueAsync(CreateRuleRequest(), RawMime, CancellationToken.None);
+        var record = (await outbox.EnqueueAsync(CreateRuleRequest(), RawMime, CancellationToken.None)).Record;
 
         // Assert
         Assert.Equal(OutgoingEmailStage.Recorded, record.Stage);
@@ -473,7 +475,7 @@ public sealed class MailOutboxTests
             timeProvider: new FakeTimeProvider(Authored));
 
         // Act
-        var record = await outbox.EnqueueAsync(HeldRequest("mfctl-4f2a", DueAt), RawMime, CancellationToken.None);
+        var record = (await outbox.EnqueueAsync(HeldRequest("mfctl-4f2a", DueAt), RawMime, CancellationToken.None)).Record;
 
         // Assert
         Assert.Equal(0, signal.Depth);
@@ -527,7 +529,7 @@ public sealed class MailOutboxTests
             Substitute.For<IEmailContentStore>(),
             outboxOperations: operations,
             timeProvider: new FakeTimeProvider(Authored));
-        var record = await outbox.EnqueueAsync(HeldRequest("mfctl-4f2a", DueAt), RawMime, CancellationToken.None);
+        var record = (await outbox.EnqueueAsync(HeldRequest("mfctl-4f2a", DueAt), RawMime, CancellationToken.None)).Record;
         operations.CancelAsync(record.Id, Arg.Any<CancellationToken>()).Returns(OutboxDecisionOutcome.Accepted);
 
         // Act
@@ -596,7 +598,7 @@ public sealed class MailOutboxTests
             timeProvider: new FakeTimeProvider(Authored));
 
         // Act
-        var record = await outbox.EnqueueAsync(CreateOccurrenceRequest(), RawMime, CancellationToken.None);
+        var record = (await outbox.EnqueueAsync(CreateOccurrenceRequest(), RawMime, CancellationToken.None)).Record;
 
         // Assert
         Assert.Equal(OutgoingEmailStage.Recorded, record.Stage);

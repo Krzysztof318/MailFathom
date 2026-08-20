@@ -416,6 +416,7 @@ public sealed class SendEmailToolTests
                 granted,
                 OutgoingMailGovernors.Permitting(),
                 new FakeTimeProvider(Recorded)),
+            AuthoredSendGovernors.Permitting(granted),
             granted,
             new FakeTimeProvider(Recorded)));
     }
@@ -465,9 +466,11 @@ public sealed class SendEmailToolTests
                     };
 
                     recordsByIdentity[identity] = opened;
+
+                    return OpenedOutgoingEmail.RecordedNow(opened);
                 }
 
-                return opened;
+                return OpenedOutgoingEmail.AlreadyRecorded(opened);
             });
 
         return store;

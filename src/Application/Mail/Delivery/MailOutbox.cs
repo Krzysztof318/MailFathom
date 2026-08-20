@@ -86,7 +86,7 @@ public sealed class MailOutbox(
     /// <param name="request">The send that was asked for.</param>
     /// <param name="rawMime">The composed RFC 822 bytes to transmit, stored once and read back for every attempt.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>The durable record for this request, whether this call created it or an earlier one did.</returns>
+    /// <returns>The durable record for this request, and whether this call is what wrote it down.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="rawMime" /> is empty.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the act the request names as its origin is not what reached this: a caller granted <see cref="MailFathomPermission.MailSend" /> for a command, and MailFathom's own identity for a rule.</exception>
@@ -97,7 +97,7 @@ public sealed class MailOutbox(
     /// ignored rather than written over the stored ones. That is what keeps a resumed send one message: a
     /// <c>Message-ID</c> that changed between attempts would thread as a second message in every recipient's client.
     /// </remarks>
-    public async Task<OutgoingEmailRecord> EnqueueAsync(
+    public async Task<OpenedOutgoingEmail> EnqueueAsync(
         OutgoingEmailRequest request,
         ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken)
@@ -119,7 +119,7 @@ public sealed class MailOutbox(
         // an idempotency key a way to carry a permission forward.
         await governor.RequirePermittedAsync(request, cancellationToken);
 
-        var record = await retryPolicy.CommitAsync(
+        var committed = await retryPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
                 var opened = await outgoingEmails.OpenAsync(
@@ -131,7 +131,7 @@ public sealed class MailOutbox(
 
                 await contentStore.SaveOutgoingContentAsync(
                     session,
-                    opened.Id,
+                    opened.Record.Id,
                     rawMime,
                     attemptCancellationToken);
 
@@ -139,19 +139,19 @@ public sealed class MailOutbox(
             },
             cancellationToken);
 
-        if (record.IsWaitingAt(timeProvider.GetUtcNow()))
+        if (committed.Record.IsWaitingAt(timeProvider.GetUtcNow()))
         {
-            await this.DispatchWhenDueAsync(record, cancellationToken);
+            await this.DispatchWhenDueAsync(committed.Record, cancellationToken);
 
-            return record;
+            return committed;
         }
 
         // A record already delivered by an earlier identical request is signalled all the same. The pass reads the
         // outbox rather than this call, so an account with nothing outstanding costs it one claim that takes nothing —
         // which is cheaper than working out here whether the record this call read back still needs sending.
-        signal.Signal(record.AccountId);
+        signal.Signal(committed.Record.AccountId);
 
-        return record;
+        return committed;
     }
 
     /// <summary>Withdraws a message that has not begun to leave, and says what became of the request.</summary>
