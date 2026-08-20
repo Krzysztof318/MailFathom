@@ -12,7 +12,7 @@ using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 
-namespace MailFathom.Application.UnitTests.TestDoubles;
+namespace MailFathom.TestSupport;
 
 /// <summary>Holds drafts and their copies in memory, with the movements the durable store makes and no others.</summary>
 /// <remarks>

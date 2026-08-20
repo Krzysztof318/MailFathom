@@ -10,7 +10,7 @@ using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
 
-namespace MailFathom.Application.UnitTests.TestDoubles;
+namespace MailFathom.TestSupport;
 
 /// <summary>Holds the MIME of drafts in memory, replacing a draft's message the way the real store does.</summary>
 /// <remarks>

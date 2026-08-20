@@ -1010,7 +1010,7 @@ in every client. From that point the send is an ordinary send — claimed, trans
 at the promotion rather than at the writing**: whether sending is on for the account, whether every recipient is
 somebody this deployment may write to, the ceilings, and the size bound. A draft written a month before an operator
 tightened one of those is refused by the tightened one. A draft addressed to nobody is refused here too, with
-`28017` `MailDraftNotAddressed`, which is the one refusal that is about the draft rather than about the deployment. A
+`53010` `MailDraftNotAddressed`, which is the one refusal that is about the draft rather than about the deployment. A
 draft this deployment does not hold — never written, given up without ever having been sent, or another account's —
 answers `53008` `MailDraftNotFound` whichever of the three it is, so nothing learns which drafts exist by asking about
 them.
@@ -1047,9 +1047,12 @@ retention and erasure. [Stored email schema § The drafts nothing will
 send](../architecture/stored-email-schema.md#the-drafts-nothing-will-send) holds the four tables and the cascades that
 make that structural.
 
-**Nothing on [the MCP surface](mcp-tools.md) reaches any of this yet.** The use cases are here and are what a tool will
-be mapped onto; until that tool exists, a draft is written by the deployment's own code paths rather than asked for by
-a caller.
+**[The MCP surface](mcp-tools.md#the-drafting-surface) reaches all of this through four tools**, and the split between
+them is the point rather than the arithmetic. `save_draft`, `update_draft`, and `delete_draft` write a draft, replace
+it, and give it up under `mailfathom.mail.drafts.write`; `send_draft` promotes one under `mailfathom.mail.send`, which
+is the grant every act that causes mail to leave is admitted by. So a deployment can hand an agent the whole of the
+writing above and none of the promotion, which is what makes a draft the arrangement to reach for where a person
+belongs between an agent and a recipient.
 
 ## What an operator sees while mail is leaving
 

@@ -258,7 +258,7 @@ given client is one of them, and each has an answer above rather than a setting 
 
 ## What a working connection looks like
 
-Whichever client was configured, a connected one lists at least six tools. Four of them — `list_accounts`,
+Whichever client was configured, a connected one lists at least fourteen tools. Four of them — `list_accounts`,
 `list_emails`, `get_email_content`, and `search_emails` — advertise themselves as read-only, non-destructive, and
 idempotent. Four of the rest are not read-only. `set_mail_flags`
 changes your mailbox on the mail server rather than MailFathom's copy of it, and it advertises itself as destructive too
@@ -273,7 +273,15 @@ Two more sit over a send rather than performing one. `get_outgoing_email` report
 sending tools queued and advertises itself as read-only, non-destructive, and confined to this process, so a client may
 call it without asking. `cancel_outgoing_email` stops one that has not left yet, and it is the one tool here that
 advertises itself as destructive *and* as confined to this process — it destroys a queued message no later call brings
-back, while reaching no mail server and nobody outside the deployment. Where
+back, while reaching no mail server and nobody outside the deployment.
+
+Four more cover a message written and not sent. `save_draft` writes one into your own Drafts folder, and it is the one
+write here that advertises itself as neither destructive nor idempotent: it takes nothing away, and calling it twice
+leaves two drafts. `update_draft` and `delete_draft` are both — an edit states the whole message and drops what the
+caller left out, a deletion is final, and asking for either twice leaves the state the first call left. All three
+announce that they reach outside this process, because the copy goes into a folder on your own mail server, and none of
+them sends anything. `send_draft` does: it carries `send_email`'s four annotations exactly, and it is the only one of
+the four a client should treat as a real send. Where
 that list is shown is the one client-specific part: `claude mcp list` or the `/mcp` panel for the command-line tool, the
 server's entry in the editor's MCP view for Visual Studio Code and for Cursor, the connector's own settings page for the
 two cloud clients.

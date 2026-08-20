@@ -5,6 +5,7 @@
 using MailFathom.Domain.Access;
 using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.Tools.Contacts;
+using MailFathom.Mcp.Tools.Drafts;
 using MailFathom.Mcp.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
@@ -95,6 +96,71 @@ public sealed class McpToolSurfaceCompositionTests
                 UpdateContactTool.ToolName,
             ],
             listed);
+    }
+
+    /// <summary>Drafting and sending are separate grants, so a caller holding the first sees the three tools that send nothing and no others.</summary>
+    /// <remarks>
+    /// This is the arrangement the draft tools exist for: an agent that may prepare mail and may not send any. What
+    /// proves it is the listing rather than a refusal, because a capability withheld from a caller is one it is never
+    /// told about — and <c>send_draft</c> being absent here is the whole of what makes the drafting grant the safe
+    /// half.
+    /// </remarks>
+    [Fact]
+    public async Task AddMailFathomServer_ACallerGrantedOnlyTheDraftingGrant_IsListedTheDraftToolsThatSendNothing()
+    {
+        // Arrange
+        await using var provider = RegisteredMcpToolSurface.ComposedForCallerGranted(
+            MailFathomPermission.MailDraftsWrite);
+
+        // Act
+        var listing = await ListedToolsAsync(provider);
+
+        // Assert
+        var listed = listing.Tools.Select(static tool => tool.Name).Order(StringComparer.Ordinal).ToArray();
+
+        Assert.Equal(
+            [
+                DeleteDraftTool.ToolName,
+                SaveDraftTool.ToolName,
+                UpdateDraftTool.ToolName,
+            ],
+            listed);
+    }
+
+    /// <summary>Sending a draft is behind the sending grant, so a caller that may only draft cannot reach it by naming it.</summary>
+    [Fact]
+    public async Task AddMailFathomServer_TheDraftSendingToolCalledWithTheDraftingGrant_IsAnsweredAsAnUnknownTool()
+    {
+        // Arrange
+        await using var provider = RegisteredMcpToolSurface.ComposedForCallerGranted(
+            MailFathomPermission.MailDraftsWrite);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<McpProtocolException>(() =>
+            CalledAsync(provider, SendDraftTool.ToolName));
+
+        // Assert
+        Assert.Equal($"Unknown tool: '{SendDraftTool.ToolName}'", refusal.Message);
+        Assert.Equal(McpErrorCode.InvalidParams, refusal.ErrorCode);
+    }
+
+    /// <summary>The sending grant reaches the promotion and none of the three tools that write a draft.</summary>
+    [Fact]
+    public async Task AddMailFathomServer_ACallerGrantedOnlyTheSendingGrant_IsListedNoToolThatWritesADraft()
+    {
+        // Arrange
+        await using var provider = RegisteredMcpToolSurface.ComposedForCallerGranted(MailFathomPermission.MailSend);
+
+        // Act
+        var listing = await ListedToolsAsync(provider);
+
+        // Assert
+        var listed = listing.Tools.Select(static tool => tool.Name).ToArray();
+
+        Assert.Contains(SendDraftTool.ToolName, listed);
+        Assert.DoesNotContain(SaveDraftTool.ToolName, listed);
+        Assert.DoesNotContain(UpdateDraftTool.ToolName, listed);
+        Assert.DoesNotContain(DeleteDraftTool.ToolName, listed);
     }
 
     /// <summary>Erasing a person is behind the writing grant, so a reader asking for it is answered as it is about any tool it was not offered.</summary>

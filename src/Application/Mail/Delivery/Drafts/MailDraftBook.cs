@@ -23,9 +23,12 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// </para>
 /// <para>
 /// Being the one way in is also what makes it the place the grant is asked for. A draft is written into the owner's own
-/// mailbox and is one command away from being sent, so it is admitted under exactly the grant a send is: a caller
-/// holding <see cref="MailFathomPermission.MailSend" /> for a command, and MailFathom's own identity for a rule. That
-/// is asked with no transport in the picture, so a second entrypoint added later meets it whatever it did first.
+/// mailbox and reaches nobody else, so it is admitted under the grant that says exactly that: a caller holding
+/// <see cref="MailFathomPermission.MailDraftsWrite" /> for a command, and MailFathom's own identity for a rule. That is
+/// asked with no transport in the picture, so a second entrypoint added later meets it whatever it did first. What it
+/// deliberately is not is <see cref="MailFathomPermission.MailSend" />: a caller that may draft and may not send is the
+/// arrangement the two grants exist to make possible, and what stands between a draft and a recipient is the promotion,
+/// which asks for the sending grant on its own.
 /// </para>
 /// <para>
 /// The mailbox is brought into step once the write has committed, and never before it. A crash in between leaves a
@@ -147,7 +150,7 @@ public sealed class MailDraftBook
     /// <param name="draftId">The draft to give up.</param>
     /// <param name="cancellationToken">Cancels the write and the commands that follow it.</param>
     /// <returns>What settling the mailbox did, which is already durable by the time it is returned.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailSend" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailDraftsWrite" />.</exception>
     /// <exception cref="MailDraftRefusedException">Thrown when no draft this deployment holds is still one to give up under that identifier.</exception>
     /// <remarks>
     /// <para>
@@ -171,7 +174,7 @@ public sealed class MailDraftBook
         MailDraftId draftId,
         CancellationToken cancellationToken)
     {
-        this.authorization.RequirePermission(MailFathomPermission.MailSend);
+        this.authorization.RequirePermission(MailFathomPermission.MailDraftsWrite);
 
         if (await this.drafts.FindAsync(draftId, cancellationToken) is not { PromotedTo: null } draft)
         {
@@ -217,15 +220,17 @@ public sealed class MailDraftBook
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when it is not.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the origin is one this method was never taught, which is a defect here rather than a refusal.</exception>
     /// <remarks>
-    /// It is the same question the outbox asks and admits the same principals, because what a draft can become is a
-    /// send: admitting an author here that the outbox would refuse would make a draft the way around the grant.
+    /// It admits the same two principals the outbox does and asks a different permission of the first, because what a
+    /// draft is and what a send is differ in exactly that: nothing here reaches anybody but the mailbox's own owner. A
+    /// rule is admitted on MailFathom's own identity as it is at the outbox, since an act nobody is present for carries
+    /// no caller's grant either way.
     /// </remarks>
     private void RequireAdmittedToDraft(OutgoingEmailOrigin origin)
     {
         switch (origin)
         {
             case OutgoingEmailOrigin.Command:
-                this.authorization.RequirePermission(MailFathomPermission.MailSend);
+                this.authorization.RequirePermission(MailFathomPermission.MailDraftsWrite);
 
                 break;
 

@@ -137,22 +137,10 @@ internal sealed class SendEmailTool(AuthoredMailSubmission submission)
     }
 
     /// <summary>Reads the account the caller's text names.</summary>
-    /// <remarks>
-    /// Whether an account answers to the text is the use case's question, asked against the accounts this deployment
-    /// serves. What is answered here is whether the text could name one at all, so a caller that sent nothing meets a
-    /// statement about its own argument rather than a refusal implying the account exists somewhere.
-    /// </remarks>
+    /// <remarks>What makes text a name at all is read once for every tool that takes an account, and what a caller is told about text that is not one is this tool's own answer.</remarks>
     /// <exception cref="MailSubmissionRefusedException">Thrown when the text is not one an account could be named by.</exception>
-    private static MailAccountSelector NamedAccount(string account)
-    {
-        if (account is null
-            || string.IsNullOrWhiteSpace(account)
-            || account.Length > MailAccountSelector.MaximumLength
-            || account.Any(char.IsControl))
-        {
-            throw MailSubmissionRefusedException.AccountNotNamed();
-        }
-
-        return MailAccountSelector.Create(account);
-    }
+    private static MailAccountSelector NamedAccount(string account) =>
+        AuthoredMailArguments.CouldNameAnAccount(account)
+            ? MailAccountSelector.Create(account)
+            : throw MailSubmissionRefusedException.AccountNotNamed();
 }

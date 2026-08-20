@@ -5,6 +5,7 @@
 using System.Collections.Frozen;
 using MailFathom.Domain.Access;
 using MailFathom.Mcp.Tools.Contacts;
+using MailFathom.Mcp.Tools.Drafts;
 
 namespace MailFathom.Mcp.Tools;
 
@@ -44,6 +45,10 @@ internal static class PublishedTools
             [SendEmailTool.ToolName] = SendEmailTool.RequiredPermission,
             [ReplyToEmailTool.ToolName] = ReplyToEmailTool.RequiredPermission,
             [ForwardEmailTool.ToolName] = ForwardEmailTool.RequiredPermission,
+            [SaveDraftTool.ToolName] = SaveDraftTool.RequiredPermission,
+            [UpdateDraftTool.ToolName] = UpdateDraftTool.RequiredPermission,
+            [DeleteDraftTool.ToolName] = DeleteDraftTool.RequiredPermission,
+            [SendDraftTool.ToolName] = SendDraftTool.RequiredPermission,
             [GetOutgoingEmailTool.ToolName] = GetOutgoingEmailTool.RequiredPermission,
             [CancelOutgoingEmailTool.ToolName] = CancelOutgoingEmailTool.RequiredPermission,
             [AskMailTool.ToolName] = AskMailTool.RequiredPermission,

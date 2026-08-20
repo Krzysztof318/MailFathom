@@ -93,9 +93,9 @@ public sealed class AuthoredResponseDraftingTests
         Assert.Empty(harness.Drafts.Drafts);
     }
 
-    /// <summary>A caller that may not send may not draft an answer either.</summary>
+    /// <summary>Drafting is its own grant, and reading the mail an answer would quote is not it.</summary>
     [Fact]
-    public async Task SaveAsync_CallerWithoutTheSendingGrant_IsRefusedBeforeAnythingIsRead()
+    public async Task SaveAsync_CallerWithoutTheDraftingGrant_IsRefusedBeforeAnythingIsRead()
     {
         // Arrange
         var harness = Harness();
@@ -146,7 +146,7 @@ public sealed class AuthoredResponseDraftingTests
         AccessAuthorization? authorization = null)
     {
         var granted = authorization ?? AccessAuthorizations.ForCallerGranted(
-            MailFathomPermission.MailSend,
+            MailFathomPermission.MailDraftsWrite,
             MailFathomPermission.MailRead);
 
         var catalog = Substitute.For<IMailAccountCatalog>();

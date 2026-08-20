@@ -4,7 +4,8 @@
 
 MailFathom publishes Model Context Protocol tools over the Streamable HTTP transport: the mailbox read side, one
 tool that changes the flags and keywords on mail this deployment holds, three that send mail from a mailbox it holds —
-a new message, a reply, and a forward — two over a send that was queued that way, and the contact book. This page records the
+a new message, a reply, and a forward — two over a send that was queued that way, four over a message written into the
+owner's own drafts folder, and the contact book. This page records the
 conventions every tool follows, the contract of the tools that exist, and what a client reads when a call fails.
 
 The endpoint is disabled by default, and enabling it requires stating whether a client presents an API key or nothing at all.
@@ -22,7 +23,9 @@ nothing else, `get_email_content` calls the `EmailContentReader` use case and no
 nothing else, `send_email` calls the `AuthoredMailSubmission` use case and nothing else, `reply_to_email` and
 `forward_email` call the `AuthoredResponseSubmission` use case and nothing else,
 `get_outgoing_email` calls the `OutgoingMailReader` use case and nothing else, `cancel_outgoing_email` calls the
-`OutgoingMailCancellation` use case and nothing else,
+`OutgoingMailCancellation` use case and nothing else, `save_draft` and `update_draft` call the `AuthoredMailDrafting`
+and `AuthoredResponseDrafting` use cases and nothing else, `delete_draft` calls the `MailDraftBook` use case and
+nothing else, `send_draft` calls the `MailDraftPromotion` use case and nothing else,
 `ask_mail` calls the `MailboxQuestionReader` use case and nothing else,
 `list_contacts` and `get_contact` call the `ContactBookReader` use case and nothing else, and `create_contact`,
 `update_contact`, `delete_contact`, and `promote_contact` call the `ContactBookWriter` use case and nothing else.
@@ -53,11 +56,18 @@ says the folder exists.
 
 Four properties hold for every tool and are proven by test rather than asserted here:
 
-- A call reaches no mail server. Nothing in a tool request speaks IMAP or SMTP, so a request cannot wait on a mailbox,
-  and the mailbox tools read the local copy only — reading mail through this surface still never sets the remote
-  `\Seen` flag. `set_mail_flags` is the one tool whose effect reaches a mail server at all, and it reaches one no
-  sooner than the rest: the call writes a durable record and the account's own synchronization run issues the `STORE`,
-  so nothing in the request opens a session or holds a type that could. `ask_mail` reaches a chat
+- **No call reads mail from a mail server.** Nothing in a tool request fetches a message, so a read cannot wait on a
+  mailbox, and the mailbox tools read the local copy only — reading mail through this surface still never sets the
+  remote `\Seen` flag. What a call may reach a server *for* is a write, and only two shapes of one.
+  `set_mail_flags` reaches one no sooner than the rest: the call writes a durable record and the account's own
+  synchronization run issues the `STORE`, so nothing in the request opens a session or holds a type that could. **The
+  three draft tools that write a draft are the exception, and it is deliberate**: the record and the message commit
+  first, and the copy in the owner's drafts folder is then appended or removed inside the same call, so a `save_draft`,
+  an `update_draft`, or a `delete_draft` does wait on one IMAP round trip. That is what puts the message in front of
+  the owner while whoever asked for it is still there, and what a caller loses if it fails is only the copy: the draft
+  is already durable, the result says the folder does not show it, and a later pass finishes the job.
+  [§ The drafting surface](#the-drafting-surface) records what the two states mean. `send_draft` reaches nothing —
+  a promotion writes a record like any other send. `ask_mail` reaches a chat
   provider, which is a different thing and the one exception to "a call reaches nothing outside this process": it still
   reads mail from the local copy alone and still speaks to no mail server. The three contact writes change local state
   and reach nothing outside the process at all.
@@ -79,15 +89,17 @@ Four properties hold for every tool and are proven by test rather than asserted 
   are bounded by construction rather than by a number: each answers about the one record its argument names, and
   neither has a listing shape to bound.
 
-One property holds for sixteen of the seventeen and is stated where it stops. `list_accounts`, `list_emails`,
-`get_email_content`, `search_emails`, `set_mail_flags`, the three sending tools, the two over a queued send, and the six
+One property holds for twenty of the twenty-one and is stated where it stops. `list_accounts`, `list_emails`,
+`get_email_content`, `search_emails`, `set_mail_flags`, the three sending tools, the two over a queued send, the four
+draft tools, and the six
 contact tools are within
 reach of every deployment, because local state is all they need — the sending tools included, since each writes a
 message down rather than sending one and an account configured for no delivery refuses the call rather than withdrawing
-the tool. `ask_mail`
+the tool. A draft tool needs less than that: an account that maps no drafts folder keeps its drafts here and shows the
+owner none of them, which is a state the result reports rather than a reason to withhold a tool. `ask_mail`
 needs two AI providers an operator configures separately, so it is advertised only while both are configured and
 working; the [`ask_mail`](#ask_mail) section records what decides that and what a call meets when it arrives anyway.
-Whether any of the seventeen is offered to a particular caller is a second question, which the next section answers.
+Whether any of the twenty-one is offered to a particular caller is a second question, which the next section answers.
 
 ## What a caller is offered
 
@@ -130,12 +142,12 @@ it calls anything:
 
 | Element | Convention |
 |---|---|
-| `name` | Snake case, as the MCP tool ecosystem spells tool names — `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `set_mail_flags`, `send_email`, `reply_to_email`, `forward_email`, `get_outgoing_email`, `cancel_outgoing_email`, `ask_mail`, `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact`, `promote_contact` |
-| `title` | A human-readable label for display — `List accounts`, `List emails`, `Get email content`, `Search emails`, `Set mail flags`, `Send email`, `Reply to email`, `Forward email`, `Get outgoing email`, `Cancel outgoing email`, `Ask about mail`, `List contacts`, `Get contact`, `Create contact`, `Update contact`, `Delete contact` |
+| `name` | Snake case, as the MCP tool ecosystem spells tool names — `list_accounts`, `list_emails`, `get_email_content`, `search_emails`, `set_mail_flags`, `send_email`, `reply_to_email`, `forward_email`, `get_outgoing_email`, `cancel_outgoing_email`, `save_draft`, `update_draft`, `delete_draft`, `send_draft`, `ask_mail`, `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact`, `promote_contact` |
+| `title` | A human-readable label for display — `List accounts`, `List emails`, `Get email content`, `Search emails`, `Set mail flags`, `Send email`, `Reply to email`, `Forward email`, `Get outgoing email`, `Cancel outgoing email`, `Save draft`, `Update draft`, `Delete draft`, `Send draft`, `Ask about mail`, `List contacts`, `Get contact`, `Create contact`, `Update contact`, `Delete contact` |
 | `description` | States what the tool reads or changes, that the call itself reaches no mail server, and what it bounds |
 | `inputSchema` | Every argument is a top-level property carrying its own description, unit, and absence meaning |
 | `outputSchema` | Generated from the result type, whose properties carry descriptions of their own |
-| `openWorldHint` | `false` for every tool but `set_mail_flags` and the three sending tools, whose effects leave this process — the first for the owner's own mailbox, the others for a submission server and a recipient nobody here controls; the rest are confined to MailFathom-controlled local state |
+| `openWorldHint` | `false` for every tool but `set_mail_flags`, the three sending tools, and the four draft tools, whose effects leave this process — `set_mail_flags`, `save_draft`, `update_draft`, and `delete_draft` for the owner's own mailbox, the three sending tools and `send_draft` for a submission server and a recipient nobody here controls; the rest are confined to MailFathom-controlled local state |
 
 The remaining three annotations are what a client reads before it decides whether a call needs a human, so they differ
 per tool rather than per surface:
@@ -146,6 +158,10 @@ per tool rather than per surface:
 | `set_mail_flags` | `false` | `true` | `true` |
 | `send_email`, `reply_to_email`, `forward_email` | `false` | `true` | `true` |
 | `cancel_outgoing_email` | `false` | `true` | `true` |
+| `save_draft` | `false` | `false` | `false` |
+| `update_draft` | `false` | `true` | `true` |
+| `delete_draft` | `false` | `true` | `true` |
+| `send_draft` | `false` | `true` | `true` |
 | `list_contacts`, `get_contact` | `true` | `false` | `true` |
 | `create_contact` | `false` | `false` | `false` |
 | `update_contact` | `false` | `true` | `true` |
@@ -184,8 +200,10 @@ key. An annotation describes the tool as it may be called rather than as a caref
 key would have made the value a statement about good behaviour — and the call it would have been wrong about is exactly
 the one a client makes without thinking, a retry after a timeout, whose second message cannot be taken back.
 
-`set_mail_flags` and the three sending tools are what is marked `openWorld`, and what they reach is not the same thing. A
-flag change reaches the owner's own mailbox on the owner's own server; a send, a reply, and a forward reach a submission server this
+`set_mail_flags`, the three sending tools, and the four draft tools are what is marked `openWorld`, and what
+they reach is not the same thing. A flag change and a draft reach the owner's own mailbox on the owner's own server — a draft is
+appended to their Drafts folder, edited by replacing that copy, and removed with it; a send, a reply, a forward, and the
+draft `send_draft` promotes reach a submission server this
 deployment does not own and a recipient nobody here controls, which is the first time anything on this surface leaves
 for somebody who is not this mailbox's owner. Every other tool, contact writes included, reaches MailFathom's own
 database and no third party.
@@ -199,6 +217,23 @@ destructive** shape, and it is the send's opposite on both counts: withdrawing r
 recipient — it is what stops a message from leaving — while destroying a queued send no further call brings back. A
 client that reads only `destructiveHint` cannot tell the last two apart; a client that reads `openWorldHint` beside it
 can, which is what the pair is for.
+
+The four draft tools publish the same three facts about an act that reaches nobody, and each value is decided by what the
+call does rather than by the family it belongs to. `save_draft` is `false`, `false`, `false`: it writes where nothing was,
+takes nothing away, and mints an identity — so calling it twice leaves two drafts, exactly as `create_contact` leaves one
+record and then refuses. `update_draft` is idempotent because an edit states the whole message, and destructive for that
+same reason: a recipient the caller leaves out is no longer addressed and an `htmlBody` it omits is dropped. `delete_draft`
+is both for the plainest reading of either word — the message the owner wrote is gone, and asking twice leaves the state the
+first call left. `send_draft` carries `send_email`'s three values for `send_email`'s reasons, because it is a send; what
+differs is only where the message came from, and the idempotency the annotation claims is the draft's own identity rather
+than a key a caller supplies.
+
+`openWorldHint` is what tells the first three apart from the fourth, and it is the whole reason the pair of annotations is
+worth reading together here. `update_draft` and `delete_draft` are `destructive` and closed for nobody but the owner:
+what they destroy is a message in the owner's own folder, which the owner can see and MailFathom can replace.
+`send_draft` is `destructive` because what it does cannot be undone at all, and open-world because the message reaches
+somebody nobody here controls. A client that reads only `destructiveHint` cannot tell those apart; the deployment can,
+because they sit behind different permissions, which is the stronger half of the same separation.
 
 The annotations are contract metadata rather than documentation, so `Mcp.UnitTests` asserts the advertised
 `tools/list` output: the name, the title, the description, every input property, the descriptions on them, the output
@@ -263,19 +298,21 @@ configured name for an account and carries nothing the caller did not already wr
 | `53003` | The call named a folder by a role no folder in scope is mapped with | A `folders` element written `role:Junk` on a deployment whose accounts map no junk folder; naming the alias, or mapping the role, is what answers it |
 | `53004` | A recipient named by naming somebody resolved to nobody the contact book holds | No tool published today produces it: `send_email`, `reply_to_email`, and `forward_email` all take addresses, so nothing on this surface names a contact as a recipient. It is the answer the shared resolution behind those tools already gives — a contact identity or name the book does not hold, a name several contacts carry, or an address the named contact does not hold — and it is stated here because the code is allocated and the resolution is one argument shape away rather than a path that does not exist |
 | `53005` | The call named no email this deployment can answer | `reply_to_email` or `forward_email` naming an identifier nothing is held under, an email of an account this deployment no longer serves, an email in a folder the calling grant does not read, or one whose stored content is no longer readable — four situations and deliberately one answer, so a caller cannot learn from a refusal which of them it met |
-| `53006` | The call named a recipient this deployment's recipient policy does not admit | Any of the three sending tools naming somebody a denied entry of `MailDelivery:RecipientPolicy` covers, or somebody outside the allowed entries where an operator wrote any; the whole message is refused rather than sent to the remaining recipients, and the answer names which half of the policy refused and never the address |
+| `53006` | The call named a recipient this deployment's recipient policy does not admit | Any of the three sending tools, or `send_draft` promoting a draft, naming somebody a denied entry of `MailDelivery:RecipientPolicy` covers, or somebody outside the allowed entries where an operator wrote any; the whole message is refused rather than sent to the remaining recipients, and the answer names which half of the policy refused and never the address |
 | `53007` | The call named no queued send this caller may be told about | `get_outgoing_email` or `cancel_outgoing_email` naming an identifier nothing is held under, or one held for a send some other caller queued — two situations and deliberately one answer, so an identifier alone never establishes that this mailbox sent something |
+| `53008` | The call named no draft this deployment holds | Any of the four draft tools naming an identifier nothing is held under, one already given up, one already sent with `send_draft`, one another account holds, or text that is no identifier at all — five situations and deliberately one answer, so nothing is learnt about which drafts exist by asking about identifiers one at a time. A draft the owner wrote in their own mail client is in that set by construction rather than by a check, because MailFathom holds it under no identifier |
 | `53009` | The call named a recipient this deployment holds no record of | Any of the three sending tools naming an address the caller wrote out itself, on a deployment whose `MailDelivery:UnvouchedRecipients` is `Refuse` and whose contact book and own sending addresses hold none of it; a recipient this deployment derived — whoever a reply answers, whoever a reply-to-all keeps — is never judged by it, and the answer names neither the address nor how many were refused |
+| `53010` | A draft asked to be sent names nobody to send it to | `send_draft` on a draft addressed by neither `to`, `cc`, nor `bcc`. It is the one draft refusal that is about the draft rather than about the deployment, and the remedy is `update_draft` rather than a second save — a draft addressed to nobody is an ordinary draft, so `save_draft` never refuses one |
 | `54001` | The call failed for a reason the boundary deliberately does not describe | Anything undiagnosed; the detail is in the server log |
 | `55001` | The email exists locally and its stored content is missing, damaged, or unreadable | A local copy being repaired; the call is worth repeating once repair has run |
 | `56001` | This deployment cannot answer questions about mail, either at all or for now | `ask_mail` called on a server that declared no chat endpoint or embeds no mail, or one whose chat provider is currently refusing; the message says which |
-| `56002` | This deployment cannot send as the account a message would be sent from | `send_email` naming an account whose configuration declares no `Delivery` block, or one whose block names no address to send from, and `reply_to_email` or `forward_email` reaching such an account through the email it answers; the account is served and readable, and sending from it is the part nobody configured |
-| `56003` | This deployment holds no capability to send as the account a message would be sent from | Any of the three sending tools on an account whose `Delivery:Enabled` is off, which is every account's default, or on a deployment running under `Deployment:ReadOnly`; the message says which, the account is never named, and only an operator's edit changes the answer |
+| `56002` | This deployment cannot send as the account a message would be sent from | `send_email` naming an account whose configuration declares no `Delivery` block, or one whose block names no address to send from, `reply_to_email` or `forward_email` reaching such an account through the email it answers, and `send_draft` promoting a draft that belongs to one; the account is served and readable, and sending from it is the part nobody configured. A draft is written for such an account all the same, because writing one asks nothing of a submission server |
+| `56003` | This deployment holds no capability to send as the account a message would be sent from | Any of the three sending tools, or `send_draft`, on an account whose `Delivery:Enabled` is off, which is every account's default, or on a deployment running under `Deployment:ReadOnly`; the message says which, the account is never named, and only an operator's edit changes the answer |
 | `57001` | Answering would cost more than this deployment allows | `ask_mail` on a server whose current period has spent its allowance, or a run that reached what one question may spend; the message says which, and only the first becomes answerable by waiting |
-| `57002` | Sending would carry this period past a ceiling this deployment configured | Any of the three sending tools on a deployment whose `MailDelivery:SendCeilings` for the account, for the installation, or for the calling client itself has no room for the message; the message names which of the six ceilings and never the number, and the period's roll-over is when asking again can succeed. The same code answers a period already counting as many distinct callers as this deployment holds counts for, and says so rather than naming a ceiling nobody configured |
+| `57002` | Sending would carry this period past a ceiling this deployment configured | Any of the three sending tools, or `send_draft`, on a deployment whose `MailDelivery:SendCeilings` for the account, for the installation, or for the calling client itself has no room for the message; the message names which of the six ceilings and never the number, and the period's roll-over is when asking again can succeed. The same code answers a period already counting as many distinct callers as this deployment holds counts for, and says so rather than naming a ceiling nobody configured |
 | `58001` | The call asked for a state the record has already passed | `cancel_outgoing_email` on a send that is being transmitted, has been transmitted, or was already given up on — three situations and one answer, because nothing was withdrawn in any of them and which it was reads from the state the record itself carries |
 
-Codes `51001` through `53009`, `55001`, `56001` through `56003`, `57001`, `57002`, and `58001` are the use cases' own, allocated in the
+Codes `51001` through `53010`, `55001`, `56001` through `56003`, `57001`, `57002`, and `58001` are the use cases' own, allocated in the
 MCP-boundary category because that is
 where they surface, and every one of them is written for a caller to read. That is the whole rule the boundary applies: a
 failure whose code belongs to that category is published as it stands, and a failure from any other category — a schema
@@ -1257,7 +1294,7 @@ so no refusal carries an address, a subject, or a line of the message being answ
 Reports what became of one message this caller queued. It is the other half of `queued`: a sending tool answers with an
 identifier and no outcome, because a call that waited for an SMTP exchange would be a call that blocks on a mail server,
 and a caller left holding that identifier with no way to learn what happened does the one thing that cannot be taken
-back — it sends again. So the three sending tools name this tool in their own descriptions, and a client reading
+back — it sends again. So the three sending tools and `send_draft` name this tool in their own descriptions, and a client reading
 `tools/list` sees the pair rather than discovering the second one later.
 
 **It reads a durable record and speaks to no mail server.** The answer is as fresh as the last delivery attempt, not a
@@ -1369,6 +1406,229 @@ a send nobody holds would tell a caller its own malformed argument was somebody 
 `58001` covers three situations with one message — a send being transmitted, one already transmitted, and one already
 given up on — because nothing was withdrawn in any of them and which it was reads from the `state` the same record
 carries. It is never produced for a send that was already cancelled: that one succeeds.
+
+## The drafting surface
+
+Four tools cover a message the owner writes and nobody receives: `save_draft` writes one, `update_draft` replaces what
+it holds, `delete_draft` gives it up, and `send_draft` is the one that queues it as a real message.
+[A message that is written and not sent](mail-delivery.md#a-message-that-is-written-and-not-sent) is what they act on —
+a draft this deployment holds, whose copy stands in the folder the account maps to the **drafts** role — and this
+section is the contract a caller reads.
+
+**Drafting and sending are separate grants, and that is what the surface is for.** `save_draft`, `update_draft`, and
+`delete_draft` require `mailfathom.mail.drafts.write`; `send_draft` requires `mailfathom.mail.send`, exactly as the
+three sending tools do. No permission here implies another, so a caller granted only the drafting name is offered the
+three tools that send nothing, is not offered `send_draft` at all, and has a call naming it answered as a call naming a
+tool that does not exist. A deployment that wants an agent to prepare mail for a person to send grants the first name
+and withholds the second, and nothing about that arrangement depends on a client behaving well:
+[§ What a caller is offered](#what-a-caller-is-offered) is the mechanism, and the use case behind each tool asks for
+the same grant again.
+
+The reverse holds too and is worth stating, because it is the half an operator is likelier to get wrong. A caller
+granted only `mailfathom.mail.send` may send and may not draft: it is offered `send_email`, `reply_to_email`,
+`forward_email`, and `send_draft`, and none of the three tools that write a draft.
+[Which tool each name covers](../operations/permissions.md#which-tool-each-name-covers) holds the mapping.
+
+**One tool covers what the sending surface publishes as three.** A draft is a message of its own or an answer to mail
+this deployment already holds, and `save_draft` takes both shapes rather than splitting into a `save_draft`, a
+`save_reply_draft`, and a `save_forward_draft`. The sending surface splits because each send is irreversible and worth
+its own description and its own annotations; a draft is neither, and what a caller needs instead is one act per verb —
+write one, edit one, delete one, send one. A call states exactly one shape, and a call that states both or neither is
+refused rather than guessed at.
+
+**A draft is not idempotent and takes no idempotency key.** Calling `save_draft` twice writes two drafts, and the tool
+is advertised `idempotentHint` `false` because that is what it does. The reason is the one the record itself gives: a
+duplicate draft costs the owner a deletion, where a duplicate send costs a recipient a second message that nothing can
+withdraw. So a retry after a timeout leaves a second draft to remove with `delete_draft` rather than a message sent
+twice, and the way to change a draft is `update_draft` with the identifier the first call answered.
+
+## `save_draft`
+
+Writes one message into the drafts folder of an account this deployment holds, and sends nothing. Nobody receives it,
+no submission server is offered it, and the only person who ever sees it is the mailbox's owner, in their own mail
+client.
+
+**The call reaches a mail server, and no submission server.** The draft and its message are written in one transaction
+and the account's drafts folder is brought into step with them inside the same call, so this is the one tool family
+whose request waits on an IMAP round trip — one append, and the removal of the copy a revision replaced. The order is
+what makes that safe: the draft is durable before a command goes out, so a server that refuses or never answers costs
+the copy rather than the message, `state` says `held`, and the account's own pass finishes it. That is also why
+`openWorldHint` is `true` — the copy is appended to the owner's own server — and why it means something different here
+from what it means on `send_email`.
+
+### Arguments
+
+| Argument | Type | Meaning |
+|---|---|---|
+| `plainTextBody` | `string` | **Required.** The body as plain text, which every draft carries. Required even alongside `htmlBody`. On an answer it is placed above the quoted original, which is derived rather than pasted |
+| `account` | `string` | The account the draft belongs to, named by the `accountId` or the display name `list_accounts` returned. **Required for a message of its own**, and refused on an answer with `51013` |
+| `subject` | `string` | The subject line. **Required for a message of its own** — empty text is allowed and means a message nobody has titled yet — and refused on an answer with `51013`. A line break in it is refused with `51013` |
+| `to` | `string[]` | The addresses the draft is addressed to, each a plain address. Omitted addresses nobody, which is an ordinary draft. On an answer these add to whoever the answer already reaches |
+| `cc` | `string[]` | The addresses to copy. Omitted copies nobody |
+| `bcc` | `string[]` | The addresses to copy without naming them to anybody else. Omitted blind-copies nobody |
+| `htmlBody` | `string` | An HTML alternative, stored beside the plain text. Omitted stores the plain text alone |
+| `answeredEmailId` | `string` | The `storedEmailId` of the email this draft answers, named together with `answering`. **Naming neither drafts a message of its own** |
+| `answering` | `string` | `senderOnly`, `everyone`, or `forward`. Required whenever `answeredEmailId` is named and refused otherwise |
+
+**The two shapes are exclusive and neither is a default.** A message of its own names `account` and `subject`; an
+answer names `answeredEmailId` and `answering` and neither of the other two, because the account, the subject, the
+threading headers, the quoted original, and the files a forward carries are all read from the stored email.
+[Replying and forwarding from mail this deployment already holds](mail-delivery.md#replying-and-forwarding-from-mail-this-deployment-already-holds)
+records every value that is derived and how. A call naming one half of a pair, both shapes, or neither is `51013`.
+
+`answering` is the drafting counterpart of `reply_to_email`'s `audience` with the forward folded in, and it is required
+for the same reason: the three reach three different sets of people from one stored email. `senderOnly` addresses
+whoever asked for answers, `everyone` also addresses everybody the original named in `To` and `Cc` less this account's
+own address, and `forward` carries the original and its files to people it addresses itself.
+
+**A draft addressed to nobody is an ordinary draft.** No recipient is required here, because writing the message before
+deciding who reads it is what drafting is for; `send_draft` is where the absence is refused.
+
+### Result
+
+| Field | Meaning |
+|---|---|
+| `draftId` | The draft's stable identifier, which `update_draft`, `delete_draft`, and `send_draft` name it by and which an edit does not change |
+| `accountId` | The account the draft belongs to, as MailFathom's configuration names it |
+| `state` | `held` or `filed` — whether the owner's own drafts folder shows this version of the draft yet |
+| `revision` | Which version of the draft this is, counted from one. Every accepted `update_draft` adds one |
+| `recipientCount` | How many people the draft is addressed to across the three headers, after addresses named twice were reduced to one. Nobody is named |
+| `savedAt` | When this version was written down |
+
+`state` says which of two facts has happened, because they are not one fact. MailFathom holds the draft the instant the
+call answers — it can be edited, deleted, and sent from then — while the copy in the mailbox is appended over a network
+round trip afterwards, and **an account that maps no folder to the drafts role never gets one at all**: it keeps its
+drafts here and shows the owner none of them. `held` is what a caller reads before telling somebody to look in a
+folder that does not show the message yet.
+
+Nothing about the message appears — no address, no subject, no body, no `Message-ID`, and no MIME — for the reason
+`send_email`'s result carries none: a caller that wants any of it already holds what it wrote.
+
+## `update_draft`
+
+Replaces the whole message of a draft this deployment holds, and sends nothing. The draft keeps its identifier, its
+`revision` goes up by one, and the owner's folder ends up showing one message rather than one per edit — the copy of
+the previous version is removed after the new one is appended,
+[in that order and for that reason](mail-delivery.md#a-message-that-is-written-and-not-sent).
+
+### Arguments
+
+`save_draft`'s arguments, with `draftId` in front of them: the `draftId` a save answered, required, and read exactly as
+[`delete_draft`'s](#delete_draft) is. The shape rule is `save_draft`'s unchanged — `account` and `subject` for a
+message of its own, `answeredEmailId` and `answering` for an answer, never both pairs and never neither.
+
+**It states the whole message rather than the part that changed.** A recipient the caller leaves out is no longer
+addressed, a body it does not restate is gone, and an `htmlBody` it omits is dropped. That is what makes the tool
+`idempotentHint` `true` — the second identical call writes what the first one wrote — and `destructiveHint` `true` at
+the same time, for the reason `update_contact` carries both: stating the whole record removes what the caller did not
+repeat.
+
+**An answer is re-derived from the stored email on every edit**, which is what keeps an edited reply a reply. So the
+answered email is named again, and naming a different one turns the draft into an answer to that message instead.
+
+`account` has to be the account that already holds the draft. Naming another is refused as a draft this deployment does
+not hold, so editing is never a way to move a message into a different mailbox.
+
+### Result
+
+`save_draft`'s shape, field for field, with `revision` one higher than the call before it.
+
+## `delete_draft`
+
+Gives up one draft this deployment holds and takes the copy of it back out of the owner's drafts folder. The message
+the owner wrote is gone and no call here brings it back, which is `destructiveHint` in its plainest sense. Nothing is
+sent by this call and nothing was ever sent by the draft.
+
+### Arguments
+
+| Argument | Type | Meaning |
+|---|---|---|
+| `draftId` | `string` | **Required.** The identifier `save_draft` answered. Text that is no identifier at all is refused exactly as a draft nobody holds is |
+
+### Result
+
+| Field | Meaning |
+|---|---|
+| `draftId` | The identifier of the draft that was given up. It names no draft afterwards |
+| `state` | `deleted`, `copyLeftBehind`, or `pending` |
+
+The draft is gone from this deployment in all three, and what they differ in is whether the owner will still see a
+message in their drafts folder. `deleted` is the ordinary ending. `copyLeftBehind` says one copy could not be taken out
+— the mail server refused it, or the folder it was appended to is no longer the one the account means by drafts — so
+the owner may still see that message and can remove it in their own client, and **nothing here will touch it again**.
+`pending` says the record is marked and the mailbox could not be reached, which a later pass finishes.
+
+**Asking twice is safe**, and the second call is refused as a draft this deployment does not hold, because that is what
+a deleted draft is.
+
+## `send_draft`
+
+Sends the message one draft holds, exactly as it stands. It is a send in every sense the three sending tools are: it
+reaches a submission server this deployment does not own and a recipient nobody here controls, it cannot be recalled,
+and it carries `send_email`'s four annotations for
+[ADR 0013](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0013-what-a-caller-must-do-before-mail-leaves.md)'s
+reasons.
+
+**The call transmits nothing.** The promotion writes an ordinary outgoing record carrying the bytes the draft already
+is — a recomposition would thread as a second message — and the account's delivery pass offers it to a server
+afterwards. So the result says `queued` and never that anything was delivered, exactly as `send_email`'s does.
+
+**Nothing may be changed here.** The message, the recipients, and the account are the draft's, which is why the tool
+takes one argument.
+
+### Arguments
+
+| Argument | Type | Meaning |
+|---|---|---|
+| `draftId` | `string` | **Required.** The draft to send, as `save_draft` answered it. The whole of what this call takes |
+
+### Result
+
+`send_email`'s shape, field for field, and read the same way: `outgoingEmailId` is what
+[`get_outgoing_email`](#get_outgoing_email) and [`cancel_outgoing_email`](#cancel_outgoing_email) take, and a fresh
+promotion is always `queued`. Nothing about the draft appears in it.
+
+### Asking twice
+
+There is no `idempotencyKey`, and that is not an omission. **The draft is the identity**: promoting one draft sends one
+message however many callers ask, and a repeated call answers with the record the first one wrote. A key whoever asked
+supplied would make their two asks two requests and put the message in the recipient's mailbox twice, which is the one
+duplication nothing downstream can withdraw. That is what `idempotentHint` `true` is true of here.
+
+### Every bound is asked now rather than when the draft was written
+
+Whether sending is on for the account, whether every recipient is somebody this deployment may write to, the ceilings,
+and the size bound are all asked at the promotion. A draft composed a month before an operator tightened one of them is
+refused by the one that holds today, and **a promotion that fails leaves the draft exactly as it was**.
+
+**The draft is not deleted when this answers.** The message is queued rather than sent, so the copy stands in the
+owner's folder until the message has actually been delivered and is taken out in the same pass that files the sent
+copy — which is what leaves an owner whose message did not go out with the message they wrote.
+
+## What the draft tools refuse, and what they do not reveal
+
+**Every way of naming a draft that cannot be acted on is one answer.** An identifier nothing is held under, a draft
+another account holds, a draft already given up, a draft already sent with `send_draft`, and text that is no identifier
+at all all produce `53008` `MailDraftNotFound`, with the same message. A draft the owner wrote in their own mail client
+is in that set too, and is there by construction rather than by a check: it is held under no identifier of
+MailFathom's, so there is nothing here that could name it. Telling the cases apart would let a caller discover which
+drafts this deployment holds by asking about identifiers one at a time.
+
+A draft that has already been sent is refused rather than deleted or edited, and the remedy is a different tool: its
+message is a queued send that removing the draft would leave running, so [`cancel_outgoing_email`](#cancel_outgoing_email)
+is what stops it.
+
+Everything else refuses as the sending tools do. A draft whose shape names both message forms or neither, an account
+name that is blank or carries a control character, a subject carrying a line break, an address a message cannot be
+composed from, and an answer naming none of the three answers are `51013`; too many recipients or a body past the
+configured bound is `51014` naming the number; an account this deployment does not serve is `53001`; an account with no
+`Delivery` block behind a promotion is `56002`; an email that cannot be answered is `53005` for
+[the four reasons a reply gives](#what-a-reply-and-a-forward-refuse); and a draft asked to be sent that names nobody is
+`53010` `MailDraftNotAddressed` — the one refusal that is about the draft rather than about the deployment, whose
+remedy is `update_draft` rather than a second save.
+
+Every one of them names a field, a bound, or a count and never a value, so no refusal carries an address, a subject, or
+a line of what somebody wrote.
 
 ## `ask_mail`
 
@@ -1702,12 +1962,14 @@ one anchored to mail it already holds, and `ask_mail` answers over the retrieval
 and the agent composition above them, under the ceilings an operator sets on what one question and one period may
 spend. The six contact tools are complete as well.
 
-What is still pending is the run trace an operator reads after a question, and the rest of the sending surface: reading
-back and cancelling what was queued, and the
-drafts a deployment grants where it wants a person between an agent and a recipient. The three sending tools are the
-whole of what a caller can send with today.
+The sending surface is complete as well. `get_outgoing_email` and `cancel_outgoing_email` read back and withdraw what
+was queued, and the four draft tools publish the half a deployment grants where it wants a person between an agent and
+a recipient: `save_draft`, `update_draft`, and `delete_draft` write a message nobody receives, and `send_draft` is the
+only one of the four that queues one. What is still pending is the run trace an operator reads after a question.
 
-`mailfathom.mail.send` is the grant that reaches all three, and it is on no descriptor because the protocol has nowhere on a
-tool to state a required permission. What holds it instead is the listing, which offers them only to a caller that
+`mailfathom.mail.send` is the grant that reaches every tool that causes mail to leave — the three sending tools and
+`send_draft` — and `mailfathom.mail.drafts.write` is what reaches the three that write a draft and send nothing.
+Neither is on a descriptor, because the protocol has nowhere on a
+tool to state a required permission. What holds them instead is the listing, which offers a tool only to a caller that
 holds the name, and the use cases behind them, each of which asks for it again.
-[What a credential may do](../operations/permissions.md#the-published-set) holds the name beside the rest of the set.
+[What a credential may do](../operations/permissions.md#the-published-set) holds both names beside the rest of the set.

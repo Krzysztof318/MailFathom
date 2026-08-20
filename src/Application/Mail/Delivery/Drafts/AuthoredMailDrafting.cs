@@ -49,7 +49,7 @@ public sealed class AuthoredMailDrafting(
     /// <param name="cancellationToken">Cancels the reads and the writes.</param>
     /// <returns>The draft as it stands once the mailbox has been brought into step with it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailSend" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailDraftsWrite" />.</exception>
     /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account this deployment does not serve.</exception>
     /// <exception cref="MailDraftRefusedException">Thrown when a recipient names nobody, a field cannot be composed, a bound is exceeded, the account configures no address to send from, or the draft being revised is not one of this account's.</exception>
     public async Task<MailDraftRecord> SaveAsync(
@@ -58,7 +58,7 @@ public sealed class AuthoredMailDrafting(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        authorization.RequirePermission(MailFathomPermission.MailSend);
+        authorization.RequirePermission(MailFathomPermission.MailDraftsWrite);
 
         var account = accountCatalog.ServedAccounts.FirstOrDefault(served => served.IsNamedBy(request.Account))
             ?? throw new MailAccountNotAccessibleException(request.Account);

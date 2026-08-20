@@ -189,7 +189,7 @@ public sealed class AuthoredMailDraftingTests
             new NamedRecipientResolver(book ?? new InMemoryContactBookStore()),
             composer ?? ComposerThatComposes(),
             harness.Book,
-            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend));
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailDraftsWrite));
     }
 
     private static IAuthoredEmailComposer ComposerThatComposes()

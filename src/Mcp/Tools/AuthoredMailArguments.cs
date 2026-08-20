@@ -5,20 +5,23 @@
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Application.Mail.Delivery.Tracking;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Mcp.Tools;
 
-/// <summary>Reads the arguments the tools that send mail, and the tools that ask about a send, share.</summary>
+/// <summary>Reads the arguments the tools that author mail, and the tools that ask about a send, share.</summary>
 /// <remarks>
 /// <para>
-/// Three tools send, and each of them takes an idempotency key and a list of addresses in the same shape and refuses
-/// the same values. Reading them once is what keeps the three from drifting into three answers to one question: a key
-/// a fourth character longer, a blank address admitted by one tool and refused by the next, a recipient ceiling
-/// applied after the list was expanded rather than before it.
+/// Three tools send and two write a draft, and each of them takes a list of addresses in the same shape and refuses the
+/// same values, as the three that send take an idempotency key. Reading them once is what keeps the five from drifting
+/// into five answers to one question: a key a fourth character longer, a blank address admitted by one tool and refused
+/// by the next, a recipient ceiling applied after the list was expanded rather than before it.
 /// </para>
 /// <para>
 /// Everything here is checked in front of the use case rather than instead of it. The domain bounds the same key where
@@ -80,6 +83,31 @@ internal static class AuthoredMailArguments
         return OutgoingEmailId.Create(parsed);
     }
 
+    /// <summary>Reads the identity of the draft a caller is naming.</summary>
+    /// <param name="draftId">The text the caller named the draft by.</param>
+    /// <returns>The draft identity.</returns>
+    /// <remarks>
+    /// Text that is not an identifier at all is answered as a draft this deployment does not hold, which is the answer
+    /// a draft of another account, a draft already given up, and a draft nobody ever wrote all get. That is deliberate
+    /// where it is deliberate for those three: telling them apart is how a caller would learn which drafts exist by
+    /// asking about them, and a draft carries no published identifier scheme a caller could be told it violated. The
+    /// bound and the parse are the stored email's, because the longest form <see cref="Guid.TryParse(string, out Guid)" />
+    /// accepts is 68 characters and the parse scans whatever it is handed.
+    /// </remarks>
+    /// <exception cref="MailDraftRefusedException">Thrown when the text is not an identifier this system issues.</exception>
+    public static MailDraftId HeldDraft(string draftId)
+    {
+        if (draftId is null
+            || draftId.Length > MaximumIdentifierLength
+            || !Guid.TryParse(draftId, out var parsed)
+            || parsed == Guid.Empty)
+        {
+            throw MailDraftRefusedException.NotFound();
+        }
+
+        return MailDraftId.Create(parsed);
+    }
+
     /// <summary>Names the invocation asking, from the key the caller supplied for it.</summary>
     /// <param name="idempotencyKey">The caller's own identity for this send.</param>
     /// <returns>The requester the record is written under.</returns>
@@ -114,50 +142,116 @@ internal static class AuthoredMailArguments
         IReadOnlyList<string>? cc,
         IReadOnlyList<string>? bcc)
     {
-        var count = (to?.Count ?? 0) + (cc?.Count ?? 0) + (bcc?.Count ?? 0);
-
-        if (count > OutgoingEmailRequest.MaximumRecipientCount)
+        if (Counted(to, cc, bcc) > OutgoingEmailRequest.MaximumRecipientCount)
         {
             throw MailSubmissionRefusedException.TooManyRecipients();
         }
 
-        var named = new List<NamedRecipient>(count);
-
-        AddNamed(named, to, OutgoingRecipientRole.To, AuthoredEmailField.To);
-        AddNamed(named, cc, OutgoingRecipientRole.Cc, AuthoredEmailField.Cc);
-        AddNamed(named, bcc, OutgoingRecipientRole.Bcc, AuthoredEmailField.Bcc);
-
-        return named;
+        return Collect(to, cc, bcc, out var unusableField)
+            ?? throw MailSubmissionRefusedException.From(
+                new AuthoredEmailRefusal(AuthoredEmailRefusalReason.FieldUnusable, unusableField));
     }
 
-    /// <summary>Adds one header's addresses, refusing an entry that names nobody at all.</summary>
+    /// <summary>Collects the three headers into the one recipient list a draft is written from.</summary>
+    /// <param name="to">The addresses named in the <c>To</c> header, or <see langword="null" /> where the caller named none.</param>
+    /// <param name="cc">The addresses named in the <c>Cc</c> header, or <see langword="null" />.</param>
+    /// <param name="bcc">The addresses named in the <c>Bcc</c> header, or <see langword="null" />.</param>
+    /// <returns>The recipients the author named, in the order the headers are read in.</returns>
     /// <remarks>
-    /// Blank text is refused here because an authored recipient is built from an address and a blank one names nothing
-    /// to build from — a defect in whoever called rather than an author's mistake, and this is the boundary that keeps
-    /// it from becoming one. Everything else the text may be wrong about travels unparsed to the composition, which is
-    /// the single place an address is read and refused.
+    /// It reads exactly what <see cref="NamedRecipients" /> reads and refuses exactly what it refuses, and differs in
+    /// the failure it raises: a caller told its <em>submission</em> was refused while saving a draft would read that as
+    /// a message having been offered to a server and turned down, which is the one thing that certainly did not
+    /// happen. The code and the sentence are the same either way, because both are published from one place.
     /// </remarks>
-    /// <exception cref="MailSubmissionRefusedException">Thrown when an entry carries no address.</exception>
-    private static void AddNamed(
+    /// <exception cref="MailDraftRefusedException">Thrown when the three headers name more people than a record holds, or an entry carries no address.</exception>
+    public static IReadOnlyList<NamedRecipient> DraftedRecipients(
+        IReadOnlyList<string>? to,
+        IReadOnlyList<string>? cc,
+        IReadOnlyList<string>? bcc)
+    {
+        if (Counted(to, cc, bcc) > OutgoingEmailRequest.MaximumRecipientCount)
+        {
+            throw MailDraftRefusedException.TooManyRecipients();
+        }
+
+        return Collect(to, cc, bcc, out var unusableField)
+            ?? throw MailDraftRefusedException.From(
+                new AuthoredEmailRefusal(AuthoredEmailRefusalReason.FieldUnusable, unusableField));
+    }
+
+    /// <summary>Reports whether text could name an account at all, before anything looks for one it names.</summary>
+    /// <param name="account">The text the caller named the account by.</param>
+    /// <returns><see langword="true" /> when an account could be named by that text.</returns>
+    /// <remarks>
+    /// Whether an account answers to the text is the use case's question, asked against the accounts this deployment
+    /// serves. What is answered here is whether the text could name one at all, so a caller that sent nothing meets a
+    /// statement about its own argument rather than a refusal implying the account exists somewhere. Each caller
+    /// raises its own refusal, because a send and a draft say different words about the same mistake.
+    /// </remarks>
+    public static bool CouldNameAnAccount(string? account) =>
+        !string.IsNullOrWhiteSpace(account)
+        && account.Length <= MailAccountSelector.MaximumLength
+        && !account.Any(char.IsControl);
+
+    /// <summary>Counts what the three headers name together, which is what decides whether they are expanded at all.</summary>
+    private static int Counted(
+        IReadOnlyList<string>? to,
+        IReadOnlyList<string>? cc,
+        IReadOnlyList<string>? bcc) =>
+        (to?.Count ?? 0) + (cc?.Count ?? 0) + (bcc?.Count ?? 0);
+
+    /// <summary>Reads the three headers into one list, or reports the header carrying an entry that names nobody.</summary>
+    /// <returns>The recipients, or <see langword="null" /> when an entry carried no address.</returns>
+    /// <remarks>
+    /// Blank text stops the reading because an authored recipient is built from an address and a blank one names
+    /// nothing to build from — a defect in whoever called rather than an author's mistake, and this is the boundary
+    /// that keeps it from becoming one. Everything else the text may be wrong about travels unparsed to the
+    /// composition, which is the single place an address is read and refused.
+    /// </remarks>
+    private static List<NamedRecipient>? Collect(
+        IReadOnlyList<string>? to,
+        IReadOnlyList<string>? cc,
+        IReadOnlyList<string>? bcc,
+        out AuthoredEmailField unusableField)
+    {
+        var named = new List<NamedRecipient>(Counted(to, cc, bcc));
+
+        if (AddNamed(named, to, OutgoingRecipientRole.To, AuthoredEmailField.To, out unusableField)
+            && AddNamed(named, cc, OutgoingRecipientRole.Cc, AuthoredEmailField.Cc, out unusableField)
+            && AddNamed(named, bcc, OutgoingRecipientRole.Bcc, AuthoredEmailField.Bcc, out unusableField))
+        {
+            return named;
+        }
+
+        return null;
+    }
+
+    /// <summary>Adds one header's addresses, stopping at an entry that names nobody at all.</summary>
+    /// <returns><see langword="true" /> when every entry named somebody.</returns>
+    private static bool AddNamed(
         List<NamedRecipient> named,
         IReadOnlyList<string>? addresses,
         OutgoingRecipientRole role,
-        AuthoredEmailField field)
+        AuthoredEmailField field,
+        out AuthoredEmailField unusableField)
     {
+        unusableField = field;
+
         if (addresses is null)
         {
-            return;
+            return true;
         }
 
         foreach (var address in addresses)
         {
             if (string.IsNullOrWhiteSpace(address))
             {
-                throw MailSubmissionRefusedException.From(
-                    new AuthoredEmailRefusal(AuthoredEmailRefusalReason.FieldUnusable, field));
+                return false;
             }
 
             named.Add(NamedRecipient.AtAddress(role, address));
         }
+
+        return true;
     }
 }
