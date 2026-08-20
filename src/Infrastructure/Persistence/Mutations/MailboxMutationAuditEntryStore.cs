@@ -63,6 +63,7 @@ internal sealed class MailboxMutationAuditEntryStore(
     }
 
     /// <inheritdoc />
+    /// <remarks>The read takes one row past the page, for the reason <see cref="KeysetPageSplit" /> states.</remarks>
     public async Task<MailboxMutationAuditPage> ReadPageAsync(
         MailboxMutationAuditQuery query,
         CancellationToken cancellationToken)
@@ -75,13 +76,10 @@ internal sealed class MailboxMutationAuditEntryStore(
             .Where(entry => entry.MailboxAccountId == accountValue)
             .OrderByDescending(entry => entry.CompletedAt)
             .ThenByDescending(entry => entry.Id)
-
-            // One more than the page holds, which is how the answer says whether a following page exists without a
-            // second count query over the same filtered set.
             .Take(query.PageSize + 1)
             .ToArrayAsync(cancellationToken);
 
-        var pageEntities = entities.Take(query.PageSize).ToArray();
+        var (pageEntities, hasMore) = KeysetPageSplit.Of(entities, query.PageSize);
         var entries = new List<MailboxMutationAuditEntry>(pageEntities.Length);
         var unreadableCount = 0;
 
@@ -106,7 +104,7 @@ internal sealed class MailboxMutationAuditEntryStore(
         // costs its own place in the page and nothing else: the walk neither stalls on it nor repeats the rows around it.
         return new MailboxMutationAuditPage(
             entries,
-            entities.Length > query.PageSize && pageEntities.Length > 0
+            hasMore
                 ? MailboxMutationAuditCursor.After(
                     pageEntities[^1].CompletedAt,
                     MailboxMutationAuditEntryId.Create(pageEntities[^1].Id),
@@ -115,6 +113,12 @@ internal sealed class MailboxMutationAuditEntryStore(
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The bounded set is read first and deleted by key, rather than bounding the delete itself: PostgreSQL has no
+    /// <c>DELETE ... LIMIT</c>, so a bound expressed on the delete either fails to translate or becomes a subquery whose
+    /// shape depends on the provider. Two statements over the same index cost one extra round trip and keep the
+    /// statement that takes row locks small enough to state. Every retention sweep here is written that way.
+    /// </remarks>
     public async Task<int> EraseCompletedBeforeAsync(
         MailAccountId accountId,
         DateTimeOffset completedBefore,
@@ -125,10 +129,6 @@ internal sealed class MailboxMutationAuditEntryStore(
 
         var accountValue = accountId.Value;
 
-        // The bounded set is read first and deleted by key, rather than bounding the delete itself: PostgreSQL has no
-        // `DELETE ... LIMIT`, so a bound expressed on the delete either fails to translate or becomes a subquery whose
-        // shape depends on the provider. Two statements over the same index cost one extra round trip and keep the
-        // statement that takes row locks small enough to state.
         var expiringIds = await readContext.MailboxMutationAuditEntries
             .AsNoTracking()
             .Where(entry => entry.MailboxAccountId == accountValue && entry.CompletedAt < completedBefore)

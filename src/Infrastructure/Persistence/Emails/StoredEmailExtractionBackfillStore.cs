@@ -7,9 +7,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.CodeCoverage;
-using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
-using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
@@ -89,28 +87,14 @@ internal sealed class StoredEmailExtractionBackfillStore(
             .Where(email => resumeAfterId == null || email.Id > resumeAfterId)
             .OrderBy(email => email.Id)
             .Take(batchSize)
-            .Select(email => new
-            {
-                email.Id,
-                email.MailFolder.MailboxAccountId,
-                email.MailFolder.Alias,
-                email.MailFolder.ResolutionGeneration,
-                email.UidValidity,
-                email.Uid,
-            })
+            .Select(StoredEmailOccurrenceRow.Projection)
             .ToArrayAsync(cancellationToken);
 
         return
         [
             .. candidates.Select(candidate => new StoredEmailAwaitingExtraction(
                 StoredEmailId.Create(candidate.Id),
-                EmailOccurrenceId.Create(
-                    MailAccountId.Create(candidate.MailboxAccountId),
-                    new MailFolderResolutionId(
-                        MailFolderAlias.Create(candidate.Alias),
-                        MailFolderResolutionGeneration.Create(candidate.ResolutionGeneration)),
-                    ImapUidValidity.Create(candidate.UidValidity),
-                    ImapUid.Create(candidate.Uid)))),
+                candidate.ToOccurrenceId())),
         ];
     }
 

@@ -5,6 +5,7 @@
 using MailFathom.Application.Jobs;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
+using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Jobs;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -17,6 +18,10 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Jobs;
 /// bound one claim drains the queue, and without the terminal-state predicate the partial index stops applying. None of
 /// that needs a database to establish, so it is established here.
 /// </summary>
+/// <remarks>
+/// The column names are asserted through <see cref="JobEntity" /> rather than as text, so renaming a property fails
+/// this test at compile time instead of leaving a statement PostgreSQL refuses at run time.
+/// </remarks>
 public sealed class JobClaimStatementTests
 {
     private static readonly DateTimeOffset ClaimedAt = new(2026, 8, 12, 12, 0, 0, TimeSpan.Zero);
@@ -65,8 +70,14 @@ public sealed class JobClaimStatementTests
         var statement = JobClaimStatement.Compose(Request, ClaimedAt);
 
         // Assert
-        Assert.Contains("candidate.\"AvailableAt\" <= ", statement.Format, StringComparison.Ordinal);
-        Assert.Contains("candidate.\"LeaseExpiresAt\" <= ", statement.Format, StringComparison.Ordinal);
+        Assert.Contains(
+            $"candidate.\"{nameof(JobEntity.AvailableAt)}\" <= ",
+            statement.Format,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"candidate.\"{nameof(JobEntity.LeaseExpiresAt)}\" <= ",
+            statement.Format,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -82,7 +93,10 @@ public sealed class JobClaimStatementTests
         var statement = JobClaimStatement.Compose(Request, ClaimedAt);
 
         // Assert
-        Assert.Contains("candidate.\"State\" = ANY(", statement.Format, StringComparison.Ordinal);
+        Assert.Contains(
+            $"candidate.\"{nameof(JobEntity.State)}\" = ANY(",
+            statement.Format,
+            StringComparison.Ordinal);
         Assert.Contains(
             statement.GetArguments(),
             argument => argument is string[] states
@@ -117,8 +131,14 @@ public sealed class JobClaimStatementTests
         var statement = JobClaimStatement.Compose(Request, ClaimedAt);
 
         // Assert
-        Assert.Contains("\"AttemptCount\" = job.\"AttemptCount\" + 1", statement.Format, StringComparison.Ordinal);
-        Assert.Contains("RETURNING job.\"Id\" AS \"Value\"", statement.Format, StringComparison.Ordinal);
+        Assert.Contains(
+            $"\"{nameof(JobEntity.AttemptCount)}\" = job.\"{nameof(JobEntity.AttemptCount)}\" + 1",
+            statement.Format,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"RETURNING job.\"{nameof(JobEntity.Id)}\" AS \"Value\"",
+            statement.Format,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -165,6 +185,9 @@ public sealed class JobClaimStatementTests
 
         // Assert
         Assert.Contains("WITH due AS", sql, StringComparison.Ordinal);
-        Assert.EndsWith("RETURNING job.\"Id\" AS \"Value\"", sql.TrimEnd(), StringComparison.Ordinal);
+        Assert.EndsWith(
+            $"RETURNING job.\"{nameof(JobEntity.Id)}\" AS \"Value\"",
+            sql.TrimEnd(),
+            StringComparison.Ordinal);
     }
 }

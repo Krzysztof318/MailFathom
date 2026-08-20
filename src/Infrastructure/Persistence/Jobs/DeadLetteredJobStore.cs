@@ -29,6 +29,7 @@ internal sealed class DeadLetteredJobStore(MailFathomDbContext dbContext, TimePr
     : IDeadLetteredJobStore
 {
     /// <inheritdoc />
+    /// <remarks>The read takes one row past the page, for the reason <see cref="KeysetPageSplit" /> states.</remarks>
     public async Task<DeadLetteredJobPage> ReadPageAsync(
         DeadLetteredJobQuery query,
         CancellationToken cancellationToken)
@@ -38,9 +39,6 @@ internal sealed class DeadLetteredJobStore(MailFathomDbContext dbContext, TimePr
         var rows = await this.Filter(query)
             .OrderByDescending(job => job.StateChangedAt)
             .ThenByDescending(job => job.Id)
-
-            // One more than the page holds, which is how the answer says whether a following page exists without a
-            // second count query over the same filtered set.
             .Take(query.PageSize + 1)
             .Select(job => new DeadLetteredJobRow(
                 job.Id,
@@ -54,7 +52,7 @@ internal sealed class DeadLetteredJobStore(MailFathomDbContext dbContext, TimePr
                 job.StateChangedAt))
             .ToArrayAsync(cancellationToken);
 
-        var pageRows = rows.Take(query.PageSize).ToArray();
+        var (pageRows, hasMore) = KeysetPageSplit.Of(rows, query.PageSize);
 
         // A row whose type this build does not declare is left out of the answer but still counted for the boundary:
         // the cursor is the position in the reading, so skipping a row must not move where the next page resumes.
@@ -68,7 +66,7 @@ internal sealed class DeadLetteredJobStore(MailFathomDbContext dbContext, TimePr
 
         return new DeadLetteredJobPage(
             jobs,
-            rows.Length > query.PageSize && pageRows.Length > 0
+            hasMore
                 ? DeadLetteredJobCursor.After(
                     pageRows[^1].StateChangedAt,
                     JobId.Create(pageRows[^1].Id),
@@ -77,28 +75,13 @@ internal sealed class DeadLetteredJobStore(MailFathomDbContext dbContext, TimePr
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// The attempt count goes back to nothing and the available instant to now, so the job is claimable by the next
-    /// pass rather than after whatever backoff the failed attempt had written. The failure columns are left where they
-    /// are: the row goes on saying why it stopped until an attempt replaces the answer.
-    /// </remarks>
+    /// <remarks>What the statement writes and leaves alone is <see cref="DeadLetteredJobDecisionStatements.ComposeRetry" />'s.</remarks>
     public async Task<JobRecoveryOutcome> RetryAsync(JobId jobId, CancellationToken cancellationToken)
     {
-        var retriedAt = timeProvider.GetUtcNow();
         var jobIdValue = jobId.Value;
-        var deadLettered = nameof(JobState.DeadLettered);
-        var pending = nameof(JobState.Pending);
 
         var retriedRows = await dbContext.Database.ExecuteSqlAsync(
-            $"""
-             UPDATE jobs
-             SET "State" = {pending},
-                 "AvailableAt" = {retriedAt},
-                 "AttemptCount" = 0,
-                 "StateChangedAt" = {retriedAt}
-             WHERE "Id" = {jobIdValue}
-               AND "State" = {deadLettered}
-             """,
+            DeadLetteredJobDecisionStatements.ComposeRetry(jobIdValue, timeProvider.GetUtcNow()),
             cancellationToken);
 
         return retriedRows == 1
@@ -107,21 +90,13 @@ internal sealed class DeadLetteredJobStore(MailFathomDbContext dbContext, TimePr
     }
 
     /// <inheritdoc />
+    /// <remarks>What the statement writes and leaves alone is <see cref="DeadLetteredJobDecisionStatements.ComposeDrop" />'s.</remarks>
     public async Task<JobRecoveryOutcome> DropAsync(JobId jobId, CancellationToken cancellationToken)
     {
-        var droppedAt = timeProvider.GetUtcNow();
         var jobIdValue = jobId.Value;
-        var deadLettered = nameof(JobState.DeadLettered);
-        var dropped = nameof(JobState.Dropped);
 
         var droppedRows = await dbContext.Database.ExecuteSqlAsync(
-            $"""
-             UPDATE jobs
-             SET "State" = {dropped},
-                 "StateChangedAt" = {droppedAt}
-             WHERE "Id" = {jobIdValue}
-               AND "State" = {deadLettered}
-             """,
+            DeadLetteredJobDecisionStatements.ComposeDrop(jobIdValue, timeProvider.GetUtcNow()),
             cancellationToken);
 
         return droppedRows == 1

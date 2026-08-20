@@ -6,7 +6,6 @@ using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
-using MailFathom.Domain.Failures;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -61,6 +60,7 @@ internal sealed class OutboxOperationStore(MailFathomDbContext dbContext, TimePr
     }
 
     /// <inheritdoc />
+    /// <remarks>The read takes one row past the page, for the reason <see cref="KeysetPageSplit" /> states.</remarks>
     public async Task<OutboxPage> ReadPageAsync(OutboxQuery query, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
@@ -68,9 +68,6 @@ internal sealed class OutboxOperationStore(MailFathomDbContext dbContext, TimePr
         var rows = await this.Filter(query)
             .OrderByDescending(message => message.RecordedAt)
             .ThenByDescending(message => message.Id)
-
-            // One more than the page holds, which is how the answer says whether a following page exists without a
-            // second count query over the same filtered set.
             .Take(query.PageSize + 1)
             .Select(message => new OutboxRow(
                 message.Id,
@@ -86,11 +83,11 @@ internal sealed class OutboxOperationStore(MailFathomDbContext dbContext, TimePr
                 message.LastReplyCode))
             .ToArrayAsync(cancellationToken);
 
-        var pageRows = rows.Take(query.PageSize).ToArray();
+        var (pageRows, hasMore) = KeysetPageSplit.Of(rows, query.PageSize);
 
         return new OutboxPage(
             [.. pageRows.Select(ToEntry)],
-            rows.Length > query.PageSize && pageRows.Length > 0
+            hasMore
                 ? OutboxCursor.After(
                     pageRows[^1].RecordedAt,
                     OutgoingEmailId.Create(pageRows[^1].Id),
@@ -254,25 +251,9 @@ internal sealed class OutboxOperationStore(MailFathomDbContext dbContext, TimePr
         RecordedAt = row.RecordedAt,
         StageChangedAt = row.StageChangedAt,
         AvailableAt = row.AvailableAt,
-        LastFailure = ToFailure(row.LastFailureCode),
+        LastFailure = StoredFailureCode.ToErrorCode(row.LastFailureCode),
         LastReplyCode = row.LastReplyCode,
     };
-
-    /// <summary>Reads back the code of the failure the last attempt ended in.</summary>
-    /// <remarks>
-    /// A number this build does not recognize is a row written by one that allocated a code since. It is diagnostic
-    /// detail rather than something acted on, so it is reported as absent instead of failing the read of a page that is
-    /// otherwise perfectly readable — which is the same rule the record mapping follows.
-    /// </remarks>
-    private static MailFathomErrorCode? ToFailure(int? storedCode)
-    {
-        if (storedCode is not { } failureCode)
-        {
-            return null;
-        }
-
-        return MailFathomErrorCode.TryParse(failureCode, out var failure) ? failure : null;
-    }
 
     /// <summary>The columns one listing row is read from, which are the ones that name no person.</summary>
     private sealed record OutboxRow(

@@ -3,10 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Domain.Accounts;
-using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Scheduling;
-using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
 
 namespace MailFathom.Infrastructure.Persistence.Delivery;
@@ -49,27 +47,15 @@ internal static class RecurringSendMapping
     }
 
     /// <summary>Restores one recipient every occasion of the declaration is offered to.</summary>
-    /// <remarks>
-    /// An address that no longer parses fails the read rather than being dropped, for the reason an outgoing record's
-    /// does: a repetition offered to fewer people than it was declared for is somebody who stops receiving mail with
-    /// nothing afterwards saying so.
-    /// </remarks>
-    private static OutgoingRecipient ToRecipient(Guid declarationId, RecurringSendRecipientEntity entity)
-    {
-        if (!EmailAddress.TryCreate(displayName: null, entity.Address, out var address))
-        {
-            // The address itself stays out of the message: it is personal data, and the ordinal names the row exactly.
-            throw new InvalidOperationException(
-                $"Recurring send {declarationId} carries a recipient at position {entity.Ordinal} whose address names no mailbox.");
-        }
-
-        return OutgoingRecipient.Create(address, entity.Role, ContactOf(entity));
-    }
-
-    /// <summary>Reads back which contact the recipient's address was resolved from, where one was.</summary>
-    /// <remarks>An empty identifier is read as no contact rather than failing the read, exactly as it is on an outgoing record: nothing addresses anybody by it.</remarks>
-    private static ContactId? ContactOf(RecurringSendRecipientEntity entity) =>
-        entity.ContactId is { } contactId && contactId != Guid.Empty ? ContactId.Create(contactId) : null;
+    /// <remarks>The address and the contact are read as <see cref="StoredOutgoingRecipient" /> states.</remarks>
+    private static OutgoingRecipient ToRecipient(Guid declarationId, RecurringSendRecipientEntity entity) =>
+        StoredOutgoingRecipient.ToRecipient(
+            "Recurring send",
+            declarationId,
+            entity.Ordinal,
+            entity.Address,
+            entity.Role,
+            entity.ContactId);
 
     /// <summary>Reads back the message the last occasion produced, where there has been one.</summary>
     /// <remarks>

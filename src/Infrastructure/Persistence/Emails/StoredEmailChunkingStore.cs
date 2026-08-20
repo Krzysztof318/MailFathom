@@ -10,7 +10,6 @@ using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
-using MailFathom.Domain.Spam;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using MailFathom.Infrastructure.Persistence.Spam;
@@ -63,18 +62,19 @@ internal sealed class StoredEmailChunkingStore(
             .Take(batchSize)
             .Select(email => new OutstandingEmailRow(
                 email.Id,
-                email.MailFolder.MailboxAccountId,
-                email.MailFolder.Alias,
-                email.StoredAt,
-                email.ContentAvailability,
-                email.SpamClassification == null ? null : email.SpamClassification.Verdict))
+                new StoredDerivedWorkCandidateRow(
+                    email.MailFolder.MailboxAccountId,
+                    email.MailFolder.Alias,
+                    email.StoredAt,
+                    email.ContentAvailability,
+                    email.SpamClassification == null ? null : email.SpamClassification.Verdict)))
             .ToArrayAsync(cancellationToken);
 
         return
         [
-            .. candidates.Select(candidate => new StoredEmailAwaitingChunking(
-                StoredEmailId.Create(candidate.Id),
-                AdmissionOf(terms, candidate))),
+            .. candidates.Select(row => new StoredEmailAwaitingChunking(
+                StoredEmailId.Create(row.Id),
+                row.Candidate.AdmittedUnder(terms))),
         ];
     }
 
@@ -133,27 +133,6 @@ internal sealed class StoredEmailChunkingStore(
             embeddedFolders),
         terms);
 
-    /// <summary>Names the answer the predicate above already reached about one selected row.</summary>
-    /// <remarks>
-    /// The query admits the message; this says which of the gate's answers admitted it, which is the only place a
-    /// release is decidable per message. A withheld one never reaches here, so the answer is always an admitting one.
-    /// </remarks>
-    private static DerivedWorkAdmission AdmissionOf(DerivedWorkAdmissionTerms terms, OutstandingEmailRow candidate) =>
-        DerivedWorkGate.Admit(
-            terms,
-            new DerivedWorkCandidate(
-                MailAccountId.Create(candidate.MailboxAccountId),
-                MailFolderAlias.Create(candidate.Alias),
-                candidate.StoredAt,
-                candidate.ContentAvailability,
-                candidate.Verdict));
-
     /// <summary>One message awaiting the cut, as the walk's projection returns it.</summary>
-    private sealed record OutstandingEmailRow(
-        Guid Id,
-        string MailboxAccountId,
-        string Alias,
-        DateTimeOffset StoredAt,
-        StoredEmailContentAvailability ContentAvailability,
-        SpamVerdict? Verdict);
+    private sealed record OutstandingEmailRow(Guid Id, StoredDerivedWorkCandidateRow Candidate);
 }

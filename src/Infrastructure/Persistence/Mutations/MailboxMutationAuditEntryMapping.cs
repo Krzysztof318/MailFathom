@@ -5,10 +5,10 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
-using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Mutations.Audit;
+using MailFathom.Infrastructure.Persistence.Delivery;
 using MailFathom.Infrastructure.Persistence.Entities;
 
 namespace MailFathom.Infrastructure.Persistence.Mutations;
@@ -54,7 +54,7 @@ internal static class MailboxMutationAuditEntryMapping
     /// entries this one has no value for, and a rollback then reads them.
     /// </para>
     /// <para>
-    /// It is reported rather than thrown for the reason <see cref="ToFailure" /> degrades an unrecognized failure code:
+    /// It is reported rather than thrown for the reason <see cref="StoredFailureCode" /> degrades an unrecognized code:
     /// this trail is read a page at a time and paginated by position, so one unreadable row thrown out of the mapping
     /// would fail the whole page and every page after it. The caller leaves the row out, says so, and walks on.
     /// </para>
@@ -86,13 +86,13 @@ internal static class MailboxMutationAuditEntryMapping
             SourceUidValidity = ImapUidValidity.Create(entity.SourceUidValidity),
             SourceUid = ImapUid.Create(entity.SourceUid),
             DestinationFolderPath = destinationFolderPath,
-            Placement = ToPlacement(entity),
+            Placement = StoredRemotePlacement.Of(entity.PlacementUidValidity, entity.PlacementUid),
             DesiredSeenState = entity.DesiredSeenState,
             Requester = MailboxMutationRequester.Create(entity.RequesterOrigin, entity.RequesterIdentity),
             RequestedAt = entity.RequestedAt,
             CompletedAt = entity.CompletedAt,
             Outcome = entity.Outcome,
-            Failure = ToFailure(entity),
+            Failure = StoredFailureCode.ToErrorCode(entity.FailureCode),
         };
 
         return true;
@@ -126,25 +126,5 @@ internal static class MailboxMutationAuditEntryMapping
         folderPath = parsed ? storedFolderPath : null;
 
         return parsed;
-    }
-
-    private static RemoteEmailPlacement ToPlacement(MailboxMutationAuditEntryEntity entity) =>
-        entity is { PlacementUidValidity: { } uidValidity, PlacementUid: { } uid }
-            ? RemoteEmailPlacement.Reported(ImapUidValidity.Create(uidValidity), ImapUid.Create(uid))
-            : RemoteEmailPlacement.NotReported();
-
-    /// <summary>Reads back the code an abandoned change was given up on for.</summary>
-    /// <remarks>
-    /// A number this build does not recognize is a row written by one that allocated a code since. It is diagnostic
-    /// detail rather than something acted on, so it is reported as absent instead of failing the read of the whole page.
-    /// </remarks>
-    private static MailFathomErrorCode? ToFailure(MailboxMutationAuditEntryEntity entity)
-    {
-        if (entity.FailureCode is not { } failureCode)
-        {
-            return null;
-        }
-
-        return MailFathomErrorCode.TryParse(failureCode, out var failure) ? failure : null;
     }
 }

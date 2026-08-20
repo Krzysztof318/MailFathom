@@ -3,13 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Domain.Accounts;
-using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
-using MailFathom.Domain.Emails;
-using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
-using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Persistence.Entities;
 
 namespace MailFathom.Infrastructure.Persistence.Delivery;
@@ -51,7 +47,7 @@ internal static class MailDraftRecordMapping
                 : null,
             Copies = [.. entity.Copies.Select(ToCopy).OrderByDescending(copy => copy.Revision)],
             Divergence = ToDivergence(entity),
-            LastFailure = ToFailure(entity.LastFailureCode),
+            LastFailure = StoredFailureCode.ToErrorCode(entity.LastFailureCode),
         };
     }
 
@@ -63,22 +59,11 @@ internal static class MailDraftRecordMapping
             FolderAlias = MailFolderAlias.Create(entity.FolderAlias),
             FolderPath = RemoteFolderPath.Create(entity.FolderPath),
             Stage = entity.Stage,
-            Placement = ToPlacement(entity),
+            Placement = StoredRemotePlacement.Of(entity.PlacementUidValidity, entity.PlacementUid),
             InternetMessageId = entity.InternetMessageId,
             AppendedAt = entity.AppendedAt,
             SettledAt = entity.SettledAt,
         };
-
-    /// <summary>Reads back where the server said it put the copy, which on most servers is nowhere it named.</summary>
-    /// <remarks>
-    /// The two columns are written together and read together. A row carrying one of them is a row no code path here
-    /// can produce, and reading it as a placement would name a UID with no UID space to interpret it in — which is the
-    /// one thing a removal must never do.
-    /// </remarks>
-    private static RemoteEmailPlacement ToPlacement(MailDraftCopyEntity entity) =>
-        entity is { PlacementUidValidity: { } uidValidity, PlacementUid: { } uid }
-            ? RemoteEmailPlacement.Reported(ImapUidValidity.Create(uidValidity), ImapUid.Create(uid))
-            : RemoteEmailPlacement.NotReported();
 
     /// <summary>Reads back why the tracked copy stopped being one MailFathom may touch.</summary>
     /// <remarks>
@@ -91,42 +76,13 @@ internal static class MailDraftRecordMapping
             : null;
 
     /// <summary>Restores one person the draft is addressed to.</summary>
-    /// <remarks>
-    /// An address that no longer parses fails the read rather than being dropped, for the reason a send's does: a draft
-    /// promoted with fewer recipients than its author wrote is a person who never receives the message and is told
-    /// nothing about it.
-    /// </remarks>
-    private static OutgoingRecipient ToRecipient(Guid draftId, MailDraftRecipientEntity entity)
-    {
-        if (!EmailAddress.TryCreate(displayName: null, entity.Address, out var address))
-        {
-            // The address itself stays out of the message: it is personal data, and the ordinal names the row exactly.
-            throw new InvalidOperationException(
-                $"Mail draft {draftId} carries a recipient at position {entity.Ordinal} whose address names no mailbox.");
-        }
-
-        return OutgoingRecipient.Create(address, entity.Role, ContactOf(entity));
-    }
-
-    /// <summary>Reads back which contact the address was resolved from, where one was.</summary>
-    /// <remarks>An empty identifier is read as no contact, for the reason a send's is: the value records how the
-    /// address came to be on the draft and nothing addresses anybody by it.</remarks>
-    private static ContactId? ContactOf(MailDraftRecipientEntity entity) =>
-        entity.ContactId is { } contactId && contactId != Guid.Empty ? ContactId.Create(contactId) : null;
-
-    /// <summary>Reads back the code of the failure the last attempt on the mailbox ended in.</summary>
-    /// <remarks>
-    /// A number this build does not recognize is a row written by one that allocated a code since. It is diagnostic
-    /// detail rather than something acted on, so it is reported as absent instead of failing the read of a draft that
-    /// is otherwise perfectly readable.
-    /// </remarks>
-    private static MailFathomErrorCode? ToFailure(int? storedCode)
-    {
-        if (storedCode is not { } failureCode)
-        {
-            return null;
-        }
-
-        return MailFathomErrorCode.TryParse(failureCode, out var failure) ? failure : null;
-    }
+    /// <remarks>The address and the contact are read as <see cref="StoredOutgoingRecipient" /> states.</remarks>
+    private static OutgoingRecipient ToRecipient(Guid draftId, MailDraftRecipientEntity entity) =>
+        StoredOutgoingRecipient.ToRecipient(
+            "Mail draft",
+            draftId,
+            entity.Ordinal,
+            entity.Address,
+            entity.Role,
+            entity.ContactId);
 }
