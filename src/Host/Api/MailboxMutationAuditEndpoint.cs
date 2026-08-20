@@ -5,7 +5,6 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Domain.Access;
-using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Mutations.Audit;
 using MailFathom.Host.Security.Endpoints;
@@ -81,18 +80,9 @@ internal static class MailboxMutationAuditEndpoint
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(trail);
 
-        if (string.IsNullOrWhiteSpace(account))
+        if (AdminAccountRequest.Resolve(account, accounts) is not { } accountId)
         {
-            return TypedResults.Problem("The request named no mail account.", statusCode: StatusCodes.Status400BadRequest);
-        }
-
-        var accountId = MailAccountId.Create(account);
-
-        if (!accounts.ServedAccounts.Any(account => account.Id == accountId))
-        {
-            return TypedResults.Problem(
-                $"This deployment configures no mail account named '{accountId.Value}'.",
-                statusCode: StatusCodes.Status400BadRequest);
+            return AdminAccountRequest.Refuse(account);
         }
 
         // The unspecified default is what "every mutation" is written as, so an absent filter and a named one reach the

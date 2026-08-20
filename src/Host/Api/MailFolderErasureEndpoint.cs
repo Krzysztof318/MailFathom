@@ -5,7 +5,6 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Folders;
 using MailFathom.Domain.Access;
-using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -86,9 +85,9 @@ internal static class MailFolderErasureEndpoint
         ArgumentNullException.ThrowIfNull(mappings);
         ArgumentNullException.ThrowIfNull(eraser);
 
-        if (ResolveAccount(request?.Account, accounts) is not { } accountId)
+        if (AdminAccountRequest.Resolve(request?.Account, accounts) is not { } accountId)
         {
-            return UnknownAccount(request?.Account);
+            return AdminAccountRequest.Refuse(request?.Account);
         }
 
         if (!MailFolderAlias.TryCreate(request?.Folder, out var folderAlias))
@@ -113,26 +112,6 @@ internal static class MailFolderErasureEndpoint
             erasure.ErasedEmailCount,
             erasure.EmailsRemain));
     }
-
-    /// <summary>Reads the account a request named, or nothing when this deployment does not serve it.</summary>
-    private static MailAccountId? ResolveAccount(string? account, IMailAccountCatalog accounts)
-    {
-        if (string.IsNullOrWhiteSpace(account))
-        {
-            return null;
-        }
-
-        var accountId = MailAccountId.Create(account);
-
-        return accounts.ServedAccounts.Any(served => served.Id == accountId) ? accountId : null;
-    }
-
-    /// <summary>States that the request named no account this deployment serves, without echoing an empty one.</summary>
-    private static ProblemHttpResult UnknownAccount(string? account) => TypedResults.Problem(
-        string.IsNullOrWhiteSpace(account)
-            ? "The request named no mail account."
-            : $"This deployment configures no mail account named '{account}'.",
-        statusCode: StatusCodes.Status400BadRequest);
 }
 
 /// <summary>What a deployment is asked when a folder's stored mail is to be erased.</summary>

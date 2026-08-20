@@ -5,7 +5,6 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Domain.Access;
-using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
 using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -77,18 +76,9 @@ internal static class MailAnsweringAuditEndpoint
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(trail);
 
-        if (string.IsNullOrWhiteSpace(account))
+        if (AdminAccountRequest.Resolve(account, accounts) is not { } accountId)
         {
-            return TypedResults.Problem("The request named no mail account.", statusCode: StatusCodes.Status400BadRequest);
-        }
-
-        var accountId = MailAccountId.Create(account);
-
-        if (!accounts.ServedAccounts.Any(account => account.Id == accountId))
-        {
-            return TypedResults.Problem(
-                $"This deployment configures no mail account named '{accountId.Value}'.",
-                statusCode: StatusCodes.Status400BadRequest);
+            return AdminAccountRequest.Refuse(account);
         }
 
         MailAnsweringAuditCursor? decodedCursor = null;

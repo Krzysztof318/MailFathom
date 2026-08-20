@@ -5,7 +5,6 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Domain.Access;
-using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -237,7 +236,7 @@ internal static class MailboxMaintenanceEndpoints
     /// </remarks>
     private static StoredMailScope? ResolveScope(string? account, string? folder, IMailAccountCatalog accounts)
     {
-        if (ResolveAccount(account, accounts) is not { } accountId)
+        if (AdminAccountRequest.Resolve(account, accounts) is not { } accountId)
         {
             return null;
         }
@@ -252,19 +251,6 @@ internal static class MailboxMaintenanceEndpoints
             : null;
     }
 
-    /// <summary>Reads the account a request named, or nothing when this deployment does not serve it.</summary>
-    private static MailAccountId? ResolveAccount(string? account, IMailAccountCatalog accounts)
-    {
-        if (string.IsNullOrWhiteSpace(account))
-        {
-            return null;
-        }
-
-        var accountId = MailAccountId.Create(account);
-
-        return accounts.ServedAccounts.Any(served => served.Id == accountId) ? accountId : null;
-    }
-
     /// <summary>States which half of the scope was wrong, without echoing an empty one.</summary>
     /// <remarks>
     /// The folder is not a parameter because it is not read: a scope that failed to resolve with an account this
@@ -272,17 +258,13 @@ internal static class MailboxMaintenanceEndpoints
     /// </remarks>
     private static ProblemHttpResult Refusal(string? account, IMailAccountCatalog accounts)
     {
-        if (ResolveAccount(account, accounts) is not null)
+        if (AdminAccountRequest.Resolve(account, accounts) is not null)
         {
             return TypedResults.Problem(
                 "The request named a folder that is not an alias. Name the alias of one folder, or name none at all to cover every folder the account holds mail in.",
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        return TypedResults.Problem(
-            string.IsNullOrWhiteSpace(account)
-                ? "The request named no mail account."
-                : $"This deployment configures no mail account named '{account}'.",
-            statusCode: StatusCodes.Status400BadRequest);
+        return AdminAccountRequest.Refuse(account);
     }
 }
