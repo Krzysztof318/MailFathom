@@ -318,9 +318,11 @@ verify_full_runs_workflow_contracts_for_a_change_beyond_csharp() {
   assert_file_content 'workflow-contracts' "$workflow_invocation_log"
 }
 
-# Every invariant the suite asserts is carried by a file no C# change can move: a licensing header
-# outside `.cs`, a `describes:` marker, a table-of-contents entry. `CI` runs it on every pull request
-# including a draft, so what is skipped here is an earlier verdict rather than the verdict.
+# All but one invariant the suite asserts is carried by a file no C# change can move: a licensing
+# header outside `.cs`, a `describes:` marker, a table-of-contents entry. The exception is the
+# NUL-byte sweep, which reads `.cs` along with every other tracked text file. `CI` runs the suite on
+# every pull request including a draft, so what is skipped here is an earlier verdict rather than the
+# verdict — for that one invariant genuinely deferred, and for the rest nothing to ask about at all.
 verify_full_skips_workflow_contracts_for_a_csharp_only_change() {
   : > "$workflow_invocation_log"
   : > "$invocation_log"
@@ -6845,6 +6847,58 @@ every_skill_declares_its_license() {
   (( failures == 0 ))
 }
 
+# A literal NUL byte makes a text file binary to everything that reads it as text. `grep` reports no
+# match where there is one, so a helper written inside such a file is invisible to the search a later
+# session runs before writing its own copy of it; `git diff` renders any change to it as `Binary files
+# differ`, so the change arrives unreviewable. The escape that means the same character — `\0` in a
+# string, `'\0'` for the char — costs none of that.
+#
+# The sweep asks `.gitattributes` which files are binary rather than carrying an extension list of its
+# own, because the repository declares that once already and a second list would stop silently at the
+# first `.props`, `.slnx`, or Quadlet unit nobody remembered to add to it.
+#
+# Detection is `read -d ''`, which reads to the first NUL and reports whether it reached one, rather
+# than git's own binary heuristic: that one looks at the first 8000 bytes alone, so it reads a file
+# carrying the byte further in as ordinary text — which is exactly where one of the five sites this
+# check was written for sat.
+no_tracked_text_file_carries_a_nul_byte() {
+  local text_files file failures=0
+
+  text_files="$(git -C "$source_repository_root" ls-files |
+    git -C "$source_repository_root" check-attr --stdin binary |
+    grep -v ': binary: set$' |
+    sed 's/: binary: [^:]*$//')"
+
+  while IFS= read -r file; do
+    # A gitlink is tracked and is not a file, and nothing here can read one.
+    [[ -f "$source_repository_root/$file" ]] || continue
+
+    if IFS= read -r -d '' _ < "$source_repository_root/$file"; then
+      printf '%s carries a literal NUL byte, which makes it binary to grep and to git diff; write the escape instead\n' \
+        "$file" >&2
+      failures=$(( failures + 1 ))
+    fi
+  done <<< "$text_files"
+
+  # The floor rather than the coverage. A sweep that reached nothing reports nothing and is
+  # indistinguishable from a clean tree, and the extension list this check exists to avoid would leave
+  # every one of these three out. The fourth is the declared-binary case, which has to stay out or
+  # every image in the repository fails.
+  for file in MailFathom.slnx deploy/quadlet/mailfathom.container docfx/template/public/main.css; do
+    if ! grep -qxF "$file" <<< "$text_files"; then
+      printf '%s is not among the tracked text files the sweep read\n' "$file" >&2
+      failures=$(( failures + 1 ))
+    fi
+  done
+
+  if grep -qxF 'assets/icon-180.png' <<< "$text_files"; then
+    printf 'assets/icon-180.png is declared binary and must not be swept as text\n' >&2
+    failures=$(( failures + 1 ))
+  fi
+
+  (( failures == 0 ))
+}
+
 run_test verify_fast_runs_restore_build_tests_and_formatting
 run_test verify_full_runs_tests_once_through_coverage
 run_test verify_full_runs_workflow_contracts_for_a_change_beyond_csharp
@@ -7081,6 +7135,7 @@ run_test every_browser_asset_carries_the_license_header
 run_test every_container_unit_carries_the_license_header
 run_test every_shell_script_carries_the_license_header
 run_test every_skill_declares_its_license
+run_test no_tracked_text_file_carries_a_nul_byte
 
 printf '%s passed, %s failed\n' "$passed_count" "$failed_count"
 

@@ -113,12 +113,16 @@ if [[ -z "${VERIFY_FORCE:-}" ]] && verification_already_recorded 'verify-full' "
 else
   # What the contract suite asserts is a property of the whole tree — a licensing header in every
   # `.yml`, `.sh`, Helm template, and `SKILL.md`, a `describes:` marker resolving to something, a
-  # table-of-contents entry behind every published page — and none of those can be moved by adding or
-  # editing a C# file. Removing or moving one can, because a marker and an entry name a path, so a
-  # deletion or a rename runs the suite whatever it touched. `CI` runs it unconditionally on every
-  # pull request including a draft and on every push to `main`, which is what makes skipping it here
-  # an earlier verdict withheld rather than a verdict lost: the tree a merge produces is the one no
-  # pull-request run was ever shown, and that run is in the pipeline rather than in this script.
+  # table-of-contents entry behind every published page — and all but one of those are carried by a
+  # file no C# change can move. Removing or moving one can, because a marker and an entry name a
+  # path, so a deletion or a rename runs the suite whatever it touched. The exception is the NUL-byte
+  # sweep, which reads every tracked text file rather than a list of extensions and therefore reads
+  # `.cs` as well: for a C#-only branch that one verdict is deferred rather than absent, which is the
+  # single place this skip withholds an answer somebody here could have wanted. `CI` runs the suite
+  # unconditionally on every pull request including a draft and on every push to `main`, which is
+  # what makes skipping it here an earlier verdict withheld rather than a verdict lost: the tree a
+  # merge produces is the one no pull-request run was ever shown, and that run is in the pipeline
+  # rather than in this script.
   #
   # It runs beside the dotnet chain rather than in front of it. The suite builds the repositories it
   # tests under its own temporary directory and fakes `dotnet` with a symlink to itself, so it reads

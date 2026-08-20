@@ -722,7 +722,7 @@ public sealed class AuthoredResponseSubmissionTests
             .Returns(call =>
             {
                 var request = call.ArgAt<OutgoingEmailRequest>(1);
-                var identity = $"{request.AccountId.Value} {request.Requester.Identity}";
+                var identity = $"{request.AccountId.Value}\0{request.Requester.Identity}";
 
                 if (!recordsByIdentity.TryGetValue(identity, out var opened))
                 {
