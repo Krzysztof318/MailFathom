@@ -50,6 +50,7 @@ using MailFathom.Infrastructure.Spam;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Xunit;
 
 namespace MailFathom.IntegrationTests.Orchestration;
 
@@ -530,6 +531,34 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
                 await write(scope, session, token);
 
                 return await session.CommitAsync(token);
+            },
+            cancellationToken);
+
+    /// <summary>Runs one write in its own scope and session, and hands back the value the write produced.</summary>
+    /// <typeparam name="TResult">What the write produces, such as the identifier the repository assigned.</typeparam>
+    /// <param name="write">The repository calls that join the session, answering with the value the caller needs.</param>
+    /// <param name="cancellationToken">Cancels the write and the commit.</param>
+    /// <returns>What the write produced, once its session committed.</returns>
+    /// <remarks>
+    /// The scope, the session, and the ordering are <see cref="CommitAsync" />'s. What differs is which of the two
+    /// values reaches the caller: that method answers with the commit result, which is what a test asserting a conflict
+    /// needs and what leaves a test needing the written identifier with nowhere to read it from. Here the commit is
+    /// asserted instead, so an arrangement that silently conflicted fails where it happened rather than at whatever the
+    /// caller asserts about the value next.
+    /// </remarks>
+    internal Task<TResult> CommitProducingAsync<TResult>(
+        Func<IServiceProvider, IPersistenceSession, CancellationToken, Task<TResult>> write,
+        CancellationToken cancellationToken) => this.InScopeAsync(
+            async (scope, token) =>
+            {
+                await using var session = await scope.GetRequiredService<IPersistenceSessionFactory>()
+                    .BeginSessionAsync(token);
+
+                var produced = await write(scope, session, token);
+
+                Assert.Equal(PersistenceCommitResult.Committed, await session.CommitAsync(token));
+
+                return produced;
             },
             cancellationToken);
 
