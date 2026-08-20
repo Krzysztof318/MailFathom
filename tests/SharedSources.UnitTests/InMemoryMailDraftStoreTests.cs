@@ -6,7 +6,11 @@ using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
+using MailFathom.Domain.Delivery.Filing;
+using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
+using MailFathom.Domain.Folders;
+using MailFathom.Domain.Mutations;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -25,6 +29,14 @@ public sealed class InMemoryMailDraftStoreTests
     private static readonly MailAccountId Account = MailAccountId.Create("work");
 
     private static readonly IPersistenceSession Session = new IgnoredPersistenceSession();
+
+    private static readonly MailFolderResolution Drafts = MailFolderResolution.FirstBindingOf(
+        MailFolderAlias.Create("DRAFTS"),
+        RemoteFolderPath.Create("Drafts"));
+
+    private static readonly AppendedMailCopy Appended = new(
+        RemoteEmailPlacement.Reported(ImapUidValidity.Create(1), ImapUid.Create(7)),
+        InternetMessageId: null);
 
     [Fact]
     public async Task OpenAsync_AMessageSomebodyWrote_HoldsItAtItsFirstRevision()
@@ -102,6 +114,131 @@ public sealed class InMemoryMailDraftStoreTests
 
         // Assert
         await Assert.ThrowsAsync<InvalidOperationException>(refusal);
+    }
+
+    /// <summary>One revision is appended once, which is what stops a resumed attempt from putting a second copy in the folder.</summary>
+    [Fact]
+    public async Task RecordAppendIssuedAsync_ARevisionAlreadyAppended_RefusesRatherThanIssuingASecondCopy()
+    {
+        // Arrange
+        var store = new InMemoryMailDraftStore();
+        var draft = await OpenAsync(store);
+
+        await store.RecordAppendIssuedAsync(Session, draft.Id, Drafts, Moment, TestContext.Current.CancellationToken);
+
+        // Act
+        var refusal = () => store.RecordAppendIssuedAsync(
+            Session,
+            draft.Id,
+            Drafts,
+            Moment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(refusal);
+        Assert.Equal(MailDraftStage.AppendIssued, store.Peek(draft.Id)!.Stage);
+    }
+
+    /// <summary>A confirmation settles an append that went out, so a revision nothing was issued for has nothing to confirm.</summary>
+    [Fact]
+    public async Task RecordAppendConfirmedAsync_ARevisionWithNoIssuedCopy_RefusesRatherThanRecordingAnAppendNobodyMade()
+    {
+        // Arrange
+        var store = new InMemoryMailDraftStore();
+        var draft = await OpenAsync(store);
+
+        // Act
+        var refusal = () => store.RecordAppendConfirmedAsync(
+            Session,
+            draft.Id,
+            Appended,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(refusal);
+    }
+
+    /// <summary>Confirming twice is the same refusal, because the first confirmation left no copy awaiting one.</summary>
+    [Fact]
+    public async Task RecordAppendConfirmedAsync_ACopyAlreadyConfirmed_RefusesRatherThanConfirmingItTwice()
+    {
+        // Arrange
+        var store = new InMemoryMailDraftStore();
+        var draft = await OpenAsync(store);
+
+        await store.RecordAppendIssuedAsync(Session, draft.Id, Drafts, Moment, TestContext.Current.CancellationToken);
+        await store.RecordAppendConfirmedAsync(Session, draft.Id, Appended, TestContext.Current.CancellationToken);
+
+        // Act
+        var refusal = () => store.RecordAppendConfirmedAsync(
+            Session,
+            draft.Id,
+            Appended,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(refusal);
+        Assert.Equal(MailDraftStage.Filed, store.Peek(draft.Id)!.Stage);
+    }
+
+    /// <summary>A copy is settled as withdrawn or as abandoned, and a caller writing any other stage fails here rather than only against PostgreSQL.</summary>
+    [Theory]
+    [InlineData(MailDraftCopyStage.Issued)]
+    [InlineData(MailDraftCopyStage.Standing)]
+    public async Task RecordCopySettledAsync_AStageNoSettlementProduces_IsRefusedAsAnArgument(MailDraftCopyStage stage)
+    {
+        // Arrange
+        var store = new InMemoryMailDraftStore();
+        var draft = await OpenAsync(store);
+
+        await store.RecordAppendIssuedAsync(Session, draft.Id, Drafts, Moment, TestContext.Current.CancellationToken);
+        await store.RecordAppendConfirmedAsync(Session, draft.Id, Appended, TestContext.Current.CancellationToken);
+
+        // Act
+        var refusal = () => store.RecordCopySettledAsync(
+            Session,
+            draft.Id,
+            draft.Revision,
+            stage,
+            Moment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(refusal);
+        Assert.Equal(MailDraftCopyStage.Standing, store.Peek(draft.Id)!.CurrentCopy!.Stage);
+    }
+
+    /// <summary>The settled instant is written once, so a resumed removal does not restamp a copy the first attempt took out.</summary>
+    [Fact]
+    public async Task RecordCopySettledAsync_ACopySettledTwice_KeepsTheInstantTheFirstSettlementWrote()
+    {
+        // Arrange
+        var store = new InMemoryMailDraftStore();
+        var draft = await OpenAsync(store);
+
+        await store.RecordAppendIssuedAsync(Session, draft.Id, Drafts, Moment, TestContext.Current.CancellationToken);
+        await store.RecordAppendConfirmedAsync(Session, draft.Id, Appended, TestContext.Current.CancellationToken);
+
+        // Act
+        await store.RecordCopySettledAsync(
+            Session,
+            draft.Id,
+            draft.Revision,
+            MailDraftCopyStage.Withdrawn,
+            Moment,
+            TestContext.Current.CancellationToken);
+        await store.RecordCopySettledAsync(
+            Session,
+            draft.Id,
+            draft.Revision,
+            MailDraftCopyStage.Abandoned,
+            Moment.AddHours(1),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var copy = store.Peek(draft.Id)!.FindCopy(draft.Revision)!;
+        Assert.Equal(MailDraftCopyStage.Abandoned, copy.Stage);
+        Assert.Equal(Moment, copy.SettledAt);
     }
 
     [Fact]

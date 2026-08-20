@@ -258,7 +258,7 @@ given client is one of them, and each has an answer above rather than a setting 
 
 ## What a working connection looks like
 
-Whichever client was configured, a connected one lists at least ten tools. Four of them — `list_accounts`,
+Whichever client was configured, a connected one lists at least fourteen tools. Four of them — `list_accounts`,
 `list_emails`, `get_email_content`, and `search_emails` — advertise themselves as read-only, non-destructive, and
 idempotent. Four of the rest are not read-only. `set_mail_flags`
 changes your mailbox on the mail server rather than MailFathom's copy of it, and it advertises itself as destructive too

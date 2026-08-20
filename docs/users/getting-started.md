@@ -292,7 +292,7 @@ only the setup steps;
 [connecting the chat client you already use](mcp-clients.md) has the steps, the address kind, and the authentication
 shapes for each one by name.
 
-A connected client's tool listing should show at least ten tools — `list_accounts`, `list_emails`,
+A connected client's tool listing should show at least fourteen tools — `list_accounts`, `list_emails`,
 `get_email_content`, `search_emails`, each advertising itself as read-only, non-destructive, and idempotent;
 `set_mail_flags`, which marks, stars, and labels a message and announces itself as neither read-only nor confined to
 this process, and as destructive because a keyword replacement states the whole set; and `send_email`,

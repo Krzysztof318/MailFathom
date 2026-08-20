@@ -99,7 +99,7 @@ the tool. A draft tool needs less than that: an account that maps no drafts fold
 owner none of them, which is a state the result reports rather than a reason to withhold a tool. `ask_mail`
 needs two AI providers an operator configures separately, so it is advertised only while both are configured and
 working; the [`ask_mail`](#ask_mail) section records what decides that and what a call meets when it arrives anyway.
-Whether any of the seventeen is offered to a particular caller is a second question, which the next section answers.
+Whether any of the twenty-one is offered to a particular caller is a second question, which the next section answers.
 
 ## What a caller is offered
 
