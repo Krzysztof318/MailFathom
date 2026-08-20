@@ -36,6 +36,7 @@ using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Delivery.Governance;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.DataEncryption;
@@ -299,6 +300,16 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // to compose rather than behave like the deployment that names no such server — which is the deployment this
         // account is.
         builder.Services.AddSingleton<ITrustedAuthenticationAuthorityReader>(account);
+        // Beside it because the same MIME reader resolves both: the trusted authority decides who authenticated the
+        // author, and this decides which authenticated authors the account recognizes. Registered here for the same
+        // reason, too — a composition without it fails to resolve the reader rather than behaving like the account that
+        // recognizes nobody, which is the account this suite composes.
+        builder.Services.AddSingleton<ISenderTrustPolicyReader>(account);
+        // The third thing that reader resolves, and the shipped default rather than a choice made here: assessing how a
+        // message was written is on unless an operator turns it off, and the disabled profile records the same
+        // not-assessed state a message with no readable body reaches. A composition without it fails to resolve the
+        // reader, which reaches a test as every extraction in the class failing at once.
+        builder.Services.AddSingleton(MachineAuthorshipProfile.Standard);
         builder.Services.AddSingleton(new MailboxSynchronizationOptions
         {
             MaxMetadataBatchSize = 50,

@@ -9,6 +9,7 @@ using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
@@ -16,6 +17,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.IntegrationTests.Mailbox;
 using MailFathom.IntegrationTests.Orchestration;
+using MailFathom.IntegrationTests.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -73,6 +75,15 @@ public sealed class OrchestratedOutgoingMailFilingTests(MailFathomOrchestrationF
             cancellationToken,
             filesSentCopies: true);
 
+        // The binding a synchronization run over the sent folder would have recorded. Filing resolves its destination
+        // by role and then reads that binding, and nothing has synchronized this folder yet, so without it the append
+        // reports the destination as unavailable rather than reaching the server.
+        await OrchestratedFolderBinding.CommitAsync(
+            services,
+            SyntheticMailAccount.OutgoingCopyFolderAlias,
+            SyntheticMailAccount.OutgoingCopyFolderPath,
+            cancellationToken);
+
         var subject = $"outgoing-filing-{Guid.NewGuid():N}";
         var arriving = $"outgoing-filing-arriving-{Guid.NewGuid():N}";
         var queued = await EnqueueAsync(services, subject, cancellationToken);
@@ -127,7 +138,13 @@ public sealed class OrchestratedOutgoingMailFilingTests(MailFathomOrchestrationF
                 token),
             cancellationToken);
 
-        Assert.Equal(2, synchronization.StoredEmailCount);
+        // At least the two this test wrote, rather than exactly them: the outbox pass is the account's rather than this
+        // send's, so a message another class left queued is delivered by the same run and its copy is filed into this
+        // folder beside them. What the folder holds in total is therefore the collection's rather than this test's, and
+        // the two rows named below are what this run has to have stored.
+        Assert.True(
+            synchronization.StoredEmailCount >= 2,
+            $"The run stored {synchronization.StoredEmailCount} emails, and the filed copy and the arriving message are two.");
 
         var stored = await ReadStoredAsync(services, cancellationToken);
         var storedCopy = Assert.Single(stored, email => email.Subject == subject);
@@ -150,11 +167,12 @@ public sealed class OrchestratedOutgoingMailFilingTests(MailFathomOrchestrationF
         string subject,
         CancellationToken cancellationToken)
     {
-        var opened = await services.InScopeAsync(
+        var opened = await services.AsCallerInScopeAsync(
             (scope, token) => scope.GetRequiredService<MailOutbox>().EnqueueAsync(
                 RequestFor(subject),
                 MimeOf(subject),
                 token),
+            [MailFathomPermission.MailSend],
             cancellationToken);
 
         return opened.Record;

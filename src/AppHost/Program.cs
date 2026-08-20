@@ -295,8 +295,8 @@ if (runsIntegrationTests)
         // forward is refused without. It names a host in the reserved testing domain rather than the orchestrated mail
         // server: what a tool call produces is a durable record, and whether that record is then delivered is the
         // outbox's own behaviour, proven against a real server by the delivery tests rather than through this host. So
-        // the delivery pass here finds a host that does not resolve, retries it under its own bounded budget, and
-        // changes nothing a tool call answered. The port and the connection security are left at their defaults, which
+        // the delivery pass here finds a host that does not resolve, defers the send under its own bounded budget, and
+        // reaches no mail server at all. The port and the connection security are left at their defaults, which
         // name implicit TLS on the submission port and therefore need no opt-in from the account's transport policy.
         // Sending is off for every account until an operator turns it on, so a composed host that only declared a
         // submission endpoint would refuse every sending tool with the coded refusal that says so — and, with no record
@@ -312,6 +312,9 @@ if (runsIntegrationTests)
         // Required because a submission endpoint permitting a password mechanism is validated for one at startup, and
         // spent by nothing: it is the mailbox password the ephemeral topology already declares, under the same
         // restriction, for a server this host never opens a session with.
+        .WithEnvironment(
+            "MailSynchronization__Accounts__0__Delivery__Secrets__Password__Name",
+            OrchestrationContract.ComposedHostSubmissionPasswordName)
         .WithEnvironment(
             "MailSynchronization__Accounts__0__Delivery__Secrets__Password__SecretReference",
             $"plaintext:{OrchestrationContract.MailServerAccountPassword}")
@@ -390,7 +393,12 @@ if (runsIntegrationTests)
             OrchestrationContract.ComposedHostRefusedRecipientDomain)
         .WithEnvironment(
             "MailDelivery__SendCeilings__MaxRecipientsPerCaller",
-            OrchestrationContract.ComposedHostCallerRecipientCeiling.ToString(CultureInfo.InvariantCulture));
+            OrchestrationContract.ComposedHostCallerRecipientCeiling.ToString(CultureInfo.InvariantCulture))
+        // The outbox worker runs here like it does on any deployment, and the submission host it offers a message to
+        // does not resolve — so every send this host queues is claimed, attempted once, and deferred. Stretching the
+        // first retry past the length of a run is what makes that one attempt the whole of what happens to a record: a
+        // send stands recorded and withdrawable afterwards instead of being claimed again while a test is reading it.
+        .WithEnvironment("MailDelivery__RetryBaseDelay", OrchestrationContract.ComposedHostDeliveryRetryDelay);
 
     // The probe section is handed the port the endpoint above allocated, which is what puts the two surfaces on one
     // socket. It is a second reference to the same endpoint rather than a second endpoint, because two endpoints are

@@ -52,6 +52,9 @@ public sealed class OrchestratedMailboxMutationAuditTrailTests(MailFathomOrchest
     private static readonly MailboxMutationRequester Requester =
         MailboxMutationRequester.Rule("keep-an-audit-trail", "1");
 
+    /// <summary>The keywords the three keyword mutations are performed with, each on a message of its own.</summary>
+    private static readonly AuthoredMailKeywords AuditedKeywords = AuthoredMailKeywords.Create(["AuditTrail"]);
+
     /// <summary>
     /// Every change MailFathom is permitted to make leaves exactly one entry on an account that asked for a trail, and
     /// every one of those entries is still there after the email it describes has been erased — including the entry for
@@ -162,6 +165,13 @@ public sealed class OrchestratedMailboxMutationAuditTrailTests(MailFathomOrchest
         return requests;
     }
 
+    /// <summary>Builds the request that performs one permitted mutation, for every kind the domain publishes.</summary>
+    /// <remarks>
+    /// Every kind is named, and a kind this does not name throws rather than falling through to a request for some other
+    /// kind. The claim above is that each published mutation leaves an entry of its own, so a fallthrough would perform
+    /// one kind several times and report the missing kinds as an assertion about the trail — which is what a chain
+    /// ending in <see cref="MailboxMutationRequest.SetSeen" /> did while the flag and keyword mutations were added.
+    /// </remarks>
     private static MailboxMutationRequest RequestFor(
         MailboxMutation mutation,
         StoredEmailId storedEmailId,
@@ -186,7 +196,33 @@ public sealed class OrchestratedMailboxMutationAuditTrailTests(MailFathomOrchest
                 AuthoredDeleteEmailDisposition.RetainLocalCopy);
         }
 
-        return MailboxMutationRequest.SetSeen(storedEmailId, occurrence, Requester, isSeen: true);
+        if (mutation == MailboxMutation.SetSeen)
+        {
+            return MailboxMutationRequest.SetSeen(storedEmailId, occurrence, Requester, isSeen: true);
+        }
+
+        if (mutation == MailboxMutation.SetFlagged)
+        {
+            return MailboxMutationRequest.SetFlagged(storedEmailId, occurrence, Requester, isFlagged: true);
+        }
+
+        if (mutation == MailboxMutation.AddKeywords)
+        {
+            return MailboxMutationRequest.AddKeywords(storedEmailId, occurrence, Requester, AuditedKeywords);
+        }
+
+        if (mutation == MailboxMutation.RemoveKeywords)
+        {
+            return MailboxMutationRequest.RemoveKeywords(storedEmailId, occurrence, Requester, AuditedKeywords);
+        }
+
+        if (mutation == MailboxMutation.SetKeywords)
+        {
+            return MailboxMutationRequest.SetKeywords(storedEmailId, occurrence, Requester, AuditedKeywords);
+        }
+
+        throw new NotSupportedException(
+            $"The audit trail suite performs every published mutation, and it names no request for '{mutation.Name}'.");
     }
 
     private static Task<MailboxMutationOutcome> PerformAsync(

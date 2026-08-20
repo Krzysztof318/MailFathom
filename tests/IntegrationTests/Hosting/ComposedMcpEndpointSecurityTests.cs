@@ -39,6 +39,16 @@ public sealed class ComposedMcpEndpointSecurityTests
 {
     private const string ToolListedByTheProtocolSurface = "list_emails";
 
+    /// <summary>How far past a client's whole capacity the burst below reaches, which is the count of refusals it expects.</summary>
+    /// <remarks>
+    /// Added to the capacity rather than multiplying it, because the capacity is sized by what the rest of the
+    /// collection spends with the other key rather than by what proves a refusal here — so a multiple would make every
+    /// raise of that bound cost this test another hundred requests while proving nothing more. The margin is what makes
+    /// the assertion exact: the bucket starts full, restores nothing while the burst is in flight, and therefore serves
+    /// the capacity and refuses precisely this many.
+    /// </remarks>
+    private const int RefusedBurstMargin = 20;
+
     /// <summary>The probe served on the socket below, chosen because it consults process-local state and nothing else.</summary>
     private const string LivenessProbePath = "/alive";
 
@@ -201,7 +211,7 @@ public sealed class ComposedMcpEndpointSecurityTests
     {
         // Arrange
         using var client = await this.orchestration.OpenMcpEndpointClientAsync(TestContext.Current.CancellationToken);
-        var burstSize = OrchestrationContract.McpRateLimitTokenCapacity * 3;
+        var burstSize = OrchestrationContract.McpRateLimitTokenCapacity + RefusedBurstMargin;
 
         // Act
         var burst = await Task.WhenAll(Enumerable
@@ -218,7 +228,7 @@ public sealed class ComposedMcpEndpointSecurityTests
         // An exact count rather than "some", because the topology restores nothing while the burst is in flight: the
         // bucket starts full, queues nothing, and therefore serves its capacity and refuses the rest. A test that only
         // asked for one refusal would still pass on a limiter that had started refusing everything.
-        Assert.Equal(burstSize - OrchestrationContract.McpRateLimitTokenCapacity, refusals.Length);
+        Assert.Equal(RefusedBurstMargin, refusals.Length);
         Assert.All(refusals, refusal => Assert.Empty(refusal.Body));
         Assert.All(refusals, refusal => Assert.Equal("no-store", refusal.CacheControl));
         Assert.All(refusals, refusal => Assert.NotNull(refusal.RetryAfter));

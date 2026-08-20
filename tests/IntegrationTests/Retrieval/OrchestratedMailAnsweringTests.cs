@@ -10,6 +10,7 @@ using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -386,7 +387,7 @@ public sealed class OrchestratedMailAnsweringTests(MailFathomOrchestrationFixtur
     private static Task<AskMailResult> AskAsync(
         OrchestratedMailFathomServices services,
         string question,
-        CancellationToken cancellationToken) => services.InScopeAsync(
+        CancellationToken cancellationToken) => services.AsCallerInScopeAsync(
             (scope, token) => scope.GetRequiredService<MailboxQuestionReader>().AnswerQuestionAsync(
                 new AskMailRequest
                 {
@@ -395,6 +396,7 @@ public sealed class OrchestratedMailAnsweringTests(MailFathomOrchestrationFixtur
                     Folders = [MailFolderReference.ToAlias(MailFolderAlias.Create(FolderAlias))],
                 },
                 token),
+            [MailFathomPermission.MailAsk],
             cancellationToken);
 
     /// <summary>Searches the same folder for the same text, which is what a run's reach is measured against.</summary>
@@ -402,7 +404,7 @@ public sealed class OrchestratedMailAnsweringTests(MailFathomOrchestrationFixtur
         OrchestratedMailFathomServices services,
         string queryText,
         CancellationToken cancellationToken,
-        string folderAlias = FolderAlias) => services.InScopeAsync(
+        string folderAlias = FolderAlias) => services.AsCallerInScopeAsync(
             async (scope, token) =>
             {
                 var result = await scope.GetRequiredService<MailboxSearchReader>().SearchEmailsAsync(
@@ -417,6 +419,7 @@ public sealed class OrchestratedMailAnsweringTests(MailFathomOrchestrationFixtur
                 return (IReadOnlyList<StoredEmailId>)
                     [.. result.Matches.Select(match => match.Summary.StoredEmailId)];
             },
+            [MailFathomPermission.MailRead],
             cancellationToken);
 
     /// <summary>Reads every document the run's lookups handed the model, in the order the run received them.</summary>

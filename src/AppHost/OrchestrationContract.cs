@@ -174,12 +174,22 @@ public static class OrchestrationContract
 
     /// <summary>The burst one MCP client may spend in the integration-test topology before it is refused.</summary>
     /// <remarks>
+    /// <para>
     /// Declared here because the suite has to send more than this to observe a refusal, and a value that reached only
-    /// the app model would leave the burst either too small to refuse anything or needlessly large. It is deliberately
-    /// well above what any other test in the suite spends, and only <see cref="McpExpendableApiKeyName" /> ever spends
-    /// it, so exhausting it disturbs nothing that runs afterwards.
+    /// the app model would leave the burst either too small to refuse anything or needlessly large.
+    /// </para>
+    /// <para>
+    /// It bounds two different things at once, because the limiter partitions by client and carries one capacity for
+    /// every partition. <see cref="McpExpendableApiKeyName" /> spends it deliberately, once, and stays spent — the
+    /// replenishment period outlasts the run. <see cref="McpApiKeyName" /> spends it one request at a time across
+    /// *every* composed-host test that reaches the MCP endpoint, and that spending is cumulative for the same reason:
+    /// nothing is restored between classes. So this number has to stay above what the whole collection sends with that
+    /// key, and a class added to the collection spends from the same bucket as the ones already there. At twenty it was
+    /// below that total, and the classes that happened to run last were refused with <c>429</c> — which reads as the
+    /// endpoint being wrong rather than as the suite having outgrown its own bound.
+    /// </para>
     /// </remarks>
-    public const int McpRateLimitTokenCapacity = 20;
+    public const int McpRateLimitTokenCapacity = 100;
 
     /// <summary>How often the integration-test topology restores a client's spent MCP capacity.</summary>
     /// <remarks>
@@ -376,18 +386,45 @@ public static class OrchestrationContract
     /// account it sends as configures an address to send from, so a topology that named none would answer every reply
     /// and every forward with a deployment that cannot send. The domain is the reserved testing one, so nothing
     /// composed under it could leave the run it was composed in even if something transmitted — and nothing does,
-    /// because a tool call writes a record and the composed host runs no delivery pass over it.
+    /// because the endpoint the delivery pass offers a message to does not resolve.
     /// </remarks>
     public const string ComposedHostSendingAddress = "mailfathom@mailfathom.test";
 
-    /// <summary>The submission host the composed host's one account names, which nothing under this topology connects to.</summary>
+    /// <summary>The submission host the composed host's one account names, which nothing under this topology answers as.</summary>
     /// <remarks>
+    /// <para>
     /// A submission endpoint is configured because its presence is what makes the account able to send at all, and its
-    /// address is a name rather than the orchestrated mail server's: the composed host queues sends and never delivers
-    /// them — synchronization and the outbox pass are both off under this topology — so a reachable host would be
-    /// configuration nothing acts on. The domain is the reserved testing one for the same reason the address above is.
+    /// address is a name rather than the orchestrated mail server's: what a tool call produces is a durable record, and
+    /// whether that record is then delivered is proven against a real server by the delivery tests rather than here. The
+    /// domain is the reserved testing one for the same reason the address above is, so the name resolves to nothing and
+    /// every attempt this host makes ends in a transport failure before a mail server is reached.
+    /// </para>
+    /// <para>
+    /// This host does run a delivery pass. The outbox worker is registered on every deployment and answers the signal a
+    /// send raises, so a queued message is claimed within milliseconds of the tool call that wrote it — which is what
+    /// <see cref="ComposedHostDeliveryRetryDelay" /> is set against, and what a test reading a queued send back has to
+    /// be written for.
+    /// </para>
     /// </remarks>
     public const string ComposedHostSubmissionHost = "smtp.mailfathom.test";
+
+    /// <summary>How long a send whose first attempt failed stands before the composed host offers it again.</summary>
+    /// <remarks>
+    /// Longer than any run, so an attempt this topology cannot complete happens once. A transport failure defers the
+    /// send rather than ending it — the stage moves back to recorded, the lease is released, and the record becomes
+    /// withdrawable again — so this delay is the window in which a test can read a queued send back and stop it without
+    /// racing the claim that would otherwise take it. The product default of a minute would be enough for the calls
+    /// themselves and would still leave the outcome depending on how long the rest of the collection took.
+    /// </remarks>
+    public const string ComposedHostDeliveryRetryDelay = "00:30:00";
+
+    /// <summary>The name the composed host's submission password is configured under.</summary>
+    /// <remarks>
+    /// A secret block is identified by its name rather than by where it sits in configuration, because a rotation, an
+    /// expiry, and an audit record all name it by that; a block stating only a reference fails startup validation, which
+    /// under this topology reaches a test as the host never answering rather than as configuration being wrong.
+    /// </remarks>
+    public const string ComposedHostSubmissionPasswordName = "integration-tests-submission-password";
 
     /// <summary>The one organization the composed host's recipient policy refuses, whoever a caller says asked for it.</summary>
     /// <remarks>

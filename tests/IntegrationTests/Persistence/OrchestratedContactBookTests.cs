@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence;
@@ -79,12 +80,12 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
             "ANNA.KOWALSKA@Erasure.Contacts.Test",
             cancellationToken);
 
-        var export = await InScopeAsync(
+        var export = await AsOperatorAsync(
             services,
             (book, token) => book.ExportAsync(contactId, token),
             cancellationToken);
 
-        var erasure = await InScopeAsync(
+        var erasure = await AsOperatorAsync(
             services,
             (book, token) => book.EraseAsync(contactId, token),
             cancellationToken);
@@ -134,17 +135,17 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         var contactId = recorded.Contact!.Id;
 
         // Act
-        var promoted = await InScopeAsync(
+        var promoted = await AsOperatorAsync(
             services,
             (book, token) => book.PromoteAsync(contactId, ContactOrigin.Asserted, token),
             cancellationToken);
 
-        var reread = await InScopeAsync(
+        var reread = await AsOperatorAsync(
             services,
             (book, token) => book.ExportAsync(contactId, token),
             cancellationToken);
 
-        var again = await InScopeAsync(
+        var again = await AsOperatorAsync(
             services,
             (book, token) => book.PromoteAsync(contactId, ContactOrigin.Asserted, token),
             cancellationToken);
@@ -375,7 +376,7 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         var contactId = recorded.Contact!.Id;
 
         // Act
-        var amended = await InScopeAsync(
+        var amended = await AsOperatorAsync(
             services,
             (book, token) => book.AmendAsync(
                 new ContactAmendment
@@ -398,7 +399,7 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
             ContactOrigin.Asserted,
             cancellationToken);
 
-        var reread = await InScopeAsync(
+        var reread = await AsOperatorAsync(
             services,
             (book, token) => book.ExportAsync(contactId, token),
             cancellationToken);
@@ -441,7 +442,7 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
         string displayName,
         IReadOnlyList<string> addresses,
         ContactOrigin origin,
-        CancellationToken cancellationToken) => InScopeAsync(
+        CancellationToken cancellationToken) => AsOperatorAsync(
             services,
             (book, token) => book.RecordAsync(
                 new NewContact
@@ -507,10 +508,23 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
                 .CountAsync(token),
             cancellationToken);
 
-    private static Task<TResult> InScopeAsync<TResult>(
+    /// <summary>Reaches the book as the operator, which is the only principal every act asserted here is admitted to.</summary>
+    /// <remarks>
+    /// Every method this class drives — recording, amending, promoting, exporting, erasing — is published to a caller
+    /// rather than to MailFathom's own identity, so a scope stating none is refused before it reaches the database and
+    /// the class would prove nothing about PostgreSQL at all. The grant is the administrative surface an operator holds,
+    /// which is the whole of what these acts are published under; collection's own two methods are the process
+    /// identity's and are exercised where collection is, not here.
+    /// </remarks>
+    private static Task<TResult> AsOperatorAsync<TResult>(
         OrchestratedMailFathomServices services,
         Func<ContactBook, CancellationToken, Task<TResult>> read,
-        CancellationToken cancellationToken) => services.InScopeAsync(
+        CancellationToken cancellationToken) => services.AsCallerInScopeAsync(
             (scope, token) => read(scope.GetRequiredService<ContactBook>(), token),
+            [
+                MailFathomPermission.AdminOperate,
+                MailFathomPermission.AdminAuditRead,
+                MailFathomPermission.AdminErase,
+            ],
             cancellationToken);
 }
