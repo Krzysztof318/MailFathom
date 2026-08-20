@@ -14,7 +14,7 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    [Migration("20260819233300_AddMailDrafts")]
+    [Migration("20260820082840_AddMailDrafts")]
     partial class AddMailDrafts
     {
         /// <inheritdoc />
@@ -1448,6 +1448,10 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.Property<long>("MimeByteLength")
                         .HasColumnType("bigint");
+
+                    b.Property<string>("PrincipalFingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<DateTimeOffset>("RecordedAt")
                         .HasColumnType("timestamp with time zone");
