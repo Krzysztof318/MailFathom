@@ -100,21 +100,31 @@ public readonly record struct EmailAddress
     /// <param name="domainText">The domain exactly as the message wrote it, which is the form a domain type normalizes from.</param>
     /// <returns><see langword="true" /> when the address has both halves; otherwise <see langword="false" />.</returns>
     /// <remarks>
+    /// <para>
     /// The two halves are handed back in different forms because they normalize differently: the local part is compared
     /// as text and takes this type's comparison form, while the domain has an encoding to settle and is left to the type
     /// that settles it. Reading the domain from <see cref="Address" /> rather than from the comparison form is what
     /// keeps a domain type's own record of what its source wrote intact.
+    /// </para>
+    /// <para>
+    /// Each form is cut at its own at-sign rather than at an offset carried from the other. A case mapping is not
+    /// obliged to produce one character per character, so an offset taken from the written address would cut the
+    /// comparison form of a local part that expanded — handing back a truncated prefix that a shorter, unrelated
+    /// mailbox could also produce, in a value sender trust and recipient governance then compare on.
+    /// </para>
     /// </remarks>
     public bool TrySplit(out string normalizedLocalPart, out ReadOnlySpan<char> domainText)
     {
-        if (!TrySplit(this.Address, out var localPartText, out domainText))
+        if (!TrySplit(this.Address, out _, out domainText)
+            || !TrySplit(this.NormalizedAddress, out var normalizedLocalPartText, out _))
         {
             normalizedLocalPart = string.Empty;
+            domainText = default;
 
             return false;
         }
 
-        normalizedLocalPart = this.NormalizedAddress[..localPartText.Length];
+        normalizedLocalPart = normalizedLocalPartText.ToString();
 
         return true;
     }

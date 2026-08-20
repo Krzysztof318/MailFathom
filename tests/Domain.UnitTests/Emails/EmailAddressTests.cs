@@ -160,6 +160,31 @@ public sealed class EmailAddressTests
         Assert.Equal(expectedDomain, domainText.ToString());
     }
 
+    /// <summary>
+    /// The local part is taken from the comparison form's own at-sign rather than from an offset into it. A case
+    /// mapping is not obliged to produce one character per character, and an offset carried over from the written
+    /// address would hand back a truncated prefix — one a shorter, unrelated mailbox could also produce, in the value
+    /// sender trust and recipient governance compare on.
+    /// </summary>
+    [Theory]
+    [InlineData("straße@example.test")]
+    [InlineData("ﬁle@example.test")]
+    [InlineData("ǅungla@example.test")]
+    public void TrySplit_ALocalPartWhoseCaseMappingMayResize_TakesTheWholeComparisonFormOfIt(string writtenAddress)
+    {
+        // Arrange
+        EmailAddress.TryCreate(displayName: null, writtenAddress, out var address);
+        var expectedLocalPart = address.NormalizedAddress[..address.NormalizedAddress.LastIndexOf('@')];
+
+        // Act
+        var split = address.TrySplit(out var normalizedLocalPart, out var domainText);
+
+        // Assert
+        Assert.True(split);
+        Assert.Equal(expectedLocalPart, normalizedLocalPart);
+        Assert.Equal("example.test", domainText.ToString());
+    }
+
     /// <summary>A default address carries no text at all, and a caller reading its halves is given the refusal rather than an empty pair.</summary>
     [Fact]
     public void TrySplit_AnAddressThatWasNeverCreated_IsRefused()
