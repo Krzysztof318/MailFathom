@@ -55,15 +55,17 @@ holds for it, and the conversation it belongs to — all published on every read
 book of MailFathom's own: people rather than addresses, held in your database, filled by hand or from the mail an
 account corresponds with.
 
-**Four things need an edit before this release serves what `0.6.0` served**, and three of them fail quietly rather than
-loudly. **Write `Permissions` on every `Authentication` entry**, because an entry that names none holds everything its
-surface publishes — so on upgrade it gains the sixteen new tools, sending among them, and a credential you meant to be
-able to read your mail can now send from it to anybody. **Rename `SpamClassification:Actions:FileInJunkFolder` to
-`MoveToJunkFolder`**, or junk stops being filed and nothing says so. **Rewrite
-`SensitiveContent:PersonalDataAnalyzer:Language` as the list `Languages`** — `personalDataScanning.languages` in the
-Helm chart, `SensitiveContent__PersonalDataAnalyzer__Languages__0` in Compose — or the analyzer silently falls back to
-English. And **`SensitiveContent:ScanTimeout` now defaults to fifteen seconds** where it defaulted to five, which is a
-longer wait before a scan is refused rather than a change you have to make.
+**Three things need an edit before this release serves what `0.6.0` served, and every one of them fails quietly rather
+than loudly.** **Write `Permissions` on every `Authentication` entry**, because an entry that names none holds
+everything its surface publishes — so on upgrade it gains the sixteen new tools, sending among them, and a credential
+you meant to be able to read your mail can now send from it to anybody. **Rename
+`SpamClassification:Actions:FileInJunkFolder` to `MoveToJunkFolder`**, or junk stops being filed and nothing says so.
+**Rewrite `SensitiveContent:PersonalDataAnalyzer:Language` as the list `Languages`** —
+`personalDataScanning.languages` in the Helm chart, `SensitiveContent__PersonalDataAnalyzer__Languages__0` in Compose —
+or the analyzer silently falls back to English.
+
+**One default moved and asks nothing of you.** `SensitiveContent:ScanTimeout` now defaults to fifteen seconds where it
+defaulted to five, which is a longer wait before a scan is refused and not a key to edit.
 
 **Mail stored by an earlier release keeps the answers it was given.** The sender verdict, the trust verdict, the
 machine-authorship reading, the keywords, and the threads are derived while a message is synchronized, so the migrations
