@@ -27,6 +27,22 @@ public sealed class MailboxAuthorizationFailedException : MailFathomException
         // a server this process does not own. See AuthorizationServerErrorText for what survives.
         this.AuthorizationServerErrorCode = AuthorizationServerErrorText.Sanitize(authorizationServerErrorCode);
 
+    /// <summary>Initializes a new authorization failure over the transport failure that produced it.</summary>
+    /// <param name="authorizationServerErrorCode">The error code the authorization server returned, or one of the two MailFathom names.</param>
+    /// <param name="innerException">The failure this one translates, which records which answer the code stands for.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="authorizationServerErrorCode" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The code is a vocabulary an operator reads, so several distinct answers share one — a body that is not JSON, a
+    /// character set this platform does not carry, and a payload the contract refuses all report
+    /// <c>non_json_response_http_…</c>. Carrying the original failure is what lets a diagnostic say which of them
+    /// happened without the message ever quoting a body from a machine this process does not own.
+    /// </remarks>
+    public MailboxAuthorizationFailedException(string authorizationServerErrorCode, Exception innerException)
+        : base(
+            DescribeFailedAuthorization(AuthorizationServerErrorText.Sanitize(authorizationServerErrorCode)),
+            innerException) =>
+        this.AuthorizationServerErrorCode = AuthorizationServerErrorText.Sanitize(authorizationServerErrorCode);
+
     /// <inheritdoc />
     public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.MailboxAuthorizationFailed;
 

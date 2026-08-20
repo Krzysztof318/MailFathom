@@ -6,12 +6,16 @@ using MailFathom.Host.Security.Transport;
 
 namespace MailFathom.Host.Security.ApiKeys;
 
-/// <summary>The names the API key authentication scheme publishes, whichever surface it protects.</summary>
+/// <summary>The names the API key authentication scheme publishes, and the challenge composed from them.</summary>
 /// <remarks>
 /// They are constants rather than settings, and the challenge is what an HTTP client reads: <c>Bearer</c>, because that
 /// is the scheme the credential is presented under and the one a client already knows how to answer. The scheme's own
 /// name is not among them, because it differs per surface and is composed by
 /// <see cref="TransportSurface.ApiKeySchemeName" />.
+/// <para>
+/// Every credential method on a surface refuses with the same challenge, so it is written here — beside the constants
+/// it is composed from — rather than by each handler that has to answer one.
+/// </para>
 /// </remarks>
 internal static class ApiKeyAuthentication
 {
@@ -42,4 +46,24 @@ internal static class ApiKeyAuthentication
     /// <summary>The claim type a role check reads on a key's identity, which nothing ever issues.</summary>
     /// <remarks>Named rather than left empty, because an identity given an empty role type silently reverts to the framework's default; a claim type no mapping writes is what actually makes a role check answer no.</remarks>
     internal const string RoleClaimType = "urn:mailfathom:api-key-role";
+
+    /// <summary>The challenge a refusal answers with, naming the scheme and the protection space and nothing else.</summary>
+    /// <remarks>An error code or a description would begin to describe which credential was wrong, which is what makes every refusal on a surface indistinguishable from every other.</remarks>
+    private const string BareChallenge = $"{HttpAuthenticationScheme} realm=\"{Realm}\"";
+
+    /// <summary>Answers a request with the empty <c>401</c> every refusal on a surface produces.</summary>
+    /// <param name="response">The response to write the refusal onto.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="response" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Written here rather than by each scheme's handler because the header is security-visible and a client is told
+    /// which protection space to hold a credential for, never which method judged it: two schemes composing the same
+    /// string separately is a header that can differ between them for no reason a client could act on.
+    /// </remarks>
+    internal static void WriteBareChallenge(HttpResponse response)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        response.StatusCode = StatusCodes.Status401Unauthorized;
+        response.Headers.WWWAuthenticate = BareChallenge;
+    }
 }

@@ -75,26 +75,22 @@ internal sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKey
             ? permissions
             : [];
 
-        var identity = new ClaimsIdentity(
-            [
-                new Claim(ApiKeyAuthentication.ApiKeyNameClaimType, keyName.Value!),
-                .. TransportGrant.ClaimsFor(grantedPermissions),
-            ],
-            this.Options.Surface.ApiKeySchemeName,
+        var identity = TransportGrant.IdentityFor(
+            keyName.Value!,
             ApiKeyAuthentication.ApiKeyNameClaimType,
-            ApiKeyAuthentication.RoleClaimType);
+            ApiKeyAuthentication.RoleClaimType,
+            this.Options.Surface.ApiKeySchemeName,
+            grantedPermissions);
 
         return AuthenticateResult.Success(
             new AuthenticationTicket(new ClaimsPrincipal(identity), this.Scheme.Name));
     }
 
     /// <inheritdoc />
-    /// <remarks>The challenge names the scheme and the protection space and nothing else, because an error code or a description would begin to describe which credential was wrong.</remarks>
+    /// <remarks>The bare challenge every method on the surface produces, written where the constants it names live.</remarks>
     protected override Task HandleChallengeAsync(AuthenticationProperties properties)
     {
-        this.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        this.Response.Headers.WWWAuthenticate =
-            $"{ApiKeyAuthentication.HttpAuthenticationScheme} realm=\"{ApiKeyAuthentication.Realm}\"";
+        ApiKeyAuthentication.WriteBareChallenge(this.Response);
 
         return Task.CompletedTask;
     }

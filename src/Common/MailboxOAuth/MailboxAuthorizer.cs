@@ -4,7 +4,6 @@
 
 using System.Globalization;
 using System.Net.Http.Json;
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using System.Web;
@@ -29,12 +28,6 @@ namespace MailFathom.Common.MailboxOAuth;
 /// </remarks>
 public sealed class MailboxAuthorizer
 {
-    /// <summary>The interval RFC 8628 mandates when the device authorization response states none.</summary>
-    private static readonly TimeSpan DefaultDevicePollInterval = TimeSpan.FromSeconds(5);
-
-    /// <summary>The extra wait RFC 8628 requires after the authorization server answers <c>slow_down</c>.</summary>
-    private static readonly TimeSpan DevicePollBackoffIncrement = TimeSpan.FromSeconds(5);
-
     private readonly HttpClient httpClient;
     private readonly TimeProvider timeProvider;
 
@@ -66,7 +59,7 @@ public sealed class MailboxAuthorizer
         }
 
         var proofKey = PkceCodeChallenge.Create();
-        var state = CreateAntiForgeryState();
+        var state = AntiForgeryState.Create();
 
         var query = HttpUtility.ParseQueryString(string.Empty);
         query["client_id"] = request.ClientId;
@@ -213,7 +206,7 @@ public sealed class MailboxAuthorizer
 
         var pollInterval = deviceAuthorization.IntervalSeconds is { } interval and > 0
             ? TimeSpan.FromSeconds(interval)
-            : DefaultDevicePollInterval;
+            : DeviceCodePolling.DefaultInterval;
 
         var expiresAt = this.timeProvider.GetUtcNow()
             + TimeSpan.FromSeconds(deviceAuthorization.ExpiresInSeconds ?? 600);
@@ -240,7 +233,7 @@ public sealed class MailboxAuthorizer
                 // The authorization server is telling this client it polls too fast, and the RFC requires the interval
                 // to grow permanently rather than for one iteration.
                 case "slow_down":
-                    pollInterval += DevicePollBackoffIncrement;
+                    pollInterval += DeviceCodePolling.BackoffIncrement;
                     continue;
 
                 default:
@@ -257,10 +250,6 @@ public sealed class MailboxAuthorizer
             new Uri(deviceAuthorization.VerificationUri!),
             deviceAuthorization.VerificationUriComplete is { } completeUri ? new Uri(completeUri) : null,
             asOf + TimeSpan.FromSeconds(deviceAuthorization.ExpiresInSeconds ?? 600));
-
-    /// <summary>Creates the opaque value the redirect must echo, which is what binds a returned code to this request.</summary>
-    private static string CreateAntiForgeryState() =>
-        Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
 
     private MailboxAuthorizationGrant ToGrant(OAuthTokenResponse response)
     {
@@ -297,13 +286,16 @@ public sealed class MailboxAuthorizer
             // readable `error`, so the body is read either way and the status is consulted only when it holds nothing.
             payload = await response.Content.ReadFromJsonAsync(responseContract, cancellationToken);
         }
-        catch (JsonException)
+        catch (Exception failure) when (failure is JsonException or NotSupportedException or InvalidOperationException)
         {
             // A mistyped endpoint reaches a login page, a proxy, or an error page rather than a token endpoint, and an
             // operator running this by hand should be told which status came back instead of meeting a stack trace.
             // The body itself is not read: it is attacker-influenced text from a machine that is not the one intended.
+            // An answer naming a character set this platform does not carry never reaches the parser at all, and
+            // arrives from the transport as an InvalidOperationException; it is the same defect and reads the same way.
             throw new MailboxAuthorizationFailedException(
-                string.Create(CultureInfo.InvariantCulture, $"non_json_response_http_{(int)response.StatusCode}"));
+                string.Create(CultureInfo.InvariantCulture, $"non_json_response_http_{(int)response.StatusCode}"),
+                failure);
         }
 
         return payload ?? throw new MailboxAuthorizationFailedException(

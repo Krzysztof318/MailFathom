@@ -75,6 +75,65 @@ public sealed class TransportGrantTests
         Assert.Equal([MailFathomPermission.MailRead], permissions);
     }
 
+    /// <summary>What a scheme's success produces is the credential's name and its grant, in the shape the surface reads back.</summary>
+    [Fact]
+    public void IdentityFor_AnAuthenticatedCredential_CarriesItsNameAndItsGrant()
+    {
+        // Arrange
+        MailFathomPermission[] granted = [MailFathomPermission.MailRead, MailFathomPermission.AdminSpend];
+
+        // Act
+        var identity = TransportGrant.IdentityFor(
+            "operations-key",
+            "urn:mailfathom:api-key-name",
+            "urn:mailfathom:api-key-role",
+            "MailFathom:Mcp:ApiKey",
+            granted);
+
+        // Assert
+        Assert.Equal("MailFathom:Mcp:ApiKey", identity.AuthenticationType);
+        Assert.Equal("operations-key", identity.Name);
+        Assert.Equal(granted.ToHashSet(), TransportGrant.PermissionsCarriedBy(new ClaimsPrincipal(identity)));
+    }
+
+    /// <summary>
+    /// A role claim type nothing issues is what makes a role check answer no. Left unstated the identity reverts to the
+    /// framework's default type, and a mapping that wrote one would then be read as a role this system never grants.
+    /// </summary>
+    [Fact]
+    public void IdentityFor_AnAuthenticatedCredential_IsInNoRole()
+    {
+        // Arrange, Act
+        var identity = TransportGrant.IdentityFor(
+            "operations-key",
+            "urn:mailfathom:client-assertion-key-name",
+            "urn:mailfathom:client-assertion-role",
+            "MailFathom:Admin:ClientAssertion",
+            [MailFathomPermission.MailRead]);
+
+        // Assert
+        Assert.Equal("urn:mailfathom:client-assertion-role", identity.RoleClaimType);
+        Assert.False(new ClaimsPrincipal(identity).IsInRole(MailFathomPermission.MailRead.Name));
+    }
+
+    /// <summary>An entry that granted nothing still authenticates, and the identity it produces holds only the name.</summary>
+    [Fact]
+    public void IdentityFor_ACredentialGrantedNothing_CarriesItsNameAlone()
+    {
+        // Arrange, Act
+        var identity = TransportGrant.IdentityFor(
+            "operations-key",
+            "urn:mailfathom:api-key-name",
+            "urn:mailfathom:api-key-role",
+            "MailFathom:Mcp:ApiKey",
+            []);
+
+        // Assert
+        var claim = Assert.Single(identity.Claims);
+        Assert.Equal("urn:mailfathom:api-key-name", claim.Type);
+        Assert.Equal("operations-key", claim.Value);
+    }
+
     private static ClaimsPrincipal PrincipalCarrying(IEnumerable<Claim> claims) =>
         new(new ClaimsIdentity(claims, "test"));
 }
