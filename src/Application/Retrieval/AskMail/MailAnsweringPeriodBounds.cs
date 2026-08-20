@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
+using MailFathom.Domain.Scheduling;
 
 namespace MailFathom.Application.Retrieval.AskMail;
 
@@ -78,22 +79,14 @@ public sealed record MailAnsweringPeriodBounds
     /// <returns>The period's start, in UTC.</returns>
     /// <remarks>
     /// Anchored at the Unix epoch, so where a period begins is a function of the clock alone and every restart of the
-    /// process places it identically. Floored rather than truncated, so an instant before the epoch — which no clock
-    /// this runs on reports, but which a test may hand it — lands on the start of its period rather than the end of the
-    /// one before.
+    /// process places it identically.
     /// </remarks>
-    public DateTimeOffset PeriodStartAt(DateTimeOffset instant)
-    {
-        var elapsedTicks = instant.ToUniversalTime().Ticks - DateTimeOffset.UnixEpoch.Ticks;
-        var periodsElapsed = (long)Math.Floor((double)elapsedTicks / this.Period.Ticks);
-
-        return DateTimeOffset.UnixEpoch.AddTicks(periodsElapsed * this.Period.Ticks);
-    }
+    public DateTimeOffset PeriodStartAt(DateTimeOffset instant) => EpochAnchoredPeriod.StartAt(this.Period, instant);
 
     /// <summary>Finds when the period an instant falls in rolls over, which is when a refused question is worth asking again.</summary>
     /// <param name="instant">The moment to place in a period.</param>
     /// <returns>The instant the next period begins, in UTC.</returns>
-    public DateTimeOffset PeriodEndAt(DateTimeOffset instant) => this.PeriodStartAt(instant) + this.Period;
+    public DateTimeOffset PeriodEndAt(DateTimeOffset instant) => EpochAnchoredPeriod.EndAt(this.Period, instant);
 
     /// <inheritdoc />
     public override string ToString() => string.Format(

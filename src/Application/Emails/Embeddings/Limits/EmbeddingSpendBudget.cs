@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Scheduling;
+
 namespace MailFathom.Application.Emails.Embeddings.Limits;
 
 /// <summary>The aggregate ceiling an instance is willing to spend on embedding, and the period it is counted over.</summary>
@@ -67,19 +69,10 @@ public sealed class EmbeddingSpendBudget
     /// Anchored at the Unix epoch so that every process of a deployment, and every restart of one, agrees on where a
     /// period begins without anything having to be stored to say so.
     /// </remarks>
-    public DateTimeOffset PeriodStartAt(DateTimeOffset instant)
-    {
-        var elapsedTicks = instant.ToUniversalTime().Ticks - DateTimeOffset.UnixEpoch.Ticks;
-
-        // Floored rather than truncated, so an instant before the epoch — which no clock this runs on reports, but which
-        // a test may hand it — lands on the start of its period rather than on the end of the one before.
-        var periodsElapsed = (long)Math.Floor((double)elapsedTicks / this.Period.Ticks);
-
-        return DateTimeOffset.UnixEpoch.AddTicks(periodsElapsed * this.Period.Ticks);
-    }
+    public DateTimeOffset PeriodStartAt(DateTimeOffset instant) => EpochAnchoredPeriod.StartAt(this.Period, instant);
 
     /// <summary>Finds when the period an instant falls in rolls over, which is when paused work resumes.</summary>
     /// <param name="instant">The moment to place in a period.</param>
     /// <returns>The instant the next period begins, in UTC.</returns>
-    public DateTimeOffset PeriodEndAt(DateTimeOffset instant) => this.PeriodStartAt(instant) + this.Period;
+    public DateTimeOffset PeriodEndAt(DateTimeOffset instant) => EpochAnchoredPeriod.EndAt(this.Period, instant);
 }

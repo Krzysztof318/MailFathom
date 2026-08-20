@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Security.Cryptography;
+using MailFathom.Application.Resilience;
 
 namespace MailFathom.Application.Persistence;
 
@@ -15,6 +15,16 @@ namespace MailFathom.Application.Persistence;
 /// </remarks>
 public sealed class OptimisticConcurrencyRetryPolicy
 {
+    /// <summary>The delay the first retry of a conflicted commit is drawn around.</summary>
+    /// <remarks>
+    /// A conflict is resolved by reading and writing again in the same process, so the whole curve is measured in
+    /// milliseconds rather than in the minutes a scheduler's backoff spans.
+    /// </remarks>
+    private static readonly TimeSpan ConflictRetryBaseDelay = TimeSpan.FromMilliseconds(50);
+
+    /// <summary>The ceiling a grown commit-retry delay never exceeds.</summary>
+    private static readonly TimeSpan ConflictRetryMaxDelay = TimeSpan.FromMilliseconds(1000);
+
     private readonly IPersistenceSessionFactory sessionFactory;
     private readonly TimeProvider timeProvider;
     private readonly int maximumAttempts;
@@ -94,7 +104,11 @@ public sealed class OptimisticConcurrencyRetryPolicy
             if (attemptNumber < this.maximumAttempts)
             {
                 await Task.Delay(
-                    CreateJitteredRetryDelay(attemptNumber),
+                    JitteredRetryBackoff.DelayBeforeNextAttempt(
+                        ConflictRetryBaseDelay,
+                        ConflictRetryMaxDelay,
+                        minimumDelay: TimeSpan.Zero,
+                        attemptNumber),
                     this.timeProvider,
                     cancellationToken);
             }
@@ -102,18 +116,5 @@ public sealed class OptimisticConcurrencyRetryPolicy
 
         throw new PersistenceConcurrencyConflictException(
             $"A local write did not commit within the configured {this.maximumAttempts} optimistic concurrency attempts.");
-    }
-
-    private static TimeSpan CreateJitteredRetryDelay(int completedAttemptCount)
-    {
-        var exponentialCeilingMilliseconds = Math.Min(
-            1000,
-            50 * (1 << Math.Min(completedAttemptCount - 1, 5)));
-        var minimumMilliseconds = exponentialCeilingMilliseconds / 2;
-        var jitteredMilliseconds = RandomNumberGenerator.GetInt32(
-            minimumMilliseconds,
-            exponentialCeilingMilliseconds + 1);
-
-        return TimeSpan.FromMilliseconds(jitteredMilliseconds);
     }
 }

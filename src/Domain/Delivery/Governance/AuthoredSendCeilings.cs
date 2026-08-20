@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Scheduling;
+
 namespace MailFathom.Domain.Delivery.Governance;
 
 /// <summary>How much mail one caller may ask this deployment for inside one period.</summary>
@@ -77,16 +79,7 @@ public sealed class AuthoredSendCeilings
     /// Anchored at the Unix epoch, so a period has a start an operator can name and a roll-over instant a refused caller
     /// can be told to come back after, with nothing stored to say where either is.
     /// </remarks>
-    public DateTimeOffset PeriodStartAt(DateTimeOffset instant)
-    {
-        var elapsedTicks = instant.ToUniversalTime().Ticks - DateTimeOffset.UnixEpoch.Ticks;
-
-        // Floored rather than truncated, so an instant before the epoch — which no clock this runs on reports, but which
-        // a test may hand it — lands on the start of its period rather than on the end of the one before.
-        var periodsElapsed = (long)Math.Floor((double)elapsedTicks / this.Period.Ticks);
-
-        return DateTimeOffset.UnixEpoch.AddTicks(periodsElapsed * this.Period.Ticks);
-    }
+    public DateTimeOffset PeriodStartAt(DateTimeOffset instant) => EpochAnchoredPeriod.StartAt(this.Period, instant);
 
     /// <summary>Finds the ceiling one further message would carry a caller's period past.</summary>
     /// <param name="usage">What the caller has already been admitted for in the period.</param>
