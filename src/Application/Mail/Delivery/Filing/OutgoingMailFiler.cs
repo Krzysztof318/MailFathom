@@ -366,7 +366,7 @@ public sealed class OutgoingMailFiler
         var resolution = await this.ResolveDestinationAsync(record, standing.Filing, cancellationToken);
 
         if (resolution.Destination is not { } destination
-            || !string.Equals(destination.Path.Value, standing.FolderPath.Value, StringComparison.Ordinal))
+            || !destination.Path.NamesSameFolderAs(standing.FolderPath))
         {
             return;
         }

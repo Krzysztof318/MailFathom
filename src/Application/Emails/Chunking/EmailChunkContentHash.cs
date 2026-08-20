@@ -2,9 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Buffers.Binary;
 using System.Security.Cryptography;
-using System.Text;
+using MailFathom.Application.Digests;
 
 namespace MailFathom.Application.Emails.Chunking;
 
@@ -60,21 +59,21 @@ public readonly record struct EmailChunkContentHash
 
         using var digest = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
 
-        AppendText(digest, HashDomain);
-        AppendNumber(digest, rules.RuleSetVersion);
-        AppendNumber(digest, rules.TargetCharacterCount);
-        AppendNumber(digest, rules.MinimumCharacterCount);
-        AppendNumber(digest, rules.OverlapCharacterCount);
-        AppendNumber(digest, (int)rules.SourceForm);
-        AppendNumber(digest, isDerivedFromLossyHtml ? 1 : 0);
-        AppendNumber(digest, rules.BoundarySeparators.Count);
+        CanonicalDigest.AppendText(digest, HashDomain);
+        CanonicalDigest.AppendNumber(digest, rules.RuleSetVersion);
+        CanonicalDigest.AppendNumber(digest, rules.TargetCharacterCount);
+        CanonicalDigest.AppendNumber(digest, rules.MinimumCharacterCount);
+        CanonicalDigest.AppendNumber(digest, rules.OverlapCharacterCount);
+        CanonicalDigest.AppendNumber(digest, (int)rules.SourceForm);
+        CanonicalDigest.AppendNumber(digest, isDerivedFromLossyHtml ? 1 : 0);
+        CanonicalDigest.AppendNumber(digest, rules.BoundarySeparators.Count);
 
         foreach (var separator in rules.BoundarySeparators)
         {
-            AppendText(digest, separator);
+            CanonicalDigest.AppendText(digest, separator);
         }
 
-        AppendText(digest, text);
+        CanonicalDigest.AppendText(digest, text);
 
         return new EmailChunkContentHash(Convert.ToHexStringLower(digest.GetHashAndReset()));
     }
@@ -88,7 +87,7 @@ public readonly record struct EmailChunkContentHash
     {
         ArgumentNullException.ThrowIfNull(value);
 
-        if (value.Length != Length || !value.All(IsLowercaseHexadecimal))
+        if (!CanonicalDigest.IsHexadecimalDigest(value, Length))
         {
             throw new ArgumentException(
                 $"A chunk content hash is {Length} lowercase hexadecimal characters.",
@@ -100,22 +99,4 @@ public readonly record struct EmailChunkContentHash
 
     /// <inheritdoc />
     public override string ToString() => this.Value;
-
-    private static bool IsLowercaseHexadecimal(char character) =>
-        character is >= '0' and <= '9' or >= 'a' and <= 'f';
-
-    private static void AppendNumber(IncrementalHash digest, int value)
-    {
-        Span<byte> encoded = stackalloc byte[sizeof(int)];
-        BinaryPrimitives.WriteInt32BigEndian(encoded, value);
-        digest.AppendData(encoded);
-    }
-
-    private static void AppendText(IncrementalHash digest, string value)
-    {
-        var encoded = Encoding.UTF8.GetBytes(value);
-
-        AppendNumber(digest, encoded.Length);
-        digest.AppendData(encoded);
-    }
 }

@@ -2,9 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Buffers.Binary;
 using System.Security.Cryptography;
-using System.Text;
+using MailFathom.Application.Digests;
 
 namespace MailFathom.Application.Emails.Embeddings;
 
@@ -56,15 +55,15 @@ public readonly record struct EmbeddingProfileFingerprint
 
         using var digest = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
 
-        AppendText(digest, HashDomain);
-        AppendText(digest, identity.Provider);
-        AppendText(digest, identity.ModelIdentifier);
+        CanonicalDigest.AppendText(digest, HashDomain);
+        CanonicalDigest.AppendText(digest, identity.Provider);
+        CanonicalDigest.AppendText(digest, identity.ModelIdentifier);
         AppendOptionalText(digest, identity.ModelVersion);
-        AppendNumber(digest, identity.Dimension);
-        AppendNumber(digest, (int)identity.DistanceMetric);
-        AppendNumber(digest, preparation.InputCharacterLimit);
+        CanonicalDigest.AppendNumber(digest, identity.Dimension);
+        CanonicalDigest.AppendNumber(digest, (int)identity.DistanceMetric);
+        CanonicalDigest.AppendNumber(digest, preparation.InputCharacterLimit);
         AppendOptionalText(digest, preparation.PassageInstruction);
-        AppendNumber(digest, preparation.NormalizesVector ? 1 : 0);
+        CanonicalDigest.AppendNumber(digest, preparation.NormalizesVector ? 1 : 0);
 
         return new EmbeddingProfileFingerprint(Convert.ToHexStringLower(digest.GetHashAndReset()));
     }
@@ -78,7 +77,7 @@ public readonly record struct EmbeddingProfileFingerprint
     {
         ArgumentNullException.ThrowIfNull(value);
 
-        if (value.Length != Length || !value.All(IsLowercaseHexadecimal))
+        if (!CanonicalDigest.IsHexadecimalDigest(value, Length))
         {
             throw new ArgumentException(
                 $"An embedding profile fingerprint is {Length} lowercase hexadecimal characters.",
@@ -91,31 +90,14 @@ public readonly record struct EmbeddingProfileFingerprint
     /// <inheritdoc />
     public override string ToString() => this.Value;
 
-    private static bool IsLowercaseHexadecimal(char character) =>
-        character is >= '0' and <= '9' or >= 'a' and <= 'f';
-
-    private static void AppendNumber(IncrementalHash digest, int value)
-    {
-        Span<byte> encoded = stackalloc byte[sizeof(int)];
-        BinaryPrimitives.WriteInt32BigEndian(encoded, value);
-        digest.AppendData(encoded);
-    }
-
-    private static void AppendText(IncrementalHash digest, string value)
-    {
-        var encoded = Encoding.UTF8.GetBytes(value);
-
-        AppendNumber(digest, encoded.Length);
-        digest.AppendData(encoded);
-    }
-
+    /// <summary>Writes an optional field as a presence marker followed by the value, so absence is not a shorter value.</summary>
     private static void AppendOptionalText(IncrementalHash digest, string? value)
     {
-        AppendNumber(digest, value is null ? 0 : 1);
+        CanonicalDigest.AppendNumber(digest, value is null ? 0 : 1);
 
         if (value is not null)
         {
-            AppendText(digest, value);
+            CanonicalDigest.AppendText(digest, value);
         }
     }
 }

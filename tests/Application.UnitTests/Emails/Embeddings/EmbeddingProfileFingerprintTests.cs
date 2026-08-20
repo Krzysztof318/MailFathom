@@ -86,6 +86,25 @@ public sealed class EmbeddingProfileFingerprintTests
             "A digest is written in lowercase hexadecimal only."));
     }
 
+    /// <summary>
+    /// The profile table is unique on this value, so the encoding is pinned rather than merely self-consistent: a
+    /// deployment upgraded to a build whose digest writer moved must resolve its registered profile rather than write a
+    /// second row and re-embed a whole mailbox against it. Only a digest written down outside the code can say so, which
+    /// is why this expectation is a literal and not a second computation.
+    /// </summary>
+    [Fact]
+    public void Compute_TheReferenceGeometry_ProducesTheDigestAlreadyRegisteredRowsCarry()
+    {
+        // Arrange
+        const string registeredDigest = "dcf17af40c4cd8b674567539820590850813269ddd23b43009c3189e8f931238";
+
+        // Act
+        var fingerprint = EmbeddingProfileFingerprint.Compute(Identity());
+
+        // Assert
+        Assert.Equal(registeredDigest, fingerprint.Value);
+    }
+
     /// <summary>A fingerprint read back from a registered profile is the one that was written.</summary>
     [Fact]
     public void Create_ADigestThatWasComputed_ReadsBackAsTheSameValue()

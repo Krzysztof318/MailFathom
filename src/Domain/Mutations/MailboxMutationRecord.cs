@@ -193,7 +193,7 @@ public sealed record MailboxMutationRecord
         && this.PlacementObservedAt is null
         && this.Stage == MailboxMutationStage.Completed
         && this.Request.DestinationPath is { } destinationPath
-        && string.Equals(destinationPath.Value, discoveredFolderPath.Value, StringComparison.Ordinal)
+        && destinationPath.NamesSameFolderAs(discoveredFolderPath)
         && this.Placement is { UidValidity: { } placedUidValidity, Uid: { } placedUid }
         && placedUidValidity == discoveredUidValidity
         && placedUid == discoveredUid;

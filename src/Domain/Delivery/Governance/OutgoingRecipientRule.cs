@@ -76,7 +76,8 @@ public sealed record OutgoingRecipientRule
         rule = null;
 
         if (!EmailAddress.TryCreate(displayName: null, address, out var mailbox)
-            || !TrySplitMailbox(mailbox, out var localPart, out var domain))
+            || !mailbox.TrySplit(out var localPart, out var domainText)
+            || !SenderDomain.TryCreate(domainText.ToString(), out var domain))
         {
             return false;
         }
@@ -95,7 +96,8 @@ public sealed record OutgoingRecipientRule
     /// </remarks>
     public bool Matches(EmailAddress recipient)
     {
-        if (!TrySplitMailbox(recipient, out var localPart, out var domain))
+        if (!recipient.TrySplit(out var localPart, out var domainText)
+            || !SenderDomain.TryCreate(domainText.ToString(), out var domain))
         {
             return false;
         }
@@ -106,27 +108,5 @@ public sealed record OutgoingRecipientRule
         }
 
         return domain == this.Domain || domain.IsSubdomainOf(this.Domain);
-    }
-
-    /// <summary>Splits a mailbox into the two halves that are compared separately.</summary>
-    /// <remarks>
-    /// The local part takes the address's own comparison form and the domain takes the domain type's, because only the
-    /// domain has an encoding to settle.
-    /// </remarks>
-    private static bool TrySplitMailbox(EmailAddress mailbox, out string localPart, out SenderDomain domain)
-    {
-        localPart = string.Empty;
-        domain = default;
-
-        var separatorIndex = mailbox.Address.LastIndexOf('@');
-
-        if (separatorIndex <= 0 || !SenderDomain.TryCreate(mailbox.Address[(separatorIndex + 1)..], out domain))
-        {
-            return false;
-        }
-
-        localPart = mailbox.Address[..separatorIndex].ToUpperInvariant();
-
-        return true;
     }
 }

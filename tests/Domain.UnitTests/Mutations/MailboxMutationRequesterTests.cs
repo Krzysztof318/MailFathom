@@ -134,6 +134,52 @@ public sealed class MailboxMutationRequesterTests
         Assert.Equal("revision", refusal.ParamName);
     }
 
+    /// <summary>
+    /// Two distinct rules must never compose one identity. A rule named <c>a</c> at revision <c>b@c</c> and one named
+    /// <c>a@b</c> at revision <c>c</c> would otherwise write the same key, and the constraint the record is keyed by
+    /// would read the second rule's genuine request as a repeat of the first one's and perform nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("file@newsletters", "3", "ruleName")]
+    [InlineData("file-newsletters", "3@4", "revision")]
+    public void Rule_PartCarryingTheCharacterTheIdentityIsComposedWith_IsRefused(
+        string ruleName,
+        string revision,
+        string expectedParameter)
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(() => MailboxMutationRequester.Rule(ruleName, revision));
+
+        // Assert
+        Assert.Equal(expectedParameter, refusal.ParamName);
+    }
+
+    /// <summary>A corpus name carrying the separator would write the identity another corpus at another threshold writes.</summary>
+    [Fact]
+    public void Classification_CorpusNameCarryingTheCharacterTheIdentityIsComposedWith_IsRefused()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(
+            () => MailboxMutationRequester.Classification("spamassassin@4.0.2", actingThreshold: 8));
+
+        // Assert
+        Assert.Equal("decidedUnder", refusal.ParamName);
+    }
+
+    /// <summary>A stored identity carries the separator, so restoring one is not held to the rule its parts are held to.</summary>
+    [Fact]
+    public void Create_ARuleIdentityReadBackFromARecord_IsRestoredUnchanged()
+    {
+        // Arrange
+        var recorded = MailboxMutationRequester.Rule("file-newsletters", "3");
+
+        // Act
+        var restored = MailboxMutationRequester.Create(MailboxMutationOrigin.Rule, recorded.Identity);
+
+        // Assert
+        Assert.Equal(recorded, restored);
+    }
+
     /// <summary>A record hands back what it stored, so restoring has to produce the requester that was written.</summary>
     [Fact]
     public void Create_FromTheStoredOriginAndIdentity_RestoresTheRequesterThatWasWritten()

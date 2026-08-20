@@ -77,7 +77,8 @@ public sealed record TrustedSenderEntry
         entry = null;
 
         if (!EmailAddress.TryCreate(displayName: null, address, out var mailbox)
-            || !TrySplitMailbox(mailbox, out var localPart, out var domain))
+            || !mailbox.TrySplit(out var localPart, out var domainText)
+            || !SenderDomain.TryCreate(domainText.ToString(), out var domain))
         {
             return false;
         }
@@ -117,7 +118,8 @@ public sealed record TrustedSenderEntry
 
         return authorDomain == this.Domain
             && displayedSender is { } sender
-            && TrySplitMailbox(sender, out var displayedLocalPart, out var displayedDomain)
+            && sender.TrySplit(out var displayedLocalPart, out var displayedDomainText)
+            && SenderDomain.TryCreate(displayedDomainText.ToString(), out var displayedDomain)
             && displayedDomain == this.Domain
             && string.Equals(displayedLocalPart, localPart, StringComparison.Ordinal);
     }
@@ -132,26 +134,4 @@ public sealed record TrustedSenderEntry
     public string ToPolicyStatement() => this.NormalizedLocalPart is { } localPart
         ? $"mailbox:{localPart}@{this.Domain.NormalizedValue}"
         : $"domain{(this.IncludesSubdomains ? "+sub" : string.Empty)}:{this.Domain.NormalizedValue}";
-
-    /// <summary>Splits a mailbox into the two halves that are compared separately.</summary>
-    /// <remarks>
-    /// The local part takes the address's own comparison form, and the domain takes the domain type's, because the two
-    /// halves normalize differently: only the domain has an encoding to settle.
-    /// </remarks>
-    private static bool TrySplitMailbox(EmailAddress mailbox, out string localPart, out SenderDomain domain)
-    {
-        localPart = string.Empty;
-        domain = default;
-
-        var separatorIndex = mailbox.Address.LastIndexOf('@');
-
-        if (separatorIndex <= 0 || !SenderDomain.TryCreate(mailbox.Address[(separatorIndex + 1)..], out domain))
-        {
-            return false;
-        }
-
-        localPart = mailbox.Address[..separatorIndex].ToUpperInvariant();
-
-        return true;
-    }
 }

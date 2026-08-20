@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Buffers;
 using System.Globalization;
 
 namespace MailFathom.Domain.Mutations;
@@ -26,6 +27,14 @@ public sealed record MailboxMutationRequester
     /// <summary>The greatest length an identity may have, which bounds the column it is stored in and the index over it.</summary>
     public const int MaximumIdentityLength = 128;
 
+    /// <summary>The character a composed identity is written with, and which therefore cannot appear inside its parts.</summary>
+    /// <remarks>
+    /// One character rather than the two an outgoing email's identity is composed with, because a mutation's identity is
+    /// composed of two parts rather than three. It is held as a set so that composing a third part later refuses the
+    /// character that separates it in the same place as this one.
+    /// </remarks>
+    private static readonly SearchValues<char> ComposedIdentitySeparators = SearchValues.Create(['@']);
+
     private MailboxMutationRequester(MailboxMutationOrigin origin, string identity)
     {
         this.Origin = origin;
@@ -42,7 +51,7 @@ public sealed record MailboxMutationRequester
     /// <param name="ruleName">The operator's own name for the rule.</param>
     /// <param name="revision">The identity of the rule set revision the request was produced from.</param>
     /// <returns>A requester naming that revision of that rule.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="ruleName" /> or <paramref name="revision" /> is blank, carries a control character, or is long enough that the composed identity exceeds <see cref="MaximumIdentityLength" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="ruleName" /> or <paramref name="revision" /> is blank, carries a control character, carries the <c>@</c> character the identity is composed with, or is long enough that the composed identity exceeds <see cref="MaximumIdentityLength" />.</exception>
     /// <remarks>
     /// The revision is part of the identity rather than a column beside it, because the comparison that matters is
     /// equality of the whole thing: an edited rule is a different requester and asks again, while an unchanged one
@@ -54,7 +63,10 @@ public sealed record MailboxMutationRequester
         ArgumentException.ThrowIfNullOrWhiteSpace(ruleName);
         ArgumentException.ThrowIfNullOrWhiteSpace(revision);
 
-        var identity = string.Create(CultureInfo.InvariantCulture, $"{ruleName.Trim()}@{revision.Trim()}");
+        var trimmedRuleName = ValidComposedPart(ruleName, nameof(ruleName));
+        var trimmedRevision = ValidComposedPart(revision, nameof(revision));
+
+        var identity = string.Create(CultureInfo.InvariantCulture, $"{trimmedRuleName}@{trimmedRevision}");
 
         // Reported against the rule name rather than against the composed identity, because that is the part the caller
         // supplied and the only part they can shorten.
@@ -65,7 +77,7 @@ public sealed record MailboxMutationRequester
     /// <param name="decidedUnder">What the deciding stage ran under — a scanner's rule corpus, or the stage's own name where it has none.</param>
     /// <param name="actingThreshold">The score MailFathom itself requires before it touches mail, or <see langword="null" /> when the operator configured none.</param>
     /// <returns>A requester naming that profile.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="decidedUnder" /> is blank, carries a control character, or is long enough that the composed identity exceeds <see cref="MaximumIdentityLength" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="decidedUnder" /> is blank, carries a control character, carries the <c>@</c> character the identity is composed with, or is long enough that the composed identity exceeds <see cref="MaximumIdentityLength" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="actingThreshold" /> is not a finite number.</exception>
     /// <remarks>
     /// <para>
@@ -96,7 +108,7 @@ public sealed record MailboxMutationRequester
 
         var identity = string.Create(
             CultureInfo.InvariantCulture,
-            $"{decidedUnder.Trim()}@{DescribeThreshold(actingThreshold)}");
+            $"{ValidComposedPart(decidedUnder, nameof(decidedUnder))}@{DescribeThreshold(actingThreshold)}");
 
         // Reported against the corpus rather than against the composed identity, for the reason the rule factory gives:
         // it is the part the caller supplied and the only part they can shorten.
@@ -141,6 +153,28 @@ public sealed record MailboxMutationRequester
     private static string DescribeThreshold(double? actingThreshold) => actingThreshold is { } threshold
         ? threshold.ToString(CultureInfo.InvariantCulture)
         : "none";
+
+    /// <summary>Validates one part of a composed identity, including that it cannot be mistaken for another split of it.</summary>
+    /// <remarks>
+    /// The separator is refused rather than escaped, because what a composed identity has to guarantee is that two
+    /// distinct pairs cannot write the same string: a rule named <c>a</c> at revision <c>b@c</c> and a rule named
+    /// <c>a@b</c> at revision <c>c</c> would otherwise compose one identity, and the unique index would read the second
+    /// rule's genuine request as a repeat of the first one's and perform nothing. Neither a rule name an operator wrote
+    /// nor a scanner corpus name carries an at-sign, so refusing it costs nothing a caller can legitimately want.
+    /// </remarks>
+    private static string ValidComposedPart(string identityPart, string parameterName)
+    {
+        var trimmedPart = identityPart.Trim();
+
+        if (trimmedPart.AsSpan().ContainsAny(ComposedIdentitySeparators))
+        {
+            throw new ArgumentException(
+                "A part of a composed mutation requester identity cannot contain the character it is composed with.",
+                parameterName);
+        }
+
+        return trimmedPart;
+    }
 
     /// <summary>Validates an identity and reports a refusal against the parameter the caller actually supplied.</summary>
     /// <remarks>

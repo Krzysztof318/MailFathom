@@ -98,11 +98,7 @@ public static class AutomatedMailboxName
     }
 
     /// <summary>Reads the comparison form of what precedes the address's last at-sign.</summary>
-    /// <remarks>The last one, because a quoted local part may contain an at-sign of its own and every split of an address in this system is made there.</remarks>
-    private static string LocalPartOf(EmailAddress address)
-    {
-        var separatorIndex = address.NormalizedAddress.LastIndexOf('@');
-
-        return separatorIndex <= 0 ? string.Empty : address.NormalizedAddress[..separatorIndex];
-    }
+    /// <remarks>The domain half is not read at all here, because what a name says about a mailbox is said by its local part.</remarks>
+    private static string LocalPartOf(EmailAddress address) =>
+        address.TrySplit(out var localPart, out _) ? localPart : string.Empty;
 }

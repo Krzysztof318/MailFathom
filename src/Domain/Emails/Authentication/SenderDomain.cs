@@ -87,14 +87,17 @@ public readonly record struct SenderDomain
     /// <remarks>
     /// RFC 8601 writes the SPF identity as <c>smtp.mailfrom</c>, whose value is a mailbox for an ordinary message and a
     /// bare domain for one whose envelope sender is empty. Both forms are accepted here, and the domain is what follows
-    /// the last at-sign because a quoted local part is allowed to contain one.
+    /// the last at-sign because a quoted local part is allowed to contain one. Text carrying an at-sign but no local
+    /// part is neither form, and it is refused rather than read as the domain that follows it: a mailbox missing a half
+    /// says the identity was written wrongly, which the not-established verdict already has a value for.
     /// </remarks>
     public static bool TryCreateFromMailbox(string? mailbox, out SenderDomain domain)
     {
         var trimmed = mailbox?.Trim() ?? string.Empty;
-        var separatorIndex = trimmed.LastIndexOf('@');
 
-        return TryCreate(separatorIndex < 0 ? trimmed : trimmed[(separatorIndex + 1)..], out domain);
+        return EmailAddress.TrySplit(trimmed, out _, out var domainText)
+            ? TryCreate(domainText.ToString(), out domain)
+            : TryCreate(trimmed, out domain);
     }
 
     /// <summary>Answers whether this domain lies beneath another one in the naming tree.</summary>

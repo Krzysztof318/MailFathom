@@ -85,5 +85,5 @@ public sealed record MailDraftServerCopy
     /// somebody else's mail.
     /// </remarks>
     public bool NamesFolder(RemoteFolderPath resolvedFolderPath) =>
-        string.Equals(this.FolderPath.Value, resolvedFolderPath.Value, StringComparison.Ordinal);
+        this.FolderPath.NamesSameFolderAs(resolvedFolderPath);
 }

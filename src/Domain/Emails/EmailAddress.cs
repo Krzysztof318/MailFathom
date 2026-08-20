@@ -63,6 +63,62 @@ public readonly record struct EmailAddress
         return true;
     }
 
+    /// <summary>Splits an addr-spec into its two halves at the at-sign every split in this system is made at.</summary>
+    /// <param name="address">The addr-spec text to read, which may be anything a header carried.</param>
+    /// <param name="localPartText">What precedes the last at-sign, when the text names a mailbox.</param>
+    /// <param name="domainText">What follows it.</param>
+    /// <returns><see langword="true" /> when the text has both halves; otherwise <see langword="false" />.</returns>
+    /// <remarks>
+    /// The last at-sign, because a quoted local part is allowed to contain one. Both halves must be non-empty for the
+    /// text to name a mailbox at all, so text that is only a domain, only a local part, or a bare at-sign is refused
+    /// rather than handed back with an empty half every caller would have to check for. Neither half is validated here:
+    /// what a usable local part and a usable domain are belongs to the types that own those questions.
+    /// </remarks>
+    public static bool TrySplit(
+        ReadOnlySpan<char> address,
+        out ReadOnlySpan<char> localPartText,
+        out ReadOnlySpan<char> domainText)
+    {
+        var separatorIndex = address.LastIndexOf('@');
+
+        if (separatorIndex <= 0 || separatorIndex == address.Length - 1)
+        {
+            localPartText = default;
+            domainText = default;
+
+            return false;
+        }
+
+        localPartText = address[..separatorIndex];
+        domainText = address[(separatorIndex + 1)..];
+
+        return true;
+    }
+
+    /// <summary>Splits this address into the comparison form of its local part and the text of its domain.</summary>
+    /// <param name="normalizedLocalPart">The local part in the form <see cref="NormalizedAddress" /> is written in.</param>
+    /// <param name="domainText">The domain exactly as the message wrote it, which is the form a domain type normalizes from.</param>
+    /// <returns><see langword="true" /> when the address has both halves; otherwise <see langword="false" />.</returns>
+    /// <remarks>
+    /// The two halves are handed back in different forms because they normalize differently: the local part is compared
+    /// as text and takes this type's comparison form, while the domain has an encoding to settle and is left to the type
+    /// that settles it. Reading the domain from <see cref="Address" /> rather than from the comparison form is what
+    /// keeps a domain type's own record of what its source wrote intact.
+    /// </remarks>
+    public bool TrySplit(out string normalizedLocalPart, out ReadOnlySpan<char> domainText)
+    {
+        if (!TrySplit(this.Address, out var localPartText, out domainText))
+        {
+            normalizedLocalPart = string.Empty;
+
+            return false;
+        }
+
+        normalizedLocalPart = this.NormalizedAddress[..localPartText.Length];
+
+        return true;
+    }
+
     /// <summary>Compares two addresses by the form they were normalized to.</summary>
     /// <param name="other">The address to compare with.</param>
     /// <returns><see langword="true" /> when both name the same mailbox.</returns>
@@ -104,20 +160,16 @@ public readonly record struct EmailAddress
             return false;
         }
 
-        var domainSeparatorIndex = address.LastIndexOf('@');
-        if (domainSeparatorIndex <= 0 || domainSeparatorIndex == address.Length - 1)
+        if (!TrySplit(address, out var localPartText, out var domainText))
         {
             return false;
         }
 
-        var localPart = address[..domainSeparatorIndex];
-        var domain = address[(domainSeparatorIndex + 1)..];
-
-        return !domain.Any(char.IsWhiteSpace) && IsUsableLocalPart(localPart);
+        return !ContainsWhiteSpace(domainText) && IsUsableLocalPart(localPartText);
     }
 
     /// <summary>Accepts a local part that is either an ordinary token or a quoted string.</summary>
-    private static bool IsUsableLocalPart(string localPart)
+    private static bool IsUsableLocalPart(ReadOnlySpan<char> localPart)
     {
         var isQuoted = localPart.Length > 1
             && localPart[0] == '"'
@@ -125,7 +177,25 @@ public readonly record struct EmailAddress
 
         return isQuoted
             ? localPart.Length > 2
-            : !localPart.Any(char.IsWhiteSpace) && !localPart.Contains('@', StringComparison.Ordinal);
+            : !ContainsWhiteSpace(localPart) && !localPart.Contains('@');
+    }
+
+    /// <summary>Reports whether a half of an address carries whitespace, which neither unquoted half may.</summary>
+    /// <remarks>
+    /// Written as a walk rather than as a query, because the halves are spans cut out of the address and materializing
+    /// either of them to ask this question would allocate a string on the path every parsed address takes.
+    /// </remarks>
+    private static bool ContainsWhiteSpace(ReadOnlySpan<char> text)
+    {
+        foreach (var character in text)
+        {
+            if (char.IsWhiteSpace(character))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Keeps a display name readable and refuses to let one span lines it never spanned.</summary>
