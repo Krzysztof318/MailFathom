@@ -940,7 +940,12 @@ denormalized flag.
 
 `mail_draft_recipients` holds one row per person the draft names, keyed by the draft and the position in its list, and
 carrying the `Address`, the `Role`, and the nullable `ContactId` an outgoing recipient carries for the same reason. It
-carries no status and no reply code, because a draft has been offered to nobody. A revision replaces the whole list
+carries no status and no reply code, because a draft has been offered to nobody. What it carries and an outgoing
+recipient does not is `Provenance` — `NamedByCaller`, `ResolvedFromContactBook`, or `DerivedFromAnsweredEmail` — added
+by the `AddMailDraftRecipientProvenance` migration and defaulting to `NamedByCaller`, which is the strict reading a row
+written before the column existed gets. A send meets the caller-facing governance before its row is written, so nothing
+about it has to survive; a draft meets that governance at the promotion, which has only this column to judge whether the
+caller chose the address itself. A revision replaces the whole list
 rather than amending it, so the row set is the composed message's own rather than everybody the draft was ever
 addressed to — and a draft addressed to nobody at all is an empty set here rather than an invalid record, which is what
 saving an unfinished message means.

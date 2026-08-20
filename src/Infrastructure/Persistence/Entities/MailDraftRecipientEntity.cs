@@ -39,4 +39,12 @@ internal sealed class MailDraftRecipientEntity
     public Guid? ContactId { get; set; }
 
     public OutgoingRecipientRole Role { get; set; }
+
+    /// <summary>Gets or sets where the address came from, which the promotion judges the caller's own word by.</summary>
+    /// <remarks>
+    /// An outgoing recipient carries none because a send was governed before its row existed. A draft's governance runs
+    /// at the promotion instead, so the row is what still has to answer whether the caller chose this address itself —
+    /// months later, and against a contact book that has moved since.
+    /// </remarks>
+    public AuthoredRecipientProvenance Provenance { get; set; }
 }

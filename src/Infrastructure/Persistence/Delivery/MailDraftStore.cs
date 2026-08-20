@@ -46,7 +46,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
         IPersistenceSession session,
         MailAccountId accountId,
         OutgoingEmailRequester author,
-        IReadOnlyList<OutgoingRecipient> recipients,
+        IReadOnlyList<MailDraftRecipient> recipients,
         long mimeByteLength,
         DateTimeOffset composedAt,
         CancellationToken cancellationToken)
@@ -81,7 +81,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
     public async Task<MailDraftRecord> ReviseAsync(
         IPersistenceSession session,
         MailDraftId draftId,
-        IReadOnlyList<OutgoingRecipient> recipients,
+        IReadOnlyList<MailDraftRecipient> recipients,
         long mimeByteLength,
         DateTimeOffset revisedAt,
         CancellationToken cancellationToken)
@@ -357,7 +357,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
     /// Added through the navigation rather than through their own set, so they are inserted with the draft they belong
     /// to and a draft can never be committed with somebody else's recipients attached to it.
     /// </remarks>
-    private static void AddRecipients(MailDraftEntity entity, IReadOnlyList<OutgoingRecipient> recipients)
+    private static void AddRecipients(MailDraftEntity entity, IReadOnlyList<MailDraftRecipient> recipients)
     {
         foreach (var (recipient, ordinal) in recipients.Select((recipient, ordinal) => (recipient, ordinal)))
         {
@@ -366,9 +366,10 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
                 MailDraftId = entity.Id,
                 MailDraft = entity,
                 Ordinal = ordinal,
-                Address = recipient.Address.Address,
-                ContactId = recipient.Contact?.Value,
-                Role = recipient.Role,
+                Address = recipient.Recipient.Address.Address,
+                ContactId = recipient.Recipient.Contact?.Value,
+                Role = recipient.Recipient.Role,
+                Provenance = recipient.Provenance,
             });
         }
     }

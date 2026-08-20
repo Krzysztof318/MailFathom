@@ -46,7 +46,7 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
         IPersistenceSession session,
         MailAccountId accountId,
         OutgoingEmailRequester author,
-        IReadOnlyList<OutgoingRecipient> recipients,
+        IReadOnlyList<MailDraftRecipient> recipients,
         long mimeByteLength,
         DateTimeOffset composedAt,
         CancellationToken cancellationToken)
@@ -77,7 +77,7 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
     public Task<MailDraftRecord> ReviseAsync(
         IPersistenceSession session,
         MailDraftId draftId,
-        IReadOnlyList<OutgoingRecipient> recipients,
+        IReadOnlyList<MailDraftRecipient> recipients,
         long mimeByteLength,
         DateTimeOffset revisedAt,
         CancellationToken cancellationToken)

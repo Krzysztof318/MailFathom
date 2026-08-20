@@ -517,6 +517,11 @@ being answered; a `cc` the caller adds to that reply is judged; and a **forward 
 addresses nobody of its own and every address on it came from the call. So under `Refuse` a forward to somebody not yet
 in the contact book is refused — which is the setting doing its work, and the thing to know before turning it on.
 
+Promoting a draft is judged as the message it holds was written: the draft records where each of its addresses came
+from, so a drafted reply is untouched and a drafted message addressed to a stranger the caller wrote down is refused,
+against the contact book as it stands at the promotion. A draft written before this deployment kept that answer is
+judged as the caller's own word throughout.
+
 `Admit` is the default because refusing by default would refuse the first message of every installation whose contact
 book is still empty. It is not the same as not judging: a send reaching somebody nothing vouches for is recorded as
 such either way, which is the line to look for when reading back what a caller has been sending. What this setting is

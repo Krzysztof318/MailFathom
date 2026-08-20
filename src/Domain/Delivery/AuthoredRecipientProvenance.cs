@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-namespace MailFathom.Application.Mail.Delivery.Composition;
+namespace MailFathom.Domain.Delivery;
 
 /// <summary>States how one recipient came to be on a message: whoever asked wrote the address, or this system derived it.</summary>
 /// <remarks>
@@ -13,10 +13,15 @@ namespace MailFathom.Application.Mail.Delivery.Composition;
 /// out of the headers of the very message being answered was never the caller's to choose.
 /// </para>
 /// <para>
-/// Nothing about it reaches the composed message or the outgoing record. It is read once, by the governance that
-/// decides whether a caller may address somebody nothing here vouches for, and it is on the authored recipient rather
-/// than on the outgoing one for that reason: what a record has to hold is who the message went to, and how the address
-/// was arrived at stops mattering the moment it is written down.
+/// It is read by the governance that decides whether a caller may address somebody nothing here vouches for, and it is
+/// on the authored recipient rather than on the outgoing one because a record of a send has already met that
+/// governance: what such a record has to hold is who the message went to, and how the address was arrived at stops
+/// mattering once the send has been admitted.
+/// </para>
+/// <para>
+/// A draft is the one thing written down before that governance ever runs, so a draft's recipients keep it. The
+/// promotion is where the same question is finally asked, months later and against a contact book that has moved, and a
+/// draft that had dropped the provenance would leave the promotion judging every address as the caller's own word.
 /// </para>
 /// </remarks>
 public enum AuthoredRecipientProvenance

@@ -36,7 +36,7 @@ public interface IMailDraftStore
     /// <param name="session">The session the write joins, which is the one the message is stored in.</param>
     /// <param name="accountId">The account the draft belongs to.</param>
     /// <param name="author">The authored act that wrote it.</param>
-    /// <param name="recipients">The people it is addressed to, which may be nobody.</param>
+    /// <param name="recipients">The people it is addressed to, which may be nobody, each with where its address came from.</param>
     /// <param name="mimeByteLength">How many bytes the stored message is.</param>
     /// <param name="composedAt">When it was written down.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
@@ -46,7 +46,7 @@ public interface IMailDraftStore
         IPersistenceSession session,
         MailAccountId accountId,
         OutgoingEmailRequester author,
-        IReadOnlyList<OutgoingRecipient> recipients,
+        IReadOnlyList<MailDraftRecipient> recipients,
         long mimeByteLength,
         DateTimeOffset composedAt,
         CancellationToken cancellationToken);
@@ -54,7 +54,7 @@ public interface IMailDraftStore
     /// <summary>Advances a draft to a new revision, before any command replacing its copy goes out.</summary>
     /// <param name="session">The session the write joins, which is the one the new message is stored in.</param>
     /// <param name="draftId">The draft being revised.</param>
-    /// <param name="recipients">The people the new revision is addressed to.</param>
+    /// <param name="recipients">The people the new revision is addressed to, each with where its address came from.</param>
     /// <param name="mimeByteLength">How many bytes the new stored message is.</param>
     /// <param name="revisedAt">When the revision was written down.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
@@ -70,7 +70,7 @@ public interface IMailDraftStore
     Task<MailDraftRecord> ReviseAsync(
         IPersistenceSession session,
         MailDraftId draftId,
-        IReadOnlyList<OutgoingRecipient> recipients,
+        IReadOnlyList<MailDraftRecipient> recipients,
         long mimeByteLength,
         DateTimeOffset revisedAt,
         CancellationToken cancellationToken);

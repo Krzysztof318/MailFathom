@@ -76,13 +76,19 @@ internal static class MailDraftRecordMapping
             : null;
 
     /// <summary>Restores one person the draft is addressed to.</summary>
-    /// <remarks>The address and the contact are read as <see cref="StoredOutgoingRecipient" /> states.</remarks>
-    private static OutgoingRecipient ToRecipient(Guid draftId, MailDraftRecipientEntity entity) =>
-        StoredOutgoingRecipient.ToRecipient(
-            "Mail draft",
-            draftId,
-            entity.Ordinal,
-            entity.Address,
-            entity.Role,
-            entity.ContactId);
+    /// <remarks>
+    /// The address and the contact are read as <see cref="StoredOutgoingRecipient" /> states. The provenance beside
+    /// them is the draft's own column: a send meets the governance before its row exists, while a draft is written
+    /// first and governed when it is promoted, so how each address came to be on it has to survive the wait.
+    /// </remarks>
+    private static MailDraftRecipient ToRecipient(Guid draftId, MailDraftRecipientEntity entity) =>
+        new(
+            StoredOutgoingRecipient.ToRecipient(
+                "Mail draft",
+                draftId,
+                entity.Ordinal,
+                entity.Address,
+                entity.Role,
+                entity.ContactId),
+            entity.Provenance);
 }

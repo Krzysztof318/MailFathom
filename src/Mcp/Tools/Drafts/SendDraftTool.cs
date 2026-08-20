@@ -25,6 +25,14 @@ namespace MailFathom.Mcp.Tools.Drafts;
 /// to reach it and unable to see it in a listing.
 /// </para>
 /// <para>
+/// The requirements are the use case's rather than this file's, and they are the same three a message sent outright
+/// meets: the caller's own ceiling for the period, the deployment's posture on a recipient nothing here vouches for,
+/// and the audit row naming who dispatched what. All three are asked here and nowhere earlier — writing a draft is
+/// admitted under the drafting grant and reaches none of them, because nothing has been offered to anybody yet. What
+/// makes them answerable at the promotion is that the draft kept where each of its addresses came from, so an address
+/// derived from a message being answered is still not read as the caller's own word months later.
+/// </para>
+/// <para>
 /// <b>The call never transmits.</b> The promotion writes an ordinary outgoing record carrying the bytes the draft
 /// already is, and the account's delivery pass offers it to a submission server afterwards — so the result is the
 /// send's own, in the send's own words, and a caller reading it must not report that mail arrived.

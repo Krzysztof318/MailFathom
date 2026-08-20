@@ -47,10 +47,17 @@ public sealed record MailDraftRecord
 
     /// <summary>Gets the people the draft is addressed to, which may be nobody.</summary>
     /// <remarks>
+    /// <para>
     /// A draft addressed to nobody is an ordinary draft — writing the message before deciding who reads it is what a
     /// draft is for — and it is a draft nothing can promote, which is where the absence is refused rather than here.
+    /// </para>
+    /// <para>
+    /// Each of them says where its address came from as well as what it is, which an outgoing record has no reason to.
+    /// A promotion is the first moment a draft's recipients are governed at all, and the question that governance asks
+    /// is whether the caller named the address itself.
+    /// </para>
     /// </remarks>
-    public required IReadOnlyList<OutgoingRecipient> Recipients { get; init; }
+    public required IReadOnlyList<MailDraftRecipient> Recipients { get; init; }
 
     /// <summary>Gets how many bytes of MIME are stored for the current revision.</summary>
     /// <remarks>
