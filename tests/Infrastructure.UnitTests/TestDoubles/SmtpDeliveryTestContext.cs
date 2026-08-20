@@ -10,6 +10,7 @@ using MailFathom.Infrastructure.Mail.MailKit.Delivery;
 using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Secrets.Resolution;
+using MailKit.Security;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -57,6 +58,39 @@ internal static class SmtpDeliveryTestContext
         client.AuthenticationMechanisms.Returns([.. advertisedMechanisms]);
 
         return client;
+    }
+
+    /// <summary>Scripts how a submission server answers the access tokens presented to it, and records each one.</summary>
+    /// <param name="client">The scripted server.</param>
+    /// <param name="refusedAuthenticationCount">How many of the first tokens the server refuses, modelling one it no longer accepts.</param>
+    /// <returns>The access token presented by every token authentication attempted, in order.</returns>
+    /// <remarks>
+    /// The presented value is recorded rather than counted, because what the renewal path has to prove is that the
+    /// second attempt carried a different token: a re-authentication repeating the refused one would pass a test that
+    /// only counted the round trips.
+    /// </remarks>
+    internal static IReadOnlyList<string> ScriptTokenAuthentication(
+        ISubmissionClient client,
+        int refusedAuthenticationCount = 0)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+
+        var presentedAccessTokens = new List<string>();
+
+        client.AuthenticateAsync(Arg.Any<SaslMechanism>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            var mechanism = call.Arg<SaslMechanism>()
+                ?? throw new InvalidOperationException("The adapter authenticated with no SASL mechanism.");
+
+            presentedAccessTokens.Add(mechanism.Credentials?.Password ?? string.Empty);
+
+            // Counted against the attempts already recorded, so "refuse the first one" reads as exactly that.
+            return presentedAccessTokens.Count <= refusedAuthenticationCount
+                ? throw new AuthenticationException("The submission server refused the access token.")
+                : Task.CompletedTask;
+        });
+
+        return presentedAccessTokens;
     }
 
     /// <summary>Builds a settings provider that resolves a password for the scripted endpoint on every attempt.</summary>

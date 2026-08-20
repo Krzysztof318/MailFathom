@@ -4,9 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Sockets;
-using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Transmission;
@@ -249,7 +247,7 @@ internal sealed partial class MailKitSmtpConnection : IAsyncDisposable
 
         if (ownedClient is not null)
         {
-            await DisconnectAndDisposeAsync(ownedClient);
+            await MailKitClientLifetime.DisconnectAndDisposeAsync(ownedClient);
         }
     }
 
@@ -267,7 +265,9 @@ internal sealed partial class MailKitSmtpConnection : IAsyncDisposable
             {
                 attemptClient.Timeout = (int)this.timeouts.Command.TotalMilliseconds;
 
-                TrustConfiguredCertificateAuthority(attemptClient, settings.Material.TrustedCertificateAuthority);
+                MailKitClientLifetime.TrustConfiguredCertificateAuthority(
+                    attemptClient,
+                    settings.Material.TrustedCertificateAuthority);
 
                 var socket = await this.RunPhaseAsync(
                     MailDeliveryPhase.Connection,
@@ -276,10 +276,7 @@ internal sealed partial class MailKitSmtpConnection : IAsyncDisposable
 
                 await this.GreetOverAsync(attemptClient, socket, settings, cancellationToken);
 
-                await this.RunPhaseAsync(
-                    MailDeliveryPhase.Authentication,
-                    phaseToken => this.AuthenticateAsync(attemptClient, settings, phaseToken),
-                    cancellationToken);
+                await this.AuthenticateAsync(attemptClient, settings, cancellationToken);
 
                 // Read before the client is adopted, so a failure here still leaves this connection holding nothing and
                 // the abandonment below is the only thing that closes the client.
@@ -291,7 +288,7 @@ internal sealed partial class MailKitSmtpConnection : IAsyncDisposable
             catch (SmtpCommandException refusal)
             {
                 this.ReportRefusal(refusal);
-                Abandon(attemptClient);
+                MailKitClientLifetime.Abandon(attemptClient);
 
                 throw;
             }
@@ -299,7 +296,7 @@ internal sealed partial class MailKitSmtpConnection : IAsyncDisposable
             {
                 // A half-established connection is unusable by definition, and this cleanup runs inside an attempt the
                 // pipeline may abandon, so it closes the socket rather than waiting on a reply the server owes it.
-                Abandon(attemptClient);
+                MailKitClientLifetime.Abandon(attemptClient);
 
                 throw;
             }
@@ -339,9 +336,21 @@ internal sealed partial class MailKitSmtpConnection : IAsyncDisposable
 
     /// <summary>Narrows the advertised mechanisms to the allow-list and authenticates with whichever credential the survivors need.</summary>
     /// <remarks>
+    /// <para>
     /// The advertised set is narrowed first, because MailKit selects a mechanism from whatever remains in it, and
     /// nothing widens it again. A submission server that offers nothing the account permits ends the attempt here with
     /// the account's own coded failure, since SMTP has no clear-text command to fall back to.
+    /// </para>
+    /// <para>
+    /// The Authentication budget bounds each round trip to the submission server rather than the whole of this method,
+    /// which is what lets a rejected access token be renewed here at all. A renewal is a request to the authorization
+    /// server, whose own class already allows it more than one exchange across its retries, so a stage sized to contain
+    /// a token exchange and two <c>AUTH</c> exchanges would have to be larger than the establishment stages may total
+    /// while staying inside the delivery attempt budget they are deliberately kept under. It would also attribute a
+    /// hung authorization server to the submission server, which is the reading that class's own budget exists to
+    /// prevent. So the exchanges sit between the stages instead of inside one, bounded by the class that owns them,
+    /// and every stage timeout this connection reports still names something the mail server did.
+    /// </para>
     /// </remarks>
     private async Task AuthenticateAsync(
         ISmtpClient attemptClient,
@@ -358,10 +367,15 @@ internal sealed partial class MailKitSmtpConnection : IAsyncDisposable
             this.transportSecurityPolicy.Authentication,
             out var tokenMechanism))
         {
-            var accessToken = await this.accessTokenSource.GetAccessTokenAsync(settings.AccountId, cancellationToken);
-
-            await attemptClient.AuthenticateAsync(
-                MailKitTransportSecurityMapping.ToSaslMechanism(tokenMechanism, settings.UserName, accessToken.Value),
+            await MailKitAccessTokenAuthentication.AuthenticateAsync(
+                this.accessTokenSource,
+                tokenMechanism,
+                settings.AccountId,
+                settings.UserName,
+                (mechanism, credentialToken) => this.RunPhaseAsync(
+                    MailDeliveryPhase.Authentication,
+                    phaseToken => attemptClient.AuthenticateAsync(mechanism, phaseToken),
+                    credentialToken),
                 cancellationToken);
 
             return;
@@ -375,7 +389,10 @@ internal sealed partial class MailKitSmtpConnection : IAsyncDisposable
 
         // MailKit's authentication contract takes a string, so an un-erasable copy of the password is unavoidable
         // here. It is created at the call itself and never stored, logged, or passed on.
-        await attemptClient.AuthenticateAsync(settings.UserName, password.RevealAsString(), cancellationToken);
+        await this.RunPhaseAsync(
+            MailDeliveryPhase.Authentication,
+            phaseToken => attemptClient.AuthenticateAsync(settings.UserName, password.RevealAsString(), phaseToken),
+            cancellationToken);
     }
 
     /// <summary>Runs one stage of reaching the server under a budget of its own.</summary>
@@ -471,79 +488,6 @@ internal sealed partial class MailKitSmtpConnection : IAsyncDisposable
             classification.ReplyCode,
             classification.EnhancedStatusCode?.ToString() ?? "none",
             classification.Disposition.ToString());
-    }
-
-    /// <summary>Points the client at the account's configured authority before the handshake that will consult it.</summary>
-    /// <remarks>
-    /// The anchor lives as long as the connection attempt that resolved it, and so does the callback that closes over
-    /// it: the client is created per attempt and disposed with it, so no callback outlives the certificate it reads.
-    /// An account without a configured authority leaves the client's own validating default untouched.
-    /// </remarks>
-    private static void TrustConfiguredCertificateAuthority(
-        ISmtpClient client,
-        X509Certificate2? trustedCertificateAuthority)
-    {
-        if (trustedCertificateAuthority is null)
-        {
-            return;
-        }
-
-        client.ServerCertificateValidationCallback = (_, certificate, chain, sslPolicyErrors) =>
-            MailServerCertificateValidator.IsServerCertificateTrusted(
-                trustedCertificateAuthority,
-                certificate,
-                chain,
-                sslPolicyErrors);
-    }
-
-    /// <summary>Drops a client this type has already declared unusable, without speaking the protocol again.</summary>
-    /// <remarks>
-    /// A graceful quit is a command, and a command sent to a server that stopped answering waits for a reply that may
-    /// never come, through a cancellation token this cleanup has no way to observe. Closing the socket asks the server
-    /// for nothing. Politeness belongs to <see cref="DisposeAsync" />, where the session is ending in order.
-    /// </remarks>
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A connection already being abandoned must not have its cleanup failure replace the failure that caused the abandonment.")]
-    [SuppressMessage("Roslynator", "RCS1075:Avoid empty catch clause that catches System.Exception", Justification = "There is no second action to take: the connection is already unusable, and the caller is about to rethrow the failure that made it so.")]
-    private static void Abandon(ISmtpClient client)
-    {
-        try
-        {
-            client.Dispose();
-        }
-        catch (Exception)
-        {
-        }
-    }
-
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Both cleanup operations must be attempted while the first cleanup failure remains observable.")]
-    private static async ValueTask DisconnectAndDisposeAsync(ISmtpClient client)
-    {
-        Exception? firstCleanupException = null;
-        try
-        {
-            if (client.IsConnected)
-            {
-                await client.DisconnectAsync(quit: true, CancellationToken.None);
-            }
-        }
-        catch (Exception exception)
-        {
-            firstCleanupException = exception;
-        }
-
-        try
-        {
-            client.Dispose();
-        }
-        catch (Exception exception)
-        {
-            firstCleanupException ??= exception;
-        }
-
-        if (firstCleanupException is not null)
-        {
-            ExceptionDispatchInfo.Capture(firstCleanupException).Throw();
-        }
     }
 
     [LoggerMessage(

@@ -7,7 +7,7 @@ namespace MailFathom.Infrastructure.Mail.MailKit.Delivery;
 /// <summary>The budget each stage of reaching a submission server is given before it is abandoned.</summary>
 /// <param name="Connection">How long the transport to the endpoint may take to open.</param>
 /// <param name="Greeting">How long encryption, the greeting, and the capability exchange may take together.</param>
-/// <param name="Authentication">How long the server may take to answer the account's credential.</param>
+/// <param name="Authentication">How long the server may take to answer one presentation of the account's credential.</param>
 /// <param name="Command">How long any command over the established session may take, which the client enforces itself.</param>
 /// <param name="Transmission">How long offering the envelope and transmitting the whole message may take together.</param>
 /// <remarks>
@@ -18,6 +18,12 @@ namespace MailFathom.Infrastructure.Mail.MailKit.Delivery;
 /// <see cref="TimeoutException" /> rather than a cancellation, so a hung server can never be read as a host shutting
 /// down. Their defaults total less than that class's default attempt timeout, which is what keeps a stage able to
 /// expire on its own before the enclosing budget takes the attempt away from it.
+/// </para>
+/// <para>
+/// <see cref="Authentication" /> bounds one round trip rather than the whole authentication, because an account
+/// whose access token the server refuses presents a renewed one over a second round trip. The exchange that renews it
+/// is not inside this budget at all: it is a request to the authorization server, bounded by that dependency class,
+/// and holding it here would report its silence against the submission server.
 /// </para>
 /// <para>
 /// <see cref="Command" /> is not one of them. It is applied to the client as its own timeout and bounds a command over

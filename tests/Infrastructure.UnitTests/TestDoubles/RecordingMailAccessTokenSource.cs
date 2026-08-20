@@ -25,19 +25,37 @@ internal sealed class RecordingMailAccessTokenSource : IMailAccessTokenSource
     /// <summary>Gets how many times a renewal was requested.</summary>
     internal int RenewCount => this.RejectedTokens.Count;
 
-    /// <inheritdoc />
-    public Task<MailAccessToken> GetAccessTokenAsync(string accountId, CancellationToken cancellationToken) =>
-        Task.FromResult(this.IssueNext());
+    /// <summary>Gets or sets what happens before an exchange answers, which a test uses to model a slow authorization server.</summary>
+    /// <remarks>Left unset, an exchange answers at once, which is what every test that is not about the exchange's own duration wants.</remarks>
+    internal Func<CancellationToken, Task>? WhileExchanging { get; set; }
 
     /// <inheritdoc />
-    public Task<MailAccessToken> RenewAccessTokenAsync(
+    public async Task<MailAccessToken> GetAccessTokenAsync(string accountId, CancellationToken cancellationToken)
+    {
+        await this.ExchangeAsync(cancellationToken);
+
+        return this.IssueNext();
+    }
+
+    /// <inheritdoc />
+    public async Task<MailAccessToken> RenewAccessTokenAsync(
         string accountId,
         MailAccessToken rejectedToken,
         CancellationToken cancellationToken)
     {
         this.RejectedTokens.Add(rejectedToken.Value);
 
-        return Task.FromResult(this.IssueNext());
+        await this.ExchangeAsync(cancellationToken);
+
+        return this.IssueNext();
+    }
+
+    private async Task ExchangeAsync(CancellationToken cancellationToken)
+    {
+        if (this.WhileExchanging is { } exchange)
+        {
+            await exchange(cancellationToken);
+        }
     }
 
     private MailAccessToken IssueNext()

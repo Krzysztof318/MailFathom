@@ -247,6 +247,15 @@ command: `AUTH` is the only way to present a credential, so a server advertising
 leaves nothing to fall back to. The attempt ends there with `MailAuthenticationMechanismUnavailableException`, before
 any credential is presented.
 
+**A refused access token is renewed once here too**, exactly as it is on the reading side and for the same reason: a
+cached token can be refused for something no expiry instant predicts, and the cache replaces an entry only when a
+renewal tells it to, so presenting the same value again would fail every send until that entry expired on its own. A
+token the submission server refuses is therefore renewed and presented a second time, and a fresh token it also refuses
+fails the attempt rather than looping. The exchange that renews it is a request to the authorization server, bounded by
+that dependency class rather than by the Authentication stage below — which is why that stage bounds one presentation
+rather than the whole authentication, and why an authorization server that stops answering is never reported as the
+submission server having done so.
+
 ## Five stages, five budgets
 
 Reaching a submission server and using one are five things that fail differently, so each is bounded on its own and
@@ -256,7 +265,7 @@ reported as itself:
 | --- | --- | --- |
 | Connection | 15 s | Opening the transport to the endpoint. |
 | Greeting | 15 s | Encryption, the greeting, and the capability exchange. |
-| Authentication | 20 s | The server answering the account's credential. |
+| Authentication | 20 s | The server answering one presentation of the account's credential. |
 | Command | 30 s | Any one command over the established session. |
 | Transmission | 5 min | Offering the envelope and transmitting the whole message, as one. |
 
@@ -271,7 +280,8 @@ server can therefore never be read as a process shutting down, and a shutdown ne
 
 The first three bound the stages of establishing the session and sit inside the attempt budget of the `EmailDelivery`
 resilience class, which is what a deployment configures. Their defaults total 50 s against that class's 60 s default
-attempt timeout, so a stage can expire on its own before the enclosing budget takes the attempt away from it. The other
+attempt timeout, so a stage can expire on its own before the enclosing budget takes the attempt away from it. A
+renewal is the one path that enters a stage twice, and the enclosing attempt budget is what bounds it there. The other
 two are not part of that total: both bound work over a session that is already established, which is outside the
 establishment attempt. The command budget is set on the client itself; the transmission budget is applied around the
 submission and is enclosed instead by `MailDelivery:AttemptTimeout`, which is the outbox's own bound rather than the

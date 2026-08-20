@@ -3,8 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.ExceptionServices;
-using System.Security.Cryptography.X509Certificates;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Synchronization.Sessions;
@@ -473,7 +471,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
 
         if (ownedClient is not null)
         {
-            await DisconnectAndDisposeAsync(ownedClient);
+            await MailKitClientLifetime.DisconnectAndDisposeAsync(ownedClient);
         }
     }
 
@@ -514,7 +512,9 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
             var attemptClient = this.clientFactory();
             try
             {
-                TrustConfiguredCertificateAuthority(attemptClient, settings.Material.TrustedCertificateAuthority);
+                MailKitClientLifetime.TrustConfiguredCertificateAuthority(
+                    attemptClient,
+                    settings.Material.TrustedCertificateAuthority);
 
                 await attemptClient.ConnectAsync(
                     settings.Host,
@@ -536,7 +536,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
             {
                 // A half-established connection is unusable by definition, and this cleanup runs inside an attempt the
                 // pipeline may abandon, so it closes the socket rather than waiting on a logout the server owes it.
-                Abandon(attemptClient);
+                MailKitClientLifetime.Abandon(attemptClient);
                 throw;
             }
         }
@@ -589,7 +589,13 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
             this.transportSecurityPolicy.Authentication,
             out var tokenMechanism))
         {
-            await this.AuthenticateWithAccessTokenAsync(attemptClient, settings, tokenMechanism, cancellationToken);
+            await MailKitAccessTokenAuthentication.AuthenticateAsync(
+                this.accessTokenSource,
+                tokenMechanism,
+                settings.AccountId,
+                settings.UserName,
+                attemptClient.AuthenticateAsync,
+                cancellationToken);
 
             return;
         }
@@ -603,48 +609,6 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
         // MailKit's authentication contract takes a string, so an un-erasable copy of the password is unavoidable
         // here. It is created at the call itself and never stored, logged, or passed on.
         await attemptClient.AuthenticateAsync(settings.UserName, password.RevealAsString(), cancellationToken);
-    }
-
-    /// <summary>Presents an access token, renewing it once when the server rejects one this process believed was valid.</summary>
-    /// <remarks>
-    /// <para>
-    /// The single retry is what separates an expired token from a rejected credential. A cached token can be refused
-    /// for reasons no expiry instant predicts — it was revoked, the mailbox password changed, an administrator
-    /// withdrew consent — and repeating the same value would spend the establishment budget on an answer that cannot
-    /// change. Renewing once distinguishes the two: a fresh token that is also refused is a decision the authorization
-    /// server and the mail server agree on, and it fails the attempt.
-    /// </para>
-    /// <para>
-    /// This is bounded and non-recursive by construction. There is exactly one renewal per establishment attempt, and
-    /// the token source has its own retry budget under a different dependency class, so no retry layer nests inside
-    /// another.
-    /// </para>
-    /// </remarks>
-    private async Task AuthenticateWithAccessTokenAsync(
-        IImapClient attemptClient,
-        ImapAccountSettings settings,
-        MailAuthenticationMechanism tokenMechanism,
-        CancellationToken cancellationToken)
-    {
-        var accessToken = await this.accessTokenSource.GetAccessTokenAsync(settings.AccountId, cancellationToken);
-
-        try
-        {
-            await attemptClient.AuthenticateAsync(
-                MailKitTransportSecurityMapping.ToSaslMechanism(tokenMechanism, settings.UserName, accessToken.Value),
-                cancellationToken);
-        }
-        catch (global::MailKit.Security.AuthenticationException)
-        {
-            var renewedToken = await this.accessTokenSource.RenewAccessTokenAsync(
-                settings.AccountId,
-                accessToken,
-                cancellationToken);
-
-            await attemptClient.AuthenticateAsync(
-                MailKitTransportSecurityMapping.ToSaslMechanism(tokenMechanism, settings.UserName, renewedToken.Value),
-                cancellationToken);
-        }
     }
 
     /// <summary>Selects the pinned folder with this connection's fixed access, once it is confirmed to be the one the session started on.</summary>
@@ -756,83 +720,7 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
 
         if (discardedClient is not null)
         {
-            Abandon(discardedClient);
-        }
-    }
-
-    /// <summary>Points the client at the account's configured authority before the handshake that will consult it.</summary>
-    /// <remarks>
-    /// The anchor lives as long as the connection attempt that resolved it, and so does the callback that closes over
-    /// it: the client is created per attempt and disposed with it, so no callback outlives the certificate it reads.
-    /// An account without a configured authority leaves the client's own validating default untouched.
-    /// </remarks>
-    private static void TrustConfiguredCertificateAuthority(
-        IImapClient client,
-        X509Certificate2? trustedCertificateAuthority)
-    {
-        if (trustedCertificateAuthority is null)
-        {
-            return;
-        }
-
-        client.ServerCertificateValidationCallback = (_, certificate, chain, sslPolicyErrors) =>
-            MailServerCertificateValidator.IsServerCertificateTrusted(
-                trustedCertificateAuthority,
-                certificate,
-                chain,
-                sslPolicyErrors);
-    }
-
-    /// <summary>Drops a connection this type has already declared unusable, without speaking the protocol again.</summary>
-    /// <remarks>
-    /// A graceful logout is a command, and a command sent to a server that stopped answering waits for a reply that
-    /// may never come — on a client whose only timeout is its own, far beyond the attempt budget, and through a
-    /// cancellation token that this cleanup has no way to observe. The pipeline would abandon the attempt and start
-    /// the next one while this call was still running against a connection object that is not safe for concurrent
-    /// use. Closing the socket asks the server for nothing and cannot block on it. Politeness belongs to
-    /// <see cref="DisposeAsync" />, where the session is ending in order and no attempt is racing it.
-    /// </remarks>
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A connection already being replaced must not have its cleanup failure replace the failure that is being retried.")]
-    [SuppressMessage("Roslynator", "RCS1075:Avoid empty catch clause that catches System.Exception", Justification = "There is no second action to take: the connection is already unusable, and the caller is about to rethrow the failure that made it so.")]
-    private static void Abandon(IImapClient client)
-    {
-        try
-        {
-            client.Dispose();
-        }
-        catch (Exception)
-        {
-        }
-    }
-
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Both cleanup operations must be attempted while the first cleanup failure remains observable.")]
-    private static async ValueTask DisconnectAndDisposeAsync(IImapClient client)
-    {
-        Exception? firstCleanupException = null;
-        try
-        {
-            if (client.IsConnected)
-            {
-                await client.DisconnectAsync(quit: true, CancellationToken.None);
-            }
-        }
-        catch (Exception exception)
-        {
-            firstCleanupException = exception;
-        }
-
-        try
-        {
-            client.Dispose();
-        }
-        catch (Exception exception)
-        {
-            firstCleanupException ??= exception;
-        }
-
-        if (firstCleanupException is not null)
-        {
-            ExceptionDispatchInfo.Capture(firstCleanupException).Throw();
+            MailKitClientLifetime.Abandon(discardedClient);
         }
     }
 }

@@ -264,7 +264,8 @@ endpoint that is not absolute HTTPS, and a `refresh_token` grant with no refresh
   where a server offers both, the registered `OAUTHBEARER` is used.
 - **A rejected token is retried once, with a new one.** A token the mail server refuses despite being unexpired — it
   was revoked, or the mailbox password changed — triggers one renewal and one re-authentication. A fresh token that is
-  also refused fails the attempt rather than looping.
+  also refused fails the attempt rather than looping. This holds on both connections an account opens, the mailbox one
+  and the submission one, since the renewal is also the only thing that replaces the cached entry.
 - **The stored refresh token is preferred over the configured one.** An account whose token has been rotated at least
   once spends what MailFathom stored; one whose token never has is served from its configured reference. Both are
   handled the same way from there.
