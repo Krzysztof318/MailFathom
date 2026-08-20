@@ -294,7 +294,8 @@ public sealed class MailboxAuthorizer
             // An answer naming a character set this platform does not carry never reaches the parser at all, and
             // arrives from the transport as an InvalidOperationException; it is the same defect and reads the same way.
             throw new MailboxAuthorizationFailedException(
-                string.Create(CultureInfo.InvariantCulture, $"non_json_response_http_{(int)response.StatusCode}"));
+                string.Create(CultureInfo.InvariantCulture, $"non_json_response_http_{(int)response.StatusCode}"),
+                failure);
         }
 
         return payload ?? throw new MailboxAuthorizationFailedException(

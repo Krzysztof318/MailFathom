@@ -20,8 +20,11 @@ public sealed class ApiKeyAuthenticationTests
     [Fact]
     public void WriteBareChallenge_ARefusedRequest_AnswersAnEmptyUnauthorizedNamingTheSchemeAndRealm()
     {
-        // Arrange
+        // Arrange: an observable stream rather than the context's default, which is Stream.Null and reports no length
+        // whatever is written to it — so a challenge that grew a body would leave the emptiness assertion green.
         var context = new DefaultHttpContext();
+        using var body = new MemoryStream();
+        context.Response.Body = body;
 
         // Act
         ApiKeyAuthentication.WriteBareChallenge(context.Response);
@@ -29,7 +32,7 @@ public sealed class ApiKeyAuthenticationTests
         // Assert
         Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
         Assert.Equal("Bearer realm=\"MailFathom\"", context.Response.Headers[HeaderNames.WWWAuthenticate]);
-        Assert.Equal(0, context.Response.Body.Length);
+        Assert.Equal(0, body.Length);
     }
 
     /// <summary>An error code or a description would begin to say which credential was wrong, so the challenge carries neither.</summary>

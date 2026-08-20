@@ -381,8 +381,10 @@ public sealed class MailboxAuthorizerTests
         var failure = await Assert.ThrowsAsync<MailboxAuthorizationFailedException>(
             () => authorizer.RedeemAuthorizationCodeAsync(request, pending, "code", CancellationToken.None));
 
-        // Assert
+        // Assert: the code is the operator's vocabulary, and the failure it stands for is preserved for a diagnostic
+        // to say which of the answers sharing that code arrived.
         Assert.Equal("non_json_response_http_200", failure.AuthorizationServerErrorCode);
+        Assert.IsType<InvalidOperationException>(failure.InnerException);
     }
 
     [Fact]
