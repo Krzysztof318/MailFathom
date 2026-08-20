@@ -312,13 +312,13 @@
       "MailFathom.Application": {
         "type": "Project",
         "dependencies": {
-          "MailFathom.Domain": "[0.7.0, )"
+          "MailFathom.Domain": "[0.8.0, )"
         }
       },
       "MailFathom.Common": {
         "type": "Project",
         "dependencies": {
-          "MailFathom.Domain": "[0.7.0, )"
+          "MailFathom.Domain": "[0.8.0, )"
         }
       },
       "MailFathom.Domain": {
@@ -327,9 +327,9 @@
       "MailFathom.Mcp": {
         "type": "Project",
         "dependencies": {
-          "MailFathom.Application": "[0.7.0, )",
-          "MailFathom.Common": "[0.7.0, )",
-          "MailFathom.Domain": "[0.7.0, )",
+          "MailFathom.Application": "[0.8.0, )",
+          "MailFathom.Common": "[0.8.0, )",
+          "MailFathom.Domain": "[0.8.0, )",
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.10, )",
           "ModelContextProtocol.AspNetCore": "[2.0.0, )"
         }
