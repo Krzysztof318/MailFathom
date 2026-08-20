@@ -120,16 +120,11 @@ internal static class JobDeadLetterEndpoints
 
         DeadLetteredJobCursor? decodedCursor = null;
 
-        if (cursor is not null)
+        if (cursor is not null && !DeadLetteredJobCursor.TryDecode(cursor, out decodedCursor))
         {
-            if (!DeadLetteredJobCursor.TryDecode(cursor, out var presentedCursor))
-            {
-                return TypedResults.Problem(
-                    "The continuation cursor is not one this deployment issued.",
-                    statusCode: StatusCodes.Status400BadRequest);
-            }
-
-            decodedCursor = presentedCursor;
+            return TypedResults.Problem(
+                "The continuation cursor is not one this deployment issued.",
+                statusCode: StatusCodes.Status400BadRequest);
         }
 
         var queryResult = DeadLetteredJobQuery.Create(jobType, accountId, pageSize, decodedCursor);

@@ -2,9 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Buffers.Text;
-using System.Globalization;
-using System.Text;
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.Mailboxes;
@@ -24,28 +22,14 @@ namespace MailFathom.Application.Emails.Mailboxes;
 /// opacity rather than protection — a client that cannot read a cursor cannot build one, and building one is how a
 /// caller would end up asking for a boundary this system never computed.
 /// </para>
+/// <para>
+/// The encoded form itself is <see cref="KeysetCursorPayload" />'s, which every keyset cursor here shares. This is the
+/// one reading whose rows need not carry an instant — a message no header could date is still on the timeline — so it
+/// is also the one that accepts a decoded position of <see langword="null" /> rather than refusing it.
+/// </para>
 /// </remarks>
 public readonly record struct EmailTimelineCursor
 {
-    /// <summary>The greatest number of characters an encoded cursor may carry before it is refused unread.</summary>
-    /// <remarks>
-    /// Comfortably above every cursor this version issues, and low enough that a caller cannot make the decoder work.
-    /// The bound is applied before decoding, because a decoder is the wrong place to discover that an input is absurd.
-    /// </remarks>
-    public const int MaximumEncodedLength = 512;
-
-    /// <summary>The field the encoded form uses for a message no header could date.</summary>
-    private const string AbsentReceivedTimestamp = "-";
-
-    /// <summary>
-    /// The encoded form's version. It leads the payload so a later change to the fields — another ordering key, a
-    /// different fingerprint — refuses the cursors this version issued instead of misreading them.
-    /// </summary>
-    private const string FormatVersion = "1";
-
-    /// <summary>Separates the encoded fields, chosen because it appears in none of them.</summary>
-    private const char FieldSeparator = '.';
-
     private EmailTimelineCursor(EmailTimelinePosition position, string filterFingerprint)
     {
         this.Position = position;
@@ -90,82 +74,21 @@ public readonly record struct EmailTimelineCursor
     {
         cursor = default;
 
-        if (text is null || text.Length is 0 or > MaximumEncodedLength)
-        {
-            return false;
-        }
-
-        // Validity is checked separately because the decoder's Try form reports only that a destination was too small
-        // and throws on text that is not base64url at all, which is the shape a caller most easily presents.
-        if (!Base64Url.IsValid(text))
-        {
-            return false;
-        }
-
-        Span<byte> decoded = stackalloc byte[Base64Url.GetMaxDecodedLength(MaximumEncodedLength)];
-        if (!Base64Url.TryDecodeFromChars(text, decoded, out var decodedLength))
-        {
-            return false;
-        }
-
-        var fields = Encoding.UTF8.GetString(decoded[..decodedLength]).Split(FieldSeparator);
-
-        if (fields is not [FormatVersion, var receivedField, var identifierField, var fingerprintField]
-            || !TryReadReceivedAt(receivedField, out var receivedAt)
-            || !Guid.TryParseExact(identifierField, "N", out var identifier)
-            || identifier == Guid.Empty
-            || fingerprintField.Length is 0)
+        if (!KeysetCursorPayload.TryDecode(text, out var payload))
         {
             return false;
         }
 
         cursor = new EmailTimelineCursor(
-            new EmailTimelinePosition(receivedAt, StoredEmailId.Create(identifier)),
-            fingerprintField);
+            new EmailTimelinePosition(payload.Position, StoredEmailId.Create(payload.Identity)),
+            payload.FilterFingerprint);
 
         return true;
     }
 
     /// <summary>Writes the cursor as the opaque string a caller presents to continue the walk.</summary>
     /// <returns>The encoded cursor.</returns>
-    /// <remarks>
-    /// The received timestamp is written as its UTC tick count, which is the form the timeline order compares: two
-    /// timestamps that name the same instant in different offsets encode identically, so a boundary cannot depend on the
-    /// offset a mail server happened to write.
-    /// </remarks>
-    public string Encode()
-    {
-        var payload = string.Join(
-            FieldSeparator,
-            FormatVersion,
-            this.Position.ReceivedAt is { } receivedAt
-                ? receivedAt.UtcTicks.ToString(CultureInfo.InvariantCulture)
-                : AbsentReceivedTimestamp,
-            this.Position.StoredEmailId.Value.ToString("N", CultureInfo.InvariantCulture),
-            this.FilterFingerprint);
-
-        return Base64Url.EncodeToString(Encoding.UTF8.GetBytes(payload));
-    }
-
-    private static bool TryReadReceivedAt(string field, out DateTimeOffset? receivedAt)
-    {
-        receivedAt = null;
-
-        if (string.Equals(field, AbsentReceivedTimestamp, StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        // NumberStyles.None refuses a sign, so no negative tick count reaches the range check below.
-        if (!long.TryParse(field, NumberStyles.None, CultureInfo.InvariantCulture, out var utcTicks)
-            || utcTicks < DateTime.MinValue.Ticks
-            || utcTicks > DateTime.MaxValue.Ticks)
-        {
-            return false;
-        }
-
-        receivedAt = new DateTimeOffset(utcTicks, TimeSpan.Zero);
-
-        return true;
-    }
+    public string Encode() => KeysetCursorPayload
+        .At(this.Position.ReceivedAt, this.Position.StoredEmailId.Value, this.FilterFingerprint)
+        .Encode();
 }

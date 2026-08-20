@@ -83,16 +83,11 @@ internal static class MailAnsweringAuditEndpoint
 
         MailAnsweringAuditCursor? decodedCursor = null;
 
-        if (cursor is not null)
+        if (cursor is not null && !MailAnsweringAuditCursor.TryDecode(cursor, out decodedCursor))
         {
-            if (!MailAnsweringAuditCursor.TryDecode(cursor, out var presentedCursor))
-            {
-                return TypedResults.Problem(
-                    "The continuation cursor is not one this deployment issued.",
-                    statusCode: StatusCodes.Status400BadRequest);
-            }
-
-            decodedCursor = presentedCursor;
+            return TypedResults.Problem(
+                "The continuation cursor is not one this deployment issued.",
+                statusCode: StatusCodes.Status400BadRequest);
         }
 
         var queryResult = MailAnsweringAuditQuery.Create(accountId, from, before, pageSize, decodedCursor);

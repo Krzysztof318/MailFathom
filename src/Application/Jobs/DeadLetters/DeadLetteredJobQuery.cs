@@ -2,8 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Security.Cryptography;
-using System.Text;
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Jobs.DeadLetters;
@@ -35,16 +34,6 @@ public sealed record DeadLetteredJobQuery
     /// many rows it names.
     /// </remarks>
     public const int MaximumPageSize = 200;
-
-    /// <summary>Separates the fingerprint's fields, chosen because no filter value can contain it.</summary>
-    private const char FingerprintFieldSeparator = '\u001f';
-
-    /// <summary>How many hexadecimal characters of the filter digest a cursor carries.</summary>
-    /// <remarks>
-    /// Short because it distinguishes one caller's own filter sets rather than resisting a search for a collision: a
-    /// forged fingerprint buys a boundary inside a page that same caller is already entitled to read.
-    /// </remarks>
-    private const int FingerprintLength = 16;
 
     private DeadLetteredJobQuery(
         JobType? jobType,
@@ -115,13 +104,6 @@ public sealed record DeadLetteredJobQuery
     }
 
     /// <summary>Reduces the filters to the short stable text a cursor carries to prove it belongs to this walk.</summary>
-    private static string ComputeFingerprint(JobType? jobType, MailAccountId? accountId)
-    {
-        var material = string.Join(
-            FingerprintFieldSeparator,
-            jobType?.Name ?? string.Empty,
-            accountId?.Value ?? string.Empty);
-
-        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(material)))[..FingerprintLength];
-    }
+    private static string ComputeFingerprint(JobType? jobType, MailAccountId? accountId) =>
+        PageFilterFingerprint.Of(jobType?.Name, accountId?.Value);
 }

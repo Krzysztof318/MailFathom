@@ -3,8 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Mutations;
 
@@ -30,16 +29,6 @@ public sealed record MailboxMutationAuditQuery
 
     /// <summary>The greatest page size one request may ask for.</summary>
     public const int MaximumPageSize = 200;
-
-    /// <summary>Separates the fingerprint's fields, chosen because no filter value can contain it.</summary>
-    private const char FingerprintFieldSeparator = '\u001f';
-
-    /// <summary>How many hexadecimal characters of the filter digest a cursor carries.</summary>
-    /// <remarks>
-    /// Short because it distinguishes one caller's own filter sets rather than resisting a search for a collision: a
-    /// forged fingerprint buys a boundary inside a page that same caller is already entitled to read.
-    /// </remarks>
-    private const int FingerprintLength = 16;
 
     private MailboxMutationAuditQuery(
         MailAccountId accountId,
@@ -136,15 +125,10 @@ public sealed record MailboxMutationAuditQuery
         MailAccountId accountId,
         MailboxMutation mutation,
         DateTimeOffset? completedFrom,
-        DateTimeOffset? completedBefore)
-    {
-        var material = string.Join(
-            FingerprintFieldSeparator,
+        DateTimeOffset? completedBefore) =>
+        PageFilterFingerprint.Of(
             accountId.Value,
-            mutation.IsSpecified ? mutation.Name : string.Empty,
-            completedFrom?.UtcTicks.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
-            completedBefore?.UtcTicks.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
-
-        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(material)))[..FingerprintLength];
-    }
+            mutation.IsSpecified ? mutation.Name : null,
+            completedFrom?.UtcTicks.ToString(CultureInfo.InvariantCulture),
+            completedBefore?.UtcTicks.ToString(CultureInfo.InvariantCulture));
 }

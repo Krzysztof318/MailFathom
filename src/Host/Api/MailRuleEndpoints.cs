@@ -224,16 +224,11 @@ internal static class MailRuleEndpoints
 
         MailRuleExecutionCursor? decodedCursor = null;
 
-        if (cursor is not null)
+        if (cursor is not null && !MailRuleExecutionCursor.TryDecode(cursor, out decodedCursor))
         {
-            if (!MailRuleExecutionCursor.TryDecode(cursor, out var presentedCursor))
-            {
-                return TypedResults.Problem(
-                    "The continuation cursor is not one this deployment issued.",
-                    statusCode: StatusCodes.Status400BadRequest);
-            }
-
-            decodedCursor = presentedCursor;
+            return TypedResults.Problem(
+                "The continuation cursor is not one this deployment issued.",
+                statusCode: StatusCodes.Status400BadRequest);
         }
 
         var queryResult = MailRuleExecutionQuery.Create(
