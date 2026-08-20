@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
+using MailFathom.Mcp.Tools.Categories;
 using MailFathom.Mcp.Tools.Results;
 using ModelContextProtocol.Server;
 
@@ -45,6 +46,10 @@ internal sealed class SaveDraftTool(DraftedMailWriting drafts)
     /// <summary>The capability a caller must hold to be offered this tool and to reach the use cases behind it.</summary>
     /// <remarks>It is the drafting grant rather than the sending one, which is what lets a deployment give an agent the ability to prepare mail without the ability to send any. A caller holding it and nothing else is offered this tool, <c>update_draft</c>, and <c>delete_draft</c>, and is not offered <c>send_draft</c>.</remarks>
     public static MailFathomPermission RequiredPermission => MailFathomPermission.MailDraftsWrite;
+
+    /// <summary>The kind of thing this tool is for, which is what a deployment publishes or withholds it by.</summary>
+    /// <remarks>A draft leaves nothing, so it is published apart from sending: an operator may let an agent compose mail a person then reads without letting anything it wrote go out. A category decides what this endpoint offers rather than who may reach it, so it turns nothing on: the tool appears only where the capability behind it is available and the caller's grant reaches it.</remarks>
+    public static McpToolCategory Category => McpToolCategory.Drafts;
 
     /// <summary>Writes one message into the drafts folder of an account this deployment holds.</summary>
     /// <param name="plainTextBody">The plain-text body every draft carries.</param>

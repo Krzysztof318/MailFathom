@@ -8,6 +8,7 @@ using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Infrastructure.Secrets;
 using MailFathom.Infrastructure.Security.ClientCertificates;
+using MailFathom.Mcp.Tools.Categories;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 
@@ -786,6 +787,67 @@ public sealed class McpEndpointOptionsBindingTests
         }
 
         return values;
+    }
+
+    /// <summary>The selection binds into a getter-only collection, which is where a list that silently stayed empty would publish everything an operator meant to withhold.</summary>
+    [Fact]
+    public void ReadFrom_AConfiguredCategorySelection_ReachesTheSurfaceCompositionPublishesBy()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["McpEndpoint:Enabled"] = "true",
+            ["McpEndpoint:PublishedToolCategories:0"] = "mailbox",
+            ["McpEndpoint:PublishedToolCategories:1"] = "answering",
+        });
+
+        // Act
+        var options = McpEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        Assert.Equal(["mailbox", "answering"], options.PublishedToolCategories);
+        Assert.Equal(
+            [McpToolCategory.Mailbox, McpToolCategory.Answering],
+            options.ToPublishedToolCategories().Categories);
+        Assert.Empty(options.FindConfigurationErrors());
+    }
+
+    /// <summary>An absent list publishes everything, so a deployment written before the setting existed keeps the surface it had.</summary>
+    [Fact]
+    public void ReadFrom_ASectionNamingNoCategory_PublishesEveryCategory()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["McpEndpoint:Enabled"] = "true",
+        });
+
+        // Act
+        var options = McpEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        Assert.Empty(options.PublishedToolCategories);
+        Assert.Equal(McpToolCategory.All, options.ToPublishedToolCategories().Categories);
+    }
+
+    /// <summary>A name no category answers to is refused at startup rather than narrowing the endpoint to nothing.</summary>
+    [Fact]
+    public void ReadFrom_AMisspelledCategory_BindsAndIsThenRefusedByValidation()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["McpEndpoint:Enabled"] = "true",
+            ["McpEndpoint:PublishedToolCategories:0"] = "mail",
+        });
+
+        // Act
+        var options = McpEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        Assert.Contains(
+            options.FindConfigurationErrors(),
+            error => error.Contains("PublishedToolCategories:0", StringComparison.Ordinal));
     }
 
     private static IConfiguration ConfigurationFrom(Dictionary<string, string?> values) =>

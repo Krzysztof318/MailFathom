@@ -290,12 +290,15 @@ grant is what the deployment wrote, never who presented something.
 
 The two surfaces enforce the same grant and answer differently, because their callers are different.
 
-**The MCP endpoint says nothing.** A caller is offered exactly the tools its grant permits — `tools/list` omits the
-rest, composed per request and never cached — and a call naming one of the omitted tools is answered as a call naming a
+**The MCP endpoint says nothing.** A caller is offered no tool its grant does not permit — `tools/list` omits the rest,
+composed per request and never cached — and a call naming one of the omitted tools is answered as a call naming a
 tool that does not exist: the same error, the same code, and nothing about the caller, the credential, the permission,
 or what a different caller would have been served. A message a client could tell apart would disclose the capability the
 listing just withheld, and there is no `insufficient_scope` challenge either, even where the grant came from a token
-whose authorization server could in principle mint one.
+whose authorization server could in principle mint one. A grant is not the only reason a tool is missing: a tool whose
+category this deployment does not publish is withheld from the same listing and refused with the same answer, so
+nothing tells a caller which of the two reasons applied —
+[what this endpoint publishes](mcp-endpoint.md#what-this-endpoint-publishes).
 
 **The administrative endpoint names the permission and nothing else.** A caller the grant does not admit is refused
 `403` in the endpoint's ordinary problem shape, stating the permission that would have sufficed and carrying it as a

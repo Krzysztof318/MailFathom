@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Contacts;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
+using MailFathom.Mcp.Tools.Categories;
 using MailFathom.Mcp.Tools.Results;
 using ModelContextProtocol.Server;
 
@@ -38,6 +39,10 @@ internal sealed class CreateContactTool(ContactBookWriter contactBookWriter)
     /// <summary>The capability a caller must hold to be offered this tool and to reach the use case behind it.</summary>
     /// <remarks>Writing the book is its own grant and does not follow from reading it, so a deployment that lets an agent resolve who somebody is has not thereby let it change the record. Declaring it beside the name is what keeps <see cref="PublishedTools" /> able to answer for every tool this surface publishes.</remarks>
     public static MailFathomPermission RequiredPermission => MailFathomPermission.MailContactsWrite;
+
+    /// <summary>The kind of thing this tool is for, which is what a deployment publishes or withholds it by.</summary>
+    /// <remarks>The book is an assembled record about identified third parties rather than mail that arrived, so a deployment decides separately whether this endpoint offers it. A category decides what this endpoint offers rather than who may reach it, so it turns nothing on: the tool appears only where the capability behind it is available and the caller's grant reaches it.</remarks>
+    public static McpToolCategory Category => McpToolCategory.Contacts;
 
     /// <summary>Records a person the book does not yet hold.</summary>
     /// <param name="displayName">The name to record for this person.</param>

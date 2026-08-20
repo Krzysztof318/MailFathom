@@ -9,6 +9,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
+using MailFathom.Mcp.Tools.Categories;
 using MailFathom.Mcp.Tools.Results;
 using ModelContextProtocol.Server;
 
@@ -58,6 +59,10 @@ internal sealed class AskMailTool(
     /// <summary>The capability a caller must hold to be offered this tool and to reach the use case behind it.</summary>
     /// <remarks>It is the tool that sends mail content to a model provider, which is a decision about what leaves this process rather than only about what a caller may read, so it carries a permission of its own. <see cref="MailFathomPermission.MailAsk" /> neither implies nor is implied by <see cref="MailFathomPermission.MailRead" />, and it is not the weaker of the two: a cited answer returns mail content. Declaring it beside the name is what keeps <see cref="PublishedTools" /> able to answer for every tool this surface publishes.</remarks>
     public static MailFathomPermission RequiredPermission => MailFathomPermission.MailAsk;
+
+    /// <summary>The kind of thing this tool is for, which is what a deployment publishes or withholds it by.</summary>
+    /// <remarks>It is the one tool here whose work leaves the deployment for a model provider, which is what a deployment may decline to offer while publishing everything that reads the same mail locally. A category decides what this endpoint offers rather than who may reach it, so it turns nothing on: the tool appears only where the capability behind it is available and the caller's grant reaches it.</remarks>
+    public static McpToolCategory Category => McpToolCategory.Answering;
 
     /// <summary>Answers one question about the local mailbox copy, citing the emails the answer was drawn from.</summary>
     /// <param name="question">What to answer.</param>

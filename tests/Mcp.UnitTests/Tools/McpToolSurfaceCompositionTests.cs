@@ -9,11 +9,8 @@ using MailFathom.Mcp.Tools.Drafts;
 using MailFathom.Mcp.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
-using ModelContextProtocol.Server;
-using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Mcp.UnitTests.Tools;
@@ -33,7 +30,7 @@ public sealed class McpToolSurfaceCompositionTests
         await using var provider = RegisteredMcpToolSurface.ComposedForCallerGranted(MailFathomPermission.MailRead);
 
         // Act
-        var listing = await ListedToolsAsync(provider);
+        var listing = await RegisteredMcpToolSurface.ListedToolsAsync(provider);
 
         // Assert
         Assert.DoesNotContain(AskMailTool.ToolName, listing.Tools.Select(static tool => tool.Name));
@@ -50,7 +47,7 @@ public sealed class McpToolSurfaceCompositionTests
             MailFathomPermission.MailAsk);
 
         // Act
-        var listing = await ListedToolsAsync(provider);
+        var listing = await RegisteredMcpToolSurface.ListedToolsAsync(provider);
 
         // Assert
         Assert.Contains(AskMailTool.ToolName, listing.Tools.Select(static tool => tool.Name));
@@ -66,7 +63,7 @@ public sealed class McpToolSurfaceCompositionTests
             MailFathomPermission.MailContactsRead);
 
         // Act
-        var listing = await ListedToolsAsync(provider);
+        var listing = await RegisteredMcpToolSurface.ListedToolsAsync(provider);
 
         // Assert
         var listed = listing.Tools.Select(static tool => tool.Name).Order(StringComparer.Ordinal).ToArray();
@@ -83,7 +80,7 @@ public sealed class McpToolSurfaceCompositionTests
             MailFathomPermission.MailContactsWrite);
 
         // Act
-        var listing = await ListedToolsAsync(provider);
+        var listing = await RegisteredMcpToolSurface.ListedToolsAsync(provider);
 
         // Assert
         var listed = listing.Tools.Select(static tool => tool.Name).Order(StringComparer.Ordinal).ToArray();
@@ -113,7 +110,7 @@ public sealed class McpToolSurfaceCompositionTests
             MailFathomPermission.MailDraftsWrite);
 
         // Act
-        var listing = await ListedToolsAsync(provider);
+        var listing = await RegisteredMcpToolSurface.ListedToolsAsync(provider);
 
         // Assert
         var listed = listing.Tools.Select(static tool => tool.Name).Order(StringComparer.Ordinal).ToArray();
@@ -137,7 +134,7 @@ public sealed class McpToolSurfaceCompositionTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<McpProtocolException>(() =>
-            CalledAsync(provider, SendDraftTool.ToolName));
+            RegisteredMcpToolSurface.CalledAsync(provider, SendDraftTool.ToolName));
 
         // Assert
         Assert.Equal($"Unknown tool: '{SendDraftTool.ToolName}'", refusal.Message);
@@ -152,7 +149,7 @@ public sealed class McpToolSurfaceCompositionTests
         await using var provider = RegisteredMcpToolSurface.ComposedForCallerGranted(MailFathomPermission.MailSend);
 
         // Act
-        var listing = await ListedToolsAsync(provider);
+        var listing = await RegisteredMcpToolSurface.ListedToolsAsync(provider);
 
         // Assert
         var listed = listing.Tools.Select(static tool => tool.Name).ToArray();
@@ -173,7 +170,7 @@ public sealed class McpToolSurfaceCompositionTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<McpProtocolException>(() =>
-            CalledAsync(provider, DeleteContactTool.ToolName));
+            RegisteredMcpToolSurface.CalledAsync(provider, DeleteContactTool.ToolName));
 
         // Assert
         Assert.Equal($"Unknown tool: '{DeleteContactTool.ToolName}'", refusal.Message);
@@ -187,7 +184,7 @@ public sealed class McpToolSurfaceCompositionTests
         await using var provider = RegisteredMcpToolSurface.ComposedForCallerGranted();
 
         // Act
-        var listing = await ListedToolsAsync(provider);
+        var listing = await RegisteredMcpToolSurface.ListedToolsAsync(provider);
 
         // Assert
         Assert.Empty(listing.Tools);
@@ -202,7 +199,7 @@ public sealed class McpToolSurfaceCompositionTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<McpProtocolException>(() =>
-            CalledAsync(provider, AskMailTool.ToolName));
+            RegisteredMcpToolSurface.CalledAsync(provider, AskMailTool.ToolName));
 
         // Assert
         Assert.Equal($"Unknown tool: '{AskMailTool.ToolName}'", refusal.Message);
@@ -223,7 +220,7 @@ public sealed class McpToolSurfaceCompositionTests
         await using var provider = RegisteredMcpToolSurface.ComposedForCallerGranted(MailFathomPermission.MailRead);
 
         // Act
-        await Assert.ThrowsAsync<McpProtocolException>(() => CalledAsync(provider, AskMailTool.ToolName));
+        await Assert.ThrowsAsync<McpProtocolException>(() => RegisteredMcpToolSurface.CalledAsync(provider, AskMailTool.ToolName));
 
         // Assert
         var recorded = provider.GetRequiredService<RecordingLoggerProvider>().Records;
@@ -252,66 +249,9 @@ public sealed class McpToolSurfaceCompositionTests
         var served = new CallToolResult { Content = [new TextContentBlock { Text = "served" }] };
 
         // Act
-        var result = await CalledAsync(provider, ListAccountsTool.ToolName, served);
+        var result = await RegisteredMcpToolSurface.CalledAsync(provider, ListAccountsTool.ToolName, served);
 
         // Assert
         Assert.Same(served, result);
     }
-
-    /// <summary>Runs the listing through the filters the registration composed, over a handler standing in for the SDK's own.</summary>
-    private static Task<ListToolsResult> ListedToolsAsync(IServiceProvider provider)
-    {
-        var everyDescriptor = new ListToolsResult
-        {
-            Tools =
-            [
-                .. RegisteredMcpToolSurface.Tools().Select(static tool => tool.ProtocolTool),
-            ],
-        };
-
-        var pipeline = RequestFilters(provider).ListToolsFilters
-            .Reverse()
-            .Aggregate<McpRequestFilter<ListToolsRequestParams, ListToolsResult>, McpRequestHandler<ListToolsRequestParams, ListToolsResult>>(
-                (_, _) => new ValueTask<ListToolsResult>(everyDescriptor),
-                static (next, filter) => filter(next));
-
-        var request = new RequestContext<ListToolsRequestParams>(
-            Substitute.For<McpServer>(),
-            new JsonRpcRequest { Method = "tools/list" },
-            new ListToolsRequestParams())
-        {
-            Services = provider,
-        };
-
-        return pipeline(request, TestContext.Current.CancellationToken).AsTask();
-    }
-
-    /// <summary>Runs the call through the filters the registration composed, over a handler standing in for the tool.</summary>
-    private static Task<CallToolResult> CalledAsync(
-        IServiceProvider provider,
-        string toolName,
-        CallToolResult? served = null)
-    {
-        var result = served ?? new CallToolResult { Content = [new TextContentBlock { Text = "served" }] };
-
-        var pipeline = RequestFilters(provider).CallToolFilters
-            .Reverse()
-            .Aggregate<McpRequestFilter<CallToolRequestParams, CallToolResult>, McpRequestHandler<CallToolRequestParams, CallToolResult>>(
-                (_, _) => new ValueTask<CallToolResult>(result),
-                static (next, filter) => filter(next));
-
-        var request = new RequestContext<CallToolRequestParams>(
-            Substitute.For<McpServer>(),
-            new JsonRpcRequest { Method = "tools/call" },
-            new CallToolRequestParams { Name = toolName })
-        {
-            Services = provider,
-        };
-
-        return pipeline(request, TestContext.Current.CancellationToken).AsTask();
-    }
-
-    /// <summary>Reads the filters the registration wrote onto the server options, in the order it registered them.</summary>
-    private static McpRequestFilters RequestFilters(IServiceProvider provider) =>
-        provider.GetRequiredService<IOptions<McpServerOptions>>().Value.Filters.Request;
 }

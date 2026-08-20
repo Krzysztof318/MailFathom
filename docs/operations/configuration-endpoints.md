@@ -148,6 +148,22 @@ routing and listeners — while key and certificate material is read per request
 | `McpEndpoint:Port` | int | `8080` | 1–65535. The administrative endpoint's default as well — see [sharing a socket](#sharing-a-socket) | restart |
 | `McpEndpoint:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` — see [`Transport`](#transport) | restart |
 | `McpEndpoint:Authentication` | list of credentials | empty | One entry per accepted credential; empty warns at startup. A value written here rather than a list fails startup | restart |
+| `McpEndpoint:PublishedToolCategories` | string list | absent = every category | `mailbox`, `flags`, `sending`, `drafts`, `answering`, `contacts`, in any case; a name nothing publishes fails startup naming the value and listing what is accepted. Only narrows — see [what the endpoint publishes](#what-the-endpoint-publishes) | restart |
+
+### What the endpoint publishes
+
+The coarse answer to what this instance offers, beside the per-capability switches that decide what it can do. Every
+category is published unless the list names some, so a deployment written before the setting existed keeps the surface
+it had, and an endpoint that should offer nothing at all is one with `Enabled` set to `false`.
+
+**A category only ever takes away.** Naming `sending` does not enable sending — the account's own switches decide that
+— and no category widens a grant or reveals a tool a caller was not offered. A tool appears when its capability is
+available, its category is published, and the caller's grant reaches it.
+
+A connecting client may narrow further for its own session, by naming categories in the `MailFathom-Tool-Categories`
+header. The effective set is the intersection with the list above, so a category this list excludes is never published
+because a client asked for it. [Tool categories](../features/mcp-tools.md#tool-categories) states which tools each
+category carries and what the header does with a value it cannot read.
 
 ### The accepted credentials — `McpEndpoint:Authentication:<n>`
 

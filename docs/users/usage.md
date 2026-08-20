@@ -25,6 +25,14 @@ question for whoever configured the deployment:
 [what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do). A deployment that wrote no grant,
 which is the default, offers everything it has, and the six contact tools are part of that everything.
 
+A grant is not the only reason your listing may be shorter than this page. Every tool belongs to exactly one kind —
+the mailbox, the flags, sending, drafts, answering, and the contact book — and a deployment may publish some of those
+kinds and not the rest, in which case no credential reaches the withheld ones whatever its grant says. A client may
+narrow its own session further still by naming the kinds it wants in a request header. Neither can turn anything on:
+both only ever offer less, so nothing you write in a request makes a tool this deployment withheld appear.
+[What this endpoint publishes](../operations/mcp-endpoint.md#what-this-endpoint-publishes) records what an operator
+chose and what a client may ask for.
+
 ## The model behind every call
 
 A mailbox tool call reads the **local copy** that synchronization maintains. Nothing in a request reaches a mail

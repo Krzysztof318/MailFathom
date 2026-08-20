@@ -6,6 +6,7 @@ using MailFathom.Common;
 using MailFathom.Mcp.Observability;
 using MailFathom.Mcp.Serialization;
 using MailFathom.Mcp.Tools;
+using MailFathom.Mcp.Tools.Categories;
 using MailFathom.Mcp.Tools.Contacts;
 using MailFathom.Mcp.Tools.Drafts;
 using MailFathom.Versioning;
@@ -26,25 +27,41 @@ public static class McpServiceCollectionExtensions
 {
     /// <summary>Adds the MailFathom MCP server, its tools, and the reporting that wraps every tool call.</summary>
     /// <param name="services">The container to add to.</param>
+    /// <param name="publishedCategories">The kinds of tool this endpoint publishes, or <see langword="null" /> to publish every one of them.</param>
     /// <returns>The builder, so a caller can extend the server registration.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
     /// <remarks>
+    /// <para>
     /// The tools resolve their dependencies per call from the request's scope, so the application ports they read
     /// through may be registered with any lifetime the host chooses — which is also what lets a filter read the caller
     /// the request was admitted under.
+    /// </para>
+    /// <para>
+    /// The selection is a parameter rather than a setting this project reads, because which categories a deployment
+    /// publishes is written in its configuration and configuration is the host's to bind. Omitting it publishes every
+    /// category, which is what a deployment that names none has.
+    /// </para>
     /// </remarks>
     /// <seealso cref="AskMailAdvertisement" />
     /// <seealso cref="McpToolAuthorization" />
-    public static IMcpServerBuilder AddMailFathomServer(this IServiceCollection services)
+    /// <seealso cref="McpToolCategoryPublication" />
+    public static IMcpServerBuilder AddMailFathomServer(
+        this IServiceCollection services,
+        PublishedToolCategorySelection? publishedCategories = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        services.AddSingleton(publishedCategories ?? PublishedToolCategorySelection.Everything);
         services.AddSingleton<McpToolCallTelemetry>();
         services.AddSingleton<McpToolCallReporter>();
         // The two tools that write a draft read the same fields and route them to the same pair of use cases, so the
         // reading is one object both resolve rather than a rule each states. It is scoped because the use cases it
         // holds are, which is what makes the caller a request was admitted under the one a draft is written for.
         services.AddScoped<DraftedMailWriting>();
+
+        // A tool that declares no category is a defect in this surface rather than a deployment's mistake, so it stops
+        // the host it was composed into rather than being decided about per request.
+        services.AddHostedService<PublishedToolCategoryGate>();
 
         return services
             .AddMcpServer(serverOptions =>
@@ -66,6 +83,13 @@ public static class McpServiceCollectionExtensions
                 .AddCallToolFilter(next => (request, cancellationToken) =>
                     new ValueTask<CallToolResult>(
                         McpToolAuthorization.RefuseUnauthorizedToolAsync(next, request, cancellationToken)))
+                // Inside the authorization filter, so a caller whose grant does not reach the tool is refused by the
+                // filter that records it. Both refusals are the same answer to the caller, so which of the two decides
+                // a call that is outside the grant and outside the published categories changes only what the
+                // deployment learns — and a grant a credential does not hold is the reading worth keeping.
+                .AddCallToolFilter(next => (request, cancellationToken) =>
+                    new ValueTask<CallToolResult>(
+                        McpToolCategoryPublication.RefuseUnpublishedCategoryToolAsync(next, request, cancellationToken)))
                 // Registered before the availability filter and therefore outside it, so the deployment's own switch is
                 // evaluated first and this narrows what that switch left — the order ADR 0012 records. Which of the two
                 // takes a descriptor away changes no listing, because neither can put one back; the switch stays the
@@ -77,7 +101,14 @@ public static class McpServiceCollectionExtensions
                 // provider needs no restart to have it offered again.
                 .AddListToolsFilter(next => (request, cancellationToken) =>
                     new ValueTask<ListToolsResult>(
-                        AskMailAdvertisement.WithoutUnavailableAnsweringAsync(next, request, cancellationToken))))
+                        AskMailAdvertisement.WithoutUnavailableAnsweringAsync(next, request, cancellationToken)))
+                // Registered last and therefore innermost, so it narrows the listing the server composed and the other
+                // two narrow what it left. Which of the three takes a descriptor away changes no answer, because none
+                // of them can put one back: the deployment's selection, its capability switches, and the caller's grant
+                // each only remove, and what a client receives is the intersection however the three are ordered.
+                .AddListToolsFilter(next => (request, cancellationToken) =>
+                    new ValueTask<ListToolsResult>(
+                        McpToolCategoryPublication.WithoutUnpublishedCategoriesAsync(next, request, cancellationToken))))
             .WithTools<ListAccountsTool>(McpToolContractSerialization.Options)
             .WithTools<ListEmailsTool>(McpToolContractSerialization.Options)
             .WithTools<GetEmailContentTool>(McpToolContractSerialization.Options)

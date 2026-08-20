@@ -4,12 +4,13 @@
 
 using System.Collections.Frozen;
 using MailFathom.Domain.Access;
+using MailFathom.Mcp.Tools.Categories;
 using MailFathom.Mcp.Tools.Contacts;
 using MailFathom.Mcp.Tools.Drafts;
 
 namespace MailFathom.Mcp.Tools;
 
-/// <summary>The tools this surface publishes, as one closed set known at build time, with the permission each requires.</summary>
+/// <summary>The tools this surface publishes, as one closed set known at build time, with what each declares about itself.</summary>
 /// <remarks>
 /// <para>
 /// A caller chooses the name it sends, so the name that arrives with a request is unvalidated input until something says
@@ -17,10 +18,12 @@ namespace MailFathom.Mcp.Tools;
 /// a time series per value, and a client looping over misspelled names would open one apiece.
 /// </para>
 /// <para>
-/// Both halves are read from the tools themselves rather than restated, so a tool renamed or regranted in the one place
-/// it is declared cannot leave a stale literal here that keeps matching nothing. A tool that reaches this surface without
-/// an entry is a tool nothing can answer for, which is why every caller of
-/// <see cref="TryGetRequiredPermission" /> treats an absent answer as a refusal rather than as a tool nobody bounded.
+/// Every half is read from the tools themselves rather than restated, so a tool renamed, regranted, or recategorized in
+/// the one place it is declared cannot leave a stale literal here that keeps matching nothing. A tool that reaches this
+/// surface without an entry is a tool nothing can answer for, which is why every caller of
+/// <see cref="TryGetRequiredPermission" /> and of <see cref="TryGetCategory" /> treats an absent answer as a refusal
+/// rather than as a tool nobody bounded — and why <see cref="PublishedToolCategoryGate" /> refuses to start a host
+/// serving one.
 /// </para>
 /// </remarks>
 internal static class PublishedTools
@@ -34,37 +37,37 @@ internal static class PublishedTools
     /// </remarks>
     internal const string UnpublishedToolName = "(unpublished)";
 
-    private static readonly FrozenDictionary<string, MailFathomPermission> RequiredPermissionsByName =
-        new Dictionary<string, MailFathomPermission>(StringComparer.Ordinal)
+    private static readonly FrozenDictionary<string, PublishedTool> DeclarationsByName =
+        new Dictionary<string, PublishedTool>(StringComparer.Ordinal)
         {
-            [ListAccountsTool.ToolName] = ListAccountsTool.RequiredPermission,
-            [ListEmailsTool.ToolName] = ListEmailsTool.RequiredPermission,
-            [GetEmailContentTool.ToolName] = GetEmailContentTool.RequiredPermission,
-            [SearchEmailsTool.ToolName] = SearchEmailsTool.RequiredPermission,
-            [SetMailFlagsTool.ToolName] = SetMailFlagsTool.RequiredPermission,
-            [SendEmailTool.ToolName] = SendEmailTool.RequiredPermission,
-            [ReplyToEmailTool.ToolName] = ReplyToEmailTool.RequiredPermission,
-            [ForwardEmailTool.ToolName] = ForwardEmailTool.RequiredPermission,
-            [SaveDraftTool.ToolName] = SaveDraftTool.RequiredPermission,
-            [UpdateDraftTool.ToolName] = UpdateDraftTool.RequiredPermission,
-            [DeleteDraftTool.ToolName] = DeleteDraftTool.RequiredPermission,
-            [SendDraftTool.ToolName] = SendDraftTool.RequiredPermission,
-            [GetOutgoingEmailTool.ToolName] = GetOutgoingEmailTool.RequiredPermission,
-            [CancelOutgoingEmailTool.ToolName] = CancelOutgoingEmailTool.RequiredPermission,
-            [AskMailTool.ToolName] = AskMailTool.RequiredPermission,
-            [ListContactsTool.ToolName] = ListContactsTool.RequiredPermission,
-            [GetContactTool.ToolName] = GetContactTool.RequiredPermission,
-            [CreateContactTool.ToolName] = CreateContactTool.RequiredPermission,
-            [UpdateContactTool.ToolName] = UpdateContactTool.RequiredPermission,
-            [PromoteContactTool.ToolName] = PromoteContactTool.RequiredPermission,
-            [DeleteContactTool.ToolName] = DeleteContactTool.RequiredPermission,
+            [ListAccountsTool.ToolName] = new(ListAccountsTool.RequiredPermission, ListAccountsTool.Category),
+            [ListEmailsTool.ToolName] = new(ListEmailsTool.RequiredPermission, ListEmailsTool.Category),
+            [GetEmailContentTool.ToolName] = new(GetEmailContentTool.RequiredPermission, GetEmailContentTool.Category),
+            [SearchEmailsTool.ToolName] = new(SearchEmailsTool.RequiredPermission, SearchEmailsTool.Category),
+            [SetMailFlagsTool.ToolName] = new(SetMailFlagsTool.RequiredPermission, SetMailFlagsTool.Category),
+            [SendEmailTool.ToolName] = new(SendEmailTool.RequiredPermission, SendEmailTool.Category),
+            [ReplyToEmailTool.ToolName] = new(ReplyToEmailTool.RequiredPermission, ReplyToEmailTool.Category),
+            [ForwardEmailTool.ToolName] = new(ForwardEmailTool.RequiredPermission, ForwardEmailTool.Category),
+            [SaveDraftTool.ToolName] = new(SaveDraftTool.RequiredPermission, SaveDraftTool.Category),
+            [UpdateDraftTool.ToolName] = new(UpdateDraftTool.RequiredPermission, UpdateDraftTool.Category),
+            [DeleteDraftTool.ToolName] = new(DeleteDraftTool.RequiredPermission, DeleteDraftTool.Category),
+            [SendDraftTool.ToolName] = new(SendDraftTool.RequiredPermission, SendDraftTool.Category),
+            [GetOutgoingEmailTool.ToolName] = new(GetOutgoingEmailTool.RequiredPermission, GetOutgoingEmailTool.Category),
+            [CancelOutgoingEmailTool.ToolName] = new(CancelOutgoingEmailTool.RequiredPermission, CancelOutgoingEmailTool.Category),
+            [AskMailTool.ToolName] = new(AskMailTool.RequiredPermission, AskMailTool.Category),
+            [ListContactsTool.ToolName] = new(ListContactsTool.RequiredPermission, ListContactsTool.Category),
+            [GetContactTool.ToolName] = new(GetContactTool.RequiredPermission, GetContactTool.Category),
+            [CreateContactTool.ToolName] = new(CreateContactTool.RequiredPermission, CreateContactTool.Category),
+            [UpdateContactTool.ToolName] = new(UpdateContactTool.RequiredPermission, UpdateContactTool.Category),
+            [PromoteContactTool.ToolName] = new(PromoteContactTool.RequiredPermission, PromoteContactTool.Category),
+            [DeleteContactTool.ToolName] = new(DeleteContactTool.RequiredPermission, DeleteContactTool.Category),
         }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>Determines whether a name a caller sent is one of the tools this surface publishes.</summary>
     /// <param name="toolName">The name the request carried, which may be absent or anything at all.</param>
     /// <returns><see langword="true" /> when a published tool answers to that name.</returns>
     public static bool Contains(string? toolName) =>
-        toolName is not null && RequiredPermissionsByName.ContainsKey(toolName);
+        toolName is not null && DeclarationsByName.ContainsKey(toolName);
 
     /// <summary>Reduces a name a caller sent to one this surface publishes, so it is safe to make a dimension of.</summary>
     /// <param name="toolName">The name the request carried, which may be absent or anything at all.</param>
@@ -79,12 +82,33 @@ internal static class PublishedTools
     /// <remarks>Absence is one answer rather than two, because a tool nothing here knows about and a tool that stated no permission are the same fact to whoever has to decide whether a caller may reach it: nobody decided, so nobody may.</remarks>
     public static bool TryGetRequiredPermission(string? toolName, out MailFathomPermission requiredPermission)
     {
-        if (toolName is not null && RequiredPermissionsByName.TryGetValue(toolName, out requiredPermission))
+        if (toolName is not null && DeclarationsByName.TryGetValue(toolName, out var declaration))
         {
+            requiredPermission = declaration.RequiredPermission;
+
             return true;
         }
 
         requiredPermission = default;
+
+        return false;
+    }
+
+    /// <summary>Reports the kind of thing a tool is for, which is what a deployment's category selection decides by.</summary>
+    /// <param name="toolName">The name the request or the descriptor carried.</param>
+    /// <param name="category">The category the tool declared, or the unspecified default when no tool answers to that name.</param>
+    /// <returns><see langword="true" /> when a published tool answers to that name and therefore declared a category.</returns>
+    /// <remarks>Absence is one answer rather than two, as it is for a permission: a tool nothing here knows about and a tool that stated no category are the same fact to whoever has to decide whether this endpoint offers it, so neither is published.</remarks>
+    public static bool TryGetCategory(string? toolName, out McpToolCategory category)
+    {
+        if (toolName is not null && DeclarationsByName.TryGetValue(toolName, out var declaration))
+        {
+            category = declaration.Category;
+
+            return true;
+        }
+
+        category = default;
 
         return false;
     }

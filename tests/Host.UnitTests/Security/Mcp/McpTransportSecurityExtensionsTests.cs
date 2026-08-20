@@ -10,6 +10,7 @@ using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Mcp;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Mcp.Tools.Categories;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Http;
@@ -52,6 +53,31 @@ public sealed class McpTransportSecurityExtensionsTests
 
         Assert.NotNull(policy);
         Assert.Contains(HeaderNames.WWWAuthenticate, policy.ExposedHeaders);
+    }
+
+    /// <summary>
+    /// A header the policy does not name is dropped before the endpoint sees it, so a browser client narrowing its own
+    /// session would be served the whole surface instead — which reads as the surface ignoring the request rather than
+    /// as CORS refusing it.
+    /// </summary>
+    [Fact]
+    public void AddMcpTransportSecurity_TheEndpointPolicy_LetsABrowserNarrowTheToolsItIsOffered()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddMcpTransportSecurity(BrowserFacingEndpoint());
+
+        // Assert
+        using var composed = services.BuildServiceProvider();
+        var policy = composed
+            .GetRequiredService<IOptions<CorsOptions>>()
+            .Value
+            .GetPolicy(McpTransportSecurityExtensions.CorsPolicyName);
+
+        Assert.NotNull(policy);
+        Assert.Contains(McpToolCategoryHeader.Name, policy.Headers);
     }
 
     /// <summary>

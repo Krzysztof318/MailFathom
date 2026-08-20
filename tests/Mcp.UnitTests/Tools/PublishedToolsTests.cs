@@ -4,7 +4,9 @@
 
 using MailFathom.Domain.Access;
 using MailFathom.Mcp.Tools;
+using MailFathom.Mcp.Tools.Categories;
 using MailFathom.Mcp.Tools.Contacts;
+using MailFathom.Mcp.Tools.Drafts;
 using MailFathom.Mcp.UnitTests.TestDoubles;
 using Xunit;
 
@@ -245,5 +247,147 @@ public sealed class PublishedToolsTests
     {
         // Act, Assert
         Assert.Equal(PublishedTools.UnpublishedToolName, PublishedTools.MeasurableName(toolName));
+    }
+
+    /// <summary>A tool without a category is one no deployment could decide about, so the registration is what this is read against.</summary>
+    [Fact]
+    public void TryGetCategory_EveryToolTheRegistrationAdvertises_DeclaresACategory()
+    {
+        // Arrange
+        var advertisedToolNames = RegisteredMcpToolSurface.Tools()
+            .Select(static tool => tool.ProtocolTool.Name)
+            .ToArray();
+
+        // Act
+        var uncategorized = advertisedToolNames
+            .Where(static name => !PublishedTools.TryGetCategory(name, out _))
+            .ToArray();
+
+        // Assert
+        Assert.Empty(uncategorized);
+    }
+
+    /// <summary>A category no tool carries is a name an operator could write to publish nothing, which is a narrowing they could not tell from a broken deployment.</summary>
+    [Fact]
+    public void TryGetCategory_EveryPublishedCategory_IsCarriedByAToolTheRegistrationAdvertises()
+    {
+        // Arrange
+        var carried = RegisteredMcpToolSurface.Tools()
+            .Select(static tool =>
+            {
+                PublishedTools.TryGetCategory(tool.ProtocolTool.Name, out var category);
+
+                return category;
+            })
+            .ToHashSet();
+
+        // Act
+        var empty = McpToolCategory.All.Where(category => !carried.Contains(category)).ToArray();
+
+        // Assert
+        Assert.Empty(empty);
+    }
+
+    [Theory]
+    [InlineData(ListAccountsTool.ToolName)]
+    [InlineData(ListEmailsTool.ToolName)]
+    [InlineData(GetEmailContentTool.ToolName)]
+    [InlineData(SearchEmailsTool.ToolName)]
+    public void TryGetCategory_AToolThatReadsTheLocalCopy_BelongsToTheMailboxCategory(string toolName)
+    {
+        // Act
+        var declared = PublishedTools.TryGetCategory(toolName, out var category);
+
+        // Assert
+        Assert.True(declared);
+        Assert.Equal(McpToolCategory.Mailbox, category);
+    }
+
+    /// <summary>Marking mail reaches somebody's mail server, so it is not part of the reading surface a deployment may publish alone.</summary>
+    [Fact]
+    public void TryGetCategory_TheFlagWritingTool_BelongsToItsOwnCategory()
+    {
+        // Act
+        var declared = PublishedTools.TryGetCategory(SetMailFlagsTool.ToolName, out var category);
+
+        // Assert
+        Assert.True(declared);
+        Assert.Equal(McpToolCategory.Flags, category);
+    }
+
+    /// <summary>Reading back a send and withdrawing one are about mail this deployment was asked to send, which a deployment that sends nothing has none of.</summary>
+    [Theory]
+    [InlineData(SendEmailTool.ToolName)]
+    [InlineData(ReplyToEmailTool.ToolName)]
+    [InlineData(ForwardEmailTool.ToolName)]
+    [InlineData(GetOutgoingEmailTool.ToolName)]
+    [InlineData(CancelOutgoingEmailTool.ToolName)]
+    public void TryGetCategory_AToolAboutMailLeavingTheDeployment_BelongsToTheSendingCategory(string toolName)
+    {
+        // Act
+        var declared = PublishedTools.TryGetCategory(toolName, out var category);
+
+        // Assert
+        Assert.True(declared);
+        Assert.Equal(McpToolCategory.Sending, category);
+    }
+
+    /// <summary>A draft leaves nothing, which is what an operator publishing composition without dispatch is buying.</summary>
+    [Theory]
+    [InlineData(SaveDraftTool.ToolName)]
+    [InlineData(UpdateDraftTool.ToolName)]
+    [InlineData(DeleteDraftTool.ToolName)]
+    public void TryGetCategory_AToolOverAMessageNeverSent_BelongsToTheDraftsCategory(string toolName)
+    {
+        // Act
+        var declared = PublishedTools.TryGetCategory(toolName, out var category);
+
+        // Assert
+        Assert.True(declared);
+        Assert.Equal(McpToolCategory.Drafts, category);
+    }
+
+    /// <summary>Dispatching a draft is what puts mail on the wire, so publishing the drafting surface must not carry it.</summary>
+    [Fact]
+    public void TryGetCategory_TheToolThatDispatchesADraft_BelongsToTheSendingCategory()
+    {
+        // Act
+        var declared = PublishedTools.TryGetCategory(SendDraftTool.ToolName, out var category);
+
+        // Assert
+        Assert.True(declared);
+        Assert.Equal(McpToolCategory.Sending, category);
+    }
+
+    /// <summary>The book is read under one grant and written under another while both are one kind of thing to offer.</summary>
+    [Theory]
+    [InlineData(ListContactsTool.ToolName)]
+    [InlineData(GetContactTool.ToolName)]
+    [InlineData(CreateContactTool.ToolName)]
+    [InlineData(UpdateContactTool.ToolName)]
+    [InlineData(DeleteContactTool.ToolName)]
+    [InlineData(PromoteContactTool.ToolName)]
+    public void TryGetCategory_AToolOverTheContactBook_BelongsToTheContactsCategory(string toolName)
+    {
+        // Act
+        var declared = PublishedTools.TryGetCategory(toolName, out var category);
+
+        // Assert
+        Assert.True(declared);
+        Assert.Equal(McpToolCategory.Contacts, category);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("delete_everything")]
+    public void TryGetCategory_ANameNoToolAnswersTo_DeclaresNothing(string? toolName)
+    {
+        // Act
+        var declared = PublishedTools.TryGetCategory(toolName, out var category);
+
+        // Assert
+        Assert.False(declared);
+        Assert.False(category.IsSpecified);
     }
 }

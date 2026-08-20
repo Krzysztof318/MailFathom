@@ -46,7 +46,7 @@ verification that nothing here performs.
 
 ## What is the same for every client
 
-Four things hold whichever client is being configured, and each is stated in full on the page that owns it rather than
+Five things hold whichever client is being configured, and each is stated in full on the page that owns it rather than
 repeated per client below:
 
 - **The address ends in `/mcp`**, which is a constant rather than a setting. What precedes it is where the deployment is
@@ -59,6 +59,12 @@ repeated per client below:
   header, and a deployment that narrowed `McpEndpoint:Cors:AllowedOrigins` has to list that client's origin;
   [CORS and the `Origin` header](../operations/mcp-endpoint.md#cors-and-the-origin-header) holds the rule. A client that
   is a desktop application or a command-line tool sends none and is unaffected.
+- **Which tools a client is offered is the deployment's decision, and a client may ask for fewer.** The endpoint
+  publishes every category of tool unless the deployment named some, and a client that wants a narrower surface for its
+  own session names categories in the `MailFathom-Tool-Categories` header. It only ever takes away — a category the
+  deployment did not publish stays unpublished however the header is written, and it authorizes nothing.
+  [Tool categories](../features/mcp-tools.md#tool-categories) holds the categories, the syntax, and what a value the
+  endpoint cannot read does. Most clients send no such header and are offered whatever the deployment publishes.
 - **Enabling the endpoint at all, and choosing what protects it, is one decision made before any of this.**
   [Getting started § enable the MCP endpoint](getting-started.md#6-enable-the-mcp-endpoint) is the short form and
   [the MCP endpoint](../operations/mcp-endpoint.md) is the whole contract.

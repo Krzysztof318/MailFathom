@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Accounts;
 using MailFathom.Domain.Access;
+using MailFathom.Mcp.Tools.Categories;
 using MailFathom.Mcp.Tools.Results;
 using ModelContextProtocol.Server;
 
@@ -44,6 +45,10 @@ internal sealed class ListAccountsTool(
     /// <summary>The capability a caller must hold to be offered this tool and to reach the use case behind it.</summary>
     /// <remarks>It reads the local mailbox copy, which is what <see cref="MailFathomPermission.MailRead" /> covers. Declaring it beside the name is what keeps <see cref="PublishedTools" /> able to answer for every tool this surface publishes.</remarks>
     public static MailFathomPermission RequiredPermission => MailFathomPermission.MailRead;
+
+    /// <summary>The kind of thing this tool is for, which is what a deployment publishes or withholds it by.</summary>
+    /// <remarks>It reads the local mailbox copy, which is the retrieval surface a deployment standing an instance up for reading publishes on its own. A category decides what this endpoint offers rather than who may reach it, so it turns nothing on: the tool appears only where the capability behind it is available and the caller's grant reaches it.</remarks>
+    public static McpToolCategory Category => McpToolCategory.Mailbox;
 
     /// <summary>Lists the accounts this deployment serves.</summary>
     /// <param name="cancellationToken">Cancels the read when the caller disconnects or the host shuts down.</param>

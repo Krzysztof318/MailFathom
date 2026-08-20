@@ -118,7 +118,7 @@ internal static class McpToolAuthorization
             PublishedTools.TryGetRequiredPermission(requestedToolName, out var declaredPermission);
             RecordRefusal(request, authorization, requestedToolName, declaredPermission);
 
-            throw UnknownTool(requestedToolName);
+            throw UnpublishedTool.Refusal(requestedToolName);
         }
 
         try
@@ -169,25 +169,6 @@ internal static class McpToolAuthorization
     private static bool IsPermitted(AccessAuthorization authorization, string? toolName) =>
         PublishedTools.TryGetRequiredPermission(toolName, out var requiredPermission)
         && authorization.Permits(requiredPermission);
-
-    /// <summary>Writes the answer a call naming a tool this surface will not serve is refused with.</summary>
-    /// <remarks>
-    /// <para>
-    /// The wording is copied from the SDK's own answer to an unknown tool, because it publishes no member to reach that
-    /// answer through. Nothing verifies the two still match: <c>McpToolAuthorizationTests</c> compares what this method
-    /// produces against a literal of its own rather than against the SDK, so a release that reworded its message would
-    /// leave the suite green. Reaching the SDK's own dispatch needs a composed host over a real transport, which is the
-    /// integration suite rather than a unit test.
-    /// </para>
-    /// <para>
-    /// What that drift would cost is a divergence from the server's default phrasing and nothing more. No caller can
-    /// tell two refusals apart on this surface whatever the SDK says, because the filter above decides on the
-    /// permission alone: an unpermitted name and a name no tool answers to are the same case here and are both refused
-    /// before the request reaches the server, so the SDK's unknown-tool path is not reachable through this pipeline.
-    /// </para>
-    /// </remarks>
-    private static McpProtocolException UnknownTool(string? toolName) =>
-        new($"Unknown tool: '{toolName}'", McpErrorCode.InvalidParams);
 
     /// <summary>Resolves the authorization from the scope the request arrived in.</summary>
     /// <remarks>

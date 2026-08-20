@@ -9,6 +9,7 @@ using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
+using MailFathom.Mcp.Tools.Categories;
 using MailFathom.Mcp.Tools.Results;
 using ModelContextProtocol.Server;
 
@@ -61,6 +62,10 @@ internal sealed class ReplyToEmailTool(AuthoredResponseSubmission submission)
     /// surface publishes, and it is the grant the listing is narrowed by.
     /// </remarks>
     public static MailFathomPermission RequiredPermission => MailFathomPermission.MailSend;
+
+    /// <summary>The kind of thing this tool is for, which is what a deployment publishes or withholds it by.</summary>
+    /// <remarks>It belongs to the mail this deployment was asked to send, which a deployment that sends nothing publishes none of. A category decides what this endpoint offers rather than who may reach it, so it turns nothing on: the tool appears only where the capability behind it is available and the caller's grant reaches it.</remarks>
+    public static McpToolCategory Category => McpToolCategory.Sending;
 
     /// <summary>Queues a reply to one email this deployment already holds.</summary>
     /// <param name="storedEmailId">The email being answered, as a listing, a search, or a read returned it.</param>

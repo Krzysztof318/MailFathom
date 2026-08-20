@@ -8,6 +8,7 @@ using MailFathom.Application.Access;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Mcp.Tools.Categories;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
@@ -385,6 +386,41 @@ public sealed class HostCompositionTests
 
         // Assert
         Assert.Same(stated, read);
+    }
+
+    /// <summary>
+    /// The deployment's category selection is read while the surface is registered rather than by a request, so the
+    /// composition is the one place it can be dropped: the protocol surface would then publish every category while the
+    /// operator's own file named two, and every test of the filters would still pass.
+    /// </summary>
+    [Fact]
+    public async Task Compose_AnEndpointNamingToolCategories_PublishesTheSurfaceByThoseAndNoOther()
+    {
+        // Arrange
+        var builder = ConfiguredBuilder(
+            "mcp and admin served",
+            [new("McpEndpoint:PublishedToolCategories:0", "mailbox")]);
+
+        HostComposition.Compose(builder);
+
+        // Act
+        await using var provider = builder.Services.BuildServiceProvider();
+        var published = provider.GetRequiredService<PublishedToolCategorySelection>();
+
+        // Assert
+        Assert.Equal([McpToolCategory.Mailbox], published.Categories);
+    }
+
+    /// <summary>A deployment naming none publishes every category, which is the surface it had before the setting existed.</summary>
+    [Fact]
+    public async Task Compose_AnEndpointNamingNoToolCategory_PublishesEveryOneOfThem()
+    {
+        // Arrange, Act
+        await using var provider = ComposeServices("mcp and admin served").BuildServiceProvider();
+        var published = provider.GetRequiredService<PublishedToolCategorySelection>();
+
+        // Assert
+        Assert.Equal(McpToolCategory.All, published.Categories);
     }
 
     /// <summary>Both surfaces served, each authenticating or not, which is the matrix the schemes are asserted across.</summary>

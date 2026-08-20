@@ -11,6 +11,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Mutations;
+using MailFathom.Mcp.Tools.Categories;
 using MailFathom.Mcp.Tools.Results;
 using ModelContextProtocol.Server;
 
@@ -59,6 +60,10 @@ internal sealed class SetMailFlagsTool(MailFlagChangeRecorder flagChangeRecorder
     /// <summary>The capability a caller must hold to be offered this tool and to reach the use case behind it.</summary>
     /// <remarks>Changing somebody's mailbox is its own grant and does not follow from reading it, so a deployment that lets an agent read mail has not thereby let it star, unstar, or relabel any. Declaring it beside the name is what keeps <see cref="PublishedTools" /> able to answer for every tool this surface publishes.</remarks>
     public static MailFathomPermission RequiredPermission => MailFathomPermission.MailFlagsWrite;
+
+    /// <summary>The kind of thing this tool is for, which is what a deployment publishes or withholds it by.</summary>
+    /// <remarks>Marking mail reaches the owner's own mail server, which is why it is not part of the retrieval surface a deployment may publish alone. A category decides what this endpoint offers rather than who may reach it, so it turns nothing on: the tool appears only where the capability behind it is available and the caller's grant reaches it.</remarks>
+    public static McpToolCategory Category => McpToolCategory.Flags;
 
     /// <summary>The greatest length text naming an email may carry before anything tries to read an identity out of it.</summary>
     /// <remarks>The bound and the reason are <c>get_email_content</c>'s: the longest form <see cref="Guid.TryParse(string, out Guid)" /> accepts is 68 characters, and the parse scans whatever it is handed.</remarks>

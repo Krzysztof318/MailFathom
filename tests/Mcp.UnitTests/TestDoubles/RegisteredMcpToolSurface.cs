@@ -21,7 +21,9 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Access;
+using MailFathom.Mcp.Tools.Categories;
 using MailFathom.TestSupport;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -29,6 +31,7 @@ using Microsoft.Extensions.Time.Testing;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using NSubstitute;
+using Xunit;
 
 namespace MailFathom.Mcp.UnitTests.TestDoubles;
 
@@ -89,9 +92,100 @@ internal static class RegisteredMcpToolSurface
             AccessAuthorizations.ForCallerGranted(grantedPermissions),
             AnsweringDeployment.Capability(new StubMailQuestionAnswerer()));
 
+    /// <summary>Composes the surface as a host does, for a deployment publishing the categories named.</summary>
+    /// <param name="publishedCategories">What the deployment's own configuration selected.</param>
+    /// <param name="requestedCategories">What the client wrote in the narrowing header, or <see langword="null" /> for a request that carries none.</param>
+    /// <returns>The provider, which the caller owns and must dispose.</returns>
+    /// <remarks>
+    /// The caller is granted the whole mail surface and the deployment answers questions, so a tool missing from what
+    /// the filters produce is missing for want of a published category rather than for want of a grant or a capability.
+    /// A request carrying the header is composed with an HTTP context holding it, which is the one thing a listing
+    /// reaches a header through; without one the accessor is absent entirely, which is the shape a surface composed
+    /// outside a request has.
+    /// </remarks>
+    public static ServiceProvider ComposedPublishing(
+        PublishedToolCategorySelection publishedCategories,
+        string? requestedCategories = null)
+    {
+        var context = new DefaultHttpContext();
+
+        if (requestedCategories is not null)
+        {
+            context.Request.Headers[McpToolCategoryHeader.Name] = requestedCategories;
+        }
+
+        return Compose(
+            AccessAuthorizations.ForCallerGranted([.. MailFathomPermission.PublishedFor(ProtectedSurface.Mail)]),
+            AnsweringDeployment.Capability(new StubMailQuestionAnswerer()),
+            publishedCategories,
+            requestedCategories is null ? null : context);
+    }
+
+    /// <summary>Runs a listing through the filters the registration composed, over a handler standing in for the SDK's own.</summary>
+    /// <param name="provider">The composed surface.</param>
+    /// <returns>The listing the pipeline produced.</returns>
+    internal static Task<ListToolsResult> ListedToolsAsync(IServiceProvider provider)
+    {
+        var everyDescriptor = new ListToolsResult
+        {
+            Tools = [.. Tools().Select(static tool => tool.ProtocolTool)],
+        };
+
+        var pipeline = RequestFilters(provider).ListToolsFilters
+            .Reverse()
+            .Aggregate<McpRequestFilter<ListToolsRequestParams, ListToolsResult>, McpRequestHandler<ListToolsRequestParams, ListToolsResult>>(
+                (_, _) => new ValueTask<ListToolsResult>(everyDescriptor),
+                static (next, filter) => filter(next));
+
+        var request = new RequestContext<ListToolsRequestParams>(
+            Substitute.For<McpServer>(),
+            new JsonRpcRequest { Method = "tools/list" },
+            new ListToolsRequestParams())
+        {
+            Services = provider,
+        };
+
+        return pipeline(request, TestContext.Current.CancellationToken).AsTask();
+    }
+
+    /// <summary>Runs a call through the filters the registration composed, over a handler standing in for the tool.</summary>
+    /// <param name="provider">The composed surface.</param>
+    /// <param name="toolName">The name the call carries.</param>
+    /// <param name="served">What the handler behind the filters answers with, so a test can prove the call reached it.</param>
+    /// <returns>The result the pipeline produced.</returns>
+    internal static Task<CallToolResult> CalledAsync(
+        IServiceProvider provider,
+        string toolName,
+        CallToolResult? served = null)
+    {
+        var result = served ?? new CallToolResult { Content = [new TextContentBlock { Text = "served" }] };
+
+        var pipeline = RequestFilters(provider).CallToolFilters
+            .Reverse()
+            .Aggregate<McpRequestFilter<CallToolRequestParams, CallToolResult>, McpRequestHandler<CallToolRequestParams, CallToolResult>>(
+                (_, _) => new ValueTask<CallToolResult>(result),
+                static (next, filter) => filter(next));
+
+        var request = new RequestContext<CallToolRequestParams>(
+            Substitute.For<McpServer>(),
+            new JsonRpcRequest { Method = "tools/call" },
+            new CallToolRequestParams { Name = toolName })
+        {
+            Services = provider,
+        };
+
+        return pipeline(request, TestContext.Current.CancellationToken).AsTask();
+    }
+
+    /// <summary>Reads the filters the registration wrote onto the server options, in the order it registered them.</summary>
+    private static McpRequestFilters RequestFilters(IServiceProvider provider) =>
+        provider.GetRequiredService<IOptions<McpServerOptions>>().Value.Filters.Request;
+
     private static ServiceProvider Compose(
         AccessAuthorization? authorization = null,
-        MailAnsweringCapability? answeringCapability = null)
+        MailAnsweringCapability? answeringCapability = null,
+        PublishedToolCategorySelection? publishedCategories = null,
+        HttpContext? httpContext = null)
     {
         var services = new ServiceCollection();
 
@@ -148,7 +242,15 @@ internal static class RegisteredMcpToolSurface
         services.AddSingleton<ContactBookReader>();
         services.AddSingleton<ContactBookWriter>();
         services.AddSingleton(Substitute.For<IContactStore>());
-        services.AddMailFathomServer();
+
+        // Registered only where a test states a request, so the surface composed without one is the shape a host that
+        // serves no HTTP transport has: the filters read no header and narrow by the deployment's selection alone.
+        if (httpContext is not null)
+        {
+            services.AddSingleton<IHttpContextAccessor>(new HttpContextAccessor { HttpContext = httpContext });
+        }
+
+        services.AddMailFathomServer(publishedCategories);
 
         return services.BuildServiceProvider();
     }
