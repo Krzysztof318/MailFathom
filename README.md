@@ -2,11 +2,11 @@
 
 # MailFathom
 
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Krzysztof318/MailFathom/blob/main/LICENSE) [![Release](https://github.com/Krzysztof318/MailFathom/actions/workflows/release.yml/badge.svg)](https://github.com/Krzysztof318/MailFathom/actions/workflows/release.yml) [![Version](https://img.shields.io/github/v/release/Krzysztof318/MailFathom?sort=semver&label=version)](https://github.com/Krzysztof318/MailFathom/releases/latest) [![Nightly](https://github.com/Krzysztof318/MailFathom/actions/workflows/nightly.yml/badge.svg)](https://github.com/Krzysztof318/MailFathom/actions/workflows/nightly.yml) [![CI](https://github.com/Krzysztof318/MailFathom/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/Krzysztof318/MailFathom/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush) [![Documentation](https://img.shields.io/badge/documentation-blue)](https://krzysztof318.github.io/MailFathom/)
+[![Stars](https://img.shields.io/github/stars/Krzysztof318/MailFathom?style=flat&label=%E2%98%85%20Stars&color=gold)](https://github.com/Krzysztof318/MailFathom) [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Krzysztof318/MailFathom/blob/main/LICENSE) [![Release](https://github.com/Krzysztof318/MailFathom/actions/workflows/release.yml/badge.svg)](https://github.com/Krzysztof318/MailFathom/actions/workflows/release.yml) [![Version](https://img.shields.io/github/v/release/Krzysztof318/MailFathom?sort=semver&label=version)](https://github.com/Krzysztof318/MailFathom/releases/latest) [![Nightly](https://github.com/Krzysztof318/MailFathom/actions/workflows/nightly.yml/badge.svg)](https://github.com/Krzysztof318/MailFathom/actions/workflows/nightly.yml) [![CI](https://github.com/Krzysztof318/MailFathom/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/Krzysztof318/MailFathom/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush) [![Documentation](https://img.shields.io/badge/documentation-blue)](https://krzysztof318.github.io/MailFathom/)
 
 **A brain for your mail — self-hosted, AI-native, and yours alone.**
 
-MailFathom synchronizes your IMAP accounts into a PostgreSQL database you run, indexes that copy, and serves it to AI agents as tools over the [Model Context Protocol](https://modelcontextprotocol.io/). Reading answers from your copy rather than from a mail server, and reading never marks anything read on the server — only a rule or a spam action you configured yourself can change your mailbox.
+MailFathom synchronizes your IMAP accounts into a PostgreSQL database you run, indexes that copy, and serves it to AI agents as tools over the [Model Context Protocol](https://modelcontextprotocol.io/). Reading answers from your copy rather than from a mail server, and it never marks anything read there. Writing — marking, drafting, sending — is a separate act each account and each credential has to be given, and every one of them is off until you turn it on.
 
 ![A chat client asked to show the latest mail, answered with a table of the ten most recent messages, their receipt times, and the moment the local copy was last synchronized](https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/mcp-tools/list-recent-emails.png)
 
@@ -22,11 +22,9 @@ cd MailFathom
 scripts/quick-start-compose.sh
 ```
 
-That third line is the quick way to *try* it and not the way to run it: [the script](https://github.com/Krzysztof318/MailFathom/blob/main/scripts/quick-start-compose.sh) asks where your mailbox lives, generates the credentials, writes the configuration, starts the stack, offers the schema step, and hands you the address a chat client connects to — and what it prepares serves that one machine over plain HTTP, keeps its credentials in files under the checkout, and backs nothing up. It prints that list when it finishes. [Trying it first, with one command](https://krzysztof318.github.io/MailFathom/operations/deployment-compose.html#trying-it-first-with-one-command) is the whole of what it does and does not decide. Leave it out to install by hand, which is what the rest of this section describes.
+That third line is the quick way to *try* it, not the way to run it: [the script](https://github.com/Krzysztof318/MailFathom/blob/main/scripts/quick-start-compose.sh) asks where your mailbox lives, generates the credentials, writes the configuration, starts the stack, offers the schema step, and hands you the address a chat client connects to — and what it prepares serves that one machine over plain HTTP, keeps its credentials in files under the checkout, and backs nothing up. It prints that list when it finishes.
 
-From there, [installing MailFathom](https://krzysztof318.github.io/MailFathom/users/installation.html) covers what every shape needs — Linux, PostgreSQL with the `vector` extension, an IMAP account, an explicit schema step — and routes you to the guide for Compose, [Podman Quadlet](https://krzysztof318.github.io/MailFathom/operations/deployment-quadlet.html), Kubernetes, or a native systemd process. [Getting started](https://krzysztof318.github.io/MailFathom/users/getting-started.html) then walks from an installed instance to a first successful tool call: provisioning the secrets, configuring a mailbox, applying the schema, verifying health, enabling the MCP endpoint, and connecting a client.
-
-To evaluate MailFathom from the checkout instead of deploying it, the local Aspire orchestration provisions PostgreSQL and applies the schema on its own. [Local development](https://krzysztof318.github.io/MailFathom/operations/local-development.html#running-locally-with-aspire) has that path.
+[Installing MailFathom](https://krzysztof318.github.io/MailFathom/users/installation.html) is the real thing: what every shape needs, and the guide for Compose, [Podman Quadlet](https://krzysztof318.github.io/MailFathom/operations/deployment-quadlet.html), Kubernetes, or a native systemd process. [Getting started](https://krzysztof318.github.io/MailFathom/users/getting-started.html) then walks from an installed instance to a first successful tool call. To evaluate from the checkout instead, the local Aspire orchestration provisions PostgreSQL and applies the schema on its own — [local development](https://krzysztof318.github.io/MailFathom/operations/local-development.html#running-locally-with-aspire) has that path.
 
 ## Start here
 
@@ -46,72 +44,42 @@ If an AI assistant is helping you install, configure, or use MailFathom, give it
 Read https://krzysztof318.github.io/MailFathom/llms.txt and follow it to the pages that answer my question.
 ```
 
-That address is the current release's map: every published page, its title, and one line saying what it answers, linking each page's Markdown source. The agent loads the map in full and then fetches only the page that owns your question, so its answer comes from the page carrying the contract instead of from fragments of several. The map also names the two bundles beside it — the operator path, from choosing an installation to administering the deployment, and the mailbox user path, from connecting a client to what each tool returns — for when the question is a whole path rather than one page of it. Every version the site documents carries its own copy of all three, and the address above is the version the site opens on.
-
-MailFathom also resolves in [Context7](https://context7.com/krzysztof318/mailfathom), as `/krzysztof318/mailfathom`, for an agent that already has that connector. It is a mirror and the map above is what it mirrors: it indexes the default branch rather than a release, so it can answer from documentation of work no version carries yet, and it is refreshed on its own schedule rather than by a publish here.
+That address is the current release's map: every published page, what it answers, and a link to its source, so the agent fetches the one page that owns your question instead of fragments of several. MailFathom also resolves in [Context7](https://context7.com/krzysztof318/mailfathom) as `/krzysztof318/mailfathom`, which mirrors the default branch rather than a release.
 
 → [Handing this guide to your own agent](https://krzysztof318.github.io/MailFathom/users/README.html#handing-this-guide-to-your-own-agent)
 
-## What exists today
+## What an agent gets
 
-What is implemented is read-only mail retrieval, twenty-one tools, and the changes your own configuration and three grants let something ask for, and this README is split on that line: this section and [What it does well](https://github.com/Krzysztof318/MailFathom#what-it-does-well) describe the code as it stands, while [Where it is going](https://github.com/Krzysztof318/MailFathom#where-it-is-going) is the roadmap.
+Twenty-one tools, and they are the whole surface.
 
-Two properties hold everywhere, and much of the rest of the design follows from them:
+| | |
+| --- | --- |
+| **Reading your mail** | `list_accounts`, `list_emails`, `search_emails` — ranked lexically, and by embedding similarity once you configure a model — `get_email_content` for up to ten messages in full, and `ask_mail`, which answers a question from your mail and cites every message it drew on |
+| **Marking it** | `set_mail_flags` marks a message read or unread, stars it, and writes the keywords your client shows as tags |
+| **Sending** | `send_email` sends one message; `reply_to_email` and `forward_email` answer one you already hold, deriving the addressing, subject, threading, quotation, and attachments from your stored copy; `get_outgoing_email` and `cancel_outgoing_email` report what became of a send and stop one that has not left |
+| **Drafting** | `save_draft`, `update_draft`, and `delete_draft` write a message into your own Drafts folder and send nothing at all; `send_draft` is what sends one |
+| **Contacts** | Six tools over MailFathom's own book of people — not addresses — which lives in your database rather than at your mail provider |
+
+Two properties hold everywhere, and much of the design follows from them:
 
 - **Reading is local.** A read answers from your copy and never contacts a mail server, so it is fast, it works while the server is down, and it changes nothing remotely. Every result states how fresh the local copy is.
-- **Retrieval never writes to your mailbox.** Fetching mail never sets the remote `\Seen` flag, so mail MailFathom has copied still shows as unread in your own mail client until you read it there. What can write is what you asked to: a `MailRules` rule whose action moves, copies, deletes, or marks a message read, `SpamClassification:Actions`, which files junk and marks it read, and the `set_mail_flags` tool, which an agent calls to mark, star, or label one message. The two configured paths are off until you turn them on, and each account states which of the actions a rule may ask of it; the tool needs a grant of its own that reading mail does not carry. The three draft tools that write a message into your own Drafts folder need a grant of their own as well. Sending is a separate act rather than a write to your mailbox, and `send_email`, `reply_to_email`, `forward_email`, and `send_draft` need a third grant that none of the others carries.
+- **Nothing writes unless you asked for it.** Retrieval cannot set the remote `\Seen` flag at all. What can change your mailbox is what you configured — a mail rule, a spam action — or a tool a credential was explicitly granted. Sending is stricter again: it is off on every account, refused outright while the deployment is read-only, and bounded by a recipient policy and a per-period ceiling you set.
 
-What an agent gets is twenty-one tools, and they are the whole surface. Five of them read your mail:
-
-| Tool | What it answers |
-| --- | --- |
-| `list_accounts` | Which mailboxes this deployment serves, each with the readable name you gave it and how current its local copy is — the tool an agent calls first, so it knows what to narrow the others to |
-| `list_emails` | A page of the timeline, newest first, filtered by account, folder, sender, recipient, subject, date range, seen state, or attachment presence |
-| `search_emails` | Ranked matches for a text query across subjects, participants, and body text, each with short extracts around what matched — ranked lexically, and by embedding similarity beside it once an embedding model is configured |
-| `get_email_content` | Up to ten messages in full: normalized headers, plain-text body, optionally sanitized HTML, every attachment by name, type, and size, and — on request — a short-lived link that fetches each file |
-| `ask_mail` | A question answered from the mail a chat model looks up while answering, citing the identifiers of every message it drew on so each claim can be read for yourself |
-
-The first four are always there. `ask_mail` needs a chat model and an embedding model you configure and point at, so a deployment with neither does not advertise it at all rather than offering a tool that would fail on first use.
-
-Eight are the only things on this surface whose effect reaches a mail server at all, and they hold different grants:
-
-| Tool | What it does |
-| --- | --- |
-| `set_mail_flags` | Marks one message read or unread, stars or unstars it, and adds, removes, or replaces its keywords — the labels your mail client shows as tags. Every value is optional and at least one is required |
-| `send_email` | Sends one message, as an account you configured to send, to the addresses the call names. Subject and plain text are required, an HTML alternative is optional, and an idempotency key the caller chooses is what makes a retry the same message rather than a second one |
-| `reply_to_email` | Replies to one message this deployment already holds. The caller names the message and writes the new words; who it goes to, the subject, the headers that put it in the right conversation, and the quoted original are read from your stored copy. Whether it answers the sender alone or everybody is required and never defaulted |
-| `forward_email` | Forwards one message this deployment already holds, with the files it carried, to people the original never named. The caller names the message, the recipients, and the new words; the subject, the forwarded text, and the attachments come from your stored copy |
-| `save_draft` | Writes one message into your own Drafts folder and sends nothing. It takes a message of its own, or an answer to mail you already hold, and a draft addressed to nobody is an ordinary draft |
-| `update_draft` | Replaces the whole message of a draft MailFathom wrote. The draft keeps its identifier and your folder ends up showing one message rather than one per edit |
-| `delete_draft` | Gives up a draft MailFathom wrote and takes the copy of it back out of your Drafts folder. A draft you wrote in your own mail client is unreachable by it |
-| `send_draft` | Sends the message a draft holds, exactly as it stands. It is the only one of the four draft tools that causes mail to leave, and it holds the sending grant rather than the drafting one |
-
-None of them waits for your mail to be delivered. Each writes the change or the message down and answers with a record identity; the account's next run issues it, so a crash mid-flight leaves work that finishes by itself rather than something MailFathom believes it did. The three draft tools are the one place a call does wait on your mail server, for one round trip: the draft is written down first and the copy is then put into your Drafts folder while you are still there, and a server that refuses costs the copy rather than the draft. A flag change is reversible with the call that would have made it and nothing about it deletes mail. A draft is reversible too, by editing or deleting it. A send is not reversible by anything, which is why the three sending tools and `send_draft` announce themselves as destructive to your client even though they take nothing away, and why the answer says *queued* rather than *sent*: the message leaves on the next delivery pass, against the same bounds and the same bounded retry every other outgoing message is held to. Nothing a caller sends decides who the message is from — a message is sent as the account it names, or for a reply and a forward as the account the answered message belongs to, from the address that account's own configuration declares. Each tool is offered only to a credential granted its own permission — `mailfathom.mail.flags.write`, `mailfathom.mail.drafts.write`, and `mailfathom.mail.send` — none of which reading mail carries and none of which implies another; a reply, a forward, and a draft that answers stored mail need `mailfathom.mail.read` as well, because an answer is derived from the message it answers. The drafting grant is the one to reach for where you want a person between an agent and a recipient: it writes, edits, and deletes a draft in your own mailbox and cannot send one, because `send_draft` is admitted by the sending grant like every other act that causes mail to leave. [What each tool answers, refuses, and never repeats back](https://krzysztof318.github.io/MailFathom/features/mcp-tools.html) is the contract.
-
-Two more answer for a send rather than performing one, and they hold the sending grant. `get_outgoing_email` reports what became of a message the caller queued — where it has got to, how many delivery attempts it has taken, what a mail server said about each person it was addressed to, and the code it stopped on if it stopped — so an agent unsure whether a send went through reads the record instead of sending a second copy. `cancel_outgoing_email` stops one during the seconds before it leaves and refuses once transmission has begun, because nothing recalls a message that has been handed to a server. Neither enumerates: each answers about the one identifier a send gave back, and there is no listing of what a mailbox has sent on this surface. Each is confined to what the calling credential queued, so another caller's send reads as not found.
-
-The other six are MailFathom's own contact book — `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `delete_contact`, and `promote_contact`. It holds the people you write down and every address each of them uses, which is what lets an agent answer who a message is from for somebody who writes from three addresses. Four of the six change that book, and unlike the four tools that reach a mail server they reach MailFathom's own database and nothing outside this deployment. Two of them announce themselves as destructive: `delete_contact`, because an erasure removes a person and every address recorded with them for good, and `update_contact`, because an amendment states the whole record and drops whatever it leaves out. `promote_contact` is neither: it takes on a person MailFathom collected from arriving mail, so the record becomes one you asserted and every other tool may amend it. They are offered to a credential granted them, which every credential is until you narrow its entry.
-
-The book can also fill itself. Switch [contact collection](https://krzysztof318.github.io/MailFathom/features/contacts.html#collecting-contacts-from-arriving-mail) on for an account and it records the people that account corresponds with as its mail is synchronized — the author of mail that arrives, the recipients of mail you sent, held to a threshold you set and never a mailing list, a role mailbox, or an address you excluded. It is off until you switch it on, per account, and one command takes back everything it collected.
-
-The screenshot at the top of this page is `list_emails`. Two of the other tools, answering the same client over the same mailbox:
+No send is performed while the caller waits. Each is written down, answered with a record identity, and offered by a delivery pass that survives a crash — so a message MailFathom says it queued is one it will actually try to deliver, and the seconds before it leaves are the only window in which it can be withdrawn. Nothing a client sends decides who a message is from.
 
 ![A search for the word confirmation, answered with three ranked matches, each carrying the fragment of the message that matched](https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/mcp-tools/search-emails.png)
 
 ![One message opened by subject, answered with its sender, recipient, timestamps, folder, attachment state, and full plain-text body](https://raw.githubusercontent.com/Krzysztof318/MailFathom/main/assets/mcp-tools/read-email-content.png)
 
-A connected agent can list, read, search, and ask about your mail; it can mark, star, and label one message at a time through `set_mail_flags`; and it can send a message through `send_email`, or answer one you already hold through `reply_to_email` and `forward_email`. It can also write a message into your Drafts folder and leave it there for you to read, through `save_draft`, `update_draft`, and `delete_draft`, which send nothing and are granted apart from sending. It cannot delete or move any of your mail, and no writing tool is reachable without the grant named on it, which reading mail does not carry — an answering run is composed with one capability and that capability searches, so nothing inside it writes or sends either. A deployment that grants neither is read-only end to end, and an account with no sending configuration cannot send however a credential is written. That describes this stage rather than a permanent limit: the rest of writing to a mailbox is on the roadmap, and each such capability arrives as its own tool behind a grant of its own — never as a setting that loosens a tool you already trust. The contact book is what an agent writes without reaching a mail server at all: it lives in your own database.
+Beside what a tool returns, MailFathom records what it can establish about each message: who authenticated its sender and whether you recognize that author, how much its text reads as machine written, and the conversation it belongs to. [What each tool answers, refuses, and never repeats back](https://krzysztof318.github.io/MailFathom/features/mcp-tools.html) is the contract.
 
 ## Project status
 
-`0.6.0` is the current release, and it builds on `0.5.0` — `ask_mail`, semantic ranking in `search_emails`, `list_accounts`, and the ceilings on what answering and embedding may spend.
+`0.7.0` is the current release, and it is the first one that **sends mail**. Before it, everything an agent could reach read your local copy; from here it can compose a message, answer one you already hold, forward one on, leave a draft for you, and mark or label mail on your server.
 
-- **What it adds** is everything that acts on your mail rather than reading it: rules you author in configuration that move, copy, delete, and mark messages as read; spam classification that can file junk on the server; and the durable queue underneath both. Beside that, mail can be redacted before anything is derived from it or leaves the deployment, secrets found in the process and personal data by an analyzer you run beside it. The rules, the classification, and both scanners are off until you turn them on; the queue beneath the first two runs on every instance. The MCP surface was still five read-only tools at that release, and it stays true of the mail half here: nothing a client can call writes to a mailbox.
-- **Upgrading from `0.5.0`** is a configuration edit, a client edit, and a database migration you apply. Every folder you want read is named in configuration, and mail under an alias your file no longer names is unreachable until an entry names it again; switching a folder's `Synchronize` off now keeps its stored mail instead of erasing it; the folder argument of `list_emails`, `search_emails`, and `ask_mail` is `folders` where it was `folderAliases`, and the old spelling is ignored rather than refused, so a client still sending it reads every folder instead of the one it named; `get_email_content` hands back a signed link per attachment instead of base64, asked for with `includeAttachmentDownloadLinks` where `0.5.0` asked with `includeAttachmentContent`, and issues none unless `Deployment:PublicBaseAddress` is declared; `EmailContent:MaxAttachmentBytes` and `EmailContent:MaxAttachmentBytesPerRead` are deleted from the configuration file, or the host declines to start on a key it no longer knows; and mail in a folder mapped as junk is withheld from listing and search unless the call asks for it, and withheld from answering with no way to ask. The schema step applies while `0.5.0` is still serving. [The changelog](https://krzysztof318.github.io/MailFathom/CHANGELOG.html) states each break against the surface it breaks, and what to do about it.
-- **What it ships** is a container image, a Helm chart, the SQL script that creates the schema it expects, and an `mfctl` binary per platform — [where the artifacts are published](https://github.com/Krzysztof318/MailFathom#where-the-artifacts-are-published) has the references. There is no binary artifact for the service itself, so a native installation starts from a checkout of this repository.
-- **What it promises** across the MCP tool contract, the configuration schema, the database schema, and the deployment contract is stated in [the changelog](https://krzysztof318.github.io/MailFathom/CHANGELOG.html).
+**Upgrading from `0.6.0`** takes a configuration edit and a database migration you apply. The important one: a credential entry that names no permissions holds everything its surface publishes, so on upgrade it gains the ability to send from your mailboxes — write the grant you mean on every entry. [The changelog](https://krzysztof318.github.io/MailFathom/CHANGELOG.html) states each break against the surface it breaks, and what to do about it; the schema step applies while `0.6.0` is still serving.
 
-Nightly images are built from `main` and published to both registries alongside the releases. A nightly is not a release: its schema can be ahead of any published migration, it has no upgrade path in either direction, and it is deleted once newer ones accumulate. [What a nightly build risks](https://krzysztof318.github.io/MailFathom/operations/container-image.html#what-a-nightly-build-risks) states the whole of it before you choose one.
+Nightly images are built from `main` and published beside the releases. A nightly is not a release: its schema can be ahead of any published migration, it has no upgrade path in either direction, and it is deleted once newer ones accumulate. [What a nightly build risks](https://krzysztof318.github.io/MailFathom/operations/container-image.html#what-a-nightly-build-risks) states the whole of it.
 
 ### Where the artifacts are published
 
@@ -122,94 +90,33 @@ Nightly images are built from `main` and published to both registries alongside 
 | Database schema script | attached to each [release](https://github.com/Krzysztof318/MailFathom/releases) |
 | `mfctl`, the administrative command | attached to each [release](https://github.com/Krzysztof318/MailFathom/releases), one self-contained binary per platform, verified by the checksum file beside them, and installed on Linux by [one command](https://krzysztof318.github.io/MailFathom/operations/admin-endpoint.html#on-linux-with-the-install-script) that does both |
 
-Both registries carry the same manifest list under the same digest, so the one to pull from is whichever your environment already reaches. The image and the chart each carry a signed provenance statement; [the container image](https://krzysztof318.github.io/MailFathom/operations/container-image.html#published-images) records what each tag means and how to verify one.
+Both registries carry the same manifest list under the same digest, so pull from whichever your environment already reaches. There is no binary artifact for the service itself: a native installation starts from a checkout.
 
 ## What it does well
 
-MailFathom is built as an enterprise-grade system from the first line, even while its feature scope is still small. Every claim below is a property of the code and the deployment assets today, and each links to the page that documents it.
+MailFathom is built as an enterprise-grade system from the first line, even while its feature scope is still small. Every claim below is a property of the code and the deployment assets today.
 
-### Eight tools reach a mail server, each behind a grant of its own
-
-- Eight tools on the MCP surface reach a mail server. `set_mail_flags` marks a message read or unread, stars or unstars it, and changes its keywords; `send_email` sends one message as an account you configured to send; `reply_to_email` and `forward_email` answer one message you already hold, deriving the addressing, the subject, the threading, the quotation, and a forward's attachments from your stored copy rather than from anything a client supplies; `save_draft`, `update_draft`, and `delete_draft` write a message into your own Drafts folder, replace it, and take it back out, and `send_draft` sends what one of them holds. Nothing a client sends can delete or move your mail, nothing a client sends decides who a message is from, and each of the eight is offered only to a credential granted its own permission — `mailfathom.mail.flags.write`, `mailfathom.mail.drafts.write`, and `mailfathom.mail.send` — none of which reading mail carries, none of which implies another, and all of which narrowing a credential's entry withholds. A reply, a forward, and a draft answering stored mail need `mailfathom.mail.read` beside the grant on the tool, because an answer is derived from the message it answers. What a client can write besides is MailFathom's own contact book, which is a table in your database rather than anything at your mail provider.
-- Retrieval is incapable of marking remote mail as read. A change to your mailbox happens only where your own configuration asks for one — a rule action, or a spam action — or where a caller holding the flag grant asks for one; nothing else on the surface reaches your mail server. Sending reaches a server too, and reaches it only for an account whose own configuration declares a submission server and an address to send from: an account without that block is readable and unsendable, whatever a credential holds.
-- No response carries an attachment's bytes. A call that asks for them by name receives a signed link per file instead, valid for minutes, scoped to that one attachment, and resolved through the live mailbox so it dies with the message it points at.
-- Configuration is read-only to the process, permanently. No request, command, or tool changes a setting, and the service never rewrites the file it was configured from. So the file you provisioned is the file in force: how an instance is configured is reviewable as a diff and restorable from a backup, and nothing reachable over the network can move it out from under you. What the service itself has to modify lives in the database instead.
-
-→ [MCP tools](https://krzysztof318.github.io/MailFathom/features/mcp-tools.html), [configuration sources](https://krzysztof318.github.io/MailFathom/operations/configuration-sources.html)
-
-### Secure by default, and explicit about every weakening
-
-- The MCP endpoint is off until you enable it, and enabling it means stating whether it requires an API key or nothing at all. The unauthenticated posture is legal, announced with a startup warning, and never the default.
-- Client certificates and per-client rate limits are part of the endpoint rather than something a proxy has to add.
-- IMAP is TLS-on-connect by default, and a private certificate authority is trusted rather than validation disabled. A configuration that weakens the transport or sends a clear-text credential fails startup unless it says so explicitly.
-
-→ [The MCP endpoint](https://krzysztof318.github.io/MailFathom/operations/mcp-endpoint.html), [transport security](https://krzysztof318.github.io/MailFathom/features/imap-synchronization.html#transport-security)
-
-### Credentials never live in configuration
-
-- A secret-bearing setting holds a *reference* — a file path, a systemd credential, an environment variable — and the material lives wherever the deployment provisions it.
-- A configuration file is therefore safe to review, diff, and back up: leaking it leaks paths, not passwords.
-
-→ [Secret provisioning](https://krzysztof318.github.io/MailFathom/operations/secret-provisioning.html), [rotation](https://krzysztof318.github.io/MailFathom/operations/secret-rotation.html)
-
-### Mail is handled as personal data by the code that touches it
-
-- Content, metadata, extracted text, and search extracts are never written to a log and never carried in an error message.
-- Every call is bounded — at most 100 summaries in a page, 50 ranked matches in a search, a configured character bound on a body — so a deployment can decide how much mail a single call may draw out.
-- That is the part software can settle. Whether a deployment satisfies GDPR depends on how you run it: where the database sits, who reaches it, how long you keep mail, and which model an agent hands a result to. What MailFathom offers is an architecture that keeps those choices open rather than one that has already made them badly, including explicit seams for the data-subject workflows a later release implements.
-
-→ [Using the tools](https://krzysztof318.github.io/MailFathom/users/usage.html)
-
-### It fails fast and says why
-
-- Startup resolves every secret reference and verifies the database schema before the process serves anything, and a refusal names the configuration key or the pending migration that caused it.
-- Migrations are never applied while starting, in any environment — applying is a step you take, with a backup first.
-- Three probes answer on a listener of their own, and telemetry is OpenTelemetry, exported only where you point it.
-
-→ [Health endpoints](https://krzysztof318.github.io/MailFathom/operations/health-endpoints.html), [configuration reference](https://krzysztof318.github.io/MailFathom/operations/configuration-reference.html), [telemetry](https://krzysztof318.github.io/MailFathom/operations/telemetry.html)
-
-### The deployment assets are hardened, not illustrative
-
-- The image is chiseled — no shell, no package manager, no HTTP client — runs as an unprivileged user on a read-only root filesystem with every Linux capability dropped, creates no diagnostic socket, and carries no tool that could apply a migration.
-- Docker Compose, the Podman Quadlet units, and the Helm chart all ship that posture by default, and the chart meets the Restricted Pod Security Standard.
-- The Quadlet shape goes one step further on secrets: because a `.container` file is a systemd unit source, the deployment's credentials are encrypted at rest and bound to the machine, decrypted only as the unit starts.
-
-→ [The container image](https://krzysztof318.github.io/MailFathom/operations/container-image.html), [Compose](https://krzysztof318.github.io/MailFathom/operations/deployment-compose.html), [Podman Quadlet](https://krzysztof318.github.io/MailFathom/operations/deployment-quadlet.html), [Kubernetes](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html)
-
-### The supply chain is verifiable
-
-- Images are multi-architecture, built from base images pinned to an exact patch version, scanned before publication, and accompanied by signed build provenance that ties a digest to the commit and workflow that produced it.
-- Package versions are pinned centrally with committed lock files, and every third-party component is reviewed against a licensing policy that keeps the project commercially redistributable.
-
-→ [Verification](https://krzysztof318.github.io/MailFathom/operations/container-image.html#verification), [THIRD_PARTY_LICENSES.md](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md)
-
-### It is built to be maintained
-
-- A .NET 10 clean-architecture modular monolith, with enforced boundaries between domain, application, infrastructure, protocol, and host.
-- Compiler and analyzer diagnostics are errors, and every behavior change ships with tests.
-- The decisions that shape the system are recorded as ADRs rather than remembered.
-
-→ [Solution structure](https://krzysztof318.github.io/MailFathom/architecture/solution-structure.html), [decisions](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/README.md)
+- **Every act is behind a grant, and no grant implies another.** Reading your mail, changing a flag, writing a draft, and sending are four separate permissions, checked when a tool is listed and again when it is called; an administrative route is checked the same way. An endpoint can also publish only some kinds of tool at all, so a deployment can offer reading and drafting while withholding sending from every credential. → [Permissions](https://krzysztof318.github.io/MailFathom/operations/permissions.html)
+- **Secure by default, and explicit about every weakening.** The MCP endpoint is off until you enable it, and enabling it means saying whether it requires a credential; the unauthenticated posture is legal, warned about at startup, and never the default. Client certificates and per-client rate limits belong to the endpoint rather than to a proxy. IMAP is TLS-on-connect, and a configuration that weakens the transport fails startup unless it says so explicitly. → [The MCP endpoint](https://krzysztof318.github.io/MailFathom/operations/mcp-endpoint.html)
+- **Credentials never live in configuration.** A secret-bearing setting holds a *reference* — a file path, a systemd credential, an environment variable — so a configuration file is safe to review, diff, and back up: leaking it leaks paths, not passwords. Configuration is read-only to the process, permanently; nothing reachable over the network can change a setting. → [Secret provisioning](https://krzysztof318.github.io/MailFathom/operations/secret-provisioning.html), [configuration sources](https://krzysztof318.github.io/MailFathom/operations/configuration-sources.html)
+- **Mail is handled as personal data by the code that touches it.** Content, metadata, extracted text, and search extracts are never logged and never carried in an error message; every call is bounded, so a deployment decides how much mail one call may draw out. Whether a deployment satisfies GDPR still depends on how you run it — what MailFathom offers is an architecture that keeps those choices open, with explicit seams for the data-subject workflows a later release implements. → [Using the tools](https://krzysztof318.github.io/MailFathom/users/usage.html)
+- **It fails fast and says why.** Startup resolves every secret reference and verifies the database schema before serving anything, and a refusal names the key or the pending migration that caused it. Migrations are never applied while starting, in any environment. → [Health endpoints](https://krzysztof318.github.io/MailFathom/operations/health-endpoints.html), [telemetry](https://krzysztof318.github.io/MailFathom/operations/telemetry.html)
+- **The deployment assets are hardened, not illustrative.** The image is chiseled — no shell, no package manager, no HTTP client — runs unprivileged on a read-only root filesystem with every capability dropped, and carries no tool that could apply a migration. Compose, the Quadlet units, and the Helm chart all ship that posture by default, and the chart meets the Restricted Pod Security Standard. → [The container image](https://krzysztof318.github.io/MailFathom/operations/container-image.html), [Kubernetes](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html)
+- **The supply chain is verifiable.** Multi-architecture images from base images pinned to an exact patch, scanned before publication, with signed build provenance tying a digest to the commit and workflow that produced it. Package versions are pinned centrally with committed lock files, and every third-party component is reviewed against a licensing policy that keeps the project commercially redistributable. → [Verification](https://krzysztof318.github.io/MailFathom/operations/container-image.html#verification), [THIRD_PARTY_LICENSES.md](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md)
+- **It is built to be maintained.** A .NET 10 clean-architecture modular monolith with enforced boundaries, compiler and analyzer diagnostics as errors, tests with every behavior change, and the decisions recorded as ADRs rather than remembered. → [Solution structure](https://krzysztof318.github.io/MailFathom/architecture/solution-structure.html), [decisions](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/README.md)
 
 ## Documentation
 
-Every documentation link on this page goes to **[the documentation site](https://krzysztof318.github.io/MailFathom/)**,
-which is the readable form: the same pages with search, an API reference generated from the source, and a version
-selector. It opens on the current release, and an address here names no version, so a link keeps working across
-releases and lands on the one you are most likely to be running.
-[`docs/`](https://github.com/Krzysztof318/MailFathom/blob/main/docs/README.md) is the index for reading the same pages
-in the repository instead. The ones you are most likely to want first:
+Every documentation link here goes to **[the documentation site](https://krzysztof318.github.io/MailFathom/)**, which is the readable form: the same pages with search, an API reference generated from the source, and a version selector. It opens on the current release, and an address here names no version, so a link keeps working across releases. [`docs/`](https://github.com/Krzysztof318/MailFathom/blob/main/docs/README.md) is the index for reading the same pages in the repository instead.
 
 | | |
 | --- | --- |
 | [User guide](https://krzysztof318.github.io/MailFathom/users/README.html) | Install, configure, run, and use MailFathom |
 | [Configuration reference](https://krzysztof318.github.io/MailFathom/operations/configuration-reference.html) | Every user-settable option, its default, and whether changing it needs a restart |
-| [Permissions](https://krzysztof318.github.io/MailFathom/operations/permissions.html) | What a credential may do: the published names, how a grant is written, and what a refusal says |
-| [MCP endpoint](https://krzysztof318.github.io/MailFathom/operations/mcp-endpoint.html) | Authentication, TLS, browser origins, client certificates, rate limits |
+| [Permissions](https://krzysztof318.github.io/MailFathom/operations/permissions.html) | What a credential may do, and what a refusal says |
 | [MCP tools](https://krzysztof318.github.io/MailFathom/features/mcp-tools.html) | The tool contracts, their arguments and results, and the stable error codes |
-| [IMAP synchronization](https://krzysztof318.github.io/MailFathom/features/imap-synchronization.html) | What a run stores, how it reconciles, and what it never touches |
+| [Mail delivery](https://krzysztof318.github.io/MailFathom/features/mail-delivery.html) | What a send passes through before it leaves, and what bounds it |
 | [Architecture](https://krzysztof318.github.io/MailFathom/architecture/solution-structure.html) | The boundaries, the projects, and why they are drawn there |
-| [Decisions](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/README.md) | The ADRs, and the workflow that produces them |
 
 Documentation under `docs/` describes behavior that exists. Where something is planned, it is tracked as an issue rather than written up as though it worked.
 
@@ -217,38 +124,21 @@ Documentation under `docs/` describes behavior that exists. Where something is p
 
 A mailbox is the largest archive most people own and the least usable one. Contracts, decisions, invoices, threads that ended without a conclusion, attachments nobody will ever find again: all of it is in there, and none of it is reachable except by scrolling. Mail clients are built to show you the newest of it, one message at a time. After twenty years of accumulation, that is the wrong shape entirely.
 
-MailFathom is being built to change what mail *is* to software. It keeps the local copy current, indexes it so the whole of it is reachable rather than only its most recent slice, and serves it to agents as tools. The destination is a mail brain: something an agent can put a question to and get an answer from, working across years of mail, on infrastructure that belongs to you.
-
-MCP is how agents reach MailFathom; it is not what MailFathom is. The protocol surface is deliberately thin, and the project is building what sits behind it — continuous synchronization, extracted and indexed content, lexical and semantic retrieval, question answering over both, and eventually the ability to act on your mail rather than only read it.
-
-None of it depends on somebody else's service. The copy is yours, the database is yours, the deployment is yours, and the AI capabilities on the roadmap arrive as providers you choose and point at rather than as ones compiled into the product.
+MailFathom is being built to change what mail *is* to software: keep the local copy current, index it so the whole of it is reachable rather than only its most recent slice, and serve it to agents as tools. MCP is how agents reach it; it is not what MailFathom is. None of it depends on somebody else's service — the copy is yours, the database is yours, the deployment is yours, and the AI capabilities arrive as providers you choose and point at rather than as ones compiled into the product.
 
 ## Where it is going
 
-The tools are the foundation, not the product. What follows turns a synchronized, searchable copy of your mail into something an agent can reason over and eventually act on. The direction is set and the order is not fixed:
+The tools are the foundation, not the product. Sending was the capability whose effect first reached somebody who is not this mailbox's owner; what remains of writing to a mailbox is moving, filing, and deleting. Every later capability takes the route these took: a named permission, a recorded change, and a pass of its own that owns the mail server.
 
-- **Acting on mail, not only reading it.** `set_mail_flags` was the first capability that writes to a mailbox from the protocol side, and `send_email` is the first whose effect reaches somebody who is not this mailbox's owner: it composes and records a message behind a grant of its own, and the account's delivery pass offers it to a submission server rather than the caller waiting on one. Answering an existing message followed, and so did drafting one and leaving it for you to send. What remains is the rest of writing to a mailbox — moving, filing, and deleting. Every later capability takes the route these took: a named permission, a recorded change, and a pass of its own that owns the mail server.
-
-### Ideas, not yet scope
-
-These are recorded as open questions, each waiting on a decision rather than on effort. [Discussions](https://github.com/Krzysztof318/MailFathom/discussions) is where they are argued, and the `Ideas` category is open to yours.
-
-- **Encrypted and signed mail**, S/MIME and OpenPGP — the hard part is not the parsing but whether local decryption should be permitted at all, since it turns end-to-end protected mail into searchable plaintext. [#75](https://github.com/Krzysztof318/MailFathom/issues/75)
-- **Antivirus scanning of stored attachments**, constrained by which engines can be used under a permissive licensing policy. [#77](https://github.com/Krzysztof318/MailFathom/issues/77)
-- **OAuth for outbound IMAP and SMTP**, so a provider that has retired password authentication stays reachable. [#78](https://github.com/Krzysztof318/MailFathom/issues/78)
-- **Skill-based jobs**, whose body is an instruction an agent carries out against a slice of your mail, rather than the deterministic rule `0.6.0` shipped. It asks questions a rule does not — what content leaves for a model, what a job may act on, and what an attacker who can write you an email can make one do.
+**Ideas, not yet scope** — recorded as open questions, each waiting on a decision rather than on effort. [Discussions](https://github.com/Krzysztof318/MailFathom/discussions) is where they are argued, and the `Ideas` category is open to yours: [encrypted and signed mail](https://github.com/Krzysztof318/MailFathom/issues/75), [antivirus scanning of stored attachments](https://github.com/Krzysztof318/MailFathom/issues/77), [OAuth for outbound IMAP and SMTP](https://github.com/Krzysztof318/MailFathom/issues/78), and skill-based jobs, whose body is an instruction an agent carries out against a slice of your mail rather than a deterministic rule.
 
 ## Contributing
 
-Contributions are welcome, and the entry point is [CONTRIBUTING.md](https://github.com/Krzysztof318/MailFathom/blob/main/CONTRIBUTING.md): it gets you from a clone to a passing verification run and states the few rules a pull request has to satisfy. Every change starts from an issue, so open one — or comment on an existing one — before writing code, and wait for a reply on anything larger than a typo, because MailFathom is on its `0.x` line and its direction still moves faster than its issue list.
+Contributions are welcome, and the entry point is [CONTRIBUTING.md](https://github.com/Krzysztof318/MailFathom/blob/main/CONTRIBUTING.md): it gets you from a clone to a passing verification run and states the few rules a pull request has to satisfy. Every change starts from an issue, so open one — or comment on an existing one — before writing code, and wait for a reply on anything larger than a typo.
 
-**MailFathom is developed AI-first, and close to zero-touch.** Nearly every line here was written by an autonomous coding agent working from an issue and the rules in [`AGENTS.md`](https://github.com/Krzysztof318/MailFathom/blob/main/AGENTS.md), and reviewed before merge; the maintainer sets direction and decides, but rarely edits code by hand. Working the same way is encouraged rather than merely tolerated — point an agent at your checkout, let it read the instruction files, and let it produce the change, its tests, and its documentation in one pass. A hand-written patch is judged identically. What does not change either way is that you read your diff before submitting it, and that the same gates and the same licensing obligations apply. [How this project is built](https://github.com/Krzysztof318/MailFathom/blob/main/CONTRIBUTING.md#how-this-project-is-built) has the whole of it.
+**MailFathom is developed AI-first, and close to zero-touch.** Nearly every line here was written by an autonomous coding agent working from an issue and the rules in [`AGENTS.md`](https://github.com/Krzysztof318/MailFathom/blob/main/AGENTS.md), and reviewed before merge. Working the same way is encouraged rather than merely tolerated; a hand-written patch is judged identically. What does not change either way is that you read your diff before submitting it, and that the same gates and licensing obligations apply.
 
-[`docs/operations/local-development.md`](https://krzysztof318.github.io/MailFathom/operations/local-development.html) is the full development setup, [`AGENTS.md`](https://github.com/Krzysztof318/MailFathom/blob/main/AGENTS.md) is the entry point to the engineering rules the build and the review enforce, and [CODE_OF_CONDUCT.md](https://github.com/Krzysztof318/MailFathom/blob/main/CODE_OF_CONDUCT.md) applies to everyone taking part.
-
-### Your first contribution, from a fork to a green run
-
-Fork the repository, then clone your fork and point it at this one, because every verification gate here measures your branch against the base it will actually merge into rather than against your fork's `main`:
+Fork the repository, clone your fork, and point it at this one — every verification gate measures your branch against the base it will actually merge into:
 
 ```bash
 git clone https://github.com/<you>/MailFathom.git
@@ -257,42 +147,30 @@ git remote add upstream https://github.com/Krzysztof318/MailFathom.git
 git fetch upstream main
 ```
 
-If you work with a coding agent, hand the rest to [`get-started-contributors`](https://github.com/Krzysztof318/MailFathom/blob/main/.agents/skills/get-started-contributors/SKILL.md), which is one of the workflow skills this repository ships and the one written for somebody arriving for the first time. In Claude Code it is `/get-started-contributors`; any other agent can be pointed at the file. It welcomes you and walks through what MailFathom is, how this repository is worked, where things live, and what Apache-2.0 asks of a contribution — then sets the machine up: the platform check, the .NET SDK the [`global.json`](https://github.com/Krzysztof318/MailFathom/blob/main/global.json) pin accepts, `gh`, Docker, the local file that tells your agent it is working in a fork rather than in the maintainer's checkout, the permissions your agent needs so the verification loop stops asking on every command, and a first green run. Invoke it again weeks later and it refreshes that machine against what has changed here since, rather than walking you through any of it twice. You invoke it yourself — it is deliberately not something an agent starts on its own.
+If you work with a coding agent, hand the rest to [`get-started-contributors`](https://github.com/Krzysztof318/MailFathom/blob/main/.agents/skills/get-started-contributors/SKILL.md), the workflow skill written for somebody arriving for the first time; in Claude Code it is `/get-started-contributors`, and any other agent can be pointed at the file. Setting up by hand takes the same steps, written out in [From a clone to a green run](https://github.com/Krzysztof318/MailFathom/blob/main/CONTRIBUTING.md#from-a-clone-to-a-green-run). Development is on Linux; nothing here is verified against anything else.
 
-Setting up by hand takes the same steps in the same order, and [From a clone to a green run](https://github.com/Krzysztof318/MailFathom/blob/main/CONTRIBUTING.md#from-a-clone-to-a-green-run) is where they are written out. Development is on Linux; nothing here is verified against anything else.
-
-### Questions, bugs, and proposals
-
-[Discussions](https://github.com/Krzysztof318/MailFathom/discussions) takes questions in `Q&A` and proposals in `Ideas`; a question is not a unit of work, and one that turns out to be work gets converted into an issue. A defect or a piece of scope belongs in [issues](https://github.com/Krzysztof318/MailFathom/issues) — except a vulnerability, which has a private channel below.
+[Discussions](https://github.com/Krzysztof318/MailFathom/discussions) takes questions in `Q&A` and proposals in `Ideas`. A defect or a piece of scope belongs in [issues](https://github.com/Krzysztof318/MailFathom/issues) — except a vulnerability, which has a private channel below. [CODE_OF_CONDUCT.md](https://github.com/Krzysztof318/MailFathom/blob/main/CODE_OF_CONDUCT.md) applies to everyone taking part.
 
 ## Security
 
 MailFathom holds mailbox credentials, OAuth tokens, certificate material, and a local copy of someone's mail. Report a vulnerability privately through [SECURITY.md](https://github.com/Krzysztof318/MailFathom/blob/main/SECURITY.md) rather than in a public issue.
 
-**Privacy policy.** MailFathom transfers no information to other networked systems unless specifically requested by the user or the person installing or operating it. It reaches the mail servers, the database, and the model provider a deployment configures, and nothing else: it collects no telemetry, phones no home, and exports OpenTelemetry data only to an endpoint an operator sets. Where mail is stored, who can reach it, and which model receives a result are deployment decisions — [SECURITY.md](https://github.com/Krzysztof318/MailFathom/blob/main/SECURITY.md) and the [user guide](https://krzysztof318.github.io/MailFathom/users/README.html) describe them, and the terms of any model provider a deployment chooses are that provider's own.
+**Privacy policy.** MailFathom transfers no information to other networked systems unless specifically requested by the user or the person installing or operating it. It reaches the mail servers, the database, and the model provider a deployment configures, and nothing else: it collects no telemetry, phones no home, and exports OpenTelemetry data only to an endpoint an operator sets. Where mail is stored, who can reach it, and which model receives a result are deployment decisions.
 
-### Verifying what you downloaded
-
-**No `mfctl` binary carries a code signature**, on any platform, so Windows warns about an unknown publisher when you run one. The checksum file attached beside them is what tells a genuine download from a tampered one, and checking it is a deliberate step rather than something the operating system does for you:
+**Verifying what you downloaded.** No `mfctl` binary carries a code signature, on any platform, so Windows warns about an unknown publisher. The checksum file attached beside them is what tells a genuine download from a tampered one:
 
 ```bash
 sha256sum --check --ignore-missing 'mfctl-<version>.sha256'
 ```
 
-[The administrative endpoint](https://krzysztof318.github.io/MailFathom/operations/admin-endpoint.html#getting-the-command) is where getting the command and verifying it are documented.
-
-The container image and the Helm chart are different: each carries a signed build provenance statement naming the workflow and commit that produced it, so `gh attestation verify` answers where one came from without your having to trust the registry. [The container image](https://krzysztof318.github.io/MailFathom/operations/container-image.html#published-images) records how to check one.
+The container image and the Helm chart each carry a signed build provenance statement instead, so `gh attestation verify` answers where one came from without your having to trust the registry. [The container image](https://krzysztof318.github.io/MailFathom/operations/container-image.html#published-images) records how to check one.
 
 ## License
 
-MailFathom is licensed under the [Apache License, Version 2.0](https://github.com/Krzysztof318/MailFathom/blob/main/LICENSE), SPDX identifier `Apache-2.0`. Source files repeat that grant in a header the build enforces, and a published artifact carries `LICENSE` and `NOTICE` beside the binaries. The container image is that same publish output, so it carries both files and declares `org.opencontainers.image.licenses`; the Helm chart states the identifier as `artifacthub.io/license`.
+MailFathom is licensed under the [Apache License, Version 2.0](https://github.com/Krzysztof318/MailFathom/blob/main/LICENSE), SPDX identifier `Apache-2.0`. Source files repeat that grant in a header the build enforces, and a published artifact carries `LICENSE` and `NOTICE` beside the binaries.
 
-MailFathom was originally created by **Krzysztof Kasprowicz**. The root [NOTICE](https://github.com/Krzysztof318/MailFathom/blob/main/NOTICE) records that attribution, which section 4(d) of the license asks a derivative distribution to preserve while it remains relevant to the derived work. A fork may add its own attribution notices beside it. The notice adds no use restriction, changes nothing about the license, and claims nothing about contributions written by other copyright holders.
+MailFathom was originally created by **Krzysztof Kasprowicz**. The root [NOTICE](https://github.com/Krzysztof318/MailFathom/blob/main/NOTICE) records that attribution, which section 4(d) of the license asks a derivative distribution to preserve while it remains relevant to the derived work. The notice adds no use restriction and claims nothing about contributions written by other copyright holders. Contributions to this repository are offered under Apache-2.0, by section 5 of the license: there is no contributor licence agreement and no developer certificate of origin, and contributors keep the copyright in what they write.
 
-Contributions to this repository are offered under Apache-2.0, by section 5 of the license. There is no contributor licence agreement and no developer certificate of origin, and contributors keep the copyright in what they write.
+Third-party components MailFathom consumes are reviewed separately in [THIRD_PARTY_LICENSES.md](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md). That register records what MailFathom depends on and under which terms; it grants nothing in MailFathom itself, which `LICENSE` alone does. The application icon in [`assets/`](https://github.com/Krzysztof318/MailFathom/tree/main/assets) is MailFathom's own asset and the same grant covers it.
 
-Third-party components that MailFathom consumes are reviewed separately in [THIRD_PARTY_LICENSES.md](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md). That register records what MailFathom depends on and under which terms; it grants nothing in MailFathom itself, which `LICENSE` alone does.
-
-The application icon in [`assets/`](https://github.com/Krzysztof318/MailFathom/tree/main/assets) is MailFathom's own asset rather than a third-party component, and the same grant covers it. The register records how it was produced and why no one else holds rights in it.
-
-What the license grants, it grants without promising that the software works. Sections 7 and 8 give MailFathom **as is**, without warranties or conditions of any kind, and state that no contributor is liable for damages arising out of its use or out of an inability to use it — a synchronization that falls behind, a search that misses what was there, or mail disclosed by a deployment that was reachable when it should not have been. That is the ordinary allocation for software given away rather than sold, and the license text is what governs rather than this summary of it: read [sections 7 and 8](https://github.com/Krzysztof318/MailFathom/blob/main/LICENSE) before pointing MailFathom at a mailbox that matters. Where the database sits, who can reach it, how long mail is kept, and which model receives a result stay the deployment's decisions, and they are where most of the risk actually lives.
+What the license grants, it grants without promising that the software works. Sections 7 and 8 give MailFathom **as is**, without warranties or conditions of any kind, and state that no contributor is liable for damages arising out of its use or out of an inability to use it — a synchronization that falls behind, a search that misses what was there, or mail disclosed by a deployment that was reachable when it should not have been. The license text is what governs rather than this summary of it: read [sections 7 and 8](https://github.com/Krzysztof318/MailFathom/blob/main/LICENSE) before pointing MailFathom at a mailbox that matters.

@@ -169,7 +169,10 @@ unavailable:
    brings `server.json` and the three files that name a version in prose onto that version: the Registry metadata's
    top-level `version`, the **Project status** paragraph and the **Where the artifacts are published** table in
    `README.md`, the **state of the release** section in `docs/users/README.md`, and the **Supported versions** table in
-   `SECURITY.md`. It changes no other Registry metadata. It merges first because **its merge commit is what gets tagged
+   `SECURITY.md`. It changes no other Registry metadata unless the release carries a separately reviewed metadata
+   change, which is read here for the same reason the version is — the tagged tree is what the Registry publishes, so a
+   field that went stale during the cycle would be published as this release's own description of the server — and
+   `mcp-publisher validate` runs on any such edit. It merges first because **its merge commit is what gets tagged
    and published**, so the tagged tree contains the released changelog, the metadata published to the Registry, and
    the files describing the release they ship inside rather than describing them afterwards.
 

@@ -2,13 +2,13 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.Krzysztof318/mailfathom",
   "title": "MailFathom",
-  "description": "Security-first, self-hosted email archive with read-only search and cited answers for AI agents.",
+  "description": "Security-first, self-hosted email archive with search, cited answers, and sending for AI agents.",
   "repository": {
     "url": "https://github.com/Krzysztof318/MailFathom",
     "source": "github",
     "id": "1309260427"
   },
-  "version": "0.6.0",
+  "version": "0.7.0",
   "websiteUrl": "https://krzysztof318.github.io/MailFathom/",
   "remotes": [
     {
