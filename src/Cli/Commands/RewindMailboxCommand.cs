@@ -42,10 +42,7 @@ internal static class RewindMailboxCommand
         var endpointOption = CliOptions.Endpoint();
         var accountOption = CliOptions.MailAccount();
         var folderOption = CliOptions.NarrowedMailFolder();
-        var confirmedOption = new Option<bool>("--yes", "-y")
-        {
-            Description = "Agree to the fetch without being asked, which is what a scripted rewind needs.",
-        };
+        var confirmedOption = CliOptions.Confirmed("fetch");
 
         Command command = new(
             "rewind",
@@ -61,7 +58,7 @@ internal static class RewindMailboxCommand
             context,
             result.GetValue(accountOption) ?? string.Empty,
             result.GetValue(folderOption),
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             result.GetValue(confirmedOption),
             cancellationToken));
 
@@ -128,33 +125,16 @@ internal static class RewindMailboxCommand
 
     /// <summary>Reports whether the person running this agreed to the fetch, refusing to guess where nobody can answer.</summary>
     /// <remarks>
-    /// <para>
-    /// A redirected input has nobody to ask, and reading the answer out of whatever was piped in would turn a stray
-    /// line into an agreement to pull somebody's whole mailbox again. Such an invocation is told to pass the flag
-    /// instead, which is an operator stating the agreement in the command rather than a command inferring it.
-    /// </para>
-    /// <para>
     /// A scope the assessment counted no mail in is asked about like any other. The count is what the deployment
     /// stores, which is deliberately not what a run would fetch: mail that arrived since is fetched without ever
     /// having been stored, and a scope whose local copies are all tombstoned counts nothing while its folders still
     /// hold progress a rewind takes away. Both are cases where zero would have waved through the fetch this
     /// confirmation exists for, and the second needs no race to reach. So the figure informs the question rather than
     /// answering it, and <c>--yes</c> stays the one way to state the agreement without being asked.
-    /// </para>
     /// </remarks>
-    private static bool Agreed(CliContext context, bool confirmedUpFront)
-    {
-        if (confirmedUpFront)
-        {
-            return true;
-        }
-
-        if (!context.Console.CanConfirm)
-        {
-            throw new CliFailure(
-                "There is nobody at the terminal to agree to this, and rewinding has the deployment read the scope from the mail server again. Pass --yes to rewind without being asked.");
-        }
-
-        return context.Console.Confirm("Rewind that scope? [y/N] ");
-    }
+    private static bool Agreed(CliContext context, bool confirmedUpFront) => CliConfirmation.Agreed(
+        context,
+        confirmedUpFront,
+        "There is nobody at the terminal to agree to this, and rewinding has the deployment read the scope from the mail server again. Pass --yes to rewind without being asked.",
+        "Rewind that scope? [y/N] ");
 }

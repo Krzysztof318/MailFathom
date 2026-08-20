@@ -56,7 +56,7 @@ internal static class RederiveMailboxCommand
             context,
             result.GetValue(accountOption) ?? string.Empty,
             result.GetValue(folderOption),
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
         return command;

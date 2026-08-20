@@ -45,15 +45,8 @@ internal static class RuleHistoryCommand
             Description = "Report only what was concluded about this message, named by its local identifier.",
         };
 
-        Option<int?> pageSizeOption = new("--page-size")
-        {
-            Description = "How many executions to read. Defaults to what the deployment serves.",
-        };
-
-        Option<string?> cursorOption = new("--cursor")
-        {
-            Description = "Continue from where a previous page ended, using the cursor it printed.",
-        };
+        var pageSizeOption = CliOptions.PageSize("executions");
+        var cursorOption = CliOptions.Cursor();
 
         Command command = new("history", "Report what the rules concluded about an account's mail, newest first.")
         {
@@ -73,7 +66,7 @@ internal static class RuleHistoryCommand
                 result.GetValue(emailOption),
                 result.GetValue(pageSizeOption),
                 result.GetValue(cursorOption)),
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
         return command;

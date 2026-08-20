@@ -37,7 +37,7 @@ internal static class ClassificationRunStatusCommand
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
             result.GetValue(accountOption) ?? string.Empty,
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
         return command;

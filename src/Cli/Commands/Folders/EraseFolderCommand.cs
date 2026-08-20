@@ -53,7 +53,7 @@ internal static class EraseFolderCommand
             context,
             result.GetValue(accountOption) ?? string.Empty,
             result.GetValue(folderOption) ?? string.Empty,
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
         return command;

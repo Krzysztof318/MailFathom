@@ -37,15 +37,8 @@ internal static class ListContactsCommand
                 "Narrow to contacts of one origin: Asserted for the people written down, Collected for the addresses the deployment picked up. Defaults to the whole book.",
         };
 
-        Option<int?> pageSizeOption = new("--page-size")
-        {
-            Description = "How many contacts to read. Defaults to what the deployment serves.",
-        };
-
-        Option<string?> cursorOption = new("--cursor")
-        {
-            Description = "Continue from where a previous page ended, using the cursor it printed.",
-        };
+        var pageSizeOption = CliOptions.PageSize("contacts");
+        var cursorOption = CliOptions.Cursor();
 
         Command command = new("list", "Read one page of the deployment's contact book.")
         {
@@ -60,7 +53,7 @@ internal static class ListContactsCommand
             result.GetValue(originOption),
             result.GetValue(pageSizeOption),
             result.GetValue(cursorOption),
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
         return command;

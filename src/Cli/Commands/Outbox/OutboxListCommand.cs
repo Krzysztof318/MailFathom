@@ -41,15 +41,8 @@ internal static class OutboxListCommand
             Description = "Report only the sends standing at this stage, by the stage's own name.",
         };
 
-        Option<int?> pageSizeOption = new("--page-size")
-        {
-            Description = "How many messages to read. Defaults to what the deployment serves.",
-        };
-
-        Option<string?> cursorOption = new("--cursor")
-        {
-            Description = "Continue from where a previous page ended, using the cursor it printed.",
-        };
+        var pageSizeOption = CliOptions.PageSize("messages");
+        var cursorOption = CliOptions.Cursor();
 
         Command command = new("list", "Report what this deployment has been asked to send, newest first.")
         {
@@ -67,7 +60,7 @@ internal static class OutboxListCommand
                 result.GetValue(stageOption),
                 result.GetValue(pageSizeOption),
                 result.GetValue(cursorOption)),
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
         return command;

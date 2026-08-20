@@ -46,7 +46,7 @@ internal static class AddContactAddressCommand
             result.GetValue(identityOption),
             result.GetValue(addressOption) ?? string.Empty,
             result.GetValue(preferredOption),
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
         return command;

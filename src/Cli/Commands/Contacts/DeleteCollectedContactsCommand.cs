@@ -33,10 +33,7 @@ internal static class DeleteCollectedContactsCommand
 
         var endpointOption = CliOptions.Endpoint();
 
-        Option<bool> confirmedOption = new("--yes", "-y")
-        {
-            Description = "Agree to the erasure without being asked, which is what a scripted erasure needs.",
-        };
+        var confirmedOption = CliOptions.Confirmed("erasure");
 
         Command command = new(
             "delete-collected",
@@ -48,7 +45,7 @@ internal static class DeleteCollectedContactsCommand
 
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             result.GetValue(confirmedOption),
             cancellationToken));
 
@@ -63,7 +60,13 @@ internal static class DeleteCollectedContactsCommand
     {
         var profile = await context.Deployment().ReachAsync(requestedDeployment, cancellationToken);
 
-        if (!Agreed(context, confirmedUpFront))
+        // Asked before the book is read rather than after, unlike the erasure of one person: there is no record to show
+        // first, and counting what would go would mean reading a page of people the operator is about to dispose of.
+        if (!CliConfirmation.Agreed(
+                context,
+                confirmedUpFront,
+                "There is nobody at the terminal to agree to this, and erasing what was collected cannot be undone. Pass --yes to erase without being asked.",
+                "Erase every contact this deployment collected from arriving mail? The ones you entered are kept. [y/N] "))
         {
             context.Console.WriteError("Nothing was erased.");
 
@@ -80,28 +83,6 @@ internal static class DeleteCollectedContactsCommand
             : $"Erased {Describe(erasure.ContactsErased, "contact", "contacts")} the deployment had collected, and {Describe(erasure.AddressesErased, "address", "addresses")}. Nothing in MailFathom can put them back.");
 
         return CliExitCode.Success;
-    }
-
-    /// <summary>Reports whether the person running this agreed to the erasure, refusing to guess where nobody can answer.</summary>
-    /// <remarks>
-    /// Asked before the book is read rather than after, unlike the erasure of one person: there is no record to show
-    /// first, and counting what would go would mean reading a page of people the operator is about to dispose of.
-    /// </remarks>
-    private static bool Agreed(CliContext context, bool confirmedUpFront)
-    {
-        if (confirmedUpFront)
-        {
-            return true;
-        }
-
-        if (!context.Console.CanConfirm)
-        {
-            throw new CliFailure(
-                "There is nobody at the terminal to agree to this, and erasing what was collected cannot be undone. Pass --yes to erase without being asked.");
-        }
-
-        return context.Console.Confirm(
-            "Erase every contact this deployment collected from arriving mail? The ones you entered are kept. [y/N] ");
     }
 
     /// <summary>Counts one kind of thing invariantly, for the reason every other figure this tool prints is.</summary>

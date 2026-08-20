@@ -64,7 +64,7 @@ internal static class CreateContactCommand
             result.GetValue(addressOption) ?? [],
             result.GetValue(preferredOption),
             result.GetValue(noteOption),
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
         return command;

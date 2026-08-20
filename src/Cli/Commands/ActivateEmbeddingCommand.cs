@@ -36,10 +36,7 @@ internal static class ActivateEmbeddingCommand
         ArgumentNullException.ThrowIfNull(context);
 
         var endpointOption = CliOptions.Endpoint();
-        var confirmedOption = new Option<bool>("--yes", "-y")
-        {
-            Description = "Agree to the estimated cost without being asked, which is what a scripted activation needs.",
-        };
+        var confirmedOption = CliOptions.Confirmed("estimated cost");
 
         Command command = new(
             "activate",
@@ -51,7 +48,7 @@ internal static class ActivateEmbeddingCommand
 
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             result.GetValue(confirmedOption),
             cancellationToken));
 
@@ -122,25 +119,15 @@ internal static class ActivateEmbeddingCommand
 
     /// <summary>Reports whether the person running this agreed to the cost, refusing to guess where nobody can answer.</summary>
     /// <remarks>
-    /// A redirected input has nobody to ask, and reading the answer out of whatever was piped in would turn a stray line
-    /// into an agreement to a provider bill. Such an invocation is told to pass the flag instead, which is an operator
-    /// stating the agreement in the command rather than a command inferring it.
+    /// The refusal names what the spend would be, which is the one thing the shared rule cannot supply: an invocation
+    /// with nobody at the terminal is told what it would have agreed to rather than only that it was not asked.
     /// </remarks>
-    private static bool Agreed(CliContext context, EmbeddingActivationAssessment assessment, bool confirmedUpFront)
-    {
-        if (confirmedUpFront)
-        {
-            return true;
-        }
-
-        if (!context.Console.CanConfirm)
-        {
-            throw new CliFailure(
-                $"This would spend {assessment.Estimate?.DescribeCost() ?? "an unreported amount"} at your provider, and there is nobody at the terminal to agree to it. Pass --yes to activate without being asked.");
-        }
-
-        return context.Console.Confirm("Embed the mailbox under that model? [y/N] ");
-    }
+    private static bool Agreed(CliContext context, EmbeddingActivationAssessment assessment, bool confirmedUpFront) =>
+        CliConfirmation.Agreed(
+            context,
+            confirmedUpFront,
+            $"This would spend {assessment.Estimate?.DescribeCost() ?? "an unreported amount"} at your provider, and there is nobody at the terminal to agree to it. Pass --yes to activate without being asked.",
+            "Embed the mailbox under that model? [y/N] ");
 
     /// <summary>States the two numbers the deployment refused the activation as, before it is asked to refuse again.</summary>
     /// <remarks>

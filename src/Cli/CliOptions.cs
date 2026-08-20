@@ -120,13 +120,50 @@ internal static class CliOptions
         Description = "The name to remember this deployment under. Defaults to its host name.",
     };
 
+    /// <summary>Builds the option continuing a listing from where the previous page ended.</summary>
+    /// <returns>The option.</returns>
+    /// <remarks>
+    /// Declared here rather than per listing because a cursor is one thing: an opaque value the deployment printed,
+    /// handed back unread. A description written again per family is the first place the five listings would start
+    /// telling an operator different things about the same value.
+    /// </remarks>
+    internal static Option<string?> Cursor() => new("--cursor")
+    {
+        Description = "Continue from where a previous page ended, using the cursor it printed.",
+    };
+
+    /// <summary>Builds the option bounding how much of a listing one page holds.</summary>
+    /// <param name="noun">What the page holds, in the plural, as the listing's own output names it.</param>
+    /// <returns>The option.</returns>
+    /// <remarks>The noun is the whole of what differs between the listings, and an absent value stays the deployment's own default rather than a number this tool would have to keep in step with it.</remarks>
+    internal static Option<int?> PageSize(string noun) => new("--page-size")
+    {
+        Description = $"How many {noun} to read. Defaults to what the deployment serves.",
+    };
+
+    /// <summary>Builds the option an operator states an irreversible act's agreement in the command with.</summary>
+    /// <param name="description">What is being agreed to, as the command's own output names it.</param>
+    /// <returns>The option.</returns>
+    /// <remarks>The prompt is the default and this is the exception, rather than the other way round: a command that assumed consent would be one an operator can only find out about afterwards.</remarks>
+    internal static Option<bool> Confirmed(string description) => new("--yes", "-y")
+    {
+        Description = $"Agree to the {description} without being asked, which is what a scripted run needs.",
+    };
+
     /// <summary>Reports which deployment the operator named for this invocation, if any.</summary>
     /// <param name="configuredEndpoint">What the operator passed to <c>--endpoint</c>, or <see langword="null" />.</param>
+    /// <param name="endpointVariable">What <see cref="EndpointVariable" /> holds, or <see langword="null" /> when it is unset.</param>
     /// <returns>A profile name, an address, or <see langword="null" /> to fall back to the stored default.</returns>
-    internal static string? RequestedDeployment(string? configuredEndpoint) =>
+    /// <remarks>
+    /// The variable is a parameter rather than read here, for the reason <see cref="RecordsInvocation" /> takes its own
+    /// one: the process environment is shared by every test in an assembly that runs them in parallel, so a developer
+    /// who exported the variable for their own shell would otherwise have command tests resolve a deployment nobody
+    /// asked for.
+    /// </remarks>
+    internal static string? RequestedDeployment(string? configuredEndpoint, string? endpointVariable) =>
         configuredEndpoint is { Length: > 0 } named
             ? named.Trim()
-            : Environment.GetEnvironmentVariable(EndpointVariable) is { Length: > 0 } fromEnvironment
+            : endpointVariable is { Length: > 0 } fromEnvironment
                 ? fromEnvironment.Trim()
                 : null;
 

@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -207,7 +206,7 @@ internal sealed class AdminApiClient
 
         return this.RequestAsync(
             HttpMethod.Get,
-            $"{AdminEndpointRoutes.MailboxRewindPath}{ScopeQuery(account, folder)}",
+            $"{AdminEndpointRoutes.MailboxRewindPath}{new AdminQueryString().Add("account", account).Add("folder", folder)}",
             token,
             CliJsonContext.Default.MailboxRewindAssessment,
             cancellationToken);
@@ -294,7 +293,7 @@ internal sealed class AdminApiClient
 
         return this.RequestAsync(
             HttpMethod.Get,
-            AdminEndpointRoutes.MailboxRederivationPath + ScopeQuery(account, folder),
+            $"{AdminEndpointRoutes.MailboxRederivationPath}{new AdminQueryString().Add("account", account).Add("folder", folder)}",
             token,
             CliJsonContext.Default.MailboxRederivationState,
             cancellationToken);
@@ -603,7 +602,7 @@ internal sealed class AdminApiClient
         CancellationToken cancellationToken) =>
         this.RequestAsync(
             HttpMethod.Get,
-            $"{AdminEndpointRoutes.OutboxSummaryPath}{AccountQuery(account)}",
+            $"{AdminEndpointRoutes.OutboxSummaryPath}{new AdminQueryString().Add("account", account)}",
             token,
             CliJsonContext.Default.OutboxStatus,
             cancellationToken);
@@ -755,7 +754,7 @@ internal sealed class AdminApiClient
         CancellationToken cancellationToken) =>
         this.RequestAsync(
             HttpMethod.Get,
-            $"{AdminEndpointRoutes.ContactsPath}{ContactPageQuery(origin, pageSize, cursor)}",
+            $"{AdminEndpointRoutes.ContactsPath}{new AdminQueryString().Add("origin", origin).Add("pageSize", pageSize).Add("cursor", cursor)}",
             token,
             CliJsonContext.Default.ContactPage,
             cancellationToken);
@@ -925,51 +924,6 @@ internal sealed class AdminApiClient
             token,
             CliJsonContext.Default.ContactExport,
             cancellationToken);
-
-    /// <summary>Writes the one account filter a summary takes as a query string.</summary>
-    /// <remarks>An absent account is left out rather than sent empty, so the deployment reads it as every account it serves rather than as one more shape to have an opinion about.</remarks>
-    private static string AccountQuery(string? account) => account is { Length: > 0 } narrowed
-        ? $"?account={Uri.EscapeDataString(narrowed)}"
-        : string.Empty;
-
-    /// <summary>Writes the narrowing an operator asked a listing for as a query string.</summary>
-    /// <remarks>
-    /// A filter the operator left out is left out of the query rather than sent empty, so the request says what they
-    /// said: the deployment reads an absent origin as the whole book and an absent size as its own default, and a
-    /// parameter present but blank would be one more shape for it to have an opinion about.
-    /// </remarks>
-    private static string ContactPageQuery(string? origin, int? pageSize, string? cursor)
-    {
-        var filters = new List<string>(3);
-
-        if (origin is { Length: > 0 } narrowed)
-        {
-            filters.Add($"origin={Uri.EscapeDataString(narrowed)}");
-        }
-
-        if (pageSize is { } size)
-        {
-            filters.Add($"pageSize={size.ToString(CultureInfo.InvariantCulture)}");
-        }
-
-        if (cursor is { Length: > 0 } continuation)
-        {
-            filters.Add($"cursor={Uri.EscapeDataString(continuation)}");
-        }
-
-        return filters.Count == 0 ? string.Empty : $"?{string.Join('&', filters)}";
-    }
-
-    /// <summary>Writes the scope an operator named as a query string, escaping both halves.</summary>
-    /// <remarks>
-    /// An omitted folder is left out of the query rather than sent empty, so the request says what the operator said:
-    /// a deployment reads an absent folder as the whole account, and a parameter present but blank would be one more
-    /// shape for it to have an opinion about.
-    /// </remarks>
-    private static string ScopeQuery(string account, string? folder) =>
-        folder is { Length: > 0 } narrowed
-            ? $"?account={Uri.EscapeDataString(account)}&folder={Uri.EscapeDataString(narrowed)}"
-            : $"?account={Uri.EscapeDataString(account)}";
 
     /// <summary>Sends one credentialed request and reads the answer, or turns the refusal into a sentence.</summary>
     /// <remarks>

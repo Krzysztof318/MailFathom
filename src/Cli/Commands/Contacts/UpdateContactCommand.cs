@@ -79,7 +79,7 @@ internal static class UpdateContactCommand
                 result.GetValue(preferredOption),
                 result.GetValue(noteOption),
                 result.GetValue(clearNoteOption)),
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
         return command;
