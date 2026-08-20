@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -26,18 +27,14 @@ public sealed record PkceCodeChallenge(string Verifier, string Challenge)
     public static PkceCodeChallenge Create()
     {
         var entropy = RandomNumberGenerator.GetBytes(VerifierEntropyByteCount);
-        var verifier = Base64UrlEncode(entropy);
+        var verifier = Base64Url.EncodeToString(entropy);
 
         var digest = SHA256.HashData(Encoding.ASCII.GetBytes(verifier));
 
-        return new PkceCodeChallenge(verifier, Base64UrlEncode(digest));
+        return new PkceCodeChallenge(verifier, Base64Url.EncodeToString(digest));
     }
 
     /// <inheritdoc />
     /// <remarks>Redacted by construction, because the verifier is the secret half of the pair.</remarks>
     public override string ToString() => "***";
-
-    /// <summary>Encodes bytes as base64url without padding, which is the only form RFC 7636 accepts.</summary>
-    private static string Base64UrlEncode(ReadOnlySpan<byte> material) =>
-        Convert.ToBase64String(material).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 }

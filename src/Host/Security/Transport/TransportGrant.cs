@@ -48,6 +48,42 @@ internal static class TransportGrant
         return [.. permissions.Select(permission => new Claim(PermissionClaimType, permission.Name))];
     }
 
+    /// <summary>Builds the identity a credential scheme's successful authentication produces.</summary>
+    /// <param name="keyName">The configured name of the credential that authenticated, which is what an audit record names.</param>
+    /// <param name="keyNameClaimType">The claim type that name travels as, which is the scheme's own private type.</param>
+    /// <param name="roleClaimType">The claim type a role check reads, which nothing ever issues.</param>
+    /// <param name="schemeName">The authentication type the identity reports, which is the surface's scheme name.</param>
+    /// <param name="granted">The permissions the credential's own configuration entry granted, empty when it granted none.</param>
+    /// <returns>An identity carrying the credential's name and its resolved grant, and nothing else.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="granted" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when a name or claim type is <see langword="null" />, empty, or white space.</exception>
+    /// <remarks>
+    /// One shape for every credential kind, because what a principal carries is decided by this file rather than by
+    /// which method judged the credential: a key name under the scheme's own claim type, the grant beside it, and a
+    /// role claim type no mapping writes so a role check answers no. The claim types and the scheme name are passed in
+    /// rather than read here, because those are the caller's published identities and a surface registers two schemes
+    /// over them.
+    /// </remarks>
+    internal static ClaimsIdentity IdentityFor(
+        string keyName,
+        string keyNameClaimType,
+        string roleClaimType,
+        string schemeName,
+        IReadOnlyList<MailFathomPermission> granted)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyNameClaimType);
+        ArgumentException.ThrowIfNullOrWhiteSpace(roleClaimType);
+        ArgumentException.ThrowIfNullOrWhiteSpace(schemeName);
+        ArgumentNullException.ThrowIfNull(granted);
+
+        return new ClaimsIdentity(
+            [new Claim(keyNameClaimType, keyName), .. ClaimsFor(granted)],
+            schemeName,
+            keyNameClaimType,
+            roleClaimType);
+    }
+
     /// <summary>Reports the permissions an authenticated principal was granted.</summary>
     /// <param name="principal">The principal a validated credential produced.</param>
     /// <returns>The granted permissions, empty when the principal holds none.</returns>

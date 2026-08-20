@@ -330,6 +330,61 @@ public sealed class MailboxAuthorizerTests
         Assert.Equal("non_json_response_http_502", failure.AuthorizationServerErrorCode);
     }
 
+    /// <summary>
+    /// The device grant reaches the token endpoint from inside the polling loop, which is a second place a proxy or an
+    /// error page answers instead of the authorization server. It is mapped there for the reason it is mapped on the
+    /// first request: an operator running this by hand meets a sentence rather than a stack trace.
+    /// </summary>
+    [Fact]
+    public async Task AuthorizeWithDeviceCodeAsync_ATokenEndpointAnsweringSomethingThatIsNotJson_FailsAsAnAuthorizationFailure()
+    {
+        // Arrange
+        var timeProvider = new FakeTimeProvider(Now);
+        using var transport = new FakeHttpMessageHandler((request, _) => Task.FromResult(
+            request.RequestUri == DeviceEndpoint
+                ? JsonResponse(
+                    """{"device_code":"dc","user_code":"CODE","verification_uri":"https://authorization.test/activate","expires_in":600,"interval":5}""")
+                : new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                {
+                    Content = new StringContent("<html><body>maintenance</body></html>", Encoding.UTF8, "text/html"),
+                }));
+        using var httpClient = new HttpClient(transport);
+        var authorizer = new MailboxAuthorizer(httpClient, timeProvider);
+
+        // Act
+        var authorization = authorizer.AuthorizeWithDeviceCodeAsync(CreateRequest(), _ => { }, CancellationToken.None);
+        await AdvanceUntilCompletedAsync(timeProvider, authorization);
+
+        // Assert: the status is named, and the body — attacker-influenced text — is not.
+        var failure = await Assert.ThrowsAsync<MailboxAuthorizationFailedException>(() => authorization);
+        Assert.Equal("non_json_response_http_503", failure.AuthorizationServerErrorCode);
+        Assert.DoesNotContain("maintenance", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A token endpoint naming a character set this platform does not carry is the other way a well-formed HTTP answer
+    /// is not a token response, and it arrives before a byte of the body is parsed. Left unmapped it escapes the
+    /// exchange as the transport's own exception, which is the stack trace every other malformed answer avoids.
+    /// </summary>
+    [Fact]
+    public async Task RedeemAuthorizationCodeAsync_AnAnswerInAnUnsupportedCharacterSet_FailsAsAnAuthorizationFailure()
+    {
+        // Arrange
+        using var transport = new FakeHttpMessageHandler((_, _) => Task.FromResult(
+            JsonResponse("""{"access_token":"at","refresh_token":"rt","expires_in":3600}""", characterSet: "iso-8859-2")));
+        using var httpClient = new HttpClient(transport);
+        var authorizer = new MailboxAuthorizer(httpClient, new FakeTimeProvider(Now));
+        var request = CreateRequest();
+        var pending = authorizer.BuildAuthorization(request);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<MailboxAuthorizationFailedException>(
+            () => authorizer.RedeemAuthorizationCodeAsync(request, pending, "code", CancellationToken.None));
+
+        // Assert
+        Assert.Equal("non_json_response_http_200", failure.AuthorizationServerErrorCode);
+    }
+
     [Fact]
     public void MatchesReturnedState_TheValueTheAuthorizationWasIssuedWith_IsAccepted()
     {
@@ -422,9 +477,18 @@ public sealed class MailboxAuthorizerTests
         "https://mail.example.test/scope",
         RedirectUri);
 
-    private static HttpResponseMessage JsonResponse(string body, HttpStatusCode statusCode = HttpStatusCode.OK) =>
-        new(statusCode)
+    private static HttpResponseMessage JsonResponse(
+        string body,
+        HttpStatusCode statusCode = HttpStatusCode.OK,
+        string? characterSet = null)
+    {
+        var content = new StringContent(body, Encoding.UTF8, "application/json");
+
+        if (characterSet is not null)
         {
-            Content = new StringContent(body, Encoding.UTF8, "application/json"),
-        };
+            content.Headers.ContentType!.CharSet = characterSet;
+        }
+
+        return new HttpResponseMessage(statusCode) { Content = content };
+    }
 }

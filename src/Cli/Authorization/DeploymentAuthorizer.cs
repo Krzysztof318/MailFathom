@@ -4,7 +4,6 @@
 
 using System.Globalization;
 using System.Net.Http.Json;
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using System.Web;
@@ -31,12 +30,6 @@ namespace MailFathom.Cli.Authorization;
 /// </remarks>
 internal sealed class DeploymentAuthorizer
 {
-    /// <summary>The interval RFC 8628 mandates when the device authorization response states none.</summary>
-    private static readonly TimeSpan DefaultDevicePollInterval = TimeSpan.FromSeconds(5);
-
-    /// <summary>The extra wait RFC 8628 requires after the authorization server answers <c>slow_down</c>.</summary>
-    private static readonly TimeSpan DevicePollBackoffIncrement = TimeSpan.FromSeconds(5);
-
     /// <summary>How long a device code stays pollable when the authorization server states no lifetime.</summary>
     private static readonly TimeSpan DefaultDeviceCodeLifetime = TimeSpan.FromMinutes(10);
 
@@ -91,7 +84,7 @@ internal sealed class DeploymentAuthorizer
         }
 
         var proofKey = PkceCodeChallenge.Create();
-        var state = CreateAntiForgeryState();
+        var state = AntiForgeryState.Create();
 
         var query = HttpUtility.ParseQueryString(string.Empty);
         query["client_id"] = clientId;
@@ -261,10 +254,6 @@ internal sealed class DeploymentAuthorizer
         }
     }
 
-    /// <summary>Creates the opaque value the redirect must echo, which is what binds a returned code to this request.</summary>
-    private static string CreateAntiForgeryState() =>
-        Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
-
     private static DeviceCodePrompt DescribePrompt(
         OAuthDeviceAuthorizationResponse deviceAuthorization,
         DateTimeOffset asOf) =>
@@ -373,7 +362,7 @@ internal sealed class DeploymentAuthorizer
             ["resource"] = authorization.Resource,
         };
 
-        var pollInterval = LifetimeOf(deviceAuthorization.IntervalSeconds, DefaultDevicePollInterval);
+        var pollInterval = LifetimeOf(deviceAuthorization.IntervalSeconds, DeviceCodePolling.DefaultInterval);
         var expiresAt = this.timeProvider.GetUtcNow()
             + LifetimeOf(deviceAuthorization.ExpiresInSeconds, DefaultDeviceCodeLifetime);
 
@@ -399,7 +388,7 @@ internal sealed class DeploymentAuthorizer
                 // The server is telling this client it polls too fast, and RFC 8628 requires the interval to grow
                 // permanently rather than for one iteration.
                 case "slow_down":
-                    pollInterval += DevicePollBackoffIncrement;
+                    pollInterval += DeviceCodePolling.BackoffIncrement;
                     continue;
 
                 default:
@@ -476,11 +465,12 @@ internal sealed class DeploymentAuthorizer
                 // holds nothing.
                 payload = await response.Content.ReadFromJsonAsync(responseContract, cancellationToken);
             }
-            catch (Exception failure) when (failure is JsonException or NotSupportedException)
+            catch (Exception failure) when (failure is JsonException or NotSupportedException or InvalidOperationException)
             {
                 // A mistyped or hijacked endpoint reaches a login page, a proxy, or an error page rather than a token
                 // endpoint. The body itself is never read back: it is attacker-influenced text from a machine that is
-                // not the one intended.
+                // not the one intended. An answer naming a character set this platform does not carry never reaches
+                // the parser at all, and arrives from the transport as an InvalidOperationException.
                 throw new CliFailure(
                     string.Create(CultureInfo.InvariantCulture, $"The authorization server answered {(int)response.StatusCode} with something that is not a token response."),
                     failure);

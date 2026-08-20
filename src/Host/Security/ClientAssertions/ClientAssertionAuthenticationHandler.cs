@@ -78,26 +78,22 @@ internal sealed class ClientAssertionAuthenticationHandler
             ? permissions
             : [];
 
-        var identity = new ClaimsIdentity(
-            [
-                new Claim(ClientAssertionAuthentication.KeyNameClaimType, keyName.Value!),
-                .. TransportGrant.ClaimsFor(grantedPermissions),
-            ],
-            this.Options.Surface.ClientAssertionSchemeName,
+        var identity = TransportGrant.IdentityFor(
+            keyName.Value!,
             ClientAssertionAuthentication.KeyNameClaimType,
-            ClientAssertionAuthentication.RoleClaimType);
+            ClientAssertionAuthentication.RoleClaimType,
+            this.Options.Surface.ClientAssertionSchemeName,
+            grantedPermissions);
 
         return AuthenticateResult.Success(
             new AuthenticationTicket(new ClaimsPrincipal(identity), this.Scheme.Name));
     }
 
     /// <inheritdoc />
-    /// <remarks>The same bare challenge every other method on the surface produces, named through the API key scheme's constants because a client is told which protection space to hold a credential for and never which method judged it.</remarks>
+    /// <remarks>The same bare challenge every other method on the surface produces, written by the API key scheme because a client is told which protection space to hold a credential for and never which method judged it.</remarks>
     protected override Task HandleChallengeAsync(AuthenticationProperties properties)
     {
-        this.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        this.Response.Headers.WWWAuthenticate =
-            $"{ApiKeyAuthentication.HttpAuthenticationScheme} realm=\"{ApiKeyAuthentication.Realm}\"";
+        ApiKeyAuthentication.WriteBareChallenge(this.Response);
 
         return Task.CompletedTask;
     }

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
+using System.Text;
 using System.Web;
 using MailFathom.Cli.Authorization;
 using MailFathom.Cli.Credentials;
@@ -662,6 +663,39 @@ public sealed class OAuthSignInTests : IDisposable
         Assert.Equal(1, exitCode);
         Assert.Empty(store.Read().Profiles);
         Assert.Contains(this.console.Errors, line => line.Contains("--issuer", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A token endpoint naming a character set this platform does not carry answers something that is not a token
+    /// response, and it does so before a byte of the body is parsed. Left unmapped it reaches the operator as the
+    /// transport's own exception rather than as the sentence every other malformed answer produces.
+    /// </summary>
+    [Fact]
+    public async Task Login_ATokenEndpointAnsweringInAnUnsupportedCharacterSet_IsReportedRatherThanThrown()
+    {
+        // Arrange
+        var deployment = FakeOAuthDeployment.Answering();
+        deployment.AnswerTokenRequest = _ =>
+        {
+            var content = new StringContent(
+                FakeOAuthDeployment.TokenResponse("an-access-token", "a-refresh-token", expiresInSeconds: 3600),
+                Encoding.UTF8,
+                "application/json");
+
+            content.Headers.ContentType!.CharSet = "iso-8859-2";
+
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+        };
+        using var handler = deployment.Handler();
+        var store = this.CreateStore();
+
+        // Act
+        var exitCode = await this.RunInteractiveAsync(store, handler);
+
+        // Assert
+        Assert.Equal(1, exitCode);
+        Assert.Empty(store.Read().Profiles);
+        Assert.Contains(this.console.Errors, line => line.Contains("not a token response", StringComparison.Ordinal));
     }
 
     /// <summary>An endpoint that accepts only API keys publishes no metadata, and the refusal has to name the way in that does work.</summary>
