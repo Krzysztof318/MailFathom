@@ -147,7 +147,7 @@ it calls anything:
 | `description` | States what the tool reads or changes, that the call itself reaches no mail server, and what it bounds |
 | `inputSchema` | Every argument is a top-level property carrying its own description, unit, and absence meaning |
 | `outputSchema` | Generated from the result type, whose properties carry descriptions of their own |
-| `openWorldHint` | `false` for every tool but `set_mail_flags`, the three sending tools, and the four draft tools, whose effects leave this process — the first and the drafting three for the owner's own mailbox, the sending four for a submission server and a recipient nobody here controls; the rest are confined to MailFathom-controlled local state |
+| `openWorldHint` | `false` for every tool but `set_mail_flags`, the three sending tools, and the four draft tools, whose effects leave this process — `set_mail_flags`, `save_draft`, `update_draft`, and `delete_draft` for the owner's own mailbox, the three sending tools and `send_draft` for a submission server and a recipient nobody here controls; the rest are confined to MailFathom-controlled local state |
 
 The remaining three annotations are what a client reads before it decides whether a call needs a human, so they differ
 per tool rather than per surface:
@@ -200,10 +200,10 @@ key. An annotation describes the tool as it may be called rather than as a caref
 key would have made the value a statement about good behaviour — and the call it would have been wrong about is exactly
 the one a client makes without thinking, a retry after a timeout, whose second message cannot be taken back.
 
-`set_mail_flags`, the three draft tools that send nothing, and the four sending tools are what is marked `openWorld`, and what
+`set_mail_flags`, the three sending tools, and the four draft tools are what is marked `openWorld`, and what
 they reach is not the same thing. A flag change and a draft reach the owner's own mailbox on the owner's own server — a draft is
-appended to their Drafts folder, edited by replacing that copy, and removed with it; a send, a reply, a forward, and a
-promoted draft reach a submission server this
+appended to their Drafts folder, edited by replacing that copy, and removed with it; a send, a reply, a forward, and the
+draft `send_draft` promotes reach a submission server this
 deployment does not own and a recipient nobody here controls, which is the first time anything on this surface leaves
 for somebody who is not this mailbox's owner. Every other tool, contact writes included, reaches MailFathom's own
 database and no third party.
