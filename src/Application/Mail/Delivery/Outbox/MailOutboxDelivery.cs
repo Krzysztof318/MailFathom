@@ -347,6 +347,7 @@ public sealed class MailOutboxDelivery
         var availableAt = this.timeProvider.GetUtcNow() + JitteredRetryBackoff.DelayBeforeNextAttempt(
             this.settings.RetryBaseDelay,
             this.settings.RetryMaxDelay,
+            minimumDelay: TimeSpan.Zero,
             claimed.Record.AttemptCount);
 
         await this.CommitAsync(async (session, token) =>

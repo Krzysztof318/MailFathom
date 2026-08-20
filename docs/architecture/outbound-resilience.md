@@ -243,10 +243,12 @@ is the layer rather than something MailFathom re-implements:
   [Mail delivery § Failing, retrying, and the single layer of
   it](../features/mail-delivery.md#failing-retrying-and-the-single-layer-of-it) states what each ending records.
 
-  `JitteredRetryBackoff` is the delay both durable layers draw from — this one and the job queue above — because the
-  question they ask is identical: how long to wait before an attempt that failed for a reason that may have cleared. It
-  doubles from a base delay, caps at a ceiling, and draws inside the resulting window, which is what stops every send
-  and every job deferred by one outage returning together.
+  `JitteredRetryBackoff` is the delay every scheduler of this system draws from — this one, the job queue above, one
+  account's synchronization run, and a commit that lost a concurrency race — because the question they ask is
+  identical: how long to wait before an attempt that failed for a reason that may have cleared. It doubles from a base
+  delay, caps at a ceiling, and draws inside the resulting window, which is what stops every send and every job deferred
+  by one outage returning together. A caller that already has a wait of its own states it as the floor of the draw,
+  which is how a synchronization run is never returned to its server sooner than a healthy account would be.
 
 - **Optimistic concurrency.** `OptimisticConcurrencyRetryPolicy` in `Application` already retries a commit that lost a
   race. That is why the classifier reports a concurrency conflict as terminal: the pipeline must not become a second

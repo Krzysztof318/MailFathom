@@ -24,7 +24,7 @@ public sealed class JitteredRetryBackoffTests
         int ceilingSeconds)
     {
         // Act
-        var delay = JitteredRetryBackoff.DelayBeforeNextAttempt(BaseDelay, MaxDelay, attemptCount);
+        var delay = JitteredRetryBackoff.DelayBeforeNextAttempt(BaseDelay, MaxDelay, TimeSpan.Zero, attemptCount);
 
         // Assert
         Assert.InRange(delay, TimeSpan.FromSeconds(floorSeconds), TimeSpan.FromSeconds(ceilingSeconds));
@@ -41,7 +41,7 @@ public sealed class JitteredRetryBackoffTests
     public void DelayBeforeNextAttempt_AnAttemptCountPastTheCeiling_StaysWithinIt(int attemptCount)
     {
         // Act
-        var delay = JitteredRetryBackoff.DelayBeforeNextAttempt(BaseDelay, MaxDelay, attemptCount);
+        var delay = JitteredRetryBackoff.DelayBeforeNextAttempt(BaseDelay, MaxDelay, TimeSpan.Zero, attemptCount);
 
         // Assert
         Assert.InRange(delay, MaxDelay / 2, MaxDelay);
@@ -57,7 +57,7 @@ public sealed class JitteredRetryBackoffTests
         // Act
         var delays = Enumerable
             .Range(0, 64)
-            .Select(_ => JitteredRetryBackoff.DelayBeforeNextAttempt(BaseDelay, MaxDelay, attemptCount: 3))
+            .Select(_ => JitteredRetryBackoff.DelayBeforeNextAttempt(BaseDelay, MaxDelay, TimeSpan.Zero, attemptCount: 3))
             .ToArray();
 
         // Assert
@@ -71,11 +71,43 @@ public sealed class JitteredRetryBackoffTests
         // Act
         var delays = Enumerable
             .Range(1, 8)
-            .Select(attemptCount => JitteredRetryBackoff.DelayBeforeNextAttempt(BaseDelay, MaxDelay, attemptCount))
+            .Select(attemptCount => JitteredRetryBackoff.DelayBeforeNextAttempt(BaseDelay, MaxDelay, TimeSpan.Zero, attemptCount))
             .ToArray();
 
         // Assert
         Assert.All(delays, delay => Assert.True(delay > TimeSpan.Zero));
+    }
+
+    /// <summary>
+    /// Work with a wait of its own — an account that runs on a configured interval — must never be returned to its
+    /// dependency sooner than that wait, which is what the floor is for.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(20)]
+    public void DelayBeforeNextAttempt_AMinimumDelayAboveHalfTheCeiling_NeverFallsBelowIt(int attemptCount)
+    {
+        // Act
+        var delay = JitteredRetryBackoff.DelayBeforeNextAttempt(BaseDelay, MaxDelay, BaseDelay, attemptCount);
+
+        // Assert
+        Assert.InRange(delay, BaseDelay, MaxDelay);
+    }
+
+    /// <summary>A floor above the range the first attempt draws from is two contradictory delays rather than one curve.</summary>
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(31)]
+    public void DelayBeforeNextAttempt_AMinimumDelayOutsideTheCurve_IsRefused(int minimumDelaySeconds)
+    {
+        // Act & Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => JitteredRetryBackoff.DelayBeforeNextAttempt(
+            BaseDelay,
+            MaxDelay,
+            TimeSpan.FromSeconds(minimumDelaySeconds),
+            attemptCount: 1));
     }
 
     /// <summary>A bound that is not a bound would be read as one, so each is refused rather than corrected.</summary>
@@ -94,6 +126,7 @@ public sealed class JitteredRetryBackoffTests
         Assert.Throws<ArgumentOutOfRangeException>(() => JitteredRetryBackoff.DelayBeforeNextAttempt(
             TimeSpan.FromSeconds(baseDelaySeconds),
             TimeSpan.FromSeconds(maxDelaySeconds),
+            TimeSpan.Zero,
             attemptCount));
     }
 }

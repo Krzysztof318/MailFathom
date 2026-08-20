@@ -299,6 +299,7 @@ public sealed class JobExecutor
         var delay = JitteredRetryBackoff.DelayBeforeNextAttempt(
             this.settings.RetryBaseDelay,
             this.settings.RetryMaxDelay,
+            minimumDelay: TimeSpan.Zero,
             job.AttemptCount);
         var availableAt = this.timeProvider.GetUtcNow() + delay;
 

@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Scheduling;
+
 namespace MailFathom.Domain.Delivery.Governance;
 
 /// <summary>How much mail one period may be asked to send, for one account and for the whole deployment.</summary>
@@ -112,21 +114,12 @@ public sealed class OutgoingMailCeilings
     /// Anchored at the Unix epoch so every process of a deployment, and every restart of one, agrees on where a period
     /// begins without anything having to be stored to say so.
     /// </remarks>
-    public DateTimeOffset PeriodStartAt(DateTimeOffset instant)
-    {
-        var elapsedTicks = instant.ToUniversalTime().Ticks - DateTimeOffset.UnixEpoch.Ticks;
-
-        // Floored rather than truncated, so an instant before the epoch — which no clock this runs on reports, but which
-        // a test may hand it — lands on the start of its period rather than on the end of the one before.
-        var periodsElapsed = (long)Math.Floor((double)elapsedTicks / this.Period.Ticks);
-
-        return DateTimeOffset.UnixEpoch.AddTicks(periodsElapsed * this.Period.Ticks);
-    }
+    public DateTimeOffset PeriodStartAt(DateTimeOffset instant) => EpochAnchoredPeriod.StartAt(this.Period, instant);
 
     /// <summary>Finds when the period an instant falls in rolls over, which is when a refused send may be asked for again.</summary>
     /// <param name="instant">The moment to place in a period.</param>
     /// <returns>The instant the next period begins, in UTC.</returns>
-    public DateTimeOffset PeriodEndAt(DateTimeOffset instant) => this.PeriodStartAt(instant) + this.Period;
+    public DateTimeOffset PeriodEndAt(DateTimeOffset instant) => EpochAnchoredPeriod.EndAt(this.Period, instant);
 
     /// <summary>Finds the ceiling one further message would carry a period past.</summary>
     /// <param name="usage">What the period has already been asked for.</param>

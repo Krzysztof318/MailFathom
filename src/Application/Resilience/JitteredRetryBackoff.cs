@@ -16,8 +16,10 @@ namespace MailFathom.Application.Resilience;
 /// keeps the attempt counts from multiplying into a retry storm.
 /// </para>
 /// <para>
-/// It is shared by the durable job queue and the outbox because both answer that question about work of their own, and
-/// a second implementation of it would be a second set of jitter arithmetic to get subtly wrong.
+/// Every backoff curve in this system is drawn here — the durable job queue, the outbox, one account's synchronization
+/// run, and a conflicted local commit — because each answers that same question about work of its own, and a second
+/// implementation of it would be a second set of jitter arithmetic to get subtly wrong. What the callers differ on is
+/// the arguments: the bounds of the curve, and whether a delay has a floor of its own to respect.
 /// </para>
 /// <para>
 /// The delay doubles per attempt and is drawn from a range rather than computed exactly. Work that failed together
@@ -38,17 +40,29 @@ public static class JitteredRetryBackoff
     /// <summary>Computes how long the work waits before its next attempt.</summary>
     /// <param name="baseDelay">The delay the first retry is drawn around, from which the doubling grows.</param>
     /// <param name="maxDelay">The ceiling a grown delay never exceeds.</param>
+    /// <param name="minimumDelay">The delay no draw falls below, which is <see cref="TimeSpan.Zero" /> for work that has no wait of its own to respect.</param>
     /// <param name="attemptCount">How many attempts the work has already been handed out for, counting from one.</param>
-    /// <returns>A jittered delay of at least half the grown ceiling and at most <paramref name="maxDelay" />.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="baseDelay" /> is not positive, when <paramref name="maxDelay" /> is below it, or when <paramref name="attemptCount" /> is not positive.</exception>
-    public static TimeSpan DelayBeforeNextAttempt(TimeSpan baseDelay, TimeSpan maxDelay, int attemptCount)
+    /// <returns>A jittered delay of at least half the grown ceiling, never below <paramref name="minimumDelay" />, and at most <paramref name="maxDelay" />.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="baseDelay" /> is not positive, when <paramref name="maxDelay" /> is below it, when <paramref name="minimumDelay" /> is negative or above <paramref name="baseDelay" />, or when <paramref name="attemptCount" /> is not positive.</exception>
+    /// <remarks>
+    /// The floor is bounded by the base delay rather than by the ceiling, because a floor above the range the first
+    /// attempt draws from is a caller stating two delays that contradict each other rather than one curve with a lower
+    /// bound.
+    /// </remarks>
+    public static TimeSpan DelayBeforeNextAttempt(
+        TimeSpan baseDelay,
+        TimeSpan maxDelay,
+        TimeSpan minimumDelay,
+        int attemptCount)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(baseDelay, TimeSpan.Zero);
         ArgumentOutOfRangeException.ThrowIfLessThan(maxDelay, baseDelay);
+        ArgumentOutOfRangeException.ThrowIfLessThan(minimumDelay, TimeSpan.Zero);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(minimumDelay, baseDelay);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(attemptCount);
 
         var ceilingTicks = GrowFromBaseDelay(baseDelay.Ticks, maxDelay.Ticks, attemptCount - 1);
-        var floorTicks = ceilingTicks / 2;
+        var floorTicks = Math.Max(minimumDelay.Ticks, ceilingTicks / 2);
 
         return TimeSpan.FromTicks(floorTicks + DrawJitterTicks(ceilingTicks - floorTicks));
     }

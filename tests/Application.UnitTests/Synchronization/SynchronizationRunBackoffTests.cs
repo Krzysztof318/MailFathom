@@ -59,6 +59,35 @@ public sealed class SynchronizationRunBackoffTests
         Assert.All(delays, delay => Assert.Equal(Interval, delay));
     }
 
+    /// <summary>
+    /// The first failure draws from the interval up to twice it, and a delay that never left the interval is the shared
+    /// curve being handed a failure count where it expects an attempt count — which halves every backed-off delay while
+    /// still satisfying every bound above.
+    /// </summary>
+    [Fact]
+    public void DelayBeforeNextRun_TheFirstFailure_DrawsPastTheIntervalRatherThanStayingOnIt()
+    {
+        // Arrange, Act
+        var delays = Enumerable.Range(0, 64)
+            .Select(_ => SynchronizationRunBackoff.DelayBeforeNextRun(Interval, MaxDelay, consecutiveFailureCount: 1))
+            .ToArray();
+
+        // Assert
+        Assert.All(delays, delay => Assert.InRange(delay, Interval, 2 * Interval));
+        Assert.Contains(delays, delay => delay > Interval);
+    }
+
+    /// <summary>A failure count no account reaches is still a count this answers with the ceiling rather than refuses.</summary>
+    [Fact]
+    public void DelayBeforeNextRun_TheLargestFailureCount_StaysWithinTheConfiguredCeiling()
+    {
+        // Arrange, Act
+        var delay = SynchronizationRunBackoff.DelayBeforeNextRun(Interval, MaxDelay, int.MaxValue);
+
+        // Assert
+        Assert.InRange(delay, MaxDelay / 2, MaxDelay);
+    }
+
     [Fact]
     public void DelayBeforeNextRun_ManyConsecutiveFailures_StaysWithinTheConfiguredCeiling()
     {

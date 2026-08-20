@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Security.Cryptography;
+using MailFathom.Application.Resilience;
 
 namespace MailFathom.Application.Synchronization;
 
@@ -20,16 +20,14 @@ namespace MailFathom.Application.Synchronization;
 /// caused it, and the delay is drawn from a range rather than computed exactly. Accounts that share a mail server fail
 /// together, and an exact delay would return every one of them to that server in the same instant on every later run.
 /// </para>
+/// <para>
+/// The curve itself is <see cref="JitteredRetryBackoff" />, which every scheduler of this system draws its delays from.
+/// What is decided here is what a synchronization run means by it: a failure count rather than an attempt count, the
+/// configured interval as the floor, and a healthy account answered before any of that arithmetic runs.
+/// </para>
 /// </remarks>
 public static class SynchronizationRunBackoff
 {
-    /// <summary>Bounds the exponent so the doubling stays inside the tick arithmetic that applies it.</summary>
-    /// <remarks>Growth has reached any usable ceiling long before this, so the bound costs nothing an operator can observe.</remarks>
-    private const int MaxGrowthSteps = 16;
-
-    /// <summary>How finely a delay is drawn from its range.</summary>
-    private const int JitterResolution = 1000;
-
     /// <summary>Computes the delay before one account's next synchronization run.</summary>
     /// <param name="interval">The configured interval a healthy account runs on.</param>
     /// <param name="maxDelay">The ceiling a backed-off delay never exceeds.</param>
@@ -55,36 +53,14 @@ public static class SynchronizationRunBackoff
             return interval;
         }
 
-        var ceilingTicks = GrowFromInterval(interval.Ticks, maxDelay.Ticks, consecutiveFailureCount);
-        var floorTicks = Math.Max(interval.Ticks, ceilingTicks / 2);
-
-        return TimeSpan.FromTicks(floorTicks + DrawJitterTicks(ceilingTicks - floorTicks));
+        // The shared curve counts attempts from one and grows by the attempts already made, while a failure count is
+        // zero for an account that has never failed. Passing the count without the increment would halve every
+        // backed-off delay. The increment saturates rather than wrapping, so a count no account reaches but a caller
+        // may still hand this is answered with the ceiling instead of being refused as a negative attempt count.
+        return JitteredRetryBackoff.DelayBeforeNextAttempt(
+            interval,
+            maxDelay,
+            minimumDelay: interval,
+            attemptCount: Math.Min(consecutiveFailureCount, int.MaxValue - 1) + 1);
     }
-
-    /// <summary>Doubles the interval once per consecutive failure and caps the result.</summary>
-    /// <remarks>
-    /// The comparison shifts the ceiling down rather than shifting the interval up, so the product that would exceed
-    /// the ceiling — and, for a large enough failure count, the tick range itself — is never computed.
-    /// </remarks>
-    private static long GrowFromInterval(
-        long intervalTicks,
-        long maxDelayTicks,
-        int consecutiveFailureCount)
-    {
-        var growthSteps = Math.Min(consecutiveFailureCount, MaxGrowthSteps);
-
-        return intervalTicks <= maxDelayTicks >> growthSteps
-            ? intervalTicks << growthSteps
-            : maxDelayTicks;
-    }
-
-    /// <summary>Draws the jitter added to the floor of the range.</summary>
-    /// <remarks>
-    /// The draw is a fraction of the range rather than a tick count, so one generator call covers every range width
-    /// without the range having to fit the generator's own bounds.
-    /// </remarks>
-    private static long DrawJitterTicks(long spreadTicks) =>
-        spreadTicks == 0
-            ? 0
-            : spreadTicks * RandomNumberGenerator.GetInt32(0, JitterResolution + 1) / JitterResolution;
 }
