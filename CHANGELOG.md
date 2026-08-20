@@ -29,6 +29,293 @@ previous tag, and that same pull request is the one whose merge commit is tagged
 registries. `CHANGELOG.md` is a protected path for the same reason: an edit to it outside that flow changes what a
 release claims it shipped.
 
+## [0.7.0] - 2026-08-20
+
+The seventh release, and the first one that **sends mail**. Until now everything an agent could reach either read your
+local copy or changed a flag on your own server; from here it can compose a message and have MailFathom offer it to a
+submission server. It can answer mail you already hold, forward one on, write a message into your Drafts folder and
+leave it there for you, and mark, star, or label mail. The tool surface goes from five to twenty-one, and MailFathom
+stops being a read-only window on a mailbox.
+
+**Everything that leaves the deployment is off until you turn it on.** Sending is per account and disabled everywhere by
+default, an account enabled with no submission host fails startup, `Deployment:ReadOnly` refuses every send whatever any
+account says, and a recipient policy and a send ceiling bound who may be written to and how much may leave in a period.
+Nothing a caller supplies decides who a message is from, no send is performed while the caller waits — each is written
+down, answered with a record identity, and offered by a delivery pass that survives a crash — and the seconds before it
+leaves are the only window in which it can be withdrawn.
+
+**The other half of the release is who may ask.** Every `Authentication` entry can now state what it grants, as a list of
+named permissions, and the check runs in the use case rather than only at the door: a tool a caller cannot reach is not
+even listed to it, and an administrative route refuses the same way. An endpoint can also publish only some kinds of
+tool at all, so a deployment can offer reading and drafting while withholding sending from every credential.
+
+**And MailFathom now records more about the mail it stores.** Who authenticated a message's sender and whether this
+deployment recognizes that author, how much the message's own text reads as machine written, the keywords your server
+holds for it, and the conversation it belongs to — all published on every read tool's result. Beside them is a contact
+book of MailFathom's own: people rather than addresses, held in your database, filled by hand or from the mail an
+account corresponds with.
+
+**Four things need an edit before this release serves what `0.6.0` served**, and three of them fail quietly rather than
+loudly. **Write `Permissions` on every `Authentication` entry**, because an entry that names none holds everything its
+surface publishes — so on upgrade it gains the sixteen new tools, sending among them, and a credential you meant to be
+able to read your mail can now send from it to anybody. **Rename `SpamClassification:Actions:FileInJunkFolder` to
+`MoveToJunkFolder`**, or junk stops being filed and nothing says so. **Rewrite
+`SensitiveContent:PersonalDataAnalyzer:Language` as the list `Languages`** — `personalDataScanning.languages` in the
+Helm chart, `SensitiveContent__PersonalDataAnalyzer__Languages__0` in Compose — or the analyzer silently falls back to
+English. And **`SensitiveContent:ScanTimeout` now defaults to fifteen seconds** where it defaulted to five, which is a
+longer wait before a scan is refused rather than a change you have to make.
+
+**Mail stored by an earlier release keeps the answers it was given.** The sender verdict, the trust verdict, the
+machine-authorship reading, the keywords, and the threads are derived while a message is synchronized, so the migrations
+fill every existing row with the not-established answer rather than a wrong one. `mfctl mailbox rederive` re-reads the
+raw MIME already stored and writes the real answers back; until you run it, mail from before the upgrade reports as
+nothing established.
+
+**The database schema moves by twenty-three migrations** that add seventeen tables, thirty-six columns on tables that
+already held data, and the indexes for both. Every added column carries a default, and nothing `0.6.0` reads changes —
+so the schema step applies while `0.6.0` is still serving, `0.6.0` serves the result unchanged if you roll the image
+back, and this release deploys over the previous release's data. Nothing else `0.6.0` promised is withdrawn: no tool was
+removed, no tool argument was renamed, and every artifact a release publishes still publishes.
+
+### Added
+
+**Sending mail.** An account with a submission endpoint can be asked to send, and MailFathom writes the message down
+before anything reaches a server: the record is created first, answered with an identity, and offered to the submission
+server by a delivery pass that claims it under a lease, so a crash mid-flight leaves work that finishes by itself rather
+than a message MailFathom believes it sent
+([#891](https://github.com/Krzysztof318/MailFathom/pull/891),
+[#900](https://github.com/Krzysztof318/MailFathom/pull/900),
+[#942](https://github.com/Krzysztof318/MailFathom/pull/942)).
+[Mail delivery](https://krzysztof318.github.io/MailFathom/features/mail-delivery.html) is the page, stage by stage.
+
+- **`send_email` sends one message**, as the account it names, to the addresses the call names. An idempotency key the
+  caller chooses is what makes a retry the same message rather than a second one
+  ([#977](https://github.com/Krzysztof318/MailFathom/pull/977)).
+- **`reply_to_email` and `forward_email` answer mail you already hold.** The caller names the message and writes the new
+  words; the addressing, the subject, the headers that put it in the right conversation, the quoted original, and a
+  forward's attachments are read from your stored copy rather than from anything a client supplies. Whether a reply
+  answers the sender alone or everybody is required and never defaulted
+  ([#920](https://github.com/Krzysztof318/MailFathom/pull/920),
+  [#989](https://github.com/Krzysztof318/MailFathom/pull/989)).
+- **`get_outgoing_email` and `cancel_outgoing_email` answer for a send rather than performing one** — where it has got
+  to, how many attempts it has taken, what each recipient's server said, and the code it stopped on. Cancellation
+  succeeds only before transmission begins, and each answers about the one identifier the caller was given: there is no
+  listing of what a mailbox has sent on this surface, and another caller's send reads as not found
+  ([#996](https://github.com/Krzysztof318/MailFathom/pull/996)).
+- **The copy is filed where the account's own configuration says**, into the folder mapped as `Sent` where one is mapped
+  ([#976](https://github.com/Krzysztof318/MailFathom/pull/976)).
+- **The message is composed by MailFathom rather than by a caller.** The headers that establish identity, threading, and
+  the message's own identifier are this system's; a caller supplies a subject, text, an optional HTML alternative, and
+  recipients ([#911](https://github.com/Krzysztof318/MailFathom/pull/911)).
+- **Sending is bounded on four independent axes.** `Delivery:Enabled` is off on every account; `Deployment:ReadOnly`
+  refuses every send process-wide whatever an account holds; `MailDelivery:RecipientPolicy` names allowed and denied
+  domains and addresses, and a message naming one refused recipient is refused whole rather than delivered to the rest;
+  and `MailDelivery:SendCeilings` counts messages and recipients per account, per caller, and per deployment over a
+  fixed period. Every ceiling is zero — no ceiling — by default
+  ([#992](https://github.com/Krzysztof318/MailFathom/pull/992),
+  [#998](https://github.com/Krzysztof318/MailFathom/pull/998)).
+- **`MailDelivery:UnvouchedRecipients` can refuse an address nothing here vouches for.** Set to `Refuse`, an address
+  the *caller* named that neither the contact book nor one of your own accounts holds refuses the whole message — which
+  is the bound written for an agent that read a stranger's mail and was talked into forwarding a thread somewhere. Only
+  what the caller named is judged, so a plain reply is unaffected and a forward is judged in full. It admits by default,
+  because refusing by default would refuse the first message of every installation whose contact book is still empty
+  ([#974](https://github.com/Krzysztof318/MailFathom/pull/974),
+  [#998](https://github.com/Krzysztof318/MailFathom/pull/998)).
+- **`mfctl outbox` operates it**: what stands at each stage, one bounded page of what has been queued, one message with
+  who it was offered to and what each of them was told, withdrawing one, and offering one again. Delivery is
+  instrumented as well — attempts, retries, outcomes, submission duration, and queue depth
+  ([#995](https://github.com/Krzysztof318/MailFathom/pull/995)).
+
+**The four draft tools — writing a message and leaving it for you.** `save_draft` writes a message into your own Drafts
+folder and sends nothing; `update_draft` replaces the whole message and your folder ends up showing one draft rather
+than one per edit; `delete_draft` gives one up and takes the copy back out; `send_draft` sends what a draft holds. A
+draft can be a message of its own or an answer to mail you already hold, and one addressed to nobody is an ordinary
+draft ([#1001](https://github.com/Krzysztof318/MailFathom/pull/1001),
+[#1010](https://github.com/Krzysztof318/MailFathom/pull/1010)). **Drafting is granted apart from sending**, which is the
+grant to reach for where you want a person between an agent and a recipient: a credential that can write, edit, and
+delete a draft cannot make one leave.
+
+**`set_mail_flags` — marking, starring, and labelling.** One tool marks a message read or unread, stars or unstars it,
+and adds, removes, or replaces its keywords. Every value is optional and at least one is required, and the change is
+written down and carried to your server by the same convergence pass every other mailbox change goes through
+([#968](https://github.com/Krzysztof318/MailFathom/pull/968)). The keywords your server already holds are stored as
+well, and `list_emails` and `search_emails` filter on them and on `\Flagged`
+([#878](https://github.com/Krzysztof318/MailFathom/pull/878)). A rule can set them too, and can flag a message
+([#924](https://github.com/Krzysztof318/MailFathom/pull/924)).
+
+**Named permissions on every credential.** An `Authentication` entry states what it grants as `Permissions`, a list of
+published names; the set is closed, so a misspelling fails startup rather than reading as a narrower grant than you
+meant. A `*` written as a whole segment grants the subtree beneath it, at any position. `PermissionsFromTokenScopes`
+turns the list into a ceiling instead, so an authorization server decides per subject within a bound the deployment
+fixed. The check runs at the transport, in the use case behind every operation, and in what a caller is offered: a tool
+it cannot reach is not listed to it. Startup records what every entry resolved to, one line each
+([#874](https://github.com/Krzysztof318/MailFathom/pull/874),
+[#882](https://github.com/Krzysztof318/MailFathom/pull/882),
+[#904](https://github.com/Krzysztof318/MailFathom/pull/904),
+[#912](https://github.com/Krzysztof318/MailFathom/pull/912),
+[#925](https://github.com/Krzysztof318/MailFathom/pull/925),
+[#969](https://github.com/Krzysztof318/MailFathom/pull/969),
+[#994](https://github.com/Krzysztof318/MailFathom/pull/994)).
+[Permissions](https://krzysztof318.github.io/MailFathom/operations/permissions.html) is the whole model.
+
+- **Every administrative route is behind a grant too**, with the readings that touch mail separated from the readings
+  that report the deployment's own state, and both from the operations that cause work
+  ([#925](https://github.com/Krzysztof318/MailFathom/pull/925)).
+- **A refusal is counted under the permission it was refused for**, and nothing about the caller is recorded beside it
+  ([#939](https://github.com/Krzysztof318/MailFathom/pull/939)).
+
+**An endpoint publishes only the kinds of tool it names.** `McpEndpoint:PublishedToolCategories` narrows the surface to
+some of `mailbox`, `flags`, `sending`, `drafts`, `answering`, and `contacts`; naming none publishes every one, so a
+deployment written before the setting keeps the surface it had. A category only ever takes away — it enables nothing and
+widens no grant — and a connecting client may narrow further for its own session with the `MailFathom-Tool-Categories`
+header ([#1011](https://github.com/Krzysztof318/MailFathom/pull/1011)).
+
+**A contact book of MailFathom's own.** It holds people rather than addresses, so somebody who writes from three
+addresses is one contact, and it lives in your database rather than at your mail provider. Six MCP tools read and write
+it, `mfctl contacts` administers it including the export and the erasure, and switching `ContactCollection` on for an
+account records the people that account corresponds with as its mail is synchronized — held to a message threshold you
+set, and never a mailing list, a role mailbox, or an address you excluded. It is off on every account, and one command
+takes back everything it collected. A message can be addressed by naming a contact, without that becoming a way around
+the recipient policy ([#890](https://github.com/Krzysztof318/MailFathom/pull/890),
+[#905](https://github.com/Krzysztof318/MailFathom/pull/905),
+[#913](https://github.com/Krzysztof318/MailFathom/pull/913),
+[#943](https://github.com/Krzysztof318/MailFathom/pull/943),
+[#965](https://github.com/Krzysztof318/MailFathom/pull/965)).
+[Contacts](https://krzysztof318.github.io/MailFathom/features/contacts.html) is the page.
+
+**Who authenticated a message's sender, and whether you recognize them.** The verdict is read from the
+`Authentication-Results` header of the one server you name as yours, in `TrustedAuthenticationServiceIdentifier`, and
+from nowhere else — a header any hop could have written is not evidence. Where your server writes none,
+`VerifyDkimLocally` checks the message's own signatures in this process instead, which is the one path that makes an
+outbound DNS query. A second answer says whether the established author is one this deployment recognizes, from
+`TrustedSenders` and from the domains your own accounts use. Both are published on every read tool's result
+([#877](https://github.com/Krzysztof318/MailFathom/pull/877),
+[#887](https://github.com/Krzysztof318/MailFathom/pull/887),
+[#893](https://github.com/Krzysztof318/MailFathom/pull/893),
+[#899](https://github.com/Krzysztof318/MailFathom/pull/899),
+[#967](https://github.com/Krzysztof318/MailFathom/pull/967),
+[#979](https://github.com/Krzysztof318/MailFathom/pull/979)).
+[Sender authentication](https://krzysztof318.github.io/MailFathom/features/sender-authentication.html) is the page.
+
+**How much a message's text reads as machine written.** A band and a likelihood, derived from characters in text this
+deployment already holds — no model asked, no service consulted, no extra parse and no IMAP round trip — published
+beside the sender verdict. **It is informational and it is not a safety signal**: nothing files, flags, hides, or refuses
+a message because of it, and the only thing that can act on it is a rule you wrote.
+`MailSynchronization:AssessMachineAuthorship` turns it off ([#927](https://github.com/Krzysztof318/MailFathom/pull/927)).
+[Machine authorship](https://krzysztof318.github.io/MailFathom/features/machine-authorship.html) states what it weighs
+and what it deliberately does not claim.
+
+**The conversation a message belongs to.** Stored mail is assembled into threads from what was synchronized, and every
+message a tool returns names its thread ([#906](https://github.com/Krzysztof318/MailFathom/pull/906)).
+
+**Bringing stored mail up to a later release.** `mfctl mailbox rederive` re-reads the raw MIME already stored into the
+properties a newer release records from it, as durable background work the deployment owns rather than a command holding
+a terminal open; `mfctl mailbox rederive-status` says where it has got to
+([#892](https://github.com/Krzysztof318/MailFathom/pull/892),
+[#950](https://github.com/Krzysztof318/MailFathom/pull/950)). `mfctl mailbox rewind` discards an account's
+synchronization progress so the next runs read its folders again, and reports what that would cost before you ask for it
+([#892](https://github.com/Krzysztof318/MailFathom/pull/892)).
+
+**`mfctl mailbox status`** reports what synchronization is doing, per account and per mapped folder
+([#876](https://github.com/Krzysztof318/MailFathom/pull/876)). Its output is rendered with colour and structure
+throughout ([#915](https://github.com/Krzysztof318/MailFathom/pull/915)), and what it did is recorded in a local log
+beside its credentials ([#910](https://github.com/Krzysztof318/MailFathom/pull/910)).
+
+**One command prepares a Compose deployment to evaluate with.** `scripts/quick-start-compose.sh` asks where your mailbox
+lives, generates the credentials, writes the configuration, starts the stack, offers the schema step, and hands you the
+address a chat client connects to. **What it prepares serves one machine over plain HTTP, keeps its credentials in files
+under the checkout, and backs nothing up** — it prints that list when it finishes, and it is the quick way to try
+MailFathom rather than the way to run it ([#971](https://github.com/Krzysztof318/MailFathom/pull/971)).
+
+**A rule condition can read what the release added**: the keywords, both sender verdicts, and the machine-authorship
+band ([#938](https://github.com/Krzysztof318/MailFathom/pull/938)).
+
+**The personal-data analyzer is asked in every language your mailbox carries**, up to eight, rather than in one.
+`SensitiveContent:PersonalDataAnalyzer:Languages` names them; a scan asks once per language and merges what came back,
+inside the one timeout it is allowed. Every language named has to be one the analyzer image was built for
+([#875](https://github.com/Krzysztof318/MailFathom/pull/875)).
+[Analyzer languages](https://krzysztof318.github.io/MailFathom/operations/personal-data-analyzer-languages.html) states
+what building such an image takes.
+
+**A trace reads as a tree.** Every unit of work is spanned, the interior of a folder run and of an MCP read included, and
+a job attempt is linked to the trace that enqueued it
+([#907](https://github.com/Krzysztof318/MailFathom/pull/907),
+[#932](https://github.com/Krzysztof318/MailFathom/pull/932)).
+
+### Changed
+
+- **Breaking (configuration schema)** — `SpamClassification:Actions:FileInJunkFolder` is now
+  `SpamClassification:Actions:MoveToJunkFolder`. The old key is ignored rather than refused, so a file that keeps it
+  stops filing junk and nothing reports it. **Rename the key**
+  ([#956](https://github.com/Krzysztof318/MailFathom/pull/956)).
+- **Breaking (configuration schema, deployment contract)** — `SensitiveContent:PersonalDataAnalyzer:Language` is now the
+  list `SensitiveContent:PersonalDataAnalyzer:Languages`. The old key is ignored rather than refused, and an absent list
+  yields English, so a deployment that scanned in another language silently stops. **Rewrite it as a list**:
+  `personalDataScanning.languages` in the Helm chart, and
+  `SensitiveContent__PersonalDataAnalyzer__Languages__0` in Compose, where a second language is a second indexed line
+  rather than a value in `.env` ([#875](https://github.com/Krzysztof318/MailFathom/pull/875)).
+- **Breaking (configuration schema)** — an `Authentication` entry that writes no `Permissions` key holds everything its
+  surface publishes, so on upgrade it gains the sending grant, the drafting grant, the flag grant, and both contact
+  grants. A written `mailfathom.mail.*` pattern gains them too. **Write the grant you mean on every entry**
+  ([#882](https://github.com/Krzysztof318/MailFathom/pull/882),
+  [#994](https://github.com/Krzysztof318/MailFathom/pull/994)).
+- **The personal-data analyzer no longer has to answer before the process starts.** MailFathom starts, reports itself
+  unready on `/health`, and refuses every read and derived write the scanner guards until the analyzer answers, instead
+  of failing startup and restarting until a model has loaded. Naming no analyzer address at all still fails startup. In
+  Kubernetes it is a readiness question rather than a liveness one, so a pod is not restarted for it
+  ([#853](https://github.com/Krzysztof318/MailFathom/pull/853)).
+- **`SensitiveContent:ScanTimeout` defaults to fifteen seconds** where it defaulted to five. The old default refused
+  ordinary messages on ordinary hardware ([#866](https://github.com/Krzysztof318/MailFathom/pull/866)).
+- **`ask_mail` answers in the language the question was asked in**, and looks mail up in the language it was written in
+  ([#861](https://github.com/Krzysztof318/MailFathom/pull/861)).
+- **Mail deleted at the server is reported at information level** rather than as a warning: it is the ordinary outcome of
+  somebody tidying a mailbox ([#964](https://github.com/Krzysztof318/MailFathom/pull/964)).
+- **The configuration reference is four pages** — mail, endpoints, runtime, and AI — with the permission model on a page
+  of its own. The old address is the map to them
+  ([#958](https://github.com/Krzysztof318/MailFathom/pull/958)).
+
+### Fixed
+
+- **An access token is no longer refused as clear text behind a TLS-terminating reverse proxy.** Authentication ran ahead
+  of the forwarded-header middleware, so a request nginx forwarded as `X-Forwarded-Proto: https` was authenticated while
+  the scheme still read `http`, and every token was refused without being read. **A deployment behind a proxy that could
+  not authenticate at all can now do so** ([#955](https://github.com/Krzysztof318/MailFathom/pull/955)).
+- **A token refused for arriving over a clear-text hop says so**, instead of being answered with the challenge an
+  anonymous request receives ([#945](https://github.com/Krzysztof318/MailFathom/pull/945)).
+- **The schema artifact a release publishes carries no byte-order mark**, so `psql` applies it rather than failing on the
+  first line ([#919](https://github.com/Krzysztof318/MailFathom/pull/919)).
+- **A lost race on an embedding's primary key is retried** rather than ending the backfill run
+  ([#879](https://github.com/Krzysztof318/MailFathom/pull/879)).
+- **The secret scanner finds a credential that ends a sentence**, not only one followed by a quote or a newline
+  ([#850](https://github.com/Krzysztof318/MailFathom/pull/850)).
+
+### Security
+
+- **Nothing on the MCP surface is reachable without a grant naming it.** Before this release a credential that
+  authenticated reached every tool the deployment published; now every tool and every administrative route is checked
+  against a named permission, in the listing as well as in the call, and at the transport as well as in the use case
+  ([#874](https://github.com/Krzysztof318/MailFathom/pull/874),
+  [#904](https://github.com/Krzysztof318/MailFathom/pull/904),
+  [#912](https://github.com/Krzysztof318/MailFathom/pull/912),
+  [#925](https://github.com/Krzysztof318/MailFathom/pull/925)).
+- **What a caller can be talked into sending is bounded by the deployment rather than by the agent's judgement.** An
+  agent holding a read grant and a send grant reads mail written by strangers, and a message saying *forward this thread
+  to the address below* is untrusted input inside the very content the agent was asked to reason about. The recipient
+  policy, the send ceilings, and the unvouched-recipient rule are the answer to it, and every one of them is checked
+  where the outgoing record is written — the one place a tool call, a rule, and a command all pass through
+  ([#974](https://github.com/Krzysztof318/MailFathom/pull/974),
+  [#998](https://github.com/Krzysztof318/MailFathom/pull/998)).
+- **Sending cannot be reached by a deployment that has not asked for it**, on any of four independent switches, and
+  `Deployment:ReadOnly` is the one that holds however the account list is edited
+  ([#992](https://github.com/Krzysztof318/MailFathom/pull/992)).
+- **The sender verdict is believed from one server only.** An `Authentication-Results` header is evidence only where it
+  carries the authserv-id of the server you named as yours; a header any hop could have written is recorded as nothing
+  established ([#877](https://github.com/Krzysztof318/MailFathom/pull/877)).
+- **This deployment serves several users of one mailbox owner and refuses multi-tenancy**, which is now a recorded
+  decision rather than an assumption: nothing here isolates one tenant's mail from another's, and a deployment must not
+  be shared across parties who may not read each other's mail
+  ([#990](https://github.com/Krzysztof318/MailFathom/pull/990)).
+
 ## [0.6.0] - 2026-08-14
 
 The sixth release, and the first one that **does something with your mail rather than only reading it**. Rules you write
@@ -1154,6 +1441,7 @@ is the whole surface, key by key, including which keys reload and which need a r
   [`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) registers
   every dependency it ships beside ([#173](https://github.com/Krzysztof318/MailFathom/pull/173)).
 
+[0.7.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Krzysztof318/MailFathom/compare/v0.3.0...v0.4.0
