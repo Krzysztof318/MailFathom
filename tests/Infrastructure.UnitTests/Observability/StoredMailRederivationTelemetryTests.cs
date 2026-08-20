@@ -4,13 +4,13 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Diagnostics.Metrics;
 using System.Globalization;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Common.Observability;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Observability;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
@@ -25,6 +25,14 @@ namespace MailFathom.Infrastructure.UnitTests.Observability;
 /// </remarks>
 public sealed class StoredMailRederivationTelemetryTests : IDisposable
 {
+    private const string RederivedInstrumentName = "mailfathom.mail.rederivation.rederived";
+
+    private const string UnreadableInstrumentName = "mailfathom.mail.rederivation.unreadable";
+
+    private const string MissingContentInstrumentName = "mailfathom.mail.rederivation.missing_content";
+
+    private const string PassDurationInstrumentName = "mailfathom.mail.rederivation.pass.duration";
+
     private readonly FakeTimeProvider timeProvider = new(new DateTimeOffset(2026, 8, 18, 12, 0, 0, TimeSpan.Zero));
     private readonly ConcurrentBag<Activity> published = [];
     private readonly ActivityListener listener;
@@ -188,7 +196,11 @@ public sealed class StoredMailRederivationTelemetryTests : IDisposable
         var telemetry = new StoredMailRederivationTelemetry(this.timeProvider);
         var account = MailAccountId.Create("rederive-counts");
 
-        using var collector = new MeasurementCollector(account);
+        using var measurements = new RecordedMailFathomMeasurements(
+            RederivedInstrumentName,
+            UnreadableInstrumentName,
+            MissingContentInstrumentName,
+            PassDurationInstrumentName);
 
         // Act
         using (var run = telemetry.BeginRun(account, folderAlias: null))
@@ -203,10 +215,10 @@ public sealed class StoredMailRederivationTelemetryTests : IDisposable
         Assert.Equal(
             [500d, 2d, 3d, 9d],
             [
-                collector.Sum("mailfathom.mail.rederivation.rederived"),
-                collector.Sum("mailfathom.mail.rederivation.unreadable"),
-                collector.Sum("mailfathom.mail.rederivation.missing_content"),
-                collector.Sum("mailfathom.mail.rederivation.pass.duration"),
+                Walked(measurements, RederivedInstrumentName, account).Sum(),
+                Walked(measurements, UnreadableInstrumentName, account).Sum(),
+                Walked(measurements, MissingContentInstrumentName, account).Sum(),
+                Walked(measurements, PassDurationInstrumentName, account).Sum(),
             ]);
     }
 
@@ -221,7 +233,9 @@ public sealed class StoredMailRederivationTelemetryTests : IDisposable
         var telemetry = new StoredMailRederivationTelemetry(this.timeProvider);
         var account = MailAccountId.Create("rederive-clean");
 
-        using var collector = new MeasurementCollector(account);
+        using var measurements = new RecordedMailFathomMeasurements(
+            UnreadableInstrumentName,
+            MissingContentInstrumentName);
 
         // Act
         using (var run = telemetry.BeginRun(account, folderAlias: null))
@@ -232,8 +246,8 @@ public sealed class StoredMailRederivationTelemetryTests : IDisposable
         }
 
         // Assert
-        Assert.Empty(collector.Read("mailfathom.mail.rederivation.unreadable"));
-        Assert.Empty(collector.Read("mailfathom.mail.rederivation.missing_content"));
+        Assert.Empty(Walked(measurements, UnreadableInstrumentName, account));
+        Assert.Empty(Walked(measurements, MissingContentInstrumentName, account));
     }
 
     /// <summary>
@@ -247,7 +261,9 @@ public sealed class StoredMailRederivationTelemetryTests : IDisposable
         var telemetry = new StoredMailRederivationTelemetry(this.timeProvider);
         var account = MailAccountId.Create("rederive-cancelled");
 
-        using var collector = new MeasurementCollector(account);
+        using var measurements = new RecordedMailFathomMeasurements(
+            PassDurationInstrumentName,
+            RederivedInstrumentName);
 
         // Act
         using (var run = telemetry.BeginRun(account, folderAlias: null))
@@ -258,9 +274,22 @@ public sealed class StoredMailRederivationTelemetryTests : IDisposable
         }
 
         // Assert
-        Assert.Empty(collector.Read("mailfathom.mail.rederivation.pass.duration"));
-        Assert.Empty(collector.Read("mailfathom.mail.rederivation.rederived"));
+        Assert.Empty(Walked(measurements, PassDurationInstrumentName, account));
+        Assert.Empty(Walked(measurements, RederivedInstrumentName, account));
     }
+
+    /// <summary>Selects the values one instrument published for the scope one test walked, out of what the meter recorded.</summary>
+    private static IReadOnlyList<double> Walked(
+        RecordedMailFathomMeasurements measurements,
+        string instrumentName,
+        MailAccountId account) =>
+        [
+            .. measurements.Read(instrumentName)
+                .Where(measurement => Equals(
+                    measurement.Tags.GetValueOrDefault(StoredMailRederivationTelemetry.AccountTagName),
+                    account.Value))
+                .Select(measurement => measurement.Value),
+        ];
 
     private Activity OnlyPass() => Assert.Single(
         this.published,
@@ -270,63 +299,4 @@ public sealed class StoredMailRederivationTelemetryTests : IDisposable
         this.published,
         activity => activity.OperationName == spanName
             && Equals(activity.GetTagItem(StoredMailRederivationTelemetry.AccountTagName), account.Value));
-
-    /// <summary>Reads what the re-derivation instruments published for one account.</summary>
-    private sealed class MeasurementCollector : IDisposable
-    {
-        private readonly MeterListener listener = new();
-
-        // Concurrent because the listener is enabled for every instrument on MailFathom's one meter, so any other test
-        // class publishing to it writes here while this one reads — which a plain list reports as a modified collection.
-        private readonly ConcurrentQueue<(string InstrumentName, double Value)> measurements = [];
-
-        private readonly MailAccountId account;
-
-        internal MeasurementCollector(MailAccountId account)
-        {
-            this.account = account;
-            this.listener.InstrumentPublished = (instrument, activeListener) =>
-            {
-                if (StringComparer.Ordinal.Equals(instrument.Meter.Name, Telemetry.Name))
-                {
-                    activeListener.EnableMeasurementEvents(instrument);
-                }
-            };
-            this.listener.SetMeasurementEventCallback<long>(this.Record);
-            this.listener.SetMeasurementEventCallback<double>(this.Record);
-            this.listener.Start();
-        }
-
-        public void Dispose() => this.listener.Dispose();
-
-        /// <summary>Returns what one instrument published for this collector's account, in order.</summary>
-        internal IReadOnlyList<double> Read(string instrumentName) =>
-            [
-                .. this.measurements.ToArray()
-                    .Where(measurement => StringComparer.Ordinal.Equals(measurement.InstrumentName, instrumentName))
-                    .Select(measurement => measurement.Value),
-            ];
-
-        /// <summary>Returns the total one instrument published for this collector's account.</summary>
-        internal double Sum(string instrumentName) => this.Read(instrumentName).Sum();
-
-        private void Record<TMeasurement>(
-            Instrument instrument,
-            TMeasurement measurement,
-            ReadOnlySpan<KeyValuePair<string, object?>> tags,
-            object? state)
-            where TMeasurement : struct
-        {
-            var walked = tags.ToArray().Any(tag =>
-                StringComparer.Ordinal.Equals(tag.Key, StoredMailRederivationTelemetry.AccountTagName)
-                && Equals(tag.Value, this.account.Value));
-
-            if (walked)
-            {
-                this.measurements.Enqueue((
-                    instrument.Name,
-                    Convert.ToDouble(measurement, CultureInfo.InvariantCulture)));
-            }
-        }
-    }
 }

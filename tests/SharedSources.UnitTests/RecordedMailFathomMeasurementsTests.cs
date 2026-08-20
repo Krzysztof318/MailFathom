@@ -87,6 +87,25 @@ public sealed class RecordedMailFathomMeasurementsTests
         Assert.Equal([7d], measurements.ValuesOf(InstrumentName));
     }
 
+    /// <summary>A gauge reading is the state the instrument is in now, so an earlier one must not still be there.</summary>
+    [Fact]
+    public void ObserveGaugesAfresh_ASecondReading_KeepsOnlyWhatTheGaugeReportsNow()
+    {
+        // Arrange
+        const string InstrumentName = "mailfathom.test.reobserved.gauge";
+        var reported = 4L;
+        Telemetry.Meter.CreateObservableGauge(InstrumentName, () => reported);
+        using var measurements = new RecordedMailFathomMeasurements(InstrumentName);
+        measurements.ObserveGauges();
+
+        // Act
+        reported = 9L;
+        measurements.ObserveGaugesAfresh();
+
+        // Assert
+        Assert.Equal([9d], measurements.ValuesOf(InstrumentName));
+    }
+
     /// <summary>A dimension an instrument never published reads as absent rather than as an empty value.</summary>
     [Fact]
     public void DimensionOf_ATagTheMeasurementDidNotCarry_ReadsAsAbsent()
