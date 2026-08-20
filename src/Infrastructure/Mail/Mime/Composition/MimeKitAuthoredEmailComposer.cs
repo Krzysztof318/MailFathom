@@ -413,7 +413,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
         }
 
         var placed = new List<PlacedRecipient>(authoredRecipients.Count);
-        var alreadyPlaced = new HashSet<EmailAddress>();
+        var placementsByAddress = new Dictionary<EmailAddress, int>();
 
         foreach (var authoredRecipient in authoredRecipients.OrderBy(static recipient => recipient.Role))
         {
@@ -432,13 +432,30 @@ internal sealed class MimeKitAuthoredEmailComposer(
                     field);
             }
 
-            if (alreadyPlaced.Add(address))
+            if (placementsByAddress.TryGetValue(address, out var placement))
             {
-                placed.Add(new PlacedRecipient(
-                    OutgoingRecipient.Create(address, authoredRecipient.Role, authoredRecipient.Contact),
-                    address.DisplayName,
-                    authoredRecipient.Provenance));
+                // A mailbox named twice is offered once, and the mention that decides how it is judged is the strictest
+                // of them. A caller that also wrote down an address this system derived has named that address, and
+                // naming it is exactly what the sending governance weighs — so the redundant mention narrows the
+                // placement rather than being dropped whole. Keeping the derived reading would let a caller buy an
+                // address the vouching would otherwise judge, by mentioning somebody the answered message already
+                // named; the direct send judges the list before this dedup and would refuse the same message.
+                if (authoredRecipient.Provenance is AuthoredRecipientProvenance.NamedByCaller)
+                {
+                    placed[placement] = placed[placement] with
+                    {
+                        Provenance = AuthoredRecipientProvenance.NamedByCaller,
+                    };
+                }
+
+                continue;
             }
+
+            placementsByAddress.Add(address, placed.Count);
+            placed.Add(new PlacedRecipient(
+                OutgoingRecipient.Create(address, authoredRecipient.Role, authoredRecipient.Contact),
+                address.DisplayName,
+                authoredRecipient.Provenance));
         }
 
         if (requireRecipients && placed.Count == 0)

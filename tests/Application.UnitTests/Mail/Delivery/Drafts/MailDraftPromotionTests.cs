@@ -521,9 +521,11 @@ public sealed class MailDraftPromotionTests
             return session;
         });
 
+        // One attempt, so the policy is exhausted by the first conflict. A second would await a jittered delay drawn
+        // from the system clock, which the claim here — that the audit was written before the mark — needs nothing of.
         return new OptimisticConcurrencyRetryPolicy(
             sessionFactory,
-            new PersistenceConcurrencyOptions(),
+            new PersistenceConcurrencyOptions { MaximumCommitAttempts = 1 },
             TimeProvider.System);
     }
 

@@ -332,6 +332,77 @@ public sealed class MimeKitAuthoredEmailComposerTests
         Assert.Empty(ParseDraft(composition).To);
     }
 
+    /// <summary>
+    /// A mailbox named twice is offered once, and the mention that survives on the composed draft is the strictest one:
+    /// a caller that also wrote down an address this system derived has named that address, and naming it is what the
+    /// sending governance weighs. A promotion judging the derived reading would admit a recipient the same reply sent
+    /// outright is refused for, because the direct send is judged before this dedup.
+    /// </summary>
+    [Fact]
+    public void ComposeDraft_AddressBothDerivedAndNamedByTheCaller_RecordsItAsNamedByTheCaller()
+    {
+        // Arrange
+        var composer = CreateComposer();
+        var authored = Authored() with
+        {
+            Recipients =
+            [
+                new AuthoredEmailRecipient(
+                    OutgoingRecipientRole.To,
+                    "anna@example.test",
+                    Provenance: AuthoredRecipientProvenance.DerivedFromAnsweredEmail),
+                new AuthoredEmailRecipient(
+                    OutgoingRecipientRole.To,
+                    "anna@example.test",
+                    Provenance: AuthoredRecipientProvenance.NamedByCaller),
+            ],
+        };
+
+        // Act
+        var composition = composer.ComposeDraft(Account, authored, Capabilities());
+
+        // Assert
+        var recipient = Assert.Single(composition.Draft!.Recipients);
+        Assert.Equal("anna@example.test", recipient.Recipient.Address.Address);
+        Assert.Equal(AuthoredRecipientProvenance.NamedByCaller, recipient.Provenance);
+        Assert.Single(ParseDraft(composition).To);
+    }
+
+    /// <summary>
+    /// The narrowing runs one way only. An address the caller named that the answered message also named stays the
+    /// caller's word, and one only this system derived is not turned into the caller's by a second derived mention.
+    /// </summary>
+    [Fact]
+    public void ComposeDraft_AddressDerivedTwice_StaysDerivedFromTheAnsweredEmail()
+    {
+        // Arrange
+        var composer = CreateComposer();
+        var authored = Authored() with
+        {
+            Recipients =
+            [
+                new AuthoredEmailRecipient(
+                    OutgoingRecipientRole.To,
+                    "anna@example.test",
+                    Provenance: AuthoredRecipientProvenance.DerivedFromAnsweredEmail),
+                new AuthoredEmailRecipient(
+                    OutgoingRecipientRole.Cc,
+                    "anna@example.test",
+                    Provenance: AuthoredRecipientProvenance.DerivedFromAnsweredEmail),
+            ],
+        };
+
+        // Act
+        var composition = composer.ComposeDraft(Account, authored, Capabilities());
+
+        // Assert
+        var recipient = Assert.Single(composition.Draft!.Recipients);
+        Assert.Equal(
+            AuthoredRecipientProvenance.DerivedFromAnsweredEmail,
+            recipient.Provenance);
+        Assert.Equal(OutgoingRecipientRole.To, recipient.Recipient.Role);
+    }
+
     /// <summary>A draft is otherwise the same message a send is, down to the headers this system owns.</summary>
     [Fact]
     public void ComposeDraft_AuthoredMessage_WritesTheSameHeadersASendWould()
