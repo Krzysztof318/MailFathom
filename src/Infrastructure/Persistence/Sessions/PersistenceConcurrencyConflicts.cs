@@ -51,9 +51,19 @@ internal static class PersistenceConcurrencyConflicts
     /// is that a different reindex is already running.
     /// </para>
     /// <para>
-    /// The next is the mutation identity's case once more, for the account's whole-mailbox rule run: two requests
-    /// for an account that has never had one reach the database together, and the retry reads back the run the
-    /// winner asked for instead of the second caller starting a second walk of one mailbox.
+    /// The next two are the mutation identity's case once more, for the account's whole-mailbox runs — the rule run
+    /// and the classification run, each keyed by the account because an account has one of either outstanding. Two
+    /// requests for an account that has never had one reach the database together, and the retry reads back the run
+    /// the winner asked for instead of the second caller starting a second walk of one mailbox. The two are listed
+    /// together because they are one shape: a run table keyed by the account is exactly the write that loses this
+    /// race, so the next one added belongs here on the day its key does.
+    /// </para>
+    /// <para>
+    /// The next is the one classification an occurrence carries, and it is that convergence a message at a time: an
+    /// arrival classifies an occurrence while a run's pass or a reclassification reaches the same one, both read that
+    /// nothing is recorded, and the loser violates the key. The retry re-reads, finds the winner's record, and
+    /// replaces it in place — which is how classifying one message twice leaves one verdict beside the signals it
+    /// rests on rather than a provider failure ending the pass that lost.
     /// </para>
     /// <para>
     /// The last two are one message met by two writers, at the two stages that write per passage. The passage
@@ -133,6 +143,8 @@ internal static class PersistenceConcurrencyConflicts
                 or MailFathomDbContext.EmbeddingProfileFingerprintUniqueIndexName
                 or MailFathomDbContext.EmbeddingProfileLifecycleUniqueIndexName
                 or MailFathomDbContext.MailRuleEvaluationRunPrimaryKeyConstraintName
+                or MailFathomDbContext.SpamClassificationRunPrimaryKeyConstraintName
+                or MailFathomDbContext.EmailSpamClassificationPrimaryKeyConstraintName
                 or MailFathomDbContext.EmailChunkOrdinalUniqueIndexName
                 or MailFathomDbContext.EmailEmbeddingPrimaryKeyConstraintName
                 or MailFathomDbContext.MailRederivationPositionPrimaryKeyConstraintName

@@ -24,6 +24,8 @@ public sealed class PersistenceConcurrencyConflictsTests
         MailFathomDbContext.EmbeddingProfileFingerprintUniqueIndexName,
         MailFathomDbContext.EmbeddingProfileLifecycleUniqueIndexName,
         MailFathomDbContext.MailRuleEvaluationRunPrimaryKeyConstraintName,
+        MailFathomDbContext.SpamClassificationRunPrimaryKeyConstraintName,
+        MailFathomDbContext.EmailSpamClassificationPrimaryKeyConstraintName,
         MailFathomDbContext.EmailChunkOrdinalUniqueIndexName,
         MailFathomDbContext.EmailEmbeddingPrimaryKeyConstraintName,
         MailFathomDbContext.MailRederivationPositionPrimaryKeyConstraintName,
