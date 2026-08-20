@@ -99,6 +99,13 @@ public sealed class MailDraftPromotion
     /// unpromoted, because a read cannot see a write that has not happened yet.
     /// </para>
     /// <para>
+    /// It answers that way while the draft is being given up as well, which is the state a successful promotion leads
+    /// to rather than an exception to it: delivery is what discards a promoted draft, and the copy leaves the folder
+    /// over a network round trip after the mark is written. A retry crossing that window is asking about a message
+    /// that was sent, so it is told which record carries it; only a draft this deployment holds nothing for, or one
+    /// given up without ever having been sent, is refused as not found.
+    /// </para>
+    /// <para>
     /// What settles that is the request's own identity, which is why this takes no key from whoever asked. A draft is
     /// promoted once, so the draft is the act — two callers promoting one draft compose one identity, the outbox
     /// answers the second with the record the first opened, and the two of them then write that same record onto the
@@ -112,15 +119,24 @@ public sealed class MailDraftPromotion
     {
         this.authorization.RequirePermission(MailFathomPermission.MailSend);
 
-        if (await this.drafts.FindAsync(draftId, cancellationToken) is not { IsDiscarded: false } draft)
+        if (await this.drafts.FindAsync(draftId, cancellationToken) is not { } draft)
         {
             throw MailDraftRefusedException.NotFound();
         }
 
+        // Read before the draft is judged for having been given up, because a promoted draft is given up by its own
+        // delivery: the mark is written when the message has left, and the copy is taken out of the folder over a
+        // network round trip after it. A caller retrying across that window asks about a message that was sent, and
+        // answering it with "no such draft" would be this system denying a delivery it performed.
         if (draft.PromotedTo is { } alreadyPromoted)
         {
             return await this.outgoingEmails.FindAsync(alreadyPromoted, cancellationToken)
                 ?? throw MailDraftRefusedException.NotFound();
+        }
+
+        if (draft.IsDiscarded)
+        {
+            throw MailDraftRefusedException.NotFound();
         }
 
         if (!draft.IsAddressed)

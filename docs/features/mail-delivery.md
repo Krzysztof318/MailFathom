@@ -937,11 +937,14 @@ at the promotion rather than at the writing**: whether sending is on for the acc
 somebody this deployment may write to, the ceilings, and the size bound. A draft written a month before an operator
 tightened one of those is refused by the tightened one. A draft addressed to nobody is refused here too, with
 `28017` `MailDraftNotAddressed`, which is the one refusal that is about the draft rather than about the deployment. A
-draft this deployment does not hold — never written, already given up, or another account's — answers `53008`
-`MailDraftNotFound` whichever of the three it is, so nothing learns which drafts exist by asking about them.
+draft this deployment does not hold — never written, given up without ever having been sent, or another account's —
+answers `53008` `MailDraftNotFound` whichever of the three it is, so nothing learns which drafts exist by asking about
+them.
 
 **Promoting one draft sends one message, however many callers ask.** A draft that already names its record answers with
-that record, which is what a caller whose first answer never reached it is told. Two callers arriving together are the
+that record, which is what a caller whose first answer never reached it is told — including while the draft is being
+given up, because that is what a delivered send does to the draft it came from and the copy leaves the folder over a
+round trip after the mark is written. Two callers arriving together are the
 case that read cannot settle — neither of them can see a write that has not happened yet — so the request's identity is
 the draft rather than a key whoever asked supplies: their two asks compose one identity, and the outbox answers the
 second with the record the first opened. It is the same mechanism [an occasion of a repeated

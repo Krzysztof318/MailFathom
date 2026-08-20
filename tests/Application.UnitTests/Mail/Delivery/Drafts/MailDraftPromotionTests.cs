@@ -78,6 +78,32 @@ public sealed class MailDraftPromotionTests
     }
 
     /// <summary>
+    /// A draft is given up by the very delivery its promotion produced, and taking its copy out of the folder is a
+    /// network round trip after that mark. A caller retrying across that window is asking about a message that was
+    /// sent, so it is told which record carries it rather than that no such draft exists.
+    /// </summary>
+    [Fact]
+    public async Task PromoteAsync_DraftAlreadyGivenUpByItsOwnDelivery_StillAnswersWithTheRecordItProduced()
+    {
+        // Arrange
+        var harness = Harness();
+        var draft = await SaveAsync(harness, "the message as written");
+        var promotion = PromotionOver(harness);
+        var first = await promotion.PromoteAsync(draft.Id, CancellationToken.None);
+        await harness.Drafts.RecordDiscardedAsync(
+            Substitute.For<IPersistenceSession>(),
+            draft.Id,
+            Moment,
+            CancellationToken.None);
+
+        // Act
+        var retried = await promotion.PromoteAsync(draft.Id, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(first.Id, retried.Id);
+    }
+
+    /// <summary>
     /// Two callers arriving together both find the draft unpromoted, because a read cannot see a write that has not
     /// happened yet. What makes their two asks one message is the request's identity, which is the draft itself.
     /// </summary>
