@@ -8,6 +8,7 @@ using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence.Entities;
+using MailFathom.Infrastructure.Persistence.Mutations;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using Microsoft.EntityFrameworkCore;
 
@@ -59,6 +60,7 @@ internal sealed class MailRuleExecutionStore(
     }
 
     /// <inheritdoc />
+    /// <remarks>The read takes one row past the page, for the reason <see cref="KeysetPageSplit" /> states.</remarks>
     public async Task<MailRuleExecutionPage> ReadPageAsync(
         MailRuleExecutionQuery query,
         CancellationToken cancellationToken)
@@ -75,13 +77,10 @@ internal sealed class MailRuleExecutionStore(
             .Include(execution => execution.Actions)
             .OrderByDescending(execution => execution.EvaluatedAt)
             .ThenByDescending(execution => execution.Id)
-
-            // One more than the page holds, which is how the answer says whether a following page exists without a
-            // second count query over the same filtered set.
             .Take(query.PageSize + 1)
             .ToArrayAsync(cancellationToken);
 
-        var pageEntities = entities.Take(query.PageSize).ToArray();
+        var (pageEntities, hasMore) = KeysetPageSplit.Of(entities, query.PageSize);
         var executions = new List<MailRuleExecution>(pageEntities.Length);
         var unreadableCount = 0;
 
@@ -107,7 +106,7 @@ internal sealed class MailRuleExecutionStore(
         // either side of it.
         return new MailRuleExecutionPage(
             executions,
-            entities.Length > query.PageSize && pageEntities.Length > 0
+            hasMore
                 ? MailRuleExecutionCursor.After(
                     pageEntities[^1].EvaluatedAt,
                     MailRuleExecutionId.Create(pageEntities[^1].Id),
@@ -116,6 +115,10 @@ internal sealed class MailRuleExecutionStore(
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The bounded set is read first and deleted by key, for the reason
+    /// <see cref="MailboxMutationAuditEntryStore.EraseCompletedBeforeAsync" /> states.
+    /// </remarks>
     public async Task<int> EraseEvaluatedBeforeAsync(
         MailAccountId accountId,
         DateTimeOffset evaluatedBefore,
@@ -126,10 +129,6 @@ internal sealed class MailRuleExecutionStore(
 
         var accountValue = accountId.Value;
 
-        // The bounded set is read first and deleted by key, rather than bounding the delete itself: PostgreSQL has no
-        // `DELETE ... LIMIT`, so a bound expressed on the delete either fails to translate or becomes a subquery whose
-        // shape depends on the provider. Two statements over the same index cost one extra round trip and keep the
-        // statement that takes row locks small enough to state.
         var expiringIds = await readContext.MailRuleExecutions
             .AsNoTracking()
             .Where(execution => execution.MailboxAccountId == accountValue && execution.EvaluatedAt < evaluatedBefore)

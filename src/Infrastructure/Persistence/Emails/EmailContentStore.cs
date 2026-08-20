@@ -58,10 +58,7 @@ internal sealed class EmailContentStore(
 
         read.Found(storedContent.RawMime.LongLength);
 
-        return new StoredEmailContent(
-            storedContent.RawMime.AsMemory(),
-            storedContent.MimeByteLength,
-            storedContent.Sha256Hash.AsMemory());
+        return storedContent.ToStoredContent();
     }
 
     /// <inheritdoc />
@@ -238,12 +235,7 @@ internal sealed class EmailContentStore(
             .Select(content => new StoredEmailContentRow(content.RawMime, content.MimeByteLength, content.Sha256Hash))
             .SingleOrDefaultAsync(cancellationToken);
 
-        return storedContent is null
-            ? null
-            : new StoredEmailContent(
-                storedContent.RawMime.AsMemory(),
-                storedContent.MimeByteLength,
-                storedContent.Sha256Hash.AsMemory());
+        return storedContent?.ToStoredContent();
     }
 
     /// <inheritdoc />
@@ -315,12 +307,7 @@ internal sealed class EmailContentStore(
             .Select(draft => new StoredEmailContentRow(draft.DraftMime, draft.DraftByteLength, draft.Sha256Hash))
             .SingleOrDefaultAsync(cancellationToken);
 
-        return storedDraft is null
-            ? null
-            : new StoredEmailContent(
-                storedDraft.RawMime.AsMemory(),
-                storedDraft.MimeByteLength,
-                storedDraft.Sha256Hash.AsMemory());
+        return storedDraft?.ToStoredContent();
     }
 
     /// <inheritdoc />
@@ -427,12 +414,7 @@ internal sealed class EmailContentStore(
             .Select(content => new StoredEmailContentRow(content.RawMime, content.MimeByteLength, content.Sha256Hash))
             .SingleOrDefaultAsync(cancellationToken);
 
-        return storedContent is null
-            ? null
-            : new StoredEmailContent(
-                storedContent.RawMime.AsMemory(),
-                storedContent.MimeByteLength,
-                storedContent.Sha256Hash.AsMemory());
+        return storedContent?.ToStoredContent();
     }
 
     private static void EnsureOccurrenceMatches(

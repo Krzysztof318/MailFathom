@@ -4,9 +4,9 @@
 
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
-using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
+using MailFathom.Infrastructure.Persistence.Delivery;
 using MailFathom.Infrastructure.Persistence.Entities;
 
 namespace MailFathom.Infrastructure.Persistence.Mutations;
@@ -56,11 +56,11 @@ internal static class MailboxMutationRecordMapping
             Stage = entity.Stage,
             IsAudited = entity.AuditTrailEnabled,
             RequiresSourceRemoval = entity.RequiresSourceRemoval,
-            Placement = ToPlacement(entity),
+            Placement = StoredRemotePlacement.Of(entity.PlacementUidValidity, entity.PlacementUid),
             AttemptCount = entity.AttemptCount,
             RecordedAt = entity.RecordedAt,
             StageChangedAt = entity.StageChangedAt,
-            LastFailure = ToFailure(entity),
+            LastFailure = StoredFailureCode.ToErrorCode(entity.LastFailureCode),
             PlacementObservedAt = entity.PlacementObservedAt,
             SourceRemovalObservedAt = entity.SourceRemovalObservedAt,
         };
@@ -149,26 +149,5 @@ internal static class MailboxMutationRecordMapping
             ? destinationPath
             : throw new InvalidOperationException(
                 $"Mailbox mutation record {entity.Id} carries a destination folder path that names no folder.");
-    }
-
-    private static RemoteEmailPlacement ToPlacement(MailboxMutationEntity entity) =>
-        entity is { PlacementUidValidity: { } uidValidity, PlacementUid: { } uid }
-            ? RemoteEmailPlacement.Reported(ImapUidValidity.Create(uidValidity), ImapUid.Create(uid))
-            : RemoteEmailPlacement.NotReported();
-
-    /// <summary>Reads back the code of the failure the last attempt ended in.</summary>
-    /// <remarks>
-    /// A number this build does not recognize is a row written by one that allocated a code since. It is diagnostic
-    /// detail rather than something acted on, so it is reported as absent instead of failing the read of every other
-    /// mutation the account has.
-    /// </remarks>
-    private static MailFathomErrorCode? ToFailure(MailboxMutationEntity entity)
-    {
-        if (entity.LastFailureCode is not { } failureCode)
-        {
-            return null;
-        }
-
-        return MailFathomErrorCode.TryParse(failureCode, out var failure) ? failure : null;
     }
 }

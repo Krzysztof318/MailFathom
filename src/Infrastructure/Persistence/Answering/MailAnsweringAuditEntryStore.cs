@@ -9,6 +9,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence.Entities;
+using MailFathom.Infrastructure.Persistence.Mutations;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using Microsoft.EntityFrameworkCore;
 
@@ -64,6 +65,7 @@ internal sealed class MailAnsweringAuditEntryStore(
     }
 
     /// <inheritdoc />
+    /// <remarks>The read takes one row past the page, for the reason <see cref="KeysetPageSplit" /> states.</remarks>
     public async Task<MailAnsweringAuditPage> ReadPageAsync(
         MailAnsweringAuditQuery query,
         CancellationToken cancellationToken)
@@ -80,13 +82,10 @@ internal sealed class MailAnsweringAuditEntryStore(
             .Include(record => record.Emails)
             .OrderByDescending(record => record.CompletedAt)
             .ThenByDescending(record => record.Id)
-
-            // One more than the page holds, which is how the answer says whether a following page exists without a
-            // second count query over the same filtered set.
             .Take(query.PageSize + 1)
             .ToArrayAsync(cancellationToken);
 
-        var pageEntities = entities.Take(query.PageSize).ToArray();
+        var (pageEntities, hasMore) = KeysetPageSplit.Of(entities, query.PageSize);
         var entries = new List<MailAnsweringAuditEntry>(pageEntities.Length);
         var unreadableCount = 0;
 
@@ -111,7 +110,7 @@ internal sealed class MailAnsweringAuditEntryStore(
         // costs its own place in the page and nothing else: the walk neither stalls on it nor repeats the rows around it.
         return new MailAnsweringAuditPage(
             entries,
-            entities.Length > query.PageSize && pageEntities.Length > 0
+            hasMore
                 ? MailAnsweringAuditCursor.After(
                     pageEntities[^1].CompletedAt,
                     MailAnsweringAuditEntryId.Create(pageEntities[^1].Id),
@@ -120,6 +119,10 @@ internal sealed class MailAnsweringAuditEntryStore(
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The bounded set is read first and deleted by key, for the reason
+    /// <see cref="MailboxMutationAuditEntryStore.EraseCompletedBeforeAsync" /> states.
+    /// </remarks>
     public async Task<int> EraseCompletedBeforeAsync(
         MailAccountId accountId,
         DateTimeOffset completedBefore,
@@ -130,10 +133,6 @@ internal sealed class MailAnsweringAuditEntryStore(
 
         var accountValue = accountId.Value;
 
-        // The bounded set is read first and deleted by key, rather than bounding the delete itself: PostgreSQL has no
-        // `DELETE ... LIMIT`, so a bound expressed on the delete either fails to translate or becomes a subquery whose
-        // shape depends on the provider. Two statements over the same index cost one extra round trip and keep the
-        // statement that takes row locks small enough to state.
         var expiringIds = await readContext.MailAnsweringAuditEntries
             .AsNoTracking()
             .Where(record => record.MailboxAccountId == accountValue && record.CompletedAt < completedBefore)

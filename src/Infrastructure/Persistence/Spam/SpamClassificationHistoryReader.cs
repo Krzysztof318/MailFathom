@@ -29,6 +29,7 @@ namespace MailFathom.Infrastructure.Persistence.Spam;
 internal sealed class SpamClassificationHistoryReader(MailFathomDbContext dbContext) : ISpamClassificationHistoryReader
 {
     /// <inheritdoc />
+    /// <remarks>The read takes one row past the page, for the reason <see cref="KeysetPageSplit" /> states.</remarks>
     public async Task<SpamClassificationHistoryPage> ReadPageAsync(
         SpamClassificationHistoryQuery query,
         CancellationToken cancellationToken)
@@ -41,9 +42,6 @@ internal sealed class SpamClassificationHistoryReader(MailFathomDbContext dbCont
             .Where(classification => classification.StoredEmail!.MailboxAccountId == accountValue)
             .OrderByDescending(classification => classification.EvaluatedAt)
             .ThenByDescending(classification => classification.StoredEmailId)
-
-            // One more than the page holds, which is how the answer says whether a following page exists without a
-            // second count query over the same filtered set.
             .Take(query.PageSize + 1)
             .Select(classification => new ClassificationRow(
                 classification.StoredEmailId,
@@ -61,7 +59,7 @@ internal sealed class SpamClassificationHistoryReader(MailFathomDbContext dbCont
                     .ToList()))
             .ToArrayAsync(cancellationToken);
 
-        var pageRows = rows.Take(query.PageSize).ToArray();
+        var (pageRows, hasMore) = KeysetPageSplit.Of(rows, query.PageSize);
         var requestedMutations = await this.ReadRequestedMutationsAsync(pageRows, cancellationToken);
 
         var entries = pageRows
@@ -82,7 +80,7 @@ internal sealed class SpamClassificationHistoryReader(MailFathomDbContext dbCont
 
         return new SpamClassificationHistoryPage(
             entries,
-            rows.Length > query.PageSize && pageRows.Length > 0
+            hasMore
                 ? SpamClassificationHistoryCursor.After(
                     pageRows[^1].EvaluatedAt,
                     StoredEmailId.Create(pageRows[^1].StoredEmailId),
