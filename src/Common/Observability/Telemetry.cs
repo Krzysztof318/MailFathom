@@ -33,6 +33,20 @@ namespace MailFathom.Common.Observability;
 /// cardinality rule as much as a privacy one, because every one of those would open a time series per message or per
 /// person.
 /// </para>
+/// <para>
+/// A publisher choosing a word for one of its own dimensions writes it in <c>snake_case</c>, and writes an outcome as a
+/// past participle: <c>succeeded</c>, <c>failed</c>, <c>cancelled</c>, <c>lease_lost</c>, <c>outcome_unknown</c>. This
+/// is stated once because the cost of a second spelling is not local to the publisher that invents it — a family
+/// writing <c>lease-lost</c> where another writes <c>lease_lost</c> is two words for one ending, and a panel written
+/// against either one silently answers for half the deployment. The same rule is why one dimension keeps one key
+/// wherever it is published: a folder is <c>mailfathom.mail.folder</c> in every family, so a query written against one
+/// subsystem can be reused against the next.
+/// </para>
+/// <para>
+/// It governs the words a publisher chooses, not the ones it carries in. A value that arrives already named — a domain
+/// identity such as a mutation's own name, or a word a protocol contract publishes — is published exactly as it is
+/// named there, because renaming it for a dashboard would put a second spelling into the world rather than remove one.
+/// </para>
 /// </remarks>
 public static class Telemetry
 {

@@ -15,6 +15,12 @@ namespace MailFathom.Infrastructure.Observability;
 /// mutation is counted rather than dropping the operation out of the record entirely.
 /// </para>
 /// <para>
+/// A mutation that ended without completing while the caller's token was cancelled is published as cancelled rather
+/// than failed. Shutdown is what produces it, and a rolling restart that reads as a burst of failed writes is a
+/// dashboard telling an operator about their own deployment restarting; what such a mutation cost the mailbox is
+/// decided from the change's own durable record, which is where a half-applied write is resolved anyway.
+/// </para>
+/// <para>
 /// The outcome is the only thing the counter is broken down by beyond the mutation itself. Which protocol path ran is
 /// deliberately not a dimension, because a dimension is exactly the thing that would let a dashboard tell a native
 /// relocation from a fallback one; it is written to the debug log instead, where somebody diagnosing a broken fallback
@@ -29,6 +35,7 @@ internal sealed class MailboxMutationScope : IDisposable
     private readonly MailFolderAlias folderAlias;
     private readonly Activity? activity;
     private readonly long startingTimestamp;
+    private readonly CancellationToken cancellationToken;
 
     private bool succeeded;
     private bool reported;
@@ -39,7 +46,8 @@ internal sealed class MailboxMutationScope : IDisposable
         MailAccountId accountId,
         MailFolderAlias folderAlias,
         Activity? activity,
-        long startingTimestamp)
+        long startingTimestamp,
+        CancellationToken cancellationToken)
     {
         this.telemetry = telemetry;
         this.operationName = operationName;
@@ -47,6 +55,7 @@ internal sealed class MailboxMutationScope : IDisposable
         this.folderAlias = folderAlias;
         this.activity = activity;
         this.startingTimestamp = startingTimestamp;
+        this.cancellationToken = cancellationToken;
     }
 
     /// <summary>Records which protocol path is carrying the mutation, as debug detail and nowhere else.</summary>
@@ -80,16 +89,25 @@ internal sealed class MailboxMutationScope : IDisposable
 
         this.reported = true;
 
+        var outcome = this.succeeded
+            ? MailboxMutationTelemetry.SucceededOutcomeName
+            : this.cancellationToken.IsCancellationRequested
+                ? MailboxMutationTelemetry.CancelledOutcomeName
+                : MailboxMutationTelemetry.FailedOutcomeName;
+
         if (!this.succeeded)
         {
-            this.activity?.SetStatus(ActivityStatusCode.Error);
+            this.activity?.SetStatus(
+                outcome == MailboxMutationTelemetry.CancelledOutcomeName
+                    ? ActivityStatusCode.Unset
+                    : ActivityStatusCode.Error);
         }
 
         this.telemetry.RecordOutcome(
             this.operationName,
             this.accountId,
             this.folderAlias,
-            this.succeeded,
+            outcome,
             this.telemetry.ElapsedSince(this.startingTimestamp));
 
         this.activity?.Dispose();

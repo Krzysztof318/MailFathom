@@ -154,9 +154,10 @@ public sealed class EmailEmbeddingTelemetry
     /// <summary>Names the failure, or says there was none, so the tag stays present on every series.</summary>
     /// <remarks>
     /// A tag left off some of the measurements and set on others produces two time series for one instrument, which a
-    /// dashboard reads as a gap rather than as an absence.
+    /// dashboard reads as a gap rather than as an absence. <see cref="EmailEmbeddingBackfillTelemetry" /> publishes the
+    /// same dimension and calls this rather than restating it, so one failure has one word in both families.
     /// </remarks>
-    private static string FailureTagOf(EmbeddingGenerationFailure? failure) => failure switch
+    internal static string FailureTagOf(EmbeddingGenerationFailure? failure) => failure switch
     {
         EmbeddingGenerationFailure.CredentialRejected => "credential_rejected",
         EmbeddingGenerationFailure.RateLimited => "rate_limited",
