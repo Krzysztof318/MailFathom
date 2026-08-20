@@ -195,13 +195,12 @@ public sealed class MailDraftPromotion
         // written before a policy tightened cannot be sent past it.
         var opened = await this.outbox.EnqueueAsync(request, content.RawMime, cancellationToken);
 
-        await this.retryPolicy.CommitAsync(
-            (session, token) => this.drafts.RecordPromotedAsync(session, draftId, opened.Record.Id, token),
-            cancellationToken);
-
-        // Only where this call is what wrote the record down, for the reason a submission audits only then: the outbox
-        // answers a repeated request with the record it already has, and auditing that again would report one message
-        // as having left twice.
+        // Before the mark rather than after it, and only where this call is what wrote the record down. The enqueue
+        // above committed the record and its message, so the send is on its way whatever happens next — and a mark that
+        // then fails to commit leaves a retry that finds the draft unpromoted, is answered with the record that already
+        // exists, and is therefore not the call that would audit it. Auditing here is what keeps a message that left
+        // from leaving no trail; the record it names is durable, which is the whole of what the audit is about. A
+        // repeated request is not audited again, because that would report one message as having left twice.
         if (opened.WasRecordedNow)
         {
             await this.governor.RecordAsync(
@@ -210,6 +209,10 @@ public sealed class MailDraftPromotion
                 opened.Record,
                 cancellationToken);
         }
+
+        await this.retryPolicy.CommitAsync(
+            (session, token) => this.drafts.RecordPromotedAsync(session, draftId, opened.Record.Id, token),
+            cancellationToken);
 
         return opened.Record;
     }

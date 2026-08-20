@@ -8,6 +8,7 @@ using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
+using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
@@ -150,6 +151,57 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
         Assert.Null(await FindAsync(services, edited.Id, cancellationToken));
     }
 
+    /// <summary>
+    /// Where each of a draft's addresses came from survives the round trip through PostgreSQL, which is what the
+    /// promotion's answer is built from months later.
+    /// </summary>
+    /// <remarks>
+    /// It is here rather than in the unit suite because only the real mapping can be wrong about it: every
+    /// Application-level test writes through an in-memory store, so a column the insert never sets or a read that
+    /// answers with the CLR default would leave both suites green. What that costs is the whole point of persisting
+    /// the value — on a deployment refusing unvouched recipients, a promoted draft of a reply would be refused for
+    /// naming somebody the answered message itself named.
+    /// </remarks>
+    [Fact]
+    public async Task OpenAsync_RecipientsFromDifferentSources_ReadsEachProvenanceBack()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+
+        var recipients = new[]
+        {
+            RecipientNamed("caller@mailfathom.test", AuthoredRecipientProvenance.NamedByCaller),
+            RecipientNamed("answered@mailfathom.test", AuthoredRecipientProvenance.DerivedFromAnsweredEmail),
+            RecipientNamed("book@mailfathom.test", AuthoredRecipientProvenance.ResolvedFromContactBook),
+        };
+
+        MailDraftRecord? opened = null;
+
+        // Act
+        var commit = await services.CommitAsync(
+            async (scope, session, token) => opened = await scope.GetRequiredService<IMailDraftStore>().OpenAsync(
+                session,
+                SyntheticMailAccount.AccountId,
+                OutgoingEmailRequester.Command($"provenance-{Guid.NewGuid():N}"),
+                recipients,
+                mimeByteLength: 128,
+                DateTimeOffset.UnixEpoch,
+                token),
+            cancellationToken);
+
+        // Assert
+        Assert.Equal(PersistenceCommitResult.Committed, commit);
+        Assert.NotNull(opened);
+
+        var stored = await FindAsync(services, opened.Id, cancellationToken);
+        Assert.NotNull(stored);
+        Assert.Equal(
+            recipients.Select(recipient => (recipient.Recipient.Address.Address, recipient.Provenance)),
+            stored.Recipients.Select(recipient => (recipient.Recipient.Address.Address, recipient.Provenance)));
+    }
+
     /// <summary>Recognizes one of this test's own messages among whatever the folder holds.</summary>
     private static Predicate<ObservedEmail> Named(string subject) => message => message.Subject == subject;
 
@@ -206,6 +258,16 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
         return new MailDraftRecipient(
             OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To),
             AuthoredRecipientProvenance.NamedByCaller);
+    }
+
+    /// <summary>Addresses a draft to one mailbox, saying where the address came from.</summary>
+    private static MailDraftRecipient RecipientNamed(string address, AuthoredRecipientProvenance provenance)
+    {
+        Assert.True(EmailAddress.TryCreate(displayName: null, address, out var parsed));
+
+        return new MailDraftRecipient(
+            OutgoingRecipient.Create(parsed, OutgoingRecipientRole.To),
+            provenance);
     }
 
     /// <summary>Builds a synthetic message whose subject is how a test recognizes its own draft.</summary>

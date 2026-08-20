@@ -1689,8 +1689,14 @@ duplication nothing downstream can withdraw. That is what `idempotentHint` `true
 ### Every bound is asked now rather than when the draft was written
 
 Whether sending is on for the account, whether every recipient is somebody this deployment may write to, the ceilings,
-and the size bound are all asked at the promotion. A draft composed a month before an operator tightened one of them is
-refused by the one that holds today, and **a promotion that fails leaves the draft exactly as it was**.
+and the size bound are all asked at the promotion. So are the two bounds that are about the caller rather than the
+deployment: this caller's own ceiling for the period, and — where an operator set `MailDelivery:UnvouchedRecipients` to
+`Refuse` — the posture on a recipient nothing here vouches for, which answers `53009`. A draft records where each of its
+addresses came from, so promoting a drafted reply is judged as that reply would have been and promoting a message
+addressed to somebody the caller wrote out itself is judged as that call would have been, against the contact book as it
+stands now. A draft written before this deployment kept that answer is judged as the caller's own word throughout. A
+draft composed a month before an operator tightened one of them is refused by the one that holds today, and **a
+promotion that fails leaves the draft exactly as it was**.
 
 **The draft is not deleted when this answers.** The message is queued rather than sent, so the copy stands in the
 owner's folder until the message has actually been delivered and is taken out in the same pass that files the sent
@@ -1714,9 +1720,10 @@ name that is blank or carries a control character, a subject carrying a line bre
 composed from, and an answer naming none of the three answers are `51013`; too many recipients or a body past the
 configured bound is `51014` naming the number; an account this deployment does not serve is `53001`; an account with no
 `Delivery` block behind a promotion is `56002`; an email that cannot be answered is `53005` for
-[the four reasons a reply gives](#what-a-reply-and-a-forward-refuse); and a draft asked to be sent that names nobody is
-`53010` `MailDraftNotAddressed` — the one refusal that is about the draft rather than about the deployment, whose
-remedy is `update_draft` rather than a second save.
+[the four reasons a reply gives](#what-a-reply-and-a-forward-refuse); a promotion naming a recipient the caller wrote
+out itself that nothing here vouches for is `53009`, on a deployment whose `MailDelivery:UnvouchedRecipients` is
+`Refuse`; and a draft asked to be sent that names nobody is `53010` `MailDraftNotAddressed` — the one refusal that is
+about the draft rather than about the deployment, whose remedy is `update_draft` rather than a second save.
 
 Every one of them names a field, a bound, or a count and never a value, so no refusal carries an address, a subject, or
 a line of what somebody wrote.

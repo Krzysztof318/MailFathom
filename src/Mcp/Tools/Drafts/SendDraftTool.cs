@@ -25,10 +25,12 @@ namespace MailFathom.Mcp.Tools.Drafts;
 /// to reach it and unable to see it in a listing.
 /// </para>
 /// <para>
-/// The requirements are the use case's rather than this file's, and they are the same three a direct send meets: the
-/// caller's own ceiling for the period, the deployment's posture on a recipient nothing here vouches for, and the audit
-/// row naming who dispatched what. The draft kept where each of its addresses came from so that the second of those is
-/// asked of the promotion exactly as it was asked of the message that composed it.
+/// The requirements are the use case's rather than this file's, and they are the same three a message sent outright
+/// meets: the caller's own ceiling for the period, the deployment's posture on a recipient nothing here vouches for,
+/// and the audit row naming who dispatched what. All three are asked here and nowhere earlier — writing a draft is
+/// admitted under the drafting grant and reaches none of them, because nothing has been offered to anybody yet. What
+/// makes them answerable at the promotion is that the draft kept where each of its addresses came from, so an address
+/// derived from a message being answered is still not read as the caller's own word months later.
 /// </para>
 /// <para>
 /// <b>The call never transmits.</b> The promotion writes an ordinary outgoing record carrying the bytes the draft

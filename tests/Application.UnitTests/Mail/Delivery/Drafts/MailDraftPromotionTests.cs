@@ -346,6 +346,34 @@ public sealed class MailDraftPromotionTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// The mark that names the send on the draft is written after the record is already durable, so a mark that never
+    /// commits leaves a message on its way. It is audited before that mark for exactly this reason: the retry it leads
+    /// to finds the draft unpromoted, is answered with the record that already exists, and would therefore never be the
+    /// call that recorded it.
+    /// </summary>
+    [Fact]
+    public async Task PromoteAsync_MarkThatNeverCommits_StillRecordsTheSendThatLeft()
+    {
+        // Arrange
+        var harness = Harness();
+        var draft = await SaveAsync(harness, "the message as written");
+        var auditor = Substitute.For<IAuthoredSendAuditor>();
+        var promotion = PromotionOver(
+            harness,
+            sendGovernor: AuthoredSendGovernors.Governing(auditor: auditor),
+            draftMarkPolicy: ConflictingPolicy());
+
+        // Act
+        await Assert.ThrowsAsync<PersistenceConcurrencyConflictException>(
+            () => promotion.PromoteAsync(draft.Id, CancellationToken.None));
+
+        // Assert
+        await auditor.Received(1).RecordAuthoredSendAsync(
+            Arg.Is<AuthoredSend>(send => send != null && send.Act == AuthoredSendAct.PromotedDraft),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>Nothing is held under an identifier this system never minted, so a promotion of one is refused.</summary>
     [Fact]
     public async Task PromoteAsync_DraftThisSystemNeverWrote_IsRefused()
@@ -416,7 +444,8 @@ public sealed class MailDraftPromotionTests
         IEmailContentStore? contentStore = null,
         OutgoingEmailBounds? bounds = null,
         OutgoingMailGovernor? governor = null,
-        AuthoredSendGovernor? sendGovernor = null)
+        AuthoredSendGovernor? sendGovernor = null,
+        OptimisticConcurrencyRetryPolicy? draftMarkPolicy = null)
     {
         var store = outgoingEmails ?? new InMemoryOutgoingEmailStore();
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
@@ -449,7 +478,7 @@ public sealed class MailDraftPromotionTests
             harness.Contents,
             outbox,
             store,
-            retryPolicy,
+            draftMarkPolicy ?? retryPolicy,
             bounds ?? Bounds(),
             sendGovernor ?? AuthoredSendGovernors.Permitting(),
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend));
@@ -478,6 +507,25 @@ public sealed class MailDraftPromotionTests
                 Encoding.ASCII.GetBytes($"Subject: a draft\r\n\r\n{body}").AsMemory()),
             revises: null,
             CancellationToken.None);
+
+    /// <summary>Builds a commit policy whose every attempt conflicts, which exhausts it and raises.</summary>
+    private static OptimisticConcurrencyRetryPolicy ConflictingPolicy()
+    {
+        var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
+        sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            var session = Substitute.For<IPersistenceSession>();
+            session.CommitAsync(Arg.Any<CancellationToken>())
+                .Returns(PersistenceCommitResult.ConcurrencyConflict);
+
+            return session;
+        });
+
+        return new OptimisticConcurrencyRetryPolicy(
+            sessionFactory,
+            new PersistenceConcurrencyOptions(),
+            TimeProvider.System);
+    }
 
     private static MailDraftRecipient Recipient(
         AuthoredRecipientProvenance provenance = AuthoredRecipientProvenance.NamedByCaller)
