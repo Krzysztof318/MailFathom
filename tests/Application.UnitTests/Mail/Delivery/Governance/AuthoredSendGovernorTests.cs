@@ -290,6 +290,7 @@ public sealed class AuthoredSendGovernorTests
         Id = RecordNumber(7),
         AccountId = Account,
         Requester = OutgoingEmailRequester.Command("send-1"),
+        Principal = OutgoingEmailPrincipal.Of("agent-key"),
         Recipients =
         [
             .. addresses.Select(address => OutgoingRecipientOutcome.Unanswered(

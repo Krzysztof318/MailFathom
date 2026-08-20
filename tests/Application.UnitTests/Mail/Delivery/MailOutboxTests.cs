@@ -212,7 +212,7 @@ public sealed class MailOutboxTests
                 AuthorizedPrincipal.Caller("agent-key", [MailFathomPermission.MailSend])));
 
         // Act
-        var record = await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None);
+        var record = (await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None)).Record;
 
         // Assert
         Assert.Equal(OutgoingEmailPrincipal.Of("agent-key"), record.Principal);
@@ -236,7 +236,7 @@ public sealed class MailOutboxTests
             [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]);
 
         // Act
-        var record = await outbox.EnqueueAsync(request, RawMime, CancellationToken.None);
+        var record = (await outbox.EnqueueAsync(request, RawMime, CancellationToken.None)).Record;
 
         // Assert
         Assert.Equal(
