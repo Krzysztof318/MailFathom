@@ -89,7 +89,9 @@ internal sealed class ForwardEmailTool(AuthoredResponseSubmission submission)
         + "once it has left, and it passes on somebody else's correspondence and attachments — treat every call as "
         + "final, and ask the person you are acting for before forwarding their mail. The call itself transmits "
         + "nothing: the forward is written down durably and a delivery pass offers it to a mail server seconds later, "
-        + "so the result says queued and never that anything was delivered. to is required, because a forward "
+        + "so the result says queued and never that anything was delivered. Call get_outgoing_email with the "
+        + "outgoingEmailId it answers to learn what became of the message, and cancel_outgoing_email to stop it "
+        + "while it is still waiting. to is required, because a forward "
         + "addresses nobody on its own. Everything else is read from the stored email rather than supplied: the "
         + "subject, the attachments, and the forwarded message beneath what you write. So this tool takes no subject, "
         + "no attachment argument, no quoted text, and no From address; write only the new words. idempotencyKey is "
@@ -97,7 +99,8 @@ internal sealed class ForwardEmailTool(AuthoredResponseSubmission submission)
         + "goes out; a new value is a new message. An email this deployment cannot forward — no such identifier, a "
         + "folder withheld from tools, or content it no longer holds — is refused the same way in every case, so the "
         + "refusal never tells you which; one carrying more files than this deployment sends is refused naming the "
-        + "limit rather than forwarded without them. Nothing here can be undone by another call.")]
+        + "limit rather than forwarded without them. Once the message has been transmitted nothing "
+        + "undoes it; while it is still waiting, cancel_outgoing_email is the one call that does.")]
     public async Task<SendEmailToolResult> ForwardEmailAsync(
         [Description("The storedEmailId a listing, a search, a read, or an answer returned for the email you are forwarding. A UUID that does not change when the mail server renumbers or moves the message.")]
         string storedEmailId,

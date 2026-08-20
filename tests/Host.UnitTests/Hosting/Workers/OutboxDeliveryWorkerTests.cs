@@ -302,6 +302,7 @@ public sealed class OutboxDeliveryWorkerTests
                 Id = OutgoingEmailId.Create(Guid.CreateVersion7()),
                 AccountId = accountId,
                 Requester = OutgoingEmailRequester.Command($"mfctl-{Guid.CreateVersion7()}"),
+                Principal = OutgoingEmailPrincipal.Of("caller"),
                 Recipients = [OutgoingRecipientOutcome.Unanswered(
                     OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To))],
                 Stage = OutgoingEmailStage.Recorded,

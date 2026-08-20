@@ -44,6 +44,7 @@ using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Scheduling;
 using MailFathom.Application.Mail.Delivery.Submission;
+using MailFathom.Application.Mail.Delivery.Tracking;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
@@ -778,6 +779,8 @@ public static class ServiceCollectionExtensions
         // every one of them. It holds no delivery session and cannot open one, which is what keeps asking to send from
         // ever becoming transmitting.
         services.AddScoped<AuthoredMailSubmission>();
+        services.AddScoped<OutgoingMailReader>();
+        services.AddScoped<OutgoingMailCancellation>();
         // The same three steps for the two sends that begin from mail already held, composed from the authoring
         // registered above rather than from an account and a recipient list: a reply is addressed by the message it
         // answers. It holds no delivery session either, for the same reason the submission beside it does not.

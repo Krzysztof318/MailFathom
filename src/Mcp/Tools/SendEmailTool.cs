@@ -87,14 +87,17 @@ internal sealed class SendEmailTool(AuthoredMailSubmission submission)
         + "strangers' mailboxes and CANNOT be recalled, edited, or deleted once it has left — treat every call as "
         + "final, and ask the person you are acting for before sending on their behalf. The call itself transmits "
         + "nothing: the message is written down durably and a delivery pass offers it to a mail server seconds later, "
-        + "so the result says queued and never that anything was delivered. idempotencyKey is required and is what "
-        + "makes a retry safe: send the same value again for the same message and one message goes out; a new value is "
+        + "so the result says queued and never that anything was delivered. Call get_outgoing_email with the "
+        + "outgoingEmailId it answers to learn what became of the message, and cancel_outgoing_email to stop it "
+        + "while it is still waiting. idempotencyKey is required and is what makes a retry safe: send the same value "
+        + "again for the same message and one message goes out; a new value is "
         + "a new message. The From address is not an argument — the message is sent as the account you name, from the "
         + "address its configuration declares — and the account must be one this deployment configured for sending, or "
         + "the call is refused. This tool will not attach files, will not reply to or forward an existing message, "
         + "will not schedule a send for later, and will not send to a mailing list: a message is addressed to at most a "
         + "few dozen people, which the deployment configures. Recipients are named by address; naming somebody from "
-        + "the contact book is not accepted here. Nothing here can be undone by another call.")]
+        + "the contact book is not accepted here. Once the message has been transmitted nothing "
+        + "undoes it; while it is still waiting, cancel_outgoing_email is the one call that does.")]
     public async Task<SendEmailToolResult> SendEmailAsync(
         [Description("The account to send as, named by the accountId or the display name list_accounts returned. Its configuration decides the From address, which you never supply. An account this deployment does not serve, or serves without a sending configuration, refuses the call.")]
         string account,

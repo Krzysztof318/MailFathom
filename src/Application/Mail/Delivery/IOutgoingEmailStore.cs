@@ -43,20 +43,23 @@ public interface IOutgoingEmailStore
     /// <summary>Writes the intent down, or reads back the record that already holds this idempotency identity.</summary>
     /// <param name="session">The session the write joins.</param>
     /// <param name="request">The send that was asked for.</param>
+    /// <param name="principal">Whoever asked for it, as the record will remember them.</param>
     /// <param name="mimeByteLength">How many bytes of MIME are being stored for this message.</param>
     /// <param name="cancellationToken">Cancels the write or the read that precedes it.</param>
     /// <returns>The record for this request, whether this call created it or an earlier one did.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="request" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" />, <paramref name="request" />, or <paramref name="principal" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="mimeByteLength" /> is not positive.</exception>
     /// <remarks>
     /// The record starts at <see cref="OutgoingEmailStage.Recorded" /> with every recipient unanswered and no attempt
     /// counted, so opening one sends nothing by itself. An identity that already has a record is answered with that
-    /// record unchanged — including its recipients and its recorded length — because the message a retry transmits has
-    /// to be the one a previous attempt may already have begun transmitting.
+    /// record unchanged — including its recipients, its recorded length, and the principal the first request was made
+    /// under — because the message a retry transmits has to be the one a previous attempt may already have begun
+    /// transmitting.
     /// </remarks>
     Task<OutgoingEmailRecord> OpenAsync(
         IPersistenceSession session,
         OutgoingEmailRequest request,
+        OutgoingEmailPrincipal principal,
         long mimeByteLength,
         CancellationToken cancellationToken);
 

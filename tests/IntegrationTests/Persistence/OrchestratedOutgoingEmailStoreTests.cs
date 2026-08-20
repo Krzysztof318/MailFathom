@@ -36,6 +36,14 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
 {
     private static readonly MailAccountId Account = SyntheticMailAccount.AccountId;
 
+    /// <summary>The principal the orchestrated caller's sends are recorded under, which is the identity the harness admits it as.</summary>
+    private static readonly OutgoingEmailPrincipal OrchestratedCallerPrincipal =
+        OutgoingEmailPrincipal.Of("orchestrated-caller");
+
+    /// <summary>The principal a record written directly through the store is stamped with.</summary>
+    /// <remarks>Only the two direct <c>OpenAsync</c> calls below supply it; everything else here goes through the outbox, which reads the principal from whatever admitted the send.</remarks>
+    private static readonly OutgoingEmailPrincipal Principal = OutgoingEmailPrincipal.Of("outbox-identity-race");
+
     [Fact]
     public async Task OpenAsync_ForTheSameIdentityInTwoConcurrentSessions_IsRefusedByTheDatabaseAndLeavesOneRecord()
     {
@@ -56,9 +64,9 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
                 // Both open before either commits, which is the whole point: neither transaction can see the other's
                 // pending row, so both reach the insert and only the index can refuse one.
                 await firstScope.GetRequiredService<IOutgoingEmailStore>()
-                    .OpenAsync(first, request, MimeOf("race").Length, token);
+                    .OpenAsync(first, request, Principal, MimeOf("race").Length, token);
                 await secondScope.GetRequiredService<IOutgoingEmailStore>()
-                    .OpenAsync(second, request, MimeOf("race").Length, token);
+                    .OpenAsync(second, request, Principal, MimeOf("race").Length, token);
 
                 return (First: await first.CommitAsync(token), Second: await second.CommitAsync(token));
             },
@@ -351,6 +359,37 @@ public sealed class OrchestratedOutgoingEmailStoreTests(MailFathomOrchestrationF
             cancellationToken);
         Assert.Equal(0, remainingRecipientCount);
     }
+
+    /// <summary>The principal a record is written under has to survive the round trip, because equality with it is what confines a read to one caller.</summary>
+    /// <remarks>
+    /// A column is the one place the value can be lost without anything failing: a row that read back as nobody would
+    /// hide every send from the caller that queued it, and a row that read back as something else would hide it just as
+    /// completely. Only a real read of a real column establishes either way.
+    /// </remarks>
+    [Fact]
+    public async Task FindAsync_ForARecordACallerQueued_ReadsBackThePrincipalItWasQueuedUnder()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var request = CreateRequest("outbox-principal-round-trip", "iris@example.test");
+        var enqueued = await EnqueueAsync(services, request, MimeOf("principal-round-trip"), cancellationToken);
+
+        // Act
+        var found = await FindAsync(services, enqueued.Id, cancellationToken);
+
+        // Assert
+        Assert.NotNull(found);
+        Assert.Equal(OrchestratedCallerPrincipal, found.Principal);
+    }
+
+    /// <summary>Reads one record back the way the tools over a queued send do.</summary>
+    private static Task<OutgoingEmailRecord?> FindAsync(
+        OrchestratedMailFathomServices services,
+        OutgoingEmailId outgoingEmailId,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IOutgoingEmailStore>().FindAsync(outgoingEmailId, token),
+            cancellationToken);
 
     /// <summary>Claims one named record the way a delivery pass does, and fails the test when the claim missed it.</summary>
     private static async Task<ClaimedOutgoingEmail> ClaimAsync(

@@ -297,8 +297,10 @@ A connected client's tool listing should show at least six tools — `list_accou
 `set_mail_flags`, which marks, stars, and labels a message and announces itself as neither read-only nor confined to
 this process, and as destructive because a keyword replacement states the whole set; and `send_email`,
 `reply_to_email`, and `forward_email`, which announce
-themselves the same way and are destructive on the other ground — each takes nothing away and nothing takes it back — and
-beside them the six contact
+themselves the same way and are destructive on the other ground — each takes nothing away and nothing takes it back.
+Beside those, `get_outgoing_email` reports what became of a message one of them queued and advertises itself as
+read-only, and `cancel_outgoing_email` stops one that has not left yet, advertising itself as destructive and — unlike
+the sending tools — as confined to this process, since stopping a message reaches nobody. Then the six contact
 tools over the deployment's own contact book, of which four change state
 and two —
 `update_contact`, which replaces a whole record, and `delete_contact`, which erases one — announce themselves as

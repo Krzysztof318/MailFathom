@@ -104,7 +104,7 @@ public sealed class MailOutbox(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        this.RequireAdmittedToSend(request.Requester.Origin);
+        var principal = this.RequireAdmittedToSend(request.Requester.Origin);
 
         if (rawMime.IsEmpty)
         {
@@ -125,6 +125,7 @@ public sealed class MailOutbox(
                 var opened = await outgoingEmails.OpenAsync(
                     session,
                     request,
+                    principal,
                     rawMime.Length,
                     attemptCancellationToken);
 
@@ -210,6 +211,7 @@ public sealed class MailOutbox(
 
     /// <summary>Requires that whatever reached this outbox is the kind of act the request says asked for the send.</summary>
     /// <param name="origin">What the request states asked.</param>
+    /// <returns>Whoever asked, as the record will remember them.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when it is not.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the origin is one this method was never taught, which is a defect here rather than a refusal.</exception>
     /// <remarks>
@@ -231,8 +233,13 @@ public sealed class MailOutbox(
     /// present when it is composed. What the owner authorized was the declaration, at a boundary that asked them for
     /// the grant then, and the occasion that follows is this process acting on what they wrote down.
     /// </para>
+    /// <para>
+    /// It is also where the principal is established, rather than anywhere a request is built. Nobody states who asked
+    /// for a send: the record remembers what this deployment admitted, which is what makes reading a send back and
+    /// withdrawing one confined to whoever queued it instead of to whoever claims to have.
+    /// </para>
     /// </remarks>
-    private void RequireAdmittedToSend(OutgoingEmailOrigin origin)
+    private OutgoingEmailPrincipal RequireAdmittedToSend(OutgoingEmailOrigin origin)
     {
         switch (origin)
         {
@@ -253,5 +260,11 @@ public sealed class MailOutbox(
                     origin,
                     "The outgoing email origin names no act this outbox admits.");
         }
+
+        // Whichever branch admitted the send established that a principal is present, so an absent identity here would
+        // be a principal source contradicting the check that just passed rather than an unauthenticated caller.
+        return OutgoingEmailPrincipal.Of(authorization.PrincipalIdentity
+            ?? throw new InvalidOperationException(
+                "An admitted send reached the outbox under no identity, so nothing could be recorded as having asked for it."));
     }
 }

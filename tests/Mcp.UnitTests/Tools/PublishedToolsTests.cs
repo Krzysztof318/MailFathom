@@ -182,6 +182,25 @@ public sealed class PublishedToolsTests
         Assert.Equal(MailFathomPermission.MailSend, permission);
     }
 
+    /// <summary>Reading back what a caller queued, and stopping it, are part of sending rather than part of reading a mailbox.</summary>
+    /// <remarks>
+    /// A mapping naming the reading grant would offer a credential given a mailbox to read a tool that reports who this
+    /// mailbox wrote to and when, which is the disclosure the absence of a listing exists to prevent — reached one
+    /// identifier at a time instead of in a page.
+    /// </remarks>
+    [Theory]
+    [InlineData(GetOutgoingEmailTool.ToolName)]
+    [InlineData(CancelOutgoingEmailTool.ToolName)]
+    public void TryGetRequiredPermission_AToolOverAQueuedSend_RequiresTheSendGrant(string toolName)
+    {
+        // Act
+        var declared = PublishedTools.TryGetRequiredPermission(toolName, out var permission);
+
+        // Assert
+        Assert.True(declared);
+        Assert.Equal(MailFathomPermission.MailSend, permission);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

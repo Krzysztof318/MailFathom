@@ -32,6 +32,7 @@ internal static class OutgoingDeliveryFixture
             Id = OutgoingEmailId.Create(Guid.Parse("0198f0a0-1111-7000-8000-000000000001")),
             AccountId = MailAccountId.Create("work"),
             Requester = OutgoingEmailRequester.Command("mfctl-4f2a"),
+            Principal = OutgoingEmailPrincipal.Of("operator"),
             Recipients = recipients,
             Stage = stage,
             MimeByteLength = 4096,

@@ -434,6 +434,7 @@ public sealed class SendEmailToolTests
             .OpenAsync(
                 Arg.Any<IPersistenceSession>(),
                 Arg.Any<OutgoingEmailRequest>(),
+                Arg.Any<OutgoingEmailPrincipal>(),
                 Arg.Any<long>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -448,9 +449,10 @@ public sealed class SendEmailToolTests
                         Id = OutgoingEmailId.Create(Guid.CreateVersion7(Recorded)),
                         AccountId = request.AccountId,
                         Requester = request.Requester,
+                        Principal = call.ArgAt<OutgoingEmailPrincipal>(2),
                         Recipients = [.. request.Recipients.Select(OutgoingRecipientOutcome.Unanswered)],
                         Stage = OutgoingEmailStage.Recorded,
-                        MimeByteLength = call.ArgAt<long>(2),
+                        MimeByteLength = call.ArgAt<long>(3),
                         AttemptCount = 0,
                         RecordedAt = Recorded,
                         StageChangedAt = Recorded,
