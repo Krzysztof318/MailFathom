@@ -228,6 +228,20 @@ Skills format puts them. All of them are compared against the text parsed out of
 to the template that leaves the other files behind fails as a disagreement rather
 than quietly splitting the mark in two.
 
+A sixth case walks the same tree for a different reason: no tracked text file may
+carry a literal NUL byte. One makes the file binary to everything that reads it
+as text — `grep` reports no match where there is one, so a helper written inside
+such a file is invisible to the search a later session runs before writing its own
+copy of it, and `git diff` renders any change to it as `Binary files differ`, so
+the change arrives unreviewable. The escape that means the same character costs
+none of that: `\0` in a string, `'\0'` for the char. Which files are binary is
+read out of `.gitattributes` rather than from a list of extensions the check
+carries itself, because the repository declares that once already and a second
+list would stop silently at the first `.props`, `.slnx`, or Quadlet unit nobody
+remembered to add to it. Detection reads to the first NUL rather than asking git,
+whose own binary heuristic looks at the first 8000 bytes alone and reads a file
+carrying the byte further in as ordinary text.
+
 The suite runs in two places and the second one is not a convenience. `CI`'s
 `Workflow contracts` job runs it on every pull request, including a draft, and on
 every push to `main` after a merge, which is what makes these contracts a property
@@ -242,11 +256,15 @@ above keeps is the earlier verdict — a contract broken here is answered before
 push rather than after it — and the job is the same command against the same tree,
 so the two cannot disagree.
 
-That is also what decides when the full gate runs it. Every invariant the suite
-asserts is carried by a file no C# change can move: a licensing header outside
-`.cs`, a `describes:` marker, a table-of-contents entry, a link. So a branch that
-only added or edited C# files has nothing here to break, and the gate skips the
-suite for it. A path the branch removed or moved runs it whatever the path was,
+That is also what decides when the full gate runs it. All but one invariant the
+suite asserts is carried by a file no C# change can move: a licensing header
+outside `.cs`, a `describes:` marker, a table-of-contents entry, a link. So a
+branch that only added or edited C# files has almost nothing here to break, and
+the gate skips the suite for it. The exception is the NUL-byte sweep above, which
+reads every tracked text file rather than a list of extensions and so reads `.cs`
+too: a C#-only branch that plants one is answered by `CI` rather than by the
+local gate, which is the one verdict this skip defers instead of having nothing
+to ask for. A path the branch removed or moved runs it whatever the path was,
 because a marker and an entry name a path and the files that remain say nothing
 about one that left. So does a change list the script cannot determine, which is
 a repository state to fix rather than a verdict to guess at. `CI` is
