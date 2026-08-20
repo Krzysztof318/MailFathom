@@ -64,6 +64,7 @@ internal sealed class SyntheticMailAccount(
     IMailFolderMappingReader,
     IJunkMailFolderCatalog,
     ITrustedAuthenticationAuthorityReader,
+    ISenderTrustPolicyReader,
     IOutgoingSenderIdentityReader,
     IOutgoingMailFilingPolicyReader,
     IOutgoingSendPermissionReader
@@ -93,6 +94,7 @@ internal sealed class SyntheticMailAccount(
         "audit-trail-inbox",
         "authored-delete",
         "content-inventory",
+        "content-inventory-uid-space",
         "content-read",
         "content-store",
         "convergence-inbox",
@@ -121,6 +123,7 @@ internal sealed class SyntheticMailAccount(
         "persistence-session-retry",
         "push-watched",
         "reconciliation-erasure",
+        "reconciliation-keywords",
         "reconciliation-tombstone",
         "reconciliation-window",
         "relocation-source",
@@ -278,6 +281,15 @@ internal sealed class SyntheticMailAccount(
     /// </remarks>
     public TrustedAuthenticationAuthority GetTrustedAuthority(MailAccountId accountId) =>
         TrustedAuthenticationAuthority.None;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Nobody, for the reason the authority above is none: sender trust is judged from the authenticated author, and a
+    /// server writing no <c>Authentication-Results</c> header authenticates none of the mail this suite delivers. A
+    /// policy naming a recognized domain here would therefore change no verdict and only make the arrangement look like
+    /// it proved one. What the policy decides is settled in the unit suite, where an authenticated author can be stated.
+    /// </remarks>
+    public SenderTrustPolicy GetTrustPolicy(MailAccountId accountId) => SenderTrustPolicy.RecognizingNobody;
 
     /// <inheritdoc />
     /// <remarks>

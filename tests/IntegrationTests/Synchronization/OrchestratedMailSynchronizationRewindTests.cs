@@ -6,6 +6,7 @@ using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
@@ -86,9 +87,10 @@ public sealed class OrchestratedMailSynchronizationRewindTests(MailFathomOrchest
         var scope = new StoredMailScope(SyntheticMailAccount.AccountId, RewoundFolder.Alias);
 
         // Act
-        var rewound = await services.InScopeAsync(
+        var rewound = await services.AsCallerInScopeAsync(
             (serviceScope, token) => serviceScope.GetRequiredService<MailSynchronizationRewind>()
                 .RewindAsync(scope, token),
+            [MailFathomPermission.AdminOperate],
             cancellationToken);
 
         // Assert
@@ -112,9 +114,10 @@ public sealed class OrchestratedMailSynchronizationRewindTests(MailFathomOrchest
         var scope = new StoredMailScope(MailAccountId.Create("rewind-unknown-account"), null);
 
         // Act
-        var rewound = await services.InScopeAsync(
+        var rewound = await services.AsCallerInScopeAsync(
             (serviceScope, token) => serviceScope.GetRequiredService<MailSynchronizationRewind>()
                 .RewindAsync(scope, token),
+            [MailFathomPermission.AdminOperate],
             cancellationToken);
 
         // Assert

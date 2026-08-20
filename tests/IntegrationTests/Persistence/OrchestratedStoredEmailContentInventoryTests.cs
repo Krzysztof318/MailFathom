@@ -34,6 +34,14 @@ public sealed class OrchestratedStoredEmailContentInventoryTests(MailFathomOrche
 {
     private const string FolderAlias = "content-inventory";
 
+    /// <summary>The folder the UID-space test owns, so the row it stores cannot reach the queue the test above reads.</summary>
+    /// <remarks>
+    /// The queue read is answered per folder rather than per UID, so a second test storing an awaiting occurrence in this
+    /// class's own folder is reported by the first one whenever xUnit runs it first — as an extra UID in a window the
+    /// assertion says holds one. Distinct UIDs are not enough for that, which is what a folder of its own supplies.
+    /// </remarks>
+    private const string UidSpaceFolderAlias = "content-inventory-uid-space";
+
     private const uint AwaitingUid = 41;
 
     private const uint AvailableUid = 42;
@@ -96,7 +104,7 @@ public sealed class OrchestratedStoredEmailContentInventoryTests(MailFathomOrche
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, UidSpaceFolderAlias, cancellationToken);
         var stored = SyntheticEmail.OccurrenceIn(binding, ForeignUidValidityUid);
         await RecordAsync(services, stored, StoredEmailContentAvailability.AwaitingStorageHeadroom, cancellationToken);
 

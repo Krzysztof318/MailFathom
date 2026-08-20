@@ -10,6 +10,7 @@ using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -76,10 +77,11 @@ public sealed class OrchestratedHybridRetrievalTests(MailFathomOrchestrationFixt
         var seeded = await SeededMailboxAsync(services, cancellationToken);
 
         // Act
-        var hybrid = await services.InScopeAsync(
+        var hybrid = await services.AsCallerInScopeAsync(
             (scope, token) => scope.GetRequiredService<MailboxSearchReader>().SearchEmailsAsync(
                 SearchRequest(),
                 token),
+            [MailFathomPermission.MailRead],
             cancellationToken);
         var lexicalOnly = await LexicalCandidatesAsync(services, cancellationToken);
 

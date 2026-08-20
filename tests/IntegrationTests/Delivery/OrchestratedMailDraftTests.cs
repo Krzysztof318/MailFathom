@@ -14,6 +14,7 @@ using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Emails;
 using MailFathom.IntegrationTests.Mailbox;
 using MailFathom.IntegrationTests.Orchestration;
+using MailFathom.IntegrationTests.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -65,6 +66,21 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
             cancellationToken,
             filesSentCopies: true,
             keepsDrafts: true);
+
+        // The bindings a synchronization run over the two role folders would have recorded. Both the draft filer and
+        // the sent-copy filer resolve their destination by role and then read that binding, and nothing here
+        // synchronizes either folder — so without these the appends report their destinations as unavailable and the
+        // draft never leaves the composed stage.
+        await OrchestratedFolderBinding.CommitAsync(
+            services,
+            SyntheticMailAccount.DraftCopyFolderAlias,
+            SyntheticMailAccount.DraftCopyFolderPath,
+            cancellationToken);
+        await OrchestratedFolderBinding.CommitAsync(
+            services,
+            SyntheticMailAccount.OutgoingCopyFolderAlias,
+            SyntheticMailAccount.OutgoingCopyFolderPath,
+            cancellationToken);
 
         var written = $"draft-{Guid.NewGuid():N}";
         var revised = $"draft-revised-{Guid.NewGuid():N}";
@@ -142,7 +158,7 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
         CancellationToken cancellationToken) =>
         mailbox.ReadAsync(SyntheticMailAccount.DraftCopyFolderPath, cancellationToken);
 
-    /// <summary>Writes a draft down as a caller holding the grant a send is admitted under, which is what a command is.</summary>
+    /// <summary>Writes a draft down as a caller holding the grant drafting is admitted under, which is what a command is.</summary>
     private static Task<MailDraftRecord> SaveAsync(
         OrchestratedMailFathomServices services,
         string subject,
@@ -158,7 +174,7 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
                 new ComposedMailDraft([RecipientAtTheMailbox()], messageId, MimeOf(subject, messageId)),
                 revises,
                 token),
-            [MailFathomPermission.MailSend],
+            [MailFathomPermission.MailDraftsWrite],
             cancellationToken);
     }
 

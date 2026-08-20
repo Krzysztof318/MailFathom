@@ -118,7 +118,8 @@ public sealed class ComposedDraftToolContractTests(MailFathomOrchestrationFixtur
         // An edit states the whole message, so the recipient the second call left out is no longer addressed.
         Assert.Equal(EditedTo.Length, updated.GetProperty("recipientCount").GetInt32());
 
-        // The promotion answers with the send's own record, queued rather than sent: this host runs no delivery pass.
+        // The promotion answers with the send's own record, queued rather than sent: the answer is that record as
+        // the call committed it, and the submission host this deployment would offer it to resolves nowhere.
         Assert.Equal(OrchestrationContract.ServedMailAccountId, queued.GetProperty("accountId").GetString());
         Assert.Equal("queued", queued.GetProperty("state").GetString());
         Assert.Equal(EditedTo.Length, queued.GetProperty("recipientCount").GetInt32());

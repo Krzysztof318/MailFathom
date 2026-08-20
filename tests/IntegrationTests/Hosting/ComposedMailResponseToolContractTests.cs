@@ -29,9 +29,10 @@ namespace MailFathom.IntegrationTests.Hosting;
 /// </para>
 /// <para>
 /// <b>What a call produces is a record, not a sent message.</b> The account this host configures submits to a host in
-/// the reserved testing domain that resolves nowhere, so the outbox pass behind these calls finds nothing to speak to
-/// and changes nothing either call answered. That is exactly what the tool descriptions promise a caller — a durable
-/// record in <c>queued</c> — and what the sibling classes could never establish.
+/// the reserved testing domain that resolves nowhere, so the delivery pass behind these calls reaches no mail server
+/// and defers what it claimed. What each call answers with is the record as the call committed it, which is exactly
+/// what the tool descriptions promise a caller — a durable record in <c>queued</c> — and what the sibling classes could
+/// never establish.
 /// </para>
 /// <para>
 /// Two calls, and two credentials spent from a bucket this collection shares. The rate limit is what a sibling class
@@ -107,8 +108,8 @@ public sealed class ComposedMailResponseToolContractTests(MailFathomOrchestratio
         Assert.Equal(OrchestrationContract.ServedMailAccountId, reply.GetProperty("accountId").GetString());
         Assert.Equal(OrchestrationContract.ServedMailAccountId, forward.GetProperty("accountId").GetString());
 
-        // Queued rather than sent, in the spelling the surface publishes: no submission server has been spoken to, and
-        // this host runs no delivery pass that would speak to one.
+        // Queued rather than sent, in the spelling the surface publishes: the answer is the record as the call
+        // committed it, and no submission server has been spoken to for it.
         Assert.Equal("queued", reply.GetProperty("state").GetString());
         Assert.Equal("queued", forward.GetProperty("state").GetString());
 

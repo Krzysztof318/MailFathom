@@ -7,6 +7,7 @@ using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -120,7 +121,7 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
         var collectedId = collected.Contact!.Id;
 
         // Act
-        var erasure = await InScopeAsync(
+        var erasure = await AsOperatorAsync(
             services,
             (book, token) => book.EraseCollectedAsync(token),
             cancellationToken);
@@ -214,7 +215,7 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
         string displayName,
         IReadOnlyList<string> addresses,
         ContactOrigin origin,
-        CancellationToken cancellationToken) => InScopeAsync(
+        CancellationToken cancellationToken) => AsOperatorAsync(
             services,
             (book, token) => book.RecordAsync(
                 new NewContact
@@ -255,11 +256,22 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
                 .CountAsync(token),
             cancellationToken);
 
-    private static Task<TResult> InScopeAsync<TResult>(
+    /// <summary>Reaches the book as the operator, which is what admits the two acts this class asks of it.</summary>
+    /// <remarks>
+    /// Recording a person and erasing the collected origin are both published to a caller. What collection itself
+    /// performs is published to MailFathom's own identity instead and is reached through the account run rather than
+    /// through this helper, which is why the collecting half of this class states no caller at all.
+    /// </remarks>
+    private static Task<TResult> AsOperatorAsync<TResult>(
         OrchestratedMailFathomServices services,
         Func<ContactBook, CancellationToken, Task<TResult>> read,
-        CancellationToken cancellationToken) => services.InScopeAsync(
+        CancellationToken cancellationToken) => services.AsCallerInScopeAsync(
             (scope, token) => read(scope.GetRequiredService<ContactBook>(), token),
+            [
+                MailFathomPermission.AdminOperate,
+                MailFathomPermission.AdminAuditRead,
+                MailFathomPermission.AdminErase,
+            ],
             cancellationToken);
 
     /// <summary>One message this class seeds, named by the sender the tally is asked about.</summary>

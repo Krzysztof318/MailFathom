@@ -25,18 +25,43 @@ internal static class OrchestratedFolderBinding
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The committed binding, whose identity later writes are scoped by.</returns>
     /// <remarks>
+    /// The ordinary case, and the one a class that owns its own folder wants: an alias nothing else names is bound to a
+    /// remote folder spelled the same way, so neither has to be written twice.
+    /// </remarks>
+    internal static Task<MailFolderResolution> CommitAsync(
+        OrchestratedMailFathomServices services,
+        string alias,
+        CancellationToken cancellationToken) =>
+        CommitAsync(services, alias, alias, cancellationToken);
+
+    /// <summary>Binds one alias to the remote folder it names and commits it.</summary>
+    /// <param name="services">The composed services the write runs through.</param>
+    /// <param name="alias">The alias this test class owns, so its rows are not disturbed by another's.</param>
+    /// <param name="remotePath">The remote folder the alias names, where a mapping already spells it differently.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>The committed binding, whose identity later writes are scoped by.</returns>
+    /// <remarks>
+    /// <para>
     /// Repeating the call is harmless: the store recognizes a row already holding the same generation and the same
     /// remote folder as this run's own binding, so a class that arranges once per test commits once and finds its
     /// binding afterwards.
+    /// </para>
+    /// <para>
+    /// The remote path is stated separately where a mapping already names one, which is what the role folders do: a
+    /// destination resolved by role reads the binding a synchronization run would have recorded, and this suite runs
+    /// none over those folders — so an account that files a copy or keeps a draft is told its destination is
+    /// unavailable until the binding its configuration implies is committed here.
+    /// </para>
     /// </remarks>
     internal static async Task<MailFolderResolution> CommitAsync(
         OrchestratedMailFathomServices services,
         string alias,
+        string remotePath,
         CancellationToken cancellationToken)
     {
         var binding = MailFolderResolution.FirstBindingOf(
             MailFolderAlias.Create(alias),
-            RemoteFolderPath.Create(alias, hierarchyDelimiter: '.'));
+            RemoteFolderPath.Create(remotePath, hierarchyDelimiter: '.'));
 
         var commitResult = await services.CommitAsync(
             (scope, session, token) => scope.GetRequiredService<IMailFolderResolutionStore>().SaveResolutionAsync(
