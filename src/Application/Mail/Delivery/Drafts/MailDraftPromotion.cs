@@ -25,9 +25,17 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// <para>
 /// <b>Every bound this deployment sets is asked again here, not only when the draft was written.</b> A draft may have
 /// been composed months before the recipient policy was tightened, the ceilings were lowered, or sending was turned off
-/// for the account — so the answer that matters is the one that holds at the moment the message would leave. The
-/// governor is asked by the outbox, where every send passes, and the size the deployment composes is compared against
-/// the bytes actually stored rather than against what was measured when they were composed.
+/// for the account — so the answer that matters is the one that holds at the moment the message would leave. Two
+/// governors answer between them: the outbox's, which says what this deployment may send at all, and the authored one
+/// asked here, which says what this caller may be talked into. The size the deployment composes is compared against the
+/// bytes actually stored rather than against what was measured when they were composed.
+/// </para>
+/// <para>
+/// The authored governor is asked here rather than by the outbox for the reason it is asked by the two submissions: it
+/// bounds a caller, and the outbox runs for work nobody asked for as well. That is what makes a draft an ordinary send
+/// on this side too — the per-caller ceiling, the posture on a recipient nothing here vouches for, and the audit row
+/// are the same three a direct send meets, and the addresses they are asked about are the draft's own, judged against
+/// the contact book as it stands now rather than as it stood when the draft was written.
 /// </para>
 /// <para>
 /// <b>A promotion that fails leaves the draft exactly as it was.</b> Nothing about the draft is written until the
@@ -47,6 +55,7 @@ public sealed class MailDraftPromotion
     private readonly IOutgoingEmailStore outgoingEmails;
     private readonly OptimisticConcurrencyRetryPolicy retryPolicy;
     private readonly OutgoingEmailBounds bounds;
+    private readonly AuthoredSendGovernor governor;
     private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the promotion from the draft it reads and the outbox it writes the send into.</summary>
@@ -56,6 +65,7 @@ public sealed class MailDraftPromotion
     /// <param name="outgoingEmails">Reads back the record a draft was already promoted to.</param>
     /// <param name="retryPolicy">Commits the mark that names the send on the draft.</param>
     /// <param name="bounds">States how large a message this deployment sends.</param>
+    /// <param name="governor">Answers what this caller may be talked into sending, and records the send once it is durable.</param>
     /// <param name="authorization">Answers whether the caller that reached this holds the grant that lets it send.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public MailDraftPromotion(
@@ -65,6 +75,7 @@ public sealed class MailDraftPromotion
         IOutgoingEmailStore outgoingEmails,
         OptimisticConcurrencyRetryPolicy retryPolicy,
         OutgoingEmailBounds bounds,
+        AuthoredSendGovernor governor,
         AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(drafts);
@@ -73,6 +84,7 @@ public sealed class MailDraftPromotion
         ArgumentNullException.ThrowIfNull(outgoingEmails);
         ArgumentNullException.ThrowIfNull(retryPolicy);
         ArgumentNullException.ThrowIfNull(bounds);
+        ArgumentNullException.ThrowIfNull(governor);
         ArgumentNullException.ThrowIfNull(authorization);
 
         this.drafts = drafts;
@@ -81,6 +93,7 @@ public sealed class MailDraftPromotion
         this.outgoingEmails = outgoingEmails;
         this.retryPolicy = retryPolicy;
         this.bounds = bounds;
+        this.governor = governor;
         this.authorization = authorization;
     }
 
@@ -90,7 +103,7 @@ public sealed class MailDraftPromotion
     /// <returns>The durable record the message was written down as.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailSend" />.</exception>
     /// <exception cref="MailDraftRefusedException">Thrown when no draft is held under that identifier, when the draft names nobody to send it to, or when the stored message exceeds what this deployment sends.</exception>
-    /// <exception cref="OutgoingMailRefusedException">Thrown when sending is not enabled for the account, a recipient is one the recipient policy refuses, or the period has reached a ceiling.</exception>
+    /// <exception cref="OutgoingMailRefusedException">Thrown when sending is not enabled for the account, a recipient is one the recipient policy refuses, the period has reached a ceiling, this caller has reached a ceiling of its own, or the draft names a recipient nothing here vouches for.</exception>
     /// <remarks>
     /// <para>
     /// A draft that has already been promoted answers with the record its promotion wrote rather than writing a second
@@ -167,17 +180,53 @@ public sealed class MailDraftPromotion
         var request = OutgoingEmailRequest.Create(
             draft.AccountId,
             OutgoingEmailRequester.Draft(draftId),
-            draft.Recipients);
+            [.. draft.Recipients.Select(recipient => recipient.Recipient)]);
 
-        // Everything this deployment refuses a send for is asked inside this call, with no boundary in the picture, so
-        // a draft written before a policy tightened cannot be sent past it. Nothing about the draft has been written
-        // yet, which is what leaves it intact when the answer is no.
+        // What this caller may be talked into, asked before the record is written and against the addresses the draft
+        // stored rather than any the promotion could invent. Nothing about the draft has been written yet, which is
+        // what leaves it intact when the answer is no — and the ceiling is charged here, so a refusal after this point
+        // would be a send the caller spent without one leaving.
+        var permit = await this.governor.RequirePermittedAsync(
+            AuthoredRecipientsOf(draft),
+            request,
+            cancellationToken);
+
+        // What this deployment may send at all is asked inside this call, with no boundary in the picture, so a draft
+        // written before a policy tightened cannot be sent past it.
         var opened = await this.outbox.EnqueueAsync(request, content.RawMime, cancellationToken);
 
         await this.retryPolicy.CommitAsync(
             (session, token) => this.drafts.RecordPromotedAsync(session, draftId, opened.Record.Id, token),
             cancellationToken);
 
+        // Only where this call is what wrote the record down, for the reason a submission audits only then: the outbox
+        // answers a repeated request with the record it already has, and auditing that again would report one message
+        // as having left twice.
+        if (opened.WasRecordedNow)
+        {
+            await this.governor.RecordAsync(
+                permit,
+                AuthoredSendAct.PromotedDraft,
+                opened.Record,
+                cancellationToken);
+        }
+
         return opened.Record;
     }
+
+    /// <summary>Reads the draft's recipients back as the authored list the sending governance judges.</summary>
+    /// <remarks>
+    /// The display name is deliberately absent. A draft keeps the address, the header it is named in, the contact it
+    /// was resolved from, and where it came from; the name its author wrote stays in the stored MIME, which this
+    /// promotion transmits unchanged and never recomposes.
+    /// </remarks>
+    private static IReadOnlyList<AuthoredEmailRecipient> AuthoredRecipientsOf(MailDraftRecord draft) =>
+    [
+        .. draft.Recipients.Select(recipient => new AuthoredEmailRecipient(
+            recipient.Recipient.Role,
+            recipient.Recipient.Address.Address,
+            DisplayName: null,
+            recipient.Recipient.Contact,
+            recipient.Provenance)),
+    ];
 }

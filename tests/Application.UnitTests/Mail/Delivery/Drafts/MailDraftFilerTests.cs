@@ -301,10 +301,12 @@ public sealed class MailDraftFilerTests
     private static ReadOnlyMemory<byte> MimeOf(string body) =>
         Encoding.ASCII.GetBytes($"Subject: a draft\r\n\r\n{body}").AsMemory();
 
-    private static OutgoingRecipient Recipient()
+    private static MailDraftRecipient Recipient()
     {
         Assert.True(EmailAddress.TryCreate(displayName: null, "someone@example.test", out var address));
 
-        return OutgoingRecipient.Create(address, OutgoingRecipientRole.To);
+        return new MailDraftRecipient(
+            OutgoingRecipient.Create(address, OutgoingRecipientRole.To),
+            AuthoredRecipientProvenance.NamedByCaller);
     }
 }

@@ -555,7 +555,11 @@ public sealed class MailOutboxPassTests
                 Account,
                 OutgoingEmailRequester.Command($"mfctl-{Guid.CreateVersion7()}"),
                 new ComposedMailDraft(
-                    [OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To)],
+                    [
+                        new MailDraftRecipient(
+                            OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To),
+                            AuthoredRecipientProvenance.NamedByCaller),
+                    ],
                     InternetMessageId.Mint("example.test"),
                     RawMime),
                 revises: null,

@@ -1844,6 +1844,11 @@ internal sealed class MailFathomDbContext : DbContext
     /// nobody. A revision replaces the whole list rather than amending it, which is what keeps it the composed
     /// message's own rather than an accumulation of everybody the draft was ever addressed to.
     /// </para>
+    /// <para>
+    /// What it does carry and a send's recipients do not is where the address came from. A send meets the authored
+    /// governance before its row is written; a draft meets it at the promotion, which has only this row to read the
+    /// question off.
+    /// </para>
     /// </remarks>
     private static void ConfigureMailDraftRecipient(ModelBuilder modelBuilder) =>
         modelBuilder.Entity<MailDraftRecipientEntity>(entity =>
@@ -1855,6 +1860,16 @@ internal sealed class MailFathomDbContext : DbContext
                 .IsRequired();
 
             entity.Property(recipient => recipient.Role).HasConversion<string>().HasMaxLength(64).IsRequired();
+
+            // As a name for the reason the role and every other stored enum is one: a row read years later says what it
+            // meant, and the value survives a member being added ahead of it. The database default is the strict
+            // reading, because that is what is true of a row written before this deployment kept the answer: nothing
+            // recorded who chose the address, so the promotion treats it as the caller's own word.
+            entity.Property(recipient => recipient.Provenance)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .HasDefaultValue(AuthoredRecipientProvenance.NamedByCaller)
+                .IsRequired();
 
             entity.HasOne(recipient => recipient.MailDraft)
                 .WithMany(draft => draft.Recipients)

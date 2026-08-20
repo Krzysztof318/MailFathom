@@ -8,6 +8,7 @@ using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Emails;
 using MimeKit;
 
@@ -202,10 +203,20 @@ internal sealed class MimeKitAuthoredEmailComposer(
             message.Date = timeProvider.GetUtcNow();
             message.MessageId = messageId.Value;
 
+            // The provenance is the strict default and nothing reads it here: an occasion is composed as a send, whose
+            // request keeps the addresses alone. What governs a recurring declaration is the declaration's own
+            // question rather than this one.
             return AsOutgoing(
                 accountId,
                 requester,
-                this.Serialize(message, messageId, sender, recipients, capabilities));
+                this.Serialize(
+                    message,
+                    messageId,
+                    sender,
+                    [.. recipients.Select(static recipient => new MailDraftRecipient(
+                        recipient,
+                        AuthoredRecipientProvenance.NamedByCaller))],
+                    capabilities));
         }
     }
 
@@ -425,7 +436,8 @@ internal sealed class MimeKitAuthoredEmailComposer(
             {
                 placed.Add(new PlacedRecipient(
                     OutgoingRecipient.Create(address, authoredRecipient.Role, authoredRecipient.Contact),
-                    address.DisplayName));
+                    address.DisplayName,
+                    authoredRecipient.Provenance));
             }
         }
 
@@ -477,7 +489,9 @@ internal sealed class MimeKitAuthoredEmailComposer(
             message,
             messageId,
             sender,
-            [.. placements.Select(static placement => placement.Recipient)],
+            [.. placements.Select(static placement => new MailDraftRecipient(
+                placement.Recipient,
+                placement.Provenance))],
             capabilities);
     }
 
@@ -492,7 +506,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
         MimeMessage message,
         InternetMessageId messageId,
         OutgoingSenderIdentity sender,
-        IReadOnlyList<OutgoingRecipient> recipients,
+        IReadOnlyList<MailDraftRecipient> recipients,
         MailDeliveryCapabilities capabilities)
     {
         var format = FormatOptions.Default.Clone();
@@ -500,7 +514,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
         // Every address was refused above unless the server carries it, so the only question left is whether the
         // message needs the format at all: an all-ASCII message is written the way every server understands.
         format.International = !Ascii.IsValid(sender.Address.Address)
-            || recipients.Any(static recipient => !Ascii.IsValid(recipient.Address.Address));
+            || recipients.Any(static recipient => !Ascii.IsValid(recipient.Recipient.Address.Address));
 
         // The bytes are stored and transmitted verbatim rather than re-serialized per attempt, so they carry the line
         // ending SMTP requires rather than the platform's.
@@ -619,7 +633,10 @@ internal sealed class MimeKitAuthoredEmailComposer(
             return AuthoredEmailComposition.Refused(composition.Refusal!);
         }
 
-        var request = OutgoingEmailRequest.Create(accountId, requester, message.Recipients);
+        var request = OutgoingEmailRequest.Create(
+            accountId,
+            requester,
+            [.. message.Recipients.Select(static recipient => recipient.Recipient)]);
 
         return AuthoredEmailComposition.Composed(
             new ComposedOutgoingEmail(request, message.MessageId, message.RawMime));
@@ -632,10 +649,14 @@ internal sealed class MimeKitAuthoredEmailComposer(
         long? bound = null) =>
         MailDraftComposition.Refused(new AuthoredEmailRefusal(reason, field, bound));
 
-    /// <summary>Holds one recipient the envelope will offer, with the name the composed message writes beside them.</summary>
+    /// <summary>Holds one recipient the envelope will offer, with what the composition still owes about them.</summary>
     /// <remarks>
-    /// The two travel together only as far as this composition. The record keeps the address because a send cannot be
-    /// resumed without it, and the name stays in the stored MIME.
+    /// The three travel together only as far as this composition. The record keeps the address because a send cannot be
+    /// resumed without it, the name stays in the stored MIME, and the provenance reaches a draft's own rows so that the
+    /// promotion can be judged by where each address came from.
     /// </remarks>
-    private readonly record struct PlacedRecipient(OutgoingRecipient Recipient, string? DisplayName);
+    private readonly record struct PlacedRecipient(
+        OutgoingRecipient Recipient,
+        string? DisplayName,
+        AuthoredRecipientProvenance Provenance);
 }

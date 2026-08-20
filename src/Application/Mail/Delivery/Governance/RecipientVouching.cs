@@ -6,6 +6,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Domain.Contacts;
+using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Mail.Delivery.Governance;

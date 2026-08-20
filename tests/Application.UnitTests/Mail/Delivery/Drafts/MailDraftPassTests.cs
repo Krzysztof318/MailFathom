@@ -140,7 +140,10 @@ public sealed class MailDraftPassTests
         OutgoingEmailStage stage)
     {
         var send = outgoingEmails.Publish(
-            OutgoingEmailRequest.Create(Account, OutgoingEmailRequester.Draft(draft.Id), draft.Recipients),
+            OutgoingEmailRequest.Create(
+                Account,
+                OutgoingEmailRequester.Draft(draft.Id),
+                [.. draft.Recipients.Select(recipient => recipient.Recipient)]),
             mimeByteLength: 64);
 
         outgoingEmails.Arrange(send.Id, stage);
@@ -185,10 +188,12 @@ public sealed class MailDraftPassTests
             revises: null,
             CancellationToken.None);
 
-    private static OutgoingRecipient Recipient()
+    private static MailDraftRecipient Recipient()
     {
         Assert.True(EmailAddress.TryCreate(displayName: null, "someone@example.test", out var address));
 
-        return OutgoingRecipient.Create(address, OutgoingRecipientRole.To);
+        return new MailDraftRecipient(
+            OutgoingRecipient.Create(address, OutgoingRecipientRole.To),
+            AuthoredRecipientProvenance.NamedByCaller);
     }
 }

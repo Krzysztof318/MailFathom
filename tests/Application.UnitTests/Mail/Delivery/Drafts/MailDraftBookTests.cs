@@ -132,7 +132,10 @@ public sealed class MailDraftBookTests
         harness.MapDraftsFolder(Account);
         var draft = await SaveAsync(harness, "first version");
         var send = outgoingEmails.Publish(
-            OutgoingEmailRequest.Create(Account, OutgoingEmailRequester.Draft(draft.Id), draft.Recipients),
+            OutgoingEmailRequest.Create(
+                Account,
+                OutgoingEmailRequester.Draft(draft.Id),
+                [.. draft.Recipients.Select(recipient => recipient.Recipient)]),
             mimeByteLength: 64);
 
         await harness.Drafts.RecordPromotedAsync(
@@ -290,16 +293,18 @@ public sealed class MailDraftBookTests
             revises: null,
             CancellationToken.None);
 
-    private static ComposedMailDraft Composed(string body, IReadOnlyList<OutgoingRecipient>? recipients = null) =>
+    private static ComposedMailDraft Composed(string body, IReadOnlyList<MailDraftRecipient>? recipients = null) =>
         new(
             recipients ?? [Recipient()],
             InternetMessageId.Mint("example.test"),
             Encoding.ASCII.GetBytes($"Subject: a draft\r\n\r\n{body}").AsMemory());
 
-    private static OutgoingRecipient Recipient()
+    private static MailDraftRecipient Recipient()
     {
         Assert.True(EmailAddress.TryCreate(displayName: null, "someone@example.test", out var address));
 
-        return OutgoingRecipient.Create(address, OutgoingRecipientRole.To);
+        return new MailDraftRecipient(
+            OutgoingRecipient.Create(address, OutgoingRecipientRole.To),
+            AuthoredRecipientProvenance.NamedByCaller);
     }
 }

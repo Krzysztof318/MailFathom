@@ -194,11 +194,18 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
             cancellationToken);
 
     /// <summary>Addresses the draft to the one mailbox the orchestrated server has, so a promotion is deliverable.</summary>
-    private static OutgoingRecipient RecipientAtTheMailbox()
+    /// <remarks>
+    /// Named as the caller's own word, which is the strict reading the sending governance judges at the promotion. It
+    /// is admitted because the address is the deployment's own mailbox, which this installation vouches for whatever
+    /// its contact book holds.
+    /// </remarks>
+    private static MailDraftRecipient RecipientAtTheMailbox()
     {
         Assert.True(EmailAddress.TryCreate(displayName: null, Mailbox, out var recipient));
 
-        return OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To);
+        return new MailDraftRecipient(
+            OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To),
+            AuthoredRecipientProvenance.NamedByCaller);
     }
 
     /// <summary>Builds a synthetic message whose subject is how a test recognizes its own draft.</summary>

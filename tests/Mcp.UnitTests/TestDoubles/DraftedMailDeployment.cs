@@ -26,6 +26,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Emails;
 using MailFathom.Mcp.Tools.Drafts;
 using MailFathom.TestSupport;
@@ -124,6 +125,7 @@ internal sealed class DraftedMailDeployment
             this.OutgoingEmails,
             commitPolicy,
             Bounds,
+            AuthoredSendGovernors.Permitting(authorization),
             authorization));
     }
 
@@ -207,10 +209,12 @@ internal sealed class DraftedMailDeployment
                 Arg.Any<MailDeliveryCapabilities>())
             .Returns(call => MailDraftComposition.Composed(new ComposedMailDraft(
                 [
-                    .. call.ArgAt<AuthoredEmail>(1).Recipients.Select(recipient => OutgoingRecipient.Create(
-                        Address(recipient.Address),
-                        recipient.Role,
-                        recipient.Contact)),
+                    .. call.ArgAt<AuthoredEmail>(1).Recipients.Select(recipient => new MailDraftRecipient(
+                        OutgoingRecipient.Create(
+                            Address(recipient.Address),
+                            recipient.Role,
+                            recipient.Contact),
+                        recipient.Provenance)),
                 ],
                 InternetMessageId.Mint("example.test"),
                 "Message-ID: <one@example.test>\r\n\r\nHello."u8.ToArray().AsMemory())));

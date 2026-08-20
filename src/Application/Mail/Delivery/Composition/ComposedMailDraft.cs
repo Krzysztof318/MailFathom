@@ -3,11 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Drafts;
 
 namespace MailFathom.Application.Mail.Delivery.Composition;
 
 /// <summary>Carries one composed draft: who it is addressed to, the identity it carries, and the bytes to store.</summary>
-/// <param name="Recipients">The people the draft names, which may be nobody.</param>
+/// <param name="Recipients">The people the draft names, which may be nobody, each with where its address came from.</param>
 /// <param name="MessageId">The identity minted for this revision of the draft.</param>
 /// <param name="RawMime">The RFC 822 bytes to store and to append, built once and never rebuilt.</param>
 /// <remarks>
@@ -18,12 +19,17 @@ namespace MailFathom.Application.Mail.Delivery.Composition;
 /// what comes back here is the recipient list itself, which a promotion turns into a request when there is one to make.
 /// </para>
 /// <para>
+/// The recipients carry their provenance for the same reason. A send's request is built from a list the governance has
+/// already read; a draft's is stored and read again by whatever promotes it, so the provenance travels with the address
+/// as far as the row it is written into.
+/// </para>
+/// <para>
 /// The identity is minted per revision rather than kept across them. Every revision is a different message on the
 /// server — IMAP has no command that changes a stored one — and two messages sharing a <c>Message-ID</c> is what a mail
 /// client reads as one message it has seen twice.
 /// </para>
 /// </remarks>
 public sealed record ComposedMailDraft(
-    IReadOnlyList<OutgoingRecipient> Recipients,
+    IReadOnlyList<MailDraftRecipient> Recipients,
     InternetMessageId MessageId,
     ReadOnlyMemory<byte> RawMime);

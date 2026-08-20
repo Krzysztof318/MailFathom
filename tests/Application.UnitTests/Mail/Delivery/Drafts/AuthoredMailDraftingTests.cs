@@ -206,10 +206,12 @@ public sealed class AuthoredMailDraftingTests
 
                 return MailDraftComposition.Composed(new ComposedMailDraft(
                     [
-                        .. authored.Recipients.Select(recipient => OutgoingRecipient.Create(
-                            Address(recipient.Address),
-                            recipient.Role,
-                            recipient.Contact)),
+                        .. authored.Recipients.Select(recipient => new MailDraftRecipient(
+                            OutgoingRecipient.Create(
+                                Address(recipient.Address),
+                                recipient.Role,
+                                recipient.Contact),
+                            recipient.Provenance)),
                     ],
                     InternetMessageId.Mint("example.test"),
                     ComposedMime));

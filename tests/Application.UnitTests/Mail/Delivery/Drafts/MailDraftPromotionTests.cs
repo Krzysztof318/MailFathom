@@ -212,6 +212,140 @@ public sealed class MailDraftPromotionTests
         Assert.Null(harness.Drafts.Peek(draft.Id)!.PromotedTo);
     }
 
+    /// <summary>
+    /// What a caller may be talked into is a bound on the caller rather than on the deployment, so a draft is one more
+    /// way of asking and is counted as one. A caller that has filled its period is refused the promotion, and the draft
+    /// it wrote is exactly where it was.
+    /// </summary>
+    [Fact]
+    public async Task PromoteAsync_CallerThatFilledItsOwnPeriod_IsRefusedAndLeavesTheDraftStanding()
+    {
+        // Arrange
+        var harness = Harness();
+        var first = await SaveAsync(harness, "the first message");
+        var second = await SaveAsync(harness, "the second message");
+        var ledger = new AuthoredSendUsageLedger(
+            AuthoredSendCeilings.Create(TimeSpan.FromDays(1), maxMessagesPerCaller: 1, maxRecipientsPerCaller: 0),
+            new FakeTimeProvider(Moment));
+        var promotion = PromotionOver(harness, sendGovernor: AuthoredSendGovernors.Governing(ledger: ledger));
+        await promotion.PromoteAsync(first.Id, CancellationToken.None);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
+            () => promotion.PromoteAsync(second.Id, CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.OutgoingMailCeilingReached, refusal.ErrorCode);
+        Assert.Null(harness.Drafts.Peek(second.Id)!.PromotedTo);
+    }
+
+    /// <summary>
+    /// The posture on a recipient nothing here vouches for is asked where the message would leave, so drafting is not a
+    /// way past it. The address itself stays out of the refusal, as it does on every other surface.
+    /// </summary>
+    [Fact]
+    public async Task PromoteAsync_RecipientNothingVouchesFor_IsRefusedWithoutWritingARecord()
+    {
+        // Arrange
+        var outgoingEmails = new InMemoryOutgoingEmailStore();
+        var harness = Harness(outgoingEmails);
+        var draft = await SaveAsync(harness, "the message as written");
+        var promotion = PromotionOver(
+            harness,
+            outgoingEmails,
+            sendGovernor: AuthoredSendGovernors.Governing(
+                settings: new AuthoredSendSettings(UnvouchedRecipientPosture.Refuse)));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
+            () => promotion.PromoteAsync(draft.Id, CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.OutgoingRecipientUnvouched, refusal.ErrorCode);
+        Assert.DoesNotContain("example.test", refusal.Message, StringComparison.Ordinal);
+        Assert.Empty(outgoingEmails.OpenRequests);
+        Assert.Null(harness.Drafts.Peek(draft.Id)!.PromotedTo);
+    }
+
+    /// <summary>
+    /// The draft kept where each address came from, so an address the answered message's own headers named is still not
+    /// the caller's word months later. A reply held as a draft is therefore promoted where a stranger the caller named
+    /// itself would be refused.
+    /// </summary>
+    [Fact]
+    public async Task PromoteAsync_RecipientDerivedFromTheAnsweredEmail_IsPromotedUnderTheStrictPosture()
+    {
+        // Arrange
+        var harness = Harness();
+        var draft = await SaveAsync(
+            harness,
+            "the answer as written",
+            recipient: Recipient(AuthoredRecipientProvenance.DerivedFromAnsweredEmail));
+        var promotion = PromotionOver(
+            harness,
+            sendGovernor: AuthoredSendGovernors.Governing(
+                settings: new AuthoredSendSettings(UnvouchedRecipientPosture.Refuse)));
+
+        // Act
+        var record = await promotion.PromoteAsync(draft.Id, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(OutgoingEmailStage.Recorded, record.Stage);
+        Assert.Equal(record.Id, harness.Drafts.Peek(draft.Id)!.PromotedTo);
+    }
+
+    /// <summary>
+    /// A promotion is a message leaving under somebody's grant, so it reaches the trail the other sending acts reach,
+    /// naming the act that dispatched it and how many of its recipients nothing here vouched for.
+    /// </summary>
+    [Fact]
+    public async Task PromoteAsync_AddressedDraft_RecordsTheSendAsAPromotedDraft()
+    {
+        // Arrange
+        var harness = Harness();
+        var draft = await SaveAsync(harness, "the message as written");
+        var auditor = Substitute.For<IAuthoredSendAuditor>();
+        var promotion = PromotionOver(harness, sendGovernor: AuthoredSendGovernors.Governing(auditor: auditor));
+
+        // Act
+        var record = await promotion.PromoteAsync(draft.Id, CancellationToken.None);
+
+        // Assert
+        await auditor.Received(1).RecordAuthoredSendAsync(
+            Arg.Is<AuthoredSend>(send =>
+                send != null
+                && send.Act == AuthoredSendAct.PromotedDraft
+                && send.OutgoingEmailId == record.Id
+                && send.AccountId == Account
+                && send.RecipientCount == 1
+                && send.UnvouchedRecipientCount == 1),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Two callers promoting one draft queue one message, so the trail carries one entry: auditing the second would
+    /// report a message as having left twice to whoever reads it for a send they did not expect.
+    /// </summary>
+    [Fact]
+    public async Task PromoteAsync_TwoCallersBothFindingTheDraftUnpromoted_RecordTheSendOnce()
+    {
+        // Arrange
+        var harness = Harness();
+        var draft = await SaveAsync(harness, "the message as written");
+        var auditor = Substitute.For<IAuthoredSendAuditor>();
+        var promotion = PromotionOver(harness, sendGovernor: AuthoredSendGovernors.Governing(auditor: auditor));
+        await promotion.PromoteAsync(draft.Id, CancellationToken.None);
+        harness.Drafts.ForgetPromotion(draft.Id);
+
+        // Act
+        await promotion.PromoteAsync(draft.Id, CancellationToken.None);
+
+        // Assert
+        await auditor.Received(1).RecordAuthoredSendAsync(
+            Arg.Any<AuthoredSend>(),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>Nothing is held under an identifier this system never minted, so a promotion of one is refused.</summary>
     [Fact]
     public async Task PromoteAsync_DraftThisSystemNeverWrote_IsRefused()
@@ -281,7 +415,8 @@ public sealed class MailDraftPromotionTests
         InMemoryOutgoingEmailStore? outgoingEmails = null,
         IEmailContentStore? contentStore = null,
         OutgoingEmailBounds? bounds = null,
-        OutgoingMailGovernor? governor = null)
+        OutgoingMailGovernor? governor = null,
+        AuthoredSendGovernor? sendGovernor = null)
     {
         var store = outgoingEmails ?? new InMemoryOutgoingEmailStore();
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
@@ -316,6 +451,7 @@ public sealed class MailDraftPromotionTests
             store,
             retryPolicy,
             bounds ?? Bounds(),
+            sendGovernor ?? AuthoredSendGovernors.Permitting(),
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend));
     }
 
@@ -331,21 +467,25 @@ public sealed class MailDraftPromotionTests
     private static Task<MailDraftRecord> SaveAsync(
         MailDraftHarness harness,
         string body,
-        bool addressed = true) =>
+        bool addressed = true,
+        MailDraftRecipient? recipient = null) =>
         harness.Book.SaveAsync(
             Account,
-            OutgoingEmailRequester.Command("mfctl-4f2a"),
+            OutgoingEmailRequester.Command($"mfctl-{Guid.CreateVersion7(Moment)}"),
             new ComposedMailDraft(
-                addressed ? [Recipient()] : [],
+                addressed ? [recipient ?? Recipient()] : [],
                 InternetMessageId.Mint("example.test"),
                 Encoding.ASCII.GetBytes($"Subject: a draft\r\n\r\n{body}").AsMemory()),
             revises: null,
             CancellationToken.None);
 
-    private static OutgoingRecipient Recipient()
+    private static MailDraftRecipient Recipient(
+        AuthoredRecipientProvenance provenance = AuthoredRecipientProvenance.NamedByCaller)
     {
         Assert.True(EmailAddress.TryCreate(displayName: null, "someone@example.test", out var address));
 
-        return OutgoingRecipient.Create(address, OutgoingRecipientRole.To);
+        return new MailDraftRecipient(
+            OutgoingRecipient.Create(address, OutgoingRecipientRole.To),
+            provenance);
     }
 }

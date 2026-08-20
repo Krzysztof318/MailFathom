@@ -179,7 +179,7 @@ accounts send as. An address that is neither is what an injected instruction loo
 [`MailDelivery:UnvouchedRecipients`](../operations/configuration-mail.md#a-recipient-nothing-here-vouches-for--maildeliveryunvouchedrecipients)
 is the deployment's choice of what to do about one: `Admit` records it, `Refuse` refuses the whole message.
 
-**Which tool is affected follows from that, and it is not the same answer for all three.** A plain `reply_to_email` is
+**Which tool is affected follows from that, and it is not the same answer for all four.** A plain `reply_to_email` is
 untouched under `Refuse`, because everybody it reaches was read out of the message being answered. A `cc` or `bcc` the
 caller adds to that reply is its own word and is judged. And **`forward_email` is judged in full**: a forward addresses
 nobody of its own, so every address on it came from the call, and forwarding to somebody this deployment holds no
@@ -187,14 +187,20 @@ record of is refused under `Refuse`. That is the setting working rather than a g
 address below* is the archetype of the instruction this bound exists to refuse — but it is also what an operator has to
 know before turning it on, because forwarding to a new correspondent stops working until that person is in the book.
 
+**`send_draft` is judged as the message it holds was.** A draft records where each of its addresses came from, so
+promoting a draft of a reply is judged exactly as the reply would have been and promoting one addressed to a stranger
+the caller wrote down itself is judged as that call was — months later, and against the contact book as it stands at
+the promotion rather than as it stood at the writing. A draft this deployment wrote before it kept that answer carries
+the strict reading, so every address on one is the caller's own word.
+
 | Code | Raised when | What resolves it |
 | --- | --- | --- |
 | `53007` `OutgoingRecipientUnvouched` | A caller-named recipient is one this deployment holds no record of, under `Refuse` | Writing to somebody the contact book holds, or admitting unvouched recipients |
 | `57002` `OutgoingMailCeilingReached` | This caller's own period has no room for this message, or the period is already counting as many distinct callers as this deployment holds counts for | Waiting for the period to roll over, or raising the per-caller ceiling; the second case names itself rather than a setting, because it is not one an operator wrote |
 
-**Every send from this surface is recorded**: the calling principal, the grant it held, which of the four acts was
-asked for, the account, the identity of the outgoing record, how many people it names, and how many of those nothing
-here vouched for. A send that reached somebody unvouched for is recorded at a level of its own, because that is the
+**Every send from this surface is recorded**: the calling principal, the grant it held, which of the five acts was
+asked for — a new message, either reply, a forward, or a draft dispatched as it stands — the account, the identity of
+the outgoing record, how many people it names, and how many of those nothing here vouched for. A send that reached somebody unvouched for is recorded at a level of its own, because that is the
 line an owner looking for an odd send is looking for. What is **not** recorded is everything about the message — no
 prompt, no mail content, no subject, no body, and no address. The record answers *who asked for this and under what*,
 which turns "an agent sent something odd" from a suspicion into something an owner can read; what was sent is the
@@ -1008,8 +1014,11 @@ stored rather than a recomposition, for the reason a retry reuses them: a rebuil
 in every client. From that point the send is an ordinary send — claimed, transmitted, and settled exactly as
 [any other](#how-a-written-down-send-reaches-a-server) — and **everything this deployment refuses a send for is asked
 at the promotion rather than at the writing**: whether sending is on for the account, whether every recipient is
-somebody this deployment may write to, the ceilings, and the size bound. A draft written a month before an operator
-tightened one of those is refused by the tightened one. A draft addressed to nobody is refused here too, with
+somebody this deployment may write to, the deployment's ceilings, and the size bound. So is everything
+[a caller may be talked into](#what-a-caller-may-be-talked-into): the caller's own ceiling for the period, the posture
+on a recipient nothing here vouches for, and the audit row the send leaves. A draft written a month before an operator
+tightened one of those is refused by the tightened one, and the caller that promotes a draft spends the same allowance
+it would have spent sending the message outright — drafting is not a way past a bound that governs sending. A draft addressed to nobody is refused here too, with
 `53010` `MailDraftNotAddressed`, which is the one refusal that is about the draft rather than about the deployment. A
 draft this deployment does not hold — never written, given up without ever having been sent, or another account's —
 answers `53008` `MailDraftNotFound` whichever of the three it is, so nothing learns which drafts exist by asking about
@@ -1159,9 +1168,11 @@ is a state a real server cannot be asked to produce on demand: a process resumed
 a replacement, which withdraws the copy that was replaced and only that one; a tracked copy in a folder the drafts role
 no longer names, which is left standing with the divergence written onto the draft; giving up a draft this system never
 wrote, which is refused before any folder is opened because nothing holds it under an identifier the call accepts; and
-a promotion, including the bound and the recipient policy asked at the promotion rather than at the writing, the second
-ask answering with the record the first produced, two callers who both found the draft unpromoted queueing one message
-between them, and a delivery that failed leaving the draft where it was. The pass that delivers is covered where it is
+a promotion, including the bound and the recipient policy asked at the promotion rather than at the writing, the
+caller's own ceiling and the unvouched-recipient posture asked there too, the audit row a promotion leaves and the one
+entry two callers between them leave, an address the answered message named still being admitted under `Refuse` months
+after the draft was written, the second ask answering with the record the first produced, two callers who both found
+the draft unpromoted queueing one message between them, and a delivery that failed leaving the draft where it was. The pass that delivers is covered where it is
 assembled: that it settles an outstanding draft before it claims anything, and that a delivered send takes the draft it
 came from out of the drafts folder.
 
