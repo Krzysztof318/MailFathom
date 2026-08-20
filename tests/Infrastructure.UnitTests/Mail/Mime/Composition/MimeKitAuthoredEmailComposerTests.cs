@@ -369,6 +369,41 @@ public sealed class MimeKitAuthoredEmailComposerTests
     }
 
     /// <summary>
+    /// The caller's word survives a derived mention that arrives after it, which is the order a reply naming an
+    /// already-derived correspondent in <c>To</c> produces: the header order places the caller's mention first, and
+    /// the derived one must not widen what the row records back to something the vouching declines to judge.
+    /// </summary>
+    [Fact]
+    public void ComposeDraft_AddressNamedByTheCallerThenDerived_StaysNamedByTheCaller()
+    {
+        // Arrange
+        var composer = CreateComposer();
+        var authored = Authored() with
+        {
+            Recipients =
+            [
+                new AuthoredEmailRecipient(
+                    OutgoingRecipientRole.To,
+                    "anna@example.test",
+                    Provenance: AuthoredRecipientProvenance.NamedByCaller),
+                new AuthoredEmailRecipient(
+                    OutgoingRecipientRole.Cc,
+                    "anna@example.test",
+                    Provenance: AuthoredRecipientProvenance.DerivedFromAnsweredEmail),
+            ],
+        };
+
+        // Act
+        var composition = composer.ComposeDraft(Account, authored, Capabilities());
+
+        // Assert
+        var recipient = Assert.Single(composition.Draft!.Recipients);
+        Assert.Equal(AuthoredRecipientProvenance.NamedByCaller, recipient.Provenance);
+        Assert.Equal(OutgoingRecipientRole.To, recipient.Recipient.Role);
+        Assert.Single(ParseDraft(composition).To);
+    }
+
+    /// <summary>
     /// The narrowing runs one way only. An address the caller named that the answered message also named stays the
     /// caller's word, and one only this system derived is not turned into the caller's by a second derived mention.
     /// </summary>

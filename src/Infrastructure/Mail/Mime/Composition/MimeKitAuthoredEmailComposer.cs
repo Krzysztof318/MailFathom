@@ -48,7 +48,8 @@ internal sealed class MimeKitAuthoredEmailComposer(
     /// <remarks>
     /// Resolution drops a repeated mention rather than a person, so the resolved count is never the authored one. It
     /// can only fall this far, though: naming somebody in all three headers is the whole of what redundancy means here,
-    /// and a further mention of an address already named in the same header says nothing at all. That is what lets the
+    /// and a further mention of an address already named in the same header adds nobody to the envelope, however it
+    /// narrows what the placement records about how the address came to be there. That is what lets the
     /// authored list be measured before it is parsed — the deployment's number times this one is the largest list any
     /// acceptable message could have been written as.
     /// </remarks>
@@ -379,8 +380,9 @@ internal sealed class MimeKitAuthoredEmailComposer(
     /// <summary>Parses every authored recipient into the mailbox the envelope will offer, or refuses naming the header.</summary>
     /// <remarks>
     /// <para>
-    /// One mailbox is offered once, so a person an author named in two headers is placed in the first of them and the
-    /// later mention is dropped. The order is the header order — <c>To</c>, then <c>Cc</c>, then <c>Bcc</c> — because
+    /// One mailbox is offered once, so a person an author named in two headers is placed in the first of them. The
+    /// later mention is not discarded, though: it narrows the placement's recorded provenance where the caller named
+    /// the address itself, because that is the reading the sending governance weighs. The order is the header order — <c>To</c>, then <c>Cc</c>, then <c>Bcc</c> — because
     /// that is the order of decreasing visibility: somebody named both as a primary recipient and as a blind one was
     /// meant to be seen, and the reverse choice would hide them from the other recipients against what the author
     /// wrote. Within one header the author's own order is kept.
@@ -432,7 +434,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
                     field);
             }
 
-            if (placementsByAddress.TryGetValue(address, out var placement))
+            if (placementsByAddress.TryGetValue(address, out var placementIndex))
             {
                 // A mailbox named twice is offered once, and the mention that decides how it is judged is the strictest
                 // of them. A caller that also wrote down an address this system derived has named that address, and
@@ -442,7 +444,7 @@ internal sealed class MimeKitAuthoredEmailComposer(
                 // named; the direct send judges the list before this dedup and would refuse the same message.
                 if (authoredRecipient.Provenance is AuthoredRecipientProvenance.NamedByCaller)
                 {
-                    placed[placement] = placed[placement] with
+                    placed[placementIndex] = placed[placementIndex] with
                     {
                         Provenance = AuthoredRecipientProvenance.NamedByCaller,
                     };
