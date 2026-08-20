@@ -234,7 +234,7 @@ internal sealed partial class MailKitRemoteFolderCreator(
             folder.FullName,
             NormalizeHierarchyDelimiter(folder.DirectorySeparator),
             out var advertisedPath)
-            || !string.Equals(advertisedPath.Value, configuredPath.Value, StringComparison.Ordinal))
+            || !advertisedPath.NamesSameFolderAs(configuredPath))
         {
             throw new RemoteFolderCreationRefusedException(accountId, alias);
         }

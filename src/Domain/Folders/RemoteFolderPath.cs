@@ -90,6 +90,20 @@ public readonly record struct RemoteFolderPath
         }
     }
 
+    /// <summary>Answers whether two paths name the same folder on the server.</summary>
+    /// <param name="other">The path to compare with.</param>
+    /// <returns><see langword="true" /> when both name one folder.</returns>
+    /// <remarks>
+    /// The comparison is the advertised text alone, which is not what this type's own equality answers: a value also
+    /// carries the hierarchy delimiter the server reported, and two records of one folder can disagree about it when one
+    /// was written before the server reported a delimiter and the other after. That disagreement is a real distinction
+    /// where a resolution is being rebound, which is why equality keeps it, and no distinction at all where the question
+    /// is whether a discovered message landed in the folder a record names. This is the second question, asked in one
+    /// place instead of at every call site that would otherwise reach past the type into <see cref="Value" />.
+    /// </remarks>
+    public bool NamesSameFolderAs(RemoteFolderPath other) =>
+        string.Equals(this.Value, other.Value, StringComparison.Ordinal);
+
     /// <summary>Splits the path into its hierarchy levels.</summary>
     /// <returns>Every level in order, or the whole path as a single level when the server reported no delimiter.</returns>
     public IReadOnlyList<string> ToHierarchyLevels() =>

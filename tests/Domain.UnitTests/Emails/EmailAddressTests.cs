@@ -138,6 +138,86 @@ public sealed class EmailAddressTests
         Assert.Equal(default, address);
     }
 
+    /// <summary>The split is made at the last at-sign, because a quoted local part is allowed to carry one of its own.</summary>
+    [Theory]
+    [InlineData("anna.kowalska@example.test", "ANNA.KOWALSKA", "example.test")]
+    [InlineData("\"a@b\"@example.test", "\"A@B\"", "example.test")]
+    [InlineData("Anna@Example.Test", "ANNA", "Example.Test")]
+    public void TrySplit_AUsableAddress_HandsBackTheComparisonFormAndTheWrittenDomain(
+        string writtenAddress,
+        string expectedLocalPart,
+        string expectedDomain)
+    {
+        // Arrange
+        EmailAddress.TryCreate(displayName: null, writtenAddress, out var address);
+
+        // Act
+        var split = address.TrySplit(out var normalizedLocalPart, out var domainText);
+
+        // Assert
+        Assert.True(split);
+        Assert.Equal(expectedLocalPart, normalizedLocalPart);
+        Assert.Equal(expectedDomain, domainText.ToString());
+    }
+
+    /// <summary>
+    /// The local part is taken from the comparison form's own at-sign rather than from an offset into it. A case
+    /// mapping is not obliged to produce one character per character, and an offset carried over from the written
+    /// address would hand back a truncated prefix — one a shorter, unrelated mailbox could also produce, in the value
+    /// sender trust and recipient governance compare on.
+    /// </summary>
+    [Theory]
+    [InlineData("straße@example.test")]
+    [InlineData("ﬁle@example.test")]
+    [InlineData("ǅungla@example.test")]
+    public void TrySplit_ALocalPartWhoseCaseMappingMayResize_TakesTheWholeComparisonFormOfIt(string writtenAddress)
+    {
+        // Arrange
+        EmailAddress.TryCreate(displayName: null, writtenAddress, out var address);
+        var expectedLocalPart = address.NormalizedAddress[..address.NormalizedAddress.LastIndexOf('@')];
+
+        // Act
+        var split = address.TrySplit(out var normalizedLocalPart, out var domainText);
+
+        // Assert
+        Assert.True(split);
+        Assert.Equal(expectedLocalPart, normalizedLocalPart);
+        Assert.Equal("example.test", domainText.ToString());
+    }
+
+    /// <summary>A default address carries no text at all, and a caller reading its halves is given the refusal rather than an empty pair.</summary>
+    [Fact]
+    public void TrySplit_AnAddressThatWasNeverCreated_IsRefused()
+    {
+        // Arrange
+        var address = default(EmailAddress);
+
+        // Act
+        var split = address.TrySplit(out var normalizedLocalPart, out _);
+
+        // Assert
+        Assert.False(split);
+        Assert.Equal(string.Empty, normalizedLocalPart);
+    }
+
+    /// <summary>Text with a half missing names no mailbox, so it is refused rather than handed back with an empty side.</summary>
+    [Theory]
+    [InlineData("@example.test")]
+    [InlineData("anna@")]
+    [InlineData("@")]
+    [InlineData("example.test")]
+    [InlineData("")]
+    public void TrySplit_TextWithoutBothHalves_IsRefused(string candidate)
+    {
+        // Act
+        var split = EmailAddress.TrySplit(candidate, out var localPartText, out var domainText);
+
+        // Assert
+        Assert.False(split);
+        Assert.True(localPartText.IsEmpty);
+        Assert.True(domainText.IsEmpty);
+    }
+
     /// <summary>The role is what makes an address answerable: "wrote this" and "was copied on this" are different questions about one person.</summary>
     [Fact]
     public void EmailParticipant_SameAddressInTwoHeaders_StaysTwoParticipants()

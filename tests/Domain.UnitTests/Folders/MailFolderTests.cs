@@ -96,6 +96,39 @@ public sealed class MailFolderTests
         Assert.Equal(["Archief", "2026", "Q3"], levels);
     }
 
+    /// <summary>
+    /// A record written before the server reported a delimiter and a resolution made after it are two values of one
+    /// folder. Naming the same folder is therefore the advertised text alone, while equality keeps the delimiter because
+    /// a rebinding is decided on both halves.
+    /// </summary>
+    [Fact]
+    public void NamesSameFolderAs_OnePathWithADelimiterAndOneWithout_NamesOneFolder()
+    {
+        // Arrange
+        var advertised = RemoteFolderPath.Create("Archief/2026", '/');
+        var recorded = RemoteFolderPath.Create("Archief/2026");
+
+        // Act
+        var namesSameFolder = advertised.NamesSameFolderAs(recorded);
+
+        // Assert
+        Assert.True(namesSameFolder);
+        Assert.NotEqual(advertised, recorded);
+    }
+
+    [Fact]
+    public void NamesSameFolderAs_PathsDifferingInCase_NamesTwoFolders()
+    {
+        // Arrange
+        var archive = RemoteFolderPath.Create("Archief", '/');
+
+        // Act
+        var namesSameFolder = archive.NamesSameFolderAs(RemoteFolderPath.Create("archief", '/'));
+
+        // Assert
+        Assert.False(namesSameFolder);
+    }
+
     [Fact]
     public void ToHierarchyLevels_ServerReportedNoDelimiter_KeepsThePathAsOneLevel()
     {

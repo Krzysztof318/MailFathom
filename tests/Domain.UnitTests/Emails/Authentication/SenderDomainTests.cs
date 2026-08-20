@@ -182,9 +182,10 @@ public sealed class SenderDomainTests
         Assert.Equal(expected, domain.NormalizedValue);
     }
 
-    /// <summary>A mailbox with nothing after the at-sign names no domain, so nothing is read from it.</summary>
+    /// <summary>A mailbox with a half missing names no domain, so nothing is read from it.</summary>
     [Theory]
     [InlineData("bounce@")]
+    [InlineData("@relay.test")]
     [InlineData("bounce@rel ay.test")]
     [InlineData(null)]
     public void TryCreateFromMailbox_NoUsableDomain_IsRefused(string? mailbox)

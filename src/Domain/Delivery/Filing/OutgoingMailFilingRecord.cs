@@ -133,5 +133,5 @@ public sealed record OutgoingMailFilingRecord
     private bool IsJoinable => this.Stage == OutgoingMailFilingStage.Confirmed && this.ObservedAt is null;
 
     private bool NamesFolder(RemoteFolderPath discoveredFolderPath) =>
-        string.Equals(this.FolderPath.Value, discoveredFolderPath.Value, StringComparison.Ordinal);
+        this.FolderPath.NamesSameFolderAs(discoveredFolderPath);
 }

@@ -2,9 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Buffers.Binary;
 using System.Security.Cryptography;
-using System.Text;
+using MailFathom.Application.Digests;
 using MailFathom.Application.SensitiveContent.Detection;
 
 namespace MailFathom.Application.SensitiveContent.Derivation;
@@ -69,18 +68,18 @@ public readonly record struct SensitiveContentDerivationStamp
 
         using var digest = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
 
-        AppendText(digest, HashDomain);
-        AppendNumber(digest, plan.Bounds.MaximumAnalyzedCharacters);
-        AppendNumber(digest, plan.Scanners.Count);
+        CanonicalDigest.AppendText(digest, HashDomain);
+        CanonicalDigest.AppendNumber(digest, plan.Bounds.MaximumAnalyzedCharacters);
+        CanonicalDigest.AppendNumber(digest, plan.Scanners.Count);
 
         foreach (var scannerPlan in plan.Scanners)
         {
             var detector = registered.FirstOrDefault(candidate => candidate.Scanner == scannerPlan.Scanner)?.Detector
                 ?? throw SensitiveContentScannerUnavailableException.NotRegistered(scannerPlan.Scanner);
 
-            AppendNumber(digest, (int)scannerPlan.Scanner);
-            AppendText(digest, detector.Name);
-            AppendText(digest, detector.Revision);
+            CanonicalDigest.AppendNumber(digest, (int)scannerPlan.Scanner);
+            CanonicalDigest.AppendText(digest, detector.Name);
+            CanonicalDigest.AppendText(digest, detector.Revision);
             AppendNames(digest, [.. scannerPlan.Categories.Select(category => category.Name)]);
             AppendNames(digest, [.. scannerPlan.SuppressedRules.Select(rule => rule.ToString())]);
         }
@@ -97,7 +96,7 @@ public readonly record struct SensitiveContentDerivationStamp
     {
         ArgumentNullException.ThrowIfNull(value);
 
-        if (value.Length != Length || !value.All(IsLowercaseHexadecimal))
+        if (!CanonicalDigest.IsHexadecimalDigest(value, Length))
         {
             throw new ArgumentException(
                 $"A sensitive-content derivation stamp is {Length} lowercase hexadecimal characters.",
@@ -110,31 +109,14 @@ public readonly record struct SensitiveContentDerivationStamp
     /// <inheritdoc />
     public override string ToString() => this.Value;
 
-    private static bool IsLowercaseHexadecimal(char character) =>
-        character is >= '0' and <= '9' or >= 'a' and <= 'f';
-
+    /// <summary>Writes a set of names in a fixed order, so two deployments that listed them differently write one stamp.</summary>
     private static void AppendNames(IncrementalHash digest, string[] names)
     {
-        AppendNumber(digest, names.Length);
+        CanonicalDigest.AppendNumber(digest, names.Length);
 
         foreach (var name in names.Order(StringComparer.Ordinal))
         {
-            AppendText(digest, name);
+            CanonicalDigest.AppendText(digest, name);
         }
-    }
-
-    private static void AppendNumber(IncrementalHash digest, int value)
-    {
-        Span<byte> encoded = stackalloc byte[sizeof(int)];
-        BinaryPrimitives.WriteInt32BigEndian(encoded, value);
-        digest.AppendData(encoded);
-    }
-
-    private static void AppendText(IncrementalHash digest, string value)
-    {
-        var encoded = Encoding.UTF8.GetBytes(value);
-
-        AppendNumber(digest, encoded.Length);
-        digest.AppendData(encoded);
     }
 }
