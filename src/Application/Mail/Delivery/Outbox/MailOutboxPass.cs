@@ -99,11 +99,20 @@ public sealed class MailOutboxPass
     /// </remarks>
     public async Task<MailOutboxPassReport> RunAsync(MailAccountId accountId, CancellationToken stoppingToken)
     {
-        // An account with no submission endpoint has nothing to drain and no policy to drain it under. Asking first
-        // keeps a read-only account from claiming work it could never attempt.
+        // Before the submission endpoint is asked for, because a draft is written over IMAP and owes nothing to SMTP:
+        // an account that reads mail without sending it keeps drafts like any other, and a replacement whose process
+        // died mid-way, a discard whose copies were never withdrawn, and a promotion whose give-up never committed are
+        // reached by this sweep or by nothing. Guarding it behind the delivery policy would leave exactly those
+        // accounts with a folder nothing ever brings back into step.
+        var draftResults = new List<MailDraftFilingResult>(
+            await this.SettleDraftsAsync(accountId, stoppingToken));
+
+        // An account with no submission endpoint has nothing to drain and no policy to drain it under. Asking here
+        // keeps a read-only account from claiming work it could never attempt, and what it reports is the drafts it
+        // did settle rather than a pass that never ran.
         if (this.transportSecurityPolicyReader.GetDeliveryPolicy(accountId) is not { } transportSecurityPolicy)
         {
-            return MailOutboxPassReport.Empty;
+            return MailOutboxPassReport.WithDraftsAlone(draftResults);
         }
 
         var markedUnknownCount = await this.outgoingEmails.MarkUnknownOutcomesAsync(accountId, stoppingToken);
@@ -113,11 +122,6 @@ public sealed class MailOutboxPass
         // all and is mirrored nowhere.
         var filingResults = new List<OutgoingMailFilingResult>(
             await this.filings.MirrorWaitingSendsAsync(accountId, stoppingToken));
-
-        // Beside the mirroring and for the same reason: a replacement whose process died mid-way, and a draft whose
-        // folder was briefly unreachable, are finished before anything new is claimed rather than behind it.
-        var draftResults = new List<MailDraftFilingResult>(
-            await this.SettleDraftsAsync(accountId, stoppingToken));
 
         var claimed = await this.outgoingEmails.ClaimAsync(
             OutgoingEmailClaimRequest.Create(accountId, this.settings.MaxDeliveriesPerPass, this.settings.LeaseDuration),

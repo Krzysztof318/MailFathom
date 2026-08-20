@@ -33,7 +33,7 @@ public sealed record MailOutboxPassReport(
     bool BatchFilled,
     IReadOnlyList<OutboxStageCount> OutstandingByStage)
 {
-    /// <summary>A pass that never ran produces this: an account with no submission endpoint, and one whose pass ended in a shutdown, a conflict, or a failure.</summary>
+    /// <summary>A pass that never ran produces this: one that ended in a shutdown, a conflict, or a failure.</summary>
     /// <remarks>
     /// An account with nothing outstanding does not produce this. Its pass runs, settles nothing, and reports a real
     /// measurement of zero at every unfinished stage — which is the distinction the empty list here carries: it
@@ -42,6 +42,22 @@ public sealed record MailOutboxPassReport(
     /// </remarks>
     public static MailOutboxPassReport Empty { get; } =
         new([], [], [], MarkedUnknownCount: 0, BatchFilled: false, OutstandingByStage: []);
+
+    /// <summary>Reports a pass that settled an account's drafts and reached no outbox at all.</summary>
+    /// <param name="draftResults">What each attempt to bring the drafts folder into step with a held draft did.</param>
+    /// <returns>The report, which measures no outbox depth for the reason <see cref="Empty" /> gives.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="draftResults" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// It is what an account with no submission endpoint produces. Such an account still keeps drafts, because a draft
+    /// is written over IMAP, so the sweep that resumes them runs for it — and everything the outbox would have said is
+    /// absent rather than zero, since nothing about the outbox was read.
+    /// </remarks>
+    public static MailOutboxPassReport WithDraftsAlone(IReadOnlyList<MailDraftFilingResult> draftResults)
+    {
+        ArgumentNullException.ThrowIfNull(draftResults);
+
+        return new([], [], draftResults, MarkedUnknownCount: 0, BatchFilled: false, OutstandingByStage: []);
+    }
 
     /// <summary>Gets how many copies this pass put into a folder of the mailbox.</summary>
     public int FiledCount => this.FilingResults.Count(result => result.Outcome == OutgoingMailFilingOutcome.Filed);

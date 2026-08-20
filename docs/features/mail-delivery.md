@@ -964,7 +964,10 @@ than in two.
 where they are asked for, so what is left for a pass is the half nobody is standing there for: a process that stopped
 between the two commands of a replacement, a mail server that was briefly unreachable, and a promoted draft whose
 message has since been delivered. The pass reads the record rather than the folder, and an account whose drafts are all
-settled costs one bounded query and reaches no mail server at all.
+settled costs one bounded query and reaches no mail server at all. It runs **before** the submission endpoint is asked
+for, because a draft is written over IMAP and owes nothing to SMTP: an account that reads mail without configuring a
+place to send from keeps drafts like any other, and this sweep is the only thing that ever brings its drafts folder
+back into step.
 
 **A draft is derived personal data.** It is a message addressed to people, and one drafted as an answer is composed in
 part from mail this deployment holds, so it carries the classification of what it came from and is reached by the same

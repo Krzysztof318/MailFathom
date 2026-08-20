@@ -345,6 +345,29 @@ public sealed class MailOutboxPassTests
     }
 
     /// <summary>
+    /// A draft is written over IMAP and owes nothing to SMTP, so an account that reads mail without sending it keeps
+    /// drafts like any other — and the sweep that resumes what a crash left is the only thing that ever reaches them.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_AccountHasNoSubmissionEndpoint_StillResumesItsOutstandingDrafts()
+    {
+        // Arrange
+        var context = new PassContext(submits: false);
+        var draft = await context.SaveDraftAsync();
+        Assert.Equal(0, context.DraftSide.AppendCount);
+        context.DraftSide.MapDraftsFolder(Account);
+
+        // Act
+        var report = await context.RunAsync();
+
+        // Assert
+        Assert.Equal(MailDraftFilingOutcome.Filed, Assert.Single(report.DraftResults).Outcome);
+        Assert.Equal(MailDraftStage.Filed, context.DraftSide.Drafts.Peek(draft.Id)!.Stage);
+        Assert.Empty(report.Results);
+        Assert.Empty(report.OutstandingByStage);
+    }
+
+    /// <summary>
     /// A delivered send takes the draft it was promoted from out of the drafts folder, in the pass that filed the sent
     /// copy — which is what leaves the message in one of the owner's folders rather than in two.
     /// </summary>
