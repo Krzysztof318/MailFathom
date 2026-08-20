@@ -4,6 +4,7 @@
 
 using System.Buffers;
 using System.Globalization;
+using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
 
@@ -108,6 +109,20 @@ public sealed record OutgoingEmailRequester
     public static OutgoingEmailRequester Command(string invocationIdentity) => new(
         OutgoingEmailOrigin.Command,
         ValidIdentity(invocationIdentity, nameof(invocationIdentity)));
+
+    /// <summary>Names the promotion of one draft, which is the draft rather than a key whoever asked supplied.</summary>
+    /// <param name="draft">The draft being sent, which is what makes two callers promoting it one request.</param>
+    /// <returns>A requester naming that draft's promotion.</returns>
+    /// <remarks>
+    /// A draft is promoted once, so the draft is the act and there is nothing for a caller to key it by. That is what
+    /// closes the race a supplied key would leave open: two callers promoting one draft together both find it
+    /// unpromoted, and it is this identity that makes their two asks one record instead of one message sent twice —
+    /// the same reasoning an occasion of a recurring send is keyed by, where the duplicate would likewise be a message
+    /// in somebody's mailbox rather than a row.
+    /// </remarks>
+    public static OutgoingEmailRequester Draft(MailDraftId draft) => new(
+        OutgoingEmailOrigin.Command,
+        string.Create(CultureInfo.InvariantCulture, $"draft@{draft.Value:D}"));
 
     /// <summary>Restores a requester from the origin and identity a record holds.</summary>
     /// <param name="origin">The kind of authored act that asked.</param>

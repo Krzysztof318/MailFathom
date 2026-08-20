@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Operations;
 
@@ -20,17 +21,19 @@ namespace MailFathom.Application.Mail.Delivery.Outbox;
 /// </remarks>
 /// <param name="Results">What each claimed send ended in.</param>
 /// <param name="FilingResults">What each attempt to put a copy of one of these messages into a folder did.</param>
+/// <param name="DraftResults">What each attempt to bring the drafts folder into step with a held draft did.</param>
 /// <param name="MarkedUnknownCount">How many records this pass found stuck mid-transmission and stamped with the reason.</param>
 /// <param name="BatchFilled">Whether the claim took as much as it was allowed, which means there is more waiting.</param>
 /// <param name="OutstandingByStage">How much the pass left standing at each non-terminal stage, zeros included, and empty where it measured nothing at all.</param>
 public sealed record MailOutboxPassReport(
     IReadOnlyList<MailOutboxDeliveryResult> Results,
     IReadOnlyList<OutgoingMailFilingResult> FilingResults,
+    IReadOnlyList<MailDraftFilingResult> DraftResults,
     int MarkedUnknownCount,
     bool BatchFilled,
     IReadOnlyList<OutboxStageCount> OutstandingByStage)
 {
-    /// <summary>A pass that never ran produces this: an account with no submission endpoint, and one whose pass ended in a shutdown, a conflict, or a failure.</summary>
+    /// <summary>A pass that never ran produces this: one that ended in a shutdown, a conflict, or a failure.</summary>
     /// <remarks>
     /// An account with nothing outstanding does not produce this. Its pass runs, settles nothing, and reports a real
     /// measurement of zero at every unfinished stage — which is the distinction the empty list here carries: it
@@ -38,7 +41,23 @@ public sealed record MailOutboxPassReport(
     /// much is waiting for it, and publishing a zero would clear a backlog on a dashboard that nothing had drained.
     /// </remarks>
     public static MailOutboxPassReport Empty { get; } =
-        new([], [], MarkedUnknownCount: 0, BatchFilled: false, OutstandingByStage: []);
+        new([], [], [], MarkedUnknownCount: 0, BatchFilled: false, OutstandingByStage: []);
+
+    /// <summary>Reports a pass that settled an account's drafts and reached no outbox at all.</summary>
+    /// <param name="draftResults">What each attempt to bring the drafts folder into step with a held draft did.</param>
+    /// <returns>The report, which measures no outbox depth for the reason <see cref="Empty" /> gives.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="draftResults" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// It is what an account with no submission endpoint produces. Such an account still keeps drafts, because a draft
+    /// is written over IMAP, so the sweep that resumes them runs for it — and everything the outbox would have said is
+    /// absent rather than zero, since nothing about the outbox was read.
+    /// </remarks>
+    public static MailOutboxPassReport WithDraftsAlone(IReadOnlyList<MailDraftFilingResult> draftResults)
+    {
+        ArgumentNullException.ThrowIfNull(draftResults);
+
+        return new([], [], draftResults, MarkedUnknownCount: 0, BatchFilled: false, OutstandingByStage: []);
+    }
 
     /// <summary>Gets how many copies this pass put into a folder of the mailbox.</summary>
     public int FiledCount => this.FilingResults.Count(result => result.Outcome == OutgoingMailFilingOutcome.Filed);
@@ -53,6 +72,30 @@ public sealed record MailOutboxPassReport(
         is OutgoingMailFilingOutcome.DestinationUnavailable
         or OutgoingMailFilingOutcome.OutcomeUnknown
         or OutgoingMailFilingOutcome.Failed);
+
+    /// <summary>Gets how many drafts this pass brought the mailbox into step with.</summary>
+    /// <remarks>
+    /// It counts the three endings that changed something in the folder — a first copy appended, a copy replaced, and a
+    /// given-up draft taken back out — rather than the drafts the pass looked at, because a draft that was already
+    /// settled is one the pass answered with a read.
+    /// </remarks>
+    public int DraftsSettledCount => this.DraftResults.Count(result => result.Outcome
+        is MailDraftFilingOutcome.Filed
+        or MailDraftFilingOutcome.Replaced
+        or MailDraftFilingOutcome.Discarded);
+
+    /// <summary>Gets how many drafts this pass could not bring the mailbox into step with.</summary>
+    /// <remarks>
+    /// It is deliberately not part of <see cref="AccountDeferred" /> and of nothing else that decides what happens
+    /// next, for the reason an unfiled copy is not: a draft the folder does not show is a message its author cannot
+    /// reach from their own client, and no send is attempted again because of it. A diverged copy is counted here as
+    /// well, because what an operator has to know is that MailFathom stopped acting on a message it had put there.
+    /// </remarks>
+    public int DraftsNotSettledCount => this.DraftResults.Count(result => result.Outcome
+        is MailDraftFilingOutcome.DestinationUnavailable
+        or MailDraftFilingOutcome.Diverged
+        or MailDraftFilingOutcome.OutcomeUnknown
+        or MailDraftFilingOutcome.Failed);
 
     /// <summary>Gets how many of the claimed sends the server acknowledged.</summary>
     public int SentCount => this.CountOf(MailOutboxDeliveryOutcome.Sent);

@@ -5,6 +5,7 @@
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Delivery;
+using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
 
@@ -69,4 +70,18 @@ internal sealed class StubEmailContentStore(StoredEmailContent? storedContent = 
         RecurringSendId recurringSendId,
         CancellationToken cancellationToken) =>
         throw new NotSupportedException("A mailbox tool never reads the draft a repeated send is built from.");
+
+    /// <inheritdoc />
+    public Task SaveMailDraftContentAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        ReadOnlyMemory<byte> rawMime,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException("Reading an email never stores a draft.");
+
+    /// <inheritdoc />
+    public Task<StoredEmailContent?> FindMailDraftContentAsync(
+        MailDraftId draftId,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException("A mailbox tool never reads a draft.");
 }

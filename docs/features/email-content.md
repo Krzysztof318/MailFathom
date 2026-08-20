@@ -508,9 +508,12 @@ those leaves an email to report an outcome against.
 - `MailFathom.Application.EmailContent.Storage` — the content store port and what a read of it returns, remote and
   stored. The port covers mail leaving as well as mail arriving: an outgoing message is stored against the record of the
   send it was composed for rather than against a local occurrence, and is written once so a retry transmits the bytes an
-  earlier attempt may already have begun transmitting. One port is what keeps raw MIME behind one seam, so the move to
-  object storage this port was shaped for stays one adapter's rather than two. [Mail delivery](mail-delivery.md) holds
-  why that write may never be repeated.
+  earlier attempt may already have begun transmitting. A repeated send's draft is a third kind, written once beside the
+  declaration each occasion is composed from. A draft's message is the fourth and the one exception to writing once: it
+  is stored against the draft and **rewritten** with each revision, because what it holds is a message somebody is
+  still editing rather than bytes a later attempt has to reproduce. One port is what keeps raw MIME behind one seam, so
+  the move to object storage this port was shaped for stays one adapter's rather than four. [Mail
+  delivery](mail-delivery.md) holds why the send's write may never be repeated and why the draft's must be.
 - `MailFathom.Application.EmailContent.Rendering` — the renderer port, the body representations with their bounds, and
   the headers.
 - `MailFathom.Application.EmailContent.Repair` — the repair-request port, the request it carries, and the defect that

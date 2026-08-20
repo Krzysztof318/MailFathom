@@ -5,6 +5,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Common.Observability;
@@ -26,6 +27,12 @@ namespace MailFathom.Infrastructure.Observability;
 /// account, by the place a copy was meant for, and by outcome. It is a counter of its own rather than a dimension of
 /// the attempts, because the two say different things about the same message: a copy that could not be filed never
 /// means the message failed to reach anybody, and summing them would produce a failure rate nobody could act on.
+/// </para>
+/// <para>
+/// The fourth is whether the drafts folder shows what this deployment holds, which the draft counter answers by
+/// account and by outcome. A counter of its own again, and for a sharper form of the reason: a draft was never offered
+/// to anybody, so folding it into either of the two above would put an act that cannot fail a recipient into a rate an
+/// operator reads as mail not arriving.
 /// </para>
 /// <para>
 /// The one outcome worth alerting on is the unknown one, and it is a dimension of the same counter rather than an
@@ -53,6 +60,7 @@ public sealed class MailDeliveryTelemetry
     private const string OutcomeTagName = "mailfathom.mail.delivery.outcome";
     private const string FilingTagName = "mailfathom.mail.filing.place";
     private const string FilingOutcomeTagName = "mailfathom.mail.filing.outcome";
+    private const string DraftOutcomeTagName = "mailfathom.mail.draft.outcome";
     private const string StageTagName = "mailfathom.mail.delivery.stage";
 
     /// <summary>The span one submission to a provider is reported under.</summary>
@@ -74,6 +82,7 @@ public sealed class MailDeliveryTelemetry
     private readonly Counter<long> attemptCount;
     private readonly Counter<long> retryCount;
     private readonly Counter<long> filingCount;
+    private readonly Counter<long> draftCount;
     private readonly Histogram<double> submissionDuration;
 
     /// <summary>Initializes the instruments every delivery attempt reports through.</summary>
@@ -96,6 +105,10 @@ public sealed class MailDeliveryTelemetry
             "mailfathom.mail.filing.attempts",
             unit: "{attempt}",
             description: "Attempts to put a copy of an outgoing message into a folder, by account, place, and outcome.");
+        this.draftCount = Telemetry.Meter.CreateCounter<long>(
+            "mailfathom.mail.draft.attempts",
+            unit: "{attempt}",
+            description: "Attempts to bring the drafts folder into step with a held draft, by account and outcome.");
         this.submissionDuration = Telemetry.Meter.CreateHistogram<double>(
             "mailfathom.mail.delivery.submission.duration",
             unit: "s",
@@ -160,6 +173,17 @@ public sealed class MailDeliveryTelemetry
                     { AccountTagName, accountId.Value },
                     { FilingTagName, filing.FilingName },
                     { FilingOutcomeTagName, NameOf(filing.Outcome) },
+                });
+        }
+
+        foreach (var draft in report.DraftResults)
+        {
+            this.draftCount.Add(
+                1,
+                new TagList
+                {
+                    { AccountTagName, accountId.Value },
+                    { DraftOutcomeTagName, NameOf(draft.Outcome) },
                 });
         }
 
@@ -235,6 +259,20 @@ public sealed class MailDeliveryTelemetry
         MailOutboxDeliveryOutcome.NotRecorded => "not-recorded",
         MailOutboxDeliveryOutcome.MissedItsDueTime => "missed-due-time",
         _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "No metric dimension is defined for this delivery outcome."),
+    };
+
+    /// <summary>Names a draft outcome as the dimension a dashboard groups by, under the same rule as the one above.</summary>
+    private static string NameOf(MailDraftFilingOutcome outcome) => outcome switch
+    {
+        MailDraftFilingOutcome.AlreadySettled => "already-settled",
+        MailDraftFilingOutcome.Filed => "filed",
+        MailDraftFilingOutcome.Replaced => "replaced",
+        MailDraftFilingOutcome.Discarded => "discarded",
+        MailDraftFilingOutcome.DestinationUnavailable => "destination-unavailable",
+        MailDraftFilingOutcome.Diverged => "diverged",
+        MailDraftFilingOutcome.OutcomeUnknown => "outcome-unknown",
+        MailDraftFilingOutcome.Failed => "failed",
+        _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "No metric dimension is defined for this draft outcome."),
     };
 
     /// <summary>Names a filing outcome as the dimension a dashboard groups by, under the same rule as the one above.</summary>

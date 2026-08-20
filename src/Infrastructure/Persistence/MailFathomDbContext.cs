@@ -286,6 +286,46 @@ internal sealed class MailFathomDbContext : DbContext
     /// <remarks>Named for the reason above: the composed name would be truncated and permanent.</remarks>
     internal const string RecurringSendDraftForeignKeyName = "fk_recurring_send_drafts_sends";
 
+    /// <summary>The order an account's drafts are read in, which is the order their owner last touched them.</summary>
+    /// <remarks>
+    /// Unfiltered, unlike the outbox's, because what a pass over drafts looks for cannot be written as a predicate on
+    /// this table: whether a draft owes the mail server anything is decided by the copy rows beside it. The structure
+    /// is proportional to the drafts a mailbox holds, which is what a person keeps rather than what a deployment has
+    /// ever done.
+    /// </remarks>
+    internal const string MailDraftAccountIndexName = "ix_mail_drafts_account_revised";
+
+    /// <summary>The index a delivered send is turned back into the draft it came from through.</summary>
+    /// <remarks>
+    /// Filtered to the drafts a promotion actually wrote a record for, which is a small part of a mailbox's drafts and
+    /// none at all in a deployment where nothing is ever promoted.
+    /// </remarks>
+    internal const string MailDraftPromotedIndexName = "ix_mail_drafts_promoted";
+
+    /// <summary>The foreign key that removes a draft's recipients with the draft.</summary>
+    /// <remarks>
+    /// Named because EF's convention composes one from both table names and PostgreSQL truncates an identifier at 63
+    /// characters, which would leave a permanent constraint whose name ends in a tilde.
+    /// </remarks>
+    internal const string MailDraftRecipientForeignKeyName = "fk_mail_draft_recipients_drafts";
+
+    /// <summary>The foreign key that removes the record of what was appended where with the draft it was appended for.</summary>
+    /// <remarks>Named for the reason above: the composed name would be truncated and permanent.</remarks>
+    internal const string MailDraftCopyForeignKeyName = "fk_mail_draft_copies_drafts";
+
+    /// <summary>The revision of one draft only one writer may record an append for, kept at EF Core's conventional name.</summary>
+    /// <remarks>
+    /// Stated by the mapping for the reason the account's key is: a losing writer is recognized by the constraint its
+    /// insert violated, and a name only the convention knew about would turn a resolvable race into a failure. Two
+    /// passes settling one account can both read that a revision has no copy row and both insert one, which is exactly
+    /// the race the retry converges on.
+    /// </remarks>
+    internal const string MailDraftCopyPrimaryKeyConstraintName = "PK_mail_draft_copies";
+
+    /// <summary>The foreign key that removes the stored MIME with the draft it is the current revision of.</summary>
+    /// <remarks>Named for the reason above: the composed name would be truncated and permanent.</remarks>
+    internal const string MailDraftContentForeignKeyName = "fk_mail_draft_contents_drafts";
+
     /// <summary>The uniqueness a job's idempotency rests on, which spans every state a row can reach.</summary>
     internal const string JobIdentityUniqueIndexName = "ix_jobs_identity";
 
@@ -398,6 +438,13 @@ internal sealed class MailFathomDbContext : DbContext
         this.Set<RecurringSendRecipientEntity>();
 
     internal DbSet<RecurringSendDraftEntity> RecurringSendDrafts => this.Set<RecurringSendDraftEntity>();
+    internal DbSet<MailDraftEntity> MailDrafts => this.Set<MailDraftEntity>();
+
+    internal DbSet<MailDraftRecipientEntity> MailDraftRecipients => this.Set<MailDraftRecipientEntity>();
+
+    internal DbSet<MailDraftCopyEntity> MailDraftCopies => this.Set<MailDraftCopyEntity>();
+
+    internal DbSet<MailDraftContentEntity> MailDraftContents => this.Set<MailDraftContentEntity>();
 
     internal DbSet<MailboxMutationAuditEntryEntity> MailboxMutationAuditEntries =>
         this.Set<MailboxMutationAuditEntryEntity>();
@@ -799,6 +846,10 @@ internal sealed class MailFathomDbContext : DbContext
         ConfigureRecurringSend(modelBuilder);
         ConfigureRecurringSendRecipient(modelBuilder);
         ConfigureRecurringSendDraft(modelBuilder);
+        ConfigureMailDraft(modelBuilder);
+        ConfigureMailDraftRecipient(modelBuilder);
+        ConfigureMailDraftCopy(modelBuilder);
+        ConfigureMailDraftContent(modelBuilder);
         ConfigureMailboxMutationAuditEntry(modelBuilder);
         ConfigureMailAnsweringAuditEntry(modelBuilder);
         ConfigureMailRuleExecution(modelBuilder);
@@ -1736,6 +1787,160 @@ internal sealed class MailFathomDbContext : DbContext
                 .WithMany(message => message.Filings)
                 .HasForeignKey(filing => filing.OutgoingEmailId)
                 .HasConstraintName(OutgoingEmailFilingForeignKeyName)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+    /// <summary>Declares the messages this deployment holds that have not been sent and may never be.</summary>
+    /// <remarks>
+    /// <para>
+    /// A table of its own rather than a stage of the outgoing record, because a draft has none of what that record is
+    /// for: no delivery, no recipient that has to resolve, no idempotency identity against a duplicate nobody could
+    /// withdraw, and no terminal stage. What it has instead is the one thing a send never does — a copy on somebody
+    /// else's server that every revision has to replace.
+    /// </para>
+    /// <para>
+    /// No unique identity is declared over the author, deliberately, and that is the difference from the outgoing
+    /// record's index rather than an omission. Two identical requests to save a draft are two drafts, because a draft
+    /// that turned out to exist twice costs its owner a deletion while a send that did costs a recipient a message they
+    /// read as sent twice.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureMailDraft(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<MailDraftEntity>(entity =>
+        {
+            entity.ToTable("mail_drafts");
+            entity.HasKey(draft => draft.Id);
+            entity.Property(draft => draft.Id).ValueGeneratedNever();
+            entity.Property(draft => draft.MailboxAccountId).HasMaxLength(128).IsRequired();
+            entity.Property(draft => draft.RequesterIdentity)
+                .HasMaxLength(OutgoingEmailRequester.MaximumIdentityLength)
+                .IsRequired();
+
+            // Stored as text for the reason every enum on the delivery feature is: both stay readable in an ad-hoc
+            // audit query and survive any later reordering of their enum.
+            entity.Property(draft => draft.RequesterOrigin).HasConversion<string>().HasMaxLength(64).IsRequired();
+            entity.Property(draft => draft.DivergenceReason).HasConversion<string>().HasMaxLength(64);
+
+            // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
+            entity.Property(draft => draft.ConcurrencyVersion).IsRowVersion();
+
+            entity.HasIndex(draft => new { draft.MailboxAccountId, draft.RevisedAt })
+                .HasDatabaseName(MailDraftAccountIndexName);
+
+            entity.HasIndex(draft => draft.PromotedToOutgoingEmailId)
+                .HasDatabaseName(MailDraftPromotedIndexName)
+                .HasFilter($"\"{nameof(MailDraftEntity.PromotedToOutgoingEmailId)}\" IS NOT NULL");
+        });
+
+    /// <summary>Declares the people one draft is addressed to, which may be nobody at all.</summary>
+    /// <remarks>
+    /// <para>
+    /// Keyed by the draft and the position in its list, for the reason an outgoing recipient is: an address is personal
+    /// data and a key is repeated into every index over a table, and the ordinal keeps the recipients in the order the
+    /// composed message writes its headers in.
+    /// </para>
+    /// <para>
+    /// Nothing here carries a status or a reply code, unlike a send's recipients, because a draft has been offered to
+    /// nobody. A revision replaces the whole list rather than amending it, which is what keeps it the composed
+    /// message's own rather than an accumulation of everybody the draft was ever addressed to.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureMailDraftRecipient(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<MailDraftRecipientEntity>(entity =>
+        {
+            entity.ToTable("mail_draft_recipients");
+            entity.HasKey(recipient => new { recipient.MailDraftId, recipient.Ordinal });
+            entity.Property(recipient => recipient.Address)
+                .HasMaxLength(OutgoingRecipient.MaximumAddressLength)
+                .IsRequired();
+
+            entity.Property(recipient => recipient.Role).HasConversion<string>().HasMaxLength(64).IsRequired();
+
+            entity.HasOne(recipient => recipient.MailDraft)
+                .WithMany(draft => draft.Recipients)
+                .HasForeignKey(recipient => recipient.MailDraftId)
+                .HasConstraintName(MailDraftRecipientForeignKeyName)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+    /// <summary>Declares the copies of a draft this deployment put into the owner's drafts folder.</summary>
+    /// <remarks>
+    /// <para>
+    /// One row per revision, which is what makes a replacement expressible at all. IMAP has no command that changes a
+    /// stored message, so a new version of a draft is a new message beside the old one and the old one is removed
+    /// afterwards — and between those two commands the folder holds two copies that both belong to this draft. Keying
+    /// by the revision is also what makes the append idempotent without a read-then-write: appending the same revision
+    /// twice is refused by the key rather than by a check two callers can pass between.
+    /// </para>
+    /// <para>
+    /// The row is written before the <c>APPEND</c> goes out and completed after it, which is why the stage is a column
+    /// rather than the presence of a placement. A process that died between the command and its answer left a row
+    /// saying a copy may be there, and nothing appends that revision again on the strength of it.
+    /// </para>
+    /// <para>
+    /// The cascade is the erasure obligation the content table carries: erasing a draft erases what it says about the
+    /// mailbox with it. Nothing here is mail content — a folder, an alias, a UID, and an identity MailFathom minted are
+    /// its own or the server's names for things.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureMailDraftCopy(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<MailDraftCopyEntity>(entity =>
+        {
+            entity.ToTable("mail_draft_copies");
+            entity.HasKey(copy => new { copy.MailDraftId, copy.Revision })
+                .HasName(MailDraftCopyPrimaryKeyConstraintName);
+            entity.Property(copy => copy.FolderAlias).HasMaxLength(128).IsRequired();
+            entity.Property(copy => copy.FolderPath)
+                .HasMaxLength(MailDraftCopyEntity.MaximumFolderPathLength)
+                .IsRequired();
+            entity.Property(copy => copy.InternetMessageId)
+                .HasMaxLength(MailDraftCopyEntity.MaximumInternetMessageIdLength);
+
+            entity.Property(copy => copy.Stage).HasConversion<string>().HasMaxLength(64).IsRequired();
+
+            // A copy is confirmed and withdrawn without the draft above it changing, so the draft's token would not
+            // notice two passes settling one copy differently — and what that decides is whether a message is left in
+            // somebody's folder.
+            entity.Property(copy => copy.ConcurrencyVersion).IsRowVersion();
+
+            entity.HasOne(copy => copy.MailDraft)
+                .WithMany(draft => draft.Copies)
+                .HasForeignKey(copy => copy.MailDraftId)
+                .HasConstraintName(MailDraftCopyForeignKeyName)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+    /// <summary>Declares the raw MIME the current revision of one draft is held as.</summary>
+    /// <remarks>
+    /// <para>
+    /// A one-to-one table whose primary key is also its foreign key, which is the arrangement both other content tables
+    /// use and for the same reason: keeping the large binary value out of the record means listing what is held never
+    /// loads a single message's bytes.
+    /// </para>
+    /// <para>
+    /// One row per draft rather than per revision, which is the one place a raw-MIME row is rewritten rather than
+    /// written once. A send's payload is fixed because a retry has to transmit the bytes an earlier attempt may already
+    /// have begun transmitting; a draft's payload is what its author is still editing, and keeping every version would
+    /// hold a message per keystroke for as long as the draft lives.
+    /// </para>
+    /// <para>
+    /// The cascade is the erasure obligation: deleting the draft destroys the message it points at, so a draft's
+    /// message cannot outlive the record that says whose it is.
+    /// </para>
+    /// </remarks>
+    private static void ConfigureMailDraftContent(ModelBuilder modelBuilder) =>
+        modelBuilder.Entity<MailDraftContentEntity>(entity =>
+        {
+            entity.ToTable("mail_draft_contents");
+            entity.HasKey(content => content.MailDraftId);
+            entity.Property(content => content.MailDraftId).ValueGeneratedNever();
+            entity.Property(content => content.RawMime).IsRequired();
+            entity.Property(content => content.Sha256Hash).HasMaxLength(32).IsRequired();
+
+            entity.HasOne(content => content.MailDraft)
+                .WithOne(draft => draft.Content)
+                .HasForeignKey<MailDraftContentEntity>(content => content.MailDraftId)
+                .HasConstraintName(MailDraftContentForeignKeyName)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

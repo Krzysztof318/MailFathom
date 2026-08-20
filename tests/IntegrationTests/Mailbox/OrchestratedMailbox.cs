@@ -70,7 +70,23 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
     {
         using var message = CreateSyntheticMessage(subject);
 
-        await this.AppendAsync(folderPath, message, cancellationToken);
+        await this.AppendAsync(folderPath, message, MessageFlags.None, cancellationToken);
+    }
+
+    /// <summary>Appends one synthetic message as a draft, the way the mailbox owner's own mail client saves one.</summary>
+    /// <param name="folderPath">The folder to append to, which is the one playing the drafts role.</param>
+    /// <param name="subject">The subject the appended message carries.</param>
+    /// <param name="cancellationToken">Cancels the append.</param>
+    /// <remarks>
+    /// This is the draft MailFathom did not write, and it is the control every claim about a draft's own copy is read
+    /// against: it sits in the same folder, carries the same flag, and is reached by the same commands, so a removal
+    /// that took one message too many is visible here rather than nowhere.
+    /// </remarks>
+    internal async Task AppendDraftAsync(string folderPath, string subject, CancellationToken cancellationToken)
+    {
+        using var message = CreateSyntheticMessage(subject);
+
+        await this.AppendAsync(folderPath, message, MessageFlags.Draft, cancellationToken);
     }
 
     /// <summary>Appends one synthetic message written by a stated author, carrying headers the generator writes none of.</summary>
@@ -100,7 +116,7 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
             message.Headers.Add(name, value);
         }
 
-        await this.AppendAsync(folderPath, message, cancellationToken);
+        await this.AppendAsync(folderPath, message, MessageFlags.None, cancellationToken);
     }
 
     /// <summary>Reads every message in a folder with the flags the server currently holds for it.</summary>
@@ -132,6 +148,7 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
                     summary.Envelope?.Subject,
                     summary.Flags?.HasFlag(MessageFlags.Seen) == true,
                     summary.Flags?.HasFlag(MessageFlags.Flagged) == true,
+                    summary.Flags?.HasFlag(MessageFlags.Draft) == true,
                     summary.Keywords is { } keywords ? [.. keywords] : [])),
         ];
     }
@@ -393,16 +410,24 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
     }
 
     /// <summary>Appends a composed message to a folder, in the unread state a delivered one arrives in.</summary>
-    private async Task AppendAsync(string folderPath, MimeMessage message, CancellationToken cancellationToken)
+    /// <remarks>
+    /// The flags are the caller's because <c>\Draft</c> is what separates a message somebody is still writing from one
+    /// that arrived; the unread state is not negotiable and the append below says why.
+    /// </remarks>
+    private async Task AppendAsync(
+        string folderPath,
+        MimeMessage message,
+        MessageFlags flags,
+        CancellationToken cancellationToken)
     {
         using var client = await this.ConnectAndAuthenticateAsync(cancellationToken);
 
         var folder = await client.GetFolderAsync(folderPath, cancellationToken);
         await folder.OpenAsync(FolderAccess.ReadWrite, cancellationToken);
 
-        // MessageFlags.None on purpose. The invariant under test is about mail the server considers unread, so an
-        // appended message must arrive in the same state a delivered one does.
-        await folder.AppendAsync(message, MessageFlags.None, cancellationToken);
+        // Never MessageFlags.Seen. The invariant under test is about mail the server considers unread, so an appended
+        // message must arrive in the same state a delivered one does.
+        await folder.AppendAsync(message, flags, cancellationToken);
         await folder.CloseAsync(expunge: false, cancellationToken);
 
         await client.DisconnectAsync(quit: true, cancellationToken);

@@ -705,7 +705,7 @@ instrument from collection: the outcome is a decision about a person and never t
 
 Sending is the other direction of the same absence: the mail library publishes nothing of its own here either, and a
 message that fails to leave is invisible in a way an unsynchronized mailbox is not — nobody refreshes an outbox waiting
-for it. Four questions are worth answering, and each has one signal.
+for it. Five questions are worth answering, and each has one signal.
 
 **Is anything piling up?** `mailfathom.mail.outbox.depth` reports how many messages stand at each stage a send can still
 move from, tagged with the account alias and `mailfathom.mail.delivery.stage`, whose values are `recorded` and
@@ -757,6 +757,20 @@ mirror going away because its message left. Two are worth a dashboard. `destinat
 answer rather than a server one. And `outcome-unknown` means the same here as it does above and for the same reason:
 the append may or may not have reached the folder, nothing will attempt it again, and repeating it would put a second
 copy of somebody's own message in front of them.
+
+**Is the drafts folder showing what is held?** `mailfathom.mail.draft.attempts` counts every attempt to bring a
+mailbox's drafts folder into step with a draft this deployment holds, tagged with the account alias and
+`mailfathom.mail.draft.outcome`, whose values are `filed`, `replaced`, `discarded`, `already-settled`,
+`destination-unavailable`, `diverged`, `outcome-unknown`, and `failed`. It is a counter of its own beside the filing
+one above, because a draft was never offered to a submission server: nothing about it is a delivery, and summing the
+two would report an outbox busier than the mail actually leaving it. The first four are ordinary — a draft written, a
+draft edited, a draft given up or sent, and a pass finding nothing owed. `destination-unavailable` is a deployment
+whose drafts-role mapping resolves to nothing, so what an owner writes here is never in front of them in their own mail
+client. `diverged` is the one that names the owner rather than the system: the tracked copy is no longer provably the
+one this deployment appended — the role resolves elsewhere, the folder was recreated, the server named no placement —
+so the message is left exactly where it is and a person decides. `outcome-unknown` means here what it means above and
+for the same reason: the append may or may not have reached the folder, nothing will attempt it again, and repeating it
+would put a second draft in front of somebody.
 
 **Is one submission the slow part?** Each opens **`submit_outgoing_email`** as a client span, tagged with the account
 alias and with `mailfathom.mail.delivery.record` naming the outbox record it is submitting, and

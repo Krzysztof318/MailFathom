@@ -313,6 +313,62 @@ public sealed class MimeKitAuthoredEmailComposerTests
             MailFathomErrorCode.OutgoingEmailFieldUnusable);
     }
 
+    /// <summary>
+    /// A draft addressed to nobody is composed all the same, which is the one difference between the two entry points:
+    /// writing the message before deciding who reads it is what a draft is for, and nothing is transmitted from one.
+    /// </summary>
+    [Fact]
+    public void ComposeDraft_MessageAddressedToNobody_ComposesItAnyway()
+    {
+        // Arrange
+        var composer = CreateComposer();
+
+        // Act
+        var composition = composer.ComposeDraft(Account, Authored() with { Recipients = [] }, Capabilities());
+
+        // Assert
+        Assert.True(composition.IsComposed);
+        Assert.Empty(composition.Draft!.Recipients);
+        Assert.Empty(ParseDraft(composition).To);
+    }
+
+    /// <summary>A draft is otherwise the same message a send is, down to the headers this system owns.</summary>
+    [Fact]
+    public void ComposeDraft_AuthoredMessage_WritesTheSameHeadersASendWould()
+    {
+        // Arrange
+        var composer = CreateComposer();
+
+        // Act
+        var composition = composer.ComposeDraft(Account, Authored(), Capabilities());
+
+        // Assert
+        var message = ParseDraft(composition);
+        var sender = Assert.IsType<MailboxAddress>(Assert.Single(message.From));
+        Assert.Equal("mailfathom@example.test", sender.Address);
+        Assert.Equal(composition.Draft!.MessageId.Value, message.MessageId);
+        Assert.Equal(ComposedAt, message.Date);
+    }
+
+    /// <summary>Every bound a send is refused for refuses a draft too, because a draft is one command away from one.</summary>
+    [Fact]
+    public void ComposeDraft_BodyLongerThanTheDeploymentComposes_IsRefused()
+    {
+        // Arrange
+        var composer = CreateComposer();
+
+        // Act
+        var composition = composer.ComposeDraft(
+            Account,
+            Authored() with { PlainTextBody = new string('a', 65) },
+            Capabilities());
+
+        // Assert
+        Assert.False(composition.IsComposed);
+        Assert.Equal(AuthoredEmailRefusalReason.BoundExceeded, composition.Refusal!.Reason);
+        Assert.Equal(AuthoredEmailField.PlainTextBody, composition.Refusal.Field);
+    }
+
     /// <summary>A subject is a header, so a line break in one is refused rather than stripped.</summary>
     [Fact]
     public void Compose_SubjectCarryingALineBreak_IsRefused()
@@ -938,6 +994,15 @@ public sealed class MimeKitAuthoredEmailComposerTests
         Assert.True(composition.IsComposed);
 
         using var stream = new MemoryStream(composition.Email!.RawMime.ToArray());
+
+        return MimeMessage.Load(stream);
+    }
+
+    private static MimeMessage ParseDraft(MailDraftComposition composition)
+    {
+        Assert.True(composition.IsComposed);
+
+        using var stream = new MemoryStream(composition.Draft!.RawMime.ToArray());
 
         return MimeMessage.Load(stream);
     }

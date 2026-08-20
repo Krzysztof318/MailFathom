@@ -11,6 +11,7 @@ namespace MailFathom.IntegrationTests.Mailbox;
 /// <param name="Subject">The subject the envelope carries, which is how a test recognizes the message it seeded.</param>
 /// <param name="IsSeen">Whether the server currently holds the <c>\Seen</c> flag for the message.</param>
 /// <param name="IsFlagged">Whether the server currently holds the <c>\Flagged</c> flag for the message.</param>
+/// <param name="IsDraft">Whether the server currently holds the <c>\Draft</c> flag for the message.</param>
 /// <param name="Keywords">
 /// The keywords the server currently holds for the message, in no particular order: MailKit reports them as a set, so
 /// an assertion about them orders or sorts them itself rather than reading a position.
@@ -20,4 +21,5 @@ internal sealed record ObservedEmail(
     string? Subject,
     bool IsSeen,
     bool IsFlagged,
+    bool IsDraft,
     IReadOnlyList<string> Keywords);

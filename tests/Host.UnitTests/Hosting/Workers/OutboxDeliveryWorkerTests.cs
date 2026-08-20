@@ -7,6 +7,7 @@ using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Mutations;
@@ -225,6 +226,17 @@ public sealed class OutboxDeliveryWorkerTests
             collection.AddScoped<MailboxDestinationResolver>();
             collection.AddScoped<OutgoingMailFiler>();
             collection.AddScoped<OutgoingMailFilingPass>();
+
+            // A pass settles the account's drafts before it claims anything, so it cannot be composed without the
+            // drafts side either. The store answers that nothing is outstanding, which is the arrangement these tests
+            // are written against for the same reason the filing substitutes above are.
+            var drafts = Substitute.For<IMailDraftStore>();
+            drafts.ReadOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+                .Returns([]);
+            collection.AddSingleton(drafts);
+            collection.AddScoped<MailDraftFiler>();
+            collection.AddScoped<MailDraftPass>();
+
             collection.AddScoped<MailOutboxPass>();
 
             this.services = collection.BuildServiceProvider();

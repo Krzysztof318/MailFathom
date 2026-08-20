@@ -9,7 +9,9 @@ server — connected, encrypted, authenticated, and asked what it will accept �
 MIME**, a **reply or a forward is authored** from mail this deployment already holds, the send is written down durably
 before anything acts on it, and it is then **claimed, transmitted, and settled** against the record it was written as. A
 deployment that configures a submission endpoint and turns sending on for the account sends mail, and `send_email` on
-[the MCP surface](mcp-tools.md#send_email) is how a caller asks it to.
+[the MCP surface](mcp-tools.md#send_email) is how a caller asks it to. The same composition also **writes a message
+without sending it**: a draft is held here, kept in step with the folder the owner's own mail client reads, and offered
+to a submission server only when somebody promotes it.
 
 Each of those is a piece the ones after it rest on, and each is provable on its own: the session is the piece with a
 protocol, a credential, and a channel to get wrong; the composer is the piece that decides who a message says it is from
@@ -884,13 +886,109 @@ the copy was taken back out. A sent copy is withdrawn by nothing: it is what the
 [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 is where appending became something MailFathom may do at all, and holds the authorization review that admitted it.
 
+## A message that is written and not sent
+
+A **draft** is a message this deployment holds and will offer to nobody until somebody asks it to. It is written down
+the same way a send is — an authored message composed into MIME, or a reply or forward authored from mail this
+deployment already holds — and then it stops there: no submission endpoint is opened, no recipient is required, and
+nothing claims it. A message addressed to nobody at all is an ordinary draft rather than a refused one, which is what
+saving something half-written means. It is not what [a repeated send](#a-message-the-owner-asked-to-be-sent-again)
+stores under the same word: that draft is a template an occasion is composed from and reaches no folder, while this one
+is a message somebody is writing and is the message the owner's own client shows them.
+
+**The record and the message cross one transaction, and the mailbox follows.** A draft whose message was never stored
+describes a version nothing can append or send, and a message stored under no draft is bytes nothing will ever read, so
+both are committed together and the drafts folder is brought into step afterwards. A crash in between leaves a draft
+the next pass finishes; the other order would leave a message in somebody's drafts folder that nothing here can name.
+
+**The copy goes through the same filing mechanism a sent copy does.** The folder is the one playing the **drafts** role
+and is found by that role rather than by name, the copy carries `\Draft`, its internal date is the injected clock's
+instant, and the append and the withdrawal are the two operations the write session opens for exactly this. What is not
+shared is the durable account of it: a filed copy is written once and kept, while a draft's copy is written, replaced,
+and eventually taken back out, so the copies hang off the draft with one row per revision. An account that maps no
+folder to that role holds its drafts and puts none of them in front of the owner — the destination is reported as
+unavailable, the draft is untouched, and mapping the role is the whole of what changes it.
+
+**Editing replaces the copy: append the new version, then remove the one it replaced, in that order.** IMAP has no
+command that changes a stored message, and the order is the safety rather than a preference. Removing first and then
+failing to append leaves the owner with no draft at all — the version they were working on, gone — while appending
+first and then failing to remove leaves them with two, which is untidy and loses nothing. **The revision is durable
+before either command goes out**, so a process that dies between them is recognized for what it is and the pass that
+follows finishes the pair. That is why an owner who edits a draft is looking at one draft rather than at two.
+
+**The only occurrence anything here ever removes is one an append of its own reported.** There is no path from a
+supplied UID, a folder search, or a message identity to a removal, so a draft the owner wrote in their own mail client
+is unreachable by construction rather than spared by a check. Where the tracked copy stops being provably this
+deployment's — the role now resolves to another folder, the folder was recreated since the append, the server named no
+placement, an append was never answered — the message is left exactly where it is and the divergence is written onto
+the draft, which is what an operator reads instead of a message that quietly went missing.
+
+**Giving a draft up removes what this system put there and nothing else.** The record is marked before anything is
+issued and removed once the copies are settled, so a process that dies in between leaves a draft the pass finishes. A
+copy that could not be reached does not make the draft undeletable: it is marked as one nothing will touch again, the
+reason is recorded, and the owner is left with one message in a folder they can delete with the gesture they would have
+used anyway. **A draft that has been promoted is not given up this way**: its message is a queued send that giving the
+draft up would leave untouched, so the answer is `53008` `MailDraftNotFound` — the same one revising it gives — and
+what stops the message is cancelling the send rather than deleting the draft it came from.
+
+**Promoting a draft produces an ordinary outgoing record carrying the same MIME.** The bytes are the ones that were
+stored rather than a recomposition, for the reason a retry reuses them: a rebuilt message threads as a second message
+in every client. From that point the send is an ordinary send — claimed, transmitted, and settled exactly as
+[any other](#how-a-written-down-send-reaches-a-server) — and **everything this deployment refuses a send for is asked
+at the promotion rather than at the writing**: whether sending is on for the account, whether every recipient is
+somebody this deployment may write to, the ceilings, and the size bound. A draft written a month before an operator
+tightened one of those is refused by the tightened one. A draft addressed to nobody is refused here too, with
+`28017` `MailDraftNotAddressed`, which is the one refusal that is about the draft rather than about the deployment. A
+draft this deployment does not hold — never written, given up without ever having been sent, or another account's —
+answers `53008` `MailDraftNotFound` whichever of the three it is, so nothing learns which drafts exist by asking about
+them.
+
+**Promoting one draft sends one message, however many callers ask.** A draft that already names its record answers with
+that record, which is what a caller whose first answer never reached it is told — including while the draft is being
+given up, because that is what a delivered send does to the draft it came from and the copy leaves the folder over a
+round trip after the mark is written. Two callers arriving together are the
+case that read cannot settle — neither of them can see a write that has not happened yet — so the request's identity is
+the draft rather than a key whoever asked supplies: their two asks compose one identity, and the outbox answers the
+second with the record the first opened. It is the same mechanism [an occasion of a repeated
+send](#a-message-the-owner-asked-to-be-sent-again) is keyed by, and it is here for the same reason: a message put in
+somebody's mailbox twice is the one duplication nothing downstream can withdraw.
+
+**A promotion that fails leaves the draft exactly as it was.** Nothing about the draft is written until the outgoing
+record exists, so a refusal is a message the owner still has. And the draft is given up on **delivery** rather than on
+promotion: a send that is refused, deferred, or left with an unknown outcome leaves the draft standing, so an owner
+whose message did not leave still has what they wrote. Once the server has accepted it, the draft's copy is taken out
+of the drafts folder in the same pass that files the sent copy — which is what leaves the message in one place rather
+than in two.
+
+**What is outstanding is finished by the pass that delivers.** Saving, revising, and giving up each act on the mailbox
+where they are asked for, so what is left for a pass is the half nobody is standing there for: a process that stopped
+between the two commands of a replacement, a mail server that was briefly unreachable, and a promoted draft whose
+message has since been delivered. The pass reads the record rather than the folder, and an account whose drafts are all
+settled costs one bounded query and reaches no mail server at all. It runs **before** the submission endpoint is asked
+for, because a draft is written over IMAP and owes nothing to SMTP: an account that reads mail without configuring a
+place to send from keeps drafts like any other, and this sweep is the only thing that ever brings its drafts folder
+back into step.
+
+**A draft is derived personal data.** It is a message addressed to people, and one drafted as an answer is composed in
+part from mail this deployment holds, so it carries the classification of what it came from and is reached by the same
+retention and erasure. [Stored email schema § The drafts nothing will
+send](../architecture/stored-email-schema.md#the-drafts-nothing-will-send) holds the four tables and the cascades that
+make that structural.
+
+**Nothing on [the MCP surface](mcp-tools.md) reaches any of this yet.** The use cases are here and are what a tool will
+be mapped onto; until that tool exists, a draft is written by the deployment's own code paths rather than asked for by
+a caller.
+
 ## What an operator sees while mail is leaving
 
 Each attempt opens the `submit_outgoing_email` span over the exchange with the server, its duration is recorded, and
 its outcome counts under `mailfathom.mail.delivery.attempts` by account. `outcome-unknown` is the value worth alerting
 on at any rate above zero, because each measurement is a message nothing will attempt again until a person decides.
 Filing is counted beside it, under `mailfathom.mail.filing.attempts` by account, place, and outcome, and each append
-opens a span of its own in the mailbox-mutation record.
+opens a span of its own in the mailbox-mutation record. Keeping the drafts folder in step is counted separately again,
+under `mailfathom.mail.draft.attempts` by account and outcome, because a draft was offered to no server and summing it
+with the deliveries would report an outbox busier than the mail actually leaving it; `diverged` is the value that names
+a decision for a person rather than a failure to retry.
 The span carries the outbox record it is submitting, which is what joins a slow or failed submission to the row an
 operator then reads. `mailfathom.mail.outbox.depth` reports how much stands at each stage a send can still move from,
 as the delivery pass last measured it, and `mailfathom.mail.delivery.retries` counts the attempts that were not a
@@ -980,6 +1078,23 @@ The integration suite runs the whole loop once against the orchestrated server: 
 folder mapped as this account's sent folder, exactly one copy of it is there and it is read, asking for the settlement
 again reports it as already filed rather than appending a second, an ordinary synchronization then joins the copy to
 the send it came from — and the queue a rule pass reads holds a message appended beside it and not the copy.
+
+Drafts are split the same way once more. The unit suite carries what a scripted session settles, and each of the four
+is a state a real server cannot be asked to produce on demand: a process resumed between the append and the removal of
+a replacement, which withdraws the copy that was replaced and only that one; a tracked copy in a folder the drafts role
+no longer names, which is left standing with the divergence written onto the draft; giving up a draft this system never
+wrote, which is refused before any folder is opened because nothing holds it under an identifier the call accepts; and
+a promotion, including the bound and the recipient policy asked at the promotion rather than at the writing, the second
+ask answering with the record the first produced, two callers who both found the draft unpromoted queueing one message
+between them, and a delivery that failed leaving the draft where it was. The pass that delivers is covered where it is
+assembled: that it settles an outstanding draft before it claims anything, and that a delivered send takes the draft it
+came from out of the drafts folder.
+
+The integration suite runs the whole loop once against the orchestrated server, with the owner's own draft appended
+beside MailFathom's as the control: a written draft reaches the folder under the UID the record names, an edit leaves
+exactly one of this deployment's drafts there, a promotion delivers the message and leaves none — the copy taken out of
+the drafts folder in the same pass that files the sent one — and the draft appended by hand is still there under the
+UID it arrived with, throughout.
 
 The outgoing record is split the same way. What the shape of the state guarantees — which stages are undecidable, which
 recipients a later attempt still owes, and which terminal stage may follow which — is a unit test over the domain

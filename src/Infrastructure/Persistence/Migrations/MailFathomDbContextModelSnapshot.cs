@@ -703,6 +703,174 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("mail_answering_audited_emails", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailDraftContentEntity", b =>
+                {
+                    b.Property<Guid>("MailDraftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("MimeByteLength")
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("RawMime")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<byte[]>("Sha256Hash")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("bytea");
+
+                    b.Property<DateTimeOffset>("StoredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("MailDraftId");
+
+                    b.ToTable("mail_draft_contents", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailDraftCopyEntity", b =>
+                {
+                    b.Property<Guid>("MailDraftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("AppendedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("ConcurrencyVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("FolderAlias")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("FolderPath")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("InternetMessageId")
+                        .HasMaxLength(998)
+                        .HasColumnType("character varying(998)");
+
+                    b.Property<long?>("PlacementUid")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("PlacementUidValidity")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("SettledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Stage")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("MailDraftId", "Revision")
+                        .HasName("PK_mail_draft_copies");
+
+                    b.ToTable("mail_draft_copies", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailDraftEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ComposedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("ConcurrencyVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<DateTimeOffset?>("DiscardedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("DivergenceObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DivergenceReason")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int?>("LastFailureCode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MailboxAccountId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<long>("MimeByteLength")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("PromotedToOutgoingEmailId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequesterIdentity")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("RequesterOrigin")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("RevisedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PromotedToOutgoingEmailId")
+                        .HasDatabaseName("ix_mail_drafts_promoted")
+                        .HasFilter("\"PromotedToOutgoingEmailId\" IS NOT NULL");
+
+                    b.HasIndex("MailboxAccountId", "RevisedAt")
+                        .HasDatabaseName("ix_mail_drafts_account_revised");
+
+                    b.ToTable("mail_drafts", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailDraftRecipientEntity", b =>
+                {
+                    b.Property<Guid>("MailDraftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<Guid?>("ContactId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("MailDraftId", "Ordinal");
+
+                    b.ToTable("mail_draft_recipients", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailFolderEntity", b =>
                 {
                     b.Property<long>("Id")
@@ -2089,6 +2257,42 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailDraftContentEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailDraftEntity", "MailDraft")
+                        .WithOne("Content")
+                        .HasForeignKey("MailFathom.Infrastructure.Persistence.Entities.MailDraftContentEntity", "MailDraftId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_mail_draft_contents_drafts");
+
+                    b.Navigation("MailDraft");
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailDraftCopyEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailDraftEntity", "MailDraft")
+                        .WithMany("Copies")
+                        .HasForeignKey("MailDraftId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_mail_draft_copies_drafts");
+
+                    b.Navigation("MailDraft");
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailDraftRecipientEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailDraftEntity", "MailDraft")
+                        .WithMany("Recipients")
+                        .HasForeignKey("MailDraftId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_mail_draft_recipients_drafts");
+
+                    b.Navigation("MailDraft");
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailFolderEntity", b =>
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailboxAccountEntity", "MailboxAccount")
@@ -2252,6 +2456,15 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailAnsweringAuditEntryEntity", b =>
                 {
                     b.Navigation("Emails");
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailDraftEntity", b =>
+                {
+                    b.Navigation("Content");
+
+                    b.Navigation("Copies");
+
+                    b.Navigation("Recipients");
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailFolderEntity", b =>

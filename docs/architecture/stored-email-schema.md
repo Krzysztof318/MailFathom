@@ -907,6 +907,81 @@ composes its own message from these bytes rather than reusing them: a repeated `
 Mondays as one message in every recipient's client, so each occurrence is re-stamped with an identity and a date of its
 own before it reaches the outbox.
 
+## The drafts nothing will send
+
+`mail_drafts` holds one row per message somebody is still writing — a message, rather than the reusable draft a
+recurring send is declared with above, which is composed from once per occasion and sent every time. It is a table of
+its own rather than a stage on
+`outgoing_emails`, because the two records answer opposite questions: an outgoing record is an intent that a delivery
+pass is claiming, retrying, and settling, and a draft is a message that has been offered to nobody and may be edited
+for a week before it is offered to anybody. Giving a draft a stage on that table would put rows nothing may transmit
+into the claim's own predicate, and would make the idempotency identity that stops one authored request being sent
+twice mean something for a record that is not being sent at all.
+
+| Column | What it records |
+|---|---|
+| `Id` | The draft's identity, and what the message, the recipients, and the copies hang on. A UUIDv7 again, so the order drafts were written in is the identifier's |
+| `MailboxAccountId` | The account the draft belongs to and whose drafts folder holds its copy. A plain column for the reason an outgoing record's is: an account configured only to send need never have synchronized anything |
+| `RequesterOrigin`, `RequesterIdentity` | The authored act that wrote it down, by kind and by text, exactly as an outgoing record carries them. There is no unique index over the pair here: a draft is not idempotent, because saving the same draft twice is what editing it *is* |
+| `Revision` | Which version of the draft the row currently describes, counted from one. It is what a copy row is keyed by, so the record and the folder cannot disagree about which version is the standing one |
+| `MimeByteLength` | How many bytes the current revision's MIME is, kept beside the record so a promotion can be refused against the deployment's size bound without reading the message |
+| `ComposedAt`, `RevisedAt` | When the draft was first written and when it last changed. The second is the order an account's drafts are read in |
+| `DiscardedAt` | When the draft was given up, null while it stands. It is written **before** anything is issued against the folder, which is what makes the removal resumable rather than a message nothing can name |
+| `PromotedToOutgoingEmailId` | The send this draft became, null until it becomes one. A plain column rather than a foreign key, deliberately: the send outlives the draft, and erasing an outgoing record must not take a draft with it |
+| `DivergenceReason`, `DivergenceObservedAt` | Why the tracked copy stopped being provably this deployment's own, and when that was seen. Both null while the record and the folder still follow each other |
+| `LastFailureCode` | The code the last attempt to settle the folder ended in, null while none has. The code and not the message, for the reason an outgoing record keeps only the code |
+| `xmin` | The concurrency token, as everywhere else |
+
+**A draft has no stage column, and that is the point.** What stage it is at is read from its copies — nothing appended
+yet, an append issued and unanswered, the current revision standing, a replacement owed, a removal owed, given up — so
+there is no second place for the answer to be written and no window in which a column and the rows beneath it disagree.
+The pass that finishes what a stopped process left owing asks that same question in SQL rather than reading a
+denormalized flag.
+
+`mail_draft_recipients` holds one row per person the draft names, keyed by the draft and the position in its list, and
+carrying the `Address`, the `Role`, and the nullable `ContactId` an outgoing recipient carries for the same reason. It
+carries no status and no reply code, because a draft has been offered to nobody. A revision replaces the whole list
+rather than amending it, so the row set is the composed message's own rather than everybody the draft was ever
+addressed to — and a draft addressed to nobody at all is an empty set here rather than an invalid record, which is what
+saving an unfinished message means.
+
+`mail_draft_copies` holds one row per revision that has reached the owner's drafts folder, keyed by the draft and the
+revision. **The key is what makes a replacement expressible.** IMAP has no command that changes a stored message, so a
+new version is a new message beside the old one and the old one is removed afterwards — and between those two commands
+the folder holds two copies that both belong to this draft. Keying by revision is also what makes the append idempotent
+without a read-then-write: appending one revision twice is refused by the key rather than by a check two passes can
+both pass.
+
+| Column | What it records |
+|---|---|
+| `MailDraftId`, `Revision` | The draft and which of its versions this copy is, which together are the key. A cascade from the draft removes them with it |
+| `FolderAlias`, `FolderPath` | The folder the copy was appended to, as the alias an operator wrote and the path that alias named at the time. The path is what a later removal compares against, so a role repointed since the append names another folder and is left alone |
+| `Stage` | `Issued` before the command went out, `Standing` once the server answered, `Withdrawn` once the copy was taken back out, `Abandoned` where it is one nothing will touch again |
+| `PlacementUidValidity`, `PlacementUid` | Where the server said it put the copy, both null on a server that advertises no RFC 4315 `UIDPLUS`. **The only occurrence a removal ever names is one of these**, which is what makes a draft the owner wrote in their own mail client unreachable by construction rather than refused by a check |
+| `InternetMessageId` | The identity the appended bytes carry, minted per revision because two messages sharing one is what a client reads as one message it has seen twice |
+| `AppendedAt`, `SettledAt` | When the append was issued, and when the copy stopped being one anything acts on |
+| `xmin` | A token of its own rather than the draft's, because a copy is confirmed and withdrawn without the draft above it changing — and what that decides is whether a message is left in somebody's folder |
+
+**A row at `Issued` is the same undecidable window an outgoing filing has, and it is left undecided for the same
+reason.** Nothing appends that revision again on the strength of it, and nothing moves it forward either. `Abandoned`
+is the other half of that discipline read from the folder's side: where the tracked copy stops being provably this
+deployment's own — the role resolves elsewhere, the folder was recreated, the server named no placement, an append was
+never answered — the message is left exactly where it is, the row says nothing will touch it again, and the reason is
+written onto the draft. A draft this system did not create is never among them, because nothing here reaches a UID any
+way but through a copy row an append of its own wrote.
+
+`mail_draft_contents` is the message itself, in the same one-to-one arrangement the two other content tables have with
+their records. It is the one raw-MIME row in this schema that is **rewritten** rather than written once: a send's
+payload is fixed because a retry has to transmit the bytes an earlier attempt may already have begun transmitting,
+while a draft's payload is what its author is still editing, and keeping a row per revision would hold a message per
+keystroke for as long as the draft lives. The cascade is the erasure obligation — deleting the draft destroys the
+message, the recipients, and the copy rows with it, so nothing about a draft can outlive the record that says whose it
+is.
+
+**A draft is derived personal data and carries the classification of the mail it was written from.** It is a message
+addressed to people, composed in part from mail this deployment holds, and the retention and erasure that reach an
+account reach these four tables through the same cascade every other table is reached by.
+
 ## Indexes
 
 | Index | Columns | Purpose |
@@ -945,6 +1020,8 @@ own before it reaches the outbox.
 | `ix_outgoing_emails_period_usage` | `(RecordedAt, MailboxAccountId)` | What a send ceiling counts: the messages one period was asked for, for one account and for the whole deployment. It carries no filter, because a period counts every message it was asked for whatever became of it, and the account is behind the instant rather than in front of it so one index answers both questions — the deployment's count reads a range of it and an account's count reads the same range narrowed |
 | `ix_recurring_sends_identity` | `(MailboxAccountId, RequesterOrigin, RequesterIdentity)`, unique | A declaration's idempotency identity, which is what makes the same authored act twice one declaration. It spans stopped rows deliberately: a declaration that was stopped is what keeps the act that made it from quietly declaring a second one |
 | `ix_recurring_sends_active` | `(DeclaredAt)` where `CancelledAt` is null | The declarations a dispatch pass reads, oldest first. The filter is what keeps that read proportionate to what still repeats rather than to every repetition the deployment has ever declared |
+| `ix_mail_drafts_account_revised` | `(MailboxAccountId, RevisedAt)` | An account's drafts in the order the pass settles them, oldest change first. No filter, because the read that uses it is already narrowed by the copy predicates beneath it and a deployment's whole set of held drafts is what an owner is editing rather than a history that accumulates |
+| `ix_mail_drafts_promoted` | `(PromotedToOutgoingEmailId)` where it is not null | Two questions with one answer: which draft, if any, a finished delivery came from, and which promoted drafts a pass still has to give up. Both read the same rows, and the filter is what keeps the index the size of the drafts that have been promoted rather than of every draft ever written, since a draft that was never promoted can never answer either |
 | `ix_mail_rule_executions_account_evaluated` | `(MailboxAccountId, EvaluatedAt, Id)` | An account's rule history newest first, and the retention pass that erases what has outlived its window. The identifier is in the key because two executions of one batch share an instant and a keyset page needs a total order to continue from |
 | `ix_mail_rule_executions_account_rule_evaluated` | `(MailboxAccountId, RuleName, EvaluatedAt, Id)` | What one rule has been concluding, which is the question a rule that never seems to fire is investigated with |
 | `ix_mail_rule_executions_email_evaluated` | `(StoredEmailId, EvaluatedAt, Id)` | Why one message is where it is, and the rows the cascade removes when that message is erased |
@@ -1051,6 +1128,16 @@ are, and the same two cascades make erasure structural — deleting a declaratio
 with it. Nothing in any of them reaches a log, a metric, a trace, or an exception message either; a failure about a
 declaration names the declaration, and the schedule it carries is an operator's own phrase rather than anybody's data.
 
+`mail_drafts`, `mail_draft_recipients`, `mail_draft_copies`, and `mail_draft_contents` are read exactly as the three
+tables above are, and for a stronger reason: a draft is a message the owner is writing to somebody, and one drafted as
+an answer to stored mail is composed in part from that mail. It is derived personal data of the same classification as
+the message it came from and carries the same retention, access, export, and erasure obligations, which the cascades
+from `mail_drafts` make structural — erasing the draft destroys the recipients, the copy rows, and the stored message
+in one statement, and erasing the account reaches every draft of it. The copy rows are the one part that says anything
+about a mailbox rather than about a message, and what they hold is a folder alias, a path, a UID, and an identity
+MailFathom minted. Nothing in any of the four reaches a log, a metric, a trace, or an exception message: a failure
+names the draft's identifier and the folder alias, never a subject, an address, or a line of what was written.
+
 `embedding_profiles` is the exception on this page: it holds no personal data at all. It describes a model, and the credential that reaches that model is configuration rather than a column here, so nothing in this table is a secret or is derived from anybody's mail.
 
 ## How this schema reaches a database
@@ -1084,4 +1171,5 @@ Every claim on this page that is a claim about PostgreSQL rather than about the 
 - Both guarantees the job store gets from PostgreSQL rather than from its own code: two callers racing to enqueue one execution produce one job, because the unique index refuses the second insert; and two workers claiming at the same moment take different jobs, because the claim selects and stamps under `FOR UPDATE SKIP LOCKED` in one statement. A lease that has run out is reclaimed with a second attempt counted, the attempt it was taken from writes nothing afterwards, a completed job keeps the key that refuses the same execution again, and a row whose type this build does not declare is left where it is. A dead letter is claimed by nothing and keeps the key and the recorded failure that ended it, a scheduled retry holds the job back until the instant it named, and a release hands the attempt back with the job.
 - A schedule's durable state is written by one statement whether the row is there or not: a schedule seeded and then advanced leaves one row carrying the latest occasion, and a schedule nothing has written is absent from the read rather than answered with an empty state — which is the difference between seeding once and seeding on every pass.
 - The contact book's seven claims about PostgreSQL rather than about the model: erasing a person removes every address row through the cascade and frees those addresses for somebody else, two overlapping writers claiming one address leave the loser with a conflict rather than a provider failure, a keyset walk of the book serves every contact exactly once in the order the index is built in — which is also the only place the comparison translates to SQL at all — an amendment that stops naming an address deletes its row and releases it, a search selects the people whose stored name key or whose address key contains the text, which is the one contact predicate that reaches both tables at once and the one no index above answers, erasing the collected origin removes every row of it and every address row hanging off one in two set-based statements no change tracker ever sees, and the threshold collection is held to counts what one address wrote out of the stored mail in a query whose two halves read a message stored in several folders as one message.
+- A draft's whole life runs against the real database and the real mail server at once: it is written, appended to the folder playing the drafts role, revised, promoted, and given up when the send it became is delivered. What only PostgreSQL settles there is that the record and its message cross one transaction, that a revision rewrites the one payload row rather than adding a second, that the copy rows keyed by revision are what an edit's append and removal are read from, and that removing the draft takes its recipients, its copies, and its message with it.
 - The same read model's vector half ranks the eligible mail by a correlated minimum over each message's own embedded passages, measured by the operator the active profile's metric names. Mail carrying no vector under that profile is absent from the ranking rather than distant, and the ordering is the part only a server can settle: whether the distance operator, the aggregate, and the caller's filters compose into one statement at all is a translation question rather than a compile-time one.
