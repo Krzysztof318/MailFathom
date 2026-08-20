@@ -148,7 +148,7 @@ public sealed class MailDraftBook
     /// <param name="cancellationToken">Cancels the write and the commands that follow it.</param>
     /// <returns>What settling the mailbox did, which is already durable by the time it is returned.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailSend" />.</exception>
-    /// <exception cref="MailDraftRefusedException">Thrown when no draft this deployment holds answers to that identifier.</exception>
+    /// <exception cref="MailDraftRefusedException">Thrown when no draft this deployment holds is still one to give up under that identifier.</exception>
     /// <remarks>
     /// <para>
     /// <b>Only a draft this system created can be given up here.</b> The identifier names a record MailFathom wrote, and
@@ -160,6 +160,12 @@ public sealed class MailDraftBook
     /// The record is marked before anything is issued and removed once the copies are settled, so a process that dies
     /// in between leaves a draft the pass finishes rather than a message in the owner's folder that nothing can name.
     /// </para>
+    /// <para>
+    /// <b>A promoted draft is refused rather than given up here.</b> Its message is a queued send that this would leave
+    /// untouched, so removing the draft would answer a caller asking for the message not to exist by sending it anyway
+    /// and keeping no record of where it came from. What stops such a send is cancelling the send, and until it is
+    /// delivered or cancelled the draft stands — which is the same answer revising a promoted draft already gives.
+    /// </para>
     /// </remarks>
     public async Task<MailDraftFilingResult> DiscardAsync(
         MailDraftId draftId,
@@ -167,7 +173,7 @@ public sealed class MailDraftBook
     {
         this.authorization.RequirePermission(MailFathomPermission.MailSend);
 
-        if (await this.drafts.FindAsync(draftId, cancellationToken) is not { } draft)
+        if (await this.drafts.FindAsync(draftId, cancellationToken) is not { PromotedTo: null } draft)
         {
             throw MailDraftRefusedException.NotFound();
         }

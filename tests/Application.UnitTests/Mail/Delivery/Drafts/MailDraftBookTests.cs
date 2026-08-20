@@ -7,6 +7,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Outbox;
+using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -15,6 +16,7 @@ using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Mail.Delivery.Drafts;
@@ -116,6 +118,39 @@ public sealed class MailDraftBookTests
         Assert.Single(harness.Drafts.Drafts);
     }
 
+    /// <summary>
+    /// A promoted draft is a queued send that giving the draft up would leave untouched, so removing the record would
+    /// answer a caller asking for the message not to exist by sending it anyway and keeping nothing that names where it
+    /// came from. The copy stays in the folder for the delivery to take back out.
+    /// </summary>
+    [Fact]
+    public async Task DiscardAsync_DraftAlreadyPromotedToASend_IsRefusedAndLeavesTheCopyStanding()
+    {
+        // Arrange
+        var outgoingEmails = new InMemoryOutgoingEmailStore();
+        var harness = Harness(outgoingEmails);
+        harness.MapDraftsFolder(Account);
+        var draft = await SaveAsync(harness, "first version");
+        var send = outgoingEmails.Publish(
+            OutgoingEmailRequest.Create(Account, OutgoingEmailRequester.Draft(draft.Id), draft.Recipients),
+            mimeByteLength: 64);
+
+        await harness.Drafts.RecordPromotedAsync(
+            Substitute.For<IPersistenceSession>(),
+            draft.Id,
+            send.Id,
+            CancellationToken.None);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
+            () => harness.Book.DiscardAsync(draft.Id, CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.MailDraftNotFound, refusal.ErrorCode);
+        Assert.Empty(harness.Withdrawn);
+        Assert.False(harness.Drafts.Peek(draft.Id)!.IsDiscarded);
+    }
+
     /// <summary>Revising something this system does not hold is the same answer, so nothing appends over a stranger's mail.</summary>
     [Fact]
     public async Task SaveAsync_RevisingADraftThisSystemNeverWrote_IsRefusedAndAppendsNothing()
@@ -186,15 +221,22 @@ public sealed class MailDraftBookTests
     private static MailDraftHarness Harness(params IEnumerable<MailFathomPermission> permissions) => new(
         new FakeTimeProvider(Moment),
         new InMemoryOutgoingEmailStore(),
-        MailOutboxSettings.Create(
-            maxDeliveriesPerPass: 10,
-            TimeSpan.FromMinutes(10),
-            TimeSpan.FromMinutes(7),
-            maxAttempts: 5,
-            TimeSpan.FromMinutes(1),
-            TimeSpan.FromHours(1),
-            TimeSpan.FromHours(8)),
+        Settings(),
         permissions);
+
+    private static MailDraftHarness Harness(InMemoryOutgoingEmailStore outgoingEmails) => new(
+        new FakeTimeProvider(Moment),
+        outgoingEmails,
+        Settings());
+
+    private static MailOutboxSettings Settings() => MailOutboxSettings.Create(
+        maxDeliveriesPerPass: 10,
+        TimeSpan.FromMinutes(10),
+        TimeSpan.FromMinutes(7),
+        maxAttempts: 5,
+        TimeSpan.FromMinutes(1),
+        TimeSpan.FromHours(1),
+        TimeSpan.FromHours(8));
 
     private static Task<MailDraftRecord> SaveAsync(MailDraftHarness harness, string body) =>
         harness.Book.SaveAsync(

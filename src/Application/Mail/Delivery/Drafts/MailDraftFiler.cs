@@ -263,9 +263,15 @@ public sealed class MailDraftFiler
         CancellationToken cancellationToken)
     {
         var standing = draft.Copies.Where(copy => copy.IsStanding).ToArray();
-        var divergence = await this.WithdrawAsync(draft, standing, cancellationToken);
 
-        divergence ??= await this.AbandonUnansweredAppendsAsync(draft);
+        // Both are asked, because a draft can have a copy that could not be withdrawn and a separate copy whose append
+        // was never answered, and each is a message left in the folder on its own account. The result carries one
+        // reason, so what is reported is the withdrawal's where there is one — a copy this system proved it could not
+        // reach is the stronger statement of the two.
+        var withdrawal = await this.WithdrawAsync(draft, standing, cancellationToken);
+        var unanswered = await this.AbandonUnansweredAppendsAsync(draft);
+
+        var divergence = withdrawal ?? unanswered;
 
         await this.commitPolicy.CommitAsync(
             (session, token) => this.drafts.RemoveAsync(session, draft.Id, token),

@@ -172,8 +172,9 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// </param>
     /// <param name="filesSentCopies">
     /// Whether this account files a copy of what it sends into a folder of its own, and therefore maps one to the sent
-    /// role. Off everywhere but the class proving that the copy is appended once and comes back recognized, because a
-    /// deployment that files one appends a message on every send the collection makes.
+    /// role. Off everywhere but the two classes that need the copy to exist — the one proving it is appended once and
+    /// comes back recognized, and the one proving a promoted draft leaves the drafts folder while the sent copy stays
+    /// — because a deployment that files one appends a message on every send the collection makes.
     /// </param>
     /// <param name="keepsDrafts">
     /// Whether this account keeps drafts in a folder of its own, and therefore maps one to the drafts role. Off

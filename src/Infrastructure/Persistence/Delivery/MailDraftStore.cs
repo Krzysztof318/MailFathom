@@ -140,11 +140,11 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
     /// <inheritdoc />
     /// <remarks>
     /// What the domain reads off the copies is asked of the database here rather than by materializing every draft and
-    /// filtering afterwards, so an account whose drafts are all settled costs one bounded query. The three cases are
+    /// filtering afterwards, so an account whose drafts are all settled costs one bounded query. The four cases are
     /// the ones <see cref="MailDraftRecord.HasOutstandingServerWork" /> names: a draft given up owes a removal whatever
-    /// else is true of it, a revision nobody has appended owes an append, and a superseded copy still standing owes a
-    /// removal. An append the server never answered is deliberately none of them — nothing appends it again, and
-    /// nothing can remove what nobody can name.
+    /// else is true of it, a promoted draft owes its own give-up until delivery writes one, a revision nobody has
+    /// appended owes an append, and a superseded copy still standing owes a removal. An append the server never
+    /// answered is deliberately none of them — nothing appends it again, and nothing can remove what nobody can name.
     /// </remarks>
     public async Task<IReadOnlyList<MailDraftRecord>> ReadOutstandingAsync(
         MailAccountId accountId,
@@ -158,6 +158,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
         var entities = await this.ReadDrafts()
             .Where(draft => draft.MailboxAccountId == accountValue
                 && (draft.DiscardedAt != null
+                    || draft.PromotedToOutgoingEmailId != null
                     || (!draft.Copies.Any(copy => copy.Stage == MailDraftCopyStage.Issued)
                         && (!draft.Copies.Any(copy => copy.Revision == draft.Revision)
                             || draft.Copies.Any(copy => copy.Revision != draft.Revision

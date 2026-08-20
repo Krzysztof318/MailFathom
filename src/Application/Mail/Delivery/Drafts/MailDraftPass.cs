@@ -76,6 +76,11 @@ public sealed class MailDraftPass
     /// <param name="accountId">The account whose drafts are settled.</param>
     /// <param name="cancellationToken">Cancels the reads and the commands.</param>
     /// <returns>What each attempt did, which is empty on an account with nothing outstanding.</returns>
+    /// <remarks>
+    /// A promoted draft is settled as a promotion rather than as a draft, because the mark that gives it up is written
+    /// once and by the pass that delivered its send — so a give-up whose write never committed is reached here and
+    /// nowhere else, and a promotion still waiting to be delivered answers nothing.
+    /// </remarks>
     public async Task<IReadOnlyList<MailDraftFilingResult>> SettleOutstandingAsync(
         MailAccountId accountId,
         CancellationToken cancellationToken)
@@ -88,7 +93,13 @@ public sealed class MailDraftPass
         var results = new List<MailDraftFilingResult>(outstanding.Count);
         foreach (var draft in outstanding)
         {
-            results.Add(await this.filer.SettleAsync(draft, cancellationToken));
+            // A promoted draft is given up by its own delivery, so what is outstanding about it is that mark rather
+            // than anything the folder owes: settling it as an ordinary draft would leave the copy standing for a
+            // message that has already gone out. Asking the promotion again costs one record read while the send is
+            // still queued, which is what the ordinary path through the outbox pass already leaves behind.
+            results.AddRange(draft is { AwaitsPromotionGiveUp: true, PromotedTo: { } promoted }
+                ? await this.SettlePromotedAsync(promoted, cancellationToken)
+                : [await this.filer.SettleAsync(draft, cancellationToken)]);
         }
 
         return results;

@@ -82,7 +82,16 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
         DateTimeOffset revisedAt,
         CancellationToken cancellationToken)
     {
-        var revised = this.Require(draftId) with
+        var draft = this.Require(draftId);
+
+        // Asked the way the real store asks it: a draft that has been given up is not revised, so a test reaching that
+        // state through this double meets the refusal production would give rather than a silent new revision.
+        if (draft.IsDiscarded)
+        {
+            throw new InvalidOperationException($"Mail draft {draftId} has been given up, so nothing revises it.");
+        }
+
+        var revised = draft with
         {
             Recipients = [.. recipients],
             MimeByteLength = mimeByteLength,
@@ -196,6 +205,16 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
         DateTimeOffset settledAt,
         CancellationToken cancellationToken)
     {
+        // The same closed pair the real store accepts. A copy is settled as withdrawn or as abandoned and as nothing
+        // else, so a caller writing any other stage fails here rather than only against PostgreSQL.
+        if (stage is not (MailDraftCopyStage.Withdrawn or MailDraftCopyStage.Abandoned))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(stage),
+                stage,
+                "A copy of a draft is settled as withdrawn or as abandoned, and as nothing else.");
+        }
+
         this.Replace(
             this.Require(draftId),
             revision,

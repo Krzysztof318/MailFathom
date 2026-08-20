@@ -130,13 +130,25 @@ public sealed record MailDraftRecord
     /// <summary>Gets what the draft owes the mail server.</summary>
     public MailDraftStage Stage => this.ReadStage();
 
+    /// <summary>Gets whether a promotion of this draft has yet to give the draft up.</summary>
+    /// <remarks>
+    /// Giving up is what delivery does to the draft it was promoted from, and it is written once — by the pass that
+    /// delivered the send. So the mark is the only thing that says it happened, and a promoted draft still carrying
+    /// none is one whose give-up never committed: a crash or a refused write between the delivery and the mark. It is
+    /// outstanding until then, because otherwise its copy would stand in the owner's drafts folder for a message that
+    /// has already gone out and nothing would ever reach it again.
+    /// </remarks>
+    public bool AwaitsPromotionGiveUp => this.PromotedTo is not null && !this.IsDiscarded;
+
     /// <summary>Gets whether an attempt against the mail server would do anything for this draft.</summary>
     /// <remarks>
     /// It is what a pass filters on, so an account whose drafts are all settled costs one bounded read rather than a
     /// session per draft. A draft whose append was never answered is deliberately not outstanding: nothing appends it
-    /// again, and nothing can remove what nobody can name.
+    /// again, and nothing can remove what nobody can name. A promoted draft is outstanding whatever its copies say,
+    /// because what it is waiting for is its own delivery rather than a folder.
     /// </remarks>
-    public bool HasOutstandingServerWork => this.Stage
+    public bool HasOutstandingServerWork => this.AwaitsPromotionGiveUp
+        || this.Stage
         is MailDraftStage.Composed
         or MailDraftStage.Discarded
         or MailDraftStage.ReplacementAppendPending

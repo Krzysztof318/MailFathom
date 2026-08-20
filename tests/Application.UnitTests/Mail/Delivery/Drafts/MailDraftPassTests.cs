@@ -6,12 +6,14 @@ using System.Text;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Outbox;
+using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Emails;
 using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Mail.Delivery.Drafts;
@@ -85,6 +87,70 @@ public sealed class MailDraftPassTests
         // Assert
         Assert.Empty(results);
         Assert.Equal(0, harness.AppendCount);
+    }
+
+    /// <summary>
+    /// The mark that gives a promoted draft up is written by the pass that delivered its send, and once. A process
+    /// that died between the delivery and that write leaves a draft whose copy stands in the owner's folder for a
+    /// message already on its way, so the next pass is what has to reach it.
+    /// </summary>
+    [Fact]
+    public async Task SettleOutstandingAsync_PromotedDraftWhoseGiveUpNeverCommitted_WithdrawsTheCopyOnTheNextPass()
+    {
+        // Arrange
+        var outgoingEmails = new InMemoryOutgoingEmailStore();
+        var harness = new MailDraftHarness(new FakeTimeProvider(Moment), outgoingEmails, Settings());
+        harness.MapDraftsFolder(Account);
+        var draft = await SaveAsync(harness, "first version");
+        await PromoteAsync(harness, outgoingEmails, draft, OutgoingEmailStage.Sent);
+
+        // Act
+        var results = await harness.Pass.SettleOutstandingAsync(Account, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(MailDraftFilingOutcome.Discarded, Assert.Single(results).Outcome);
+        Assert.Equal([(ImapUidValidity.Create(1), ImapUid.Create(1))], harness.Withdrawn);
+        Assert.Empty(harness.Drafts.Drafts);
+    }
+
+    /// <summary>A promotion still waiting to be delivered leaves the message the owner wrote exactly where it is.</summary>
+    [Fact]
+    public async Task SettleOutstandingAsync_PromotedDraftWhoseSendIsStillQueued_LeavesTheCopyStanding()
+    {
+        // Arrange
+        var outgoingEmails = new InMemoryOutgoingEmailStore();
+        var harness = new MailDraftHarness(new FakeTimeProvider(Moment), outgoingEmails, Settings());
+        harness.MapDraftsFolder(Account);
+        var draft = await SaveAsync(harness, "first version");
+        await PromoteAsync(harness, outgoingEmails, draft, OutgoingEmailStage.Recorded);
+
+        // Act
+        var results = await harness.Pass.SettleOutstandingAsync(Account, CancellationToken.None);
+
+        // Assert
+        Assert.Empty(results);
+        Assert.Empty(harness.Withdrawn);
+        Assert.Equal(MailDraftStage.Filed, harness.Drafts.Peek(draft.Id)!.Stage);
+    }
+
+    private static async Task PromoteAsync(
+        MailDraftHarness harness,
+        InMemoryOutgoingEmailStore outgoingEmails,
+        MailDraftRecord draft,
+        OutgoingEmailStage stage)
+    {
+        var send = outgoingEmails.Publish(
+            OutgoingEmailRequest.Create(Account, OutgoingEmailRequester.Draft(draft.Id), draft.Recipients),
+            mimeByteLength: 64);
+
+        outgoingEmails.Arrange(send.Id, stage);
+
+        // Written without the give-up that ordinarily follows it, which is the state a crash between the two leaves.
+        await harness.Drafts.RecordPromotedAsync(
+            Substitute.For<IPersistenceSession>(),
+            draft.Id,
+            send.Id,
+            CancellationToken.None);
     }
 
     private static MailDraftHarness Harness()

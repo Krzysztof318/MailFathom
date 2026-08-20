@@ -927,7 +927,9 @@ the draft, which is what an operator reads instead of a message that quietly wen
 issued and removed once the copies are settled, so a process that dies in between leaves a draft the pass finishes. A
 copy that could not be reached does not make the draft undeletable: it is marked as one nothing will touch again, the
 reason is recorded, and the owner is left with one message in a folder they can delete with the gesture they would have
-used anyway.
+used anyway. **A draft that has been promoted is not given up this way**: its message is a queued send that giving the
+draft up would leave untouched, so the answer is `53008` `MailDraftNotFound` — the same one revising it gives — and
+what stops the message is cancelling the send rather than deleting the draft it came from.
 
 **Promoting a draft produces an ordinary outgoing record carrying the same MIME.** The bytes are the ones that were
 stored rather than a recomposition, for the reason a retry reuses them: a rebuilt message threads as a second message
