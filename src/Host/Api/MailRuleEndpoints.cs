@@ -7,7 +7,6 @@ using MailFathom.Application.Rules;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
 using MailFathom.Domain.Access;
-using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Rules;
@@ -142,9 +141,9 @@ internal static class MailRuleEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(requests);
 
-        if (ResolveAccount(request?.Account, accounts) is not { } accountId)
+        if (AdminAccountRequest.Resolve(request?.Account, accounts) is not { } accountId)
         {
-            return UnknownAccount(request?.Account);
+            return AdminAccountRequest.Refuse(request?.Account);
         }
 
         var submitted = await requests.SubmitAsync(accountId, cancellationToken);
@@ -174,9 +173,9 @@ internal static class MailRuleEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(runs);
 
-        if (ResolveAccount(account, accounts) is not { } accountId)
+        if (AdminAccountRequest.Resolve(account, accounts) is not { } accountId)
         {
-            return UnknownAccount(account);
+            return AdminAccountRequest.Refuse(account);
         }
 
         var run = await runs.FindLatestAsync(accountId, cancellationToken);
@@ -218,9 +217,9 @@ internal static class MailRuleEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(history);
 
-        if (ResolveAccount(account, accounts) is not { } accountId)
+        if (AdminAccountRequest.Resolve(account, accounts) is not { } accountId)
         {
-            return UnknownAccount(account);
+            return AdminAccountRequest.Refuse(account);
         }
 
         MailRuleExecutionCursor? decodedCursor = null;
@@ -257,26 +256,6 @@ internal static class MailRuleEndpoints
 
         return TypedResults.Ok(MailRuleHistoryPageResponse.For(page));
     }
-
-    /// <summary>Reads the account a request named, or nothing when this deployment does not serve it.</summary>
-    private static MailAccountId? ResolveAccount(string? account, IMailAccountCatalog accounts)
-    {
-        if (string.IsNullOrWhiteSpace(account))
-        {
-            return null;
-        }
-
-        var accountId = MailAccountId.Create(account);
-
-        return accounts.ServedAccounts.Any(served => served.Id == accountId) ? accountId : null;
-    }
-
-    /// <summary>States that the request named no account this deployment serves, without echoing an empty one.</summary>
-    private static ProblemHttpResult UnknownAccount(string? account) => TypedResults.Problem(
-        string.IsNullOrWhiteSpace(account)
-            ? "The request named no mail account."
-            : $"This deployment configures no mail account named '{account}'.",
-        statusCode: StatusCodes.Status400BadRequest);
 
     /// <summary>States what a caller has to change, without restating the filters they already sent.</summary>
     private static string DescribeRefusal(MailRuleExecutionQueryOutcome outcome) => outcome switch

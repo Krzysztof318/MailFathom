@@ -6,7 +6,6 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.DeadLetters;
 using MailFathom.Domain.Access;
-using MailFathom.Domain.Accounts;
 using MailFathom.Host.Security.Endpoints;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -100,16 +99,9 @@ internal static class JobDeadLetterEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(deadLetters);
 
-        MailAccountId? accountId = null;
-
-        if (account is not null)
+        if (!AdminAccountRequest.TryResolveFilter(account, accounts, out var accountId, out var refusal))
         {
-            if (ResolveAccount(account, accounts) is not { } servedAccount)
-            {
-                return UnknownAccount(account);
-            }
-
-            accountId = servedAccount;
+            return refusal;
         }
 
         JobType? jobType = null;
@@ -210,27 +202,7 @@ internal static class JobDeadLetterEndpoints
         ? JobId.Create(identifier)
         : null;
 
-    /// <summary>Reads the account a request named, or nothing when this deployment does not serve it.</summary>
-    private static MailAccountId? ResolveAccount(string? account, IMailAccountCatalog accounts)
-    {
-        if (string.IsNullOrWhiteSpace(account))
-        {
-            return null;
-        }
-
-        var accountId = MailAccountId.Create(account);
-
-        return accounts.ServedAccounts.Any(served => served.Id == accountId) ? accountId : null;
-    }
-
     private static string DeclaredJobTypes() => string.Join(", ", JobType.All.Select(declared => declared.Name));
-
-    /// <summary>States that the request named no account this deployment serves, without echoing an empty one.</summary>
-    private static ProblemHttpResult UnknownAccount(string? account) => TypedResults.Problem(
-        string.IsNullOrWhiteSpace(account)
-            ? "The account filter named no mail account. Leave it out to read every account."
-            : $"This deployment configures no mail account named '{account}'.",
-        statusCode: StatusCodes.Status400BadRequest);
 
     /// <summary>States that the request named no job to decide about.</summary>
     private static ProblemHttpResult NoJobNamed() => TypedResults.Problem(

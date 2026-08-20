@@ -8,7 +8,6 @@ using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.Spam.History;
 using MailFathom.Application.Spam.Runs;
 using MailFathom.Domain.Access;
-using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Spam;
@@ -111,9 +110,9 @@ internal static class SpamClassificationEndpoints
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(requests);
 
-        if (ResolveAccount(request?.Account, accounts) is not { } accountId)
+        if (AdminAccountRequest.Resolve(request?.Account, accounts) is not { } accountId)
         {
-            return UnknownAccount(request?.Account);
+            return AdminAccountRequest.Refuse(request?.Account);
         }
 
         var configuredScope = settings.Settings.ScannedFolderAliases;
@@ -156,9 +155,9 @@ internal static class SpamClassificationEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(runs);
 
-        if (ResolveAccount(account, accounts) is not { } accountId)
+        if (AdminAccountRequest.Resolve(account, accounts) is not { } accountId)
         {
-            return UnknownAccount(account);
+            return AdminAccountRequest.Refuse(account);
         }
 
         var run = await runs.FindLatestAsync(accountId, cancellationToken);
@@ -201,9 +200,9 @@ internal static class SpamClassificationEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(classifications);
 
-        if (ResolveAccount(account, accounts) is not { } accountId)
+        if (AdminAccountRequest.Resolve(account, accounts) is not { } accountId)
         {
-            return UnknownAccount(account);
+            return AdminAccountRequest.Refuse(account);
         }
 
         SpamClassificationHistoryCursor? decodedCursor = null;
@@ -246,19 +245,6 @@ internal static class SpamClassificationEndpoints
         var page = await classifications.ReadPageAsync(query, cancellationToken);
 
         return TypedResults.Ok(SpamClassificationPageResponse.For(page));
-    }
-
-    /// <summary>Reads the account a request named, or nothing when this deployment does not serve it.</summary>
-    private static MailAccountId? ResolveAccount(string? account, IMailAccountCatalog accounts)
-    {
-        if (string.IsNullOrWhiteSpace(account))
-        {
-            return null;
-        }
-
-        var accountId = MailAccountId.Create(account);
-
-        return accounts.ServedAccounts.Any(served => served.Id == accountId) ? accountId : null;
     }
 
     /// <summary>Resolves the folders a run walks, defaulting to and bounded by the scope classification is configured over.</summary>
@@ -329,13 +315,6 @@ internal static class SpamClassificationEndpoints
     }
 
     private static string DeclaredVerdicts() => string.Join(", ", Enum.GetNames<SpamVerdict>());
-
-    /// <summary>States that the request named no account this deployment serves, without echoing an empty one.</summary>
-    private static ProblemHttpResult UnknownAccount(string? account) => TypedResults.Problem(
-        string.IsNullOrWhiteSpace(account)
-            ? "The request named no mail account."
-            : $"This deployment configures no mail account named '{account}'.",
-        statusCode: StatusCodes.Status400BadRequest);
 
     /// <summary>States what a caller has to change, without restating the filters they already sent.</summary>
     private static string DescribeRefusal(SpamClassificationHistoryQueryOutcome outcome) => outcome switch
