@@ -124,7 +124,7 @@ internal static class LoginCommand
 
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             result.GetValue(nameOption),
             new SignInRequest(
                 result.GetValue(modeOption),

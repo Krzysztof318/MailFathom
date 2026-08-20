@@ -35,7 +35,7 @@ internal static class LogoutCommand
             // argument, and so that naming an address removes the profile serving it rather than reporting that no
             // profile carries that name.
             var (name, credential) = context.Store.Locate(
-                CliOptions.RequestedDeployment(result.GetValue(endpointOption)));
+                CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)));
 
             context.Store.Remove(name);
 

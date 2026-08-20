@@ -49,7 +49,7 @@ internal static class ShowRuleCommand
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
             result.GetValue(nameArgument) ?? string.Empty,
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
         return command;

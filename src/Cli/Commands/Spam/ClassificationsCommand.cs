@@ -46,15 +46,8 @@ internal static class ClassificationsCommand
             Description = "Report only messages carrying this verdict: Spam, NotSpam, or Undetermined.",
         };
 
-        Option<int?> pageSizeOption = new("--page-size")
-        {
-            Description = "How many classifications to read. Defaults to what the deployment serves.",
-        };
-
-        Option<string?> cursorOption = new("--cursor")
-        {
-            Description = "Continue from where a previous page ended, using the cursor it printed.",
-        };
+        var pageSizeOption = CliOptions.PageSize("classifications");
+        var cursorOption = CliOptions.Cursor();
 
         Command command = new(
             "classifications",
@@ -76,7 +69,7 @@ internal static class ClassificationsCommand
                 result.GetValue(verdictOption),
                 result.GetValue(pageSizeOption),
                 result.GetValue(cursorOption)),
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
         return command;

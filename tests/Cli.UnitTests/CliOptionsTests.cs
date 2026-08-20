@@ -16,15 +16,25 @@ public sealed class CliOptionsTests
     [Fact]
     public void RequestedDeployment_AValueOnTheCommandLine_IsWhatTheCommandActsOn()
     {
-        // Act, Assert
-        Assert.Equal("production", CliOptions.RequestedDeployment("production"));
+        // Act, Assert: what an operator typed beats what their shell was told.
+        Assert.Equal("production", CliOptions.RequestedDeployment("production", "staging"));
     }
 
     [Fact]
     public void RequestedDeployment_SurroundingWhitespace_IsNotPartOfTheName()
     {
         // Act, Assert: a value pasted from a terminal or a script arrives with whatever was around it.
-        Assert.Equal("production", CliOptions.RequestedDeployment("  production  "));
+        Assert.Equal("production", CliOptions.RequestedDeployment("  production  ", endpointVariable: null));
+    }
+
+    /// <summary>The variable is the shell stating it once for a session, and it beats the stored default.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void RequestedDeployment_NothingOnTheCommandLine_IsWhatTheShellWasTold(string? configuredEndpoint)
+    {
+        // Act, Assert
+        Assert.Equal("staging", CliOptions.RequestedDeployment(configuredEndpoint, "  staging  "));
     }
 
     /// <summary>Nothing named means the profile the operator last switched to, which the store settles rather than this.</summary>
@@ -32,7 +42,7 @@ public sealed class CliOptionsTests
     public void RequestedDeployment_NothingAnywhere_NamesNoDeployment()
     {
         // Act, Assert
-        Assert.Null(CliOptions.RequestedDeployment(configuredEndpoint: null));
+        Assert.Null(CliOptions.RequestedDeployment(configuredEndpoint: null, endpointVariable: null));
     }
 
     [Theory]
@@ -103,5 +113,60 @@ public sealed class CliOptionsTests
         // Assert
         Assert.False(option.Required);
         Assert.False(option.HasDefaultValue);
+    }
+
+    /// <summary>
+    /// An absent size is the deployment's own default rather than a number this tool keeps in step with it, so the
+    /// option carries none of its own — and the listing that omits it asks for whatever the endpoint serves.
+    /// </summary>
+    [Fact]
+    public void PageSize_Always_IsOptionalAndDefaultsToNothing()
+    {
+        // Act
+        var option = CliOptions.PageSize("contacts");
+
+        // Assert
+        Assert.False(option.Required);
+        Assert.False(option.HasDefaultValue);
+    }
+
+    /// <summary>The noun is the whole of what differs between the listings, which is what makes one factory serve all five.</summary>
+    [Fact]
+    public void PageSize_ANounOfTheListing_IsWhatTheDescriptionCounts()
+    {
+        // Act
+        var option = CliOptions.PageSize("classifications");
+
+        // Assert
+        Assert.Equal("How many classifications to read. Defaults to what the deployment serves.", option.Description);
+    }
+
+    /// <summary>A cursor is handed back unread, so nothing is assumed about a walk nobody started.</summary>
+    [Fact]
+    public void Cursor_Always_IsOptionalAndDefaultsToNothing()
+    {
+        // Act
+        var option = CliOptions.Cursor();
+
+        // Assert
+        Assert.False(option.Required);
+        Assert.False(option.HasDefaultValue);
+    }
+
+    /// <summary>
+    /// The prompt is the default and the flag is the exception, so nothing about it is required. The short form is
+    /// part of the contract rather than a convenience: it is what the four commands were each declaring by hand, and
+    /// one copy dropping it would leave <c>-y</c> working on three of them.
+    /// </summary>
+    [Fact]
+    public void Confirmed_Always_IsOptionalAndAcceptsTheShortForm()
+    {
+        // Act
+        var option = CliOptions.Confirmed("erasure");
+
+        // Assert
+        Assert.False(option.Required);
+        Assert.Contains("-y", option.Aliases);
+        Assert.Equal("Agree to the erasure without being asked, which is what a scripted run needs.", option.Description);
     }
 }

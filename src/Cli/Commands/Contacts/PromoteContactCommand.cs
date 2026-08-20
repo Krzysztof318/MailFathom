@@ -35,7 +35,7 @@ internal static class PromoteContactCommand
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
             result.GetValue(identityOption),
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
         return command;

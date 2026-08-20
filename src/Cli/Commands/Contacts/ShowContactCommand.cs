@@ -46,7 +46,7 @@ internal static class ShowContactCommand
             context,
             result.GetValue(identityOption),
             result.GetValue(addressOption),
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
         return command;

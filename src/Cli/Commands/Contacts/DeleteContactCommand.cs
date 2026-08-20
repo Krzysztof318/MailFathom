@@ -38,10 +38,7 @@ internal static class DeleteContactCommand
         var endpointOption = CliOptions.Endpoint();
         var identityOption = ContactOptions.Identity();
 
-        Option<bool> confirmedOption = new("--yes", "-y")
-        {
-            Description = "Agree to the erasure without being asked, which is what a scripted erasure needs.",
-        };
+        var confirmedOption = CliOptions.Confirmed("erasure");
 
         Command command = new("delete", "Erase one person from the deployment's contact book. This cannot be undone.")
         {
@@ -53,7 +50,7 @@ internal static class DeleteContactCommand
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
             result.GetValue(identityOption),
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             result.GetValue(confirmedOption),
             cancellationToken));
 
@@ -84,7 +81,11 @@ internal static class DeleteContactCommand
 
         ContactOutput.WriteContact(context.Console, held);
 
-        if (!Agreed(context, confirmedUpFront))
+        if (!CliConfirmation.Agreed(
+                context,
+                confirmedUpFront,
+                "There is nobody at the terminal to agree to this, and erasing a contact cannot be undone. Pass --yes to erase without being asked.",
+                "Erase that contact and everything derived from it? [y/N] "))
         {
             context.Console.WriteError("Nothing was erased.");
 
@@ -98,28 +99,6 @@ internal static class DeleteContactCommand
             : $"The deployment's contact book held no contact {erasure.Contact:D} by the time the erasure ran, so nothing was erased.");
 
         return CliExitCode.Success;
-    }
-
-    /// <summary>Reports whether the person running this agreed to the erasure, refusing to guess where nobody can answer.</summary>
-    /// <remarks>
-    /// A redirected input has nobody to ask, and reading the answer out of whatever was piped in would turn a stray line
-    /// into an agreement to erase somebody. Such an invocation is told to pass the flag instead, which is an operator
-    /// stating the agreement in the command rather than a command inferring it.
-    /// </remarks>
-    private static bool Agreed(CliContext context, bool confirmedUpFront)
-    {
-        if (confirmedUpFront)
-        {
-            return true;
-        }
-
-        if (!context.Console.CanConfirm)
-        {
-            throw new CliFailure(
-                "There is nobody at the terminal to agree to this, and erasing a contact cannot be undone. Pass --yes to erase without being asked.");
-        }
-
-        return context.Console.Confirm("Erase that contact and everything derived from it? [y/N] ");
     }
 
     /// <summary>Describes how many addresses went with the person, grouped invariantly for the reason every other figure this tool prints is.</summary>

@@ -73,7 +73,7 @@ internal static class ClassifyMailCommand
                 result.GetValue(foldersOption),
                 result.GetValue(applyOption),
                 result.GetValue(rescoreOption)),
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
         return command;

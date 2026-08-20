@@ -48,15 +48,8 @@ internal static class DeadLettersCommand
             Description = "Report only work belonging to this account, as the deployment's configuration names it.",
         };
 
-        Option<int?> pageSizeOption = new("--page-size")
-        {
-            Description = "How many jobs to read. Defaults to what the deployment serves.",
-        };
-
-        Option<string?> cursorOption = new("--cursor")
-        {
-            Description = "Continue from where a previous page ended, using the cursor it printed.",
-        };
+        var pageSizeOption = CliOptions.PageSize("jobs");
+        var cursorOption = CliOptions.Cursor();
 
         Command command = new(
             "dead-letters",
@@ -76,7 +69,7 @@ internal static class DeadLettersCommand
                 result.GetValue(accountOption),
                 result.GetValue(pageSizeOption),
                 result.GetValue(cursorOption)),
-            CliOptions.RequestedDeployment(result.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
         return command;

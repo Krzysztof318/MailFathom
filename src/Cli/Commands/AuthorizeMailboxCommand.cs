@@ -122,7 +122,7 @@ internal static class AuthorizeMailboxCommand
             parseResult.GetValue(redirectUriOption),
             parseResult.GetValue(publicClientOption),
             parseResult.GetValue(accountOption),
-            CliOptions.RequestedDeployment(parseResult.GetValue(endpointOption)),
+            CliOptions.RequestedDeployment(parseResult.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
 
         return command;
