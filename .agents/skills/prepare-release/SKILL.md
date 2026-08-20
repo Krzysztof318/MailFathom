@@ -286,6 +286,7 @@ On a branch off the release branch, and touching nothing else:
 - leave `VersionPrefix` alone. It already reads `x.y.z`, which is what makes the tagged tree self-consistent;
 - **bring the Registry metadata and the files that name a version in prose onto `x.y.z`**, per the list below;
 - **read the two registry overviews against what this release publishes**, per the subsection after it;
+- **read the root `README.md` end to end and prune it**, per the subsection after that;
 - **sweep the tree for prose that describes the release state**, per the pass after that.
 
 Nothing else belongs in this diff. **This is the pull request whose merge commit is tagged and published**, so it is
@@ -301,10 +302,19 @@ so they are read here by name rather than left to be noticed:
 
 | File | What to bring onto `x.y.z` |
 | --- | --- |
-| `server.json` | The top-level `version`. Leave the server name, remote template, and every other field unchanged unless the release contains a separately reviewed metadata change; then run `mcp-publisher validate` |
+| `server.json` | The top-level `version`, and the `description` **read against what this release publishes** rather than copied forward. Leave the server name, the remote template, and every other field unchanged unless the release carries a separately reviewed metadata change, and run `mcp-publisher validate` on any edit beyond the version |
 | `README.md` | The **Project status** paragraph — which release is current and what it ships — and the **Where the artifacts are published** table whenever a release starts or stops attaching one |
 | `docs/users/README.md` | The **The state of the release** section — which release is current, and what a page is allowed to describe as already downloadable |
 | `SECURITY.md` | The **Supported versions** table. `x.y` becomes the supported line and the one it replaces moves down a row, per ADR 0004's rule that only the newest released minor is patched by default |
+
+**The `description` is the one cell above that says *read* rather than *bring onto*, and the difference is not
+cosmetic.** Every other value in the table is derived — the version is known, the prose names it, and the edit is
+mechanical. The description is a sentence about what MailFathom *is*, published to the official MCP Registry as this
+release's own account of the server, and nothing in this repository derives it, gates it, or notices when a release
+makes it false. `0.7.0` is the worked example and the reason the cell was rewritten: it published sending, and the
+description still read `read-only search and cited answers`. Ask of it exactly what the two registry overviews are
+asked — does this still describe what the release publishes — and edit it here when the answer is no, because a
+correction after the tag describes a tree nobody downloaded.
 
 **They belong in this pull request rather than the bump one, and the reason is what the whole ordering rests on:** this
 diff's merge commit is what gets tagged, so it is the tree an operator reads at `v<x.y.z>` and the metadata published
@@ -353,6 +363,44 @@ wrong in the tree every registry rendered.
 The release-state sweep below already reaches both. Its only exclusions are `CHANGELOG.md`, `docs/decisions/`, and this
 skill's own directory, so every tracked file under `deploy/` is in its file set and neither page needs a pattern of its
 own.
+
+#### The front page
+
+The root `README.md` is on the table above for two version-bearing parts. This is the other half of what a release owes
+it, and it is a reading rather than an edit to a named paragraph: **read the whole file, and take out what stopped
+being true or stopped earning its place.**
+
+**It is the one file in the repository that nothing prunes.** Every pull request that changes what an agent can do adds
+a sentence to it, correctly — a new tool, a new grant, a new bound — and no later change reads it end to end, because
+no change is ever *about* the README. So it accretes across a cycle in a way no other file does, and it accretes in the
+direction that damages it most: toward being a second copy of the documentation, written for a reader who has already
+decided to adopt MailFathom, on the page whose whole job is the reader who has not.
+
+`0.7.0` is what that costs at the end of one cycle. The file had reached 298 lines and 46 KB, spelled permission names
+out per tool, restated per-tool contracts the feature pages own, and still opened its capability section with `What is
+implemented is read-only mail retrieval` while the release shipped sixteen tools that write. Every one of those
+sentences was correct when it was added.
+
+What the reading asks:
+
+- **Is anything false now?** A capability claim, a count of tools, a statement of what cannot be done. This is the half
+  the release-state sweep below cannot reach, because a sentence like the one above names no version and asserts no
+  release state — it describes the product, and the product moved.
+- **Does this belong on a front page at all?** A permission name, an argument, an error code, a bound, a per-tool
+  contract, a reversibility rule: each belongs to the page that owns it, and a copy here is a second place to keep
+  true. Link instead. The test is whether somebody deciding whether to adopt MailFathom needs it to decide.
+- **Does it still read as one thing?** Sections added a release at a time stop composing. The front page and the first
+  get-started are the same document, and it is read by somebody who has not committed to anything yet.
+
+The licensing record is not prunable. `$check-docs-licenses` requires this file to carry that contributions arrive
+under the license by section 5 with nothing signed, that contributors keep their copyright, and that sections 7 and 8
+give the software with no warranty and no contributor liability — the last because this is the only one of those files
+rendered outside the repository. Shorten around them.
+
+Nothing gates any of this either, and no length is prescribed: a number would be met by cutting whatever is nearest the
+end. What is prescribed is that the reading happens here, in the pull request whose merge commit is tagged, because
+this is the last moment anybody looks at the file before it becomes the tree a registry, a listing, and every new
+reader meets.
 
 #### The release-state sweep
 
@@ -564,4 +612,9 @@ The next milestone <next> is open and carries its own tracking issue (#D), which
   the next milestone and its own tracking issue already exist, and a later run finds both and creates neither.
 - **The release is abandoned after the tag.** It is not abandoned; it is released. Cut a patch from the release branch.
 
-`docs/operations/release-procedure.md` records the same sequence for a reader who does not have this skill.
+`docs/operations/release-procedure.md` records the same sequence for a reader who does not have this skill, and the two
+are one decision written twice rather than a rule and a summary of it. **A rule changed here is changed there in the
+same edit.** They drifted once already and it cost a release-preparation pull request a round of review: this file has
+always let the release correct a `server.json` field beyond the version, the page said it changed no other Registry
+metadata at all, and `Fathom review` raised the diff against the page — correctly, because a procedure and its record
+disagreeing is a defect wherever the disagreement is resolved.

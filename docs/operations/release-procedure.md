@@ -169,10 +169,10 @@ unavailable:
    brings `server.json` and the three files that name a version in prose onto that version: the Registry metadata's
    top-level `version`, the **Project status** paragraph and the **Where the artifacts are published** table in
    `README.md`, the **state of the release** section in `docs/users/README.md`, and the **Supported versions** table in
-   `SECURITY.md`. It changes no other Registry metadata unless the release carries a separately reviewed metadata
-   change, which is read here for the same reason the version is — the tagged tree is what the Registry publishes, so a
-   field that went stale during the cycle would be published as this release's own description of the server — and
-   `mcp-publisher validate` runs on any such edit. It merges first because **its merge commit is what gets tagged
+   `SECURITY.md`. It reads `server.json`'s `description` against what the release publishes rather than copying it
+   forward, because that field is a sentence about what MailFathom *is* and nothing derives it or notices when a
+   release makes it false; it changes no other Registry metadata unless the release carries a separately reviewed
+   metadata change, and `mcp-publisher validate` runs on any edit beyond the version. It merges first because **its merge commit is what gets tagged
    and published**, so the tagged tree contains the released changelog, the metadata published to the Registry, and
    the files describing the release they ship inside rather than describing them afterwards.
 
@@ -193,6 +193,13 @@ unavailable:
    is current: one names no version at all and the other writes the placeholder. They are read here anyway because the
    tagged tree is what each listing renders, so a claim that went stale during the cycle would be published as this
    release's own description of the artifact.
+
+   It reads the root `README.md` end to end as well, and takes out what stopped being true or stopped earning its
+   place. That file is the one nothing prunes: every change that moves what an agent can do adds a sentence to it and
+   no later change reads the whole of it, so across a cycle it accretes toward being a second copy of the
+   documentation on the page written for somebody who has not adopted MailFathom yet. The release is the last moment
+   anybody looks at it before it becomes the tree every new reader meets, which is why the reading belongs here and
+   why no length is prescribed for it.
 2. **Push the annotated tag `v<x.y.z>` on that merge commit.** This is what makes the release real and what triggers
    the release workflow — which starts only for a version-shaped tag, so a tag that is not one starts nothing at all
    rather than a run that fails. **Read a pushed tag that produced no run as a malformed tag**, and check its spelling

@@ -422,7 +422,13 @@ The canonical skills are:
   names. Its changelog pull request also brings `server.json` onto the release
   version, carries the files that name a version in prose, and sweeps for prose
   describing the release state without naming one, because all go stale at the
-  tag and none is reached by `<VersionPrefix>`. After the release workflow
+  tag and none is reached by `<VersionPrefix>`. Three readings sit beside those
+  edits, for the one reason that governs the whole step — the tagged tree is
+  what a registry, a listing, and every new reader meets: `server.json`'s
+  `description` and the two committed pages a registry renders are each read
+  against what the release actually publishes, and the root `README.md` is read
+  end to end and pruned, because it is the file every feature adds a sentence to
+  and no later change reads whole. After the release workflow
   succeeds, its printed sequence publishes and verifies that metadata in the
   official MCP Registry; the version-bump pull request leaves `server.json` on
   the latest stable release while `<VersionPrefix>` names the next one. Before
