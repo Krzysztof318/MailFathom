@@ -270,6 +270,12 @@ A narrowed entry is enforced on the tools themselves: a client connecting with t
 its grant permits, and a call naming any other is answered as a call naming a tool that does not exist. So a grant is
 what a credential may reach rather than a note about it.
 
+**What the endpoint offers at all is a separate decision**, and it needs no attention on a first deployment: every kind
+of tool is published unless `McpEndpoint:PublishedToolCategories` names some. An instance stood up for retrieval can
+write `["mailbox"]` there and publish the reading tools alone, so a release adding tools does not change what your
+endpoint offers without you noticing. [What this endpoint publishes](../operations/mcp-endpoint.md#what-this-endpoint-publishes)
+holds the categories and what a client may narrow for its own session.
+
 MailFathom itself serves plain HTTP unless its own TLS termination is configured, so keep the application port on
 loopback or behind a TLS-terminating proxy — the Compose deployment's default — and give the proxy the certificate. If
 you put a proxy in front, name it in `ReverseProxy:TrustedProxies` as well. The public scheme and host survive the hop

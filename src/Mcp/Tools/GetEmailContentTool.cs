@@ -9,6 +9,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
+using MailFathom.Mcp.Tools.Categories;
 using MailFathom.Mcp.Tools.Results;
 using ModelContextProtocol.Server;
 
@@ -50,6 +51,10 @@ internal sealed class GetEmailContentTool(EmailContentReader emailContentReader)
     /// <summary>The capability a caller must hold to be offered this tool and to reach the use case behind it.</summary>
     /// <remarks>It reads the local mailbox copy, which is what <see cref="MailFathomPermission.MailRead" /> covers. Declaring it beside the name is what keeps <see cref="PublishedTools" /> able to answer for every tool this surface publishes.</remarks>
     public static MailFathomPermission RequiredPermission => MailFathomPermission.MailRead;
+
+    /// <summary>The kind of thing this tool is for, which is what a deployment publishes or withholds it by.</summary>
+    /// <remarks>It reads the local mailbox copy, which is the retrieval surface a deployment standing an instance up for reading publishes on its own. A category decides what this endpoint offers rather than who may reach it, so it turns nothing on: the tool appears only where the capability behind it is available and the caller's grant reaches it.</remarks>
+    public static McpToolCategory Category => McpToolCategory.Mailbox;
 
     /// <summary>The greatest length text naming an email may carry before anything tries to read an identity out of it.</summary>
     /// <remarks>

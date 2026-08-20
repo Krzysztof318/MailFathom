@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Mail.Delivery.Tracking;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
+using MailFathom.Mcp.Tools.Categories;
 using MailFathom.Mcp.Tools.Results;
 using ModelContextProtocol.Server;
 
@@ -50,6 +51,10 @@ internal sealed class GetOutgoingEmailTool(OutgoingMailReader reader)
     /// <summary>The capability a caller must hold to be offered this tool and to reach the use case behind it.</summary>
     /// <remarks>Reading back a send is part of sending rather than part of reading a mailbox: what it answers is what the caller itself asked to have sent, and a credential granted only to read mail must not learn what this mailbox has written to whom.</remarks>
     public static MailFathomPermission RequiredPermission => MailFathomPermission.MailSend;
+
+    /// <summary>The kind of thing this tool is for, which is what a deployment publishes or withholds it by.</summary>
+    /// <remarks>It belongs to the mail this deployment was asked to send, which a deployment that sends nothing publishes none of. A category decides what this endpoint offers rather than who may reach it, so it turns nothing on: the tool appears only where the capability behind it is available and the caller's grant reaches it.</remarks>
+    public static McpToolCategory Category => McpToolCategory.Sending;
 
     /// <summary>Reports where one message this caller queued has got to.</summary>
     /// <param name="outgoingEmailId">The identifier a sending tool answered with.</param>

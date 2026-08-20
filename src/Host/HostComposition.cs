@@ -1317,8 +1317,10 @@ internal static class HostComposition
         if (mcpEndpointSettings.Enabled)
         {
             // The tools read the local mailbox copy through the use cases the infrastructure registration above already
-            // added, so the protocol surface adds no port of its own.
-            builder.Services.AddMailFathomServer();
+            // added, so the protocol surface adds no port of its own. What it publishes is the deployment's own
+            // selection, read from the same startup snapshot the endpoint was composed from: which kinds of tool an
+            // endpoint offers is part of its routing rather than something a request re-reads.
+            builder.Services.AddMailFathomServer(mcpEndpointSettings.ToPublishedToolCategories());
             builder.Services.AddMcpTransportSecurity(mcpEndpointSettings);
         }
 

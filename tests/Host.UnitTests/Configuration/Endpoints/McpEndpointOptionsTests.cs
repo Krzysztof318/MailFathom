@@ -7,6 +7,7 @@ using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Security.ClientCertificates;
+using MailFathom.Mcp.Tools.Categories;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Endpoints;
@@ -529,6 +530,69 @@ public sealed class McpEndpointOptionsTests
         profile.SubjectAlternativeNames.Add("mtls.prod.connectors.openai.com");
 
         return profile;
+    }
+
+    /// <summary>The behaviour a deployment has without the setting, which is what keeps its arrival from changing anything.</summary>
+    [Fact]
+    public void ToPublishedToolCategories_ADeploymentNamingNoCategory_PublishesEveryOneOfThem()
+    {
+        // Arrange
+        var options = new McpEndpointOptions { Enabled = true };
+
+        // Act
+        var published = options.ToPublishedToolCategories();
+
+        // Assert
+        Assert.Equal(McpToolCategory.All, published.Categories);
+    }
+
+    [Fact]
+    public void ToPublishedToolCategories_TheCategoriesNamed_PublishesThoseAndNoOther()
+    {
+        // Arrange
+        var options = new McpEndpointOptions { Enabled = true };
+        options.PublishedToolCategories.Add("mailbox");
+        options.PublishedToolCategories.Add("Contacts");
+
+        // Act
+        var published = options.ToPublishedToolCategories();
+
+        // Assert
+        Assert.Equal([McpToolCategory.Mailbox, McpToolCategory.Contacts], published.Categories);
+        Assert.False(published.Publishes(McpToolCategory.Sending));
+    }
+
+    /// <summary>A misspelling would otherwise narrow the endpoint to a name nothing carries, which an operator would read as a listing that lost tools for no reason.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ACategoryNoToolCarries_IsRefusedAndSaysWhatIsAccepted()
+    {
+        // Arrange
+        var options = new McpEndpointOptions { Enabled = true };
+        options.PublishedToolCategories.Add("mailboxes");
+
+        // Act
+        var errors = options.FindConfigurationErrors();
+
+        // Assert
+        var refusal = Assert.Single(errors);
+        Assert.Contains("McpEndpoint:PublishedToolCategories:0", refusal, StringComparison.Ordinal);
+        Assert.Contains("mailboxes", refusal, StringComparison.Ordinal);
+        Assert.Contains(McpToolCategory.PublishedNames(), refusal, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_ThePublishedCategoryNames_AreAccepted()
+    {
+        // Arrange
+        var options = new McpEndpointOptions { Enabled = true };
+
+        foreach (var category in McpToolCategory.All)
+        {
+            options.PublishedToolCategories.Add(category.Name);
+        }
+
+        // Act, Assert
+        Assert.Empty(options.FindConfigurationErrors());
     }
 
     private static ConfiguredSecret Key(string name) => new()

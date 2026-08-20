@@ -8,14 +8,15 @@ using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Security.ClientCertificates;
+using MailFathom.Mcp.Tools.Categories;
 
 namespace MailFathom.Host.Configuration.Endpoints;
 
 /// <summary>Configures whether the MCP protocol surface is served, where, and what a client must present to reach it.</summary>
 /// <remarks>
 /// <para>
-/// Whether, where, and to whom are the questions this section answers. The path is a constant published by the protocol
-/// surface, and the transport is always stateless, because every MailFathom tool answers one request from the local
+/// Whether, where, to whom, and what it offers are the questions this section answers. The path is a constant published
+/// by the protocol surface, and the transport is always stateless, because every MailFathom tool answers one request from the local
 /// mailbox copy and needs no server-initiated message — which is the shape MCP deployments take today. Should a tool
 /// that pushes notifications ever need sessions, that is a change to the surface rather than a knob an operator was
 /// expected to find.
@@ -74,6 +75,23 @@ internal sealed class McpEndpointOptions
     /// entries, because the methods identify different kinds of caller rather than layering checks on one.
     /// </remarks>
     public IList<TransportAuthenticationOptions> Authentication { get; } = [];
+
+    /// <summary>Gets the kinds of tool this endpoint publishes, empty to publish every one of them.</summary>
+    /// <remarks>
+    /// <para>
+    /// The coarse answer to what this instance offers at all, beside the per-capability switches that decide what it can
+    /// do. A category is named by <see cref="McpToolCategory" />, an unknown name fails startup rather than narrowing
+    /// the endpoint to something no tool carries, and naming none publishes everything — so the setting's absence leaves
+    /// an existing deployment exactly as it was.
+    /// </para>
+    /// <para>
+    /// It only ever takes away. A category naming a capability this deployment has not enabled publishes nothing, and no
+    /// entry here turns a capability on or widens a grant. A connecting client may narrow further still, through the
+    /// header <see cref="McpToolCategoryHeader" /> defines, and the two compose as an intersection: what a client asks
+    /// for is served only where this list already published it.
+    /// </para>
+    /// </remarks>
+    public IList<string> PublishedToolCategories { get; } = [];
 
     /// <summary>Gets or sets which browser origins the endpoint answers.</summary>
     public McpCorsOptions Cors { get; set; } = new();
@@ -231,6 +249,8 @@ internal sealed class McpEndpointOptions
             [.. this.Authentication],
             GrantedSurface));
 
+        errors.AddRange(this.FindPublishedToolCategoryErrors());
+
         errors.AddRange(this.Cors.FindConfigurationErrors()
             .Select(error => $"{SectionName}:{nameof(this.Cors)}:{error}"));
 
@@ -263,6 +283,30 @@ internal sealed class McpEndpointOptions
     /// <exception cref="InvalidOperationException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
     public IReadOnlyList<McpClientCertificateTrustProfile> ToClientCertificateTrustProfiles() =>
         [.. this.ClientCertificateProfiles.Select(profile => profile.ToTrustProfile())];
+
+    /// <summary>Maps the configured names onto the selection the protocol surface publishes by.</summary>
+    /// <returns>The selection, which publishes every category when the deployment named none.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when a configured name is not a published category, which <see cref="FindConfigurationErrors" /> refuses before composition reaches this.</exception>
+    public PublishedToolCategorySelection ToPublishedToolCategories() => PublishedToolCategorySelection.Of(
+        [
+            .. this.PublishedToolCategories.Select(written => McpToolCategory.TryParse(written, out var category)
+                ? category
+                : throw new InvalidOperationException(
+                    $"'{SectionName}:{nameof(this.PublishedToolCategories)}' names a category this surface does not publish, which startup validation refuses before the endpoint is composed.")),
+        ]);
+
+    /// <summary>Reports every configured name that no published category answers to.</summary>
+    /// <remarks>
+    /// Refused rather than ignored, for the reason every other unknown value in this section is: a misspelled category
+    /// would narrow the endpoint to a name nothing carries, which is an endpoint publishing less than its operator
+    /// wrote and saying nothing about it. The message names the value because a category name is MailFathom's own
+    /// vocabulary rather than anybody's data, and lists what is accepted so the fix needs no second page.
+    /// </remarks>
+    private IEnumerable<string> FindPublishedToolCategoryErrors() => this.PublishedToolCategories
+        .Index()
+        .Where(written => !McpToolCategory.TryParse(written.Item, out _))
+        .Select(written =>
+            $"{SectionName}:{nameof(this.PublishedToolCategories)}:{written.Index} — '{written.Item}' is not a tool category this surface publishes. Write one of: {McpToolCategory.PublishedNames()}.");
 
     /// <summary>Reports the profiles an operator must fix, and the names two of them share.</summary>
     /// <remarks>

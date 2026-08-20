@@ -7,6 +7,7 @@ using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Security.ClientCertificates;
 using MailFathom.Infrastructure.Security.Transport;
+using MailFathom.Mcp.Tools.Categories;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors.Infrastructure;
@@ -215,7 +216,12 @@ internal static class McpTransportSecurityExtensions
                 HeaderNames.CacheControl,
                 LastEventHeaderName,
                 McpSessionHeaderName,
-                McpProtocolVersionHeaderName)
+                McpProtocolVersionHeaderName,
+
+                // MailFathom's own, and the one header here a client is not obliged to send. Without it a browser
+                // client could narrow nothing, because a header the policy does not name is dropped before the endpoint
+                // sees it — which would read as the surface ignoring the request rather than as CORS refusing it.
+                McpToolCategoryHeader.Name)
             .WithExposedHeaders(
                 McpSessionHeaderName,
                 McpProtocolVersionHeaderName,

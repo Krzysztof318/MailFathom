@@ -719,6 +719,51 @@ an email address, a group, and a tenant claim are dropped at the boundary, so no
 claim the operator never mapped. The identity is `iss` together with `sub` rather than `sub` alone, because a subject is
 unique only within the server that issued it, and never an email address, which is reassignable.
 
+## What this endpoint publishes
+
+A grant decides what an admitted caller may do. What this endpoint offers at all is a separate decision, and
+`McpEndpoint:PublishedToolCategories` is where it is written:
+
+```json
+{
+  "McpEndpoint": {
+    "Enabled": true,
+    "PublishedToolCategories": ["mailbox", "contacts"]
+  }
+}
+```
+
+The categories are `mailbox`, `flags`, `sending`, `drafts`, `answering`, and `contacts`, and
+[Tool categories](../features/mcp-tools.md#tool-categories) is the table of which tools each one carries. **Naming none
+publishes every one of them**, which is the surface a deployment has without the setting — so adding a release that has
+it changes nothing about an endpoint already running, and narrowing is always something you did. A name no category
+answers to fails startup, naming the value and listing what is accepted, rather than being ignored and leaving the
+endpoint quieter than you wrote it.
+
+**It only ever takes away.** Publishing `sending` does not make this deployment able to send — an account's own SMTP
+settings decide that — and no category widens a grant or reveals a tool a caller was not offered. A tool is served when
+its capability is available, its category is published, and the caller's grant reaches it; a tool outside any of the
+three is absent from `tools/list` and its name is answered as a tool that does not exist.
+
+Two reasons to reach for it. The first is exposure: an instance stood up for retrieval can publish the reading tools
+alone, so an agent you do not fully trust cannot see that anything else exists, and a release adding tools does not
+change what your endpoint offers without you noticing. The second is cost — a listing of thirty tools is thirty
+descriptors in a model's context on every session, and an instance used only for reading pays that for nothing.
+
+### A client may narrow its own session
+
+A connecting client may name categories in the `MailFathom-Tool-Categories` header, and what it is served is the
+intersection of that with the list above. That is what lets one endpoint serve a retrieval-only agent beside a
+full-capability one without running two of them.
+
+**The header is not an authorization mechanism.** It is written by the caller and can only take away: a category this
+deployment excluded is never published because a client asked for it, and a request naming only excluded categories is
+served nothing rather than being widened back to your selection. A value this endpoint cannot read — an unknown name,
+a header longer than its bound — is dropped rather than failing the request, and a header naming nothing usable leaves
+your own selection in force. [The `MailFathom-Tool-Categories` header](../features/mcp-tools.md#the-mailfathom-tool-categories-header)
+holds the syntax and the bounds. A browser-based client reaches the header because the endpoint's CORS policy names it
+among the request headers it permits, which needs no configuration of yours.
+
 ## CORS and the `Origin` header
 
 Two separate things are configured by one setting, and they are worth telling apart:

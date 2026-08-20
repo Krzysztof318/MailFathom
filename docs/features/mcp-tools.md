@@ -135,6 +135,82 @@ is told nothing it could report, so a client that stopped working is diagnosed f
 warning rather than from what it received. A tool merely withheld from a listing is not recorded, because nothing was
 refused. [Telemetry](../operations/telemetry.md#what-an-authorization-refusal-records) holds what each channel carries.
 
+## Tool categories
+
+**Every tool belongs to exactly one category, and a category names what the tool is for.** A deployment publishes every
+category unless it names the ones it wants, and a connecting client may narrow further for its own session. The two
+questions a category answers are different from the ones a grant and a capability switch answer, which is why it is a
+third thing rather than a fourth spelling of either: a capability switch says *this instance can do this at all*, a
+grant says *this caller may reach it*, and a category says *this endpoint offers this kind of thing*.
+
+| Category | Tools | What it is for |
+| --- | --- | --- |
+| `mailbox` | `list_accounts`, `list_emails`, `get_email_content`, `search_emails` | Reading the local mailbox copy |
+| `flags` | `set_mail_flags` | Marking mail on the owner's own mail server |
+| `sending` | `send_email`, `reply_to_email`, `forward_email`, `send_draft`, `get_outgoing_email`, `cancel_outgoing_email` | Mail this deployment was asked to send, and the queued sends it holds |
+| `drafts` | `save_draft`, `update_draft`, `delete_draft` | Composing a message that is never sent |
+| `answering` | `ask_mail` | Answering a question by sending mail content to a model provider |
+| `contacts` | `list_contacts`, `get_contact`, `create_contact`, `update_contact`, `promote_contact`, `delete_contact` | The contact book |
+
+`send_draft` is in `sending` rather than in `drafts`, for the same reason it requires the sending grant rather than the
+drafting one: what it does is put mail on the wire. That is what lets a deployment publish `drafts` without `sending`
+and get the posture worth having — an agent composes mail a person then reads, and nothing it wrote leaves on its own.
+
+The set is closed. A name nothing here carries is unknown rather than new, so adding a category is a deliberate change
+to a named enumeration in the source rather than a string appearing in somebody's configuration, and it is a change to
+the configuration schema as much as to the code. A tool registered without a category refuses to start the host that
+registered it, because a tool nobody categorized has no answer to the question a selection asks and defaulting it into
+one would be the surface choosing on the operator's behalf.
+
+**A category enables nothing.** It can only remove a tool from what this endpoint offers: publishing `sending` does not
+make a deployment able to send, and no selection widens a grant or reveals that a withheld tool exists. A tool is
+served when its capability is available, its category is published, and the caller's grant reaches it — any one of the
+three saying no is enough, and each says no the same way, by the tool being absent from `tools/list` and its name
+answering as a tool that does not exist.
+
+### What a deployment publishes
+
+`McpEndpoint:PublishedToolCategories` is the list, and leaving it out publishes every category — which is the behaviour
+a deployment has without it, so its arrival changes nothing about an endpoint already running. A name no category
+answers to fails startup, naming the value and listing what is accepted, rather than being ignored and leaving the
+endpoint narrower than its operator wrote. [What the endpoint publishes](../operations/configuration-endpoints.md#what-the-endpoint-publishes)
+is the key.
+
+### The `MailFathom-Tool-Categories` header
+
+A client may name categories in the `MailFathom-Tool-Categories` request header, whose value is a comma-separated list
+of category names; repeating the header rather than writing one list means the same thing. Case and surrounding
+whitespace are ignored. What the request is served is the **intersection** of that header with what the deployment
+published, so one endpoint serves an agent that only reads beside one that does everything, and a client that needs a
+fraction of the surface need not carry the rest in its model's context.
+
+```http
+POST /mcp HTTP/1.1
+Authorization: Bearer <key>
+MailFathom-Tool-Categories: mailbox, contacts
+```
+
+**The header is not an authorization mechanism, and nothing may be built on it as one.** It is written by the caller,
+so it can only take away: a category the deployment excluded is never published because a header asked for it, and a
+request naming only excluded categories is served nothing at all rather than being widened back. Nothing in it grants,
+enables, or reveals anything, and a client that omits it is served exactly what the deployment publishes.
+
+It is read as untrusted input in the ordinary sense, so a value this endpoint cannot act on is dropped rather than
+refused:
+
+| What arrives | What happens |
+| --- | --- |
+| A name no category answers to | Dropped; the rest of the list still counts |
+| Nothing usable at all — blank, punctuation, only unknown names | The deployment's own selection stays in force |
+| More than 512 characters across every occurrence | The header is ignored entirely, rather than half a list being acted on |
+| More than 16 names | The names past that are ignored, which can only narrow further |
+
+The name is MailFathom's own and collides with nothing else on the path a request takes: the Streamable HTTP transport
+reads `Mcp-Session-Id`, `MCP-Protocol-Version`, and `Last-Event-ID`, the authentication methods read `Authorization`,
+and a reverse proxy writes the `X-Forwarded-*` family. It carries no `X-` prefix, which RFC 6648 deprecates. A browser
+client reaches it because the endpoint's CORS policy names it among the request headers it permits;
+[CORS and the `Origin` header](../operations/mcp-endpoint.md#cors-and-the-origin-header) is that policy.
+
 ## Descriptor conventions
 
 Every tool is declared with the same deliberate metadata, because a client decides whether a tool is safe to call before
