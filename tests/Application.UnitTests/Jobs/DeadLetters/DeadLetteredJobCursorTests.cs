@@ -4,82 +4,67 @@
 
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.DeadLetters;
+using MailFathom.Application.Paging;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Jobs.DeadLetters;
 
-/// <summary>Covers the boundary a continued reading of the dead letters resumes from.</summary>
+/// <summary>Covers the boundary a continued reading of the dead letters resumes from, over its own identity.</summary>
 /// <remarks>
-/// The set moves while it is read — a worker dead-letters another job, an operator retries one from a second terminal —
-/// so what these assert is that the boundary survives a round trip intact and that anything else is refused rather than
-/// read as a position in a reading it does not belong to.
+/// The encoding is <see cref="KeysetCursorPayload" />'s and is covered once beside it, refusals included. What is
+/// asserted here is this reading's own half: the recorded text a client may be part-way through, the job identity it
+/// reads back, and the boundary shape this reading has no row for.
 /// </remarks>
 public sealed class DeadLetteredJobCursorTests
 {
-    private static readonly DateTimeOffset StoppedAt = new(2026, 8, 13, 9, 30, 0, TimeSpan.Zero);
+    private const string Fingerprint = "abcdef0123456789";
 
-    private static readonly JobId Job = JobId.Create(new Guid("2f1c1d6c-6f0b-4a5e-9f3d-0f9b2a5c7e11"));
+    private const string RecordedCursor =
+        "MS42MzkyMjcyODYwMDAwMDAwMDAuMDE5ODkzZTU2YWQwN2JkMDlmMTE2YzNhMWQ1ZTRiMjMuYWJjZGVmMDEyMzQ1Njc4OQ";
 
-    /// <summary>A cursor is only useful if the next request reads back exactly the position the last page ended on.</summary>
+    private static readonly DateTimeOffset StoppedAt = new(2026, 8, 19, 9, 30, 0, TimeSpan.Zero);
+
+    private static readonly JobId Job = JobId.Create(new Guid("019893e5-6ad0-7bd0-9f11-6c3a1d5e4b23"));
+
+    /// <summary>A client holds this text between two pages, so it is pinned rather than only compared with itself.</summary>
     [Fact]
-    public void TryDecode_ACursorThisVersionIssued_ReadsBackTheSamePosition()
+    public void Encode_ARecordedBoundary_RoundTripsThroughTheTextThisReadingHasAlwaysIssued()
     {
-        // Arrange
-        var encoded = DeadLetteredJobCursor.After(StoppedAt, Job, "fingerprint").Encode();
-
         // Act
-        var decoded = DeadLetteredJobCursor.TryDecode(encoded, out var cursor);
+        var encoded = DeadLetteredJobCursor.After(StoppedAt, Job, Fingerprint).Encode();
+        var read = DeadLetteredJobCursor.TryDecode(RecordedCursor, out var cursor);
 
         // Assert
-        Assert.True(decoded);
-        Assert.Equal(StoppedAt, cursor.DeadLetteredAt);
-        Assert.Equal(Job, cursor.JobId);
-        Assert.Equal("fingerprint", cursor.FilterFingerprint);
+        Assert.Equal(RecordedCursor, encoded);
+        Assert.True(read);
+        Assert.NotNull(cursor);
+        Assert.Equal(StoppedAt, cursor.Value.DeadLetteredAt);
+        Assert.Equal(Job, cursor.Value.JobId);
+        Assert.Equal(Fingerprint, cursor.Value.FilterFingerprint);
     }
 
-    /// <summary>
-    /// The instant is written as its UTC tick count, so two timestamps naming the same moment in different offsets are
-    /// one boundary rather than two that compare differently against the order the reading is taken in.
-    /// </summary>
+    /// <summary>Every job this reading returns stopped at a known instant, so a payload with none names nothing here.</summary>
     [Fact]
-    public void Encode_TheSameInstantInAnotherOffset_ProducesTheSameCursor()
+    public void TryDecode_APayloadCarryingNoPosition_IsRefused()
     {
         // Arrange
-        var elsewhere = StoppedAt.ToOffset(TimeSpan.FromHours(2));
+        var withoutPosition = KeysetCursorPayload.At(null, Job.Value, Fingerprint).Encode();
 
         // Act
-        var encoded = DeadLetteredJobCursor.After(elsewhere, Job, "fingerprint").Encode();
+        var read = DeadLetteredJobCursor.TryDecode(withoutPosition, out var cursor);
 
         // Assert
-        Assert.Equal(DeadLetteredJobCursor.After(StoppedAt, Job, "fingerprint").Encode(), encoded);
+        Assert.False(read);
+        Assert.Null(cursor);
     }
 
-    /// <summary>Anything a client built for itself is refused, because a client that cannot read a cursor does not write one.</summary>
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("not a cursor at all")]
-    [InlineData("MS4yLjM")]
-    public void TryDecode_TextThisVersionDidNotIssue_IsRefused(string? text)
-    {
-        // Arrange, Act
-        var decoded = DeadLetteredJobCursor.TryDecode(text, out _);
-
-        // Assert
-        Assert.False(decoded);
-    }
-
-    /// <summary>A cursor longer than the bound is refused unread, so no caller can make the decoder work for it.</summary>
+    /// <summary>A cursor proves which walk it belongs to, so it is refused without the fingerprint that says so.</summary>
     [Fact]
-    public void TryDecode_TextLongerThanTheBound_IsRefusedWithoutBeingDecoded()
+    public void After_ABlankFingerprint_IsRefused()
     {
-        // Arrange
-        var overlong = new string('a', DeadLetteredJobCursor.MaximumEncodedLength + 1);
+        // Act, Assert
+        var failure = Assert.Throws<ArgumentException>(() => DeadLetteredJobCursor.After(StoppedAt, Job, "   "));
 
-        // Act
-        var decoded = DeadLetteredJobCursor.TryDecode(overlong, out _);
-
-        // Assert
-        Assert.False(decoded);
+        Assert.Equal("filterFingerprint", failure.ParamName);
     }
 }

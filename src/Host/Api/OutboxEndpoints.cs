@@ -168,16 +168,11 @@ internal static class OutboxEndpoints
 
         OutboxCursor? decodedCursor = null;
 
-        if (cursor is not null)
+        if (cursor is not null && !OutboxCursor.TryDecode(cursor, out decodedCursor))
         {
-            if (!OutboxCursor.TryDecode(cursor, out var presentedCursor))
-            {
-                return TypedResults.Problem(
-                    "The continuation cursor is not one this deployment issued.",
-                    statusCode: StatusCodes.Status400BadRequest);
-            }
-
-            decodedCursor = presentedCursor;
+            return TypedResults.Problem(
+                "The continuation cursor is not one this deployment issued.",
+                statusCode: StatusCodes.Status400BadRequest);
         }
 
         var queryResult = OutboxQuery.Create(accountId, namedStage, pageSize, decodedCursor);

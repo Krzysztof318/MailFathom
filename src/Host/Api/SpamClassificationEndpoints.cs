@@ -207,16 +207,11 @@ internal static class SpamClassificationEndpoints
 
         SpamClassificationHistoryCursor? decodedCursor = null;
 
-        if (cursor is not null)
+        if (cursor is not null && !SpamClassificationHistoryCursor.TryDecode(cursor, out decodedCursor))
         {
-            if (!SpamClassificationHistoryCursor.TryDecode(cursor, out var presentedCursor))
-            {
-                return TypedResults.Problem(
-                    "The continuation cursor is not one this deployment issued.",
-                    statusCode: StatusCodes.Status400BadRequest);
-            }
-
-            decodedCursor = presentedCursor;
+            return TypedResults.Problem(
+                "The continuation cursor is not one this deployment issued.",
+                statusCode: StatusCodes.Status400BadRequest);
         }
 
         if (!TryReadVerdict(verdict, out var namedVerdict))

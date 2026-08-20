@@ -2,9 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Buffers.Text;
-using System.Globalization;
-using System.Text;
+using MailFathom.Application.Paging;
 
 namespace MailFathom.Application.Rules.History;
 
@@ -20,22 +18,11 @@ namespace MailFathom.Application.Rules.History;
 /// <para>
 /// It carries no secret and needs no signature: every value in it is one the caller already supplied or already
 /// received. Encoding is about opacity rather than protection — a client that cannot read a cursor does not build one.
+/// The encoded form itself is <see cref="KeysetCursorPayload" />'s, which every keyset cursor here shares.
 /// </para>
 /// </remarks>
 public readonly record struct MailRuleExecutionCursor
 {
-    /// <summary>The greatest number of characters an encoded cursor may carry before it is refused unread.</summary>
-    public const int MaximumEncodedLength = 512;
-
-    /// <summary>
-    /// The encoded form's version. It leads the payload so a later change to the fields refuses the cursors this version
-    /// issued instead of misreading them.
-    /// </summary>
-    private const string FormatVersion = "1";
-
-    /// <summary>Separates the encoded fields, chosen because it appears in none of them.</summary>
-    private const char FieldSeparator = '.';
-
     private MailRuleExecutionCursor(
         DateTimeOffset evaluatedAt,
         MailRuleExecutionId executionId,
@@ -73,85 +60,32 @@ public readonly record struct MailRuleExecutionCursor
 
     /// <summary>Reads a cursor a caller presented.</summary>
     /// <param name="text">The encoded cursor, as a previous page returned it.</param>
-    /// <param name="cursor">The decoded cursor when the text is one this version issued; otherwise the struct default.</param>
+    /// <param name="cursor">The decoded cursor when the text is one this version issued; otherwise <see langword="null" />.</param>
     /// <returns><see langword="true" /> when the text decoded into a usable cursor; otherwise <see langword="false" />.</returns>
     /// <remarks>
-    /// Whether a decoded cursor belongs to the current request is a separate question its
+    /// Every execution this history returns was evaluated at a known instant, so a payload carrying none names no
+    /// boundary here and is refused. Whether a decoded cursor belongs to the current request is a separate question its
     /// <see cref="FilterFingerprint" /> answers, and one this method deliberately does not ask.
     /// </remarks>
-    public static bool TryDecode(string? text, out MailRuleExecutionCursor cursor)
+    public static bool TryDecode(string? text, out MailRuleExecutionCursor? cursor)
     {
-        cursor = default;
+        cursor = null;
 
-        if (text is null || text.Length is 0 or > MaximumEncodedLength)
-        {
-            return false;
-        }
-
-        // Validity is checked separately because the decoder's Try form reports only that a destination was too small
-        // and throws on text that is not base64url at all, which is the shape a caller most easily presents.
-        if (!Base64Url.IsValid(text))
-        {
-            return false;
-        }
-
-        Span<byte> decoded = stackalloc byte[Base64Url.GetMaxDecodedLength(MaximumEncodedLength)];
-        if (!Base64Url.TryDecodeFromChars(text, decoded, out var decodedLength))
-        {
-            return false;
-        }
-
-        var fields = Encoding.UTF8.GetString(decoded[..decodedLength]).Split(FieldSeparator);
-
-        if (fields is not [FormatVersion, var evaluatedField, var identifierField, var fingerprintField]
-            || !TryReadEvaluatedAt(evaluatedField, out var evaluatedAt)
-            || !Guid.TryParseExact(identifierField, "N", out var identifier)
-            || identifier == Guid.Empty
-            || fingerprintField.Length is 0)
+        if (!KeysetCursorPayload.TryDecode(text, out var payload) || payload.Position is not { } evaluatedAt)
         {
             return false;
         }
 
         cursor = new MailRuleExecutionCursor(
             evaluatedAt,
-            MailRuleExecutionId.Create(identifier),
-            fingerprintField);
+            MailRuleExecutionId.Create(payload.Identity),
+            payload.FilterFingerprint);
 
         return true;
     }
 
     /// <summary>Writes the cursor as the opaque string a caller presents to continue the walk.</summary>
     /// <returns>The encoded cursor.</returns>
-    /// <remarks>
-    /// The evaluation instant is written as its UTC tick count, which is the form the order compares: two timestamps
-    /// naming the same instant in different offsets encode identically.
-    /// </remarks>
-    public string Encode()
-    {
-        var payload = string.Join(
-            FieldSeparator,
-            FormatVersion,
-            this.EvaluatedAt.UtcTicks.ToString(CultureInfo.InvariantCulture),
-            this.ExecutionId.Value.ToString("N", CultureInfo.InvariantCulture),
-            this.FilterFingerprint);
-
-        return Base64Url.EncodeToString(Encoding.UTF8.GetBytes(payload));
-    }
-
-    private static bool TryReadEvaluatedAt(string field, out DateTimeOffset evaluatedAt)
-    {
-        evaluatedAt = default;
-
-        // NumberStyles.None refuses a sign, so no negative tick count reaches the range check below.
-        if (!long.TryParse(field, NumberStyles.None, CultureInfo.InvariantCulture, out var utcTicks)
-            || utcTicks < DateTime.MinValue.Ticks
-            || utcTicks > DateTime.MaxValue.Ticks)
-        {
-            return false;
-        }
-
-        evaluatedAt = new DateTimeOffset(utcTicks, TimeSpan.Zero);
-
-        return true;
-    }
+    public string Encode() =>
+        KeysetCursorPayload.At(this.EvaluatedAt, this.ExecutionId.Value, this.FilterFingerprint).Encode();
 }

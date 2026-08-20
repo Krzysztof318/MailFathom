@@ -98,16 +98,11 @@ internal static class MailboxMutationAuditEndpoint
 
         MailboxMutationAuditCursor? decodedCursor = null;
 
-        if (cursor is not null)
+        if (cursor is not null && !MailboxMutationAuditCursor.TryDecode(cursor, out decodedCursor))
         {
-            if (!MailboxMutationAuditCursor.TryDecode(cursor, out var presentedCursor))
-            {
-                return TypedResults.Problem(
-                    "The continuation cursor is not one this deployment issued.",
-                    statusCode: StatusCodes.Status400BadRequest);
-            }
-
-            decodedCursor = presentedCursor;
+            return TypedResults.Problem(
+                "The continuation cursor is not one this deployment issued.",
+                statusCode: StatusCodes.Status400BadRequest);
         }
 
         var queryResult = MailboxMutationAuditQuery.Create(

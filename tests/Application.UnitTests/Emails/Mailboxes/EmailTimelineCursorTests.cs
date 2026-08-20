@@ -2,91 +2,78 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Buffers.Text;
-using System.Text;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Emails;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Emails.Mailboxes;
 
-/// <summary>Covers the continuation cursor: what it preserves across an encode, and what it refuses to read back.</summary>
+/// <summary>Covers the continuation cursor over its own position type, dated and undated alike.</summary>
+/// <remarks>
+/// The encoding is <see cref="KeysetCursorPayload" />'s and is covered once beside it, refusals included. What is
+/// asserted here is this reading's own half: the recorded text a client may be part-way through, and the fact that this
+/// is the one timeline whose rows need not carry an instant — a message no header could date is still on it.
+/// </remarks>
 public sealed class EmailTimelineCursorTests
 {
     private const string Fingerprint = "AAECAwQFBgcICQoLDA0ODw";
 
-    private static readonly StoredEmailId BoundaryId = StoredEmailId.Create(Guid.CreateVersion7());
+    private const string RecordedDatedCursor =
+        "MS42MzkyMjcyODYwMDAwMDAwMDAuMDE5ODkzZTU2YWQwN2JkMDlmMTE2YzNhMWQ1ZTRiMjYuQUFFQ0F3UUZCZ2NJQ1FvTERBME9Edw";
 
+    private const string RecordedUndatedCursor =
+        "MS4tLjAxOTg5M2U1NmFkMDdiZDA5ZjExNmMzYTFkNWU0YjI2LkFBRUNBd1FGQmdjSUNRb0xEQTBPRHc";
+
+    private static readonly DateTimeOffset ReceivedAt = new(2026, 8, 19, 9, 30, 0, TimeSpan.Zero);
+
+    private static readonly StoredEmailId BoundaryId =
+        StoredEmailId.Create(new Guid("019893e5-6ad0-7bd0-9f11-6c3a1d5e4b26"));
+
+    /// <summary>A client holds this text between two pages, so it is pinned rather than only compared with itself.</summary>
     [Fact]
-    public void Encode_DatedPosition_RoundTripsThePositionAndTheFingerprint()
+    public void Encode_ARecordedDatedPosition_RoundTripsThroughTheTextThisTimelineHasAlwaysIssued()
     {
         // Arrange
-        var position = new EmailTimelinePosition(new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), BoundaryId);
+        var position = new EmailTimelinePosition(ReceivedAt, BoundaryId);
 
         // Act
-        var decoded = Decode(EmailTimelineCursor.After(position, Fingerprint).Encode());
+        var encoded = EmailTimelineCursor.After(position, Fingerprint).Encode();
+        var read = EmailTimelineCursor.TryDecode(RecordedDatedCursor, out var cursor);
 
         // Assert
-        Assert.Equal(position, decoded.Position);
-        Assert.Equal(Fingerprint, decoded.FilterFingerprint);
+        Assert.Equal(RecordedDatedCursor, encoded);
+        Assert.True(read);
+        Assert.Equal(position, cursor.Position);
+        Assert.Equal(Fingerprint, cursor.FilterFingerprint);
     }
 
+    /// <summary>A message no header could date still sits on the timeline, so its boundary encodes and reads back too.</summary>
     [Fact]
-    public void Encode_UndatedPosition_RoundTripsTheAbsentTimestamp()
+    public void Encode_ARecordedUndatedPosition_RoundTripsThroughTheSentinelTextItHasAlwaysIssued()
     {
         // Arrange
         var position = new EmailTimelinePosition(null, BoundaryId);
 
         // Act
-        var decoded = Decode(EmailTimelineCursor.After(position, Fingerprint).Encode());
-
-        // Assert
-        Assert.Null(decoded.Position.ReceivedAt);
-        Assert.Equal(BoundaryId, decoded.Position.StoredEmailId);
-    }
-
-    /// <summary>
-    /// The order compares instants, so a boundary written in another offset must decode to the same one. Encoding the
-    /// offset would otherwise make two cursors for one row, and the page after each of them would differ.
-    /// </summary>
-    [Fact]
-    public void Encode_TimestampsWritingTheSameInstantInDifferentOffsets_ProduceTheSameCursor()
-    {
-        // Arrange
-        var inUtc = new EmailTimelinePosition(new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), BoundaryId);
-        var inLocalOffset = new EmailTimelinePosition(
-            new DateTimeOffset(2026, 7, 24, 10, 0, 0, TimeSpan.FromHours(2)),
-            BoundaryId);
-
-        // Act
-        var fromUtc = EmailTimelineCursor.After(inUtc, Fingerprint).Encode();
-        var fromLocalOffset = EmailTimelineCursor.After(inLocalOffset, Fingerprint).Encode();
-
-        // Assert
-        Assert.Equal(fromUtc, fromLocalOffset);
-    }
-
-    /// <summary>A cursor is opaque, which is also what stops a client from reading a mail timestamp out of it at a glance.</summary>
-    [Fact]
-    public void Encode_AnyPosition_ProducesTextThatCarriesNoReadableField()
-    {
-        // Arrange
-        var position = new EmailTimelinePosition(new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), BoundaryId);
-
-        // Act
         var encoded = EmailTimelineCursor.After(position, Fingerprint).Encode();
+        var read = EmailTimelineCursor.TryDecode(RecordedUndatedCursor, out var cursor);
 
         // Assert
-        Assert.DoesNotContain(BoundaryId.Value.ToString("N"), encoded, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("2026", encoded, StringComparison.Ordinal);
+        Assert.Equal(RecordedUndatedCursor, encoded);
+        Assert.True(read);
+        Assert.Null(cursor.Position.ReceivedAt);
+        Assert.Equal(BoundaryId, cursor.Position.StoredEmailId);
     }
 
     [Fact]
     public void After_PositionWithoutAStoredEmailIdentity_IsRejected()
     {
         // Act, Assert
-        Assert.Throws<ArgumentException>(() =>
+        var failure = Assert.Throws<ArgumentException>(() =>
             EmailTimelineCursor.After(new EmailTimelinePosition(null, default), Fingerprint));
+
+        Assert.Equal("position", failure.ParamName);
     }
 
     [Theory]
@@ -110,48 +97,4 @@ public sealed class EmailTimelineCursorTests
         // Act, Assert
         Assert.Throws<ArgumentNullException>(() => EmailTimelineCursor.After(position, null!));
     }
-
-    [Fact]
-    public void TryDecode_TextLongerThanACursorEverIs_IsRefusedWithoutDecoding()
-    {
-        // Arrange
-        var overlyLongText = new string('A', EmailTimelineCursor.MaximumEncodedLength + 1);
-
-        // Act
-        var decoded = EmailTimelineCursor.TryDecode(overlyLongText, out var cursor);
-
-        // Assert
-        Assert.False(decoded);
-        Assert.Equal(default, cursor);
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    public void TryDecode_NoText_IsRefused(string? text)
-    {
-        // Act, Assert
-        Assert.False(EmailTimelineCursor.TryDecode(text, out _));
-    }
-
-    /// <summary>A tick count no date can hold is refused rather than allowed to fault the position it would build.</summary>
-    [Fact]
-    public void TryDecode_ReceivedTicksBeyondTheCalendar_IsRefused()
-    {
-        // Arrange
-        var beyondTheCalendar = EncodedPayload($"1.{long.MaxValue}.{BoundaryId.Value:N}.{Fingerprint}");
-
-        // Act, Assert
-        Assert.False(EmailTimelineCursor.TryDecode(beyondTheCalendar, out _));
-    }
-
-    private static EmailTimelineCursor Decode(string encoded)
-    {
-        Assert.True(EmailTimelineCursor.TryDecode(encoded, out var cursor));
-
-        return cursor;
-    }
-
-    private static string EncodedPayload(string payload) =>
-        Base64Url.EncodeToString(Encoding.UTF8.GetBytes(payload));
 }

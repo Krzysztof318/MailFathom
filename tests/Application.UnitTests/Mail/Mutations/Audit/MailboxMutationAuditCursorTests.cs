@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Mail.Mutations.Audit;
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
@@ -13,80 +14,79 @@ using Xunit;
 
 namespace MailFathom.Application.UnitTests.Mail.Mutations.Audit;
 
-/// <summary>Covers the boundary one page of an audit trail hands to the next.</summary>
+/// <summary>Covers the boundary one page of an audit trail hands to the next, over its own identity.</summary>
+/// <remarks>
+/// The encoding is <see cref="KeysetCursorPayload" />'s and is covered once beside it, refusals included. What is
+/// asserted here is this reading's own half: the recorded text a client may be part-way through, the entry identity it
+/// reads back, and the boundary shape this reading has no row for.
+/// </remarks>
 public sealed class MailboxMutationAuditCursorTests
 {
-    private const string Fingerprint = "0123456789abcdef";
+    private const string Fingerprint = "abcdef0123456789";
 
-    private static readonly DateTimeOffset CompletedAt = new(2026, 8, 7, 12, 0, 0, TimeSpan.Zero);
+    private const string RecordedCursor =
+        "MS42MzkyMjcyODYwMDAwMDAwMDAuMDE5ODkzZTU2YWQwN2JkMDlmMTE2YzNhMWQ1ZTRiMjQuYWJjZGVmMDEyMzQ1Njc4OQ";
 
-    /// <summary>A cursor survives the round trip through the opaque text a caller presents.</summary>
+    private static readonly DateTimeOffset CompletedAt = new(2026, 8, 19, 9, 30, 0, TimeSpan.Zero);
+
+    private static readonly MailboxMutationAuditEntryId EntryId =
+        MailboxMutationAuditEntryId.Create(new Guid("019893e5-6ad0-7bd0-9f11-6c3a1d5e4b24"));
+
+    /// <summary>A client holds this text between two pages, so it is pinned rather than only compared with itself.</summary>
+    /// <remarks>The entry overload is what a page actually advances by, so it is the one the recorded text is issued from.</remarks>
     [Fact]
-    public void TryDecode_TextThisVersionEncoded_RestoresTheBoundary()
+    public void Encode_ARecordedBoundary_RoundTripsThroughTheTextThisTrailHasAlwaysIssued()
     {
-        // Arrange
-        var entry = Entry();
-        var encoded = MailboxMutationAuditCursor.After(entry, Fingerprint).Encode();
-
         // Act
-        var decoded = MailboxMutationAuditCursor.TryDecode(encoded, out var cursor);
+        var encoded = MailboxMutationAuditCursor.After(Entry(), Fingerprint).Encode();
+        var read = MailboxMutationAuditCursor.TryDecode(RecordedCursor, out var cursor);
 
         // Assert
-        Assert.Equal(
-            (true, entry.CompletedAt, entry.Id, Fingerprint),
-            (decoded, cursor.CompletedAt, cursor.EntryId, cursor.FilterFingerprint));
+        Assert.Equal(RecordedCursor, encoded);
+        Assert.True(read);
+        Assert.NotNull(cursor);
+        Assert.Equal(CompletedAt, cursor.Value.CompletedAt);
+        Assert.Equal(EntryId, cursor.Value.EntryId);
+        Assert.Equal(Fingerprint, cursor.Value.FilterFingerprint);
     }
 
-    /// <summary>An instant written in another offset encodes identically, so a boundary never depends on the offset.</summary>
+    /// <summary>Every entry this trail returns completed at a known instant, so a payload with none names nothing here.</summary>
     [Fact]
-    public void Encode_SameInstantInAnotherOffset_ProducesTheSameCursor()
+    public void TryDecode_APayloadCarryingNoPosition_IsRefused()
     {
         // Arrange
-        var entry = Entry();
-        var shifted = entry with { CompletedAt = entry.CompletedAt.ToOffset(TimeSpan.FromHours(2)) };
+        var withoutPosition = KeysetCursorPayload.At(null, EntryId.Value, Fingerprint).Encode();
 
         // Act
-        var encodings = new[]
-        {
-            MailboxMutationAuditCursor.After(entry, Fingerprint).Encode(),
-            MailboxMutationAuditCursor.After(shifted, Fingerprint).Encode(),
-        };
+        var read = MailboxMutationAuditCursor.TryDecode(withoutPosition, out var cursor);
 
         // Assert
-        Assert.Equal(encodings[0], encodings[1]);
+        Assert.False(read);
+        Assert.Null(cursor);
     }
 
-    /// <summary>Text this system never issued names no boundary, and is reported rather than partly decoded.</summary>
-    [Theory]
-    [InlineData("")]
-    [InlineData("not a cursor")]
-    [InlineData("MC5ub3BlLm5vcGUubm9wZQ")]
-    public void TryDecode_TextThisSystemNeverIssued_IsRefused(string text)
-    {
-        // Act
-        var decoded = MailboxMutationAuditCursor.TryDecode(text, out _);
-
-        // Assert
-        Assert.False(decoded);
-    }
-
-    /// <summary>A cursor longer than any this version issues is refused before it is decoded at all.</summary>
+    /// <summary>A cursor proves which walk it belongs to, so it is refused without the fingerprint that says so.</summary>
     [Fact]
-    public void TryDecode_TextLongerThanAnyCursorThisVersionIssues_IsRefusedUnread()
+    public void After_ABlankFingerprint_IsRefused()
     {
-        // Arrange
-        var overlong = new string('A', MailboxMutationAuditCursor.MaximumEncodedLength + 1);
+        // Act, Assert
+        var failure = Assert.Throws<ArgumentException>(
+            () => MailboxMutationAuditCursor.After(CompletedAt, EntryId, "   "));
 
-        // Act
-        var decoded = MailboxMutationAuditCursor.TryDecode(overlong, out _);
+        Assert.Equal("filterFingerprint", failure.ParamName);
+    }
 
-        // Assert
-        Assert.False(decoded);
+    /// <summary>A page advances by the rows it read, so the overload taking one is refused nothing to advance from.</summary>
+    [Fact]
+    public void After_NoEntry_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(() => MailboxMutationAuditCursor.After(null!, Fingerprint));
     }
 
     private static MailboxMutationAuditEntry Entry() => new()
     {
-        Id = MailboxMutationAuditEntryId.Create(Guid.CreateVersion7(CompletedAt)),
+        Id = EntryId,
         MutationRecordId = MailboxMutationRecordId.Create(Guid.CreateVersion7(CompletedAt)),
         AccountId = MailAccountId.Create("work"),
         StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7(CompletedAt)),

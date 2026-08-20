@@ -402,7 +402,8 @@ public sealed class MailRuleEndpointsTests
         // Assert
         var page = Assert.IsType<Ok<MailRuleHistoryPageResponse>>(result.Result).Value!;
         Assert.True(MailRuleExecutionCursor.TryDecode(page.NextCursor, out var cursor));
-        Assert.Equal(executionId, cursor.ExecutionId);
+        Assert.NotNull(cursor);
+        Assert.Equal(executionId, cursor.Value.ExecutionId);
     }
 
     /// <summary>A cursor this deployment did not issue is refused before anything is read with it.</summary>

@@ -3,8 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
+using MailFathom.Application.Paging;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Spam;
@@ -40,16 +39,6 @@ public sealed record SpamClassificationHistoryQuery
     /// bounded per record, which is what keeps this figure meaningful.
     /// </remarks>
     public const int MaximumPageSize = 200;
-
-    /// <summary>Separates the fingerprint's fields, chosen because no filter value can contain it.</summary>
-    private const char FingerprintFieldSeparator = '\u001f';
-
-    /// <summary>How many hexadecimal characters of the filter digest a cursor carries.</summary>
-    /// <remarks>
-    /// Short because it distinguishes one caller's own filter sets rather than resisting a search for a collision: a
-    /// forged fingerprint buys a boundary inside a page that same caller is already entitled to read.
-    /// </remarks>
-    private const int FingerprintLength = 16;
 
     private SpamClassificationHistoryQuery(
         MailAccountId accountId,
@@ -165,16 +154,11 @@ public sealed record SpamClassificationHistoryQuery
         StoredEmailId? storedEmailId,
         SpamVerdict? verdict,
         DateTimeOffset? evaluatedFrom,
-        DateTimeOffset? evaluatedBefore)
-    {
-        var material = string.Join(
-            FingerprintFieldSeparator,
+        DateTimeOffset? evaluatedBefore) =>
+        PageFilterFingerprint.Of(
             accountId.Value,
-            storedEmailId?.Value.ToString("N", CultureInfo.InvariantCulture) ?? string.Empty,
-            verdict?.ToString() ?? string.Empty,
-            evaluatedFrom?.UtcTicks.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
-            evaluatedBefore?.UtcTicks.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
-
-        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(material)))[..FingerprintLength];
-    }
+            storedEmailId?.Value.ToString("N", CultureInfo.InvariantCulture),
+            verdict?.ToString(),
+            evaluatedFrom?.UtcTicks.ToString(CultureInfo.InvariantCulture),
+            evaluatedBefore?.UtcTicks.ToString(CultureInfo.InvariantCulture));
 }
