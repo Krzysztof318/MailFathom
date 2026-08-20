@@ -11,10 +11,13 @@ MailFathom is a self-hosted service that synchronizes mail from your IMAP accoun
 indexes it for search, and serves it to AI agents as tools over the
 [Model Context Protocol](https://modelcontextprotocol.io/). An agent connected to it can list, read, and search your
 mail, it can mark, star, and label one message at a time through `set_mail_flags`, and it can send a message through
-`send_email` — or answer one it already holds through `reply_to_email` and `forward_email`. Each of those acts is
-offered only to a credential granted its own name — `mailfathom.mail.flags.write` and `mailfathom.mail.send` — and
-neither comes with being able to read; the two answering tools need both names, because an answer is derived from the
-message it answers. `get_outgoing_email` and `cancel_outgoing_email` say what became of a message it sent and stop one
+`send_email` — or answer one it already holds through `reply_to_email` and `forward_email`. It can also write a
+message into your own Drafts folder and leave it for you, through `save_draft`, `update_draft`, and `delete_draft`,
+which send nothing at all; `send_draft` is what sends one. Each of those acts is
+offered only to a credential granted its own name — `mailfathom.mail.flags.write`, `mailfathom.mail.drafts.write`, and
+`mailfathom.mail.send` — and none comes with being able to read; the two answering tools and a draft that answers
+stored mail need the reading name too, because an answer is derived from the message it answers. Drafting and sending
+are separate names deliberately: a deployment can let an agent prepare mail for you to send and let it send none. `get_outgoing_email` and `cancel_outgoing_email` say what became of a message it sent and stop one
 that has not left yet, and both sit behind the sending name rather than one of their own. It cannot delete or move
 mail. What it can write besides is MailFathom's own contact book — the people you or your deployment wrote down — which
 six tools read and maintain, one of them by erasing a record for good.
@@ -26,9 +29,10 @@ Two properties hold everywhere and are worth knowing before anything is installe
 - **Retrieval is read-only.** Fetching mail never sets the remote `\Seen` flag, so mail MailFathom has copied still
   shows as unread in your mail client until you read it there. Three things write to your mailbox: a mail rule whose
   action moves, copies, deletes, or marks a message read, the spam actions that file junk and mark it read, and the
-  `set_mail_flags` tool. The first two are off until you turn them on; the third needs a grant that reading mail does
-  not carry. A fourth path leaves your deployment altogether rather than writing to your mailbox: `send_email`,
-  `reply_to_email`, and `forward_email`, behind
+  `set_mail_flags` tool, beside the three draft tools that put a message into your own Drafts folder. The first two are
+  off until you turn them on; the last two need grants that reading mail does not carry. A fourth path leaves your
+  deployment altogether rather than writing to your mailbox: `send_email`,
+  `reply_to_email`, `forward_email`, and `send_draft`, behind
   a grant of its own, and they are the acts here nothing can take back.
 
 ## The state of the release
@@ -49,7 +53,8 @@ says so and names the release, rather than describing it as though you could alr
 4. **[Connecting the chat client you already use](mcp-clients.md)** — where the dialog is in each popular client, which
    address kind it needs, and which of them cannot present an API key at all.
 5. **[Using the tools](usage.md)** — what `list_emails`, `search_emails`, `get_email_content`, `set_mail_flags`,
-   `send_email`, `ask_mail`, and the six contact tools do, what they deliberately bound, and how to read a failure.
+   `send_email`, the four draft tools, `ask_mail`, and the six contact tools do, what they deliberately bound, and how
+   to read a failure.
 6. **[Administering your deployment](administering.md)** — the `mfctl` command: what it is for, signing in to a
    deployment from your own machine, and what it cannot do yet.
 7. **[Configuration reference](../operations/configuration-reference.md)** — the map to the four pages that list every

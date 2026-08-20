@@ -24,7 +24,8 @@ surfaces draw from disjoint halves, and the prefix after `mailfathom.` says whic
 | `mailfathom.mail.read` | MCP | The tools that read the local mailbox copy: `list_accounts`, `list_emails`, `get_email_content`, `search_emails`. Where semantic retrieval is configured, searching places the caller's own query text with the embedding provider, so this is not an egress-free grant |
 | `mailfathom.mail.ask` | MCP | `ask_mail`, which answers from mail content by sending it to a model provider. It does not imply `mailfathom.mail.read`, and granting it is granting access to mail |
 | `mailfathom.mail.flags.write` | MCP | `set_mail_flags`, which marks mail read or unread, stars or unstars it, and writes its keywords. It is the one MCP grant whose effect reaches the owner's mail server, and it does not follow from reading mail: a deployment that lets an agent read has not thereby let it change anything |
-| `mailfathom.mail.send` | MCP | Asking this deployment to send mail from an account it holds. It is the one grant here whose effect leaves the deployment and cannot be recalled, which is why it follows from nothing: reading a mailbox is not writing from it, and marking mail reaches the owner's own server rather than a stranger's. It covers `send_email`, which queues a message for a mailbox this deployment holds, and `reply_to_email` and `forward_email`, which queue one anchored to mail it already holds — those two also need `mailfathom.mail.read`, because an answer is derived from the message it answers. It covers `get_outgoing_email` and `cancel_outgoing_email` as well, which report what became of a queued send and stop one that is still waiting: a caller may read back and withdraw exactly what it was allowed to queue, and what this mailbox has written to whom is not something the reading grant confers. It is asked for again by the use cases behind all five and by the outbox beneath the three that send, so it governs the act rather than only the tool. It is also what admits writing, editing, giving up, and promoting a **draft**, which no tool reaches yet: a draft is written into the owner's own mailbox and is one command away from being sent, so admitting it under anything weaker would be a way around this grant |
+| `mailfathom.mail.drafts.write` | MCP | `save_draft`, `update_draft`, and `delete_draft`, which write a message into the owner's own drafts folder, replace it, and take it back out. It is the safe half of authoring mail and is its own name because that half is worth granting on its own: a draft is delivered to nobody, is withdrawn by deleting it, and lands in a folder the owner already reads, so an agent holding this and nothing else can prepare mail whose worst failure is a message in Drafts. It does not imply `mailfathom.mail.send` and is not implied by it — `send_draft` is admitted under the sending grant, so a caller holding this name alone cannot make a draft leave. Its effect does reach the owner's own mail server, which is `mailfathom.mail.flags.write`'s reach rather than a send's. A draft answering stored mail needs `mailfathom.mail.read` beneath it as well, because an answer is derived from the message it answers |
+| `mailfathom.mail.send` | MCP | Asking this deployment to send mail from an account it holds. It is the one grant here whose effect leaves the deployment and cannot be recalled, which is why it follows from nothing: reading a mailbox is not writing from it, and marking mail reaches the owner's own server rather than a stranger's. It covers `send_email`, which queues a message for a mailbox this deployment holds, and `reply_to_email` and `forward_email`, which queue one anchored to mail it already holds — those two also need `mailfathom.mail.read`, because an answer is derived from the message it answers. It covers `get_outgoing_email` and `cancel_outgoing_email` as well, which report what became of a queued send and stop one that is still waiting: a caller may read back and withdraw exactly what it was allowed to queue, and what this mailbox has written to whom is not something the reading grant confers. It covers `send_draft`, which queues the message a draft holds, and the promotion beneath it, because promoting a draft is asking for mail to leave. It is asked for again by the use cases behind all six and by the outbox beneath the four that send, so it governs the act rather than only the tool |
 | `mailfathom.mail.contacts.read` | MCP | `list_contacts` and `get_contact`, which read the deployment's own contact book: names, addresses, and the notes an owner wrote about identified third parties |
 | `mailfathom.mail.contacts.write` | MCP | `create_contact`, `update_contact`, `delete_contact`, and `promote_contact`, which record, amend, erase, and take on a person in that book. The erasure is here rather than apart, because a grant that cannot edit the book cannot be trusted to take somebody out of it |
 | `mailfathom.admin.read` | administrative | The reads reporting the deployment's own state and no mail: what synchronization is doing per account and per folder, embedding status and the activation preview, the loaded rules, a run's progress, what a rewind would cost, where a re-derivation has got to, the stopped-job list, and the outbox counted by stage and listed without naming anybody |
@@ -51,6 +52,15 @@ owner's own mail server and is undone in their own client with the gesture that 
 somebody else's mailbox and nothing here can take it back. So the grant that reads a mailbox does not carry it, the
 grant that writes to one does not either, and it carries no read of its own: a credential granted it and nothing else
 can send from an account it cannot list.
+
+`mailfathom.mail.drafts.write` sits between the two and is the reason the pair is not one name. Writing a draft is
+authoring mail and is the half that reaches nobody: the message goes into the owner's own drafts folder, the owner
+reads it in the client they already open, and deleting it takes it back. So a deployment that wants an agent to prepare
+mail for a person to send grants this name and withholds `mailfathom.mail.send`, and the agent is then offered
+`save_draft`, `update_draft`, and `delete_draft` and is not offered `send_draft` at all. It carries no read of its own
+either, which matters more here than elsewhere: a draft answering stored mail is composed from that mail, so a
+deployment that means an agent to draft replies grants `mailfathom.mail.read` beside it, and one that grants this name
+alone gets an agent that can write a message of its own and cannot answer anything.
 
 The contact permissions are separate from the mailbox ones and from each other, because the book is a different body of
 personal data from the mail: an assembled record about identified third parties rather than correspondence that
@@ -88,6 +98,10 @@ call.
 | `forward_email` | `mailfathom.mail.send`, and `mailfathom.mail.read` beneath it |
 | `get_outgoing_email` | `mailfathom.mail.send` |
 | `cancel_outgoing_email` | `mailfathom.mail.send` |
+| `save_draft` | `mailfathom.mail.drafts.write`, and `mailfathom.mail.read` beneath a draft that answers stored mail |
+| `update_draft` | `mailfathom.mail.drafts.write`, and `mailfathom.mail.read` beneath a draft that answers stored mail |
+| `delete_draft` | `mailfathom.mail.drafts.write` |
+| `send_draft` | `mailfathom.mail.send` |
 | `ask_mail` | `mailfathom.mail.ask` |
 | `list_contacts` | `mailfathom.mail.contacts.read` |
 | `get_contact` | `mailfathom.mail.contacts.read` |
@@ -96,7 +110,7 @@ call.
 | `delete_contact` | `mailfathom.mail.contacts.write` |
 | `promote_contact` | `mailfathom.mail.contacts.write` |
 
-The five rows naming `mailfathom.mail.send` are the ones worth reading twice. It is the only grant here whose effect
+The six rows naming `mailfathom.mail.send` are the ones worth reading twice. It is the only grant here whose effect
 leaves this deployment and cannot be recalled, and the mapping is what withholds those tools from every other
 credential: a caller without the name is not offered the descriptor and is answered as if the tool did not exist. Two
 further checks stand behind it — the use case, and the outbox it writes through — so an entrypoint added later meets the
@@ -191,7 +205,9 @@ release reaches an unrestricted entry on its own — the contact tools are the w
 no key gained `mailfathom.mail.contacts.read` and `mailfathom.mail.contacts.write` on upgrade alone, and with the
 second of those a credential that can record, amend, and irreversibly erase what this deployment holds about identified
 third parties. `mailfathom.mail.send` is the same shape and the sharpest case of it: an entry that wrote no key gains it on upgrade,
-and with it a credential that can send mail from the deployment's mailboxes to anybody.
+and with it a credential that can send mail from the deployment's mailboxes to anybody. `mailfathom.mail.drafts.write`
+arrived the same way and is milder for the reason it exists: what an entry gains with it is the ability to put a
+message in the owner's own Drafts folder, which the owner sees and can delete.
 Writing `Permissions: []` grants nothing, which is how a credential is retired without deleting its
 entry: it still authenticates, and on the administrative surface it still reads `GET /api/admin/session`, which is
 where an operator reads that the credential now holds nothing.
@@ -214,7 +230,10 @@ Where that would be wrong, write the names out. `mailfathom.mail.flags.write` is
 check a written grant against: an entry reading `mailfathom.mail.*` used to reach nothing that leaves this deployment,
 and on upgrade it reaches the tool that writes to the owner's mail server. `mailfathom.mail.send` is the second and the
 sharper one, since the same pattern now also carries the grant to send from the owner's address to anybody, through
-`send_email` and through the two tools that answer stored mail. Everything that reads a grant back states
+`send_email`, through the two tools that answer stored mail, and through `send_draft`. `mailfathom.mail.drafts.write`
+is the third and the case that shows why the two names are worth writing out rather than patterned over: an operator
+who narrowed an entry to drafting by writing `mailfathom.mail.*` narrowed it to nothing, because that pattern carries
+the sending grant beside the drafting one and the whole separation is gone. Everything that reads a grant back states
 what a pattern resolved to and never the pattern — the startup line, `GET /api/admin/session`, and `scopes_supported` —
 so no reader has to expand one by hand.
 

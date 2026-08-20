@@ -23,6 +23,12 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// gives, and a draft nobody is addressed to is the one thing a draft may be and a send may not — so the absence of a
 /// recipient is refused here, at the promotion, rather than when the draft was written.
 /// </para>
+/// <para>
+/// Three more are the draft's own for a different reason: a draft is the one authored act that comes in two shapes, a
+/// message of its own and an answer to a stored email, and a request that describes both or neither describes no draft
+/// this system can write. They publish the field refusal every authored message shares, because what a caller does
+/// about them is what that code is for — send the fields differently.
+/// </para>
 /// </remarks>
 public sealed class MailDraftRefusedException : MailFathomException
 {
@@ -79,6 +85,47 @@ public sealed class MailDraftRefusedException : MailFathomException
     public static MailDraftRefusedException NotFound() => new(
         MailFathomErrorCode.MailDraftNotFound,
         "No draft this deployment holds is kept under that identifier.");
+
+    /// <summary>Reports a request that names the email a draft answers without naming which answer it is, or the other way round.</summary>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// The two go together because neither states an answer on its own: a reply, a reply to all, and a forward reach
+    /// three different sets of people from one stored email, and an email nobody is answering is not a message at all.
+    /// It is the field refusal every authored message shares rather than a code of its own, because the remedy is the
+    /// one that code exists for — write the fields differently.
+    /// </remarks>
+    public static MailDraftRefusedException AnsweredEmailAndAnswerDisagree() => new(
+        MailFathomErrorCode.AuthoredMailFieldRefused,
+        "A draft answering a stored email names the email and names which answer it is, or names neither.");
+
+    /// <summary>Reports a drafted answer naming none of the answers a stored email can be answered with.</summary>
+    /// <returns>The failure to raise.</returns>
+    public static MailDraftRefusedException AnswerUnknown() => new(
+        MailFathomErrorCode.AuthoredMailFieldRefused,
+        "A draft answering a stored email states whether it replies to the sender alone, replies to everybody the message was between, or forwards it, and it named none of the three.");
+
+    /// <summary>Reports a drafted answer that also states an account or a subject of its own.</summary>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// Both are read from the stored email being answered, so a request that states one describes two different
+    /// messages and this system would have to pick. Refusing is what keeps an answer an answer: the account decides
+    /// which mailbox the draft belongs to, and taking the caller's would let a draft be written into a mailbox the
+    /// answered email is not in.
+    /// </remarks>
+    public static MailDraftRefusedException AnsweredDraftStatesItsOwnMessage() => new(
+        MailFathomErrorCode.AuthoredMailFieldRefused,
+        "A draft answering a stored email takes neither an account nor a subject, because both are read from the email it answers.");
+
+    /// <summary>Reports a draft of a message of its own that states no account or no subject.</summary>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// A draft that answers nothing has nowhere else to read them from. The subject may be empty text, which is a
+    /// message somebody has not titled yet; what is refused here is the field being absent, which says the caller
+    /// meant the other shape.
+    /// </remarks>
+    public static MailDraftRefusedException MessageNotStated() => new(
+        MailFathomErrorCode.AuthoredMailFieldRefused,
+        "A draft that answers no stored email states the account it belongs to and the subject of its message.");
 
     /// <summary>Reports a draft that was asked to be sent and names nobody to send it to.</summary>
     /// <returns>The failure to raise.</returns>

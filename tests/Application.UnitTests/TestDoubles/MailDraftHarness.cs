@@ -80,7 +80,9 @@ internal sealed class MailDraftHarness
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
         principals.Current.Returns(AuthorizedPrincipal.Caller(
             "a-caller",
-            granted.Length == 0 ? [MailFathomPermission.MailSend] : granted));
+            granted.Length == 0
+                ? [MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend]
+                : granted));
 
         this.authorization = new AccessAuthorization(principals);
 

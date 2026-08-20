@@ -94,6 +94,28 @@ public readonly record struct MailFathomPermission
     /// </remarks>
     public static MailFathomPermission MailFlagsWrite { get; } = new("mailfathom.mail.flags.write", ProtectedSurface.Mail);
 
+    /// <summary>Gets the permission covering writing, editing, and giving up a draft this deployment holds.</summary>
+    /// <remarks>
+    /// <para>
+    /// It is the safe half of authoring mail, and it is its own name because that half is worth granting on its own. A
+    /// draft is delivered to nobody, can be withdrawn by deleting it, and lands in a folder the owner already reads —
+    /// so an agent holding this and nothing else can prepare mail whose worst failure is a message in Drafts, which is
+    /// the arrangement <see cref="MailSend" /> is too strong to describe.
+    /// </para>
+    /// <para>
+    /// It does not imply <see cref="MailSend" /> and is not implied by it, as no permission here implies another. A
+    /// deployment that means an agent to draft and to send writes both, and one that means it to draft alone writes
+    /// this one: promoting a draft is asking for mail to leave, so it is admitted under the sending grant wherever it
+    /// is reached.
+    /// </para>
+    /// <para>
+    /// Its effect does leave the deployment, unlike every other grant that is not <see cref="MailSend" />: a draft is
+    /// appended to the owner's own drafts folder on their own mail server, which is <see cref="MailFlagsWrite" />'s
+    /// reach rather than a send's.
+    /// </para>
+    /// </remarks>
+    public static MailFathomPermission MailDraftsWrite { get; } = new("mailfathom.mail.drafts.write", ProtectedSurface.Mail);
+
     /// <summary>Gets the permission covering asking this deployment to send mail from an account it holds.</summary>
     /// <remarks>
     /// <para>
@@ -143,6 +165,7 @@ public readonly record struct MailFathomPermission
         MailContactsRead,
         MailContactsWrite,
         MailFlagsWrite,
+        MailDraftsWrite,
         MailSend,
         AdminRead,
         AdminAuditRead,

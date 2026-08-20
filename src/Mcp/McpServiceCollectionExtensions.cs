@@ -7,6 +7,7 @@ using MailFathom.Mcp.Observability;
 using MailFathom.Mcp.Serialization;
 using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.Tools.Contacts;
+using MailFathom.Mcp.Tools.Drafts;
 using MailFathom.Versioning;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Protocol;
@@ -40,6 +41,10 @@ public static class McpServiceCollectionExtensions
 
         services.AddSingleton<McpToolCallTelemetry>();
         services.AddSingleton<McpToolCallReporter>();
+        // The two tools that write a draft read the same fields and route them to the same pair of use cases, so the
+        // reading is one object both resolve rather than a rule each states. It is scoped because the use cases it
+        // holds are, which is what makes the caller a request was admitted under the one a draft is written for.
+        services.AddScoped<DraftedMailWriting>();
 
         return services
             .AddMcpServer(serverOptions =>
@@ -81,6 +86,10 @@ public static class McpServiceCollectionExtensions
             .WithTools<SendEmailTool>(McpToolContractSerialization.Options)
             .WithTools<ReplyToEmailTool>(McpToolContractSerialization.Options)
             .WithTools<ForwardEmailTool>(McpToolContractSerialization.Options)
+            .WithTools<SaveDraftTool>(McpToolContractSerialization.Options)
+            .WithTools<UpdateDraftTool>(McpToolContractSerialization.Options)
+            .WithTools<DeleteDraftTool>(McpToolContractSerialization.Options)
+            .WithTools<SendDraftTool>(McpToolContractSerialization.Options)
             .WithTools<GetOutgoingEmailTool>(McpToolContractSerialization.Options)
             .WithTools<CancelOutgoingEmailTool>(McpToolContractSerialization.Options)
             .WithTools<AskMailTool>(McpToolContractSerialization.Options)

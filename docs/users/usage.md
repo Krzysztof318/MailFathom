@@ -2,15 +2,16 @@
 
 <!-- describes: src/Mcp/Tools/** -->
 
-MailFathom publishes seventeen MCP tools, and together they are the whole surface: an agent can see which mailboxes
+MailFathom publishes twenty-one MCP tools, and together they are the whole surface: an agent can see which mailboxes
 exist, list mail, read one message, search, ask a question, mark and label a message, send a message, reply to or
-forward one it already holds, find out what became of a message it sent and stop one that has not left yet, and keep the
+forward one it already holds, find out what became of a message it sent and stop one that has not left yet, write a
+message into your Drafts folder and edit, delete, or send that, and keep the
 deployment's own contact book — nothing else. This
 page is the user's view of that surface: what each tool answers, what every result carries, what the deliberate limits
 are, and how to read a failure. The full contracts — every argument, every field, every bound — live in
 [MCP tools](../features/mcp-tools.md) and the feature pages it links, and this page does not restate them.
 
-Ten of the eleven mailbox tools are always within the deployment's reach. `ask_mail` needs a chat model and an embedding
+Fourteen of the fifteen mailbox tools are always within the deployment's reach. `ask_mail` needs a chat model and an embedding
 model configured and working, so a deployment that has neither does not offer it at all; its absence from a tool listing
 is that deployment saying it cannot answer questions rather than something being broken. The three sending tools are
 always offered to a caller granted them and refuse the call where the account behind the message has no sending
@@ -374,6 +375,62 @@ runs the deployment, through `mfctl outbox`, and is reached with an administrati
 words as an identifier nothing is held under — `53007` for both, so an identifier alone never establishes that this
 mailbox sent something. Both take `mailfathom.mail.send`, the sending grant rather than the reading one: what this
 mailbox has written to whom is not something a credential given the mailbox to read is thereby told.
+
+## The draft tools — writing a message and leaving it for you
+
+Four tools cover a message that is written and not sent. `save_draft` writes one into your own Drafts folder,
+`update_draft` replaces what it holds, `delete_draft` gives it up, and `send_draft` sends it. **Only the last of the
+four causes mail to leave**, and it is the only one behind the sending grant — which is the whole reason the surface is
+shaped this way: a deployment can let an agent prepare mail without letting it send any, and the worst a mistake costs
+you is a message in Drafts that you delete.
+
+`save_draft` takes one of two shapes and refuses a call that states both or neither. A message of its own names
+`account` and `subject` and is addressed with `to`, `cc`, and `bcc`. An answer to mail this deployment already holds
+names `answeredEmailId` and `answering` — `senderOnly`, `everyone`, or `forward` — and names **neither** `account` nor
+`subject`, because the account, the subject, the threading headers, the quotation, and a forward's attachments are read
+from the stored message exactly as `reply_to_email` and `forward_email` read them.
+
+**A draft addressed to nobody is an ordinary draft.** Writing the message before deciding who reads it is what drafting
+is for, so no recipient is required; `send_draft` is where the absence is refused, and the remedy is `update_draft`
+rather than saving again.
+
+**These are the only calls here that wait on your mail server**, and for one round trip: the draft is written down
+first and the copy is then put into your Drafts folder, or taken back out of it, while whoever asked is still there.
+So a saved draft comes back saying `filed` when your folder shows it and `held` when it does not — because the server
+could not be reached, or because the account maps no folder to the drafts role, in which case it never will and the
+draft lives here alone. Either way the draft is yours to edit, delete, and send.
+
+**There is no `idempotencyKey`, and calling `save_draft` twice writes two drafts.** That is deliberate: a duplicate
+draft costs you a deletion, where a duplicate send costs a recipient a second message. So a retry after a timeout
+leaves a second draft to remove rather than a message sent twice, and the way to change a draft is `update_draft` with
+the `draftId` the first call answered.
+
+**`update_draft` states the whole message rather than the part that changed.** A recipient you leave out is no longer
+addressed, a body you do not restate is gone, and an `htmlBody` you omit is dropped — so send everything again, not
+only the edit. The draft keeps its `draftId`, its `revision` goes up by one, and your folder ends up showing one
+message rather than one per edit.
+
+**Only a draft MailFathom wrote can be reached.** A message you drafted in your own mail client is held under no
+identifier of this deployment's, so nothing here names it, edits it, or deletes it. Every way of naming a draft that
+cannot be acted on — one nothing is held under, one already deleted, one already sent, another account's, or text that
+is no identifier at all — comes back as `53008`, worded identically.
+
+**`send_draft` is a real send and behaves like one.** Everything under `send_email` holds: the call does not send while
+you wait and answers `queued` with an `outgoingEmailId`, you never say who it is from, nothing recalls what has left,
+and `get_outgoing_email` and `cancel_outgoing_email` are what you read and stop it with. What differs is that it takes
+no message at all — the message, the recipients, and the account are the draft's, so edit the draft and read it back
+before sending. There is no `idempotencyKey` here either, for the opposite reason: the draft is the identity, so
+promoting one draft sends **one** message however many times the call is made.
+
+Everything the deployment refuses a send for is asked at the moment you send rather than when the draft was written, so
+a draft written before an operator tightened a recipient policy or a ceiling is refused by the rule that holds today —
+and a refused promotion leaves the draft exactly as it was. The draft is not deleted when `send_draft` answers either:
+the message is queued rather than sent, so it stands in your folder until the message has actually been delivered.
+
+`save_draft`, `update_draft`, and `delete_draft` need `mailfathom.mail.drafts.write`, and a draft that answers stored
+mail needs `mailfathom.mail.read` beside it. `send_draft` needs `mailfathom.mail.send`, the same grant every other act
+that causes mail to leave is admitted by. A credential granted drafting and not sending is not offered `send_draft` at
+all, and a call naming it is answered as a call naming a tool that does not exist.
 
 ## `ask_mail` — a question, answered with its sources
 

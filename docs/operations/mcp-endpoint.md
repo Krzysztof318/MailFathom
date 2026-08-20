@@ -625,15 +625,19 @@ The operational consequences are the ones that always applied to an unauthentica
   two need — it lets them answer the owner's correspondents and pass the owner's mail and its attachments on to
   strangers. It carries `get_outgoing_email` and `cancel_outgoing_email` with it, so the same reach reads back what the
   sends it made were answered with and stops one before it leaves; those two are confined to what the calling principal
-  queued, which on an endpoint that admits everybody as one identity confines nothing. Nothing takes any of it back.
+  queued, which on an endpoint that admits everybody as one identity confines nothing. It carries `send_draft` too, so
+  a message the owner wrote and did not send is one call from having been sent. Nothing takes any of it back.
+  `mailfathom.mail.drafts.write` is the mildest of the four writing halves and still not nothing: through `save_draft`,
+  `update_draft`, and `delete_draft` it lets anyone who can reach the port put a message into the owner's own Drafts
+  folder, rewrite one, and delete one — and a message somebody else drafted is one the owner may read as their own.
   Narrow the entry, or keep the port unreachable.
 
 ### What a credential may do
 
 Every entry in `McpEndpoint:Authentication` states what the credentials it admits may do, as `Permissions`. This
-surface's half of the published set is six names — `mailfathom.mail.read`, `mailfathom.mail.ask`,
-`mailfathom.mail.contacts.read`, `mailfathom.mail.contacts.write`, `mailfathom.mail.flags.write`, and
-`mailfathom.mail.send` — and
+surface's half of the published set is seven names — `mailfathom.mail.read`, `mailfathom.mail.ask`,
+`mailfathom.mail.contacts.read`, `mailfathom.mail.contacts.write`, `mailfathom.mail.flags.write`,
+`mailfathom.mail.drafts.write`, and `mailfathom.mail.send` — and
 [what a credential may do](permissions.md) holds the model behind them in full: what each name reaches, which tool each
 one covers, how a grant is written, what an absent `Permissions` key and an empty list mean, what
 `PermissionsFromTokenScopes` turns the list into, and what fails startup.
@@ -661,7 +665,8 @@ chosen what it holds:
 info: MailFathom.Host.Hosting.Warnings.TransportGrantStartupReport
       The MCP endpoint entry McpEndpoint:Authentication:0 writes down no grant, so every credential it admits holds
       mailfathom.mail.read, mailfathom.mail.ask, mailfathom.mail.contacts.read, mailfathom.mail.contacts.write,
-      mailfathom.mail.flags.write, mailfathom.mail.send — everything this surface publishes. Write a 'Permissions' list
+      mailfathom.mail.flags.write, mailfathom.mail.drafts.write, mailfathom.mail.send — everything this surface
+      publishes. Write a 'Permissions' list
       on the entry to narrow it, or an empty one to grant nothing. A caller here is served only the tools its grant
       permits, and a call naming any other is answered as a tool that does not exist.
 ```
@@ -676,9 +681,9 @@ section a grant would be written under.
 
 **The endpoint asks whether this is a caller the deployment serves, and of a token also which person it names.** What an
 admitted caller may then do is the grant its entry carries, and that decides one thing: which of this surface's tools it
-is offered and may call. Which tool each of the six names covers is
+is offered and may call. Which tool each of the seven names covers is
 [what a credential may do](permissions.md#which-tool-each-name-covers); an entry narrowed to the contact half therefore
-reaches the contact book and nothing else, and one granted none of the six is served an empty tool list and refused
+reaches the contact book and nothing else, and one granted none of the seven is served an empty tool list and refused
 every call it makes. `mailfathom.mail.send` is the one worth checking a narrowed entry against deliberately, because
 it is the only name here whose effect leaves the deployment and cannot be recalled.
 

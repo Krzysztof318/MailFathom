@@ -19,6 +19,11 @@
     <Compile Include="..\shared\StubJunkMailFolderCatalog.cs" Link="StubJunkMailFolderCatalog.cs" />
     <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
     <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
+    <!-- A draft's record and the message it is are one decision, so the two stores that hold them are linked together
+         and into every suite that writes a draft: Application.UnitTests proves the use cases, and this one the tools
+         over them. -->
+    <Compile Include="..\shared\InMemoryMailDraftStore.cs" Link="InMemoryMailDraftStore.cs" />
+    <Compile Include="..\shared\InMemoryMailDraftContentStore.cs" Link="InMemoryMailDraftContentStore.cs" />
     <!-- Every boundary holding a guarded egress point asserts the same three states of the guard, so the three are
          built once and linked into each suite that has one. -->
     <Compile Include="..\shared\MarkerSensitiveContentScanner.cs" Link="MarkerSensitiveContentScanner.cs" />

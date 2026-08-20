@@ -277,15 +277,6 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode OutgoingEmailDueTimeMissed { get; } = new(28016);
 
-    /// <summary>Gets subcategory 8, message composition: a draft was asked to be sent and states nobody to send it to.</summary>
-    /// <remarks>
-    /// A draft addressed to nobody is an ordinary draft rather than a defective one — writing the message before
-    /// deciding who reads it is what a draft is for — so the absence is refused where the send would be written down
-    /// rather than where the draft is saved. It is allocated here rather than beside the recipient refusals above
-    /// because nothing about a contact or an address decided it: there is no recipient at all.
-    /// </remarks>
-    public static MailFathomErrorCode MailDraftNotAddressed { get; } = new(28017);
-
     /// <summary>Gets subcategory 9, message filing: there is no folder to put a copy of an outgoing message into.</summary>
     /// <remarks>
     /// It covers a role the account maps no folder to, a mapped folder the server does not advertise, and a mapping
@@ -565,6 +556,21 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode OutgoingRecipientUnvouched { get; } = new(53009);
 
+    /// <summary>Gets subcategory 3, the thing named: a draft was asked to be sent and names nobody to send it to.</summary>
+    /// <remarks>
+    /// A draft addressed to nobody is an ordinary draft rather than a defective one — writing the message before
+    /// deciding who reads it is what a draft is for — so the absence is refused where the send would be written down
+    /// rather than where the draft is saved.
+    /// </remarks>
+    /// <remarks>
+    /// It is allocated in this category rather than beside the composition failures because of who reads it: the
+    /// boundary publishes a code of this category and collapses every other into the undiagnosed one, and this is a
+    /// refusal a caller caused and can act on — the remedy is to address the draft and ask again. It sits among the
+    /// codes that name what a call could not find rather than beside the recipient refusals above, because nothing
+    /// about a contact or an address decided it: there is no recipient at all.
+    /// </remarks>
+    public static MailFathomErrorCode MailDraftNotAddressed { get; } = new(53010);
+
     /// <summary>Gets subcategory 4, undiagnosed failure: a tool call failed for a reason the boundary deliberately does not describe.</summary>
     /// <remarks>
     /// This is the one code every failure that is not already an allocated one collapses into, so a client learns that
@@ -772,7 +778,6 @@ public readonly record struct MailFathomErrorCode
         OutgoingEmailContactNameAmbiguous,
         OutgoingEmailContactAddressNotHeld,
         OutgoingEmailDueTimeMissed,
-        MailDraftNotAddressed,
         OutgoingEmailFilingDestinationUnavailable,
         OutgoingEmailFilingOutcomeUnknown,
         OutgoingEmailFilingFailedUnexpectedly,
@@ -811,6 +816,7 @@ public readonly record struct MailFathomErrorCode
         OutgoingEmailNotFound,
         MailDraftNotFound,
         OutgoingRecipientUnvouched,
+        MailDraftNotAddressed,
         McpToolFailedUnexpectedly,
         EmailContentUnavailable,
         MailAnsweringUnavailable,

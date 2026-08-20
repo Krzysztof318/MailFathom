@@ -197,9 +197,53 @@ public sealed class MailDraftBookTests
         Assert.Equal(1, harness.Drafts.Peek(draft.Id)!.Revision);
     }
 
-    /// <summary>A caller that may not send may not draft either, because a draft is one command away from being one.</summary>
+    /// <summary>The sending grant does not carry the drafting one, because no permission here implies another.</summary>
+    /// <remarks>
+    /// The pair of refusals is what makes the two halves of authoring separable at all. A deployment that granted
+    /// sending alone meant an agent to send the messages it was asked for, and writing into the owner's own drafts
+    /// folder is a different act on a different folder — so it is refused here rather than admitted as the lesser of
+    /// the two.
+    /// </remarks>
     [Fact]
-    public async Task SaveAsync_CallerWithoutTheSendingGrant_IsRefusedBeforeAnythingIsWritten()
+    public async Task SaveAsync_CallerHoldingOnlyTheSendingGrant_IsRefusedBeforeAnythingIsWritten()
+    {
+        // Arrange
+        var harness = Harness(MailFathomPermission.MailSend);
+        harness.MapDraftsFolder(Account);
+
+        // Act
+        var refusal = () => harness.Book.SaveAsync(
+            Account,
+            OutgoingEmailRequester.Command("mfctl-4f2a"),
+            Composed("first version"),
+            revises: null,
+            CancellationToken.None);
+
+        // Assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(refusal);
+        Assert.Empty(harness.Drafts.Drafts);
+    }
+
+    /// <summary>Giving a draft up is admitted under the grant that wrote it rather than under the one that would send it.</summary>
+    /// <remarks>The draft is never looked for, which is the point: the grant is asked first, so a caller holding the wrong one learns nothing about which drafts exist.</remarks>
+    [Fact]
+    public async Task DiscardAsync_CallerHoldingOnlyTheSendingGrant_IsRefusedBeforeAnyDraftIsLookedFor()
+    {
+        // Arrange
+        var harness = Harness(MailFathomPermission.MailSend);
+
+        // Act
+        var refusal = () => harness.Book.DiscardAsync(
+            MailDraftId.Create(Guid.CreateVersion7(Moment)),
+            CancellationToken.None);
+
+        // Assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(refusal);
+    }
+
+    /// <summary>Drafting is its own grant, and reading the mailbox is not it.</summary>
+    [Fact]
+    public async Task SaveAsync_CallerWithoutTheDraftingGrant_IsRefusedBeforeAnythingIsWritten()
     {
         // Arrange
         var harness = Harness(MailFathomPermission.MailRead);
