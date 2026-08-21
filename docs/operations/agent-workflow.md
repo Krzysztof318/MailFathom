@@ -712,10 +712,16 @@ to *be* the comment rather than appear in it, because an acceptance is a legal a
 contributor quoting it inside a question about whether to accept has not accepted — casing,
 surrounding whitespace, and a trailing full stop are normalised away, and nothing else is.
 
-The request is made when the pull request opens or reopens, and on no other event. A
-contributor who has not answered has already been asked, so asking again on every push would
-be a notification storm; and confining it to those two events is also what keeps two pushes
-seconds apart from each reading zero prior requests and both posting one.
+The request is made once per version of the agreement rather than once per pull request,
+which are the same thing until `CLA.md` is revised. A contributor who has not answered has
+already been asked, so asking again on every push would be a notification storm — and what
+stops that is the marker the request comment carries, which names the version it was made
+about. Every later push reads that marker and says nothing. A revision landing on `main`
+while a pull request is open is the case the version buys: the author's signature names the
+older text, so `signed` turns false and `license/cla` turns red, and the pull request would
+otherwise carry a new red status nothing on it explains. Instead the request is made again,
+opening with what changed rather than repeating itself, which is `CLA.md` § 5 — a later
+version is a new acceptance, asked for in the same way — implemented rather than asserted.
 
 One property is the whole of why this is safe to run with the App's token — nothing from the
 contribution is ever fetched or executed — and `only_the_recorded_workflows_use_pull_request_target`
@@ -740,7 +746,8 @@ looks right: with `cancel-in-progress: false` the platform keeps one run queued 
 older pending ones, so two acceptances in the same minute would lose one silently. The
 branch carries a ruleset of its own admitting the `Fathom license` App and nothing else,
 which is what makes the register evidence rather than a file the party it speaks about can
-edit. ADR 0015 holds the decision and `CLA.md` the agreement.
+edit. [ADR 0015](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0015-contributor-licence-agreement-and-where-assent-is-recorded.md)
+holds the decision and `CLA.md` the agreement.
 
 ## Review on the pull request
 

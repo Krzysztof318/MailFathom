@@ -975,7 +975,7 @@ again locally in `scripts/verify-full.sh`, from `scripts/test-agent-workflow.sh`
 | `every_workflow_job_declares_its_permissions` | A job that inherits the repository default instead of declaring a `permissions:` block, at the workflow level or its own |
 | `every_write_scope_is_one_the_policy_records` | A write scope appearing anywhere the list in that contract does not already name |
 | `every_checkout_refuses_to_persist_credentials` | An `actions/checkout` step that leaves the workflow token in `.git/config` for the steps after it |
-| `only_the_recorded_workflows_use_pull_request_target` | A third `pull_request_target` trigger beside the two `fathom-review.yml` and `contributor-licence.yml` hold, and a licence workflow that checks anything out or reaches an action beyond the token mint |
+| `only_the_recorded_workflows_use_pull_request_target` | A third `pull_request_target` trigger beside the two `fathom-review.yml` and `contributor-licence.yml` hold, and a licence workflow that checks anything out, reaches an action beyond the token mint, or runs a command fetching the contribution directly |
 | `the_reviewer_resolves_one_claude_credential_everywhere` | A step in `fathom-review.yml` reaching a Claude credential without the `CLAUDE_CODE_PROFILE` selector, or a fifth step holding one, either of which leaves a leak check comparing a review against a token no run spent |
 
 Every write scope in the repository but one belongs to publishing something: `packages: write` with
