@@ -4,7 +4,7 @@
 
 using MailFathom.Domain.Delivery;
 
-namespace MailFathom.Mcp.Tools.Results;
+namespace MailFathom.Mcp.Tools.Outgoing;
 
 /// <summary>Reads the published state one stored stage is reported under, for every result that reports one.</summary>
 /// <remarks>

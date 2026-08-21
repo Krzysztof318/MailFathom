@@ -5,6 +5,7 @@
 using System.Globalization;
 using MailFathom.Application.Access;
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
 
@@ -143,7 +144,7 @@ public sealed class StoredMailRederivationRequests
         var enqueued = await this.jobs.EnqueueAsync(
             JobEnqueueRequest.Create(
                 KeyOf(requested.Run),
-                StoredMailScopeJobPayload.For(scope.Account, scope.Folder),
+                RederiveStoredMailJobPayload.For(scope.Account, scope.Folder),
                 scope.Account),
             cancellationToken);
 

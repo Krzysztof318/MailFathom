@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.UnitTests.TestDoubles;
@@ -48,7 +49,7 @@ public sealed class EmailSpamClassificationHandlerTests
 
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            EmailOccurrenceJobPayload.For(Occurrence),
+            ClassifyEmailSpamJobPayload.For(Occurrence),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -67,7 +68,7 @@ public sealed class EmailSpamClassificationHandlerTests
 
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            EmailOccurrenceJobPayload.For(Occurrence),
+            ClassifyEmailSpamJobPayload.For(Occurrence),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -81,7 +82,7 @@ public sealed class EmailSpamClassificationHandlerTests
     {
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            EmailOccurrenceJobPayload.For(Occurrence),
+            ClassifyEmailSpamJobPayload.For(Occurrence),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -97,7 +98,7 @@ public sealed class EmailSpamClassificationHandlerTests
 
         // Act
         await this.CreateHandler(MarksJunkRead, SpamClassificationSettings.Disabled).RunAsync(
-            EmailOccurrenceJobPayload.For(Occurrence),
+            ClassifyEmailSpamJobPayload.For(Occurrence),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -110,7 +111,7 @@ public sealed class EmailSpamClassificationHandlerTests
     {
         // Act
         var refusal = await Assert.ThrowsAsync<ArgumentException>(() => this.CreateHandler().RunAsync(
-            MailAccountJobPayload.For(Account),
+            RunScheduledMailRulesJobPayload.For(Account),
             TestContext.Current.CancellationToken));
 
         // Assert

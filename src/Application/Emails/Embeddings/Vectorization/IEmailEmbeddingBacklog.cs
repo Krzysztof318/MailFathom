@@ -4,7 +4,7 @@
 
 using MailFathom.Domain.Emails;
 
-namespace MailFathom.Application.Emails.Embeddings.Generation;
+namespace MailFathom.Application.Emails.Embeddings.Vectorization;
 
 /// <summary>Carries messages from the run that stored them to the worker that embeds them.</summary>
 /// <remarks>

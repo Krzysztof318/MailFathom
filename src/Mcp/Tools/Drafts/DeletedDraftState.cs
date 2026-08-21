@@ -4,7 +4,7 @@
 
 using System.ComponentModel;
 
-namespace MailFathom.Mcp.Tools.Results;
+namespace MailFathom.Mcp.Tools.Drafts;
 
 /// <summary>Publishes what giving up a draft did to the copy of it in the owner's mailbox.</summary>
 /// <remarks>

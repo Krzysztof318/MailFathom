@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.UnitTests.TestDoubles;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -519,7 +520,7 @@ public sealed class JobExecutorTests
         JobId.Create(Guid.CreateVersion7(Noon)),
         jobType,
         JobIdempotencyKey.Create("account-a/inbox/1/42"),
-        new EmailOccurrenceJobPayload
+        new ClassifyEmailSpamJobPayload
         {
             AccountId = "account-a",
             FolderAlias = "inbox",

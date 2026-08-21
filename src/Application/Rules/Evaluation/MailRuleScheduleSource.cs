@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
-using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Domain.Accounts;
 
@@ -75,7 +75,7 @@ public sealed class MailRuleScheduleSource : IScheduledJobSource
 
     private static ScheduledJob Declare(string ruleName, JobRecurrence recurrence, MailAccountId accountId) => new(
         JobScheduleId.Create($"{IdentityPrefix}:{accountId.Value}:{ruleName}"),
-        MailAccountJobPayload.For(accountId),
+        RunScheduledMailRulesJobPayload.For(accountId),
         recurrence,
         accountId);
 }

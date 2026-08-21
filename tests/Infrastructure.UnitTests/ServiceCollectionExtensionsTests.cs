@@ -5,7 +5,7 @@
 using System.Text;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Embeddings.Backfill;
-using MailFathom.Application.Emails.Embeddings.Generation;
+using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.SearchEmails;

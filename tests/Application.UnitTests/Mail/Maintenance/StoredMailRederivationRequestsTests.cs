@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
@@ -56,7 +57,7 @@ public sealed class StoredMailRederivationRequestsTests
         Assert.Equal(JobType.RederiveStoredMail, request.JobType);
         Assert.Equal(WholeAccount.Account, request.AccountId);
 
-        var payload = Assert.IsType<StoredMailScopeJobPayload>(request.Payload);
+        var payload = Assert.IsType<RederiveStoredMailJobPayload>(request.Payload);
 
         Assert.Equal(WholeAccount.Account, payload.ToAccountId());
         Assert.Null(payload.ToFolderAlias());

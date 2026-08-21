@@ -10,6 +10,7 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Observability;
@@ -218,7 +219,7 @@ public sealed class MailboxSynchronizerTests
         var request = Assert.Single(EnqueuedJobs(jobStore));
 
         Assert.Equal(JobType.ClassifyEmailSpam, request.JobType);
-        Assert.Equal(occurrence, Assert.IsType<EmailOccurrenceJobPayload>(request.Payload).ToOccurrenceId());
+        Assert.Equal(occurrence, Assert.IsType<ClassifyEmailSpamJobPayload>(request.Payload).ToOccurrenceId());
     }
 
     /// <summary>A message stored from its envelope alone is asked of nothing: no content means no verdict is coming.</summary>

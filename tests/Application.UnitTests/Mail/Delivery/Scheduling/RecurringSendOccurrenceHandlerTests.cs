@@ -7,6 +7,7 @@ using System.Text;
 using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Operations;
@@ -198,7 +199,9 @@ public sealed class RecurringSendOccurrenceHandlerTests
 
         // Act
         var thrown = await Assert.ThrowsAsync<ArgumentException>(
-            () => world.Handler.RunAsync(MailAccountJobPayload.For(Account), TestContext.Current.CancellationToken));
+            () => world.Handler.RunAsync(
+                RunScheduledMailRulesJobPayload.For(Account),
+                TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal("payload", thrown.ParamName);

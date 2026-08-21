@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Runtime.CompilerServices;
-using MailFathom.Application.Emails.Embeddings.Generation;
+using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.UnitTests.TestDoubles;

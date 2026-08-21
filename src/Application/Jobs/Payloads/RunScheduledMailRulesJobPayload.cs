@@ -5,7 +5,7 @@
 using System.Text.Json.Serialization;
 using MailFathom.Domain.Accounts;
 
-namespace MailFathom.Application.Jobs;
+namespace MailFathom.Application.Jobs.Payloads;
 
 /// <summary>Points one job at a whole account, and at nothing inside its mailbox.</summary>
 /// <remarks>
@@ -20,7 +20,7 @@ namespace MailFathom.Application.Jobs;
 /// <see cref="ToAccountId" />, which validates it the way the domain type does.
 /// </para>
 /// </remarks>
-public sealed record MailAccountJobPayload : IJobPayload
+public sealed record RunScheduledMailRulesJobPayload : IJobPayload
 {
     /// <summary>Gets the account the work is about.</summary>
     public required string AccountId { get; init; }
@@ -32,7 +32,7 @@ public sealed record MailAccountJobPayload : IJobPayload
     /// <summary>Describes one account as the document a job carries.</summary>
     /// <param name="accountId">The account the work is about.</param>
     /// <returns>The payload naming that account.</returns>
-    public static MailAccountJobPayload For(MailAccountId accountId) => new() { AccountId = accountId.Value };
+    public static RunScheduledMailRulesJobPayload For(MailAccountId accountId) => new() { AccountId = accountId.Value };
 
     /// <summary>Rebuilds the account identity this payload names.</summary>
     /// <returns>The account identity.</returns>

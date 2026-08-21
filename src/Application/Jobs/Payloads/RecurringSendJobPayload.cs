@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery.Scheduling;
 
-namespace MailFathom.Application.Jobs;
+namespace MailFathom.Application.Jobs.Payloads;
 
 /// <summary>Points one job at a declaration that a message is sent again on every occasion its schedule names.</summary>
 /// <remarks>

@@ -13,7 +13,7 @@ using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Mcp.Tools;
-using MailFathom.Mcp.Tools.Results;
+using MailFathom.Mcp.Tools.Outgoing;
 using MailFathom.Mcp.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using NSubstitute;

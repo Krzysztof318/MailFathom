@@ -4,10 +4,10 @@
 
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
-using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Emails.Embeddings.Limits;
+using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Emails;

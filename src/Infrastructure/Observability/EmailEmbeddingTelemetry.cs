@@ -5,7 +5,7 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using MailFathom.Application.Emails.Embeddings;
-using MailFathom.Application.Emails.Embeddings.Generation;
+using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Common.Observability;
 
 namespace MailFathom.Infrastructure.Observability;

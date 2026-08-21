@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Spam;
@@ -86,7 +87,7 @@ public sealed class SpamClassificationArrivals
 
         var request = JobEnqueueRequest.Create(
             KeyOf(emailId),
-            EmailOccurrenceJobPayload.For(occurrenceId),
+            ClassifyEmailSpamJobPayload.For(occurrenceId),
             occurrenceId.AccountId);
 
         await this.jobs.EnqueueAsync(request, cancellationToken);

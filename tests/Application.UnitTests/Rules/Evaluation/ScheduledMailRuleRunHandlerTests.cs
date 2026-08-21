@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
@@ -36,7 +37,7 @@ public sealed class ScheduledMailRuleRunHandlerTests
     {
         // Act
         await this.CreateHandler().RunAsync(
-            MailAccountJobPayload.For(Account),
+            RunScheduledMailRulesJobPayload.For(Account),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -51,7 +52,7 @@ public sealed class ScheduledMailRuleRunHandlerTests
     {
         // Arrange
         var handler = this.CreateHandler();
-        var payload = MailAccountJobPayload.For(Account);
+        var payload = RunScheduledMailRulesJobPayload.For(Account);
 
         // Act
         await handler.RunAsync(payload, TestContext.Current.CancellationToken);
@@ -67,7 +68,7 @@ public sealed class ScheduledMailRuleRunHandlerTests
     {
         // Act
         var refusal = await Assert.ThrowsAsync<ArgumentException>(() => this.CreateHandler().RunAsync(
-            new EmailOccurrenceJobPayload
+            new ClassifyEmailSpamJobPayload
             {
                 AccountId = Account.Value,
                 FolderAlias = "inbox",

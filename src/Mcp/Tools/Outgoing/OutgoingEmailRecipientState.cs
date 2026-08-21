@@ -4,7 +4,7 @@
 
 using System.ComponentModel;
 
-namespace MailFathom.Mcp.Tools.Results;
+namespace MailFathom.Mcp.Tools.Outgoing;
 
 /// <summary>Publishes what a mail server has said about one recipient of a queued message.</summary>
 /// <remarks>

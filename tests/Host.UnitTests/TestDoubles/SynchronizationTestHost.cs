@@ -7,7 +7,7 @@ using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Chunking;
-using MailFathom.Application.Emails.Embeddings.Generation;
+using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Folders;

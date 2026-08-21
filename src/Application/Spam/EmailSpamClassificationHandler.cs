@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Spam;
@@ -79,7 +80,7 @@ public sealed class EmailSpamClassificationHandler : IJobHandler
     /// </remarks>
     public async Task RunAsync(IJobPayload payload, CancellationToken cancellationToken)
     {
-        if (payload is not EmailOccurrenceJobPayload occurrence)
+        if (payload is not ClassifyEmailSpamJobPayload occurrence)
         {
             throw new ArgumentException(
                 $"A '{JobType.ClassifyEmailSpam}' job carries a payload naming one message occurrence.",

@@ -5,8 +5,8 @@
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Administration;
 using MailFathom.Application.Emails.Embeddings.Backfill;
-using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Embeddings.Generations;
+using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.Application.Synchronization;

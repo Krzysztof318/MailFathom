@@ -16,6 +16,11 @@ namespace MailFathom.Application.Emails.Embeddings.Generations;
 /// <para>
 /// Both are absent on an instance that has activated nothing, which is a supported deployment rather than a fault.
 /// </para>
+/// <para>
+/// A generation is the versioned epoch of the index and never the act of filling one: turning a stored message's
+/// passages into vectors belongs to <c>Embeddings.Vectorization</c>, which writes into whichever of these two
+/// <see cref="Target" /> names.
+/// </para>
 /// </remarks>
 /// <param name="Serving">The generation retrieval reads and newly synchronized mail is embedded into, or <see langword="null" /> when this instance has activated none.</param>
 /// <param name="Building">The generation a reindex is filling, or <see langword="null" /> when no reindex is running.</param>

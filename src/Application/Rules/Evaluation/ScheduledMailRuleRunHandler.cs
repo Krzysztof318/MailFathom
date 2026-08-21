@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
+using MailFathom.Application.Jobs.Payloads;
 
 namespace MailFathom.Application.Rules.Evaluation;
 
@@ -41,7 +42,7 @@ public sealed class ScheduledMailRuleRunHandler : IJobHandler
     /// <exception cref="ArgumentException">Thrown when the payload is not the contract this job type names.</exception>
     public Task RunAsync(IJobPayload payload, CancellationToken cancellationToken)
     {
-        if (payload is not MailAccountJobPayload account)
+        if (payload is not RunScheduledMailRulesJobPayload account)
         {
             throw new ArgumentException(
                 $"A '{JobType.RunScheduledMailRules}' job carries a payload naming one account.",

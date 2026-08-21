@@ -4,7 +4,7 @@
 
 using System.ComponentModel;
 
-namespace MailFathom.Mcp.Tools.Results;
+namespace MailFathom.Mcp.Tools.Outgoing;
 
 /// <summary>Publishes which header of the message named one recipient.</summary>
 /// <remarks>

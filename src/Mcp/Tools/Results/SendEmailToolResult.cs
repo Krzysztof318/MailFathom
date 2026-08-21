@@ -4,6 +4,7 @@
 
 using System.ComponentModel;
 using MailFathom.Domain.Delivery;
+using MailFathom.Mcp.Tools.Outgoing;
 
 namespace MailFathom.Mcp.Tools.Results;
 
