@@ -117,8 +117,8 @@ offer to go deeper on any one of them instead of expanding all six.
    `Domain`, `Application`, `Infrastructure`, `AI`, `Mcp`, `Host`, `Cli` — and `backend/tests/` mirrors them.
    `frontend/` carries the same two directories for the frontend application and no project yet. `docs/` states what
    the code *does* and `specs/` holds the architecture draft, which states what MailFathom is being built into;
-   `docs/decisions/` holds the ADRs a change is written to be consistent with. `deploy/`, `scripts/`, and `tools/` are
-   the deployment assets, the gates, and the development utilities — `tools/SyntheticMail` fills a mailbox to work
+   `docs/decisions/` holds the ADRs a change is written to be consistent with. `deploy/`, `scripts/`, and `backend/tools/` are
+   the deployment assets, the gates, and the development utilities — `backend/tools/SyntheticMail` fills a mailbox to work
    against — and `.agents/skills/` is this workflow, which Claude Code finds through the `.claude/skills` symlink every
    clone carries. Each directory's own `AGENTS.md` governs it, and the table in the root one says which to read when.
 
@@ -397,7 +397,7 @@ offer to go deeper on any one of them instead of expanding all six.
 7. **Take the first green run before writing anything**, so a later failure belongs to the change:
 
    ```bash
-   dotnet restore MailFathom.slnx
+   dotnet restore backend/MailFathom.slnx
    bash scripts/verify-fast.sh
    ```
 
@@ -422,8 +422,8 @@ offer to go deeper on any one of them instead of expanding all six.
 8. **Read what is refused before a session is spent on it.** From a fork:
 
    - the protected paths — `.github/`, `.config/`, `.agents/`, `.claude/`, `docs/decisions/`, an `.editorconfig`,
-     `.gitattributes`, `.worktreeinclude`, `AGENTS.md`, or `CLAUDE.md` at any depth, and the repository-root
-     `CHANGELOG.md`, `CLA.md`, `Directory.Build.props`, `LICENSE`, `NOTICE`, `NuGet.config`, and `global.json` — are refused from
+     `.gitattributes`, `.worktreeinclude`, `AGENTS.md`, `CLAUDE.md`, or `Directory.Build.props` at any depth, and the
+     repository-root `CHANGELOG.md`, `CLA.md`, `LICENSE`, `NOTICE`, `NuGet.config`, `Version.props`, and `global.json` — are refused from
      any author but the owner, whatever the change says. Raise one as an issue;
    - **the roadmap board is private, and access to it is the maintainer's to grant.** Project `4` belongs to their
      account, the repository is public and the board is not, and by default a contributor reaches neither: `gh project

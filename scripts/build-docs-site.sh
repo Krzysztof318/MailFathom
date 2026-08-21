@@ -32,7 +32,7 @@ set -euo pipefail
 # reports plenty else worth reading and nothing else worth stopping for, so the other warnings stay warnings.
 
 readonly configuration_file='docfx/docfx.json'
-readonly solution_file='MailFathom.slnx'
+readonly solution_file='backend/MailFathom.slnx'
 readonly generated_metadata_directory='docfx/api'
 # `UidNotFound` is the same defect reached the other way: a `xref:` naming a type or a namespace the reference no
 # longer generates. A page that links into the API reference is written against names the code owns, so it is the one

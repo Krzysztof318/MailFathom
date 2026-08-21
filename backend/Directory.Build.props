@@ -1,4 +1,11 @@
 <Project>
+  <!-- The build contract for the .NET stack, and for nothing else. MSBuild walks up from a project directory until it
+       finds a Directory.Build.props, so a copy at the repository root would govern every project in the repository
+       rather than this stack's; sitting here, it governs backend/src, backend/tests, and backend/tools and reaches
+       nothing beside them. The version is the one property every stack has to agree on, so it is imported from the
+       root rather than declared here — see Version.props. -->
+  <Import Project="$(MSBuildThisFileDirectory)../Version.props" />
+
   <!-- The project's own licensing and attribution, declared once so no project restates or contradicts it. The root
        LICENSE carries the unmodified Apache-2.0 text GitHub's license detection matches, the root NOTICE carries the
        original-author attribution Apache-2.0 section 4(d) asks derivative distributions to preserve, and the values
@@ -18,28 +25,6 @@
   <ItemGroup>
     <AssemblyMetadata Include="SPDX-License-Identifier" Value="Apache-2.0" />
   </ItemGroup>
-
-  <!-- The one place in the repository where a version number is written, as docs/decisions/0004-versioning-and-release-policy.md
-       records. It names the *next* release rather than the last one, so every build from main is a preview of what the
-       next tag will carry, and raising it is a reviewed diff rather than a tag typed from a shell.
-
-       Continuous integration contributes the two properties below it and nothing else. VersionSuffix turns a build into
-       a prerelease of this same version — `nightly.<run number>` — and SourceRevisionId appends `+<sha>` to
-       InformationalVersion, which is what lets a running process name the commit it was built from. Neither is set
-       here, and neither has to be: a build inside a worktree resolves the revision through the SDK's source-link
-       support, and a build without one carries whatever its caller passed. No Git *tag* is read at any point, so a
-       shallow clone stamps the same version as a full one and the silent 0.0.0 that a tag-derived scheme produces
-       cannot occur.
-
-       AssemblyVersion and FileVersion are stated rather than left to the SDK because they must never carry the
-       prerelease suffix: both are numeric-only fields, and a nightly and the release it previews are deliberately the
-       same assembly identity. InformationalVersion is left to the SDK, which is what composes VersionPrefix,
-       VersionSuffix, and SourceRevisionId into the single string the runtime reports. -->
-  <PropertyGroup>
-    <VersionPrefix>0.8.0</VersionPrefix>
-    <AssemblyVersion>$(VersionPrefix)</AssemblyVersion>
-    <FileVersion>$(VersionPrefix)</FileVersion>
-  </PropertyGroup>
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -101,11 +86,12 @@
     <RestorePackagesWithLockFile Condition="'$(MSBuildProjectName)' != 'AppHost' And '$(MSBuildProjectName)' != 'IntegrationTests'">true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
-  <!-- This file is the repository root, so it locates itself rather than searching for a marker file above it. The
-       previous definition looked for .gitignore, which the container build context deliberately does not carry: the
-       property then resolved to nothing and the LICENSE and NOTICE items below it silently matched no file. -->
+  <!-- This file sits one directory below the repository root, so it locates the root by walking up rather than by
+       searching for a marker file above it. The definition before that looked for .gitignore, which the container
+       build context deliberately does not carry: the property then resolved to nothing and the LICENSE and NOTICE
+       items that read it silently matched no file. -->
   <PropertyGroup>
-    <RepositoryRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)'))</RepositoryRoot>
+    <RepositoryRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)..'))</RepositoryRoot>
   </PropertyGroup>
 
   <ItemGroup>
@@ -115,7 +101,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory).config/BannedSymbols.txt" />
+    <AdditionalFiles Include="$(RepositoryRoot).config/BannedSymbols.txt" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -140,7 +126,7 @@
     <PackageReference Include="coverlet.MTP" PrivateAssets="all" />
     <!-- Microsoft Testing Platform reads the collector configuration from beside the test executable, so the link name
          rather than the source path is what has to stay `testconfig.json`. -->
-    <None Include="$(MSBuildThisFileDirectory).config/testconfig.json" Link="testconfig.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(RepositoryRoot).config/testconfig.json" Link="testconfig.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <PropertyGroup Condition="'$(IsUnitTestProject)' == 'true'">

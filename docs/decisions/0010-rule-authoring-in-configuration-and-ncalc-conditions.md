@@ -103,7 +103,7 @@ Facts reach an expression as declared, typed parameters resolved lazily, so a fa
 
 The package is `NCalc` — the asynchronous one, because fact resolution reaches I/O — MIT, at 7.1.0 targeting `net10.0` directly, with `NCalc.Core` as the only entry in its graph, and roughly 4.5 million downloads across its history. It owns no schema, opens no connection, and reads no configuration of its own.
 
-It is not taken here. This record is documentation and adds no package: the change that first uses NCalc pins it centrally in `Directory.Packages.props`, regenerates the lock files in the same change set, and records it in `THIRD_PARTY_LICENSES.md`. That is issue 454.
+It is not taken here. This record is documentation and adds no package: the change that first uses NCalc pins it centrally in `backend/Directory.Packages.props`, regenerates the lock files in the same change set, and records it in `THIRD_PARTY_LICENSES.md`. That is issue 454.
 
 ### Both surfaces are public, and a break is named
 

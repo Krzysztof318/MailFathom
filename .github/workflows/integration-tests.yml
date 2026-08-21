@@ -76,7 +76,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
 
       # The same script a developer runs, so the suite has one way to be started rather than two that
       # can drift. It restores tools and packages, builds, removes anything a previous run left behind,

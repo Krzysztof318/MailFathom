@@ -110,19 +110,20 @@ jobs:
             build:
               - 'backend/src/**'
               - 'backend/tests/**'
-              # The development tooling under `tools/` ships nowhere, but it is in `MailFathom.slnx` and is therefore
-              # built, analyzed, and unit-tested by exactly the same gates as everything else. Without this line a
-              # change there would compile nowhere before it merged.
-              - 'tools/**'
+              # The development tooling under `backend/tools/` ships nowhere, but it is in `backend/MailFathom.slnx`
+              # and is therefore built, analyzed, and unit-tested by exactly the same gates as everything else. Without
+              # this line a change there would compile nowhere before it merged.
+              - 'backend/tools/**'
               - '.config/**'
               - '.editorconfig'
               - '.github/workflows/build-test-format-and-migrations.yml'
               - '.github/workflows/ci.yml'
-              - 'Directory.Build.props'
-              - 'Directory.Build.targets'
-              - 'Directory.Packages.props'
-              - 'MailFathom.slnx'
+              - 'backend/Directory.Build.props'
+              - 'backend/Directory.Build.targets'
+              - 'backend/Directory.Packages.props'
+              - 'backend/MailFathom.slnx'
               - 'NuGet.config'
+              - 'Version.props'
               - 'global.json'
             # `dotnet format` without a subcommand runs the whitespace, style, and analyzer passes, so
             # its verdict depends on more than the files it rewrites: the analyzer packages pinned
@@ -135,19 +136,19 @@ jobs:
             format:
               - 'backend/src/**'
               - 'backend/tests/**'
-              - 'tools/**'
+              - 'backend/tools/**'
               - '.editorconfig'
               - '.github/workflows/build-test-format-and-migrations.yml'
               - '.github/workflows/ci.yml'
-              - 'Directory.Build.props'
-              - 'Directory.Build.targets'
-              - 'Directory.Packages.props'
-              - 'MailFathom.slnx'
+              - 'backend/Directory.Build.props'
+              - 'backend/Directory.Build.targets'
+              - 'backend/Directory.Packages.props'
+              - 'backend/MailFathom.slnx'
               - 'global.json'
             # Production code is the only thing that can move the EF Core model, so it is the only
             # thing that can leave the committed model snapshot describing a schema no migration
             # produces. Tests do not participate in the model, and documentation cannot. The pins
-            # that decide how a snapshot is written are in here too, through `Directory.Packages.props`,
+            # that decide how a snapshot is written are in here too, through `backend/Directory.Packages.props`,
             # because raising the EF Core version can change what the generator emits for an
             # unchanged model.
             model:
@@ -155,7 +156,7 @@ jobs:
               - '.config/dotnet-tools.json'
               - '.github/workflows/build-test-format-and-migrations.yml'
               - '.github/workflows/ci.yml'
-              - 'Directory.Packages.props'
+              - 'backend/Directory.Packages.props'
             # The chart, the values documents it is verified with, the manifests those render, and the script that
             # renders them. Nothing outside `deploy/helm/` reaches a rendering: the chart declares no dependency and
             # takes no version from the build — `helm package --app-version` supplies that at release time — so a

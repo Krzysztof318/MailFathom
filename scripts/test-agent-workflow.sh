@@ -68,7 +68,7 @@ ln -s "$scripts_directory/test-agent-workflow.sh" "$fake_bin_directory/dotnet"
 git -C "$repository_root" init --initial-branch=main --quiet
 git -C "$repository_root" config user.email agent-workflow@example.invalid
 git -C "$repository_root" config user.name 'Agent Workflow Tests'
-printf '<Solution />\n' > "$repository_root/MailFathom.slnx"
+printf '<Solution />\n' > "$repository_root/backend/MailFathom.slnx"
 printf 'clean\n' > "$repository_root/tracked.txt"
 # The gates record what they verified under `artifacts/`, which the real repository ignores. Without
 # the same line here the full gate would refuse its own record as an untracked file, and the digest
@@ -83,7 +83,7 @@ printf '%s\n' \
   'if [[ -n "${FAKE_WORKFLOW_FAIL:-}" ]]; then exit 23; fi' \
   > "$repository_root/scripts/test-agent-workflow.sh"
 chmod +x "$repository_root/scripts/test-agent-workflow.sh"
-git -C "$repository_root" add .gitignore MailFathom.slnx scripts/test-agent-workflow.sh tracked.txt
+git -C "$repository_root" add .gitignore backend/MailFathom.slnx scripts/test-agent-workflow.sh tracked.txt
 git -C "$repository_root" commit --quiet -m 'test fixture'
 
 git clone --quiet "$repository_root" "$remote_repository_root"
@@ -270,7 +270,7 @@ verify_fast_runs_restore_build_tests_and_formatting() {
   )
 
   assert_file_content \
-    $'restore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\ntest --solution MailFathom.slnx --configuration Release --no-build\nformat MailFathom.slnx --no-restore --include backend/src/Sample.cs' \
+    $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --solution backend/MailFathom.slnx --configuration Release --no-build\nformat backend/MailFathom.slnx --no-restore --include backend/src/Sample.cs' \
     "$invocation_log"
 }
 
@@ -287,7 +287,7 @@ verify_full_runs_tests_once_through_coverage() {
   )
 
   assert_file_content \
-    $'tool restore\nrestore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\nmsbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release\nformat MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic --include backend/src/Sample.cs' \
+    $'tool restore\nrestore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\nmsbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release\nformat backend/MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic --include backend/src/Sample.cs' \
     "$invocation_log"
 }
 
@@ -385,7 +385,7 @@ verify_full_stops_the_contract_suite_once_the_chain_failed() {
   stage_documentation_change
 
   if (
-    export FAKE_DOTNET_FAIL_MATCH='build MailFathom.slnx'
+    export FAKE_DOTNET_FAIL_MATCH='build backend/MailFathom.slnx'
     cd "$repository_root"
     "$scripts_directory/verify-full.sh"
   ) > "$gate_output" 2>&1; then
@@ -472,7 +472,7 @@ verify_fast_runs_again_once_the_tree_changed() {
   )
 
   git -C "$repository_root" checkout --quiet HEAD -- backend/src/Sample.cs
-  assert_contains 'build MailFathom.slnx --configuration Release --no-restore' "$invocation_log"
+  assert_contains 'build backend/MailFathom.slnx --configuration Release --no-restore' "$invocation_log"
 }
 
 # The full gate builds, tests, collects coverage over the same suite, and verifies the formatting the
@@ -512,7 +512,7 @@ verify_full_refuses_the_fast_loop_record_except_for_the_formatting_pass() {
   )
 
   assert_contains 'msbuild .config/CodeCoverage.proj' "$invocation_log"
-  assert_excludes 'format MailFathom.slnx' "$invocation_log"
+  assert_excludes 'format backend/MailFathom.slnx' "$invocation_log"
 }
 
 # A run whose formatting pass rewrote a file verified a build and a suite against content the working
@@ -532,7 +532,7 @@ verify_fast_records_nothing_when_formatting_rewrote_a_file() {
     "$scripts_directory/verify-fast.sh"
   )
 
-  assert_contains 'build MailFathom.slnx --configuration Release --no-restore' "$invocation_log"
+  assert_contains 'build backend/MailFathom.slnx --configuration Release --no-restore' "$invocation_log"
 }
 
 verify_force_runs_everything_a_record_would_have_skipped() {
@@ -549,7 +549,7 @@ verify_force_runs_everything_a_record_would_have_skipped() {
     "$scripts_directory/verify-fast.sh"
   )
 
-  assert_contains 'build MailFathom.slnx --configuration Release --no-restore' "$invocation_log"
+  assert_contains 'build backend/MailFathom.slnx --configuration Release --no-restore' "$invocation_log"
 }
 
 # A record says a gate passed, so a gate that failed writes none — however far it got. The whitespace
@@ -600,7 +600,7 @@ verify_full_formats_the_whole_solution_when_a_shared_style_input_changed() {
   git -C "$repository_root" rm --quiet --force --cached .editorconfig
   rm -f "$repository_root/.editorconfig"
 
-  assert_contains 'format MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic' "$invocation_log"
+  assert_contains 'format backend/MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic' "$invocation_log"
   assert_excludes '--include' "$invocation_log"
 }
 
@@ -622,7 +622,7 @@ verify_full_formats_the_whole_solution_when_a_shared_style_input_was_removed() {
 
   git -C "$repository_root" reset --quiet --hard HEAD~1
 
-  assert_contains 'format MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic' "$invocation_log"
+  assert_contains 'format backend/MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic' "$invocation_log"
   assert_excludes '--include' "$invocation_log"
 }
 
@@ -644,7 +644,7 @@ verify_full_formats_nothing_when_no_csharp_file_changed() {
   git -C "$repository_root" checkout --quiet "$fixture_branch"
 
   assert_file_content 'workflow-contracts' "$workflow_invocation_log"
-  assert_excludes 'format MailFathom.slnx' "$invocation_log"
+  assert_excludes 'format backend/MailFathom.slnx' "$invocation_log"
 }
 
 verify_full_checks_committed_staged_and_unstaged_changes() {
@@ -874,7 +874,7 @@ verify_fast_accepts_a_detached_head() {
   fi
 
   assert_file_content \
-    $'restore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\ntest --solution MailFathom.slnx --configuration Release --no-build\nformat MailFathom.slnx --no-restore --include backend/src/Sample.cs' \
+    $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --solution backend/MailFathom.slnx --configuration Release --no-build\nformat backend/MailFathom.slnx --no-restore --include backend/src/Sample.cs' \
     "$invocation_log"
 }
 
@@ -897,7 +897,7 @@ verify_fast_skips_formatting_when_no_csharp_file_changed() {
   fi
 
   assert_file_content \
-    $'restore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\ntest --solution MailFathom.slnx --configuration Release --no-build' \
+    $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --solution backend/MailFathom.slnx --configuration Release --no-build' \
     "$invocation_log"
 }
 
@@ -905,7 +905,7 @@ verification_stops_after_first_failure() {
   : > "$invocation_log"
 
   if (
-    export FAKE_DOTNET_FAIL_MATCH='build MailFathom.slnx'
+    export FAKE_DOTNET_FAIL_MATCH='build backend/MailFathom.slnx'
     cd "$repository_root"
     "$scripts_directory/verify-fast.sh"
   ); then
@@ -914,7 +914,7 @@ verification_stops_after_first_failure() {
   fi
 
   assert_file_content \
-    $'restore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore' \
+    $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore' \
     "$invocation_log"
 }
 
@@ -1162,7 +1162,7 @@ verify_fast_runs_in_a_fork_with_no_upstream_remote() {
     "$scripts_directory/verify-fast.sh"
   )
 
-  assert_contains 'format MailFathom.slnx --no-restore --include backend/src/ForkSample.cs' "$invocation_log"
+  assert_contains 'format backend/MailFathom.slnx --no-restore --include backend/src/ForkSample.cs' "$invocation_log"
 }
 
 # The `Protected paths` workflow never checks the branch out, so its guard cannot be a script in
@@ -1230,7 +1230,7 @@ protected_paths_refuses_a_contributor_changing_repository_root_configuration() {
 
   if run_protected_paths_step \
     'outside-contributor' \
-    $'Directory.Build.props\nLICENSE\nNOTICE\nNuGet.config\nglobal.json\nCHANGELOG.md\nCLA.md' \
+    $'Version.props\nLICENSE\nNOTICE\nNuGet.config\nglobal.json\nCHANGELOG.md\nCLA.md' \
     "$output_file" \
     "$summary_file"; then
     printf 'Protected paths allowed a contributor to change the repository-root configuration\n' >&2
@@ -1238,7 +1238,7 @@ protected_paths_refuses_a_contributor_changing_repository_root_configuration() {
   fi
 
   local protected_file
-  for protected_file in Directory.Build.props LICENSE NOTICE NuGet.config global.json CHANGELOG.md CLA.md; do
+  for protected_file in Version.props LICENSE NOTICE NuGet.config global.json CHANGELOG.md CLA.md; do
     assert_contains "::error file=${protected_file}::" "$output_file"
   done
 }
@@ -1276,7 +1276,7 @@ protected_paths_matches_the_configuration_files_at_every_depth() {
 
   if run_protected_paths_step \
     'outside-contributor' \
-    $'backend/src/Infrastructure/Persistence/Migrations/.editorconfig\ndocs/.gitattributes\nbackend/tests/shared/.worktreeinclude\nbackend/tests/AGENTS.md\nbackend/src/CLAUDE.md' \
+    $'backend/src/Infrastructure/Persistence/Migrations/.editorconfig\ndocs/.gitattributes\nbackend/tests/shared/.worktreeinclude\nbackend/tests/AGENTS.md\nbackend/src/CLAUDE.md\nbackend/Directory.Build.props' \
     "$output_file" \
     "$summary_file"; then
     printf 'Protected paths allowed a contributor to change a nested configuration file\n' >&2
@@ -1288,6 +1288,7 @@ protected_paths_matches_the_configuration_files_at_every_depth() {
   assert_contains '::error file=backend/tests/shared/.worktreeinclude::' "$output_file"
   assert_contains '::error file=backend/tests/AGENTS.md::' "$output_file"
   assert_contains '::error file=backend/src/CLAUDE.md::' "$output_file"
+  assert_contains '::error file=backend/Directory.Build.props::' "$output_file"
 }
 
 protected_paths_ignores_paths_that_only_resemble_a_protected_one() {
@@ -4286,7 +4287,7 @@ obligation_index_credits_a_path_directly_under_a_double_star() {
 
   # One path directly under the boundary, one nested, and one at the repository root, which is the
   # case a leading `**/` covers.
-  printf '%s\n' '[{"filename":"backend/src/MailboxOptions.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"},{"filename":"backend/src/Application/Emails/TimelineOptions.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"},{"filename":"MailFathom.slnx","status":"modified","patch":"@@ -1 +1,2 @@\n+<Solution />"}]' \
+  printf '%s\n' '[{"filename":"backend/src/MailboxOptions.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"},{"filename":"backend/src/Application/Emails/TimelineOptions.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"},{"filename":"backend/MailFathom.slnx","status":"modified","patch":"@@ -1 +1,2 @@\n+<Solution />"}]' \
     > "$files_json"
 
   run_obligation_index "$fixture_root" "$files_json" "$output_file"
@@ -4298,7 +4299,7 @@ obligation_index_credits_a_path_directly_under_a_double_star() {
     '[.documentation[] | select(.path == "backend/src/Application/Emails/TimelineOptions.cs")][0].describing_documents[0].path' \
     "$output_file"
   assert_json '"docs/features/configuration.md"' \
-    '[.documentation[] | select(.path == "MailFathom.slnx")][0].describing_documents[0].path' \
+    '[.documentation[] | select(.path == "backend/MailFathom.slnx")][0].describing_documents[0].path' \
     "$output_file"
 }
 
@@ -4331,7 +4332,7 @@ obligation_index_reports_a_moved_pin_with_no_register_row() {
   local output_file="$test_directory/obligations-register.json"
 
   create_obligation_fixture "$fixture_root"
-  printf '%s\n' '[{"filename":"Directory.Packages.props","status":"modified","patch":"@@ -1 +1,2 @@\n+<PackageVersion Include=\"Something\" Version=\"1.0.0\" />"}]' \
+  printf '%s\n' '[{"filename":"backend/Directory.Packages.props","status":"modified","patch":"@@ -1 +1,2 @@\n+<PackageVersion Include=\"Something\" Version=\"1.0.0\" />"}]' \
     > "$files_json"
 
   run_obligation_index "$fixture_root" "$files_json" "$output_file"
@@ -4348,7 +4349,7 @@ obligation_index_records_a_register_the_change_updated() {
   local output_file="$test_directory/obligations-register-met.json"
 
   create_obligation_fixture "$fixture_root"
-  printf '%s\n' '[{"filename":"Directory.Packages.props","status":"modified","patch":"@@ -1 +1,2 @@\n+<PackageVersion Include=\"Something\" Version=\"1.0.0\" />"},{"filename":"THIRD_PARTY_LICENSES.md","status":"modified","patch":"@@ -1 +1,2 @@\n+| Something | 1.0.0 | MIT |"}]' \
+  printf '%s\n' '[{"filename":"backend/Directory.Packages.props","status":"modified","patch":"@@ -1 +1,2 @@\n+<PackageVersion Include=\"Something\" Version=\"1.0.0\" />"},{"filename":"THIRD_PARTY_LICENSES.md","status":"modified","patch":"@@ -1 +1,2 @@\n+| Something | 1.0.0 | MIT |"}]' \
     > "$files_json"
 
   run_obligation_index "$fixture_root" "$files_json" "$output_file"
@@ -5429,7 +5430,7 @@ write_declared_version() {
   local declared_version="$2"
 
   printf '<Project>\n  <PropertyGroup>\n    <VersionPrefix>%s</VersionPrefix>\n  </PropertyGroup>\n</Project>\n' \
-    "$declared_version" > "$fixture_root/Directory.Build.props"
+    "$declared_version" > "$fixture_root/Version.props"
 }
 
 assert_release_tag() {
@@ -5499,6 +5500,28 @@ release_tag_assertion_refuses_a_version_the_commit_does_not_declare() {
   fi
 
   assert_contains '<VersionPrefix>0.2.0</VersionPrefix>' "$output_file"
+}
+
+# A tag from before the version left `Directory.Build.props` for a root `Version.props` points at a commit carrying no
+# such file at all. That is the same failure as a commit declaring a different version — the tree does not say what the
+# tag claims — so it has to arrive as this script's own message naming the tag rather than as git's `path does not
+# exist` under `set -o pipefail`, which would end the run before the reader learned which tag was refused.
+release_tag_assertion_refuses_a_commit_that_declares_no_version_at_all() {
+  local fixture_root="$test_directory/release-undeclared-version"
+  local output_file="$test_directory/release-undeclared-version-output"
+
+  create_release_fixture "$fixture_root" '0.2.0' $'\n### Added\n\n- Something an operator notices.\n'
+  git -C "$fixture_root" rm --quiet Version.props
+  git -C "$fixture_root" commit --quiet -m 'a tree from before the version moved to its own file'
+  git -C "$fixture_root" update-ref refs/remotes/origin/main refs/heads/main
+  git -C "$fixture_root" tag --annotate v0.2.0 --message 'MailFathom 0.2.0'
+
+  if assert_release_tag "$fixture_root" 'v0.2.0' "$output_file"; then
+    printf 'assert-release-tag.sh released a commit that declares no version at all\n' >&2
+    return 1
+  fi
+
+  assert_contains 'declares <VersionPrefix>nothing</VersionPrefix>' "$output_file"
 }
 
 release_tag_assertion_refuses_a_commit_that_never_merged() {
@@ -6789,38 +6812,38 @@ the_reviewer_resolves_one_claude_credential_everywhere() {
   fi
 }
 
-# `tools/` holds development tooling that must never ship. `tools/SyntheticMail` fabricates mail and
-# submits it under a stored credential, which is not an operator capability and has no business in
-# `mfctl`, in the container image, or in a release asset. Being outside `backend/src/` is what makes that true
-# today — the release publishes `backend/src/Cli/Cli.csproj` by name and the image's build context is an
-# allow-list — and this is what keeps it true: three ways the boundary could be crossed, each checked
-# rather than trusted to a convention nobody restates.
+# `backend/tools/` holds development tooling that must never ship. `backend/tools/SyntheticMail`
+# fabricates mail and submits it under a stored credential, which is not an operator capability and has
+# no business in `mfctl`, in the container image, or in a release asset. Being outside `backend/src/` is
+# what makes that true today — the release publishes `backend/src/Cli/Cli.csproj` by name and the image's
+# build context is an allow-list — and this is what keeps it true: three ways the boundary could be
+# crossed, each checked rather than trusted to a convention nobody restates.
 the_development_tooling_never_reaches_a_published_artifact() {
   local failures=''
   local offenders
 
-  # A project under backend/src/ referencing one under tools/ would put the tool in whatever that project
-  # publishes, image and command binaries alike.
+  # A project under backend/src/ referencing one under backend/tools/ would put the tool in whatever that
+  # project publishes, image and command binaries alike.
   offenders="$(grep -rlE 'ProjectReference[^>]*tools[/\\]' "$source_repository_root/backend/src" || true)"
 
   if [[ -n "$offenders" ]]; then
-    failures+="these projects under backend/src/ reference tools/: $(tr '\n' ' ' <<< "$offenders"). "
+    failures+="these projects under backend/src/ reference backend/tools/: $(tr '\n' ' ' <<< "$offenders"). "
   fi
 
-  # A workflow *step* naming a path under tools/ would build, publish, or attach it as part of a
+  # A workflow *step* naming a path under backend/tools/ would build, publish, or attach it as part of a
   # channel. A `paths-filter` entry is the one legitimate mention and reads as a quoted glob on a
   # list item of its own: it decides which jobs a change starts, which is the opposite of publishing.
   offenders="$(grep -rn 'tools/' "$source_repository_root/.github/workflows" |
-    grep -vE ":[[:space:]]*-[[:space:]]*'tools/\*\*'$" |
+    grep -vE ":[[:space:]]*-[[:space:]]*'backend/tools/\*\*'$" |
     grep -vE ":[[:space:]]*#" || true)"
 
   if [[ -n "$offenders" ]]; then
-    failures+="these workflow lines name a path under tools/ outside a change filter: $(tr '\n' ' ' <<< "$offenders"). "
+    failures+="these workflow lines name a path under backend/tools/ outside a change filter: $(tr '\n' ' ' <<< "$offenders"). "
   fi
 
   # The image's build context is an allow-list, so the tool reaches it only if a line says so.
-  if grep -qE '^!/tools' "$source_repository_root/deploy/docker/Dockerfile.dockerignore"; then
-    failures+='deploy/docker/Dockerfile.dockerignore admits tools/ into the container build context. '
+  if grep -qE '^!/backend/tools' "$source_repository_root/deploy/docker/Dockerfile.dockerignore"; then
+    failures+='deploy/docker/Dockerfile.dockerignore admits backend/tools/ into the container build context. '
   fi
 
   if [[ -n "$failures" ]]; then
@@ -7015,7 +7038,7 @@ every_shell_script_carries_the_license_header() {
 # A skill states the same three facts as frontmatter, because the Agent Skills specification already
 # defines where a skill declares its license and leaves `metadata` open for the rest. A comment above
 # the frontmatter would be read as content by every client that parses one. No version key joins
-# them: `<VersionPrefix>` in `Directory.Build.props` is the only version number in this repository.
+# them: `<VersionPrefix>` in `Version.props` is the only version number in this repository.
 every_skill_declares_its_license() {
   local file frontmatter holder repository failures=0
 
@@ -7077,7 +7100,7 @@ no_tracked_text_file_carries_a_nul_byte() {
   # indistinguishable from a clean tree, and the extension list this check exists to avoid would leave
   # every one of these three out. The fourth is the declared-binary case, which has to stay out or
   # every image in the repository fails.
-  for file in MailFathom.slnx deploy/quadlet/mailfathom.container docfx/template/public/main.css; do
+  for file in backend/MailFathom.slnx deploy/quadlet/mailfathom.container docfx/template/public/main.css; do
     if ! grep -qxF "$file" <<< "$text_files"; then
       printf '%s is not among the tracked text files the sweep read\n' "$file" >&2
       failures=$(( failures + 1 ))
@@ -7291,6 +7314,7 @@ run_test release_tag_assertion_accepts_a_tag_that_matches_its_commit
 run_test release_tag_assertion_refuses_a_prerelease_tag
 run_test release_tag_assertion_refuses_a_lightweight_tag
 run_test release_tag_assertion_refuses_a_version_the_commit_does_not_declare
+run_test release_tag_assertion_refuses_a_commit_that_declares_no_version_at_all
 run_test release_tag_assertion_refuses_a_commit_that_never_merged
 run_test release_tag_assertion_accepts_a_patch_from_a_release_branch
 run_test release_tag_assertion_refuses_a_version_already_released_on_its_line

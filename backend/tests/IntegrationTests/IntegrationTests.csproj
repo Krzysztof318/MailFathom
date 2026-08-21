@@ -56,6 +56,6 @@
          besides the development command itself, and it references the tool rather than keeping a second builder,
          because two of them would drift and the mail this suite synchronizes would stop resembling the mail a
          developer fills a mailbox with. Nothing under backend/src/ references this project and nothing may. -->
-    <ProjectReference Include="..\..\..\tools\SyntheticMail\SyntheticMail.csproj" />
+    <ProjectReference Include="..\..\tools\SyntheticMail\SyntheticMail.csproj" />
   </ItemGroup>
 </Project>

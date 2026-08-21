@@ -46,9 +46,9 @@ git clone https://github.com/<you>/MailFathom.git
 cd MailFathom
 git remote add upstream https://github.com/Krzysztof318/MailFathom.git
 git fetch upstream main
-dotnet restore MailFathom.slnx
-dotnet build MailFathom.slnx --no-restore
-dotnet test MailFathom.slnx --no-build
+dotnet restore backend/MailFathom.slnx
+dotnet build backend/MailFathom.slnx --no-restore
+dotnet test backend/MailFathom.slnx --no-build
 ```
 
 **The `upstream` remote is not optional.** Every gate here verifies your branch against the base it will actually merge into, and in your fork `origin/main` is whatever you last synced. The scripts find that base by looking for the remote that points at `Krzysztof318/MailFathom` — under any name, `upstream` is just the convention — and the full gate refuses to run rather than measure your work against the wrong base. Its refusal prints the two commands above.
@@ -162,7 +162,7 @@ One check does not wait, and seeing it move alone is not a sign that the rest ar
 Two checks gate the merge and both always report once the run is approved:
 
 - **`Required CI`** — the build, the unit tests, the coverage threshold, and formatting.
-- **`Protected paths`** — refuses a change from anyone but the repository owner to `.github/`, `.agents/`, `.claude/`, `.config/`, or `docs/decisions/`, to an `.editorconfig`, `.gitattributes`, `.worktreeinclude`, `AGENTS.md`, or `CLAUDE.md` at any depth, or to the repository-root `CHANGELOG.md`, `CLA.md`, `Directory.Build.props`, `LICENSE`, `NOTICE`, `NuGet.config`, or `global.json`. Those decide how every other change is judged rather than being judged by it, so a change to one is a separate conversation rather than a line inside a feature's diff. `docs/decisions/` is there for that reason and not because it is documentation: an architectural decision record is what the next change is written to be consistent with, so proposing a new one or a change to an existing one belongs in an issue. The check names the protected paths it found either way, so a passing run tells you which ones your change moved. If your work genuinely needs one — a new local tool, a coverage setting, a package pin, a workflow step — split it out and ask. A word for the typo checker's vocabulary is the exception, and the paragraph below says how to add one.
+- **`Protected paths`** — refuses a change from anyone but the repository owner to `.github/`, `.agents/`, `.claude/`, `.config/`, or `docs/decisions/`, to an `.editorconfig`, `.gitattributes`, `.worktreeinclude`, `AGENTS.md`, `CLAUDE.md`, or `Directory.Build.props` at any depth, or to the repository-root `CHANGELOG.md`, `CLA.md`, `LICENSE`, `NOTICE`, `NuGet.config`, `Version.props`, or `global.json`. Those decide how every other change is judged rather than being judged by it, so a change to one is a separate conversation rather than a line inside a feature's diff. `docs/decisions/` is there for that reason and not because it is documentation: an architectural decision record is what the next change is written to be consistent with, so proposing a new one or a change to an existing one belongs in an issue. The check names the protected paths it found either way, so a passing run tells you which ones your change moved. If your work genuinely needs one — a new local tool, a coverage setting, a package pin, a workflow step — split it out and ask. A word for the typo checker's vocabulary is the exception, and the paragraph below says how to add one.
 
 A third check, **`Typo check`**, runs on every pull request that is not a draft and spell-checks the files you changed, annotating each finding in the Files changed view. It gates nothing, so a red one does not block the merge — fix what it names, or, if it flagged a word this project uses on purpose or a misspelling that is deliberate, say so in the pull request. The vocabulary it reads is `.config/typos.toml`; add the word there with a line explaining which of the two it is, and expect `Protected paths` above to turn red for it, because that file sits under a prefix only the owner may change. That is the check reporting what your change moved rather than a refusal to take the word — the owner is the one who merges it either way.
 

@@ -324,12 +324,12 @@ emit_register() {
 }
 
 dependency_pins_changed='false'
-if grep -qxF 'Directory.Packages.props' "$work_directory/changed-paths" \
+if grep -qxF 'backend/Directory.Packages.props' "$work_directory/changed-paths" \
   || grep -qE '(^|/)packages\.lock\.json$' "$work_directory/changed-paths"; then
   dependency_pins_changed='true'
 fi
 
-emit_register 'a dependency pin moved in Directory.Packages.props or a packages.lock.json' \
+emit_register 'a dependency pin moved in backend/Directory.Packages.props or a packages.lock.json' \
   'THIRD_PARTY_LICENSES.md' "$dependency_pins_changed"
 
 exception_added='false'

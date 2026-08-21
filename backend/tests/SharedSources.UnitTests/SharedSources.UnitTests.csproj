@@ -30,6 +30,6 @@
     <ProjectReference Include="..\..\src\Common\Common.csproj" />
 
     <!-- LargeSyntheticMessage from backend/tests/shared draws its message from the repository's own deterministic generator. -->
-    <ProjectReference Include="..\..\..\tools\SyntheticMail\SyntheticMail.csproj" />
+    <ProjectReference Include="..\..\tools\SyntheticMail\SyntheticMail.csproj" />
   </ItemGroup>
 </Project>

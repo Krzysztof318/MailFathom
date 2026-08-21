@@ -124,7 +124,7 @@ dotnet ef migrations add "$migration_name" \
 # header would fail. The solution is the scope and the files are named individually: an --include filter evaluated
 # against another project's workspace silently matches nothing, and so does one given a directory.
 report 'Writing the copyright and license header into the generated files.'
-dotnet format MailFathom.slnx --no-restore --include "$migrations_directory"/*.cs
+dotnet format backend/MailFathom.slnx --no-restore --include "$migrations_directory"/*.cs
 
 report 'Generated. Review it as SQL, then apply it to the orchestrated database:'
 printf '\n    scripts/script-migration.sh %s\n' "$migration_this_one_follows"

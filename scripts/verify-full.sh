@@ -34,8 +34,8 @@ names_shared_style_input() {
   for changed_path in "$@"; do
     case "$changed_path" in
       .editorconfig | */.editorconfig) return 0 ;;
-      Directory.Build.props | Directory.Build.targets | Directory.Packages.props) return 0 ;;
-      global.json | MailFathom.slnx) return 0 ;;
+      backend/Directory.Build.props | backend/Directory.Build.targets | backend/Directory.Packages.props) return 0 ;;
+      global.json | backend/MailFathom.slnx) return 0 ;;
     esac
   done
 
@@ -156,8 +156,8 @@ else
   (
     set -e
     dotnet tool restore
-    dotnet restore MailFathom.slnx --locked-mode
-    dotnet build MailFathom.slnx --configuration Release --no-restore
+    dotnet restore backend/MailFathom.slnx --locked-mode
+    dotnet build backend/MailFathom.slnx --configuration Release --no-restore
     dotnet msbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release
 
     # Verifying rather than repairing, which is the whole difference between this gate and the fast
@@ -170,7 +170,7 @@ else
     # rather than a push. A shared style input is the exception, because it changes the answer for
     # files this branch never opened, and it is the one case that still costs the whole solution.
     if names_shared_style_input "${touched_other_paths[@]}"; then
-      dotnet format MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic
+      dotnet format backend/MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic
     elif ((${#changed_csharp_files[@]} > 0)); then
       # The one case the loop settles for this gate. Its repairing pass is the same tool over the
       # same file set from the same `list_changed_paths`, and a record exists only where that pass
@@ -182,7 +182,7 @@ else
         printf 'Formatting: the fast loop repaired exactly this content at %s without rewriting a file, so the verifying pass over the same files is skipped.\n' \
           "$(verification_recorded_at 'verify-fast')"
       else
-        dotnet format MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic \
+        dotnet format backend/MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic \
           --include "${changed_csharp_files[@]}"
       fi
     fi

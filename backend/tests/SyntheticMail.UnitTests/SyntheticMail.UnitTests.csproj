@@ -13,6 +13,6 @@
        .config/testconfig.json excludes its assembly by name. The tests are as binding as any other suite regardless —
        the generator's determinism is the whole promise the tool makes, and it is not something a reader can check. -->
   <ItemGroup>
-    <ProjectReference Include="..\..\..\tools\SyntheticMail\SyntheticMail.csproj" />
+    <ProjectReference Include="..\..\tools\SyntheticMail\SyntheticMail.csproj" />
   </ItemGroup>
 </Project>

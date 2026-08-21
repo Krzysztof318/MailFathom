@@ -7,7 +7,7 @@ set -euo pipefail
 
 ### Prints the version MailFathom declares, so nothing that names an artifact has to restate it.
 #
-# `Directory.Build.props` is the one place a version number is written, per
+# `Version.props` is the one place a version number is written, per
 # docs/decisions/0004-versioning-and-release-policy.md. Every build path that has to put that number somewhere — an
 # image tag, an OCI label, a chart's appVersion, a release tag — reads it from here rather than from a literal of its
 # own, so the artifact and the assemblies inside it cannot disagree.
@@ -23,7 +23,7 @@ set -euo pipefail
 # The file is parsed rather than evaluated through MSBuild deliberately: this has to answer before a restore, on a
 # machine that may have no SDK at all, and reading one element is not worth a workspace load.
 
-readonly version_prefix_file='Directory.Build.props'
+readonly version_prefix_file='Version.props'
 
 if ! repository_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
   # Not every caller runs inside a worktree — the container build context carries no .git — so the script falls back to

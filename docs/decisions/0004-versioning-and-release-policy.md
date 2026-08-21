@@ -9,7 +9,7 @@ informed:
 
 # Version the four public surfaces with SemVer, stamp builds from one declared prefix, and cut a release with a Git tag
 
-<!-- describes: Directory.Build.props, scripts/read-declared-version.sh, scripts/assert-release-tag.sh, deploy/docker/Dockerfile, deploy/helm/mailfathom/Chart.yaml -->
+<!-- describes: Version.props, scripts/read-declared-version.sh, scripts/assert-release-tag.sh, deploy/docker/Dockerfile, deploy/helm/mailfathom/Chart.yaml -->
 
 ## Context and Problem Statement
 
@@ -99,7 +99,7 @@ The most consequential clause is about data. A schema change is a new migration,
 
 ### Where the number comes from
 
-`<VersionPrefix>` in `Directory.Build.props` is the only place in the repository where a version number is written. Everything else is derived there, centrally, for every project: `Version`, `AssemblyVersion`, `FileVersion`, and `InformationalVersion`, the last carrying the commit SHA through `SourceRevisionId`. No project sets a version of its own, and no code restates one as a literal — the runtime reads it from assembly metadata, which is issue 119's obligation.
+`<VersionPrefix>` in `Version.props` is the only place in the repository where a version number is written. Everything else is derived there, centrally, for every project: `Version`, `AssemblyVersion`, `FileVersion`, and `InformationalVersion`, the last carrying the commit SHA through `SourceRevisionId`. No project sets a version of its own, and no code restates one as a literal — the runtime reads it from assembly metadata, which is issue 119's obligation. The file sits at the repository root and each stack's `Directory.Build.props` imports it, because the number is the one build property every stack has to agree on; it was declared inside the .NET stack's own `Directory.Build.props` until a second stack arrived beside it.
 
 Continuous integration contributes exactly two inputs, `VersionSuffix` and `SourceRevisionId`, which yields four build kinds:
 

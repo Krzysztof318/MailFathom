@@ -71,7 +71,7 @@ jobs:
 
           aspire_version="$(
             sed -n 's:.*<PackageVersion Include="Aspire.Hosting.AppHost" Version="\([^"]*\)".*:\1:p' \
-              Directory.Packages.props | head -n 1
+              backend/Directory.Packages.props | head -n 1
           )"
 
           dotnet tool install --global Aspire.Cli --version "$aspire_version"

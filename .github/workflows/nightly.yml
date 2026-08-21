@@ -247,10 +247,10 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
 
       - name: Restore dependencies
-        run: dotnet restore MailFathom.slnx --locked-mode
+        run: dotnet restore backend/MailFathom.slnx --locked-mode
 
       # Release, because a benchmark of a debug build measures the compiler rather than the code, and the harness
       # refuses to run against one.

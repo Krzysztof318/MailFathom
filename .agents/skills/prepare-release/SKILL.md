@@ -26,7 +26,7 @@ not happen.
 
 ## What the version is
 
-Read, never asked for. The version being released is the `VersionPrefix` declared in `Directory.Build.props`, because
+Read, never asked for. The version being released is the `VersionPrefix` declared in `Version.props`, because
 that is the number the build already stamps into every assembly and every artifact; asking would let this skill name a
 release the build would not produce. The `version` in `server.json` always records the latest stable MailFathom
 release instead; it is brought onto the release version in step 4, is the version published to the official MCP
@@ -480,7 +480,7 @@ steps it exists to track are still outstanding. The pair therefore reads as `[#3
 `[#398] Bump main version to 0.4.0` in the pull-request list, which says which one is the release and which one follows
 it without either being opened.
 
-On a second branch off the release branch, raise `<VersionPrefix>` in `Directory.Build.props` to the next version from
+On a second branch off the release branch, raise `<VersionPrefix>` in `Version.props` to the next version from
 the table above. That property is the only place a version is *written*: the image's tags and labels arrive as build
 arguments, and the chart's `version` and `appVersion` are both supplied at package time from the same declaration.
 
@@ -494,7 +494,7 @@ version the tree no longer has. They are part of this diff, and of no other: thi
 they record stops being true.
 
 ```bash
-dotnet restore MailFathom.slnx --force-evaluate
+dotnet restore backend/MailFathom.slnx --force-evaluate
 git diff -U0 -- '**/packages.lock.json' | grep -E '^[+-][^+-]' | grep -v 'MailFathom\.'
 ```
 
