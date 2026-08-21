@@ -13,7 +13,7 @@ namespace MailFathom.Benchmarks;
 /// <remarks>
 /// <para>
 /// The run is in process. BenchmarkDotNet's default toolchain writes a project of its own beside the output and builds
-/// it, and a generated project inside this repository inherits <c>Directory.Build.props</c> — every analyzer, warnings
+/// it, and a generated project inside this repository inherits <c>backend/Directory.Build.props</c> — every analyzer, warnings
 /// as errors, and a documentation file it has no comments for — so the build of the harness fails before a single
 /// measurement is taken. Running in process removes the generated project rather than exempting it, at the cost the
 /// library warns about: the measurement shares a process with the harness, so it is less isolated than a separate one.

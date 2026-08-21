@@ -79,7 +79,10 @@ if [[ -z "$reachable_from" ]]; then
   fail "$release_tag points at $tagged_commit, which is reachable from neither origin/main nor any origin/release/* branch. A release is published from reviewed history, so a tag on a commit that never merged is refused rather than built."
 fi
 
-declared_version="$(git show "$tagged_commit:Directory.Build.props" |
+# A commit that carries no Version.props at all is the same failure as one declaring a different version, so `git show`
+# is allowed to fail into the empty answer the message below already reports rather than aborting the script with git's
+# own error. Under `pipefail` an unguarded failure here would end the run before it named the tag.
+declared_version="$({ git show "$tagged_commit:Version.props" || true; } |
   sed -n 's:.*<VersionPrefix>\([^<]*\)</VersionPrefix>.*:\1:p' | head -n 1)"
 
 if [[ "$declared_version" != "$release_version" ]]; then

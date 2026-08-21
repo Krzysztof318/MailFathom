@@ -1,6 +1,6 @@
 # The release procedure
 
-<!-- describes: Directory.Build.props, server.json, .github/workflows/release.yml, .github/workflows/publish-helm-chart.yml, .github/workflows/submit-winget-manifest.yml, scripts/assert-release-tag.sh, scripts/read-declared-version.sh, scripts/build-winget-manifests.sh, .agents/skills/prepare-release/SKILL.md -->
+<!-- describes: Version.props, server.json, .github/workflows/release.yml, .github/workflows/publish-helm-chart.yml, .github/workflows/submit-winget-manifest.yml, scripts/assert-release-tag.sh, scripts/read-declared-version.sh, scripts/build-winget-manifests.sh, .agents/skills/prepare-release/SKILL.md -->
 
 MailFathom's version number is a compatibility promise over four public surfaces. This page records how a build
 acquires that number, how the official MCP Registry metadata records the released one, where both are observable, and
@@ -10,7 +10,7 @@ records why the build and release use their declared version and tag.
 
 ## Where the number comes from
 
-`<VersionPrefix>` in `Directory.Build.props` is the only place where a version is declared for the build. Every project
+`<VersionPrefix>` in `Version.props` is the only place where a version is declared for the build. Every project
 derives `Version`, `AssemblyVersion`, `FileVersion`, and `InformationalVersion` from it centrally, and no project sets a
 version of its own. The top-level `version` in `server.json` serves a different purpose: it always records the latest
 stable MailFathom release and the version published to the official MCP Registry, so it remains on the current release
@@ -42,7 +42,7 @@ scripts/read-declared-version.sh              # 0.1.0
 scripts/read-declared-version.sh nightly.41-3f1c9ab   # 0.1.0-nightly.41-3f1c9ab
 ```
 
-The script parses `Directory.Build.props` rather than evaluating it through MSBuild, so it works inside a container
+The script parses `Version.props` rather than evaluating it through MSBuild, so it works inside a container
 build context and on a machine with nothing restored. It rejects a prefix that is not a three-part version, because
 Helm accepts nothing else for `version` and `appVersion`, and a suffix that is not a SemVer prerelease identifier,
 because an OCI tag would reject it later and further from the cause.
@@ -240,7 +240,7 @@ unavailable:
 
    It also brings the lock files with it. Each `packages.lock.json` records the version of every `MailFathom.*`
    project it references, so raising the declaration leaves them naming the release just published;
-   `dotnet restore MailFathom.slnx --force-evaluate` rewrites them, and the diff is confirmed to hold nothing but
+   `dotnet restore backend/MailFathom.slnx --force-evaluate` rewrites them, and the diff is confirmed to hold nothing but
    those project lines. Nothing gates that half, because locked-mode restore does not compare a project reference's
    version — which is why skipping it costs the next dependency change rather than this one, where a regeneration
    would otherwise carry the skipped bumps beside the pin that was actually moved.

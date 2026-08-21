@@ -27,7 +27,7 @@ files, and the single `dotnet format` pass it runs is a repairing one.
 Formatting is skipped when the branch changed no C# file.
 
 There is no verifying pass behind it, because the build in front of it has
-already made that report. `Directory.Build.props` sets `EnforceCodeStyleInBuild`
+already made that report. `backend/Directory.Build.props` sets `EnforceCodeStyleInBuild`
 beside `TreatWarningsAsErrors`, and `.editorconfig` gives the IDE rules severity
 `warning`, so a file with an unnecessary using, a missing licensing header, or
 formatting the rules reject fails the Release build with `error IDE0005`,
@@ -104,9 +104,9 @@ property of a file, so those are the files this branch can have broken, and
 everything else was verified by whatever change last touched it — the same
 argument `ci.yml` makes when it asks a pull request rather than a push. The one
 change that moves the answer for a file nobody opened is a change to a shared
-style input: an `.editorconfig` at any depth, `Directory.Build.props`,
-`Directory.Build.targets`, `Directory.Packages.props`, `global.json`, or
-`MailFathom.slnx`. Removing one counts, and is the half a list of the files that
+style input: an `.editorconfig` at any depth, `backend/Directory.Build.props`,
+`backend/Directory.Build.targets`, `backend/Directory.Packages.props`, `global.json`, or
+`backend/MailFathom.slnx`. Removing one counts, and is the half a list of the files that
 still exist cannot see: the rules a nested `.editorconfig` carried stop applying
 the moment it is gone, and every file beneath it is then read against the ones
 above without having been touched. That case, and only it, still verifies the
@@ -2004,7 +2004,7 @@ while sitting in a tree a reader takes as fact.
 - `NU1004: The packages lock file is inconsistent with the project dependencies`
   means a pin moved without the lock files being regenerated. Both scripts
   restore in locked mode, so this is the intended result rather than a tooling
-  fault. Run `dotnet restore MailFathom.slnx --force-evaluate`, review the
+  fault. Run `dotnet restore backend/MailFathom.slnx --force-evaluate`, review the
   transitive changes it writes, stage them with the pin, and rerun.
 - `.NET SDK: unavailable` means the `global.json` SDK selection failed. Install
   the pinned SDK and confirm `dotnet --version` before verification.

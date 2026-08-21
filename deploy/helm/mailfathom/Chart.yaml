@@ -26,7 +26,7 @@ type: application
 # The two carry one number rather than two. A published chart version is immutable and a packaged chart embeds its
 # `appVersion`, so every release produces chart content that has to be published under a new chart version; a version
 # counting edits to this directory would need bumping on every release anyway, and would leave an operator mapping two
-# numbers onto one artifact. `<VersionPrefix>` in `Directory.Build.props` stays the only place in this repository where
+# numbers onto one artifact. `<VersionPrefix>` in `Version.props` stays the only place in this repository where
 # a version is written — see docs/operations/release-procedure.md.
 version: 0.0.0
 

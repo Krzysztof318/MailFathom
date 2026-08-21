@@ -71,16 +71,16 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
 
       - name: Restore dependencies
-        run: dotnet restore MailFathom.slnx --locked-mode
+        run: dotnet restore backend/MailFathom.slnx --locked-mode
 
       - name: Restore local tools
         run: dotnet tool restore
 
       - name: Build solution
-        run: dotnet build MailFathom.slnx --configuration Release --no-restore
+        run: dotnet build backend/MailFathom.slnx --configuration Release --no-restore
 
       - name: Run unit tests and enforce code coverage
         run: dotnet msbuild .config/CodeCoverage.proj -t:Collect
@@ -128,13 +128,13 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
 
       - name: Restore dependencies
-        run: dotnet restore MailFathom.slnx --locked-mode
+        run: dotnet restore backend/MailFathom.slnx --locked-mode
 
       - name: Verify formatting
-        run: dotnet format MailFathom.slnx --verify-no-changes --verbosity diagnostic
+        run: dotnet format backend/MailFathom.slnx --verify-no-changes --verbosity diagnostic
 
   pending-model-changes:
     name: Pending model changes
@@ -161,10 +161,10 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
 
       - name: Restore dependencies
-        run: dotnet restore MailFathom.slnx --locked-mode
+        run: dotnet restore backend/MailFathom.slnx --locked-mode
 
       - name: Restore local tools
         run: dotnet tool restore

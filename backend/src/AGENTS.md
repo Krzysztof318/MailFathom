@@ -18,7 +18,7 @@ Some of the rules below are enforced by the build rather than by a reader. Those
 Add a mechanically checkable rule to the mechanism, not to this file: a severity in `.editorconfig` when an analyzer already covers it, a line in `.config/BannedSymbols.txt` when the rule is "never call this". Prose here is for what a tool cannot decide — architecture, naming, and the reasoning behind a constraint. When a rule appears in both places, the tool is authoritative and this file explains why the rule exists.
 
 - Target .NET 10 and use idiomatic modern C# supported by the pinned SDK.
-- Keep the SDK version in `global.json`. Shared compiler and build settings belong in `Directory.Build.props`; shared package versions belong in `Directory.Packages.props`.
+- Keep the SDK version in `global.json`. Shared compiler and build settings belong in `backend/Directory.Build.props`; shared package versions belong in `backend/Directory.Packages.props`.
 - Enable nullable reference types, implicit usings, deterministic builds, .NET analyzers, and code-style enforcement during builds.
 - Treat compiler and analyzer warnings as errors in repository code. Suppress a diagnostic only at the narrowest scope and document the concrete reason.
 - Maintain one repository `.editorconfig` and let automated formatting define whitespace and layout. Do not hand-format against configured rules.

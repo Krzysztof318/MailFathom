@@ -48,14 +48,14 @@ fi
 # Locked mode here and not only in the final gate, for the same reason formatting runs here: a pin
 # moved without regenerating the lock files fails restore with NU1004, and discovering that after the
 # whole coverage collection has already run wastes the loop this script exists to shorten. Regenerate
-# with `dotnet restore MailFathom.slnx --force-evaluate` as part of the change that moves the pin.
-dotnet restore MailFathom.slnx --locked-mode
-dotnet build MailFathom.slnx --configuration Release --no-restore
-dotnet test --solution MailFathom.slnx --configuration Release --no-build
+# with `dotnet restore backend/MailFathom.slnx --force-evaluate` as part of the change that moves the pin.
+dotnet restore backend/MailFathom.slnx --locked-mode
+dotnet build backend/MailFathom.slnx --configuration Release --no-restore
+dotnet test --solution backend/MailFathom.slnx --configuration Release --no-build
 
 # One pass, and a repairing one, because this is the only step in either gate that rewrites a file
 # rather than reporting on it. What it repairs is the part of formatting the build cannot see:
-# `Directory.Build.props` sets `EnforceCodeStyleInBuild` beside `TreatWarningsAsErrors` and
+# `backend/Directory.Build.props` sets `EnforceCodeStyleInBuild` beside `TreatWarningsAsErrors` and
 # `.editorconfig` gives the IDE rules severity `warning`, so the Release build above already fails on
 # `IDE0055`, `IDE0005`, and `IDE0073` with the file and line — while the ordering of using directives
 # and a missing final newline are `dotnet format`'s own passes and appear nowhere in a build.
@@ -78,7 +78,7 @@ fi
 mapfile -t changed_csharp_files < <(printf '%s\n' "$changed_paths" | grep -E '\.cs$' | sort --unique)
 
 if ((${#changed_csharp_files[@]} > 0)); then
-  dotnet format MailFathom.slnx --no-restore --include "${changed_csharp_files[@]}"
+  dotnet format backend/MailFathom.slnx --no-restore --include "${changed_csharp_files[@]}"
 fi
 
 # Records nothing when that pass rewrote a file, because the build and the tests above ran against

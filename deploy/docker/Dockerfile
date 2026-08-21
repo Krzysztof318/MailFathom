@@ -44,7 +44,7 @@ ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
 WORKDIR /source
 
 # The two inputs continuous integration contributes to the stamped version, and the only two. The number itself is
-# declared in Directory.Build.props, which the context below carries, so nothing here can name a version the build
+# declared in Version.props, which the context below carries, so nothing here can name a version the build
 # would not stamp — see docs/decisions/0004-versioning-and-release-policy.md.
 #
 # `IMAGE_REVISION` is deliberately the same argument the runtime stage labels the image with, so the commit the
@@ -59,9 +59,11 @@ ARG IMAGE_REVISION=unknown
 ARG VERSION_SUFFIX=
 
 # The restore inputs first, so editing a `.cs` file does not invalidate the restore layer. The lock files travel with
-# the projects under backend/src/.
-COPY Directory.Build.props Directory.Packages.props NuGet.config global.json .editorconfig ./
+# the projects under backend/src/. The .NET build contract sits under backend/ beside them and the version it imports
+# sits at the root, so both halves are copied to the places the build resolves them from.
+COPY NuGet.config global.json .editorconfig Version.props ./
 COPY .config/BannedSymbols.txt .config/
+COPY backend/Directory.Build.props backend/Directory.Packages.props backend/
 COPY backend/src/ backend/src/
 
 # Locked mode, like every other gate in this repository. The committed packages.lock.json files fix the transitive
@@ -108,7 +110,7 @@ FROM ${DOTNET_ASPNET_IMAGE} AS runtime
 # running process reports are the same build rather than two claims about it.
 #
 # `IMAGE_VERSION` has no useful default and its placeholder says so: the version is declared once, in
-# Directory.Build.props, and `scripts/read-declared-version.sh` is what every build reads it with. A default that named
+# Version.props, and `scripts/read-declared-version.sh` is what every build reads it with. A default that named
 # a real version here would be a second place to remember, which is the failure ADR 0004 exists to avoid. An image
 # labelled 0.0.0-unversioned is therefore one nobody passed a version to, and is not publishable.
 ARG IMAGE_VERSION=0.0.0-unversioned

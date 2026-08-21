@@ -1,0 +1,28 @@
+<Project>
+  <!-- The one place in the repository where a version number is written, as docs/decisions/0004-versioning-and-release-policy.md
+       records. It sits at the repository root rather than inside a stack because both stacks report it: the service and
+       the client ship together, and a bug report that named two numbers would be describing one product twice. Each
+       stack's own Directory.Build.props imports this file, so the number reaches every assembly without either stack
+       owning it.
+
+       It names the *next* release rather than the last one, so every build from main is a preview of what the next tag
+       will carry, and raising it is a reviewed diff rather than a tag typed from a shell.
+
+       Continuous integration contributes the two properties this file does not carry, and nothing else. VersionSuffix
+       turns a build into a prerelease of this same version — `nightly.<run number>` — and SourceRevisionId appends
+       `+<sha>` to InformationalVersion, which is what lets a running process name the commit it was built from. Neither
+       is set here, and neither has to be: a build inside a worktree resolves the revision through the SDK's source-link
+       support, and a build without one carries whatever its caller passed. No Git *tag* is read at any point, so a
+       shallow clone stamps the same version as a full one and the silent 0.0.0 that a tag-derived scheme produces
+       cannot occur.
+
+       AssemblyVersion and FileVersion are stated rather than left to the SDK because they must never carry the
+       prerelease suffix: both are numeric-only fields, and a nightly and the release it previews are deliberately the
+       same assembly identity. InformationalVersion is left to the SDK, which is what composes VersionPrefix,
+       VersionSuffix, and SourceRevisionId into the single string the runtime reports. -->
+  <PropertyGroup>
+    <VersionPrefix>0.8.0</VersionPrefix>
+    <AssemblyVersion>$(VersionPrefix)</AssemblyVersion>
+    <FileVersion>$(VersionPrefix)</FileVersion>
+  </PropertyGroup>
+</Project>

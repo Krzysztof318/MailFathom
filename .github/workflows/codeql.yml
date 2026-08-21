@@ -120,14 +120,14 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
 
       # Before CodeQL initializes, deliberately. Restore compiles nothing, so tracing it would add
       # nothing to the database; keeping it outside the traced window leaves that window holding the
       # compiler invocations alone. `--locked-mode` is what makes the analysed graph the graph the
       # committed lock files fix, rather than whatever resolves on the day.
       - name: Restore dependencies
-        run: dotnet restore MailFathom.slnx --locked-mode
+        run: dotnet restore backend/MailFathom.slnx --locked-mode
 
       # `db-location` is written out rather than left to the action's default, because the step that
       # verifies the database has to name the same directory and a documented default is a weaker
@@ -143,7 +143,7 @@ jobs:
       # The build the pull-request gate runs, minus its restore. CodeQL injects the flags manual mode
       # needs — shared compilation off among them — so nothing here has to ask for them.
       - name: Build solution
-        run: dotnet build MailFathom.slnx --configuration Release --no-restore
+        run: dotnet build backend/MailFathom.slnx --configuration Release --no-restore
 
       - name: Analyze
         uses: github/codeql-action/analyze@v4

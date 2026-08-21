@@ -22,7 +22,7 @@ docfx/api/
 docfx/_site/
 
 # Local configuration a developer writes for their own machine and for nobody else's, beside the tracked example that
-# shows its shape. `tools/SyntheticMail` reads one of these and it holds the password of a throwaway sending account,
+# shows its shape. `backend/tools/SyntheticMail` reads one of these and it holds the password of a throwaway sending account,
 # so the pattern is by suffix rather than by that one name: the next tool that needs a local credential inherits the
 # rule instead of adding a line to it, and a file that was never meant to leave a machine cannot arrive in a pull
 # request because somebody named it something else.

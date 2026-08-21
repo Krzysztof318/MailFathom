@@ -29,7 +29,7 @@ set -euo pipefail
 # error, so a caller can capture the first without filtering the second.
 
 readonly apphost_project='backend/src/AppHost/AppHost.csproj'
-readonly aspire_pin_file='Directory.Packages.props'
+readonly aspire_pin_file='backend/Directory.Packages.props'
 
 if ! repository_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
   printf 'build-schema-artifact.sh must run inside a Git worktree.\n' >&2

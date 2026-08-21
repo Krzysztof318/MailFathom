@@ -502,7 +502,7 @@ Secret was created outside it and stays.
 ### Chart version and application version
 
 **They are one number.** `Chart.yaml` carries `version: 0.0.0` as a placeholder and no `appVersion` at all, and the
-release run supplies both from the `VersionPrefix` in `Directory.Build.props` that is the only file in the repository
+release run supplies both from the `VersionPrefix` in `Version.props` that is the only file in the repository
 carrying an application version:
 
 ```bash

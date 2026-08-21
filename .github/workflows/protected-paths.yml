@@ -22,9 +22,9 @@ name: Protected paths
 #                      `docs/AGENTS.md` and `docs/decisions/README.md` both require the owner's
 #                      approval for an ADR; this line is what asks for it before a reviewer does
 #
-# Five files decide the same thing from wherever they sit, so they are matched by name anywhere in
-# the tree rather than at the repository root. A nested copy of each overrides the root one for its
-# own subtree, and that override — a rule relaxed for one directory, quietly — is the part worth
+# Six files decide the same thing from wherever they sit, so they are matched by name anywhere in
+# the tree rather than at the repository root. A nested copy of each overrides the one above it for
+# its own subtree, and that override — a rule relaxed for one directory, quietly — is the part worth
 # catching:
 #
 #   `.editorconfig`     which analyzer and style diagnostics `TreatWarningsAsErrors` turns into build
@@ -40,6 +40,12 @@ name: Protected paths
 #                       first, so protecting one of the two and not the other protects neither
 #   `CLAUDE.md`         the tracked entry point to those same instructions, which is what `.claude/`
 #                       is to `.agents/`
+#   `Directory.Build.props`
+#                       the analyzer and warning policy every project beneath it inherits, and the
+#                       SPDX and copyright metadata that ships inside the assemblies. It is matched by
+#                       name rather than at one path because each stack owns one — `backend/` has the
+#                       .NET build contract, and a second stack's copy decides the same thing for its
+#                       own subtree
 #
 # The remaining entries are single repository-root files, matched whole. Each is either written by
 # one deliberate flow, so every other edit to it is out of band, or states terms and pins that the
@@ -56,9 +62,6 @@ name: Protected paths
 #                             code was the contributor's to give — would be a change to what this
 #                             repository may do with everything merged after it, proposed by
 #                             somebody it would bind
-#   `Directory.Build.props`   the analyzer and warning policy every project inherits, the declared
-#                             version every build is stamped with, and the SPDX and copyright
-#                             metadata that ships inside the assemblies
 #   `LICENSE`                 the grant MailFathom is distributed under. GitHub detects it by
 #                             matching the file against the known Apache-2.0 text, so any edit at all
 #                             turns a detected `Apache-2.0` into `NOASSERTION`
@@ -67,6 +70,9 @@ name: Protected paths
 #   `NuGet.config`            which feeds a package may come from. It clears the inherited source
 #                             list, so adding a source is a supply-chain and licensing decision
 #                             rather than a configuration tweak
+#   `Version.props`           the declared version every build is stamped with and every artifact is
+#                             named after. It sits at the root because every stack imports it, so an
+#                             edit here moves the number the whole product reports
 #   `global.json`             the SDK pin every build, every gate, and every CI run resolves against
 #
 # A pull request that edits any of them is editing the gate it has to pass, the terms the project is
@@ -144,14 +150,21 @@ jobs:
           set -euo pipefail
 
           protected_prefixes=('.github/' '.agents/' '.claude/' '.config/' 'docs/decisions/')
-          protected_names=('.editorconfig' '.gitattributes' '.worktreeinclude' 'AGENTS.md' 'CLAUDE.md')
+          protected_names=(
+            '.editorconfig'
+            '.gitattributes'
+            '.worktreeinclude'
+            'AGENTS.md'
+            'CLAUDE.md'
+            'Directory.Build.props'
+          )
           protected_files=(
             'CHANGELOG.md'
             'CLA.md'
-            'Directory.Build.props'
             'LICENSE'
             'NOTICE'
             'NuGet.config'
+            'Version.props'
             'global.json'
           )
           protected_paths="${protected_prefixes[*]} ${protected_names[*]} ${protected_files[*]}"

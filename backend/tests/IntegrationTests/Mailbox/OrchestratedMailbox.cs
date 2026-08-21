@@ -401,7 +401,7 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
     /// <summary>Builds one message through the repository's own synthetic-mail generator.</summary>
     /// <remarks>
     /// <para>
-    /// The generator lives in <c>tools/SyntheticMail</c> and is what a developer fills a development mailbox with, so
+    /// The generator lives in <c>backend/tools/SyntheticMail</c> and is what a developer fills a development mailbox with, so
     /// this suite composes through it rather than keeping a second builder of its own: two implementations of "build a
     /// synthetic message" would drift, and the drift would be between the mail this suite proves things about and the
     /// mail anybody actually works against.

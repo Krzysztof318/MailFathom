@@ -77,13 +77,13 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
 
       # Stryker builds the test project itself, and a build implies a restore that would resolve the closure afresh.
       # Restoring the solution in locked mode first makes that implicit restore a no-op against the committed lock files
       # rather than a second opinion about what the pins mean.
       - name: Restore dependencies
-        run: dotnet restore MailFathom.slnx --locked-mode
+        run: dotnet restore backend/MailFathom.slnx --locked-mode
 
       - name: Restore local tools
         run: dotnet tool restore

@@ -11,10 +11,14 @@
 **
 
 !/backend/src
-!/Directory.Build.props
-!/Directory.Packages.props
+!/backend/Directory.Build.props
+!/backend/Directory.Packages.props
 !/NuGet.config
 !/global.json
+
+# The version both stacks report. `backend/Directory.Build.props` imports it from the repository root, so a context
+# that carried the build contract without this file would fail evaluation before the restore.
+!/Version.props
 
 # `EnforceCodeStyleInBuild` and `TreatWarningsAsErrors` are both on, so the analyzer severities decide whether the
 # build succeeds at all. Without these two the container build would apply default severities and fail on diagnostics

@@ -5,7 +5,7 @@
 **Target:** Debian/Ubuntu, .NET 10, single owner, many mail accounts
 **Enterprise posture:** Enterprise-grade architecture, GDPR-ready privacy posture, and future AGT governance seams from the beginning
 
-The product and solution name is `MailFathom`. The repository uses the XML solution format in `MailFathom.slnx`; project directory and file names use short boundary names, while `Directory.Build.props` applies the `MailFathom.*` prefix to assembly names and root namespaces.
+The product and solution name is `MailFathom`. The repository uses the XML solution format in `backend/MailFathom.slnx`; project directory and file names use short boundary names, while `backend/Directory.Build.props` applies the `MailFathom.*` prefix to assembly names and root namespaces.
 
 ## 1. Purpose
 
@@ -32,7 +32,7 @@ The initial public MCP surface is read-only. Sending exists as an application ca
 - Embeddings, chunks, snippets, audit events, and model/tool traces inherit the sensitivity and governance constraints of the source mailbox data unless a reviewed privacy design explicitly proves otherwise.
 - Unit tests are developed from the beginning with xUnit.net v3, Microsoft Testing Platform v2, and NSubstitute.
 - Integration tests are planned for a later phase but are not created in the initial solution.
-- The solution is named `MailFathom`, uses `MailFathom.slnx`, uses short project directory and file names, and applies the `MailFathom.*` prefix consistently to assemblies and root namespaces.
+- The solution is named `MailFathom`, uses `backend/MailFathom.slnx`, uses short project directory and file names, and applies the `MailFathom.*` prefix consistently to assemblies and root namespaces.
 
 ## 2.1 Implementation status
 
@@ -144,10 +144,11 @@ Cli           -> Application plus required adapters when introduced
 
 ```text
 mail-fathom/
-├── MailFathom.slnx
 ├── global.json
-├── Directory.Build.props
-├── Directory.Packages.props
+├── Version.props
+├── backend/MailFathom.slnx
+├── backend/Directory.Build.props
+├── backend/Directory.Packages.props
 ├── README.md
 ├── .editorconfig
 ├── .gitignore
@@ -235,7 +236,7 @@ Each unit-test project references only the production boundary it verifies and t
 | Local orchestration | Aspire AppHost | First-release development-time orchestration and observability for MailFathom and PostgreSQL |
 | Future CLI parser | `System.CommandLine` | Official Microsoft command-line parser for the later `mcpmail` administration CLI |
 
-Package versions are centrally pinned in `Directory.Packages.props`. The .NET SDK is pinned in `global.json`. Shared compiler, analyzer, nullable, documentation, warnings-as-errors, and test-project defaults belong in `Directory.Build.props` wherever they can be expressed once for the repository. Preview Agent Framework packages are acceptable, but every update is explicit and reviewed.
+Package versions are centrally pinned in `backend/Directory.Packages.props`. The .NET SDK is pinned in `global.json`. Shared compiler, analyzer, nullable, documentation, warnings-as-errors, and test-project defaults belong in `backend/Directory.Build.props` wherever they can be expressed once for the repository. Preview Agent Framework packages are acceptable, but every update is explicit and reviewed.
 
 ### 6.1 Unit testing strategy
 
@@ -882,7 +883,7 @@ Stages 6 through 10 are decomposed into issues when the current segment nears co
 - Future ideas are collected separately from first-release scope, including AGT governance evaluation, MinIO migration, `mcpmail`, smtp4dev-backed SMTP delivery verification, policy-driven mail automation, Microsoft 365 interoperability, and a standard mail-client gateway over IMAP and SMTP.
 - The draft identifies personal-data classes, derived-data sensitivity, first-release privacy controls, and deferred GDPR workflows so later compliance implementation has explicit seams.
 - Enterprise-grade posture is visible in boundaries for auditability, governance, privacy, operational hardening, deterministic policy enforcement, and safe failure modes without prematurely adding first-release dependencies.
-- Shared repository settings are centralized in `global.json`, `Directory.Build.props`, and `Directory.Packages.props` whenever possible instead of being repeated in individual projects.
+- Shared repository settings are centralized in `global.json`, `backend/Directory.Build.props`, and `backend/Directory.Packages.props` whenever possible instead of being repeated in individual projects.
 
 ## 24. References verified for this draft
 
