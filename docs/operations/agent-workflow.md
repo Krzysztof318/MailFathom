@@ -542,15 +542,16 @@ The canonical skills are:
 
 [Issue tracking and the roadmap board](issue-tracking.md) holds the issue rules
 themselves: which work needs an issue, what an issue body contains, the `type:*`
-label it carries, the `agent:claimed` marker a session applies when it takes one,
-the `Area`, `Queue` and `Size` fields that place it on the board, the milestone
-that scopes it to a release, and which board transitions belong to the project
-automation rather than to an agent. It sits there rather than in root
-`AGENTS.md` because it is acted on twice per task and read by nothing else, so
-an always-loaded copy would cost every session that touches no issue.
-`start-task` and `finish-change` each name it at the step that writes the board.
-Placing an issue is part of opening it, because the built-in workflows set
-`Status` and nothing else.
+label it carries, the `backend` or `frontend` label saying which stack the work
+lands in and the case that takes neither, the `agent:claimed` marker a session
+applies when it takes one, the `Area`, `Queue` and `Size` fields that place it on
+the board, the milestone that scopes it to a release, and which board transitions
+belong to the project automation rather than to an agent. It sits there rather
+than in root `AGENTS.md` because it is acted on twice per task and read by
+nothing else, so an always-loaded copy would cost every session that touches no
+issue. `start-task` and `finish-change` each name it at the step that writes the
+board. Placing an issue is part of opening it, because the built-in workflows
+set `Status` and nothing else.
 
 That same limit is why `Queue: Next` is written by a skill rather than by an
 automation. No project workflow can set a custom single-select field, and the
@@ -560,15 +561,15 @@ that already exists is already in use, and a pull request opened by neither
 `finish-change` nor `prepare-release` moves nothing.
 
 Those rules describe an issue an agent opened. A public repository also receives
-issues nobody here opened, and one arrives with no `type:*` label and no board
-fields because none of the rules reached its author. The same page holds that
-path too: the missing `type:*` label is what marks an issue untriaged, triage
-either places it by the ordinary rules or closes it as `not planned` with a
-reason, a question moves to Discussions instead of being given a label so the
-board has somewhere to put it, and a contribution is read cheapest-check-first —
-required checks, then `Protected paths`, then the code-owner review. The `Triage`
-board view is where an arrival waits, and an item the project opened itself never
-reaches it.
+issues nobody here opened, and one arrives with no `type:*` label, no stack
+label, and no board fields because none of the rules reached its author. The
+same page holds that path too: the missing `type:*` label is what marks an issue
+untriaged, triage either places it by the ordinary rules or closes it as `not
+planned` with a reason, a question moves to Discussions instead of being given a
+label so the board has somewhere to put it, and a contribution is read
+cheapest-check-first — required checks, then `Protected paths`, then the
+code-owner review. The `Triage` board view is where an arrival waits, and an
+item the project opened itself never reaches it.
 
 The three Discussions categories that routing rule names — `Q&A`, `Ideas`, and
 `Announcements` — are the ones this project answers. The remaining defaults

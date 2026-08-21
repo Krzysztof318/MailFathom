@@ -41,7 +41,7 @@ below for depth instead of duplicating them.
 - [Applying the database schema](operations/database-schema.md) documents the idempotent SQL artifact each release ships, the privileges and ownership a schema step needs, the locks it takes, the deployment ordering it assumes, the three startup failures it answers, and why the artifact is a script rather than something that runs itself.
 - [The release procedure](operations/release-procedure.md) documents where the version number comes from, where it is observable at run time and on disk, and the order the two pull requests and the tag have to land in.
 - [Agent workflow](operations/agent-workflow.md) documents the shared Codex and Claude Code workflow.
-- [Issue tracking and the roadmap board](operations/issue-tracking.md) documents which work needs an issue, what its body carries, the one `type:*` label, the milestone, the board's fields and views, and how an arrival from outside the project is triaged.
+- [Issue tracking and the roadmap board](operations/issue-tracking.md) documents which work needs an issue, what its body carries, the one `type:*` label, the stack label, the milestone, the board's fields and views, and how an arrival from outside the project is triaged.
 - [The documentation site](operations/documentation-site.md) documents how these pages are published, which versions the site carries and which one it opens on, where the navigation is written, and which links have to be absolute.
 - [Decisions](decisions/README.md) describes the ADR workflow and templates.
 

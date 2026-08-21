@@ -74,8 +74,9 @@ Do not proceed while a gate fails.
    than as incomplete.
 
 Confirm the issue is still placed, against `docs/operations/issue-tracking.md`, as far as this
-session's access reaches: exactly one `type:*` label and a milestone if the release rule assigns one,
-both of which need write access to the repository, and an `Area` and a `Size` on the board, the
+session's access reaches: exactly one `type:*` label, a `backend` or `frontend` label where the work
+landed in one of the two stacks, and a milestone if the release rule assigns one, all of which need
+write access to the repository, and an `Area` and a `Size` on the board, the
 `Size` estimated when the issue was opened and now corrected against the diff this pull request
 actually produced. A change that grew past what the issue described may have outgrown its placement
 too.
@@ -97,7 +98,7 @@ Push: <remote and branch>
 Pull request: <URL, and the base repository it targets>
 Issue link: <Closes #N confirmed in the published body>
 Queue: <Next confirmed on the board after the pull request existed, or not applicable (no board write)>
-Placement: <type label, Area, Size, milestone or none — or what this session's access left to triage>
+Placement: <type label, stack label or neither, Area, Size, milestone or none — or what this session's access left to triage>
 ```
 
 Never claim completion without fresh evidence for every line.

@@ -329,8 +329,8 @@ offer to go deeper on any one of them instead of expanding all six.
 
    The roadmap board, project `4`, is private to the maintainer and I have no access to it.
    Do not read it, do not write it, and do not treat that as a step that failed: an issue I
-   open carries no `type:*` label, no milestone, and no `Area`, `Queue`, or `Size` value by
-   design, and the maintainer's triage supplies them. `$start-task` opens the issue and stops
+   open carries no `type:*` label, no stack label, no milestone, and no `Area`, `Queue`, or
+   `Size` value by design, and the maintainer's triage supplies them. `$start-task` opens the issue and stops
    there; `$finish-change` reports the board write as `not applicable (no board write)`.
 
    Workflow runs on my pull request wait for a maintainer to approve them, so a check that has
@@ -424,8 +424,8 @@ offer to go deeper on any one of them instead of expanding all six.
    - **the roadmap board is private, and access to it is the maintainer's to grant.** Project `4` belongs to their
      account, the repository is public and the board is not, and by default a contributor reaches neither: `gh project
      item-list` and `gh project item-edit` fail on permission and there is nothing to fall back to. What follows is not
-     a degraded workflow but a shorter one — an issue opened from outside carries no `type:*` label, no milestone, and
-     no `Area`, `Queue`, or `Size` value by design, triage supplies them, `start-task` opens the issue and stops there,
+     a degraded workflow but a shorter one — an issue opened from outside carries no `type:*` label, no stack label,
+     no milestone, and no `Area`, `Queue`, or `Size` value by design, triage supplies them, `start-task` opens the issue and stops there,
      and `finish-change` reports the board write as `not applicable (no board write)` rather than leaving a report that
      reads as incomplete. The maintainer does grant read or write on the board when they decide to, which is why step 3
      probes for it instead of reading it off the remote, and why what the local instruction file says about the board is
