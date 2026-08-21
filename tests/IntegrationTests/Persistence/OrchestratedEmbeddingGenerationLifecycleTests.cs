@@ -120,7 +120,7 @@ public sealed class OrchestratedEmbeddingGenerationLifecycleTests(MailFathomOrch
         // Assert
         Assert.NotNull(refusal);
         Assert.Contains(
-            MailFathomDbContext.EmbeddingProfileLifecycleUniqueIndexName,
+            PersistenceConstraintNames.EmbeddingProfileLifecycleUniqueIndexName,
             refusal.InnerException?.Message,
             StringComparison.Ordinal);
 

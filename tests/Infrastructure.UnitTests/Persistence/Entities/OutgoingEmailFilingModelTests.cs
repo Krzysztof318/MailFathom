@@ -34,7 +34,7 @@ public sealed class OutgoingEmailFilingModelTests
         // Assert
         Assert.NotNull(key);
         Assert.Equal(["OutgoingEmailId", "Filing"], key.Properties.Select(property => property.Name));
-        Assert.Equal(MailFathomDbContext.OutgoingEmailFilingPrimaryKeyConstraintName, key.GetName());
+        Assert.Equal(PersistenceConstraintNames.OutgoingEmailFilingPrimaryKeyConstraintName, key.GetName());
     }
 
     /// <summary>
@@ -44,8 +44,8 @@ public sealed class OutgoingEmailFilingModelTests
     /// what is in flight.
     /// </summary>
     [Theory]
-    [InlineData(MailFathomDbContext.OutgoingEmailFilingPlacementIndexName, "PlacementUid")]
-    [InlineData(MailFathomDbContext.OutgoingEmailFilingMessageIdIndexName, "InternetMessageId")]
+    [InlineData(PersistenceConstraintNames.OutgoingEmailFilingPlacementIndexName, "PlacementUid")]
+    [InlineData(PersistenceConstraintNames.OutgoingEmailFilingMessageIdIndexName, "InternetMessageId")]
     public void OutgoingEmailFilingModel_TheJoinIndexes_AreFilteredToExactlyTheRowsTheJoinCanMatch(
         string indexName,
         string expectedLastColumn)

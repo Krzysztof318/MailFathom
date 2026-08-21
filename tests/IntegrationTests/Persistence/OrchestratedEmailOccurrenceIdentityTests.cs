@@ -105,7 +105,7 @@ public sealed class OrchestratedEmailOccurrenceIdentityTests(MailFathomOrchestra
         var updateFailure = Assert.IsType<DbUpdateException>(refusal);
         var violation = Assert.IsType<PostgresException>(updateFailure.InnerException);
         Assert.Equal(PostgresErrorCodes.UniqueViolation, violation.SqlState);
-        Assert.Equal(MailFathomDbContext.StoredEmailOccurrenceUniqueIndexName, violation.ConstraintName);
+        Assert.Equal(PersistenceConstraintNames.StoredEmailOccurrenceUniqueIndexName, violation.ConstraintName);
 
         var storedRows = await ReadRowsForAsync(services, occurrenceId, cancellationToken);
         var storedRow = Assert.Single(storedRows);

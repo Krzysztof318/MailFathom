@@ -34,7 +34,7 @@ public sealed class MailDraftCopyModelTests
         // Assert
         Assert.NotNull(key);
         Assert.Equal(["MailDraftId", "Revision"], key.Properties.Select(property => property.Name));
-        Assert.Equal(MailFathomDbContext.MailDraftCopyPrimaryKeyConstraintName, key.GetName());
+        Assert.Equal(PersistenceConstraintNames.MailDraftCopyPrimaryKeyConstraintName, key.GetName());
     }
 
     /// <summary>Reads the design-time model, for the reason the stored email's own model tests do.</summary>

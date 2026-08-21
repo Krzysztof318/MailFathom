@@ -34,7 +34,7 @@ public sealed class EmailThreadModelTests
         // Assert
         Assert.NotNull(key);
         Assert.Equal(["MailboxAccountId", "IdentifierHash"], key.Properties.Select(property => property.Name));
-        Assert.Equal(MailFathomDbContext.EmailThreadIdentifierPrimaryKeyConstraintName, key.GetName());
+        Assert.Equal(PersistenceConstraintNames.EmailThreadIdentifierPrimaryKeyConstraintName, key.GetName());
     }
 
     /// <summary>
@@ -67,7 +67,7 @@ public sealed class EmailThreadModelTests
         var index = EntityTypeOf<EmailThreadIdentifierEntity>(context)
             .GetIndexes()
             .FirstOrDefault(candidate =>
-                candidate.GetDatabaseName() == MailFathomDbContext.EmailThreadIdentifierThreadIndexName);
+                candidate.GetDatabaseName() == PersistenceConstraintNames.EmailThreadIdentifierThreadIndexName);
 
         // Assert
         Assert.NotNull(index);
