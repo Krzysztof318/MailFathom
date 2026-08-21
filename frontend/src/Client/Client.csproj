@@ -1,11 +1,11 @@
 <Project Sdk="Uno.Sdk">
   <PropertyGroup>
     <!-- The two heads this application is written for, and the plain target beside them. `net10.0-browserwasm` is the
-         browser head and `net10.0-desktop` is the Skia desktop head, which is what runs on Windows. The bare `net10.0`
-         target builds no head at all: it is the reference target a unit-test project references the application
-         through, since a test host is neither a browser nor a desktop window. The mobile heads are deliberately
-         absent — adding `net10.0-android` and `net10.0-ios` here is what opens them, and nothing else in this project
-         has to change for that. -->
+         browser head and `net10.0-desktop` is the Skia desktop head, which runs on Windows, Linux, and macOS from this
+         one target framework. The bare `net10.0` target builds no head at all: it is the reference target a unit-test
+         project references the application through, since a test host is neither a browser nor a desktop window. The
+         mobile heads are deliberately absent — adding `net10.0-android` and `net10.0-ios` here is what opens them,
+         and nothing else in this project has to change for that. -->
     <TargetFrameworks>net10.0-browserwasm;net10.0-desktop;net10.0</TargetFrameworks>
 
     <OutputType>Exe</OutputType>

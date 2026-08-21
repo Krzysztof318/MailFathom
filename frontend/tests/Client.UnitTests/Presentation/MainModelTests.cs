@@ -6,15 +6,19 @@ using MailFathom.Client.Presentation;
 
 namespace MailFathom.Client.UnitTests.Presentation;
 
-public class MainModelTests
+public sealed class MainModelTests
 {
+    /// <summary>Awaiting a feed is how a model's state is asserted in this stack, and this one proves the MVUX path behind the only screen reaches the running build.</summary>
     [Fact]
     public async Task Build_TheScaffoldModel_YieldsTheRunningBuild()
     {
+        // Arrange
         await using var model = new MainModel();
 
+        // Act
         var build = await model.Build;
 
+        // Assert
         Assert.Equal(ClientBuild.Current, build);
     }
 }

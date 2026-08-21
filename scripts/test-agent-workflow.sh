@@ -7011,6 +7011,30 @@ every_container_unit_carries_the_license_header() {
   (( failures == 0 ))
 }
 
+# XAML is the fifth place the analyzer cannot reach, and the first one outside the service stack: a
+# `.xaml` file is markup rather than C#, so IDE0073 never sees it, and XML's one comment form is what
+# carries the header there. It opens the file above the root element, because a XAML parser reads the
+# type of the root from the first element it meets and a comment is not one.
+markup_license_header() {
+  printf '<!--\n%s\n-->\n' "$(license_header_lines)"
+}
+
+every_xaml_file_carries_the_license_header() {
+  local file expected actual failures=0
+  expected="$(markup_license_header)"
+
+  while IFS= read -r file; do
+    actual="$(head -n 5 "$source_repository_root/$file")"
+
+    if [[ "$actual" != "$expected" ]]; then
+      printf '%s does not open with the license header\n' "$file" >&2
+      failures=$(( failures + 1 ))
+    fi
+  done < <(git -C "$source_repository_root" ls-files -- '*.xaml')
+
+  (( failures == 0 ))
+}
+
 # The shebang has to be the first line for the kernel to read it, so a script is the one place the
 # header is second rather than first.
 every_shell_script_carries_the_license_header() {
@@ -7354,6 +7378,7 @@ run_test workflow_scripts_use_flat_manual_layout
 run_test every_yaml_file_carries_the_license_header
 run_test every_browser_asset_carries_the_license_header
 run_test every_container_unit_carries_the_license_header
+run_test every_xaml_file_carries_the_license_header
 run_test every_shell_script_carries_the_license_header
 run_test every_skill_declares_its_license
 run_test no_tracked_text_file_carries_a_nul_byte

@@ -17,10 +17,11 @@ the mailbox is what it leads them through. Every screen is judged against that �
 home in an ordinary mail client is usually the wrong shape for this one.
 
 It is written on Uno Platform and targets Windows, Linux, macOS, iOS, Android, and WebAssembly from one codebase. Two
-heads exist today: `net10.0-desktop`, the Skia desktop head that runs on Windows, and `net10.0-browserwasm`, the browser
-head. A third target framework, plain `net10.0`, builds no head at all — it is the reference target the unit suite
-references the application through. The mobile heads are absent rather than impossible: adding `net10.0-android` and
-`net10.0-ios` to `TargetFrameworks` is what opens them, and no code here may assume they never will be.
+heads exist today: `net10.0-desktop`, the Skia desktop head that runs on Windows, Linux, and macOS from that one
+target framework, and `net10.0-browserwasm`, the browser head. A third target framework, plain `net10.0`, builds no
+head at all — it is the reference target the unit suite references the application through. The mobile heads are
+absent rather than impossible: adding `net10.0-android` and `net10.0-ios` to `TargetFrameworks` is what opens them,
+and no code here may assume they never will be.
 
 **It has to feel native on each of them.** That is a stronger obligation than "it runs everywhere", and it is the one
 most likely to be lost by accident:

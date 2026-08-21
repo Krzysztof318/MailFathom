@@ -62,12 +62,13 @@
     <ILLinkTreatWarningsAsErrors>false</ILLinkTreatWarningsAsErrors>
   </PropertyGroup>
 
-  <!-- The analyzer set the backend runs, minus two things it takes that a client cannot. `AnalysisMode` stays at the
+  <!-- The analyzer set the backend runs, minus three things this stack has no use for. `AnalysisMode` stays at the
        SDK default rather than `AllEnabledByDefault`, because the opt-in rules are written for a library surface and a
-       server's I/O; and Microsoft.VisualStudio.Threading.Analyzers is absent, because WinUI's own contract is
-       `async void` on a lifecycle override and VSTHRD100 would refuse the framework rather than a defect. Everything
-       that remains applies as written: the XAML compiler and the MVUX generator mark their output generated, so no
-       rule here has an opinion about code nobody wrote. -->
+       server's I/O; Microsoft.VisualStudio.Threading.Analyzers is absent, because WinUI's own contract is
+       `async void` on a lifecycle override and VSTHRD100 would refuse the framework rather than a defect; and
+       Roslynator.CodeAnalysis.Analyzers is absent because its rules are about code that calls the Roslyn APIs, which
+       is a thing no client project here does. Everything that remains applies as written: the XAML compiler and the
+       MVUX generator mark their output generated, so no rule here has an opinion about code nobody wrote. -->
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
     <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
