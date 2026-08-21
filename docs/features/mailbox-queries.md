@@ -374,8 +374,8 @@ configuration bounds.
   it.
 - `MailFathom.Application.Accounts` — `IMailAccountCatalog`, the port that describes which accounts this deployment serves, and `MailAccountDirectoryReader`, the one use case that publishes that set rather than bounding a read with it. One
   member answers both questions asked of it: whether the account a request named is accepted, and which accounts an
-  unscoped request is narrowed to. `MailSynchronizationOptions` implements it, so the answer comes from the configuration
-  that defines the accounts.
+  unscoped request is narrowed to. `ConfiguredMailAccountCatalog` implements it over the bound mail section, so the
+  answer comes from the configuration that defines the accounts.
 - `MailFathom.Application.Synchronization.Checkpoints` — the freshness port and its read model, kept separate from the
   readers that return mail because every read model attaches freshness.
 - `MailFathom.Infrastructure.Persistence.Emails` — `StoredEmailTimelineReader`, which evaluates every filter, the keyset

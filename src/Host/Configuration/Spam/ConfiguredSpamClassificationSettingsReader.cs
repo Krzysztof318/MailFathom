@@ -5,6 +5,7 @@
 using MailFathom.Application.Spam;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Mail.Readers;
 using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Configuration.Spam;
@@ -52,5 +53,5 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
             ? configured
                 .Where(static alias => !string.IsNullOrWhiteSpace(alias))
                 .Select(MailFolderAlias.Create)
-            : synchronizationOptions.InboxFolderAliases;
+            : ConfiguredMailFolders.InboxAliasesOf(synchronizationOptions);
 }

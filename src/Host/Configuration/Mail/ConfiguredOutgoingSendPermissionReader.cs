@@ -40,8 +40,15 @@ internal sealed class ConfiguredOutgoingSendPermissionReader(
             return OutgoingSendRefusalReason.DeploymentIsReadOnly;
         }
 
-        return synchronizationSettings.SendingEnabled(accountId)
-            ? null
-            : OutgoingSendRefusalReason.AccountNotEnabled;
+        return this.SendingEnabled(accountId) ? null : OutgoingSendRefusalReason.AccountNotEnabled;
     }
+
+    /// <summary>Reports whether an operator has turned sending on for one account.</summary>
+    /// <remarks>
+    /// An account this snapshot does not name reads as one nobody turned sending on for, which is what it is: the
+    /// switch that would admit it exists on no account of this installation. That is also what a reload removing an
+    /// account means for a send arriving a moment later.
+    /// </remarks>
+    private bool SendingEnabled(MailAccountId accountId) =>
+        synchronizationSettings.FindConfiguredAccount(accountId)?.Delivery.Enabled ?? false;
 }

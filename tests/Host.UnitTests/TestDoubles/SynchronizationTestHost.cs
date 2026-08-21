@@ -186,7 +186,7 @@ internal static class SynchronizationTestHost
         // configure, so both answer that there is nothing to keep and nothing to erase.
         services.AddSingleton(CreateTrailThatKeepsNothing());
         services.AddSingleton(CreateAuditStoreWithNothingToErase());
-        services.AddScoped<IMailboxMutationAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
+        services.AddScoped<IMailboxMutationAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.MutationAuditSettings);
         services.AddScoped<MailboxMutationAuditTrailRetention>();
 
         // No run erases what a folder the account has stopped mirroring stored, and both of these are registered so
@@ -205,15 +205,15 @@ internal static class SynchronizationTestHost
         services.AddSingleton(new MailRuleSetEvaluator(timeProvider));
         services.AddScoped(_ => new MailRuleEvaluationOptions());
         services.AddScoped<IAuthoredDeleteEmailDispositionReader>(
-            provider => provider.GetRequiredService<MailSynchronizationOptions>());
+            provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.AuthoredDeleteEmailDispositions);
         services.AddScoped<IMailRuleActionPermissionReader>(
-            provider => provider.GetRequiredService<MailSynchronizationOptions>());
+            provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.RuleActionPermissions);
 
         // A rule may name its destination by the role a folder plays, and a condition may ask what role the folder an
         // email is in plays, so both the recorder and the pass read the account's mappings through this port. The host
         // answers it from the same snapshot every other per-account reader answers from.
         services.AddScoped<IMailFolderMappingReader>(
-            provider => provider.GetRequiredService<MailSynchronizationOptions>());
+            provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.FolderMappings);
         services.AddScoped<MailFolderReferenceResolver>();
         services.AddScoped<MailRuleActionRecorder>();
         // A rule may file into a folder the account maps and does not mirror, which nothing binds until a change needs
@@ -258,7 +258,7 @@ internal static class SynchronizationTestHost
         services.AddSingleton(Substitute.For<IAuthoredMailTally>());
         services.AddSingleton(Substitute.For<IContactCollectionTelemetry>());
         services.AddScoped<IContactCollectionSettingsReader>(provider =>
-            provider.GetRequiredService<MailSynchronizationOptions>());
+            provider.GetRequiredService<MailSynchronizationOptions>().Readers.ContactCollection);
         services.AddScoped(_ => AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
         services.AddScoped<ContactBook>();
         services.AddScoped<MailContactCollector>();
@@ -280,9 +280,9 @@ internal static class SynchronizationTestHost
         services.AddSingleton(publishedSettings);
         services.AddScoped<ScopedMailSynchronizationSettings>();
         services.AddScoped(provider => provider.GetRequiredService<ScopedMailSynchronizationSettings>().Current);
-        services.AddScoped<IMailTransportSecurityPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
-        services.AddScoped<IMailSynchronizationWindowReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
-        services.AddScoped<IRemotelyDeletedEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
+        services.AddScoped<IMailTransportSecurityPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.TransportSecurityPolicies);
+        services.AddScoped<IMailSynchronizationWindowReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.SynchronizationWindows);
+        services.AddScoped<IRemotelyDeletedEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.RemotelyDeletedEmailDispositions);
 
         return services.BuildServiceProvider();
     }

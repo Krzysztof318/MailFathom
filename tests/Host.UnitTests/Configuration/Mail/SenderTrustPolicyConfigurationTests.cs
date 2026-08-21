@@ -26,7 +26,7 @@ public sealed class SenderTrustPolicyConfigurationTests
 
         // Act
         var trust = options
-            .GetTrustPolicy(MailAccountId.Create("personal"))
+            .Readers.SenderTrustPolicies.GetTrustPolicy(MailAccountId.Create("personal"))
             .Evaluate(WrittenBy("work.example"), AddressOf("owner@work.example"));
 
         // Assert
@@ -46,7 +46,7 @@ public sealed class SenderTrustPolicyConfigurationTests
 
         // Act
         var trust = options
-            .GetTrustPolicy(MailAccountId.Create("personal"))
+            .Readers.SenderTrustPolicies.GetTrustPolicy(MailAccountId.Create("personal"))
             .Evaluate(WrittenBy("work.example"), AddressOf("owner@work.example"));
 
         // Assert
@@ -62,7 +62,7 @@ public sealed class SenderTrustPolicyConfigurationTests
 
         // Act
         var trust = options
-            .GetTrustPolicy(MailAccountId.Create("work"))
+            .Readers.SenderTrustPolicies.GetTrustPolicy(MailAccountId.Create("work"))
             .Evaluate(WrittenBy("work.example"), AddressOf("owner@work.example"));
 
         // Assert
@@ -80,10 +80,10 @@ public sealed class SenderTrustPolicyConfigurationTests
 
         // Act
         var onWork = options
-            .GetTrustPolicy(MailAccountId.Create("work"))
+            .Readers.SenderTrustPolicies.GetTrustPolicy(MailAccountId.Create("work"))
             .Evaluate(WrittenBy("partner.example"), displayedSender: null);
         var onPersonal = options
-            .GetTrustPolicy(MailAccountId.Create("personal"))
+            .Readers.SenderTrustPolicies.GetTrustPolicy(MailAccountId.Create("personal"))
             .Evaluate(WrittenBy("partner.example"), displayedSender: null);
 
         // Assert
@@ -107,7 +107,7 @@ public sealed class SenderTrustPolicyConfigurationTests
 
         // Act
         var trust = OptionsFor(account)
-            .GetTrustPolicy(MailAccountId.Create("work"))
+            .Readers.SenderTrustPolicies.GetTrustPolicy(MailAccountId.Create("work"))
             .Evaluate(WrittenBy("mail.partner.example"), displayedSender: null);
 
         // Assert
@@ -120,7 +120,7 @@ public sealed class SenderTrustPolicyConfigurationTests
     {
         // Act
         var policy = OptionsFor(AccountAt("work", "owner@work.example"))
-            .GetTrustPolicy(MailAccountId.Create("removed"));
+            .Readers.SenderTrustPolicies.GetTrustPolicy(MailAccountId.Create("removed"));
 
         // Assert
         Assert.Same(SenderTrustPolicy.RecognizingNobody, policy);

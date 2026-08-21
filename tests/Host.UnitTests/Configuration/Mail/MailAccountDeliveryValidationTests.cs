@@ -29,7 +29,7 @@ public sealed class MailAccountDeliveryValidationTests
 
         // Assert
         Assert.Empty(results);
-        Assert.Null(options.GetDeliveryPolicy(MailAccountId.Create("primary")));
+        Assert.Null(options.Readers.TransportSecurityPolicies.GetDeliveryPolicy(MailAccountId.Create("primary")));
     }
 
     /// <summary>A complete submission endpoint under the account's own policy is accepted and reachable.</summary>
@@ -46,10 +46,10 @@ public sealed class MailAccountDeliveryValidationTests
 
         // Assert
         Assert.Empty(results);
-        var policy = options.GetDeliveryPolicy(MailAccountId.Create("primary"));
+        var policy = options.Readers.TransportSecurityPolicies.GetDeliveryPolicy(MailAccountId.Create("primary"));
         Assert.Equal(MailConnectionSecurity.StartTlsRequired, policy?.ConnectionSecurity);
         Assert.Equal(
-            options.GetPolicy(MailAccountId.Create("primary")).Authentication.PermittedMechanisms,
+            options.Readers.TransportSecurityPolicies.GetPolicy(MailAccountId.Create("primary")).Authentication.PermittedMechanisms,
             policy?.Authentication.PermittedMechanisms);
     }
 
@@ -64,8 +64,8 @@ public sealed class MailAccountDeliveryValidationTests
         var options = ConfiguredMailAccounts.Holding(account);
 
         // Act
-        var readingPolicy = options.GetPolicy(MailAccountId.Create("primary"));
-        var deliveryPolicy = options.GetDeliveryPolicy(MailAccountId.Create("primary"));
+        var readingPolicy = options.Readers.TransportSecurityPolicies.GetPolicy(MailAccountId.Create("primary"));
+        var deliveryPolicy = options.Readers.TransportSecurityPolicies.GetDeliveryPolicy(MailAccountId.Create("primary"));
 
         // Assert
         Assert.Equal(MailConnectionSecurity.TlsOnConnect, readingPolicy.ConnectionSecurity);
@@ -269,6 +269,6 @@ public sealed class MailAccountDeliveryValidationTests
 
         // Assert
         Assert.Empty(results);
-        Assert.NotNull(options.FindSenderIdentity(MailAccountId.Create("primary")));
+        Assert.NotNull(options.Readers.OutgoingSenderIdentities.FindSenderIdentity(MailAccountId.Create("primary")));
     }
 }

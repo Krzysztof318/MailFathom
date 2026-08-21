@@ -225,7 +225,7 @@ public sealed class MailSynchronizationOptionsTests
         };
 
         // Act
-        var servedAccountIds = options.ServedAccounts.Select(account => account.Id);
+        var servedAccountIds = options.Readers.AccountCatalog.ServedAccounts.Select(account => account.Id);
 
         // Assert
         Assert.Equal([MailAccountId.Create("primary"), MailAccountId.Create("secondary")], servedAccountIds);
@@ -239,7 +239,7 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions { Accounts = [CreateAccount("primary")] };
 
         // Act
-        var servedAccountIds = options.ServedAccounts.Select(account => account.Id);
+        var servedAccountIds = options.Readers.AccountCatalog.ServedAccounts.Select(account => account.Id);
 
         // Assert
         Assert.DoesNotContain(MailAccountId.Create("PRIMARY"), servedAccountIds);
@@ -253,7 +253,7 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions { Enabled = false, Accounts = [CreateAccount("primary")] };
 
         // Act, Assert
-        Assert.Equal(MailAccountId.Create("primary"), Assert.Single(options.ServedAccounts).Id);
+        Assert.Equal(MailAccountId.Create("primary"), Assert.Single(options.Readers.AccountCatalog.ServedAccounts).Id);
     }
 
     [Fact]
@@ -263,7 +263,7 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions();
 
         // Act, Assert
-        Assert.Empty(options.ServedAccounts);
+        Assert.Empty(options.Readers.AccountCatalog.ServedAccounts);
     }
 
     /// <summary>An account whose identifier never bound is not a served account, and reading the set does not fail on it.</summary>
@@ -274,7 +274,7 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions { Accounts = [CreateAccount("primary"), CreateAccount("   ")] };
 
         // Act, Assert
-        Assert.Equal(MailAccountId.Create("primary"), Assert.Single(options.ServedAccounts).Id);
+        Assert.Equal(MailAccountId.Create("primary"), Assert.Single(options.Readers.AccountCatalog.ServedAccounts).Id);
     }
 
     [Fact]
@@ -460,7 +460,7 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions { Enabled = true, Accounts = [account] };
 
         // Act
-        var settings = options.GetAnsweringAuditSettings(MailAccountId.Create("primary"));
+        var settings = options.Readers.AnsweringAuditSettings.GetAnsweringAuditSettings(MailAccountId.Create("primary"));
 
         // Assert
         Assert.False(settings.IsEnabled);
@@ -475,7 +475,7 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions { Enabled = true, Accounts = [CreateAccount("primary")] };
 
         // Act
-        var settings = options.GetAnsweringAuditSettings(MailAccountId.Create("somebody-elses"));
+        var settings = options.Readers.AnsweringAuditSettings.GetAnsweringAuditSettings(MailAccountId.Create("somebody-elses"));
 
         // Assert
         Assert.Equal(MailAnsweringAuditSettings.Disabled, settings);
@@ -700,7 +700,7 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions { Accounts = [CreateAccount("  primary  ")] };
 
         // Act
-        var policy = options.GetPolicy(MailAccountId.Create("primary"));
+        var policy = options.Readers.TransportSecurityPolicies.GetPolicy(MailAccountId.Create("primary"));
 
         // Assert
         Assert.Equal(MailConnectionSecurity.TlsOnConnect, policy.ConnectionSecurity);
@@ -715,7 +715,7 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions { Accounts = [account] };
 
         // Act
-        var window = options.GetWindow(MailAccountId.Create("primary"));
+        var window = options.Readers.SynchronizationWindows.GetWindow(MailAccountId.Create("primary"));
 
         // Assert
         Assert.Equal(new DateOnly(2024, 1, 1), window.EarliestEmailReceivedDate);
@@ -729,7 +729,7 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions { Accounts = [CreateAccount("primary")] };
 
         // Act
-        var window = options.GetWindow(MailAccountId.Create("primary"));
+        var window = options.Readers.SynchronizationWindows.GetWindow(MailAccountId.Create("primary"));
 
         // Assert
         Assert.Equal(MailSynchronizationWindow.Unbounded, window);
@@ -745,8 +745,8 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions { Accounts = [followingServer, CreateAccount("archive")] };
 
         // Act
-        var dispositions = options.ServedAccounts
-            .Select(account => options.GetDisposition(account.Id))
+        var dispositions = options.Readers.AccountCatalog.ServedAccounts
+            .Select(account => options.Readers.RemotelyDeletedEmailDispositions.GetDisposition(account.Id))
             .ToArray();
 
         // Assert
@@ -763,7 +763,7 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions { Accounts = [CreateAccount("primary")] };
 
         // Act
-        var disposition = options.GetDisposition(MailAccountId.Create("primary"));
+        var disposition = options.Readers.RemotelyDeletedEmailDispositions.GetDisposition(MailAccountId.Create("primary"));
 
         // Assert
         Assert.Equal(RemotelyDeletedEmailDisposition.RetainTombstone, disposition);
@@ -860,8 +860,8 @@ public sealed class MailSynchronizationOptionsTests
         var accountId = MailAccountId.Create("primary");
 
         // Act
-        var remoteDisposition = options.GetDisposition(accountId);
-        var authoredDisposition = options.GetAuthoredDeleteDisposition(accountId);
+        var remoteDisposition = options.Readers.RemotelyDeletedEmailDispositions.GetDisposition(accountId);
+        var authoredDisposition = options.Readers.AuthoredDeleteEmailDispositions.GetAuthoredDeleteDisposition(accountId);
 
         // Assert
         Assert.Equal(RemotelyDeletedEmailDisposition.EraseLocalCopy, remoteDisposition);
@@ -878,8 +878,8 @@ public sealed class MailSynchronizationOptionsTests
         var options = new MailSynchronizationOptions { Accounts = [forgetful, CreateAccount("archive")] };
 
         // Act
-        var dispositions = options.ServedAccounts
-            .Select(account => options.GetAuthoredDeleteDisposition(account.Id))
+        var dispositions = options.Readers.AccountCatalog.ServedAccounts
+            .Select(account => options.Readers.AuthoredDeleteEmailDispositions.GetAuthoredDeleteDisposition(account.Id))
             .ToArray();
 
         // Assert

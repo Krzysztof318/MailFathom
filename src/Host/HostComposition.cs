@@ -510,28 +510,31 @@ internal static class HostComposition
         // the material it connects with, and the account list it was scheduled from all from the same reload.
         builder.Services.AddScoped<ScopedMailSynchronizationSettings>();
         builder.Services.AddScoped(provider => provider.GetRequiredService<ScopedMailSynchronizationSettings>().Current);
-        builder.Services.AddScoped<IMailTransportSecurityPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
-        builder.Services.AddScoped<IMailSynchronizationWindowReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
-        builder.Services.AddScoped<IRemotelyDeletedEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
-        builder.Services.AddScoped<IAuthoredDeleteEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
-        builder.Services.AddScoped<IMailRuleActionPermissionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
-        builder.Services.AddScoped<IMailboxMutationAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
-        builder.Services.AddScoped<IMailAnsweringAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
-        builder.Services.AddScoped<IMailAccountCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
-        builder.Services.AddScoped<ITrustedAuthenticationAuthorityReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
-        builder.Services.AddScoped<ISenderTrustPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
+        // Each port is a scoped forwarder to the reader the scope's own snapshot owns, rather than a reader constructed
+        // per scope: three of them memoize a per-account map, and each of those maps walks every account and every
+        // account's own addresses — work a per-scope reader would repeat on every work unit and every message.
+        builder.Services.AddScoped<IMailTransportSecurityPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.TransportSecurityPolicies);
+        builder.Services.AddScoped<IMailSynchronizationWindowReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.SynchronizationWindows);
+        builder.Services.AddScoped<IRemotelyDeletedEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.RemotelyDeletedEmailDispositions);
+        builder.Services.AddScoped<IAuthoredDeleteEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.AuthoredDeleteEmailDispositions);
+        builder.Services.AddScoped<IMailRuleActionPermissionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.RuleActionPermissions);
+        builder.Services.AddScoped<IMailboxMutationAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.MutationAuditSettings);
+        builder.Services.AddScoped<IMailAnsweringAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.AnsweringAuditSettings);
+        builder.Services.AddScoped<IMailAccountCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.AccountCatalog);
+        builder.Services.AddScoped<ITrustedAuthenticationAuthorityReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.TrustedAuthenticationAuthorities);
+        builder.Services.AddScoped<ISenderTrustPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.SenderTrustPolicies);
         // Resolved from the same snapshot as the verdicts above, so one work unit reads mail under one reload. Which of
         // the two profiles it is follows the setting, and the disabled one records the same not-assessed state a
         // message with no readable body reaches — so a stored row never says which of the two reasons produced it.
         builder.Services.AddScoped(provider =>
             provider.GetRequiredService<MailSynchronizationOptions>().MachineAuthorshipProfile);
-        builder.Services.AddScoped<IOutgoingSenderIdentityReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
-        builder.Services.AddScoped<IOutgoingMailFilingPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
+        builder.Services.AddScoped<IOutgoingSenderIdentityReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.OutgoingSenderIdentities);
+        builder.Services.AddScoped<IOutgoingMailFilingPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.OutgoingMailFilingPolicies);
         builder.Services.AddScoped<IOutgoingSendPermissionReader, ConfiguredOutgoingSendPermissionReader>();
-        builder.Services.AddScoped<IMailFolderParticipationReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
-        builder.Services.AddScoped<IJunkMailFolderCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
-        builder.Services.AddScoped<IMailFolderMappingReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
-        builder.Services.AddScoped<IContactCollectionSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>());
+        builder.Services.AddScoped<IMailFolderParticipationReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.FolderParticipation);
+        builder.Services.AddScoped<IJunkMailFolderCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.JunkFolderCatalog);
+        builder.Services.AddScoped<IMailFolderMappingReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.FolderMappings);
+        builder.Services.AddScoped<IContactCollectionSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.ContactCollection);
         builder.Services.AddScoped<ISpamClassificationSettingsReader, ConfiguredSpamClassificationSettingsReader>();
         builder.Services.AddScoped<ISpamActionSettingsReader, ConfiguredSpamActionSettingsReader>();
         builder.Services.AddScoped<IImapAccountSettingsProvider, ConfiguredImapAccountSettingsProvider>();

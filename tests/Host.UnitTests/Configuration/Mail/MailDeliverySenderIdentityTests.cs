@@ -28,7 +28,7 @@ public sealed class MailDeliverySenderIdentityTests
         var options = ConfiguredMailAccounts.Holding(account);
 
         // Act
-        var identity = options.FindSenderIdentity(Primary);
+        var identity = options.Readers.OutgoingSenderIdentities.FindSenderIdentity(Primary);
 
         // Assert
         Assert.Equal("mailfathom@example.test", identity?.Address.Address);
@@ -49,7 +49,7 @@ public sealed class MailDeliverySenderIdentityTests
         var options = ConfiguredMailAccounts.Holding(account);
 
         // Act
-        var identity = options.FindSenderIdentity(Primary);
+        var identity = options.Readers.OutgoingSenderIdentities.FindSenderIdentity(Primary);
 
         // Assert
         Assert.Equal("office@example.test", identity?.Address.Address);
@@ -64,7 +64,7 @@ public sealed class MailDeliverySenderIdentityTests
         var options = ConfiguredMailAccounts.Holding(ConfiguredMailAccounts.Primary());
 
         // Act and assert
-        Assert.Null(options.FindSenderIdentity(Primary));
+        Assert.Null(options.Readers.OutgoingSenderIdentities.FindSenderIdentity(Primary));
     }
 
     /// <summary>An account a reload removed answers with nothing, as every per-account reader here does.</summary>
@@ -77,7 +77,7 @@ public sealed class MailDeliverySenderIdentityTests
         var options = ConfiguredMailAccounts.Holding(account);
 
         // Act and assert
-        Assert.Null(options.FindSenderIdentity(MailAccountId.Create("secondary")));
+        Assert.Null(options.Readers.OutgoingSenderIdentities.FindSenderIdentity(MailAccountId.Create("secondary")));
     }
 
     /// <summary>
@@ -137,6 +137,6 @@ public sealed class MailDeliverySenderIdentityTests
 
         // Assert
         Assert.Single(results);
-        Assert.Null(options.FindSenderIdentity(Primary));
+        Assert.Null(options.Readers.OutgoingSenderIdentities.FindSenderIdentity(Primary));
     }
 }

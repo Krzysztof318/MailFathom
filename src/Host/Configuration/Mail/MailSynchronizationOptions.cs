@@ -6,28 +6,19 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography.X509Certificates;
 using MailFathom.Application.Accounts;
-using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.Emails.Extraction;
-using MailFathom.Application.Folders;
-using MailFathom.Application.Mail;
-using MailFathom.Application.Mail.Delivery.Composition;
-using MailFathom.Application.Mail.Delivery.Filing;
-using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Retrieval.AskMail.Audit;
-using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Synchronization;
-using MailFathom.Application.Synchronization.Checkpoints;
-using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Domain.Accounts;
-using MailFathom.Domain.Contacts.Collection;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Domain.Transport;
+using MailFathom.Host.Configuration.Mail.Readers;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.OAuth;
@@ -37,24 +28,7 @@ namespace MailFathom.Host.Configuration.Mail;
 
 /// <summary>Configures periodic IMAP synchronization.</summary>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
-internal sealed class MailSynchronizationOptions
-    : IValidatableObject,
-        IMailTransportSecurityPolicyReader,
-        IMailSynchronizationWindowReader,
-        IRemotelyDeletedEmailDispositionReader,
-        IAuthoredDeleteEmailDispositionReader,
-        IMailRuleActionPermissionReader,
-        IMailboxMutationAuditSettingsReader,
-        IMailAnsweringAuditSettingsReader,
-        IMailAccountCatalog,
-        ITrustedAuthenticationAuthorityReader,
-        ISenderTrustPolicyReader,
-        IOutgoingSenderIdentityReader,
-        IOutgoingMailFilingPolicyReader,
-        IMailFolderParticipationReader,
-        IJunkMailFolderCatalog,
-        IMailFolderMappingReader,
-        IContactCollectionSettingsReader
+internal sealed class MailSynchronizationOptions : IValidatableObject
 {
     /// <summary>The shutdown budget the .NET Generic Host applies when nothing configures one.</summary>
     private static readonly TimeSpan DefaultHostShutdownTimeout = TimeSpan.FromSeconds(30);
@@ -62,30 +36,26 @@ internal sealed class MailSynchronizationOptions
     /// <summary>What the shutdown budget keeps for the hosted services that stop beside a synchronization drain.</summary>
     private static readonly TimeSpan HostShutdownMargin = TimeSpan.FromSeconds(5);
 
-    private readonly Lazy<IReadOnlyDictionary<string, IReadOnlyList<MailFolderMapping>>> mappingsByAccount;
-
-    private readonly Lazy<IReadOnlyDictionary<string, SenderTrustPolicy>> senderTrustPolicies;
-
-    private readonly Lazy<IReadOnlyDictionary<string, ContactCollectionSettings>> contactCollectionSettings;
+    private readonly Lazy<MailSynchronizationSettingsReaders> readers;
 
     /// <summary>Initializes the options the binder is about to write into.</summary>
     /// <remarks>
-    /// Both caches are deferred rather than built here, because nothing is bound yet when this runs. What forces them
-    /// is the first lookup, which happens long after binding and after validation, and a reload binds a new instance
-    /// rather than rewriting this one — so a built value can never describe superseded configuration. The verification
-    /// policies are cached for a second reason as well: each one derives a revision over the whole effective list, and
-    /// every arriving message asks for one.
+    /// The readers are deferred rather than built here, because nothing is bound yet when this runs. What forces them
+    /// is the first port resolved against this snapshot, which happens long after binding and after validation, and a
+    /// reload binds a new instance rather than rewriting this one — so a value they memoize can never describe
+    /// superseded configuration.
     /// </remarks>
-    public MailSynchronizationOptions()
-    {
-        this.mappingsByAccount = new(this.ReadMappingsByAccount, LazyThreadSafetyMode.ExecutionAndPublication);
-        this.senderTrustPolicies = new(
-            this.ReadSenderTrustPolicies,
+    public MailSynchronizationOptions() =>
+        this.readers = new(
+            () => new MailSynchronizationSettingsReaders(this),
             LazyThreadSafetyMode.ExecutionAndPublication);
-        this.contactCollectionSettings = new(
-            this.ReadContactCollectionSettings,
-            LazyThreadSafetyMode.ExecutionAndPublication);
-    }
+
+    /// <summary>Gets the port readers this snapshot is read through.</summary>
+    /// <remarks>
+    /// One set belongs to this instance and is shared by every scope that runs against it, which is what keeps the
+    /// per-account maps three of the readers memoize built once per snapshot rather than once per work unit.
+    /// </remarks>
+    internal MailSynchronizationSettingsReaders Readers => this.readers.Value;
 
     /// <summary>Gets or sets whether periodic synchronization is enabled.</summary>
     public bool Enabled { get; set; }
@@ -509,13 +479,13 @@ internal sealed class MailSynchronizationOptions
         TrustAnchorLoader trustAnchorLoader,
         CancellationToken cancellationToken)
     {
-        var normalizedAccountId = MailAccountId.Create(accountId).Value;
-        var account = this.FindAccount(normalizedAccountId);
+        var accountIdentity = MailAccountId.Create(accountId);
+        var account = this.RequireAccount(accountIdentity);
 
         var material = await account.ResolveConnectionMaterialAsync(resolver, trustAnchorLoader, cancellationToken);
 
         return new ImapAccountSettings(
-            normalizedAccountId,
+            accountIdentity.Value,
             account.Host.Trim(),
             account.Port,
             account.UserName,
@@ -536,415 +506,23 @@ internal sealed class MailSynchronizationOptions
         TrustAnchorLoader trustAnchorLoader,
         CancellationToken cancellationToken)
     {
-        var normalizedAccountId = MailAccountId.Create(accountId).Value;
-        var account = this.FindAccount(normalizedAccountId);
+        var accountIdentity = MailAccountId.Create(accountId);
+        var account = this.RequireAccount(accountIdentity);
 
         if (!account.Delivery.IsConfigured)
         {
-            throw new InvalidOperationException($"Account '{normalizedAccountId}' configures no submission endpoint.");
+            throw new InvalidOperationException($"Account '{accountIdentity.Value}' configures no submission endpoint.");
         }
 
         var material = await account.ResolveDeliveryConnectionMaterialAsync(resolver, trustAnchorLoader, cancellationToken);
 
         return new SmtpAccountSettings(
-            normalizedAccountId,
+            accountIdentity.Value,
             account.Delivery.Host.Trim(),
             account.Delivery.Port,
             account.Delivery.ResolveUserName(account.UserName),
             material);
     }
-
-    /// <inheritdoc />
-    public MailTransportSecurityPolicy GetPolicy(MailAccountId accountId)
-    {
-        var account = this.FindAccount(accountId.Value);
-
-        return account.CreateTransportSecurityPolicy();
-    }
-
-    /// <inheritdoc />
-    public MailTransportSecurityPolicy? GetDeliveryPolicy(MailAccountId accountId)
-    {
-        var account = this.FindAccount(accountId.Value);
-
-        return account.Delivery.IsConfigured ? account.CreateDeliveryTransportSecurityPolicy() : null;
-    }
-
-    /// <inheritdoc />
-    public OutgoingSenderIdentity? FindSenderIdentity(MailAccountId accountId)
-    {
-        var account = this.FindConfiguredAccount(accountId);
-
-        if (account?.Delivery is not { IsConfigured: true } delivery)
-        {
-            return null;
-        }
-
-        return EmailAddress.TryCreate(delivery.FromDisplayName, delivery.ResolveFromAddress(account.UserName), out var address)
-            ? OutgoingSenderIdentity.Create(accountId, address)
-            : null;
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// An account this deployment does not configure is answered as though it files the copy, which is the same
-    /// direction the port's own default takes: nothing can send as an account nobody configured, so the answer is
-    /// reached only by a caller asking about a message that cannot exist.
-    /// </remarks>
-    public bool FilesSentCopy(MailAccountId accountId) =>
-        this.FindConfiguredAccount(accountId)?.Delivery.FileSentCopy ?? true;
-
-    /// <summary>Reports whether an operator has turned sending on for one account.</summary>
-    /// <param name="accountId">The account a message would be sent as.</param>
-    /// <returns><see langword="true" /> when this deployment may send as that account.</returns>
-    /// <remarks>
-    /// An account this snapshot does not name reads as one nobody turned sending on for, which is what it is: the
-    /// switch that would admit it exists on no account of this installation. That is also what a reload removing an
-    /// account means for a send arriving a moment later.
-    /// </remarks>
-    public bool SendingEnabled(MailAccountId accountId) =>
-        this.FindConfiguredAccount(accountId)?.Delivery.Enabled ?? false;
-
-    /// <inheritdoc />
-    public MailSynchronizationWindow GetWindow(MailAccountId accountId)
-    {
-        var account = this.FindAccount(accountId.Value);
-
-        return account.CreateSynchronizationWindow();
-    }
-
-    /// <inheritdoc />
-    public RemotelyDeletedEmailDisposition GetDisposition(MailAccountId accountId)
-    {
-        var account = this.FindAccount(accountId.Value);
-
-        return account.RemotelyDeletedEmailDisposition;
-    }
-
-    /// <inheritdoc />
-    public AuthoredDeleteEmailDisposition GetAuthoredDeleteDisposition(MailAccountId accountId)
-    {
-        var account = this.FindAccount(accountId.Value);
-
-        return account.AuthoredDeleteEmailDisposition;
-    }
-
-    /// <inheritdoc />
-    public MailRuleActionPermissions GetRuleActionPermissions(MailAccountId accountId)
-    {
-        var account = this.FindAccount(accountId.Value);
-
-        return (account.RuleActions ?? new MailRuleActionPermissionOptions()).ToPermissions();
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// An account this snapshot no longer names reports <see cref="MailboxMutationAuditSettings.Disabled" /> rather
-    /// than failing, unlike every other per-account reader here. The two callers are why: a mutation is only recorded
-    /// for a configured account, and the retention pass runs over accounts a reload may have removed between one run and
-    /// the next — where the honest answer is that no operator decision applies, not that the deployment is broken.
-    /// </remarks>
-    public MailboxMutationAuditSettings GetAuditSettings(MailAccountId accountId) =>
-        this.FindConfiguredAccount(accountId)?.CreateAuditSettings() ?? MailboxMutationAuditSettings.Disabled;
-
-    /// <inheritdoc />
-    public MailAnsweringAuditSettings GetAnsweringAuditSettings(MailAccountId accountId) =>
-        this.FindConfiguredAccount(accountId)?.CreateAnsweringAuditSettings() ?? MailAnsweringAuditSettings.Disabled;
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// An account this snapshot no longer names answers with none rather than failing, for the reason the audit
-    /// settings above do: the extraction backfill runs over accounts a reload may have removed between one run and the
-    /// next, and believing no header there is the honest answer as well as the safe one.
-    /// </remarks>
-    public TrustedAuthenticationAuthority GetTrustedAuthority(MailAccountId accountId) =>
-        this.FindConfiguredAccount(accountId)?.CreateTrustedAuthority() ?? TrustedAuthenticationAuthority.None;
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Answered from the cache below rather than rebuilt, because every arriving message asks for one and building a
-    /// policy derives a revision over the whole effective list. An account this snapshot no longer names recognizes
-    /// nobody, for the reason the trusted authority above answers with none.
-    /// </remarks>
-    public SenderTrustPolicy GetTrustPolicy(MailAccountId accountId) =>
-        this.senderTrustPolicies.Value.TryGetValue(accountId.Value, out var policy)
-            ? policy
-            : SenderTrustPolicy.RecognizingNobody;
-
-    /// <summary>Builds every account's verification policy once, keyed by the account identifier the lookups arrive with.</summary>
-    /// <remarks>
-    /// The stored half of each list is empty here and is what <see href="https://github.com/Krzysztof318/MailFathom/issues/760">#760</see>
-    /// fills in: the matcher already takes both halves, so the store arrives as a second list rather than as a second
-    /// rule. An entry whose text is unusable is skipped rather than raised over, and two accounts configured under one
-    /// identifier keep the first, both for the reason the folder mappings do — startup validation refuses each of
-    /// those, and a reload being rejected must not make a lookup throw.
-    /// </remarks>
-    private Dictionary<string, SenderTrustPolicy> ReadSenderTrustPolicies()
-    {
-        IReadOnlyList<SenderDomain> ownAccountDomains = this.TrustOwnAccountDomains ? this.ReadOwnAccountDomains() : [];
-
-        return (this.Accounts ?? [])
-            .Select(static account => (Id: TryReadAccountId(account.AccountId), account.ConfiguredTrustedSenders))
-            .Where(static account => account.Id is not null)
-            .GroupBy(static account => account.Id!, StringComparer.Ordinal)
-            .ToDictionary(
-                static account => account.Key,
-                account => SenderTrustPolicy.Create(
-                    ownAccountDomains,
-                    account.First().ConfiguredTrustedSenders,
-                    storedTrustedSenders: []),
-                StringComparer.Ordinal);
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Answered from the cache below, because every message of a switched-on account asks for it and building the
-    /// policy reads every account's own mailbox address. An account this snapshot no longer names collects nothing,
-    /// which is the honest answer as well as the safe one: an account nobody configures has no owner to have asked for
-    /// a book.
-    /// </remarks>
-    public ContactCollectionSettings SettingsFor(MailAccountId accountId) =>
-        this.contactCollectionSettings.Value.TryGetValue(accountId.Value, out var settings)
-            ? settings
-            : ContactCollectionSettings.CollectingNothing;
-
-    /// <summary>Builds every account's collection settings once, keyed by the account identifier the lookups arrive with.</summary>
-    /// <remarks>
-    /// The own addresses are read once for the whole deployment and handed to every account's policy, because an owner
-    /// writing from one of their mailboxes to another is not a correspondent of themselves. An entry whose text is
-    /// unusable is skipped and two accounts configured under one identifier keep the first, both for the reason the
-    /// trust policies above do: startup validation refuses each of those, and a reload being rejected must not make an
-    /// arriving message throw.
-    /// </remarks>
-    private Dictionary<string, ContactCollectionSettings> ReadContactCollectionSettings()
-    {
-        var ownAddresses = this.ReadOwnAccountAddresses();
-
-        return (this.Accounts ?? [])
-            .Select(static account => (Id: TryReadAccountId(account.AccountId), account.ContactCollection))
-            .Where(static account => account.Id is not null && account.ContactCollection is not null)
-            .GroupBy(static account => account.Id!, StringComparer.Ordinal)
-            .ToDictionary(
-                static account => account.Key,
-                account => ReadContactCollection(account.First().ContactCollection!, ownAddresses),
-                StringComparer.Ordinal);
-    }
-
-    /// <summary>Reads one account's configured block as the settings collection runs under.</summary>
-    private static ContactCollectionSettings ReadContactCollection(
-        ContactCollectionOptions configured,
-        IReadOnlyCollection<EmailAddress> ownAddresses) => new()
-        {
-            IsEnabled = configured.Enabled,
-            MinimumMessagesFromSender = configured.MinimumMessagesFromSender,
-            MaxContactsPerRun = configured.MaxContactsPerRun,
-            Policy = ContactCollectionPolicy.Create(configured.ConfiguredExclusions, ownAddresses),
-        };
-
-    /// <summary>Reads the mailboxes this deployment reads on its owner's behalf.</summary>
-    /// <remarks>
-    /// Derived from each account's user name for the reason the own domains below are: it is the only mailbox identity
-    /// an IMAP account states. An account whose user name is a bare login contributes nothing, which costs one address
-    /// that would have been excluded — and the two headers collection reads leave the owner out of both directions
-    /// anyway, since an ordinary folder's author is a correspondent and a sent folder's recipients are.
-    /// </remarks>
-    private IReadOnlyList<EmailAddress> ReadOwnAccountAddresses() =>
-    [
-        .. (this.Accounts ?? [])
-            .Select(static account => EmailAddress.TryCreate(displayName: null, account.UserName, out var address)
-                ? address
-                : (EmailAddress?)null)
-            .OfType<EmailAddress>()
-            .Distinct(),
-    ];
-
-    /// <summary>Reads the domains the configured accounts themselves send and receive under.</summary>
-    /// <remarks>
-    /// Derived from each account's user name, which is the only mailbox identity an IMAP account states: a server is
-    /// reached at a host that is rarely the mail domain, and the account identifier is a key an operator invented. An
-    /// account whose user name is a bare login rather than an address therefore contributes nothing, which is the
-    /// honest answer — inventing a domain out of the host would recognize senders nobody named.
-    /// </remarks>
-    private IReadOnlyList<SenderDomain> ReadOwnAccountDomains() =>
-    [
-        .. (this.Accounts ?? [])
-            .Select(static account => TryReadOwnDomain(account.UserName))
-            .OfType<SenderDomain>()
-            .Distinct(),
-    ];
-
-    /// <summary>Reads the mail domain one account's user name states, or nothing when it states none.</summary>
-    /// <remarks>
-    /// The at-sign is what separates the two shapes an IMAP user name takes. Without one the value is a login and
-    /// naming a domain from it would be a guess; with one it is the mailbox address the account belongs to, and the
-    /// domain is what follows the last at-sign for the reason every address in this system is split there.
-    /// </remarks>
-    private static SenderDomain? TryReadOwnDomain(string? userName) =>
-        userName is not null
-        && userName.Contains('@', StringComparison.Ordinal)
-        && SenderDomain.TryCreateFromMailbox(userName, out var domain)
-            ? domain
-            : null;
-
-    /// <inheritdoc />
-    public bool SynchronizationEnabled => this.Enabled;
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// Configuration is what defines the set of accounts, so this answers from the same bound options every other
-    /// per-account reader does. It deliberately ignores <see cref="Enabled" />: that switch stops runs from fetching
-    /// mail, and an operator who turned it off has not asked for the copy already stored to become unreadable. An
-    /// account they removed is a different matter, and its absence here is what makes its stored mail unreadable.
-    /// </para>
-    /// <para>
-    /// An account whose display name is missing or unusable is omitted rather than published under an invented one.
-    /// Startup validation refuses that configuration, so the omission is only reachable while a reload is being
-    /// rejected, and publishing an account under a name no operator chose is the one outcome worse than not publishing
-    /// it at all.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<ServedMailAccount> ServedAccounts =>
-    [
-        .. (this.Accounts ?? [])
-            .Where(static candidate => !string.IsNullOrWhiteSpace(candidate.AccountId))
-            .Select(static candidate => candidate.CreateServedAccount())
-            .OfType<ServedMailAccount>()
-            .DistinctBy(static account => account.Id.Value, StringComparer.Ordinal)
-            .OrderBy(static account => account.Id.Value, StringComparer.Ordinal),
-    ];
-
-    /// <inheritdoc />
-    public IReadOnlyList<MailFolderIdentity> FoldersMapped =>
-        [.. this.ConfiguredFolders().Select(static folder => folder.Identity)];
-
-    /// <inheritdoc />
-    public IReadOnlyList<MailFolderIdentity> FoldersSynchronized =>
-        [.. this.ConfiguredFolders().Where(static folder => folder.Participation.IsSynchronized).Select(static folder => folder.Identity)];
-
-    /// <inheritdoc />
-    public IReadOnlyList<MailFolderIdentity> FoldersVisibleToTools =>
-        [.. this.ConfiguredFolders().Where(static folder => folder.Participation.IsVisibleToTools).Select(static folder => folder.Identity)];
-
-    /// <inheritdoc />
-    public IReadOnlyList<MailFolderIdentity> FoldersGeneratingEmbeddings =>
-        [.. this.ConfiguredFolders().Where(static folder => folder.Participation.GeneratesEmbeddings).Select(static folder => folder.Identity)];
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Read from the configured role rather than from what a server advertised, for the reason
-    /// <see cref="MailFolderMappingOptions.ConfiguredSpecialUse" /> gives. A deployment that maps no junk folder answers
-    /// with nothing here, and every mailbox read then behaves as it did before this existed.
-    /// </remarks>
-    public IReadOnlyList<MailFolderIdentity> JunkFolders =>
-        [.. this.ConfiguredFolders().Where(static folder => folder.SpecialUse is MailFolderSpecialUse.Junk).Select(static folder => folder.Identity)];
-
-    /// <inheritdoc />
-    public bool IsJunkFolder(MailAccountId accountId, MailFolderAlias folderAlias) =>
-        this.ConfiguredFolders().Any(folder =>
-            folder.SpecialUse is MailFolderSpecialUse.Junk
-            && folder.Identity.AccountId == accountId
-            && folder.Identity.Alias == folderAlias);
-
-    /// <summary>Gets the aliases every account maps to its inbox, which is the scope classification defaults to.</summary>
-    /// <remarks>
-    /// Read here rather than in the classification section because this is where the folder mappings are, and because
-    /// the default has to follow the mappings: an operator whose server presents the inbox under another name configures
-    /// the role, and the default scope has to be the alias that role resolved to rather than the literal text INBOX.
-    /// </remarks>
-    internal IEnumerable<MailFolderAlias> InboxFolderAliases =>
-        this.ConfiguredFolders()
-            .Where(static folder => folder.SpecialUse is MailFolderSpecialUse.Inbox)
-            .Select(static folder => folder.Identity.Alias);
-
-    /// <inheritdoc />
-    public MailFolderParticipation GetParticipation(MailAccountId accountId, MailFolderAlias folderAlias) =>
-        this.ConfiguredFolders()
-            .FirstOrDefault(folder => folder.Identity.AccountId == accountId && folder.Identity.Alias == folderAlias)
-            ?.Participation
-        ?? MailFolderParticipation.Unmapped;
-
-    /// <inheritdoc />
-    public MailFolderMapping? FindFolderPlayingRole(MailAccountId accountId, MailFolderSpecialUse role) =>
-        this.MappingsOf(accountId).FirstOrDefault(mapping => mapping.Plays(role));
-
-    /// <inheritdoc />
-    public MailFolderMapping? FindFolderNamed(MailAccountId accountId, MailFolderAlias folderAlias) =>
-        this.MappingsOf(accountId).FirstOrDefault(mapping => mapping.Alias == folderAlias);
-
-    /// <summary>Reads one account's folders as the mappings the folder port answers with.</summary>
-    /// <remarks>
-    /// Answered from the cache below rather than rebuilt, because the two lookups above are asked once per rule
-    /// evaluated against every email of a run, and each rebuild walks the account's folders and constructs a domain
-    /// value per entry.
-    /// </remarks>
-    private IReadOnlyList<MailFolderMapping> MappingsOf(MailAccountId accountId) =>
-        this.mappingsByAccount.Value.TryGetValue(accountId.Value, out var mappings) ? mappings : [];
-
-    /// <summary>Builds every account's mappings once, keyed by the account identifier the lookups arrive with.</summary>
-    /// <remarks>
-    /// It walks <see cref="MailSynchronizationAccountOptions.EffectiveFolders" /> for the reason
-    /// <see cref="ConfiguredFolders" /> does, so an account that configures no folder answers for the inbox mapping it
-    /// is actually run with. An entry whose names are unusable is skipped rather than raised over: startup validation
-    /// refuses that configuration, and a reload being rejected must not make a lookup throw. Two accounts configured
-    /// under one identifier is the same refusal, so the first is kept here rather than the build failing over what
-    /// validation already reports.
-    /// </remarks>
-    private Dictionary<string, IReadOnlyList<MailFolderMapping>> ReadMappingsByAccount() => (this.Accounts ?? [])
-        .Select(static account => (Id: TryReadAccountId(account.AccountId), account.EffectiveFolders))
-        .Where(static account => account.Id is not null)
-        .GroupBy(static account => account.Id!, StringComparer.Ordinal)
-        .ToDictionary(
-            static account => account.Key,
-            static account => MappingsIn(account.First().EffectiveFolders),
-            StringComparer.Ordinal);
-
-    /// <summary>Reads one account's configured folders as the mappings the port answers with, dropping the unusable ones.</summary>
-    private static IReadOnlyList<MailFolderMapping> MappingsIn(IReadOnlyList<MailFolderMappingOptions> folders) =>
-    [
-        .. folders.Select(static folder => TryCreateMapping(folder)).OfType<MailFolderMapping>(),
-    ];
-
-    /// <summary>Normalizes a configured account identifier the way every lookup arrives already normalized, or reports it unusable.</summary>
-    private static string? TryReadAccountId(string? configuredAccountId)
-    {
-        try
-        {
-            return string.IsNullOrWhiteSpace(configuredAccountId)
-                ? null
-                : MailAccountId.Create(configuredAccountId).Value;
-        }
-        catch (ArgumentException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>Builds one configured folder's mapping, or nothing when its configured names are not values this system issues.</summary>
-    private static MailFolderMapping? TryCreateMapping(MailFolderMappingOptions folder)
-    {
-        try
-        {
-            return folder.CreateMapping();
-        }
-        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>Reads every account's folders as the pair of identity and participation the port answers with.</summary>
-    /// <remarks>
-    /// It walks <see cref="MailSynchronizationAccountOptions.EffectiveFolders" /> rather than the configured list, so an
-    /// account that configures no folder answers for the inbox mapping it is actually run with. An entry whose alias or
-    /// account identifier is unusable is skipped: startup validation refuses that configuration, and inventing an
-    /// identity for it here would attach one folder's decision to a name no operator wrote.
-    /// </remarks>
-    private IEnumerable<ConfiguredFolder> ConfiguredFolders() =>
-        (this.Accounts ?? [])
-            .SelectMany(account => account.EffectiveFolders.Select(folder => new { account.AccountId, Folder = folder }))
-            .Select(static configured => ConfiguredFolder.TryRead(configured.AccountId, configured.Folder))
-            .OfType<ConfiguredFolder>();
 
     /// <summary>Finds every configured earliest received date that could not mean anything on the supplied date.</summary>
     /// <param name="today">The current date the configured bounds are read against.</param>
@@ -1077,32 +655,28 @@ internal sealed class MailSynchronizationOptions
                     MailAccountId.Create(candidate.AccountId).Value,
                     accountId.Value));
 
-    private MailSynchronizationAccountOptions FindAccount(string normalizedAccountId) =>
-        this.FindConfiguredAccount(MailAccountId.Create(normalizedAccountId))
-        ?? throw new InvalidOperationException($"Account '{normalizedAccountId}' is not configured.");
+    /// <summary>Finds the account a reader was handed, failing when this snapshot does not name it.</summary>
+    /// <param name="accountId">The local account identifier.</param>
+    /// <returns>The configured account.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when this snapshot does not name the account.</exception>
+    internal MailSynchronizationAccountOptions RequireAccount(MailAccountId accountId) =>
+        this.FindConfiguredAccount(accountId)
+        ?? throw new InvalidOperationException($"Account '{accountId.Value}' is not configured.");
 
-    /// <summary>One configured folder read as the identity, the participation, and the role the folder ports answer with.</summary>
-    private sealed record ConfiguredFolder(
-        MailFolderIdentity Identity,
-        MailFolderParticipation Participation,
-        MailFolderSpecialUse? SpecialUse)
+    /// <summary>Normalizes a configured account identifier the way every lookup arrives already normalized, or reports it unusable.</summary>
+    /// <param name="configuredAccountId">The identifier as the operator wrote it.</param>
+    /// <returns>The normalized identifier, or <see langword="null" /> when it is not a value this system issues.</returns>
+    internal static string? TryReadAccountId(string? configuredAccountId)
     {
-        /// <summary>Reads one account's folder entry, or nothing when its names are not values this system issues.</summary>
-        internal static ConfiguredFolder? TryRead(
-            string configuredAccountId,
-            MailFolderMappingOptions folder)
+        try
         {
-            if (string.IsNullOrWhiteSpace(configuredAccountId) || string.IsNullOrWhiteSpace(folder.Alias))
-            {
-                return null;
-            }
-
-            return new ConfiguredFolder(
-                new MailFolderIdentity(
-                    MailAccountId.Create(configuredAccountId),
-                    MailFolderAlias.Create(folder.Alias)),
-                folder.Participation,
-                folder.ConfiguredSpecialUse);
+            return string.IsNullOrWhiteSpace(configuredAccountId)
+                ? null
+                : MailAccountId.Create(configuredAccountId).Value;
+        }
+        catch (ArgumentException)
+        {
+            return null;
         }
     }
 }

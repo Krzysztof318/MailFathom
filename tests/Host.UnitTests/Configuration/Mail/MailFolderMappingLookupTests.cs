@@ -29,7 +29,7 @@ public sealed class MailFolderMappingLookupTests
             new MailFolderMappingOptions { Alias = "spam", RemotePath = "INBOX.Spam", SpecialUse = "Junk" }));
 
         // Act
-        var folder = options.FindFolderPlayingRole(Primary, MailFolderSpecialUse.Junk);
+        var folder = options.Readers.FolderMappings.FindFolderPlayingRole(Primary, MailFolderSpecialUse.Junk);
 
         // Assert
         Assert.NotNull(folder);
@@ -44,7 +44,7 @@ public sealed class MailFolderMappingLookupTests
         var options = OptionsFor(CreateAccount(new MailFolderMappingOptions { Alias = "archive", SpecialUse = "Archive" }));
 
         // Act
-        var folder = options.FindFolderPlayingRole(Primary, MailFolderSpecialUse.Archive);
+        var folder = options.Readers.FolderMappings.FindFolderPlayingRole(Primary, MailFolderSpecialUse.Archive);
 
         // Assert
         Assert.NotNull(folder);
@@ -61,7 +61,7 @@ public sealed class MailFolderMappingLookupTests
             new MailFolderMappingOptions { Alias = "junk", RemotePath = "INBOX.Junk" }));
 
         // Act
-        var folder = options.FindFolderPlayingRole(Primary, MailFolderSpecialUse.Junk);
+        var folder = options.Readers.FolderMappings.FindFolderPlayingRole(Primary, MailFolderSpecialUse.Junk);
 
         // Assert
         Assert.Null(folder);
@@ -81,7 +81,7 @@ public sealed class MailFolderMappingLookupTests
         }));
 
         // Act
-        var folder = options.FindFolderPlayingRole(Primary, MailFolderSpecialUse.Junk);
+        var folder = options.Readers.FolderMappings.FindFolderPlayingRole(Primary, MailFolderSpecialUse.Junk);
 
         // Assert
         Assert.NotNull(folder);
@@ -97,7 +97,7 @@ public sealed class MailFolderMappingLookupTests
         var options = OptionsFor(CreateAccount());
 
         // Act
-        var folder = options.FindFolderPlayingRole(Primary, MailFolderSpecialUse.Inbox);
+        var folder = options.Readers.FolderMappings.FindFolderPlayingRole(Primary, MailFolderSpecialUse.Inbox);
 
         // Assert
         Assert.NotNull(folder);
@@ -111,7 +111,7 @@ public sealed class MailFolderMappingLookupTests
         var options = OptionsFor(CreateAccount(new MailFolderMappingOptions { Alias = "junk", SpecialUse = "Junk" }));
 
         // Act
-        var folder = options.FindFolderPlayingRole(MailAccountId.Create("withdrawn"), MailFolderSpecialUse.Junk);
+        var folder = options.Readers.FolderMappings.FindFolderPlayingRole(MailAccountId.Create("withdrawn"), MailFolderSpecialUse.Junk);
 
         // Assert
         Assert.Null(folder);
@@ -125,7 +125,7 @@ public sealed class MailFolderMappingLookupTests
             new MailFolderMappingOptions { Alias = "spam", RemotePath = "INBOX.Spam", SpecialUse = "Junk" }));
 
         // Act
-        var folder = options.FindFolderNamed(Primary, MailFolderAlias.Create("SpAm"));
+        var folder = options.Readers.FolderMappings.FindFolderNamed(Primary, MailFolderAlias.Create("SpAm"));
 
         // Assert
         Assert.NotNull(folder);
@@ -139,7 +139,7 @@ public sealed class MailFolderMappingLookupTests
         var options = OptionsFor(CreateAccount(new MailFolderMappingOptions { Alias = "inbox", SpecialUse = "Inbox" }));
 
         // Act
-        var folder = options.FindFolderNamed(Primary, MailFolderAlias.Create("archive"));
+        var folder = options.Readers.FolderMappings.FindFolderNamed(Primary, MailFolderAlias.Create("archive"));
 
         // Assert
         Assert.Null(folder);
@@ -155,8 +155,8 @@ public sealed class MailFolderMappingLookupTests
             new MailFolderMappingOptions { Alias = "inbox", SpecialUse = "Inbox" }));
 
         // Act
-        var broken = options.FindFolderNamed(Primary, MailFolderAlias.Create("broken"));
-        var inbox = options.FindFolderPlayingRole(Primary, MailFolderSpecialUse.Inbox);
+        var broken = options.Readers.FolderMappings.FindFolderNamed(Primary, MailFolderAlias.Create("broken"));
+        var inbox = options.Readers.FolderMappings.FindFolderPlayingRole(Primary, MailFolderSpecialUse.Inbox);
 
         // Assert
         Assert.Null(broken);
