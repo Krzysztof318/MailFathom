@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Governance;
 using MailFathom.Domain.Emails;
 using Xunit;
@@ -125,6 +126,74 @@ public sealed class OutgoingRecipientPolicyTests
         Assert.Null(refusal);
     }
 
+    /// <summary>A message everybody on it is admitted for is admitted whole, whichever header each recipient is named in.</summary>
+    [Fact]
+    public void FindFirstRefusal_EveryRecipientAdmitted_ReportsNoRefusal()
+    {
+        // Arrange
+        var policy = OutgoingRecipientPolicy.Create([DomainRule("example.test")], []);
+
+        // Act
+        var refusal = policy.FindFirstRefusal(
+        [
+            Recipient("anna@example.test", OutgoingRecipientRole.To),
+            Recipient("bruno@team.example.test", OutgoingRecipientRole.Cc),
+        ]);
+
+        // Assert
+        Assert.Null(refusal);
+    }
+
+    /// <summary>The message is judged whole, so a recipient in any header refuses it and the reason is that recipient's own.</summary>
+    [Fact]
+    public void FindFirstRefusal_RecipientRefusedInALaterHeader_ReportsThatRecipientsReason()
+    {
+        // Arrange
+        var policy = OutgoingRecipientPolicy.Create([], [DomainRule("rival.test")]);
+
+        // Act
+        var refusal = policy.FindFirstRefusal(
+        [
+            Recipient("anna@example.test", OutgoingRecipientRole.To),
+            Recipient("bruno@rival.test", OutgoingRecipientRole.Bcc),
+        ]);
+
+        // Assert
+        Assert.Equal(OutgoingRecipientRefusalReason.DeniedByPolicy, refusal);
+    }
+
+    /// <summary>The reading stops at the first refusal, so a denial ahead of an outsider is the reason reported.</summary>
+    [Fact]
+    public void FindFirstRefusal_SeveralRecipientsRefused_ReportsTheFirstOfThem()
+    {
+        // Arrange
+        var policy = OutgoingRecipientPolicy.Create([DomainRule("example.test")], [DomainRule("rival.test")]);
+
+        // Act
+        var refusal = policy.FindFirstRefusal(
+        [
+            Recipient("anna@rival.test", OutgoingRecipientRole.To),
+            Recipient("bruno@elsewhere.test", OutgoingRecipientRole.To),
+        ]);
+
+        // Assert
+        Assert.Equal(OutgoingRecipientRefusalReason.DeniedByPolicy, refusal);
+    }
+
+    /// <summary>A message addressed to nobody names nobody the policy could refuse.</summary>
+    [Fact]
+    public void FindFirstRefusal_NoRecipients_ReportsNoRefusal()
+    {
+        // Arrange
+        var policy = OutgoingRecipientPolicy.Create([DomainRule("example.test")], []);
+
+        // Act
+        var refusal = policy.FindFirstRefusal([]);
+
+        // Assert
+        Assert.Null(refusal);
+    }
+
     /// <summary>Text that names no organization or mailbox is no entry at all, which is what a configuration refuses at startup.</summary>
     [Theory]
     [InlineData(null)]
@@ -184,6 +253,9 @@ public sealed class OutgoingRecipientPolicyTests
 
         return rule;
     }
+
+    private static OutgoingRecipient Recipient(string address, OutgoingRecipientRole role) =>
+        OutgoingRecipient.Create(Address(address), role);
 
     private static EmailAddress Address(string address)
     {

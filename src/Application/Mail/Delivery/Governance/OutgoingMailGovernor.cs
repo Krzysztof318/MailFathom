@@ -66,12 +66,9 @@ public sealed class OutgoingMailGovernor(
             throw OutgoingMailRefusedException.SendingNotEnabled(refusal);
         }
 
-        foreach (var recipient in request.Recipients)
+        if (recipientPolicy.FindFirstRefusal(request.Recipients) is { } recipientRefusal)
         {
-            if (recipientPolicy.Judge(recipient.Address) is { } recipientRefusal)
-            {
-                throw OutgoingMailRefusedException.RecipientRefused(recipientRefusal);
-            }
+            throw OutgoingMailRefusedException.RecipientRefused(recipientRefusal);
         }
 
         if (ceilings.IsUnbounded)

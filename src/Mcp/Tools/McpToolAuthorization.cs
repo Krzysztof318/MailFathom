@@ -54,10 +54,9 @@ internal static class McpToolAuthorization
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="next" /> or <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the listing arrives without a service provider, which leaves nothing able to say whose grant to apply.</exception>
     /// <remarks>
-    /// The inner pipeline runs first and descriptors are removed from what it produced, for the reason the availability
-    /// filter gives: the tools a listing carries are the SDK's to compose — a page of them, with a cursor — and a filter
-    /// that decided not to call it would be reimplementing that. A descriptor naming a tool this surface does not publish
-    /// is removed as well, because nothing declared what reaching it would require.
+    /// The inner pipeline runs first and descriptors are removed from what it produced, for the reason
+    /// <see cref="AskMailAdvertisement.WithoutUnavailableAnsweringAsync" /> states. A descriptor naming a tool this
+    /// surface does not publish is removed as well, because nothing declared what reaching it would require.
     /// </remarks>
     public static async Task<ListToolsResult> WithoutUnauthorizedToolsAsync(
         McpRequestHandler<ListToolsRequestParams, ListToolsResult> next,
@@ -77,8 +76,7 @@ internal static class McpToolAuthorization
             return listing;
         }
 
-        // The result is rewritten rather than mutated, because the listing the SDK produced is not this filter's to
-        // change in place and a later page's cursor travels with it unaltered.
+        // Rewritten rather than mutated, for the reason AskMailAdvertisement.WithoutUnavailableAnsweringAsync gives.
         return new ListToolsResult
         {
             Tools = permitted,
