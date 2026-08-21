@@ -1230,7 +1230,7 @@ protected_paths_refuses_a_contributor_changing_repository_root_configuration() {
 
   if run_protected_paths_step \
     'outside-contributor' \
-    $'Directory.Build.props\nLICENSE\nNOTICE\nNuGet.config\nglobal.json\nCHANGELOG.md' \
+    $'Directory.Build.props\nLICENSE\nNOTICE\nNuGet.config\nglobal.json\nCHANGELOG.md\nCLA.md' \
     "$output_file" \
     "$summary_file"; then
     printf 'Protected paths allowed a contributor to change the repository-root configuration\n' >&2
@@ -1238,7 +1238,7 @@ protected_paths_refuses_a_contributor_changing_repository_root_configuration() {
   fi
 
   local protected_file
-  for protected_file in Directory.Build.props LICENSE NOTICE NuGet.config global.json CHANGELOG.md; do
+  for protected_file in Directory.Build.props LICENSE NOTICE NuGet.config global.json CHANGELOG.md CLA.md; do
     assert_contains "::error file=${protected_file}::" "$output_file"
   done
 }
