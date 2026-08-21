@@ -118,13 +118,13 @@ printf 'Obligations this change triggers, against %s.\n' "$base_ref"
 printf '\nTests\n'
 jq -r '
   if (.tests | length) == 0 then
-    "  No production file under src/ changed."
+    "  No production file under backend/src/ changed."
   else
     .tests[]
     | . as $entry
     | (.referencing_tests | map(select(.changed_by_this_pull_request))) as $touched
     | if (.referencing_tests | length) == 0 then
-        "  \(.path)\n    Nothing under tests/ names \(.type)."
+        "  \(.path)\n    Nothing under backend/tests/ names \(.type)."
       elif ($touched | length) == 0 then
         "  \(.path)\n    \(.referencing_test_count) test file(s) name \(.type) and this change touches none:\n"
         + (.referencing_tests | map("      \(.path)") | join("\n"))

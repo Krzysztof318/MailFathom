@@ -1,6 +1,6 @@
 # Connecting an MCP client through your identity provider
 
-<!-- describes: src/Host/Configuration/Access/**, src/Host/Security/Mcp/OAuthTokenValidation.cs, src/Host/Security/Mcp/OAuthAuthorizationServerMetadataRetriever.cs, src/Host/Security/Mcp/InsufficientScopeResultHandler.cs, src/Host/Security/Transport/ProtectedResourceMetadataAddress.cs, src/Common/OAuth/OAuthMetadataAddresses.cs -->
+<!-- describes: backend/src/Host/Configuration/Access/**, backend/src/Host/Security/Mcp/OAuthTokenValidation.cs, backend/src/Host/Security/Mcp/OAuthAuthorizationServerMetadataRetriever.cs, backend/src/Host/Security/Mcp/InsufficientScopeResultHandler.cs, backend/src/Host/Security/Transport/ProtectedResourceMetadataAddress.cs, backend/src/Common/OAuth/OAuthMetadataAddresses.cs -->
 
 > [!WARNING]
 > Some of the steps on this page are performed in a product this project does not control. Any screen, menu, or field

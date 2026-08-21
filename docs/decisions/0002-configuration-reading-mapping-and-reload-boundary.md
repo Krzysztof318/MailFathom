@@ -9,7 +9,7 @@ informed:
 
 # Use an application-owned configuration access layer for reading, mapping, and reloadable business settings
 
-<!-- describes: src/Host/Configuration/** -->
+<!-- describes: backend/src/Host/Configuration/** -->
 
 ## Context and Problem Statement
 

@@ -1,6 +1,6 @@
 # Applying the database schema
 
-<!-- describes: src/Infrastructure/Persistence/Migrations/**, src/Infrastructure/Persistence/Embeddings/EmbeddingProfileVectorIndex.cs, src/AppHost/**, scripts/build-schema-artifact.sh -->
+<!-- describes: backend/src/Infrastructure/Persistence/Migrations/**, backend/src/Infrastructure/Persistence/Embeddings/EmbeddingProfileVectorIndex.cs, backend/src/AppHost/**, scripts/build-schema-artifact.sh -->
 
 MailFathom never applies a schema change while starting, in any environment. It verifies the migration history and
 refuses to serve against a schema it does not recognize, so bringing a new version up *tells* you a migration is
@@ -293,7 +293,7 @@ scripts/build-schema-artifact.sh
 ```
 
 It comes from `aspire publish`, which reads the `PublishAsMigrationScript` declaration in the app model
-(`src/AppHost/Program.cs`) rather than from a second `dotnet ef` invocation written beside it — so the release path and
+(`backend/src/AppHost/Program.cs`) rather than from a second `dotnet ef` invocation written beside it — so the release path and
 a developer's path state which context, which migrations project, and which options exactly once. The script reaches no
 database: it reads the migration assembly, and produces identical output against a server that does not exist.
 

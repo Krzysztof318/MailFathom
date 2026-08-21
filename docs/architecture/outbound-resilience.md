@@ -1,6 +1,6 @@
 # Outbound resilience
 
-<!-- describes: src/Application/Resilience/**, src/Infrastructure/Resilience/**, src/Domain/Transport/**, src/Host/ServiceDefaultsExtensions.cs, src/Infrastructure/ServiceCollectionExtensions.cs, src/AI/AiServiceCollectionExtensions.cs -->
+<!-- describes: backend/src/Application/Resilience/**, backend/src/Infrastructure/Resilience/**, backend/src/Domain/Transport/**, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Infrastructure/ServiceCollectionExtensions.cs, backend/src/AI/AiServiceCollectionExtensions.cs -->
 
 MailFathom calls dependencies it does not control: IMAP servers, SMTP servers, PostgreSQL, and chat and embedding
 providers. Each of them fails in ways that clear on their own and in ways that never will, and the difference decides
@@ -130,7 +130,7 @@ is the layer rather than something MailFathom re-implements:
 
 - **HTTP.** `AddStandardResilienceHandler` in the host's service defaults wraps every `HttpClient` the client factory
   builds, and every outbound client in this process is built by that factory — which is the convention rather than an
-  accident, and `src/AGENTS.md` § *Outbound HTTP clients* is where it is stated. A provider client that reaches its
+  accident, and `backend/src/AGENTS.md` § *Outbound HTTP clients* is where it is stated. A provider client that reaches its
   model over `HttpClient` is therefore already protected, and must not also be wrapped in the `AiProviderInvocation`
   pipeline. An adapter that wants the pipeline instead removes the handler from its own registration with
   `RemoveAllResilienceHandlers`; it may not have both.

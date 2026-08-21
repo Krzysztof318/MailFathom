@@ -18,7 +18,7 @@ name: Mutation score
 # travels, and it does not make this job green: a preview test runner that crashes, or one that writes no report, fails
 # the step and marks the job failed — which is the one failure worth seeing, because it says the diagnostic did not come
 # out. What it stops is that failing the nightly run around it, so a missing report never reads as a verdict about the
-# image published beside it. `tests/AGENTS.md` § *Cost claims* states the same rule for the benchmarks this job sits
+# image published beside it. `backend/tests/AGENTS.md` § *Cost claims* states the same rule for the benchmarks this job sits
 # beside, and this is the same kind of measurement on the same channel.
 #
 # Nothing waits for this job either. It is called for its report, the two projects run as separate jobs so one failing

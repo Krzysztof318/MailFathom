@@ -1,6 +1,6 @@
 # AI configuration
 
-<!-- describes: src/Host/Configuration/Embeddings/**, src/Host/Configuration/Chat/**, src/Host/Configuration/Answering/**, src/Host/Configuration/Spam/**, src/Host/Configuration/SensitiveContent/**, src/Host/Configuration/Providers/** -->
+<!-- describes: backend/src/Host/Configuration/Embeddings/**, backend/src/Host/Configuration/Chat/**, backend/src/Host/Configuration/Answering/**, backend/src/Host/Configuration/Spam/**, backend/src/Host/Configuration/SensitiveContent/**, backend/src/Host/Configuration/Providers/** -->
 
 Every key deciding what leaves this process for a model provider and what it may cost: what is scanned before it goes,
 which endpoint and model each capability reaches, what one question and one period may spend, what classification does

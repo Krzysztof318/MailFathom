@@ -18,8 +18,8 @@
 # The two kinds of edge it follows are recorded differently on purpose.
 #
 # A production type to its test is *derived*, never recorded. `AGENTS.md` requires one primary type
-# per file and a file name that matches it, and `tests/<Boundary>.UnitTests/` mirrors
-# `src/<Boundary>/`, so the mapping already exists as a rule the build enforces. A written-down copy
+# per file and a file name that matches it, and `backend/tests/<Boundary>.UnitTests/` mirrors
+# `backend/src/<Boundary>/`, so the mapping already exists as a rule the build enforces. A written-down copy
 # could drift from it; a derived one cannot.
 #
 # A source path to the page that documents it is *declared*, because nothing derives it:
@@ -78,7 +78,7 @@ path_is_changed() {
 # Migrations are excluded: `AGENTS.md` makes them append-only and generated, so a migration owes no
 # unit test and a reviewer asked to check for one would raise the same wrong finding on every schema
 # change.
-grep -E '^src/.+\.cs$' "$work_directory/present-paths" \
+grep -E '^backend/src/.+\.cs$' "$work_directory/present-paths" \
   | grep -vE '/Migrations/' \
   > "$work_directory/changed-sources" || true
 
@@ -93,10 +93,10 @@ if [[ -s "$work_directory/type-names" ]]; then
   # One pass over the test tree rather than one grep per changed type. `-w` gives the whole-word
   # match that keeps `EmailSummary` from matching `StoredEmailSummary`, and `-F` keeps a type name
   # that happens to contain a regular-expression character from being read as a pattern.
-  if [[ -d "$repository_root/tests" ]]; then
+  if [[ -d "$repository_root/backend/tests" ]]; then
     (
       cd "$repository_root"
-      grep -roFw --include='*.cs' -f "$work_directory/type-names" tests 2>/dev/null || true
+      grep -roFw --include='*.cs' -f "$work_directory/type-names" backend/tests 2>/dev/null || true
     ) > "$work_directory/base-references"
 
     # `path:match` becomes `match<TAB>path`, which is the direction the lookup below reads.
@@ -109,7 +109,7 @@ if [[ -s "$work_directory/type-names" ]]; then
   # so they are searched as one file of `path<TAB>line` records.
   jq -r '
     .[]
-    | select(.filename | startswith("tests/"))
+    | select(.filename | startswith("backend/tests/"))
     | select(.patch != null)
     | .filename as $path
     | .patch
@@ -181,7 +181,7 @@ while IFS= read -r source_path; do
   fi
 
   type_name="$(basename "$source_path" .cs)"
-  boundary="$(cut -d'/' -f2 <<< "$source_path")"
+  boundary="$(cut -d'/' -f3 <<< "$source_path")"
   reference_count="$(count_references_for_type "$type_name")"
 
   if (( reference_count > max_references_per_type )); then
@@ -192,7 +192,7 @@ while IFS= read -r source_path; do
     --arg path "$source_path" \
     --arg type "$type_name" \
     --arg status "$(jq -r --arg path "$source_path" 'map(select(.filename == $path)) | .[0].status // ""' "$files_json")" \
-    --arg project "tests/${boundary}.UnitTests" \
+    --arg project "backend/tests/${boundary}.UnitTests" \
     --argjson count "$reference_count" \
     --argjson tests "$(references_for_type "$type_name")" \
     '{path: $path, type: $type, status: $status, expected_test_project: $project,
@@ -208,7 +208,7 @@ done < "$work_directory/changed-sources"
 
 # A `describes:` pattern is matched as a regular expression over the path list, because no shell
 # construct gives the two meanings this needs at once: `**` crosses directory separators and `*`
-# does not, which is what makes `src/*/*.csproj` mean the project files and `src/**` mean everything
+# does not, which is what makes `backend/src/*/*.csproj` mean the project files and `backend/src/**` mean everything
 # under the boundary.
 #
 # What this has to agree with is git's own `:(glob)` pathspec, because that is what
@@ -217,8 +217,8 @@ done < "$work_directory/changed-sources"
 # the paths it covers.
 #
 # Agreeing means `**` bounded by slashes matches *zero* directories as well as many: git documents
-# `a/**/b` as matching `a/b`, so `src/**/*Options.cs` has to credit `src/FooOptions.cs` and not only
-# `src/Host/Configuration/McpOptions.cs`. Turning the `**` alone into `.*` and leaving both slashes
+# `a/**/b` as matching `a/b`, so `backend/src/**/*Options.cs` has to credit `backend/src/FooOptions.cs` and not only
+# `backend/src/Host/Configuration/McpOptions.cs`. Turning the `**` alone into `.*` and leaving both slashes
 # where they were would require a directory between them, so the slash is taken into the rewrite:
 # `/**/` becomes `/(.*/)?` as one unit, and a leading `**/` becomes `(.*/)?` for the same reason at
 # the front of a pattern.
@@ -333,13 +333,13 @@ emit_register 'a dependency pin moved in Directory.Packages.props or a packages.
   'THIRD_PARTY_LICENSES.md' "$dependency_pins_changed"
 
 exception_added='false'
-if jq -e '[.[] | select(.status == "added") | select(.filename | test("^src/.*Exception\\.cs$"))] | length > 0' \
+if jq -e '[.[] | select(.status == "added") | select(.filename | test("^backend/src/.*Exception\\.cs$"))] | length > 0' \
      "$files_json" > /dev/null; then
   exception_added='true'
 fi
 
-emit_register 'a new exception type was added under src/' \
-  'src/Domain/Failures/MailFathomErrorCode.cs' "$exception_added"
+emit_register 'a new exception type was added under backend/src/' \
+  'backend/src/Domain/Failures/MailFathomErrorCode.cs' "$exception_added"
 
 # ---------------------------------------------------------------------------
 

@@ -64,9 +64,9 @@ has stated a different rule is a wrong candidate, and so is one these files alre
   email invariants, and the posture under "Project status".
 - `.agents/skills/review-change/SKILL.md`. Its "Recurring findings" section is the
   distilled history of what review has actually caught here.
-- `src/AGENTS.md`, `src/Infrastructure/AGENTS.md`, `tests/AGENTS.md`, and `docs/AGENTS.md`
+- `backend/src/AGENTS.md`, `backend/src/Infrastructure/AGENTS.md`, `backend/tests/AGENTS.md`, and `docs/AGENTS.md`
   for the parts of the tree your group touches. A nested file adds rules to the root one
-  rather than replacing them, and the .NET and C# conventions in `src/AGENTS.md` govern
+  rather than replacing them, and the .NET and C# conventions in `backend/src/AGENTS.md` govern
   test code as well.
 - The ADRs under `docs/decisions/` that govern the area your files change.
 

@@ -41,7 +41,7 @@ name: CodeQL
 # `github/codeql-action` v4 ships is past that. What makes this a check rather than a belief is the
 # last step: a bundle that cannot extract this SDK's output produces a database with nothing in it and
 # a green run, which is worse than no analysis at all, so the run fails when the database holds fewer
-# source files than `src/` does.
+# source files than `backend/src/` does.
 #
 # **A finding does not block a merge.** This workflow is not in the `main` ruleset and reports no
 # required status check. The reasoning is not `Typo check`'s — a misspelling is worth less than a
@@ -153,9 +153,9 @@ jobs:
       # The step that makes the run's verdict mean something. "CodeQL detected code written in C# but
       # could not process any of it" is a failure loud enough to notice; a database holding a fraction
       # of the source is not, and it produces the same green check as a clean analysis. The source
-      # archive is compared against what `src/` actually contains, so a partial extraction — a new SDK
+      # archive is compared against what `backend/src/` actually contains, so a partial extraction — a new SDK
       # the bundle cannot read, a project that stopped compiling into the traced window — fails here
-      # instead of being reported as no findings. The bound is `src/` alone even though a solution
+      # instead of being reported as no findings. The bound is `backend/src/` alone even though a solution
       # build extracts the test projects and the generated sources as well, which is the headroom that
       # keeps a true statement from becoming a brittle one.
       - name: Verify the database holds this repository's source
@@ -173,16 +173,16 @@ jobs:
           fi
 
           extracted_count="$(unzip -Z1 "$source_archive" | grep -c '\.cs$' || true)"
-          expected_count="$(git ls-files -- ':(glob)src/**/*.cs' | grep -c '' || true)"
+          expected_count="$(git ls-files -- ':(glob)backend/src/**/*.cs' | grep -c '' || true)"
 
           if (( expected_count == 0 )); then
-            echo "::error::No C# source was found under src/, so there is nothing to compare the CodeQL database against."
+            echo "::error::No C# source was found under backend/src/, so there is nothing to compare the CodeQL database against."
             exit 1
           fi
 
           if (( extracted_count < expected_count )); then
-            echo "::error::The CodeQL database holds ${extracted_count} C# source file(s) and src/ contains ${expected_count}. The analysis saw less than the repository's own production code, so its findings say nothing about the rest."
+            echo "::error::The CodeQL database holds ${extracted_count} C# source file(s) and backend/src/ contains ${expected_count}. The analysis saw less than the repository's own production code, so its findings say nothing about the rest."
             exit 1
           fi
 
-          echo "The CodeQL database holds ${extracted_count} C# source file(s), covering the ${expected_count} under src/."
+          echo "The CodeQL database holds ${extracted_count} C# source file(s), covering the ${expected_count} under backend/src/."

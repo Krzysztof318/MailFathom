@@ -1,6 +1,6 @@
 # Mail answering
 
-<!-- describes: src/AI/Orchestration/**, src/AI/Retrieval/**, src/AI/ProviderAdapters/ResilientChatClient.cs, src/Application/Retrieval/**, src/Domain/Answering/**, src/Infrastructure/Persistence/Answering/**, src/Host/Configuration/Mail/MailAnsweringAuditTrailOptions.cs, src/Host/Configuration/Access/TransportRequestTimeoutOptions.cs -->
+<!-- describes: backend/src/AI/Orchestration/**, backend/src/AI/Retrieval/**, backend/src/AI/ProviderAdapters/ResilientChatClient.cs, backend/src/Application/Retrieval/**, backend/src/Domain/Answering/**, backend/src/Infrastructure/Persistence/Answering/**, backend/src/Host/Configuration/Mail/MailAnsweringAuditTrailOptions.cs, backend/src/Host/Configuration/Access/TransportRequestTimeoutOptions.cs -->
 
 A question about the mailbox, answered from the mail the model looks up while answering. This page describes the
 composition that does it: what the model may reach, when it reaches it, how much of it leaves the process, and what an

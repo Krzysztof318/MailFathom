@@ -1,6 +1,6 @@
 # Sender authentication
 
-<!-- describes: src/Domain/Emails/Authentication/**, src/Application/Mail/ITrustedAuthenticationAuthorityReader.cs, src/Application/Mail/ISenderTrustPolicyReader.cs, src/Application/Mail/IDkimPublicKeyRecordResolver.cs, src/Application/Emails/Extraction/SenderTrustEvaluatingEmailMimeReader.cs, src/Infrastructure/Mail/Dkim/**, src/Infrastructure/Mail/Mime/AuthenticationResultsHeaderReader.cs, src/Infrastructure/Mail/Mime/MimeKitEmailMimeReader.cs -->
+<!-- describes: backend/src/Domain/Emails/Authentication/**, backend/src/Application/Mail/ITrustedAuthenticationAuthorityReader.cs, backend/src/Application/Mail/ISenderTrustPolicyReader.cs, backend/src/Application/Mail/IDkimPublicKeyRecordResolver.cs, backend/src/Application/Emails/Extraction/SenderTrustEvaluatingEmailMimeReader.cs, backend/src/Infrastructure/Mail/Dkim/**, backend/src/Infrastructure/Mail/Mime/AuthenticationResultsHeaderReader.cs, backend/src/Infrastructure/Mail/Mime/MimeKitEmailMimeReader.cs -->
 
 Everything about deciding whether a message is from who it says rests on one question: which domain actually sent it?
 The obvious answer is wrong. `From` is a header the sender writes, it is what a mail client displays, and it is what

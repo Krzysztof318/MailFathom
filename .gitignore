@@ -16,7 +16,7 @@ artifacts/
 !.env.example
 
 # What a documentation build writes beside its own configuration. `api/` is the reference generated from the XML
-# comments in `src/`, and `_site/` is the rendered site when docfx is run without an output directory;
+# comments in `backend/src/`, and `_site/` is the rendered site when docfx is run without an output directory;
 # `scripts/build-docs-site.sh` writes under `artifacts/` instead, which is ignored above.
 docfx/api/
 docfx/_site/

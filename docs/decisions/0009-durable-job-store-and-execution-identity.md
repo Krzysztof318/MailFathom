@@ -9,7 +9,7 @@ informed:
 
 # Keep the job store in MailFathom's own schema, claim a row with `FOR UPDATE SKIP LOCKED`, and let the enqueuer compose the one key that identifies an execution
 
-<!-- describes: src/Application/Jobs/**, src/Infrastructure/Persistence/Jobs/**, src/Infrastructure/Persistence/Entities/JobEntity.cs -->
+<!-- describes: backend/src/Application/Jobs/**, backend/src/Infrastructure/Persistence/Jobs/**, backend/src/Infrastructure/Persistence/Entities/JobEntity.cs -->
 
 ## Context and Problem Statement
 

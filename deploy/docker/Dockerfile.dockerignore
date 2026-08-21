@@ -10,7 +10,7 @@
 
 **
 
-!/src
+!/backend/src
 !/Directory.Build.props
 !/Directory.Packages.props
 !/NuGet.config
@@ -35,5 +35,5 @@
 
 # Build output from the host machine. It is architecture- and configuration-specific, it can be stale, and letting it
 # into the context would let a local build decide what the image contains.
-/src/**/bin
-/src/**/obj
+/backend/src/**/bin
+/backend/src/**/obj

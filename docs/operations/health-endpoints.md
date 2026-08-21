@@ -1,6 +1,6 @@
 # The health endpoints and the listener they are served on
 
-<!-- describes: src/Host/Hosting/**, src/Host/Configuration/Endpoints/HealthEndpointOptions.cs, src/Host/Configuration/Endpoints/EndpointTransport.cs, src/Host/Configuration/Endpoints/ListenerComposition.cs, src/Host/Configuration/Endpoints/ServedSurfaces.cs, src/Host/Security/Endpoints/Health*, src/Infrastructure/SensitiveContent/PersonalData/PresidioAnalyzerProbe.cs -->
+<!-- describes: backend/src/Host/Hosting/**, backend/src/Host/Configuration/Endpoints/HealthEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/EndpointTransport.cs, backend/src/Host/Configuration/Endpoints/ListenerComposition.cs, backend/src/Host/Configuration/Endpoints/ServedSurfaces.cs, backend/src/Host/Security/Endpoints/Health*, backend/src/Infrastructure/SensitiveContent/PersonalData/PresidioAnalyzerProbe.cs -->
 
 An orchestrator decides three things about a process by asking it: whether it has finished coming up, whether it can
 serve a request right now, and whether it is still running rather than stuck. MailFathom answers those three questions on

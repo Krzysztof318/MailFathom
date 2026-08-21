@@ -1,6 +1,6 @@
 # Mailbox OAuth
 
-<!-- describes: src/Infrastructure/Mail/OAuth/**, src/Common/MailboxOAuth/**, src/Common/OAuth/**, src/Cli/**, src/Host/Api/**, src/Application/Accounts/**, src/Infrastructure/Persistence/Accounts/** -->
+<!-- describes: backend/src/Infrastructure/Mail/OAuth/**, backend/src/Common/MailboxOAuth/**, backend/src/Common/OAuth/**, backend/src/Cli/**, backend/src/Host/Api/**, backend/src/Application/Accounts/**, backend/src/Infrastructure/Persistence/Accounts/** -->
 
 > [!WARNING]
 > Some of the steps on this page are performed in a product this project does not control. Any screen, menu, or field

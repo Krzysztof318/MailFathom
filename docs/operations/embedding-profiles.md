@@ -1,6 +1,6 @@
 # Changing the embedding model without a search outage
 
-<!-- describes: src/Application/Emails/Embeddings/Generations/**, src/Infrastructure/Persistence/Embeddings/EmbeddingGenerationStore.cs -->
+<!-- describes: backend/src/Application/Emails/Embeddings/Generations/**, backend/src/Infrastructure/Persistence/Embeddings/EmbeddingGenerationStore.cs -->
 
 Re-embedding a mailbox takes as long as it takes and costs what it costs. If activating a new model invalidated the
 vectors already stored, semantic search would be degraded for the whole run, and an operator who changed model on a

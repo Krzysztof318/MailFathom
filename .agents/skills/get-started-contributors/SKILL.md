@@ -113,13 +113,14 @@ offer to go deeper on any one of them instead of expanding all six.
    third one out loud rather than leaving it to be discovered in a review, and say the part that goes with it: the
    language a contributor thinks and asks questions in is their own.
 
-3. **Where things live.** `src/` holds the clean-architecture boundaries — `Domain`, `Application`, `Infrastructure`,
-   `AI`, `Mcp`, `Host`, `Cli` — and `tests/` mirrors them. `docs/` states what the code *does* and `specs/` holds the
-   architecture draft, which states what MailFathom is being built into; `docs/decisions/` holds the ADRs a change is
-   written to be consistent with. `deploy/`, `scripts/`, and `tools/` are the deployment assets, the gates, and the
-   development utilities — `tools/SyntheticMail` fills a mailbox to work against — and `.agents/skills/` is this
-   workflow, which Claude Code finds through the `.claude/skills` symlink every clone carries. Each directory's own
-   `AGENTS.md` governs it, and the table in the root one says which to read when.
+3. **Where things live.** `backend/` holds the .NET stack: `backend/src/` holds the clean-architecture boundaries —
+   `Domain`, `Application`, `Infrastructure`, `AI`, `Mcp`, `Host`, `Cli` — and `backend/tests/` mirrors them.
+   `frontend/` carries the same two directories for the frontend application and no project yet. `docs/` states what
+   the code *does* and `specs/` holds the architecture draft, which states what MailFathom is being built into;
+   `docs/decisions/` holds the ADRs a change is written to be consistent with. `deploy/`, `scripts/`, and `tools/` are
+   the deployment assets, the gates, and the development utilities — `tools/SyntheticMail` fills a mailbox to work
+   against — and `.agents/skills/` is this workflow, which Claude Code finds through the `.claude/skills` symlink every
+   clone carries. Each directory's own `AGENTS.md` governs it, and the table in the root one says which to read when.
 
 4. **The licence, and the one mistake that cannot be undone.** MailFathom is Apache-2.0, and section 5 puts a
    contribution under the same licence by the act of submitting it: there is no CLA, no DCO, nothing to sign, and no bot

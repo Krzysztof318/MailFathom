@@ -1,6 +1,6 @@
 # Local development
 
-<!-- describes: scripts/**, global.json, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, src/AppHost/**, src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, tests/IntegrationTests/ProviderAdapters/**, tools/** -->
+<!-- describes: scripts/**, global.json, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, backend/src/AppHost/**, backend/src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, backend/tests/IntegrationTests/ProviderAdapters/**, tools/** -->
 
 Use the .NET SDK pinned in `global.json`. Test execution is configured for Microsoft Testing Platform through the repository-level `global.json` test runner setting.
 
@@ -131,11 +131,11 @@ what they produce and how a published image is verified.
 MIME extraction with BenchmarkDotNet and leaves the table on the run and in its summary. No job waits on it and a
 failure there is swallowed, because throughput on a hosted runner is not reproducible to a precision worth blocking a
 channel over — what a change actually has to satisfy is the allocation budget the same paths carry in
-`tests/AllocationBudgets.UnitTests`, which the pull-request gate runs. It does have a local equivalent, and running it
+`backend/tests/AllocationBudgets.UnitTests`, which the pull-request gate runs. It does have a local equivalent, and running it
 is how a suspected regression is looked at before anything is claimed about it:
 
 ```bash
-dotnet run --project tests/Benchmarks/Benchmarks.csproj --configuration Release -- --filter '*' --artifacts artifacts/benchmarks
+dotnet run --project backend/tests/Benchmarks/Benchmarks.csproj --configuration Release -- --filter '*' --artifacts artifacts/benchmarks
 ```
 
 Both scripts stop immediately when `HEAD` resolves to `main` or `master`,
@@ -147,7 +147,7 @@ as well as in a linked worktree.
 Run the web host directly, against a PostgreSQL server you provide yourself:
 
 ```bash
-dotnet run --project src/Host/Host.csproj
+dotnet run --project backend/src/Host/Host.csproj
 ```
 
 The host inherits the environment it is started in, so a development mailbox on a mail server the platform's TLS
@@ -162,7 +162,7 @@ host in the right order, so a working MailFathom is one command on a machine wit
 daemon:
 
 ```bash
-dotnet run --project src/AppHost/AppHost.csproj
+dotnet run --project backend/src/AppHost/AppHost.csproj
 ```
 
 Three resources come up, in dependency order. The `postgres` container starts first and has to report healthy; the
@@ -199,9 +199,9 @@ tool should not have to. So each socket is pinned on its own, in the app host's 
 about one machine belongs, out of every checkout:
 
 ```bash
-dotnet user-secrets --project src/AppHost/AppHost.csproj set "Ports:McpEndpoint" "8080"
-dotnet user-secrets --project src/AppHost/AppHost.csproj set "Ports:HealthEndpoints" "8081"
-dotnet user-secrets --project src/AppHost/AppHost.csproj set "Ports:Postgres" "5432"
+dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:McpEndpoint" "8080"
+dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:HealthEndpoints" "8081"
+dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:Postgres" "5432"
 ```
 
 `8080` and `8081` are the ports [the container image](container-image.md) publishes and `5432` is PostgreSQL's own, so
@@ -210,14 +210,14 @@ the MCP endpoint leaves the probes and the database on whatever the run takes. A
 between `1` and `65535` fails the app host at startup naming the key, rather than being ignored and leaving the address
 to move anyway.
 
-That store is keyed by the `UserSecretsId` in `src/AppHost/AppHost.csproj`, which is one fixed identifier, so a port
+That store is keyed by the `UserSecretsId` in `backend/src/AppHost/AppHost.csproj`, which is one fixed identifier, so a port
 pinned there is pinned for **every checkout on the machine** — which is the collision above, taken deliberately for the
 address it buys. It is also loaded in the `Development` environment only, which is what the app host's only launch
 profile runs it in. The environment form of each key is what pins a port for one run: `Ports__McpEndpoint`,
 `Ports__HealthEndpoints`, and `Ports__Postgres` are read after the store and therefore win over it.
 
 ```bash
-Ports__McpEndpoint=8080 dotnet run --project src/AppHost/AppHost.csproj
+Ports__McpEndpoint=8080 dotnet run --project backend/src/AppHost/AppHost.csproj
 ```
 
 A port nothing pinned is read from the dashboard, which lists each resource's endpoints, and from the host's own
@@ -247,9 +247,9 @@ enable the endpoint the same way when a tool call is what is being tested — in
 interpretation keeps the credential a one-liner:
 
 ```bash
-dotnet user-secrets --project src/Host/Host.csproj set "McpEndpoint:Enabled" "true"
-dotnet user-secrets --project src/Host/Host.csproj set "McpEndpoint:Authentication:0:ApiKey:Name" "dev"
-dotnet user-secrets --project src/Host/Host.csproj set "McpEndpoint:Authentication:0:ApiKey:SecretReference" "plaintext:dev-key"
+dotnet user-secrets --project backend/src/Host/Host.csproj set "McpEndpoint:Enabled" "true"
+dotnet user-secrets --project backend/src/Host/Host.csproj set "McpEndpoint:Authentication:0:ApiKey:Name" "dev"
+dotnet user-secrets --project backend/src/Host/Host.csproj set "McpEndpoint:Authentication:0:ApiKey:SecretReference" "plaintext:dev-key"
 ```
 
 A development mailbox served by a mail server whose TLS parameters the platform refuses needs one more thing, and the
@@ -262,7 +262,7 @@ under no circumstances, because a suite whose handshakes depended on the machine
 
 An MCP client then connects to `http://localhost:<the port the MCP endpoint took>/mcp` with
 `Authorization: Bearer dev-key`. Stopping the orchestration with `Ctrl+C` — or
-`aspire stop --apphost src/AppHost/AppHost.csproj --non-interactive` — leaves the synchronized mail in place, because
+`aspire stop --apphost backend/src/AppHost/AppHost.csproj --non-interactive` — leaves the synchronized mail in place, because
 the database volume outlives the container and the container outlives the run. The container is stopped rather than
 left running, so the next start is a restart of the server that was there.
 
@@ -316,7 +316,7 @@ Pinning that port has one consequence worth knowing: a PostgreSQL already listen
 system service or another orchestration, takes it first and the container then fails to start with an address-in-use
 error naming it.
 
-`src/AppHost/AppHost.csproj` still declares a `UserSecretsId`, and `src/AppHost/Properties/launchSettings.json` still
+`backend/src/AppHost/AppHost.csproj` still declares a `UserSecretsId`, and `backend/src/AppHost/Properties/launchSettings.json` still
 sets `DOTNET_ENVIRONMENT=Development`, because that is where Aspire persists what it generates for the app model
 itself — the dashboard and OTLP API keys — and where [a pinned port](#pinning-a-port) is stated; user secrets are loaded
 in the `Development` environment only.
@@ -324,7 +324,7 @@ in the `Development` environment only.
 To discard the local database and start from an empty one, remove the container and its volume:
 
 ```bash
-aspire stop --apphost src/AppHost/AppHost.csproj --non-interactive
+aspire stop --apphost backend/src/AppHost/AppHost.csproj --non-interactive
 docker volume ls --filter name=-postgres-data
 docker rm -f $(docker ps -aq --filter volume=<volume>)
 docker volume rm <volume>
@@ -342,7 +342,7 @@ Secrets are never written into configuration as values, in development either. `
 }
 ```
 
-`src/Host/Host.csproj` declares the `UserSecretsId` those commands write into. It is a fixed identifier rather than one
+`backend/src/Host/Host.csproj` declares the `UserSecretsId` those commands write into. It is a fixed identifier rather than one
 generated per clone, so every checkout reads the same store and the commands below can be named here at all. The secret
 store is loaded by the framework in the `Development` environment only, which is the environment the orchestration and
 both launch profiles run the host in.
@@ -350,9 +350,9 @@ both launch profiles run the host in.
 Configure a development account in `appsettings.Development.json` or, better, in user secrets:
 
 ```bash
-dotnet user-secrets --project src/Host/Host.csproj set \
+dotnet user-secrets --project backend/src/Host/Host.csproj set \
   "MailSynchronization:Accounts:0:Secrets:Password:Name" "dev-password"
-dotnet user-secrets --project src/Host/Host.csproj set \
+dotnet user-secrets --project backend/src/Host/Host.csproj set \
   "MailSynchronization:Accounts:0:Secrets:Password:SecretReference" "plaintext:dev-password"
 ```
 
@@ -371,7 +371,7 @@ it. It exists so that nobody has to point a local run at their own correspondenc
 sensitive by default.
 
 It is a development tool and is not part of the product. It ships in no artifact, is a command of `mfctl` in no sense,
-and no project under `src/` references it; `the_development_tooling_never_reaches_a_published_artifact` in
+and no project under `backend/src/` references it; `the_development_tooling_never_reaches_a_published_artifact` in
 `scripts/test-agent-workflow.sh` is what holds all three rather than a convention. Build it from source and run it:
 
 ```bash
@@ -541,12 +541,12 @@ Which mechanism a command uses is decided by one question: whether it needs a da
 
 **A command that reaches a database goes through the AppHost's `mailfathom-migrations` resource**, so it uses the server the orchestration provisions and the connection string it issues rather than a local environment that can differ from every real one.
 
-Aspire 13 has no `aspire exec` command; earlier versions offered one, and it is gone. Its replacement is the `Aspire.Hosting.EntityFrameworkCore` package, which declares a migration resource in the app model. `src/AppHost/Program.cs` adds it against the host project, points it at `src/Infrastructure` for the migrations, and calls `RunDatabaseUpdateOnStart`, so a local run applies pending migrations before the host starts and the host waits for that to finish.
+Aspire 13 has no `aspire exec` command; earlier versions offered one, and it is gone. Its replacement is the `Aspire.Hosting.EntityFrameworkCore` package, which declares a migration resource in the app model. `backend/src/AppHost/Program.cs` adds it against the host project, points it at `backend/src/Infrastructure` for the migrations, and calls `RunDatabaseUpdateOnStart`, so a local run applies pending migrations before the host starts and the host waits for that to finish.
 
 ```bash
-aspire resource mailfathom-migrations ef-database-status --apphost src/AppHost/AppHost.csproj --non-interactive
-aspire resource mailfathom-migrations ef-database-update --apphost src/AppHost/AppHost.csproj --non-interactive
-aspire resource mailfathom-migrations ef-database-reset  --apphost src/AppHost/AppHost.csproj --non-interactive
+aspire resource mailfathom-migrations ef-database-status --apphost backend/src/AppHost/AppHost.csproj --non-interactive
+aspire resource mailfathom-migrations ef-database-update --apphost backend/src/AppHost/AppHost.csproj --non-interactive
+aspire resource mailfathom-migrations ef-database-reset  --apphost backend/src/AppHost/AppHost.csproj --non-interactive
 ```
 
 The same commands are available from the dashboard. `ef-database-reset` drops the database and replays every migration into it, which is how local data is cleared; it changes no file in the repository.
@@ -557,7 +557,7 @@ That split is why generating a migration needs no Docker and takes seconds, whil
 
 `dotnet-ef` is pinned in `.config/dotnet-tools.json` and arrives with `dotnet tool restore`. The migration resource fetches its own copy, so a global install is only needed by an editor that runs design-time commands of its own.
 
-`Host` is the startup project, because it is the resource the orchestration issues the connection string to, and it therefore carries a design-time-only reference to `Microsoft.EntityFrameworkCore.Design`. `Infrastructure` owns the context, the design-time factory, and the migrations under `src/Infrastructure/Persistence/Migrations/`.
+`Host` is the startup project, because it is the resource the orchestration issues the connection string to, and it therefore carries a design-time-only reference to `Microsoft.EntityFrameworkCore.Design`. `Infrastructure` owns the context, the design-time factory, and the migrations under `backend/src/Infrastructure/Persistence/Migrations/`.
 
 `MailFathomDbContextDesignTimeFactory` gives EF Core a context without starting the host, which matters because the host composes its connection string during startup and design-time tooling never runs that. It reads `ConnectionStrings__mailfathom` when the orchestration supplies it, then `MAILFATHOM_DESIGN_TIME_CONNECTION_STRING` for a command run outside it, and falls back to `Host=localhost;Database=mailfathom;Username=mailfathom`. The orchestrated value wins so a stale override left in a shell cannot point a migration at a different database than the one being migrated.
 
@@ -569,7 +569,7 @@ Every migration in the repository is permanent. A model change appends one with 
 
 `scripts/script-migration.sh` writes the SQL for a migration range to standard output, which is what a review reads — the generated C# hides the destructive operation, the rewrite EF inferred from a rename, and the lock a column change takes. `scripts/dump-local-schema.sh` then shows the schema PostgreSQL actually holds after the migration is applied. The `add-migration` skill is the surrounding workflow, including the review, which no script performs.
 
-`Pending model changes` in CI runs `dotnet ef migrations has-pending-model-changes` on every pull request touching `src/`, so a model change merged without its migration fails there rather than at a host's startup. Configuration that produces no SQL — a constraint name, an index filter — still moves the model snapshot, so that job can fail on a change that alters no schema; the snapshot is regenerated by EF and never hand-edited.
+`Pending model changes` in CI runs `dotnet ef migrations has-pending-model-changes` on every pull request touching `backend/src/`, so a model change merged without its migration fails there rather than at a host's startup. Configuration that produces no SQL — a constraint name, an index filter — still moves the model snapshot, so that job can fail on a change that alters no schema; the snapshot is regenerated by EF and never hand-edited.
 
 The baseline migration also installs the `vector` extension. The `pgvector/pgvector` image ships it but does not install it, so without this the first vector column would fail on a type PostgreSQL does not know.
 
@@ -589,7 +589,7 @@ That deployment step is one idempotent SQL file, and `scripts/build-schema-artif
 scripts/build-schema-artifact.sh      # artifacts/schema/mailfathom-schema-<version>.sql, and its .sha256
 ```
 
-It runs `aspire publish`, which reads the `PublishAsMigrationScript` declaration in `src/AppHost/Program.cs`, so the file a release attaches and the file this produces come from one statement rather than two. Like the other commands that only read the checkout it reaches no database: the SQL is generated from the migration assembly, so it produces identical output against a server that does not exist. Unlike them it needs the Aspire CLI rather than `dotnet-ef`, because the declaration it reads lives in the app model. [Applying the database schema](database-schema.md) is what an operator then does with it.
+It runs `aspire publish`, which reads the `PublishAsMigrationScript` declaration in `backend/src/AppHost/Program.cs`, so the file a release attaches and the file this produces come from one statement rather than two. Like the other commands that only read the checkout it reaches no database: the SQL is generated from the migration assembly, so it produces identical output against a server that does not exist. Unlike them it needs the Aspire CLI rather than `dotnet-ef`, because the declaration it reads lives in the app model. [Applying the database schema](database-schema.md) is what an operator then does with it.
 
 The documentation site is the other artifact a checkout produces, and `scripts/build-docs-site.sh` produces it:
 
@@ -627,7 +627,7 @@ Three files decide what a restore produces, and each answers a different questio
 
 `NuGet.config` exists because NuGet merges every configuration file on the path from the drive root down to the working directory. Without a repository-owned file the source list is whatever the developer machine defines, so a privately configured feed would be searched for every package here and a restore could resolve a dependency from a source `THIRD_PARTY_LICENSES.md` never reviewed. The file clears that inherited list and declares `nuget.org` alone. Its package source mapping then requires every package identifier, transitive ones included, to match a pattern before it can be restored; the single `*` pattern costs nothing while there is one source, and it makes a second source fail closed rather than silently join the search.
 
-Lock files close the gap central pinning leaves open. The 52 pins in `Directory.Packages.props` are direct references; `src/Infrastructure` alone resolves 47 further packages transitively, and nothing recorded those before. The content hash also means a package republished under a version already pinned no longer passes unnoticed, and a dependency bump shows every transitive move in the pull request diff.
+Lock files close the gap central pinning leaves open. The 52 pins in `Directory.Packages.props` are direct references; `backend/src/Infrastructure` alone resolves 47 further packages transitively, and nothing recorded those before. The content hash also means a package republished under a version already pinned no longer passes unnoticed, and a dependency bump shows every transitive move in the pull request diff.
 
 Eighteen of the twenty projects carry one. `AppHost` and `IntegrationTests` do not, because `Aspire.AppHost.Sdk` adds `Aspire.Dashboard.Sdk.<rid>` and `Aspire.Hosting.Orchestration.<rid>` as references chosen from `NETCoreSdkRuntimeIdentifier`. That part of the graph describes the machine running restore rather than this repository, so a lock file written on Linux names packages a Windows, macOS, or Linux ARM64 developer never asks for, and locked mode there fails with `NU1004: A new package reference was found Aspire.Dashboard.Sdk.win-x64` before a build can start. `IntegrationTests` follows `AppHost` because it references the project and inherits those packages transitively, and a lock file cannot exclude a subtree. Both ship nowhere, and their versions stay pinned centrally like every other project's.
 
@@ -658,21 +658,21 @@ dotnet msbuild .config/CodeCoverage.proj -t:Collect
 
 The command runs the whole solution in one test invocation, which produces one uniquely named Cobertura report per unit-test assembly, merges the reports, and requires at least 85% aggregate line coverage. The result always represents the whole configured scope, not only changed lines.
 
-The scope is every project under `src/` except `Host` and `AppHost`, which are excluded as thin executable composition roots. `.config/CodeCoverage.proj` names those two and derives everything else from them: it asks each remaining project for its `AssemblyName` and admits exactly those assemblies to the merged report, so a project enters the measurement by existing rather than by matching a naming pattern. A pattern would not do, because an assembly is not always named after its boundary — `Cli` publishes as `mfctl`, since an operator types it, and a name with no dot in it matches nothing shaped like `MailFathom.*`.
+The scope is every project under `backend/src/` except `Host` and `AppHost`, which are excluded as thin executable composition roots. `.config/CodeCoverage.proj` names those two and derives everything else from them: it asks each remaining project for its `AssemblyName` and admits exactly those assemblies to the merged report, so a project enters the measurement by existing rather than by matching a naming pattern. A pattern would not do, because an assembly is not always named after its boundary — `Cli` publishes as `mfctl`, since an operator types it, and a name with no dot in it matches nothing shaped like `MailFathom.*`.
 
 The collector is the half that has to be told each such name. The Coverlet `Include` filter in `.config/testconfig.json` matches by assembly name, and `[mfctl]*` is what instruments the command at all; a project whose `AssemblyName` does not begin with `MailFathom.` needs the same entry. Forgetting it removes a boundary from the measurement without lowering any number, which no percentage can reveal, so the gate checks the denominator before it reads one. Every measured project that compiles at least one file of its own must appear in the merged report, and no assembly outside that set may. Either mismatch fails the target the way a test project missing from `MailFathom.slnx` already does, and the failure names the file that decides it. A project compiling nothing is expected to be absent — `AI` is a scaffold today and appears in no report — and stops being expected to the moment it holds a file, which keeps that tolerance from becoming a silent exclusion of its own.
 
-Two attributes take code out of that denominator, and `.config/testconfig.json` configures the collector to honor both. `[ExcludeFromCodeCoverage]` marks code that should never participate in coverage. `[RequiresIntegrationCoverage]`, declared in `src/shared/RequiresIntegrationCoverageAttribute.cs`, marks code whose verification needs a real database, a real mail server, or a composed host: the EF Core context and its entities, the persistence stores, the file-system and environment secret readers, and the infrastructure registration extensions carry it today. The MailKit adapter deliberately does not, even though the integration suite now exercises it against a real IMAP server, because MailKit publishes `IImapClient` and `IMailFolder` and the adapter is reachable from a unit test through them; it stays in the enforced denominator and the integration suite proves the wire behavior a substitute cannot. Marked code is measured by the integration suite instead, in a separate report that enforces nothing — see [Integration tests](#integration-tests) below. The marker stays once the class is covered there: it records where the verification lives, not whether it has been written, and a class a unit test cannot reach stays unreachable afterwards. Remove it only when unit-testable logic enters the class, which puts every line back into this denominator and is how to check that the exclusion is still earned.
+Two attributes take code out of that denominator, and `.config/testconfig.json` configures the collector to honor both. `[ExcludeFromCodeCoverage]` marks code that should never participate in coverage. `[RequiresIntegrationCoverage]`, declared in `backend/src/shared/RequiresIntegrationCoverageAttribute.cs`, marks code whose verification needs a real database, a real mail server, or a composed host: the EF Core context and its entities, the persistence stores, the file-system and environment secret readers, and the infrastructure registration extensions carry it today. The MailKit adapter deliberately does not, even though the integration suite now exercises it against a real IMAP server, because MailKit publishes `IImapClient` and `IMailFolder` and the adapter is reachable from a unit test through them; it stays in the enforced denominator and the integration suite proves the wire behavior a substitute cannot. Marked code is measured by the integration suite instead, in a separate report that enforces nothing — see [Integration tests](#integration-tests) below. The marker stays once the class is covered there: it records where the verification lives, not whether it has been written, and a class a unit test cannot reach stays unreachable afterwards. Remove it only when unit-testable logic enters the class, which puts every line back into this denominator and is how to check that the exclusion is still earned.
 
 A third exclusion is applied by path rather than by attribute: `.config/CodeCoverage.proj` filters `**/Persistence/Migrations/*.cs` out of the merged report. EF Core generates those files, so they carry no attribute the generator would preserve, and no unit test may execute them — a migration is proven by applying it to a real PostgreSQL server and reviewing the resulting schema. Leaving them in put roughly a thousand uncoverable lines in the denominator and moved the aggregate by more than twenty points, which would have masked a real regression anywhere else.
 
-A fourth exclusion is about which projects the target *runs* rather than which assemblies it measures. `tests/Benchmarks` sits under `tests/` and is not a suite — it asserts nothing and its numbers gate nothing — so `.config/CodeCoverage.proj` names it as the one exception to the glob that finds test projects, and `.config/testconfig.json` excludes its assembly beside `SyntheticMail`'s. It stays in the check that every project under `tests/` appears in `MailFathom.slnx`, because a project missing from the solution is unbuilt, unanalyzed, and unformatted whether or not anything runs it.
+A fourth exclusion is about which projects the target *runs* rather than which assemblies it measures. `backend/tests/Benchmarks` sits under `backend/tests/` and is not a suite — it asserts nothing and its numbers gate nothing — so `.config/CodeCoverage.proj` names it as the one exception to the glob that finds test projects, and `.config/testconfig.json` excludes its assembly beside `SyntheticMail`'s. It stays in the check that every project under `backend/tests/` appears in `MailFathom.slnx`, because a project missing from the solution is unbuilt, unanalyzed, and unformatted whether or not anything runs it.
 
 Raw Cobertura reports and TRX files are written under `artifacts/coverage/raw/`. The merged Cobertura and HTML reports are written under `artifacts/coverage/report/`. The verification records the two gates write sit beside them under `artifacts/verify/`; the whole directory is ignored, so nothing there is ever staged, and deleting any of it costs one repeated run.
 
 ## Integration tests
 
-`tests/IntegrationTests` verifies what a unit test structurally cannot: EF Core mappings, the baseline migration, database constraints, transaction and concurrency behavior, the SQL PostgreSQL actually runs and the plans it chooses, the two readers that reach the file system and the process environment, and what MailKit puts on the wire against a real IMAP server. It starts the repository's own app model through `Aspire.Hosting.Testing`, so the orchestration under test is the one `aspire run` starts rather than a second container topology maintained beside it. [The stored email schema](../architecture/stored-email-schema.md#what-the-integration-suite-proves) lists what the persistence half of the suite establishes.
+`backend/tests/IntegrationTests` verifies what a unit test structurally cannot: EF Core mappings, the baseline migration, database constraints, transaction and concurrency behavior, the SQL PostgreSQL actually runs and the plans it chooses, the two readers that reach the file system and the process environment, and what MailKit puts on the wire against a real IMAP server. It starts the repository's own app model through `Aspire.Hosting.Testing`, so the orchestration under test is the one `aspire run` starts rather than a second container topology maintained beside it. [The stored email schema](../architecture/stored-email-schema.md#what-the-integration-suite-proves) lists what the persistence half of the suite establishes.
 
 Run it on request:
 
@@ -690,7 +690,7 @@ It is deliberately not part of any other command. `scripts/verify-fast.sh` and `
 
 ### Ephemeral resources
 
-The app host is started with the argument `IntegrationTesting=true`, which selects a second topology in `src/AppHost/Program.cs`:
+The app host is started with the argument `IntegrationTesting=true`, which selects a second topology in `backend/src/AppHost/Program.cs`:
 
 - every container and volume is named `mailfathom-integrationtests-<run>-…`, where `<run>` is eight hex characters
   generated for that run, rather than taking Aspire's random postfix and the path-derived volume name a developer's
@@ -705,7 +705,7 @@ The app host is started with the argument `IntegrationTesting=true`, which selec
 - the `mailfathom-host` project resource is added to the model but never started, because the suite exercises classes against real infrastructure and a running MailFathom would synchronize mail underneath the data a test is asserting on. What a collection eventually starts is a host serving both of its network surfaces under the posture worth proving end to end: the MCP endpoint behind an API key and a narrowed origin list, and the administrative endpoint enabled on a listener of its own behind an API key that is none of the MCP ones — which is what lets the suite establish from outside the process that neither surface's credential authenticates the other's routes. The probes are served on the MCP endpoint's own socket rather than on one of theirs, which is the arrangement a single-node deployment publishes and the only place anything proves it works: a shared socket serves the union of what its surfaces answer, so a probe is answered there without a credential while the MCP route on it still requires one. Both sections therefore state the same bind address, because they describe one socket and an address written in one place and defaulted in the other would be two sockets the host refuses to open. The administrative endpoint keeps a socket of its own, so the suite carries both arrangements at once and can establish that a path belonging to a surface a listener does not serve is refused on it rather than served by whichever route matches. Every port on that resource is allocated rather than defaulted, because two MailFathom processes run at once under this topology, and every endpoint is published as a TCP one for the same reason: an HTTP one joins `ASPNETCORE_URLS`, which the host refuses outright. It is configured with the one account identifier the suite stores its mail under, and — for the tools that send — with what an account has to declare to be allowed to send at all: a submission endpoint in the reserved testing domain, the address to send from, and the switch that turns sending on, which is off for every account until an operator sets it. Configuration is what defines the accounts a deployment serves and it is read whether or not synchronization runs, so a host naming none would answer every mailbox read with an empty window over a database that is not empty, and one declaring no delivery would answer every sending tool with the coded refusal that says so rather than exercising the contract the suite is about. Beside those it carries what the delivery block's own validation requires and nothing then spends: the login the account is reached under, and a named password secret — a secret block is identified by its name rather than by where it sits, so one stating only a reference fails validation and stops the host before it binds a socket, which reaches the suite as every request to that host timing out rather than as configuration being wrong. The delivery pass itself runs on that host like it does on any deployment — the outbox worker is registered unconditionally and answers the signal a queued send raises — and the submission host it offers a message to resolves nowhere, so every attempt ends as a transport failure that defers the send rather than delivering or ending it. The first retry is therefore stretched past the length of a run, which is what leaves a send recorded and withdrawable after its one attempt instead of being claimed again while a test is reading it. Nothing else about the account is configured: with synchronization off, a reading server or a credential for it would be configuration nothing acts on;
 - a second project resource, `mailfathom-mtls-host`, is added on the same terms and started by a collection of its own, `MutualTlsHostCollectionDefinition`, which the assembly's orderer places after the collection that starts the host above — starting a second project process must not be what a rate limit is measured against. It serves the endpoint over an HTTPS profile behind a `Required` client-certificate profile, which is what lets the suite prove the mTLS rules against a real handshake; a certificate requirement is one answer for a whole process, so it cannot be a posture applied to the host above. Its server certificate, private key, and trust anchor are issued in memory per run by the test suite and injected into the environment variables the app model's `env:` secret references name, so nothing of the kind is committed and a developer's orchestration never gets this resource at all.
 
-The prefix comes from `OrchestrationContract` in `src/AppHost`, and nothing else in the repository uses it. The run
+The prefix comes from `OrchestrationContract` in `backend/src/AppHost`, and nothing else in the repository uses it. The run
 identifier is generated by `scripts/run-integration-tests.sh` and passed to the app model in
 `MAILFATHOM_INTEGRATIONTESTS_RUN_ID`; the script needs it before the suite starts, because it is what scopes the
 removal afterwards. An unset variable makes the app model generate one, which is what a suite started by hand gets —
@@ -772,7 +772,7 @@ classification record. Every message it is sent is written by the test, and none
 
 ### The provider-contract tests
 
-`tests/IntegrationTests/ProviderAdapters` holds the tests that call a real AI provider — the embedding adapter's and the chat adapter's — and they are the only part of this suite that costs money. Everything else runs against the containers the run starts, so it costs runner time and nothing else.
+`backend/tests/IntegrationTests/ProviderAdapters` holds the tests that call a real AI provider — the embedding adapter's and the chat adapter's — and they are the only part of this suite that costs money. Everything else runs against the containers the run starts, so it costs runner time and nothing else.
 
 They are skipped unless somebody asks. One switch covers both adapters, `MAILFATHOM_AI_CONTRACT_TESTS`, and nothing sets it: a developer's run and every ordinary pipeline run spend no provider credit. Which half of the AI boundary a test bills against is not a distinction the operator turning them on makes, which is why there is one switch rather than one per provider.
 
@@ -789,13 +789,13 @@ The chat adapter's two tests each run **twice**, once over each of the provider'
 
 `MAILFATHOM_CHAT_REASONING_EFFORT` is the chat adapter's one optional choice, carrying whatever level the model documents, exactly as [`Chat:ReasoningEffort`](configuration-ai.md#chat) does. Unset by default, which sends what the tests always sent. A value the provider does not recognize fails the run as a refused request rather than passing quietly, which is the point of pointing a run at a reasoning model in the first place.
 
-[ADR 0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md) holds the reasoning, and `tests/AGENTS.md` states how such a test is written.
+[ADR 0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md) holds the reasoning, and `backend/tests/AGENTS.md` states how such a test is written.
 
 ### Coverage
 
 The suite collects its own coverage report, and nothing enforces it. The 85% gate above stays the repository's only coverage threshold, and this report never merges into it.
 
-Its scope is the classes marked `[RequiresIntegrationCoverage]` and nothing else, which is the debt the suite exists to pay off, so the number reads as progress through that inventory. The two runs therefore need opposite collector configurations of the same attribute: `.config/testconfig.json` excludes marked code because a unit test cannot reach it, and `tests/IntegrationTests/testconfig.json` does not exclude it. `scripts/run-integration-tests.sh` then narrows the report to exactly the files carrying the marker, deriving that filter by searching for the marker rather than keeping a second list, so a newly marked class enters the report on its own.
+Its scope is the classes marked `[RequiresIntegrationCoverage]` and nothing else, which is the debt the suite exists to pay off, so the number reads as progress through that inventory. The two runs therefore need opposite collector configurations of the same attribute: `.config/testconfig.json` excludes marked code because a unit test cannot reach it, and `backend/tests/IntegrationTests/testconfig.json` does not exclude it. `scripts/run-integration-tests.sh` then narrows the report to exactly the files carrying the marker, deriving that filter by searching for the marker rather than keeping a second list, so a newly marked class enters the report on its own.
 
 That number is currently 93.9% of the lines in the 22 marked classes, up from the 26.9% the harness started at. What remains uncovered is the failure paths of a database that is behaving: an unreadable migration history, a catalogue the configured user may not read, a generated column that is absent. Reaching them means breaking the orchestrated database rather than exercising it, so they stay uncovered deliberately, and the percentage is read as progress rather than as a target to close.
 
@@ -815,8 +815,8 @@ Five workflows run for every pull request targeting `main`. Three of them always
 
 - `Detect changes` reads the change with `dorny/paths-filter` and publishes four decisions: whether it can affect the build, whether it can affect formatting, whether it can affect the EF Core model, and whether it can affect what the Helm chart renders. It takes seconds and holds `contents: read` and `pull-requests: read` because how it reads the change follows from the event. A pull request is compared through the GitHub REST API and checks nothing out; a push is compared with `git diff` against the commit `main` carried before it, which is what the `base` input naming the pushed branch selects and what the checkout step conditional on the same event provides. That checkout takes `fetch-depth: 0`, so the earlier commit is already in the clone: without it the action would fetch that commit by bare SHA from an origin whose credentials the same step strips, which holds only while the repository is public. A manual dispatch has neither a pull request nor a preceding commit to compare against, so all four decisions are `true` there and an explicitly started run always does the work.
 - `Build and unit test` runs when the change touches production code, tests, the solution or SDK selection, shared build and package configuration, coverage tooling, or the workflow file. It restores `MailFathom.slnx` in locked mode and repository-local tools, builds the solution in Release configuration, runs all unit-test projects through Microsoft Testing Platform with unique coverage prefixes, merges their Cobertura reports, and fails below 85% aggregate line coverage for the complete configured production scope. It uploads raw and merged coverage artifacts and TRX results even when the threshold fails.
-- `dotnet format` runs when the change touches `src/**`, `tests/**`, `.editorconfig`, the workflow file, the shared build files, `Directory.Packages.props`, `MailFathom.slnx`, or `global.json`. It restores `MailFathom.slnx` in locked mode and verifies repository formatting without applying changes. The command runs its analyzer pass as well as its whitespace and style passes, so a centrally pinned analyzer version, a property set in a shared build file, a project added to the solution, or a different SDK can move its verdict without a single C# file changing; the trigger covers all four. `.config/**` and `NuGet.config` stay out, because they decide what the build rejects, restores, runs, and measures rather than how code is written.
-- `Pending model changes` runs when the change touches `src/**`, `.config/dotnet-tools.json`, the workflow file, or `Directory.Packages.props`. It restores in locked mode, restores local tools, builds `src/Host` in Release configuration, and runs `dotnet ef migrations has-pending-model-changes`, which fails when the EF Core model has moved without a migration recording it. The command opens no connection — it compares the compiled model against the committed model snapshot — so no database is provisioned for this job. Production code is the only thing that can move the model, which is why tests and documentation are not triggers; `Directory.Packages.props` is one because raising the EF Core version can change what the generator emits for an unchanged model. `Persistence__TextSearchConfiguration` is deliberately left unset, so a migration generated under a non-default configuration fails here by design rather than by accident.
+- `dotnet format` runs when the change touches `backend/src/**`, `backend/tests/**`, `.editorconfig`, the workflow file, the shared build files, `Directory.Packages.props`, `MailFathom.slnx`, or `global.json`. It restores `MailFathom.slnx` in locked mode and verifies repository formatting without applying changes. The command runs its analyzer pass as well as its whitespace and style passes, so a centrally pinned analyzer version, a property set in a shared build file, a project added to the solution, or a different SDK can move its verdict without a single C# file changing; the trigger covers all four. `.config/**` and `NuGet.config` stay out, because they decide what the build rejects, restores, runs, and measures rather than how code is written.
+- `Pending model changes` runs when the change touches `backend/src/**`, `.config/dotnet-tools.json`, the workflow file, or `Directory.Packages.props`. It restores in locked mode, restores local tools, builds `backend/src/Host` in Release configuration, and runs `dotnet ef migrations has-pending-model-changes`, which fails when the EF Core model has moved without a migration recording it. The command opens no connection — it compares the compiled model against the committed model snapshot — so no database is provisioned for this job. Production code is the only thing that can move the model, which is why tests and documentation are not triggers; `Directory.Packages.props` is one because raising the EF Core version can change what the generator emits for an unchanged model. `Persistence__TextSearchConfiguration` is deliberately left unset, so a migration generated under a non-default configuration fails here by design rather than by accident.
 - `Workflow contracts` runs `scripts/test-agent-workflow.sh`, and it is the only job that reads the part of the repository the build, formatting, and model jobs cannot: the workflows, the verification scripts, the fathom-review helpers, the skills, the licensing header outside the solution, and the two page contracts under `docs/` — the `describes:` marker every page carries, and the fixed notice a page whose steps happen in somebody else's product opens with. It has no trigger condition of any kind — no path filter, no draft exemption, no event condition, no dependency — so it starts with `Detect changes`, runs beside the expensive jobs rather than after them, and runs on a push to `main` as well as on a pull request. It checks the repository out shallowly with `persist-credentials: false` and runs the suite; nothing else is provisioned, because the suite fakes `dotnet` with a symlink to itself, builds the Git repositories it tests under a temporary directory, and reaches no network. The whole job takes about twenty seconds on a GitHub-hosted runner, of which the suite itself is fifteen. It takes longer than that under `scripts/verify-full.sh` on a developer machine, which is a different measurement rather than a contradiction: there it competes with whatever else that machine is doing, and the gate is one run of many rather than the one that decides a merge. That is also why the local gate narrows — it skips the suite for a branch that only added or edited C# files — while this job asks nothing and runs always: a skipped run costs a verdict that arrives minutes later, and there is no later here. [Entry points](agent-workflow.md#entry-points) describes the suite itself and the local gate that runs it as well.
 - `Helm chart` runs `scripts/render-helm-manifests.sh` when the change touches `deploy/helm/**`, that script, or the workflow file. It lints the chart with `helm lint --strict` against every `deploy/helm/mailfathom/ci/*-values.yaml`, renders each of them with `helm template`, and compares the rendering against the manifests committed under `ci/golden/`. The deployment contract is one of the four public surfaces [ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md) names, and before this job it was verified for the first time inside `Publish Helm chart` — after the release had already pushed the image, and with re-tagging a release meaning a registry deletion first. Committing what each values document renders is what puts the second half in the diff: a template edit that still renders but produces a different object is otherwise invisible in a review of the templates alone. Helm is the runner image's preinstalled copy, which is what the release run uses too, and the rendering is normalized before it is compared so that the Helm version deciding the whitespace between documents cannot decide the verdict. The job installs nothing, restores nothing, reaches no cluster and no network, and costs seconds rather than the minutes an SDK, a restore, and a build cost. `Publish Helm chart` keeps its own lint and render: a release gate that trusts an earlier run is not a gate. [Deploying to Kubernetes](deployment-kubernetes.md#verification) describes running the same script by hand and regenerating the manifests.
 - `Required CI` is this workflow's one required status check, and the only conclusion the ruleset reads from it. It depends on the other six, runs under `if: always()` so a cancelled or skipped dependency cannot skip it in turn, and reads their results: `Detect changes` and `Workflow contracts` must have succeeded, and each of the other four must have either succeeded or been skipped. `failure` and `cancelled` fail it. The contract job is held to the stricter rule because it has no way to skip on the events this job runs for: a path filter and a draft exemption are what produce a legitimate `skipped`, and it has neither, so the conclusion could only come from a job that failed to start. This job itself does not run on a push to `main`, for the reason [`CI` after a merge to `main`](#ci-after-a-merge-to-main) gives.
@@ -827,7 +827,7 @@ The protected set is matched in three shapes, and the shape follows from what th
 
 Five **directory prefixes** cover a directory and everything beneath it, because each decides how every other change is judged rather than being judged by it. `.github/` names who approves a change and which checks the ruleset waits for. `.config/` decides which API calls `BannedSymbols.txt` rejects, what `CodeCoverage.proj` demands, which local tools `dotnet-tools.json` restores, how the test runner is configured, and which spellings `typos.toml` accepts. `.agents/` holds the skills that define the task, review, verification, and completion contract, and the tracked `.claude/skills` symlink points into it, so repointing that one link redirects all of them. `docs/decisions/` holds the architectural decision records, the two templates that shape the next one, and the process that admits it: an ADR is what a later change to architecture, boundaries, persistence, configuration, or security-sensitive behavior is written to be consistent with, so rewriting one moves what the next change is judged against. The owner-approval rule `docs/AGENTS.md` and `docs/decisions/README.md` both state is what this prefix makes mechanical.
 
-Five **file names** are matched at the repository root and after any `/`, so a copy at any depth is covered. `.editorconfig` decides which analyzer and style diagnostics `TreatWarningsAsErrors` turns into build failures, which header IDE0073 requires, and — through the contract suite, which parses the same template — the header every workflow, script, Helm template, and skill outside the solution has to carry; `.gitattributes` decides how the diff a reviewer reads is produced, down to whether a path has reviewable content at all; `.worktreeinclude` decides which gitignored files, local secrets among them, are copied into every worktree an agent works in. `AGENTS.md` carries the architecture, conventions, verification gates, and workflow contract every agent-authored change is written and judged against, which is the same kind of instruction the skills under `.agents/` carry, and `CLAUDE.md` is the tracked entry point to it exactly as `.claude/` is to `.agents/` — so protecting the directories and not these files would protect neither. Depth is what makes them a name match rather than a root-file match: a nested copy overrides the root one for its own subtree, so `src/Infrastructure/Persistence/Migrations/.editorconfig` can relax for one directory what the root file enforces everywhere, and `tests/AGENTS.md` states the test rules that the root file does not. The anchoring is to a whole path segment, so `docs/my.editorconfig` is not caught and neither is `docs/CONTRIBUTING-AGENTS.md`.
+Five **file names** are matched at the repository root and after any `/`, so a copy at any depth is covered. `.editorconfig` decides which analyzer and style diagnostics `TreatWarningsAsErrors` turns into build failures, which header IDE0073 requires, and — through the contract suite, which parses the same template — the header every workflow, script, Helm template, and skill outside the solution has to carry; `.gitattributes` decides how the diff a reviewer reads is produced, down to whether a path has reviewable content at all; `.worktreeinclude` decides which gitignored files, local secrets among them, are copied into every worktree an agent works in. `AGENTS.md` carries the architecture, conventions, verification gates, and workflow contract every agent-authored change is written and judged against, which is the same kind of instruction the skills under `.agents/` carry, and `CLAUDE.md` is the tracked entry point to it exactly as `.claude/` is to `.agents/` — so protecting the directories and not these files would protect neither. Depth is what makes them a name match rather than a root-file match: a nested copy overrides the root one for its own subtree, so `backend/src/Infrastructure/Persistence/Migrations/.editorconfig` can relax for one directory what the root file enforces everywhere, and `backend/tests/AGENTS.md` states the test rules that the root file does not. The anchoring is to a whole path segment, so `docs/my.editorconfig` is not caught and neither is `docs/CONTRIBUTING-AGENTS.md`.
 
 Six **repository-root files** are matched whole, so a file of the same name elsewhere is not caught and a longer name beginning the same way is not either. `Directory.Build.props` carries the analyzer and warning policy every project inherits, the declared version every build is stamped with, and the SPDX and copyright metadata that ships inside the assemblies. `LICENSE` is the grant itself, detected by matching the file against the known Apache-2.0 text, so any edit turns a detected `Apache-2.0` into `NOASSERTION`; `NOTICE` is the attribution Apache-2.0 section 4(d) preserves. `NuGet.config` decides which feeds a package may come from, and it clears the inherited source list, so adding a source is a supply-chain and licensing decision. `global.json` pins the SDK every build and every gate resolves against. `CHANGELOG.md` is there for a different reason: it is written by the release pull request alone, so an edit arriving through ordinary work is out of band by construction.
 
@@ -849,7 +849,7 @@ The workflow names that path rather than relying on it being found, because `typ
 
 The fourth workflow, `CodeQL`, carries one job, `Analyze C#`, and is the only check here that reads what the code *does* with a value rather than how it is written. It restores in locked mode, initializes CodeQL in `manual` build mode, builds `MailFathom.slnx` in Release configuration inside the traced window, and runs GitHub's C# security query pack over the resulting database. It runs for a pull request, for a push to `main`, weekly on a schedule, and on manual dispatch, and it carries the same draft exemption `Typo check` does — for a stronger reason, since it is the one check that occupies a runner for minutes.
 
-Three of its decisions are the ones a reader would otherwise have to reconstruct, and the workflow file argues each at length. It is an advanced setup rather than GitHub's default setup, so the check that reads this repository's source is a file a pull request can change and a reviewer can read, and so it can see the SDK pin and the locked restore. Its build mode is `manual` rather than `none`, so the analysis sees the graph the committed lock files fix instead of one CodeQL resolved for itself. And its last step compares the extracted source archive against what `src/` contains, because a bundle that cannot extract this SDK's output produces an empty database and a green check — an answer that looks like "no findings" and means "no analysis". The weekly run exists for a fourth reason that has nothing to do with this repository: a query pack updates upstream, so a commit that was clean when it merged can become a finding with nothing here having changed.
+Three of its decisions are the ones a reader would otherwise have to reconstruct, and the workflow file argues each at length. It is an advanced setup rather than GitHub's default setup, so the check that reads this repository's source is a file a pull request can change and a reviewer can read, and so it can see the SDK pin and the locked restore. Its build mode is `manual` rather than `none`, so the analysis sees the graph the committed lock files fix instead of one CodeQL resolved for itself. And its last step compares the extracted source archive against what `backend/src/` contains, because a bundle that cannot extract this SDK's output produces an empty database and a green check — an answer that looks like "no findings" and means "no analysis". The weekly run exists for a fourth reason that has nothing to do with this repository: a query pack updates upstream, so a commit that was clean when it merged can become a finding with nothing here having changed.
 
 On a pull request from a fork the run gets the token GitHub grants that event, which is not the token a branch in this repository gets, and whether the alert upload succeeds there follows from GitHub's rules rather than from anything in this file. The check is required by nothing either way, so no merge waits on how it resolves, and the push to `main` after the merge analyses the same code under a token that certainly can upload.
 

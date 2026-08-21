@@ -1,6 +1,6 @@
 # Using the tools
 
-<!-- describes: src/Mcp/Tools/** -->
+<!-- describes: backend/src/Mcp/Tools/** -->
 
 MailFathom publishes twenty-one MCP tools, and together they are the whole surface: an agent can see which mailboxes
 exist, list mail, read one message, search, ask a question, mark and label a message, send a message, reply to or

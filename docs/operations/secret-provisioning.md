@@ -1,6 +1,6 @@
 # Secret provisioning
 
-<!-- describes: src/Infrastructure/Secrets/** -->
+<!-- describes: backend/src/Infrastructure/Secrets/** -->
 
 Every secret-bearing setting holds a *reference* to material the deployment provisions, and the host resolves those references before any worker starts. Under the default `ReferenceOnly` mode with an externally provisioned scheme, a configuration file leaked from a backup or a repository therefore yields credential names and paths, not credentials.
 

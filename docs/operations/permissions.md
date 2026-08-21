@@ -1,6 +1,6 @@
 # What a credential may do
 
-<!-- describes: src/Domain/Access/**, src/Application/Access/**, src/Host/Configuration/Access/TransportAuthenticationOptions.cs, src/Host/Security/Endpoints/**, src/Host/Security/Transport/**, src/Mcp/Tools/PublishedTools.cs -->
+<!-- describes: backend/src/Domain/Access/**, backend/src/Application/Access/**, backend/src/Host/Configuration/Access/TransportAuthenticationOptions.cs, backend/src/Host/Security/Endpoints/**, backend/src/Host/Security/Transport/**, backend/src/Mcp/Tools/PublishedTools.cs -->
 
 Authentication decides whether a caller reaches a surface at all. What it may then do is a **permission**: a named
 capability MailFathom publishes, written on the `Authentication` entry that admitted the caller, checked by the use

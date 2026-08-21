@@ -1,6 +1,6 @@
 # Configuration reference
 
-<!-- describes: src/**/*Options.cs, src/Host/Configuration/EnvironmentOnlySettings.cs -->
+<!-- describes: backend/src/**/*Options.cs, backend/src/Host/Configuration/EnvironmentOnlySettings.cs -->
 
 Every user-settable option, checked against the options classes that bind it. Each section's table states the key, its
 type, the value a deployment gets by writing nothing, the constraint startup enforces, and what a change needs to take
@@ -61,7 +61,7 @@ entries — `Logging` and `ConnectionStrings` — and the single-key `Secrets:In
 default rather than bound as a section.
 
 **Against what.** These four pages are written for a reader, and a generated record sits beside them for a reviewer:
-`tests/PublicSurfaces.UnitTests/configuration-keys.txt` carries every key the host binds, the type it binds as, and
+`backend/tests/PublicSurfaces.UnitTests/configuration-keys.txt` carries every key the host binds, the type it binds as, and
 whether the section is refused without it, rendered from the options classes themselves. It is the mechanical half of
 the same inventory — no defaults, no constraints, no prose — and it exists so that a key renamed, retyped, or removed
 appears as a diff in the pull request that did it. Where the two disagree, the generated file is what the code does and

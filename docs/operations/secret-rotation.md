@@ -1,6 +1,6 @@
 # Secret rotation
 
-<!-- describes: src/Infrastructure/Secrets/**, src/Infrastructure/Certificates/** -->
+<!-- describes: backend/src/Infrastructure/Secrets/**, backend/src/Infrastructure/Certificates/** -->
 
 A rotated mailbox password, trust anchor, database credential, or MCP API key takes effect without restarting MailFathom. Rotation is an ordinary operational act, not a maintenance window, and shortening the window in which any single credential is valid is a security and privacy improvement rather than a cost.
 

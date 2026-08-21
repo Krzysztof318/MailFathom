@@ -173,7 +173,7 @@ jobs:
       # the startup project's output directory. Building Infrastructure alone leaves a stale assembly
       # there and the check reads the model the previous build produced.
       - name: Build the startup project
-        run: dotnet build src/Host/Host.csproj --configuration Release --no-restore
+        run: dotnet build backend/src/Host/Host.csproj --configuration Release --no-restore
 
       # The one place the repository runs dotnet-ef directly. Everything else goes through the
       # AppHost's migration resource so a command sees the orchestrated connection string, and this
@@ -189,7 +189,7 @@ jobs:
       - name: Verify every model change carries a migration
         run: >-
           dotnet ef migrations has-pending-model-changes
-          --project src/Infrastructure/Infrastructure.csproj
-          --startup-project src/Host/Host.csproj
+          --project backend/src/Infrastructure/Infrastructure.csproj
+          --startup-project backend/src/Host/Host.csproj
           --configuration Release
           --no-build

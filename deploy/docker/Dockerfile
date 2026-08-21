@@ -59,16 +59,16 @@ ARG IMAGE_REVISION=unknown
 ARG VERSION_SUFFIX=
 
 # The restore inputs first, so editing a `.cs` file does not invalidate the restore layer. The lock files travel with
-# the projects under src/.
+# the projects under backend/src/.
 COPY Directory.Build.props Directory.Packages.props NuGet.config global.json .editorconfig ./
 COPY .config/BannedSymbols.txt .config/
-COPY src/ src/
+COPY backend/src/ backend/src/
 
 # Locked mode, like every other gate in this repository. The committed packages.lock.json files fix the transitive
 # closure, so a republished package cannot change what a pinned version means between the branch's verification and
 # this build; NU1004 fails here rather than a different graph being restored silently.
 RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
-    dotnet restore src/Host/Host.csproj --locked-mode
+    dotnet restore backend/src/Host/Host.csproj --locked-mode
 
 # The project's own licensing, which `Host` publishes beside the assemblies. It is copied after the restore rather
 # than with the layer above because it is not a restore input: a corrected NOTICE would otherwise discard the restore
@@ -85,7 +85,7 @@ COPY LICENSE NOTICE ./
 # symbol files stay, because they are what turns a stack trace in a support report into file and line numbers, and
 # they reveal nothing the assemblies beside them do not.
 RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
-    dotnet publish src/Host/Host.csproj \
+    dotnet publish backend/src/Host/Host.csproj \
         --configuration Release \
         --no-restore \
         -p:VersionSuffix="${VERSION_SUFFIX}" \

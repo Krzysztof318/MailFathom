@@ -61,8 +61,8 @@ mkdir -p \
   "$fake_bin_directory" \
   "$repository_root/docs" \
   "$repository_root/scripts" \
-  "$repository_root/src" \
-  "$repository_root/tests"
+  "$repository_root/backend/src" \
+  "$repository_root/backend/tests"
 ln -s "$scripts_directory/test-agent-workflow.sh" "$fake_bin_directory/dotnet"
 
 git -C "$repository_root" init --initial-branch=main --quiet
@@ -97,8 +97,8 @@ git -C "$repository_root" fetch --quiet origin main
 git -C "$repository_root" checkout --quiet -b "$fixture_branch"
 # The fast loop formats the C# files the branch changed, so the fixture branch carries one. Keeping
 # it committed rather than dirty leaves the working tree clean for the contracts that require it.
-printf 'namespace Fixture;\n' > "$repository_root/src/Sample.cs"
-git -C "$repository_root" add src/Sample.cs
+printf 'namespace Fixture;\n' > "$repository_root/backend/src/Sample.cs"
+git -C "$repository_root" add backend/src/Sample.cs
 git -C "$repository_root" commit --quiet -m 'fixture C# file'
 
 # The protected-paths contracts stand in for the GitHub REST call the workflow makes, so their fake
@@ -265,12 +265,12 @@ verify_fast_runs_restore_build_tests_and_formatting() {
   : > "$invocation_log"
 
   (
-    cd "$repository_root/tests"
+    cd "$repository_root/backend/tests"
     "$scripts_directory/verify-fast.sh"
   )
 
   assert_file_content \
-    $'restore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\ntest --solution MailFathom.slnx --configuration Release --no-build\nformat MailFathom.slnx --no-restore --include src/Sample.cs' \
+    $'restore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\ntest --solution MailFathom.slnx --configuration Release --no-build\nformat MailFathom.slnx --no-restore --include backend/src/Sample.cs' \
     "$invocation_log"
 }
 
@@ -282,12 +282,12 @@ verify_full_runs_tests_once_through_coverage() {
   : > "$invocation_log"
 
   (
-    cd "$repository_root/src"
+    cd "$repository_root/backend/src"
     "$scripts_directory/verify-full.sh"
   )
 
   assert_file_content \
-    $'tool restore\nrestore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\nmsbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release\nformat MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic --include src/Sample.cs' \
+    $'tool restore\nrestore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\nmsbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release\nformat MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic --include backend/src/Sample.cs' \
     "$invocation_log"
 }
 
@@ -463,7 +463,7 @@ verify_fast_runs_again_once_the_tree_changed() {
     "$scripts_directory/verify-fast.sh"
   )
 
-  printf 'namespace Fixture;\n\n// changed\n' > "$repository_root/src/Sample.cs"
+  printf 'namespace Fixture;\n\n// changed\n' > "$repository_root/backend/src/Sample.cs"
   : > "$invocation_log"
 
   (
@@ -471,7 +471,7 @@ verify_fast_runs_again_once_the_tree_changed() {
     "$scripts_directory/verify-fast.sh"
   )
 
-  git -C "$repository_root" checkout --quiet HEAD -- src/Sample.cs
+  git -C "$repository_root" checkout --quiet HEAD -- backend/src/Sample.cs
   assert_contains 'build MailFathom.slnx --configuration Release --no-restore' "$invocation_log"
 }
 
@@ -519,12 +519,12 @@ verify_full_refuses_the_fast_loop_record_except_for_the_formatting_pass() {
 # tree no longer holds, so it records nothing and the next run does the work.
 verify_fast_records_nothing_when_formatting_rewrote_a_file() {
   (
-    export FAKE_DOTNET_REWRITE="$repository_root/src/Sample.cs"
+    export FAKE_DOTNET_REWRITE="$repository_root/backend/src/Sample.cs"
     cd "$repository_root"
     "$scripts_directory/verify-fast.sh"
   )
 
-  git -C "$repository_root" checkout --quiet HEAD -- src/Sample.cs
+  git -C "$repository_root" checkout --quiet HEAD -- backend/src/Sample.cs
   : > "$invocation_log"
 
   (
@@ -610,10 +610,10 @@ verify_full_formats_the_whole_solution_when_a_shared_style_input_changed() {
 # them having been touched.
 verify_full_formats_the_whole_solution_when_a_shared_style_input_was_removed() {
   : > "$invocation_log"
-  printf 'root = true\n' > "$repository_root/src/.editorconfig"
-  git -C "$repository_root" add src/.editorconfig
+  printf 'root = true\n' > "$repository_root/backend/src/.editorconfig"
+  git -C "$repository_root" add backend/src/.editorconfig
   git -C "$repository_root" commit --quiet -m 'nested editorconfig'
-  git -C "$repository_root" rm --quiet src/.editorconfig
+  git -C "$repository_root" rm --quiet backend/src/.editorconfig
 
   (
     cd "$repository_root"
@@ -874,7 +874,7 @@ verify_fast_accepts_a_detached_head() {
   fi
 
   assert_file_content \
-    $'restore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\ntest --solution MailFathom.slnx --configuration Release --no-build\nformat MailFathom.slnx --no-restore --include src/Sample.cs' \
+    $'restore MailFathom.slnx --locked-mode\nbuild MailFathom.slnx --configuration Release --no-restore\ntest --solution MailFathom.slnx --configuration Release --no-build\nformat MailFathom.slnx --no-restore --include backend/src/Sample.cs' \
     "$invocation_log"
 }
 
@@ -1154,15 +1154,15 @@ verify_fast_runs_in_a_fork_with_no_upstream_remote() {
 
   : > "$invocation_log"
   create_fork_fixture "$fork_root"
-  mkdir -p "$fork_root/src"
-  printf 'namespace Fork;\n' > "$fork_root/src/ForkSample.cs"
+  mkdir -p "$fork_root/backend/src"
+  printf 'namespace Fork;\n' > "$fork_root/backend/src/ForkSample.cs"
 
   (
     cd "$fork_root"
     "$scripts_directory/verify-fast.sh"
   )
 
-  assert_contains 'format MailFathom.slnx --no-restore --include src/ForkSample.cs' "$invocation_log"
+  assert_contains 'format MailFathom.slnx --no-restore --include backend/src/ForkSample.cs' "$invocation_log"
 }
 
 # The `Protected paths` workflow never checks the branch out, so its guard cannot be a script in
@@ -1213,7 +1213,7 @@ protected_paths_allows_a_change_that_touches_nothing_protected() {
 
   if ! run_protected_paths_step \
     'outside-contributor' \
-    $'src/Domain/Emails/EmailOccurrenceId.cs\nREADME.md\ndocs/operations/agent-workflow.md' \
+    $'backend/src/Domain/Emails/EmailOccurrenceId.cs\nREADME.md\ndocs/operations/agent-workflow.md' \
     "$output_file" \
     "$summary_file"; then
     printf 'Protected paths refused a pull request that changes nothing protected\n' >&2
@@ -1276,18 +1276,18 @@ protected_paths_matches_the_configuration_files_at_every_depth() {
 
   if run_protected_paths_step \
     'outside-contributor' \
-    $'src/Infrastructure/Persistence/Migrations/.editorconfig\ndocs/.gitattributes\ntests/shared/.worktreeinclude\ntests/AGENTS.md\nsrc/CLAUDE.md' \
+    $'backend/src/Infrastructure/Persistence/Migrations/.editorconfig\ndocs/.gitattributes\nbackend/tests/shared/.worktreeinclude\nbackend/tests/AGENTS.md\nbackend/src/CLAUDE.md' \
     "$output_file" \
     "$summary_file"; then
     printf 'Protected paths allowed a contributor to change a nested configuration file\n' >&2
     return 1
   fi
 
-  assert_contains '::error file=src/Infrastructure/Persistence/Migrations/.editorconfig::' "$output_file"
+  assert_contains '::error file=backend/src/Infrastructure/Persistence/Migrations/.editorconfig::' "$output_file"
   assert_contains '::error file=docs/.gitattributes::' "$output_file"
-  assert_contains '::error file=tests/shared/.worktreeinclude::' "$output_file"
-  assert_contains '::error file=tests/AGENTS.md::' "$output_file"
-  assert_contains '::error file=src/CLAUDE.md::' "$output_file"
+  assert_contains '::error file=backend/tests/shared/.worktreeinclude::' "$output_file"
+  assert_contains '::error file=backend/tests/AGENTS.md::' "$output_file"
+  assert_contains '::error file=backend/src/CLAUDE.md::' "$output_file"
 }
 
 protected_paths_ignores_paths_that_only_resemble_a_protected_one() {
@@ -1298,7 +1298,7 @@ protected_paths_ignores_paths_that_only_resemble_a_protected_one() {
   # longer name beginning the same way, a suffix of one, and a copy placed elsewhere all pass.
   if ! run_protected_paths_step \
     'outside-contributor' \
-    $'docs/my.editorconfig\n.editorconfiguration\ndeploy/global.json\nsrc/Host/NOTICE.md\n.githubbed/stale.yml\ndocs/CONTRIBUTING-AGENTS.md\ndocs/decisions-notes.md' \
+    $'docs/my.editorconfig\n.editorconfiguration\ndeploy/global.json\nbackend/src/Host/NOTICE.md\n.githubbed/stale.yml\ndocs/CONTRIBUTING-AGENTS.md\ndocs/decisions-notes.md' \
     "$output_file" \
     "$summary_file"; then
     printf 'Protected paths refused paths that only resemble a protected one\n' >&2
@@ -1462,7 +1462,7 @@ typo_check_passes_the_files_the_pull_request_changed() {
   local step_output_file="$test_directory/typo-check-changed-step-output"
 
   if ! run_typo_check_step \
-    $'README.md\nsrc/Domain/Emails/EmailAddress.cs\n.github/workflows/typo-check.yml' \
+    $'README.md\nbackend/src/Domain/Emails/EmailAddress.cs\n.github/workflows/typo-check.yml' \
     "$output_file" \
     "$step_output_file"; then
     printf 'Typo check failed to collect an ordinary changed-file list\n' >&2
@@ -1470,7 +1470,7 @@ typo_check_passes_the_files_the_pull_request_changed() {
   fi
 
   assert_file_content \
-    'files=README.md src/Domain/Emails/EmailAddress.cs .github/workflows/typo-check.yml' \
+    'files=README.md backend/src/Domain/Emails/EmailAddress.cs .github/workflows/typo-check.yml' \
     "$step_output_file"
   assert_contains 'changes 3 file(s)' "$output_file"
 }
@@ -2033,10 +2033,10 @@ case "$endpoint" in
     # contract about it is a pull request wide enough to cross it.
     response="$(
       jq -nc --argjson count "${FAKE_CHANGED_FILE_COUNT:-1}" \
-        '[range($count) | {filename: "src/Sample\(.).cs", previous_filename: null,
+        '[range($count) | {filename: "backend/src/Sample\(.).cs", previous_filename: null,
                            status: "modified", additions: 1, deletions: 0,
                            patch: "@@ -1,2 +1,3 @@\n unchanged\n+added\n unchanged"}]
-         | if length == 1 then [.[0] + {filename: "src/Sample.cs"}] else . end'
+         | if length == 1 then [.[0] + {filename: "backend/src/Sample.cs"}] else . end'
     )"
     ;;
   */pulls/*/reviews*)
@@ -2218,7 +2218,7 @@ fathom_review_stops_reading_head_content_when_its_window_is_gone() {
   assert_contains 'the content of the changed files after that point was not read' \
     "$collect_review_directory/truncation.txt"
   assert_contains '0 of them have content here' "$collect_review_directory/truncation.txt"
-  [[ ! -e "$collect_review_directory/head/src/Sample.cs" ]]
+  [[ ! -e "$collect_review_directory/head/backend/src/Sample.cs" ]]
 }
 
 # The window is a ceiling like every other one in the step, so an ordinary collection never reaches
@@ -2230,7 +2230,7 @@ fathom_review_reads_head_content_within_its_window() {
   run_fathom_review_collect "$output_file"
 
   assert_file_content '' "$collect_review_directory/truncation.txt"
-  [[ -s "$collect_review_directory/head/src/Sample.cs" ]]
+  [[ -s "$collect_review_directory/head/backend/src/Sample.cs" ]]
 }
 
 # The count ceiling reports what it cut for the same reason the window does. Without a line, a pull
@@ -2269,10 +2269,10 @@ fathom_review_names_what_moved_since_its_previous_pass() {
   local output_file="$test_directory/fathom-review-collect-moved-output"
 
   FAKE_PREVIOUS_REVIEW_HEAD='89abcdef0123456789abcdef0123456789abcdef' \
-    FAKE_MOVED_FILES='src/Sample.cs,docs/operations/sample.md' \
+    FAKE_MOVED_FILES='backend/src/Sample.cs,docs/operations/sample.md' \
     run_fathom_review_collect "$output_file"
 
-  assert_contains 'src/Sample.cs' "$collect_review_directory/changed-since-last-review.txt"
+  assert_contains 'backend/src/Sample.cs' "$collect_review_directory/changed-since-last-review.txt"
   assert_contains 'docs/operations/sample.md' "$collect_review_directory/changed-since-last-review.txt"
 }
 
@@ -2566,7 +2566,7 @@ write_fathom_review_collection() {
   local review_directory="$1"
 
   mkdir -p "$review_directory"
-  printf '[{"filename":"src/Sample.cs","lines":[12,13,14]}]\n' > "$review_directory/lines.json"
+  printf '[{"filename":"backend/src/Sample.cs","lines":[12,13,14]}]\n' > "$review_directory/lines.json"
   : > "$review_directory/truncation.txt"
 }
 
@@ -2629,12 +2629,12 @@ fathom_review_anchors_a_finding_to_its_line() {
   local payload_file="$test_directory/fathom-review-submit-anchored-payload"
 
   run_fathom_review_submit \
-    '{"summary":"Read the whole change.","findings":[{"severity":"P1","path":"src/Sample.cs","start_line":null,"line":12,"title":"Refuse the empty case","impact":"An empty list reaches the loop and the guard passes.","correction":"Return early when the list is empty.","rule":"`AGENTS.md`, \"Reliability, security, and performance\""}]}' \
+    '{"summary":"Read the whole change.","findings":[{"severity":"P1","path":"backend/src/Sample.cs","start_line":null,"line":12,"title":"Refuse the empty case","impact":"An empty list reaches the loop and the guard passes.","correction":"Return early when the list is empty.","rule":"`AGENTS.md`, \"Reliability, security, and performance\""}]}' \
     "$output_file" "$payload_file"
 
   ((submit_status == 0))
   assert_json '"COMMENT"' '.event' "$payload_file"
-  assert_json '["src/Sample.cs"]' '[.comments[].path]' "$payload_file"
+  assert_json '["backend/src/Sample.cs"]' '[.comments[].path]' "$payload_file"
   assert_json '[12]' '[.comments[].line]' "$payload_file"
   assert_json '["RIGHT"]' '[.comments[].side]' "$payload_file"
   assert_contains '# NEEDS CHANGES' "$payload_file"
@@ -2649,14 +2649,14 @@ fathom_review_approves_a_pass_carrying_only_deferred_findings() {
   local payload_file="$test_directory/fathom-review-submit-settled-payload"
 
   run_fathom_review_submit \
-    '{"summary":"Nothing owed.","findings":[{"severity":"P3","path":"src/Sample.cs","start_line":null,"line":12,"title":"Name the guard for what it refuses","impact":"The name says what passes rather than what it stops.","correction":"Rename it.","rule":"`AGENTS.md`, \"Conventions & naming\""}]}' \
+    '{"summary":"Nothing owed.","findings":[{"severity":"P3","path":"backend/src/Sample.cs","start_line":null,"line":12,"title":"Name the guard for what it refuses","impact":"The name says what passes rather than what it stops.","correction":"Rename it.","rule":"`AGENTS.md`, \"Conventions & naming\""}]}' \
     "$output_file" "$payload_file"
 
   ((submit_status == 0))
   assert_json '"APPROVE"' '.event' "$payload_file"
   # The finding is still published, and still on its line: the verdict it arrives under changed,
   # never whether it arrives. The thread-resolution rule then keeps it answerable.
-  assert_json '["src/Sample.cs"]' '[.comments[].path]' "$payload_file"
+  assert_json '["backend/src/Sample.cs"]' '[.comments[].path]' "$payload_file"
   assert_contains '# APPROVED' "$payload_file"
   assert_contains '**Findings** — P3: 1' "$payload_file"
   assert_contains 'Nothing above P3 is left' "$payload_file"
@@ -2668,7 +2668,7 @@ fathom_review_holds_a_pass_that_still_found_something_owed() {
   local payload_file="$test_directory/fathom-review-submit-held-payload"
 
   run_fathom_review_submit \
-    '{"summary":"One thing owed.","findings":[{"severity":"P3","path":"src/Sample.cs","start_line":null,"line":12,"title":"Name the guard for what it refuses","impact":"The name says what passes.","correction":"Rename it.","rule":"`AGENTS.md`, \"Conventions & naming\""},{"severity":"P2","path":"src/Sample.cs","start_line":null,"line":14,"title":"Bound the sequence","impact":"A remote list is expanded without a ceiling.","correction":"Take the first hundred.","rule":"`AGENTS.md`, \"Reliability, security, and performance\""}]}' \
+    '{"summary":"One thing owed.","findings":[{"severity":"P3","path":"backend/src/Sample.cs","start_line":null,"line":12,"title":"Name the guard for what it refuses","impact":"The name says what passes.","correction":"Rename it.","rule":"`AGENTS.md`, \"Conventions & naming\""},{"severity":"P2","path":"backend/src/Sample.cs","start_line":null,"line":14,"title":"Bound the sequence","impact":"A remote list is expanded without a ceiling.","correction":"Take the first hundred.","rule":"`AGENTS.md`, \"Reliability, security, and performance\""}]}' \
     "$output_file" "$payload_file"
 
   ((submit_status == 0))
@@ -2685,12 +2685,12 @@ fathom_review_approves_a_first_pass_carrying_only_deferred_findings() {
   local payload_file="$test_directory/fathom-review-submit-early-payload"
 
   run_fathom_review_submit \
-    '{"summary":"First pass.","findings":[{"severity":"P3","path":"src/Sample.cs","start_line":null,"line":12,"title":"Name the guard for what it refuses","impact":"The name says what passes.","correction":"Rename it.","rule":"`AGENTS.md`, \"Conventions & naming\""}]}' \
+    '{"summary":"First pass.","findings":[{"severity":"P3","path":"backend/src/Sample.cs","start_line":null,"line":12,"title":"Name the guard for what it refuses","impact":"The name says what passes.","correction":"Rename it.","rule":"`AGENTS.md`, \"Conventions & naming\""}]}' \
     "$output_file" "$payload_file"
 
   ((submit_status == 0))
   assert_json '"APPROVE"' '.event' "$payload_file"
-  assert_json '["src/Sample.cs"]' '[.comments[].path]' "$payload_file"
+  assert_json '["backend/src/Sample.cs"]' '[.comments[].path]' "$payload_file"
   assert_contains 'verdict=approved' "$submit_step_output_file"
 }
 
@@ -2701,13 +2701,13 @@ fathom_review_moves_a_finding_with_no_line_into_the_body() {
   # A line the diff does not carry and a finding that never had one: both reach the author through
   # the body rather than being dropped, which is the property the anchor validation exists for.
   run_fathom_review_submit \
-    '{"summary":"Read the whole change.","findings":[{"severity":"P2","path":"src/Sample.cs","start_line":null,"line":99,"title":"Name the moved line","impact":"The anchor is not on the diff.","correction":"Anchor it where the change is.","rule":"`AGENTS.md`"},{"severity":"P3","path":null,"start_line":null,"line":null,"title":"Say what the body claims","impact":"The body promises a rename the diff does not make.","correction":"Correct the body.","rule":"`docs/operations/issue-tracking.md`"}]}' \
+    '{"summary":"Read the whole change.","findings":[{"severity":"P2","path":"backend/src/Sample.cs","start_line":null,"line":99,"title":"Name the moved line","impact":"The anchor is not on the diff.","correction":"Anchor it where the change is.","rule":"`AGENTS.md`"},{"severity":"P3","path":null,"start_line":null,"line":null,"title":"Say what the body claims","impact":"The body promises a rename the diff does not make.","correction":"Correct the body.","rule":"`docs/operations/issue-tracking.md`"}]}' \
     "$output_file" "$payload_file"
 
   ((submit_status == 0))
   assert_json '[]' '.comments' "$payload_file"
   assert_contains '### Findings with no line to sit on' "$payload_file"
-  assert_contains '**P2 — Name the moved line** — `src/Sample.cs`' "$payload_file"
+  assert_contains '**P2 — Name the moved line** — `backend/src/Sample.cs`' "$payload_file"
   assert_contains '**P3 — Say what the body claims**' "$payload_file"
   assert_contains '**Findings** — P2: 1, P3: 1' "$payload_file"
 }
@@ -2734,7 +2734,7 @@ fathom_review_marks_a_review_with_what_started_it() {
   local payload_file="$test_directory/fathom-review-submit-marker-payload"
 
   run_fathom_review_submit \
-    '{"summary":"Found nothing above the bar.","covered":["src/Sample.cs"],"findings":[]}' \
+    '{"summary":"Found nothing above the bar.","covered":["backend/src/Sample.cs"],"findings":[]}' \
     "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: requested -->'
 
   ((submit_status == 0))
@@ -2747,7 +2747,7 @@ fathom_review_marks_a_review_with_what_started_it() {
   assert_excludes '<!-- fathom-review: automatic -->' "$payload_file"
 
   run_fathom_review_submit \
-    '{"summary":"Read part of it.","covered":["src/Sample.cs"],"findings":[{"severity":"P1","path":"src/Sample.cs","start_line":null,"line":12,"title":"Refuse the empty case","impact":"An empty list reaches the loop.","correction":"Return early.","rule":"`AGENTS.md`"}]}' \
+    '{"summary":"Read part of it.","covered":["backend/src/Sample.cs"],"findings":[{"severity":"P1","path":"backend/src/Sample.cs","start_line":null,"line":12,"title":"Refuse the empty case","impact":"An empty list reaches the loop.","correction":"Return early.","rule":"`AGENTS.md`"}]}' \
     "$output_file" "$payload_file"
 
   ((submit_status == 0))
@@ -2762,9 +2762,9 @@ fathom_review_publishes_the_coverage_gap_beside_its_findings() {
   local payload_file="$test_directory/fathom-review-submit-gap-payload"
 
   run_fathom_review_submit \
-    '{"summary":"Read part of the change.","covered":["src/Sample.cs"],"findings":[{"severity":"P1","path":"src/Sample.cs","start_line":null,"line":12,"title":"Refuse the empty case","impact":"An empty list reaches the loop.","correction":"Return early.","rule":"`AGENTS.md`"}]}' \
+    '{"summary":"Read part of the change.","covered":["backend/src/Sample.cs"],"findings":[{"severity":"P1","path":"backend/src/Sample.cs","start_line":null,"line":12,"title":"Refuse the empty case","impact":"An empty list reaches the loop.","correction":"Return early.","rule":"`AGENTS.md`"}]}' \
     "$output_file" "$payload_file" 'success' \
-    'The review names 1 of the 3 changed files as read. Not named: `src/Other.cs`.'
+    'The review names 1 of the 3 changed files as read. Not named: `backend/src/Other.cs`.'
 
   ((submit_status == 0))
   assert_contains 'names 1 of the 3 changed files as read' "$payload_file"
@@ -2777,9 +2777,9 @@ fathom_review_publishes_the_coverage_gap_under_an_approval() {
   # This is the shape the gap matters most in. An approval asserts the absence of defects across the
   # whole change, so one published by a pass that read half of it says what it actually covered.
   run_fathom_review_submit \
-    '{"summary":"Found nothing above the bar.","covered":["src/Sample.cs"],"findings":[]}' \
+    '{"summary":"Found nothing above the bar.","covered":["backend/src/Sample.cs"],"findings":[]}' \
     "$output_file" "$payload_file" 'success' \
-    'The review names 1 of the 3 changed files as read. Not named: `src/Other.cs`.'
+    'The review names 1 of the 3 changed files as read. Not named: `backend/src/Other.cs`.'
 
   ((submit_status == 0))
   assert_json '"APPROVE"' '.event' "$payload_file"
@@ -2823,7 +2823,7 @@ fathom_review_refuses_findings_that_carry_a_credential() {
   local payload_file="$test_directory/fathom-review-submit-credential-payload"
 
   run_fathom_review_submit \
-    '{"summary":"Read the whole change.","findings":[{"severity":"P1","path":"src/Sample.cs","start_line":null,"line":12,"title":"Quote the token","impact":"The token sk-ant-oat01-credentialthatisnotreal is echoed here.","correction":"Do not.","rule":"`AGENTS.md`"}]}' \
+    '{"summary":"Read the whole change.","findings":[{"severity":"P1","path":"backend/src/Sample.cs","start_line":null,"line":12,"title":"Quote the token","impact":"The token sk-ant-oat01-credentialthatisnotreal is echoed here.","correction":"Do not.","rule":"`AGENTS.md`"}]}' \
     "$output_file" "$payload_file"
 
   ((submit_status == 1))
@@ -2894,8 +2894,8 @@ fathom_review_reports_the_files_a_review_never_named() {
   local coverage_file="$test_directory/fathom-review-coverage-gap"
 
   run_fathom_review_coverage \
-    '{"covered":["src/Sample.cs"],"candidates":[],"notes":""}' \
-    '[{"filename":"src/Sample.cs"},{"filename":"src/Other.cs"},{"filename":"docs/features/sample.md"}]' \
+    '{"covered":["backend/src/Sample.cs"],"candidates":[],"notes":""}' \
+    '[{"filename":"backend/src/Sample.cs"},{"filename":"backend/src/Other.cs"},{"filename":"docs/features/sample.md"}]' \
     "$output_file" "$coverage_file"
 
   ((coverage_status == 0))
@@ -2903,7 +2903,7 @@ fathom_review_reports_the_files_a_review_never_named() {
   # The whole list, not each path in turn. Asserting them individually passed while the paths were
   # joined by alternating delimiters — `paste -d` reads its argument as a list of them — so what the
   # author read was ``a`,`b` `c``.
-  assert_contains 'Not opened: `docs/features/sample.md`, `src/Other.cs`.' "$coverage_file"
+  assert_contains 'Not opened: `backend/src/Other.cs`, `docs/features/sample.md`.' "$coverage_file"
 }
 
 fathom_review_reports_no_gap_when_the_review_named_every_file() {
@@ -2913,9 +2913,9 @@ fathom_review_reports_no_gap_when_the_review_named_every_file() {
   # A file named twice counts once, so a ledger that repeats itself is complete rather than
   # over-complete, and the reviewer is not asked to deduplicate what `jq` can.
   run_fathom_review_coverage \
-    '{"covered":["src/Sample.cs","src/Sample.cs"],"candidates":[],"notes":""}
-{"covered":["src/Other.cs"],"candidates":[],"notes":""}' \
-    '[{"filename":"src/Sample.cs"},{"filename":"src/Other.cs"}]' \
+    '{"covered":["backend/src/Sample.cs","backend/src/Sample.cs"],"candidates":[],"notes":""}
+{"covered":["backend/src/Other.cs"],"candidates":[],"notes":""}' \
+    '[{"filename":"backend/src/Sample.cs"},{"filename":"backend/src/Other.cs"}]' \
     "$output_file" "$coverage_file"
 
   ((coverage_status == 0))
@@ -2931,13 +2931,13 @@ fathom_review_counts_a_named_path_the_change_does_not_contain() {
   # what this step writes is published into a review body, so an invented name reaches the author as
   # a count of names and not as the names.
   run_fathom_review_coverage \
-    '{"covered":["src/Sample.cs","src/Invented.cs"],"candidates":[],"notes":""}' \
-    '[{"filename":"src/Sample.cs"}]' \
+    '{"covered":["backend/src/Sample.cs","backend/src/Invented.cs"],"candidates":[],"notes":""}' \
+    '[{"filename":"backend/src/Sample.cs"}]' \
     "$output_file" "$coverage_file"
 
   ((coverage_status == 0))
   assert_contains 'named 1 path(s) that the collected change does not contain' "$coverage_file"
-  assert_excludes 'src/Invented.cs' "$coverage_file"
+  assert_excludes 'backend/src/Invented.cs' "$coverage_file"
 }
 
 fathom_review_bounds_how_many_unread_files_it_names() {
@@ -2950,7 +2950,7 @@ fathom_review_bounds_how_many_unread_files_it_names() {
   # fall behind `File13` — which would make the contract assert on something other than the ceiling.
   changed_files='[]'
   for index in $(seq -w 1 13); do
-    changed_files="$(jq -c --arg name "src/File${index}.cs" '. + [{filename: $name}]' <<< "$changed_files")"
+    changed_files="$(jq -c --arg name "backend/src/File${index}.cs" '. + [{filename: $name}]' <<< "$changed_files")"
   done
 
   run_fathom_review_coverage \
@@ -2960,7 +2960,7 @@ fathom_review_bounds_how_many_unread_files_it_names() {
   ((coverage_status == 0))
   assert_contains 'opened 0 of the 13 changed files' "$coverage_file"
   assert_contains 'and 3 more' "$coverage_file"
-  assert_excludes 'src/File11.cs' "$coverage_file"
+  assert_excludes 'backend/src/File11.cs' "$coverage_file"
 }
 
 fathom_review_reads_a_ledger_of_the_wrong_shape_as_an_empty_one() {
@@ -2973,7 +2973,7 @@ fathom_review_reads_a_ledger_of_the_wrong_shape_as_an_empty_one() {
   # than turning a review that was ready to post into a red job.
   run_fathom_review_coverage \
     '{"covered":12,"candidates":[],"notes":""}' \
-    '[{"filename":"src/Sample.cs"}]' \
+    '[{"filename":"backend/src/Sample.cs"}]' \
     "$output_file" "$coverage_file"
 
   ((coverage_status == 0))
@@ -2988,10 +2988,10 @@ fathom_review_separates_what_moved_from_what_nobody_re_read() {
   local coverage_file="$test_directory/fathom-review-coverage-bounded"
 
   run_fathom_review_coverage \
-    '{"covered":["src/Moved.cs"],"candidates":[],"notes":""}' \
-    '[{"filename":"src/Moved.cs"},{"filename":"src/Still.cs"},{"filename":"docs/still.md"}]' \
+    '{"covered":["backend/src/Moved.cs"],"candidates":[],"notes":""}' \
+    '[{"filename":"backend/src/Moved.cs"},{"filename":"backend/src/Still.cs"},{"filename":"docs/still.md"}]' \
     "$output_file" "$coverage_file" '1' \
-    '[{"index":1,"files":["src/Moved.cs"],"read_this_pass":true},{"index":2,"files":["src/Still.cs","docs/still.md"],"read_this_pass":false}]'
+    '[{"index":1,"files":["backend/src/Moved.cs"],"read_this_pass":true},{"index":2,"files":["backend/src/Still.cs","docs/still.md"],"read_this_pass":false}]'
 
   ((coverage_status == 0))
   # Everything in scope was read, so there is no gap line — only the sentence saying what the pass
@@ -3009,15 +3009,15 @@ fathom_review_reports_a_gap_inside_what_the_pass_re_read() {
   local coverage_file="$test_directory/fathom-review-coverage-bounded-gap"
 
   run_fathom_review_coverage \
-    '{"covered":["src/Moved.cs"],"candidates":[],"notes":""}' \
-    '[{"filename":"src/Moved.cs"},{"filename":"src/AlsoMoved.cs"},{"filename":"src/Still.cs"}]' \
+    '{"covered":["backend/src/Moved.cs"],"candidates":[],"notes":""}' \
+    '[{"filename":"backend/src/Moved.cs"},{"filename":"backend/src/AlsoMoved.cs"},{"filename":"backend/src/Still.cs"}]' \
     "$output_file" "$coverage_file" '1' \
-    '[{"index":1,"files":["src/Moved.cs","src/AlsoMoved.cs"],"read_this_pass":true},{"index":2,"files":["src/Still.cs"],"read_this_pass":false}]'
+    '[{"index":1,"files":["backend/src/Moved.cs","backend/src/AlsoMoved.cs"],"read_this_pass":true},{"index":2,"files":["backend/src/Still.cs"],"read_this_pass":false}]'
 
   ((coverage_status == 0))
   assert_contains 'opened 1 of the 2 changed files this pass covers' "$coverage_file"
-  assert_contains 'Not opened: `src/AlsoMoved.cs`.' "$coverage_file"
-  assert_excludes 'src/Still.cs' "$coverage_file"
+  assert_contains 'Not opened: `backend/src/AlsoMoved.cs`.' "$coverage_file"
+  assert_excludes 'backend/src/Still.cs' "$coverage_file"
 }
 
 # A reader that failed published nothing, and that is a part of the change no session opened. The
@@ -3029,9 +3029,9 @@ fathom_review_says_when_a_reader_never_reported() {
   local coverage_file="$test_directory/fathom-review-coverage-missing-reader"
 
   run_fathom_review_coverage \
-    '{"covered":["src/Sample.cs"],"candidates":[],"notes":""}
+    '{"covered":["backend/src/Sample.cs"],"candidates":[],"notes":""}
 ' \
-    '[{"filename":"src/Sample.cs"},{"filename":"src/Other.cs"}]' \
+    '[{"filename":"backend/src/Sample.cs"},{"filename":"backend/src/Other.cs"}]' \
     "$output_file" "$coverage_file" '2'
 
   ((coverage_status == 0))
@@ -3047,7 +3047,7 @@ fathom_review_reports_the_whole_change_when_no_reader_returned() {
   local coverage_file="$test_directory/fathom-review-coverage-silent"
 
   run_fathom_review_coverage \
-    '' '[{"filename":"src/Sample.cs"}]' "$output_file" "$coverage_file" '1'
+    '' '[{"filename":"backend/src/Sample.cs"}]' "$output_file" "$coverage_file" '1'
 
   ((coverage_status == 0))
   assert_contains 'split between 1 readers and 0 reported back' "$coverage_file"
@@ -4149,20 +4149,20 @@ create_obligation_fixture() {
 
   rm -rf "$fixture_root"
   mkdir -p \
-    "$fixture_root/src/Application/Emails" \
-    "$fixture_root/src/Domain/Failures" \
-    "$fixture_root/tests/Application.UnitTests" \
+    "$fixture_root/backend/src/Application/Emails" \
+    "$fixture_root/backend/src/Domain/Failures" \
+    "$fixture_root/backend/tests/Application.UnitTests" \
     "$fixture_root/docs/features"
 
-  printf 'internal sealed class MailboxWidget;\n' > "$fixture_root/src/Application/Emails/MailboxWidget.cs"
-  printf 'internal sealed class MailboxGadget;\n' > "$fixture_root/src/Application/Emails/MailboxGadget.cs"
+  printf 'internal sealed class MailboxWidget;\n' > "$fixture_root/backend/src/Application/Emails/MailboxWidget.cs"
+  printf 'internal sealed class MailboxGadget;\n' > "$fixture_root/backend/src/Application/Emails/MailboxGadget.cs"
   printf 'public void Reads() => new MailboxGadget();\n' \
-    > "$fixture_root/tests/Application.UnitTests/MailboxGadgetTests.cs"
+    > "$fixture_root/backend/tests/Application.UnitTests/MailboxGadgetTests.cs"
 
   printf '%s\n' \
     '# Mailbox widgets' \
     '' \
-    '<!-- describes: src/Application/Emails/** -->' \
+    '<!-- describes: backend/src/Application/Emails/** -->' \
     '' \
     'What a widget answers.' \
     > "$fixture_root/docs/features/widgets.md"
@@ -4181,13 +4181,13 @@ obligation_index_reports_a_changed_source_no_test_reaches() {
   local output_file="$test_directory/obligations-missing-test.json"
 
   create_obligation_fixture "$fixture_root"
-  printf '%s\n' '[{"filename":"src/Application/Emails/MailboxWidget.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
+  printf '%s\n' '[{"filename":"backend/src/Application/Emails/MailboxWidget.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
     > "$files_json"
 
   run_obligation_index "$fixture_root" "$files_json" "$output_file"
 
   assert_json '[]' '.tests[0].referencing_tests' "$output_file"
-  assert_json '"tests/Application.UnitTests"' '.tests[0].expected_test_project' "$output_file"
+  assert_json '"backend/tests/Application.UnitTests"' '.tests[0].expected_test_project' "$output_file"
 }
 
 # The case where reporting a missing test would be most obviously wrong: the change adds the class
@@ -4199,12 +4199,12 @@ obligation_index_credits_a_test_the_change_adds() {
   local output_file="$test_directory/obligations-added-test.json"
 
   create_obligation_fixture "$fixture_root"
-  printf '%s\n' '[{"filename":"src/Application/Emails/MailboxWidget.cs","status":"added","patch":"@@ -0,0 +1 @@\n+internal sealed class MailboxWidget;"},{"filename":"tests/Application.UnitTests/MailboxWidgetTests.cs","status":"added","patch":"@@ -0,0 +1 @@\n+public void Reads() => new MailboxWidget();"}]' \
+  printf '%s\n' '[{"filename":"backend/src/Application/Emails/MailboxWidget.cs","status":"added","patch":"@@ -0,0 +1 @@\n+internal sealed class MailboxWidget;"},{"filename":"backend/tests/Application.UnitTests/MailboxWidgetTests.cs","status":"added","patch":"@@ -0,0 +1 @@\n+public void Reads() => new MailboxWidget();"}]' \
     > "$files_json"
 
   run_obligation_index "$fixture_root" "$files_json" "$output_file"
 
-  assert_json '[{"path":"tests/Application.UnitTests/MailboxWidgetTests.cs","changed_by_this_pull_request":true}]' \
+  assert_json '[{"path":"backend/tests/Application.UnitTests/MailboxWidgetTests.cs","changed_by_this_pull_request":true}]' \
     '.tests[0].referencing_tests' "$output_file"
 }
 
@@ -4217,12 +4217,12 @@ obligation_index_names_a_test_the_change_left_alone() {
   local output_file="$test_directory/obligations-untouched-test.json"
 
   create_obligation_fixture "$fixture_root"
-  printf '%s\n' '[{"filename":"src/Application/Emails/MailboxGadget.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
+  printf '%s\n' '[{"filename":"backend/src/Application/Emails/MailboxGadget.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
     > "$files_json"
 
   run_obligation_index "$fixture_root" "$files_json" "$output_file"
 
-  assert_json '[{"path":"tests/Application.UnitTests/MailboxGadgetTests.cs","changed_by_this_pull_request":false}]' \
+  assert_json '[{"path":"backend/tests/Application.UnitTests/MailboxGadgetTests.cs","changed_by_this_pull_request":false}]' \
     '.tests[0].referencing_tests' "$output_file"
 }
 
@@ -4232,7 +4232,7 @@ obligation_index_maps_a_changed_path_to_the_page_that_describes_it() {
   local output_file="$test_directory/obligations-documentation.json"
 
   create_obligation_fixture "$fixture_root"
-  printf '%s\n' '[{"filename":"src/Application/Emails/MailboxWidget.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
+  printf '%s\n' '[{"filename":"backend/src/Application/Emails/MailboxWidget.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
     > "$files_json"
 
   run_obligation_index "$fixture_root" "$files_json" "$output_file"
@@ -4256,23 +4256,23 @@ obligation_index_credits_a_path_directly_under_a_double_star() {
   printf '%s\n' \
     '# Configuration reference' \
     '' \
-    '<!-- describes: src/**/*Options.cs, **/*.slnx -->' \
+    '<!-- describes: backend/src/**/*Options.cs, **/*.slnx -->' \
     '' \
     'Every user-settable option.' \
     > "$fixture_root/docs/features/configuration.md"
 
   # One path directly under the boundary, one nested, and one at the repository root, which is the
   # case a leading `**/` covers.
-  printf '%s\n' '[{"filename":"src/MailboxOptions.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"},{"filename":"src/Application/Emails/TimelineOptions.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"},{"filename":"MailFathom.slnx","status":"modified","patch":"@@ -1 +1,2 @@\n+<Solution />"}]' \
+  printf '%s\n' '[{"filename":"backend/src/MailboxOptions.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"},{"filename":"backend/src/Application/Emails/TimelineOptions.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"},{"filename":"MailFathom.slnx","status":"modified","patch":"@@ -1 +1,2 @@\n+<Solution />"}]' \
     > "$files_json"
 
   run_obligation_index "$fixture_root" "$files_json" "$output_file"
 
   assert_json '"docs/features/configuration.md"' \
-    '[.documentation[] | select(.path == "src/MailboxOptions.cs")][0].describing_documents[0].path' \
+    '[.documentation[] | select(.path == "backend/src/MailboxOptions.cs")][0].describing_documents[0].path' \
     "$output_file"
   assert_json '"docs/features/configuration.md"' \
-    '[.documentation[] | select(.path == "src/Application/Emails/TimelineOptions.cs")][0].describing_documents[0].path' \
+    '[.documentation[] | select(.path == "backend/src/Application/Emails/TimelineOptions.cs")][0].describing_documents[0].path' \
     "$output_file"
   assert_json '"docs/features/configuration.md"' \
     '[.documentation[] | select(.path == "MailFathom.slnx")][0].describing_documents[0].path' \
@@ -4292,9 +4292,9 @@ obligation_index_ignores_a_marker_below_the_preamble() {
   {
     printf '# How to declare what a page describes\n\n'
     printf 'Filler that pushes the example past the preamble.\n\n%.0s' {1..12}
-    printf '<!-- describes: src/Domain/Failures/** -->\n'
+    printf '<!-- describes: backend/src/Domain/Failures/** -->\n'
   } > "$fixture_root/docs/conventions.md"
-  printf '%s\n' '[{"filename":"src/Domain/Failures/MailboxFailure.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
+  printf '%s\n' '[{"filename":"backend/src/Domain/Failures/MailboxFailure.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
     > "$files_json"
 
   run_obligation_index "$fixture_root" "$files_json" "$output_file"
@@ -4346,10 +4346,10 @@ obligation_index_caps_the_tests_it_lists_for_one_type() {
 
   for index in $(seq 1 25); do
     printf 'public void Case%s() => new MailboxWidget();\n' "$index" \
-      > "$fixture_root/tests/Application.UnitTests/MailboxWidgetCase${index}Tests.cs"
+      > "$fixture_root/backend/tests/Application.UnitTests/MailboxWidgetCase${index}Tests.cs"
   done
 
-  printf '%s\n' '[{"filename":"src/Application/Emails/MailboxWidget.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
+  printf '%s\n' '[{"filename":"backend/src/Application/Emails/MailboxWidget.cs","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
     > "$files_json"
 
   run_obligation_index "$fixture_root" "$files_json" "$output_file"
@@ -4836,12 +4836,12 @@ review_obligations_reports_a_source_the_working_tree_leaves_untested() {
   create_review_obligations_fixture "$fixture_root"
 
   printf 'internal sealed class MailboxSprocket;\n' \
-    > "$fixture_root/src/Application/Emails/MailboxSprocket.cs"
-  git -C "$fixture_root" add src/Application/Emails/MailboxSprocket.cs
+    > "$fixture_root/backend/src/Application/Emails/MailboxSprocket.cs"
+  git -C "$fixture_root" add backend/src/Application/Emails/MailboxSprocket.cs
 
   run_review_obligations "$fixture_root" "$output_file"
 
-  assert_contains 'Nothing under tests/ names MailboxSprocket.' "$output_file"
+  assert_contains 'Nothing under backend/tests/ names MailboxSprocket.' "$output_file"
   assert_contains 'docs/features/widgets.md' "$output_file"
   assert_contains 'None of this is a finding.' "$output_file"
 }
@@ -4855,11 +4855,11 @@ review_obligations_names_the_untracked_paths_no_diff_contains() {
   create_review_obligations_fixture "$fixture_root"
 
   printf 'internal sealed class MailboxSprocket;\n' \
-    > "$fixture_root/src/Application/Emails/MailboxSprocket.cs"
+    > "$fixture_root/backend/src/Application/Emails/MailboxSprocket.cs"
 
   run_review_obligations "$fixture_root" "$output_file"
 
-  assert_contains 'src/Application/Emails/MailboxSprocket.cs' "$output_file"
+  assert_contains 'backend/src/Application/Emails/MailboxSprocket.cs' "$output_file"
   assert_contains 'Stage them and run this again.' "$output_file"
 }
 
@@ -4872,8 +4872,8 @@ review_obligations_reports_without_gating() {
   create_review_obligations_fixture "$fixture_root"
 
   printf 'internal sealed class MailboxSprocket;\n' \
-    > "$fixture_root/src/Application/Emails/MailboxSprocket.cs"
-  git -C "$fixture_root" add src/Application/Emails/MailboxSprocket.cs
+    > "$fixture_root/backend/src/Application/Emails/MailboxSprocket.cs"
+  git -C "$fixture_root" add backend/src/Application/Emails/MailboxSprocket.cs
 
   run_review_obligations "$fixture_root" "$output_file"
 }
@@ -4900,12 +4900,12 @@ review_obligations_reports_on_a_patch_past_the_argument_limit() {
     for ((line = 0; line < 4000; line++)); do
       printf '// %s\n' "$filler"
     done
-  } > "$fixture_root/src/Application/Emails/MailboxWidget.cs"
+  } > "$fixture_root/backend/src/Application/Emails/MailboxWidget.cs"
 
   run_review_obligations "$fixture_root" "$output_file"
 
   assert_excludes 'Argument list too long' "$output_file"
-  assert_contains 'Nothing under tests/ names MailboxWidget.' "$output_file"
+  assert_contains 'Nothing under backend/tests/ names MailboxWidget.' "$output_file"
   assert_contains 'None of this is a finding.' "$output_file"
 }
 
@@ -4917,8 +4917,8 @@ obligation_index_leaves_migrations_out() {
   local output_file="$test_directory/obligations-migration.json"
 
   create_obligation_fixture "$fixture_root"
-  mkdir -p "$fixture_root/src/Infrastructure/Persistence/Migrations"
-  printf '%s\n' '[{"filename":"src/Infrastructure/Persistence/Migrations/20260802_AddWidget.cs","status":"added","patch":"@@ -0,0 +1 @@\n+// generated"}]' \
+  mkdir -p "$fixture_root/backend/src/Infrastructure/Persistence/Migrations"
+  printf '%s\n' '[{"filename":"backend/src/Infrastructure/Persistence/Migrations/20260802_AddWidget.cs","status":"added","patch":"@@ -0,0 +1 @@\n+// generated"}]' \
     > "$files_json"
 
   run_obligation_index "$fixture_root" "$files_json" "$output_file"
@@ -4948,8 +4948,8 @@ run_group_split() {
 write_split_fixture() {
   local files_json="$1"
   local count="$2"
-  local directories=('src/Domain/Emails' 'src/Application/Contacts' 'src/Infrastructure/Persistence'
-                     'src/Mcp/Tools' 'tests/Domain.UnitTests' 'docs/features'
+  local directories=('backend/src/Domain/Emails' 'backend/src/Application/Contacts' 'backend/src/Infrastructure/Persistence'
+                     'backend/src/Mcp/Tools' 'backend/tests/Domain.UnitTests' 'docs/features'
                      'deploy/helm/mailfathom/templates')
   local index
 
@@ -5050,7 +5050,7 @@ fathom_review_composes_a_reader_prompt_naming_only_its_group() {
   rm -rf "$review_directory"
   mkdir -p "$review_directory"
   printf '%s\n' \
-    '[{"index":1,"files":["src/Domain/Emails/Email.cs","src/Domain/Emails/EmailAddress.cs"]},{"index":2,"files":["docs/features/mail.md"]}]' \
+    '[{"index":1,"files":["backend/src/Domain/Emails/Email.cs","backend/src/Domain/Emails/EmailAddress.cs"]},{"index":2,"files":["docs/features/mail.md"]}]' \
     > "$review_directory/groups.json"
   : > "$step_output_file"
 
@@ -5081,8 +5081,8 @@ fathom_review_composes_a_reader_prompt_naming_only_its_group() {
   (( status == 0 ))
   # Its own group and nothing else. A reader given another group's paths reviews a file somebody
   # else is already reading, and the coverage the run publishes then counts it twice.
-  assert_contains '- `src/Domain/Emails/Email.cs`' "$prompt_file"
-  assert_contains '- `src/Domain/Emails/EmailAddress.cs`' "$prompt_file"
+  assert_contains '- `backend/src/Domain/Emails/Email.cs`' "$prompt_file"
+  assert_contains '- `backend/src/Domain/Emails/EmailAddress.cs`' "$prompt_file"
   assert_excludes 'docs/features/mail.md' "$prompt_file"
   # The rubrics arrive whole rather than as the placeholder that stands for them.
   assert_contains '### The repository' "$prompt_file"
@@ -5102,7 +5102,7 @@ fathom_review_refuses_a_reader_group_that_holds_no_files() {
   extract_fathom_review_step 'reader_prompt' "$step_script"
   rm -rf "$review_directory"
   mkdir -p "$review_directory"
-  printf '%s\n' '[{"index":1,"files":["src/Domain/Emails/Email.cs"]}]' > "$review_directory/groups.json"
+  printf '%s\n' '[{"index":1,"files":["backend/src/Domain/Emails/Email.cs"]}]' > "$review_directory/groups.json"
 
   set +e
   (
@@ -6546,7 +6546,7 @@ the_mutation_score_is_reported_and_never_gated() {
 
   # The flag covers the score and nothing else, so everything the run can still fail on is covered here instead — a
   # preview test runner that crashes, a report that is never written. The hot-path benchmarks one job above are swallowed
-  # the same way and for the reason `tests/AGENTS.md` § *Cost claims* gives.
+  # the same way and for the reason `backend/tests/AGENTS.md` § *Cost claims* gives.
   grep -qE '^    continue-on-error: true$' "$workflow_directory/mutation-score.yml" ||
     failures+='mutation-score.yml does not swallow its own failures, so a broken diagnostic reads as a red nightly. '
 
@@ -6727,20 +6727,20 @@ the_reviewer_resolves_one_claude_credential_everywhere() {
 
 # `tools/` holds development tooling that must never ship. `tools/SyntheticMail` fabricates mail and
 # submits it under a stored credential, which is not an operator capability and has no business in
-# `mfctl`, in the container image, or in a release asset. Being outside `src/` is what makes that true
-# today — the release publishes `src/Cli/Cli.csproj` by name and the image's build context is an
+# `mfctl`, in the container image, or in a release asset. Being outside `backend/src/` is what makes that true
+# today — the release publishes `backend/src/Cli/Cli.csproj` by name and the image's build context is an
 # allow-list — and this is what keeps it true: three ways the boundary could be crossed, each checked
 # rather than trusted to a convention nobody restates.
 the_development_tooling_never_reaches_a_published_artifact() {
   local failures=''
   local offenders
 
-  # A project under src/ referencing one under tools/ would put the tool in whatever that project
+  # A project under backend/src/ referencing one under tools/ would put the tool in whatever that project
   # publishes, image and command binaries alike.
-  offenders="$(grep -rlE 'ProjectReference[^>]*tools[/\\]' "$source_repository_root/src" || true)"
+  offenders="$(grep -rlE 'ProjectReference[^>]*tools[/\\]' "$source_repository_root/backend/src" || true)"
 
   if [[ -n "$offenders" ]]; then
-    failures+="these projects under src/ reference tools/: $(tr '\n' ' ' <<< "$offenders"). "
+    failures+="these projects under backend/src/ reference tools/: $(tr '\n' ' ' <<< "$offenders"). "
   fi
 
   # A workflow *step* naming a path under tools/ would build, publish, or attach it as part of a

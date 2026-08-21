@@ -9,7 +9,7 @@ informed:
 
 # Use application-owned repository ports with explicit Unit of Work sessions and keep EF Core behind infrastructure adapters
 
-<!-- describes: src/Application/Persistence/**, src/Infrastructure/Persistence/** -->
+<!-- describes: backend/src/Application/Persistence/**, backend/src/Infrastructure/Persistence/** -->
 
 ## Context and Problem Statement
 
@@ -85,7 +85,7 @@ The decision is proposed, not accepted. The first implementation should introduc
 
 ### Repository placement and dependency direction
 
-Repository contracts are application ports. They belong in `src/Application` near the use case or subdomain that owns the persistence need. Implementations belong in `src/Infrastructure/Persistence/PostgreSql` and may use EF Core, Npgsql, provider-specific SQL, compiled queries, tracking, concurrency tokens, and transaction APIs internally.
+Repository contracts are application ports. They belong in `backend/src/Application` near the use case or subdomain that owns the persistence need. Implementations belong in `backend/src/Infrastructure/Persistence/PostgreSql` and may use EF Core, Npgsql, provider-specific SQL, compiled queries, tracking, concurrency tokens, and transaction APIs internally.
 
 `Domain` must not contain persistence repositories for ordinary data access. A domain interface is allowed only for pure domain policies that do not imply I/O, clocks, configuration, logging, or infrastructure.
 

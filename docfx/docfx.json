@@ -5,10 +5,10 @@
       "src": [
         {
           "files": [
-            "src/*/*.csproj"
+            "backend/src/*/*.csproj"
           ],
           "exclude": [
-            "src/AppHost/**"
+            "backend/src/AppHost/**"
           ],
           "src": ".."
         }

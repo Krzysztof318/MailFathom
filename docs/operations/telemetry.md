@@ -1,6 +1,6 @@
 # Telemetry and the Aspire dashboard
 
-<!-- describes: src/Application/Observability/**, src/Common/Observability/**, src/Host/Observability/**, src/Host/ServiceDefaultsExtensions.cs, src/Host/Hosting/Workers/**, src/Infrastructure/Observability/**, src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, src/Infrastructure/HostApplicationBuilderExtensions.cs, src/Mcp/Observability/**, src/Cli/Diagnostics/**, src/AppHost/**, src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs -->
+<!-- describes: backend/src/Application/Observability/**, backend/src/Common/Observability/**, backend/src/Host/Observability/**, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Host/Hosting/Workers/**, backend/src/Infrastructure/Observability/**, backend/src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, backend/src/Infrastructure/HostApplicationBuilderExtensions.cs, backend/src/Mcp/Observability/**, backend/src/Cli/Diagnostics/**, backend/src/AppHost/**, backend/src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs -->
 
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
@@ -1091,12 +1091,12 @@ families it covers.
 
 ## Local development: the Aspire dashboard
 
-The AppHost orchestration is where the switch is flipped for you. When `src/AppHost` starts a project resource, Aspire
+The AppHost orchestration is where the switch is flipped for you. When `backend/src/AppHost` starts a project resource, Aspire
 injects `OTEL_EXPORTER_OTLP_ENDPOINT` — together with the authentication header its dashboard expects — pointing at
 the dashboard's own OTLP ingestion endpoint. The host needs no telemetry configuration at all:
 
 ```bash
-dotnet run --project src/AppHost/AppHost.csproj
+dotnet run --project backend/src/AppHost/AppHost.csproj
 ```
 
 The AppHost prints the dashboard address, including a one-time login link, as it starts. The dashboard then shows, per

@@ -16,9 +16,9 @@ fi
 
 cd "$repository_root"
 
-integration_test_project='tests/IntegrationTests/IntegrationTests.csproj'
+integration_test_project='backend/tests/IntegrationTests/IntegrationTests.csproj'
 
-# Must match OrchestrationContract.EphemeralResourceNamePrefix in src/AppHost. The app model names
+# Must match OrchestrationContract.EphemeralResourceNamePrefix in backend/src/AppHost. The app model names
 # the container and the volume it creates under test with this prefix precisely so that a filter can
 # find them again without knowing what a given run produced.
 ephemeral_resource_prefix='mailfathom-integrationtests'
@@ -128,7 +128,7 @@ mapfile -t integration_covered_sources < <(
 )
 
 if ((${#integration_covered_sources[@]} == 0)); then
-  printf 'No source file under src/ carries [RequiresIntegrationCoverage], so the report would have no scope. Either the marker was removed everywhere, in which case this coverage step has no reason to exist, or the search is wrong.\n' >&2
+  printf 'No source file under backend/src/ carries [RequiresIntegrationCoverage], so the report would have no scope. Either the marker was removed everywhere, in which case this coverage step has no reason to exist, or the search is wrong.\n' >&2
   exit 1
 fi
 

@@ -1,6 +1,6 @@
 # Email search
 
-<!-- describes: src/Application/Emails/SearchEmails/**, src/Application/Emails/Search/**, src/Infrastructure/Persistence/** -->
+<!-- describes: backend/src/Application/Emails/SearchEmails/**, backend/src/Application/Emails/Search/**, backend/src/Infrastructure/Persistence/** -->
 
 MailFathom searches its local copy. `SearchEmails` is the second read use case: it takes a free-text query plus
 the same structured filters a listing takes, and returns a bounded window of matched emails ordered by relevance, each

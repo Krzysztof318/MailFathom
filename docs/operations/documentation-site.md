@@ -22,7 +22,7 @@ Everything under `docs/` except the architectural decision records, plus two thi
 | On the site | Where it comes from |
 | --- | --- |
 | The user guide, the operations pages, the feature pages, and the architecture pages | `docs/`, unchanged |
-| The API reference | Generated from the XML documentation comments in `src/`, every project but `AppHost` |
+| The API reference | Generated from the XML documentation comments in `backend/src/`, every project but `AppHost` |
 | The changelog | The repository-root `CHANGELOG.md`, published as it stands |
 | The landing page | `docs/index.md`, which exists for the site alone |
 
@@ -76,7 +76,7 @@ Two things are deliberately not published here:
   artifact to keep correct that no reader ever benefits from — the map exists precisely so that a whole-set fetch is
   never the way to an answer.
 - **No Markdown for the API reference.** It is generated from XML documentation comments into a thousand pages named
-  after types, and the map links its introduction like any other page. The types themselves are read from `src/`.
+  after types, and the map links its introduction like any other page. The types themselves are read from `backend/src/`.
 
 A link inside these artifacts follows the rule the rest of this page states, resolved for where the artifact sits. A
 page's Markdown source keeps its links exactly as written, because the sources mirror the tree the pages came from. A
@@ -300,7 +300,7 @@ the repository's own Pages deployment — `actions/deploy-pages`, not a bot push
 `pages: write` and `id-token: write` scopes on the deploying job are all it holds, and nothing in it writes to the
 repository.
 
-A pull request that changes `docs/` or the site definition builds `latest` and deploys nothing. A change under `src/`
+A pull request that changes `docs/` or the site definition builds `latest` and deploys nothing. A change under `backend/src/`
 does not trigger it: an XML comment docfx dislikes is a warning rather than a failure, so the build would add minutes
 to nearly every pull request the repository sees and catch nothing.
 

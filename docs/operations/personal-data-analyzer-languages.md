@@ -1,6 +1,6 @@
 # The analyzer's languages, and what each one requires
 
-<!-- describes: src/Infrastructure/SensitiveContent/PersonalData/**, src/Host/Configuration/SensitiveContent/PersonalDataAnalyzerOptions.cs, deploy/compose/compose.yaml, deploy/quadlet/mailfathom-presidio.container, deploy/helm/mailfathom/values.yaml -->
+<!-- describes: backend/src/Infrastructure/SensitiveContent/PersonalData/**, backend/src/Host/Configuration/SensitiveContent/PersonalDataAnalyzerOptions.cs, deploy/compose/compose.yaml, deploy/quadlet/mailfathom-presidio.container, deploy/helm/mailfathom/values.yaml -->
 
 > [!WARNING]
 > Some of the steps on this page are performed in a product this project does not control. Any screen, menu, or field

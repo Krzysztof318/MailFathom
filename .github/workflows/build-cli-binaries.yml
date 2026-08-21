@@ -50,10 +50,10 @@ jobs:
           global-json-file: global.json
 
       - name: Restore
-        run: dotnet restore src/Cli/Cli.csproj --locked-mode
+        run: dotnet restore backend/src/Cli/Cli.csproj --locked-mode
 
       # The publish-time shape lives here rather than in the project file, because a project marked self-contained
-      # cannot be referenced by the test host. Trimming is safe because of how little src/Cli reaches: Common, and
+      # cannot be referenced by the test host. Trimming is safe because of how little backend/src/Cli reaches: Common, and
       # Domain through it, neither of which opens a database or speaks a mail protocol, so no EF Core model and no
       # MailKit keeps reflection alive and every JSON read goes through a source-generated contract.
       #
@@ -70,7 +70,7 @@ jobs:
           mkdir -p artifacts/cli
 
           for rid in linux-x64 linux-arm64 win-x64 win-arm64; do
-            dotnet publish src/Cli/Cli.csproj \
+            dotnet publish backend/src/Cli/Cli.csproj \
               --configuration Release \
               --runtime "$rid" \
               --self-contained true \

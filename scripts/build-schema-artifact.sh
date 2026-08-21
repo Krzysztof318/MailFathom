@@ -18,7 +18,7 @@ set -euo pipefail
 #
 # The SQL comes from `aspire publish` rather than from `dotnet ef migrations script`, because the app model already
 # declares which context, which migrations project, and which options the artifact is generated with —
-# `PublishAsMigrationScript(idempotent: true)` in src/AppHost/Program.cs. A second invocation written here could drift
+# `PublishAsMigrationScript(idempotent: true)` in backend/src/AppHost/Program.cs. A second invocation written here could drift
 # from that declaration and nothing would notice until an operator applied the result.
 #
 # Nothing here reaches a database. Generating the script compares the migration assembly against nothing, so this runs
@@ -28,7 +28,7 @@ set -euo pipefail
 # Two key=value lines go to standard output for the release pipeline to read; everything a human reads goes to standard
 # error, so a caller can capture the first without filtering the second.
 
-readonly apphost_project='src/AppHost/AppHost.csproj'
+readonly apphost_project='backend/src/AppHost/AppHost.csproj'
 readonly aspire_pin_file='Directory.Packages.props'
 
 if ! repository_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then

@@ -1,6 +1,6 @@
 # Automatic embedding
 
-<!-- describes: src/Application/Emails/Embeddings/Vectorization/**, src/Infrastructure/Embeddings/**, src/Infrastructure/Persistence/Embeddings/**, src/Host/Hosting/Workers/MailEmbeddingWorker.cs -->
+<!-- describes: backend/src/Application/Emails/Embeddings/Vectorization/**, backend/src/Infrastructure/Embeddings/**, backend/src/Infrastructure/Persistence/Embeddings/**, backend/src/Host/Hosting/Workers/MailEmbeddingWorker.cs -->
 
 [Message chunks](message-chunks.md) cuts a message into passages and [embedding generation](embedding-generation.md)
 turns a passage into a vector. This page is the part between them: what decides that a passage should be embedded, when

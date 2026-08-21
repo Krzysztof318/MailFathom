@@ -1,6 +1,6 @@
 # Endpoint configuration
 
-<!-- describes: src/Host/Configuration/Endpoints/**, src/Host/Configuration/Access/** -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/**, backend/src/Host/Configuration/Access/** -->
 
 Every key deciding where each of the three surfaces is served, what a caller has to present to reach one, and how much
 traffic and how long a request each will take. What an admitted caller may then do is a grant rather than a listener

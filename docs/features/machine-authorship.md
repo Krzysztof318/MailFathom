@@ -1,6 +1,6 @@
 # Machine authorship
 
-<!-- describes: src/Domain/Emails/Authorship/**, src/Application/Emails/Extraction/MachineAuthorshipEvaluatingEmailMimeReader.cs, src/Mcp/Tools/Authorship/** -->
+<!-- describes: backend/src/Domain/Emails/Authorship/**, backend/src/Application/Emails/Extraction/MachineAuthorshipEvaluatingEmailMimeReader.cs, backend/src/Mcp/Tools/Authorship/** -->
 
 MailFathom records what was established about *who* sent a message, and what this deployment makes of that author. Neither says anything about *how* the message was written. A fluent, confident, well-structured message
 reads as trustworthy to an agent whoever produced it, and the case where that matters most is the one where the text

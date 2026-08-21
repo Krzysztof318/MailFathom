@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <!-- The composer the corpus fixture turns a generated description into raw MIME with. -->
+    <PackageReference Include="MimeKit" />
+    <PackageReference Include="xunit.v3.mtp-v2" />
+  </ItemGroup>
+
+  <!-- The message every budget here is a share of, shared with the nightly throughput report so the two forms of cost
+       claim are made against one message rather than two. -->
+  <ItemGroup>
+    <Compile Include="..\shared\LargeSyntheticMessage.cs" Link="LargeSyntheticMessage.cs" />
+    <Compile Include="..\shared\NoTrustedAuthentication.cs" Link="NoTrustedAuthentication.cs" />
+  </ItemGroup>
+
+  <!-- A budget is a claim about one streaming path, and the four paths sit in three boundaries, so this suite reaches
+       all three rather than being split into three files nobody would read together. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AI\AI.csproj" />
+    <ProjectReference Include="..\..\src\Application\Application.csproj" />
+    <ProjectReference Include="..\..\src\Infrastructure\Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\tools\SyntheticMail\SyntheticMail.csproj" />
+  </ItemGroup>
+</Project>
