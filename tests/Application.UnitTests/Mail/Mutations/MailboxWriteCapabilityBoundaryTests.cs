@@ -29,14 +29,15 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations;
 /// The expected set is the list of tiers the decision record names and nothing else, so growing it by a *tier* is an
 /// amendment to that record rather than an edit here. It has grown once that way: filing a copy of a message MailFathom
 /// composed is a write no mutation of the owner's own mail can express, because the message it appends does not exist
-/// on the server yet. It has grown once more without a tier being added — a draft's copies are filed by a type of their
-/// own, under the same tier, which that record decided in advance when it said the drafts role is decided by the filing
-/// tier and filed by nothing yet.
+/// on the server yet. It has grown twice more without a tier being added, both times inside the filing tier — a draft's
+/// copies are filed by a type of their own, which that record decided in advance when it said the drafts role is
+/// decided by the filing tier and filed by nothing yet, and the append itself is one type both filers call rather than
+/// a protocol each restates.
 /// </para>
 /// </remarks>
 public sealed class MailboxWriteCapabilityBoundaryTests
 {
-    /// <summary>Three application types can obtain a session that writes, and each acts within a tier the decision record names.</summary>
+    /// <summary>Four application types can obtain a session that writes, and each acts within a tier the decision record names.</summary>
     /// <remarks>
     /// Failing here is not a reason to extend the expected set. A read path that needs to write is a read path that has
     /// acquired something
@@ -44,8 +45,9 @@ public sealed class MailboxWriteCapabilityBoundaryTests
     /// refuses it, and a change to the owner's own mail belongs behind <see cref="IMailboxMutationPerformer" /> instead.
     /// A further name is admissible only where the act it performs is one that record already decided — which is what
     /// the draft filer is, since the copies it appends and withdraws are messages MailFathom composed and stored itself,
-    /// in the folder the drafts role names, carrying the flag that tier assigns. A name performing anything else is a
-    /// tier that record reopens for or refuses.
+    /// in the folder the drafts role names, carrying the flag that tier assigns, and which the appender is by being the
+    /// filing tier's own append rather than a fourth act. A name performing anything else is a tier that record reopens
+    /// for or refuses.
     /// </remarks>
     [Fact]
     public void ApplicationAssembly_HoldsTheWriteCapabilityInTheTiersTheDecisionRecordNames()
@@ -67,7 +69,12 @@ public sealed class MailboxWriteCapabilityBoundaryTests
 
         // Assert
         Assert.Equal(
-            [nameof(MailDraftFiler), nameof(MailboxMutationPerformer), nameof(OutgoingMailFiler)],
+            [
+                nameof(MailDraftFiler),
+                nameof(MailboxCopyAppender),
+                nameof(MailboxMutationPerformer),
+                nameof(OutgoingMailFiler),
+            ],
             holders);
     }
 

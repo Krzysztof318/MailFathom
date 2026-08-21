@@ -883,6 +883,10 @@ public static class ServiceCollectionExtensions
         // pass that drives them rather than with the mail adapters, because each one is a write session opened per
         // append through the same pool every other mutation goes through.
         services.AddScoped<IOutgoingMailFilingStore, OutgoingMailFilingStore>();
+        // The one append every filed copy goes through, whatever kind of message it is a copy of. It is registered once
+        // and shared by the filers rather than owned by either, because the order of its two writes is what keeps a
+        // copy one copy, and an ordering that held on one filing path and lapsed on another would be no ordering.
+        services.AddScoped<MailboxCopyAppender>();
         services.AddScoped<OutgoingMailFiler>();
         services.AddScoped<OutgoingMailFilingPass>();
         // The drafts a mailbox holds, registered beside the filing they reuse rather than with it: a draft is appended

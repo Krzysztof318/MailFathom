@@ -18,6 +18,7 @@ using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Drafts;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Mutations;
@@ -178,21 +179,24 @@ internal sealed class DraftedMailDeployment
     {
         var transportSecurityPolicies = Substitute.For<IMailTransportSecurityPolicyReader>();
         var folderResolutions = Substitute.For<IMailFolderResolutionStore>();
+        var writeSessions = Substitute.For<IMailboxWriteSessionFactory>();
+
+        var destinations = new MailboxDestinationResolver(
+            StubMailFolderMappings.Nothing.Resolver,
+            folderResolutions,
+            new MailFolderResolver(
+                Substitute.For<IRemoteFolderCatalog>(),
+                Substitute.For<IRemoteFolderCreator>(),
+                folderResolutions,
+                Substitute.For<IMailFolderMappingChangeAuditor>(),
+                persistenceSessions,
+                clock),
+            transportSecurityPolicies);
 
         return new MailDraftFiler(
-            Substitute.For<IMailboxWriteSessionFactory>(),
-            new MailboxDestinationResolver(
-                StubMailFolderMappings.Nothing.Resolver,
-                folderResolutions,
-                new MailFolderResolver(
-                    Substitute.For<IRemoteFolderCatalog>(),
-                    Substitute.For<IRemoteFolderCreator>(),
-                    folderResolutions,
-                    Substitute.For<IMailFolderMappingChangeAuditor>(),
-                    persistenceSessions,
-                    clock),
-                transportSecurityPolicies),
-            contents,
+            new MailboxCopyAppender(writeSessions, destinations, contents, transportSecurityPolicies, clock),
+            writeSessions,
+            destinations,
             drafts,
             transportSecurityPolicies,
             commitPolicy,

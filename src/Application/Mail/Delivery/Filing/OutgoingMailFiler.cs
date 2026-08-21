@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
-using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
@@ -30,11 +29,10 @@ namespace MailFathom.Application.Mail.Delivery.Filing;
 /// changes it, and the message is untouched either way.
 /// </para>
 /// <para>
-/// The order of the two writes is the whole of the safety here. An <c>APPEND</c> issued twice is a second message in
-/// somebody's folder rather than a repeat of the first, and nothing that folder shows afterwards tells the two apart —
-/// so the row is durable at <see cref="OutgoingMailFilingStage.Issued" /> before the command goes out, and a row found
-/// there is reported rather than appended again. Everything that can fail without reaching the server happens before
-/// that write, which is what keeps an ordinary connection failure retryable.
+/// The append itself is <see cref="MailboxCopyAppender" />'s, and with it the order of the two writes that is the whole
+/// of the safety here: the row is durable at <see cref="OutgoingMailFilingStage.Issued" /> before the command goes out,
+/// and a row found there is reported rather than appended again. What stays here is which row moves and what a copy
+/// that could not be filed means for the send it belongs to.
 /// </para>
 /// <para>
 /// Nothing here can fail a delivery. A send whose copy could not be filed is a send that happened, so the failure is
@@ -43,43 +41,43 @@ namespace MailFathom.Application.Mail.Delivery.Filing;
 /// </remarks>
 public sealed class OutgoingMailFiler
 {
+    private readonly MailboxCopyAppender appends;
     private readonly IMailboxWriteSessionFactory writeSessions;
     private readonly MailboxDestinationResolver destinations;
-    private readonly IEmailContentStore contentStore;
     private readonly IOutgoingMailFilingStore filings;
     private readonly IMailTransportSecurityPolicyReader transportSecurityPolicies;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly TimeProvider timeProvider;
 
-    /// <summary>Initializes the filer from the session it appends through and the record it writes the copy onto.</summary>
-    /// <param name="writeSessions">Opens the one session able to change a mailbox.</param>
+    /// <summary>Initializes the filer from the append it files through and the record it writes the copy onto.</summary>
+    /// <param name="appends">Puts the copy into the folder the filing names, in the order that keeps it one copy.</param>
+    /// <param name="writeSessions">Opens the one session able to change a mailbox, which a withdrawal needs of its own.</param>
     /// <param name="destinations">Turns the role a filing names into the folder of this account it means.</param>
-    /// <param name="contentStore">Holds the stored MIME the copy is appended from.</param>
     /// <param name="filings">Keeps the durable account of every copy that has been filed.</param>
-    /// <param name="transportSecurityPolicies">Supplies the connection and authentication policy the append obeys.</param>
+    /// <param name="transportSecurityPolicies">Supplies the connection and authentication policy the commands obey.</param>
     /// <param name="commitPolicy">Commits each movement of the filing row.</param>
-    /// <param name="timeProvider">Stamps the copy's internal date and everything the row records.</param>
+    /// <param name="timeProvider">Stamps everything the row records.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public OutgoingMailFiler(
+        MailboxCopyAppender appends,
         IMailboxWriteSessionFactory writeSessions,
         MailboxDestinationResolver destinations,
-        IEmailContentStore contentStore,
         IOutgoingMailFilingStore filings,
         IMailTransportSecurityPolicyReader transportSecurityPolicies,
         OptimisticConcurrencyRetryPolicy commitPolicy,
         TimeProvider timeProvider)
     {
+        ArgumentNullException.ThrowIfNull(appends);
         ArgumentNullException.ThrowIfNull(writeSessions);
         ArgumentNullException.ThrowIfNull(destinations);
-        ArgumentNullException.ThrowIfNull(contentStore);
         ArgumentNullException.ThrowIfNull(filings);
         ArgumentNullException.ThrowIfNull(transportSecurityPolicies);
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
+        this.appends = appends;
         this.writeSessions = writeSessions;
         this.destinations = destinations;
-        this.contentStore = contentStore;
         this.filings = filings;
         this.transportSecurityPolicies = transportSecurityPolicies;
         this.commitPolicy = commitPolicy;
@@ -131,7 +129,7 @@ public sealed class OutgoingMailFiler
             return await this.RecordFailureAsync(
                 record,
                 filing,
-                FailureCodeOf(failure),
+                MailboxCopyAppender.FailureCodeOf(failure),
                 OutgoingMailFilingOutcome.Failed);
         }
     }
@@ -214,7 +212,7 @@ public sealed class OutgoingMailFiler
             return await this.RecordFailureAsync(
                 record,
                 filing,
-                FailureCodeOf(failure),
+                MailboxCopyAppender.FailureCodeOf(failure),
                 OutgoingMailFilingOutcome.Failed);
         }
     }
@@ -236,15 +234,16 @@ public sealed class OutgoingMailFiler
             _ => OutgoingMailFilingOutcome.AlreadyFiled,
         };
 
-    /// <summary>Names the code that stands for whatever ended an attempt.</summary>
+    /// <summary>Reads what the append reported as what it means for the send the copy belongs to.</summary>
     /// <remarks>
-    /// A first-party failure already carries the code an operator looks up, so it is kept. What is left is genuinely
-    /// unaccounted for and says so rather than borrowing a code that would mislead.
+    /// <see cref="MailboxCopyAppendOutcome.Appended" /> never reaches here, because a result carrying no failure is the
+    /// copy that was filed. What is left is a message that could not be appended, which fails the filing and no more.
     /// </remarks>
-    private static MailFathomErrorCode FailureCodeOf(Exception failure) => failure switch
+    private static OutgoingMailFilingOutcome FilingOutcomeOf(MailboxCopyAppendOutcome outcome) => outcome switch
     {
-        MailFathomException named => named.ErrorCode,
-        _ => MailFathomErrorCode.OutgoingEmailFilingFailedUnexpectedly,
+        MailboxCopyAppendOutcome.DestinationUnavailable => OutgoingMailFilingOutcome.DestinationUnavailable,
+        MailboxCopyAppendOutcome.OutcomeUnknown => OutgoingMailFilingOutcome.OutcomeUnknown,
+        _ => OutgoingMailFilingOutcome.Failed,
     };
 
     private static OutgoingMailFilingResult Result(
@@ -253,89 +252,41 @@ public sealed class OutgoingMailFiler
         OutgoingMailFilingOutcome outcome,
         MailFathomErrorCode? failure) => new(record.Id, filing, outcome, failure);
 
-    /// <summary>Runs the attempt itself, from the answers that need no server to the append the server settles.</summary>
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Past the issued write the append may already have reached the folder, so every way it can end has to be recorded as an outcome nobody can settle rather than raised into a retry that would file a second copy.")]
+    /// <summary>Files the copy, moving the filing row through the stages the append passes.</summary>
     private async Task<OutgoingMailFilingResult> AppendAsync(
         OutgoingEmailRecord record,
         OutgoingMailFiling filing,
         CancellationToken cancellationToken)
     {
-        var resolution = await this.ResolveDestinationAsync(record, filing, cancellationToken);
-
-        if (resolution.Destination is not { } destination)
-        {
-            return await this.RecordFailureAsync(
-                record,
-                filing,
-                MailFathomErrorCode.OutgoingEmailFilingDestinationUnavailable,
-                OutgoingMailFilingOutcome.DestinationUnavailable);
-        }
-
-        var content = await this.contentStore.FindOutgoingContentAsync(record.Id, cancellationToken);
-
-        if (content is null || content.RawMime.IsEmpty)
-        {
-            // The record and its message are written in one transaction, so a record without one describes a send that
-            // can never happen rather than a message still being stored. There is nothing to append, and no later
-            // attempt can invent it.
-            return await this.RecordFailureAsync(
-                record,
-                filing,
-                MailFathomErrorCode.OutgoingEmailFilingFailedUnexpectedly,
-                OutgoingMailFilingOutcome.Failed);
-        }
-
-        var transportSecurityPolicy = this.transportSecurityPolicies.GetPolicy(record.AccountId);
-
-        await using var session = await this.writeSessions.OpenForWritingAsync(
+        var appended = await this.appends.AppendAsync(
             record.AccountId,
-            destination.Binding,
-            transportSecurityPolicy,
-            cancellationToken);
-
-        // Written only once everything that could fail without reaching a mail server already has. From here on a
-        // failure leaves the row saying the append may have happened, which is what stops a second copy — so anything
-        // that can be established first is established first.
-        await this.commitPolicy.CommitAsync(
-            (persistenceSession, token) => this.filings.RecordAppendIssuedAsync(
-                persistenceSession,
-                record.Id,
-                filing,
-                destination.Binding,
-                this.timeProvider.GetUtcNow(),
+            filing,
+            MailboxCopySource.OutgoingEmail(record.Id),
+            (binding, token) => this.commitPolicy.CommitAsync(
+                (persistenceSession, commitToken) => this.filings.RecordAppendIssuedAsync(
+                    persistenceSession,
+                    record.Id,
+                    filing,
+                    binding,
+                    this.timeProvider.GetUtcNow(),
+                    commitToken),
                 token),
-            cancellationToken);
-
-        try
-        {
-            var copy = await session.AppendAsync(
-                content.RawMime,
-                filing.Flags,
-                this.timeProvider.GetUtcNow(),
-                cancellationToken);
-
-            // Committed outside the caller's cancellation, for the reason a delivery outcome is: the append has already
-            // happened on somebody else's server, and a shutdown that abandoned this write would leave the row saying
-            // the outcome is unknown for a copy the server named exactly.
-            await this.commitPolicy.CommitAsync(
-                (persistenceSession, token) => this.filings.RecordAppendConfirmedAsync(
+            copy => this.commitPolicy.CommitAsync(
+                (persistenceSession, commitToken) => this.filings.RecordAppendConfirmedAsync(
                     persistenceSession,
                     record.Id,
                     filing,
                     copy,
-                    token),
-                CancellationToken.None);
+                    commitToken),
+                CancellationToken.None),
+            cancellationToken);
 
+        if (appended.Failure is not { } failure)
+        {
             return Result(record, filing, OutgoingMailFilingOutcome.Filed, failure: null);
         }
-        catch (Exception failure)
-        {
-            return await this.RecordFailureAsync(
-                record,
-                filing,
-                FailureCodeOf(failure),
-                OutgoingMailFilingOutcome.OutcomeUnknown);
-        }
+
+        return await this.RecordFailureAsync(record, filing, failure, FilingOutcomeOf(appended.Outcome));
     }
 
     private async Task<MailboxDestinationResolution> ResolveDestinationAsync(

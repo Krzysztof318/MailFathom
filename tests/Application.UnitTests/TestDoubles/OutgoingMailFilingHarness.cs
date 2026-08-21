@@ -101,9 +101,14 @@ internal sealed class OutgoingMailFilingHarness
             clock);
 
         this.Filer = new OutgoingMailFiler(
+            new MailboxCopyAppender(
+                writeSessions,
+                destinations,
+                contentStore,
+                transportSecurityPolicies,
+                clock),
             writeSessions,
             destinations,
-            contentStore,
             this.Filings,
             transportSecurityPolicies,
             commitPolicy,
