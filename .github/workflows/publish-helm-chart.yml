@@ -97,8 +97,11 @@ jobs:
             printf 'chart=ghcr.io/%s/charts/mailfathom\n' "$owner"
           } >> "$GITHUB_OUTPUT"
 
-      # The verification the deployment assets already have, run as a release gate rather than only on demand. Both
-      # channels are rendered, because the templates a release publishes include the ones a nightly install would reach.
+      # The verification the deployment assets already have, run again here as a release gate. `CI`'s `Helm chart` job
+      # runs `scripts/render-helm-manifests.sh` on every pull request that touches the chart, and this asks the same
+      # question of the commit being released: a release gate that trusts an earlier run is not a gate. Every values
+      # document under `ci/` is rendered, because the templates a release publishes include the ones a nightly install
+      # would reach and the ones the chart's own defaults produce.
       - name: Lint and render the chart
         run: |
           set -euo pipefail

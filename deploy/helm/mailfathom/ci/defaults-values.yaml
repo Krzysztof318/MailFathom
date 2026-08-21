@@ -1,0 +1,26 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# The chart's own defaults, rendered. Everything here is a value the chart deliberately refuses to default — an image
+# reference no cluster should run without somebody naming it, and the Secret the application pod mounts — so this file
+# is `values.yaml` plus the smallest thing that makes it installable and nothing else.
+#
+# It is what validates the defaults themselves against `values.schema.json`: a default the schema would reject is
+# overridden by both of the other values documents here and would go unnoticed without a rendering that keeps it. It is
+# also the third shape of the chart, and the one an operator following the quick start gets: no ingress, no
+# personal-data scanning, no spam scanning, and the PostgreSQL the chart deploys itself.
+image:
+  repository: example/mailfathom
+  tag: 0.1.0-verification
+  allowVersionMismatch: true
+
+secrets:
+  existingSecret: mailfathom-secrets
+
+# The chart deploys the database by default and refuses to take the superuser password from the Secret above, which the
+# application pod mounts whole. Naming a second Secret is therefore part of the default shape rather than a choice this
+# file makes.
+database:
+  deploy:
+    superuserPasswordSecret: mailfathom-postgres-superuser

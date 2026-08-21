@@ -1,0 +1,246 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+#
+# Rendered from deploy/helm/mailfathom with deploy/helm/mailfathom/ci/release-values.yaml by scripts/render-helm-manifests.sh.
+# Committed so a change in what the chart produces is visible in the diff rather than only a failure to
+# produce anything. Regenerate with: scripts/render-helm-manifests.sh --update
+---
+# Source: mailfathom/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mailfathom
+  labels:
+    helm.sh/chart: mailfathom-0.0.0
+    app.kubernetes.io/name: mailfathom
+    app.kubernetes.io/instance: mailfathom
+    app.kubernetes.io/version: ""
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: mailfathom
+automountServiceAccountToken: false
+---
+# Source: mailfathom/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mailfathom-config
+  labels:
+    helm.sh/chart: mailfathom-0.0.0
+    app.kubernetes.io/name: mailfathom
+    app.kubernetes.io/instance: mailfathom
+    app.kubernetes.io/version: ""
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: mailfathom
+data:
+  10-mailfathom.json: |
+    {
+      "McpEndpoint": {
+        "Enabled": true,
+        "Authentication": [
+          {
+            "ApiKey": {
+              "Name": "workstation",
+              "SecretReference": "file:/etc/mailfathom/secrets/mcp-workstation-key"
+            }
+          }
+        ]
+      }
+    }
+---
+# Source: mailfathom/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailfathom
+  labels:
+    helm.sh/chart: mailfathom-0.0.0
+    app.kubernetes.io/name: mailfathom
+    app.kubernetes.io/instance: mailfathom
+    app.kubernetes.io/version: ""
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: mailfathom
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: mailfathom
+    app.kubernetes.io/instance: mailfathom
+---
+# Source: mailfathom/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailfathom
+  labels:
+    helm.sh/chart: mailfathom-0.0.0
+    app.kubernetes.io/name: mailfathom
+    app.kubernetes.io/instance: mailfathom
+    app.kubernetes.io/version: ""
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: mailfathom
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mailfathom
+      app.kubernetes.io/instance: mailfathom
+  template:
+    metadata:
+      annotations:
+        checksum/config: 7873d865b17c278a9bbc1c4ff73886c9c97a7bdb206b531d7486d0199ffee7cc
+      labels:
+        app.kubernetes.io/name: mailfathom
+        app.kubernetes.io/instance: mailfathom
+    spec:
+      serviceAccountName: mailfathom
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1654
+        runAsGroup: 1654
+        runAsNonRoot: true
+        runAsUser: 1654
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: mailfathom
+          image: "docker.io/example/mailfathom:0.1.0-verification"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: Production
+            - name: McpEndpoint__Port
+              value: "8080"
+            - name: HealthEndpoints__Port
+              value: "8081"
+            - name: ConfigurationSources__Directory
+              value: "/etc/mailfathom/config"
+            - name: DOTNET_USE_POLLING_FILE_WATCHER
+              value: "1"
+            - name: ConnectionStrings__mailfathom
+              value: "Host=postgres.mailfathom.svc.cluster.local;Port=5432;Database=mailfathom;Username=mailfathom"
+            - name: Persistence__Password__Name
+              value: "mailfathom-database-password"
+            - name: Persistence__Password__SecretReference
+              value: "file:/etc/mailfathom/secrets/mailfathom-database-password"
+            - name: SensitiveContent__Pii__Enabled
+              value: "true"
+            - name: SensitiveContent__PersonalDataAnalyzer__Endpoint
+              value: "http://presidio-analyzer.mailfathom.svc.cluster.local:3000"
+            - name: SensitiveContent__PersonalDataAnalyzer__Languages__0
+              value: "en"
+            - name: SensitiveContent__PersonalDataAnalyzer__MinimumConfidence
+              value: "0.4"
+            - name: SpamClassification__Enabled
+              value: "true"
+            - name: SpamClassification__UseScanner
+              value: "true"
+            - name: SpamClassification__Scanner__Host
+              value: "spamassassin.mailfathom.svc.cluster.local"
+            - name: SpamClassification__Scanner__Port
+              value: "783"
+            - name: SpamClassification__Scanner__ScanTimeoutSeconds
+              value: "30"
+            - name: SpamClassification__Scanner__MaximumMessageBytes
+              value: "512000"
+            - name: SpamClassification__Scanner__MaximumConcurrentScans
+              value: "5"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/mailfathom/config
+              readOnly: true
+            - name: secrets
+              mountPath: /etc/mailfathom/secrets
+              readOnly: true
+            - name: temporary
+              mountPath: /tmp
+          startupProbe:
+            httpGet:
+              path: /started
+              port: health
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /alive
+              port: health
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            limits:
+              cpu: "2"
+              memory: 1Gi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+      volumes:
+        - name: config
+          configMap:
+            name: mailfathom-config
+        - name: secrets
+          secret:
+            secretName: mailfathom-secrets
+            defaultMode: 0400
+        - name: temporary
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+---
+# Source: mailfathom/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mailfathom
+  labels:
+    helm.sh/chart: mailfathom-0.0.0
+    app.kubernetes.io/name: mailfathom
+    app.kubernetes.io/instance: mailfathom
+    app.kubernetes.io/version: ""
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: mailfathom
+spec:
+  ingressClassName: "nginx"
+  tls:
+    - hosts:
+      - mailfathom.example.test
+      secretName: mailfathom-tls
+  rules:
+    - host: "mailfathom.example.test"
+      http:
+        paths:
+          - path: /mcp
+            pathType: Prefix
+            backend:
+              service:
+                name: mailfathom
+                port:
+                  number: 8080

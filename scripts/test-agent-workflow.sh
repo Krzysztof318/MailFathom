@@ -6765,6 +6765,42 @@ the_development_tooling_never_reaches_a_published_artifact() {
   fi
 }
 
+# `Required CI` is the one check the `main` ruleset waits for, so a job of that workflow it does not
+# depend on and does not read is a job whose failure merges. Both halves are asserted: a `needs:`
+# entry is what makes the job run before the aggregate, and a `needs.<job>.result` reference is what
+# makes its conclusion part of the verdict — a dependency listed and never read reports green while
+# the job that failed sits red beside it.
+the_required_check_aggregates_every_job_in_ci() {
+  local ci_workflow="$source_repository_root/.github/workflows/ci.yml"
+  local declared_jobs aggregated_jobs job unaggregated='' unread=''
+
+  declared_jobs="$(awk '
+    /^jobs:/ { in_jobs = 1; next }
+    in_jobs && /^  [a-zA-Z0-9_-]+:[[:space:]]*$/ { name = $1; sub(/:$/, "", name); print name }
+  ' "$ci_workflow")"
+
+  aggregated_jobs="$(awk '
+    /^  required-ci:[[:space:]]*$/ { in_aggregate = 1; next }
+    in_aggregate && /^  [a-zA-Z0-9_-]+:[[:space:]]*$/ { exit }
+    in_aggregate && /^    needs:[[:space:]]*$/ { in_needs = 1; next }
+    in_needs && /^      - / { print $2; next }
+    in_needs { in_needs = 0 }
+  ' "$ci_workflow")"
+
+  while read -r job; do
+    [[ -n "$job" && "$job" != 'required-ci' ]] || continue
+
+    grep -qx -- "$job" <<< "$aggregated_jobs" || unaggregated+="$job "
+    grep -qF -- "needs.$job.result" "$ci_workflow" || unread+="$job "
+  done <<< "$declared_jobs"
+
+  if [[ -n "$unaggregated" || -n "$unread" ]]; then
+    [[ -n "$unaggregated" ]] && printf 'required-ci does not depend on these ci.yml jobs: %s\n' "$unaggregated" >&2
+    [[ -n "$unread" ]] && printf 'required-ci never reads the result of these ci.yml jobs: %s\n' "$unread" >&2
+    return 1
+  fi
+}
+
 workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/scripts/inspect-workspace.sh" ]]
   [[ -x "$source_repository_root/scripts/assert-release-tag.sh" ]]
@@ -7224,6 +7260,7 @@ run_test only_the_reviewer_workflow_uses_pull_request_target
 run_test a_comment_never_cancels_a_review_in_flight
 run_test the_reviewer_resolves_one_claude_credential_everywhere
 run_test the_development_tooling_never_reaches_a_published_artifact
+run_test the_required_check_aggregates_every_job_in_ci
 run_test workflow_scripts_use_flat_manual_layout
 run_test every_yaml_file_carries_the_license_header
 run_test every_browser_asset_carries_the_license_header
