@@ -254,6 +254,68 @@ public sealed class MailboxCopyAppenderTests
         Assert.Equal(["issued", "append"], this.steps);
     }
 
+    /// <summary>
+    /// A caller that stops after the issued write is reported rather than raised, which is the one place a shutdown is
+    /// not passed on. The command is already out, so an <see cref="OperationCanceledException" /> escaping here would
+    /// end the pass with the row saying nothing, and whatever resumed it would file a second copy of somebody's own
+    /// message. Before that write the opposite holds, and the filing pass covers it.
+    /// </summary>
+    /// <param name="stopArrivesDuringTheConfirmation">Whether the caller stops while the record is being confirmed rather than while the command is out.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AppendAsync_ACallerThatStopsAfterTheIssuedWrite_ReportsAnOutcomeNobodyCanSettle(
+        bool stopArrivesDuringTheConfirmation)
+    {
+        // Arrange
+        this.MapSentFolder();
+        this.StoreOutgoingMessage();
+        using var shutdown = new CancellationTokenSource();
+
+        if (stopArrivesDuringTheConfirmation)
+        {
+            this.AnswerAppendWith(new AppendedMailCopy(RemoteEmailPlacement.NotReported(), InternetMessageId: null));
+        }
+        else
+        {
+            this.writeSession
+                .AppendAsync(
+                    Arg.Any<ReadOnlyMemory<byte>>(),
+                    Arg.Any<AppendedMailFlags>(),
+                    Arg.Any<DateTimeOffset>(),
+                    Arg.Any<CancellationToken>())
+                .Returns<AppendedMailCopy>(_ =>
+                {
+                    this.steps.Add("append");
+                    shutdown.Cancel();
+
+                    throw new OperationCanceledException(shutdown.Token);
+                });
+        }
+
+        var appender = this.Appender();
+
+        // Act
+        var appended = await appender.AppendAsync(
+            Account,
+            OutgoingMailFiling.Sent,
+            MailboxCopySource.OutgoingEmail(Send),
+            this.RecordIssuedAsync,
+            _ =>
+            {
+                shutdown.Cancel();
+
+                throw new OperationCanceledException(shutdown.Token);
+            },
+            shutdown.Token);
+
+        // Assert
+        Assert.True(shutdown.IsCancellationRequested);
+        Assert.Equal(MailboxCopyAppendOutcome.OutcomeUnknown, appended.Outcome);
+        Assert.Equal(MailFathomErrorCode.OutgoingEmailFilingFailedUnexpectedly, appended.Failure);
+        Assert.Equal(["issued", "append"], this.steps);
+    }
+
     /// <summary>A failure carrying no code of its own says it is unaccounted for rather than borrowing one that would mislead.</summary>
     [Fact]
     public async Task AppendAsync_AFailureCarryingNoErrorCode_NamesItUnaccountedFor()
