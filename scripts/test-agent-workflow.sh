@@ -5502,6 +5502,28 @@ release_tag_assertion_refuses_a_version_the_commit_does_not_declare() {
   assert_contains '<VersionPrefix>0.2.0</VersionPrefix>' "$output_file"
 }
 
+# A tag from before the version left `Directory.Build.props` for a root `Version.props` points at a commit carrying no
+# such file at all. That is the same failure as a commit declaring a different version — the tree does not say what the
+# tag claims — so it has to arrive as this script's own message naming the tag rather than as git's `path does not
+# exist` under `set -o pipefail`, which would end the run before the reader learned which tag was refused.
+release_tag_assertion_refuses_a_commit_that_declares_no_version_at_all() {
+  local fixture_root="$test_directory/release-undeclared-version"
+  local output_file="$test_directory/release-undeclared-version-output"
+
+  create_release_fixture "$fixture_root" '0.2.0' $'\n### Added\n\n- Something an operator notices.\n'
+  git -C "$fixture_root" rm --quiet Version.props
+  git -C "$fixture_root" commit --quiet -m 'a tree from before the version moved to its own file'
+  git -C "$fixture_root" update-ref refs/remotes/origin/main refs/heads/main
+  git -C "$fixture_root" tag --annotate v0.2.0 --message 'MailFathom 0.2.0'
+
+  if assert_release_tag "$fixture_root" 'v0.2.0' "$output_file"; then
+    printf 'assert-release-tag.sh released a commit that declares no version at all\n' >&2
+    return 1
+  fi
+
+  assert_contains 'declares <VersionPrefix>nothing</VersionPrefix>' "$output_file"
+}
+
 release_tag_assertion_refuses_a_commit_that_never_merged() {
   local fixture_root="$test_directory/release-unmerged"
   local output_file="$test_directory/release-unmerged-output"
@@ -7292,6 +7314,7 @@ run_test release_tag_assertion_accepts_a_tag_that_matches_its_commit
 run_test release_tag_assertion_refuses_a_prerelease_tag
 run_test release_tag_assertion_refuses_a_lightweight_tag
 run_test release_tag_assertion_refuses_a_version_the_commit_does_not_declare
+run_test release_tag_assertion_refuses_a_commit_that_declares_no_version_at_all
 run_test release_tag_assertion_refuses_a_commit_that_never_merged
 run_test release_tag_assertion_accepts_a_patch_from_a_release_branch
 run_test release_tag_assertion_refuses_a_version_already_released_on_its_line
