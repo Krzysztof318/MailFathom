@@ -79,6 +79,8 @@ public sealed class MailboxKnowledgeSearch : IEmailKnowledgeSearch
             ReceivedOnOrAfter = query.ReceivedOnOrAfter,
             ReceivedBefore = query.ReceivedBefore,
             IsRemotelySeen = query.IsRemotelySeen,
+            IsRemotelyFlagged = query.IsRemotelyFlagged,
+            Keyword = query.Keyword,
             HasAttachments = query.HasAttachments,
             ResultLimit = this.bounds.MaximumPassages,
         };

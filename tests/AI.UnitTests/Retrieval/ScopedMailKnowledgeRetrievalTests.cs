@@ -55,6 +55,8 @@ public sealed class ScopedMailKnowledgeRetrievalTests
             ["receivedOnOrAfter"] = "2026-07-01T00:00:00+00:00",
             ["receivedBefore"] = "2026-07-08T00:00:00+00:00",
             ["isRemotelySeen"] = true,
+            ["isRemotelyFlagged"] = true,
+            ["keyword"] = "$Label",
             ["hasAttachments"] = false,
         });
 
@@ -71,6 +73,8 @@ public sealed class ScopedMailKnowledgeRetrievalTests
                 ReceivedOnOrAfter = new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero),
                 ReceivedBefore = new DateTimeOffset(2026, 7, 8, 0, 0, 0, TimeSpan.Zero),
                 IsRemotelySeen = true,
+                IsRemotelyFlagged = true,
+                Keyword = "$Label",
                 HasAttachments = false,
             },
             query);

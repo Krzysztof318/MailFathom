@@ -15,8 +15,8 @@ namespace MailFathom.Application.Retrieval;
 /// one shape lexical and vector similarity are both weakest at.
 /// </para>
 /// <para>
-/// The fields are deliberately the structured filters of <see cref="SearchEmailsRequest" /> and no others. Two of that
-/// request's members are withheld rather than omitted by accident, and each for its own reason:
+/// The fields are deliberately the structured filters of <see cref="SearchEmailsRequest" /> and no others. That
+/// request's remaining members are withheld rather than omitted by accident, and each for its own reason:
 /// </para>
 /// <list type="bullet">
 /// <item>
@@ -28,12 +28,25 @@ namespace MailFathom.Application.Retrieval;
 /// </item>
 /// <item>
 /// <description>
+/// Whether the junk folder is read at all is settled when that scope is resolved rather than by a lookup, and an
+/// answering run resolves it excluded. Answering is the path the exclusion exists for — mail written to manipulate
+/// whoever reads it now has a model reading it — and a caller hunting a wrongly filed message reaches for the listing
+/// or the search that can ask for it.
+/// </description>
+/// </item>
+/// <item>
+/// <description>
 /// The result count is the deployment's bound on how much mail one lookup may draw out. Exposing it would let the one
 /// party with an incentive to ask for more mail ask for more mail, so the bound is applied where the passages are built
 /// and nothing about a query can widen it.
 /// </description>
 /// </item>
 /// </list>
+/// <para>
+/// That list is asserted rather than trusted. A test names the withheld members and compares the two types' properties
+/// against them, because the filters this type mirrors are added to a published request by work that has no reason to
+/// read this file — which is how the two drifted apart before, with these remarks stating a parity that no longer held.
+/// </para>
 /// <para>
 /// Nothing here is validated. The values reach the same use case that validates the published tool's, so a filter this
 /// system would refuse from a caller is refused from a model in the same words and by the same code.
@@ -62,6 +75,12 @@ public sealed record EmailKnowledgeQuery
 
     /// <summary>Gets the remote <c>\Seen</c> state to require, or <see langword="null" /> for either.</summary>
     public bool? IsRemotelySeen { get; init; }
+
+    /// <summary>Gets the remote <c>\Flagged</c> state to require, or <see langword="null" /> for either.</summary>
+    public bool? IsRemotelyFlagged { get; init; }
+
+    /// <summary>Gets the keyword an email must carry, in any case, or <see langword="null" /> for any keyword.</summary>
+    public string? Keyword { get; init; }
 
     /// <summary>Gets whether attachments are required, or <see langword="null" /> for either.</summary>
     public bool? HasAttachments { get; init; }

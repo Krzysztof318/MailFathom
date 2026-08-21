@@ -186,16 +186,9 @@ internal sealed class ProviderChatModelClient : IChatModelClient
                 attemptToken => this.SendAsync(credential, conversation, attemptToken),
                 cancellationToken);
         }
-        catch (MailFathomException rejection)
-            when (rejection.ErrorCode == MailFathomErrorCode.OutboundDependencyUnavailable)
+        catch (MailFathomException rejection) when (ChatCallFailureMapping.IsEndpointNotCalled(rejection))
         {
-            // The pipeline declined to call the endpoint at all — its circuit is open, or its concurrency budget is
-            // spent. Recognized by code rather than by type, which is what a stable error code is for: the resilience
-            // library and the exception it raises belong to another adapter boundary that this one may not reference.
-            throw new ChatGenerationFailedException(
-                endpoint.Alias,
-                ChatGenerationFailure.TransportFaulted,
-                rejection);
+            throw ChatCallFailureMapping.ToEndpointNotCalledFailure(rejection, endpoint.Alias);
         }
 
         return this.MapAnswer(response);
@@ -240,7 +233,10 @@ internal sealed class ProviderChatModelClient : IChatModelClient
         }
         catch (Exception failure) when (ProviderCallFailureClassification.Classify(failure) is { } classified)
         {
-            throw new ChatGenerationFailedException(endpoint.Alias, ToChatFailure(classified), failure);
+            throw new ChatGenerationFailedException(
+                endpoint.Alias,
+                ChatCallFailureMapping.ToChatFailure(classified),
+                failure);
         }
     }
 
@@ -343,13 +339,4 @@ internal sealed class ProviderChatModelClient : IChatModelClient
                 ChatGenerationStop.ContentFiltered,
             _ => ChatGenerationStop.Unreported,
         };
-
-    private static ChatGenerationFailure ToChatFailure(ProviderCallFailure failure) => failure switch
-    {
-        ProviderCallFailure.CredentialRejected => ChatGenerationFailure.CredentialRejected,
-        ProviderCallFailure.RateLimited => ChatGenerationFailure.RateLimited,
-        ProviderCallFailure.RequestTimedOut => ChatGenerationFailure.RequestTimedOut,
-        ProviderCallFailure.RequestRefused => ChatGenerationFailure.RequestRefused,
-        _ => ChatGenerationFailure.TransportFaulted,
-    };
 }

@@ -27,9 +27,9 @@ namespace MailFathom.AI.Retrieval;
 /// own rather than the framework's text-search provider. That provider offers a query and nothing else, which leaves a
 /// question that is naturally a filter — mail from one person, mail of one week, mail carrying an attachment — to be
 /// answered by ranking free text across the whole scope, and that is the one shape lexical and vector similarity are
-/// both weakest at. What is exposed is exactly what <c>search_emails</c> publishes minus the two arguments a model may
-/// not hold: the scope, which is the caller's authorization, and the result count, which is the deployment's bound on
-/// how much mail one lookup draws out.
+/// both weakest at. What is exposed is exactly what <c>search_emails</c> publishes minus the arguments a model may not
+/// hold: the scope, which is the caller's authorization; whether junk mail is read, which the run settles when it
+/// resolves that scope; and the result count, which is the deployment's bound on how much mail one lookup draws out.
 /// </para>
 /// <para>
 /// One instance serves one run. It records the passages it handed over so the answer can carry them, and that record is
@@ -190,6 +190,10 @@ internal sealed class ScopedMailKnowledgeRetrieval
         DateTimeOffset? receivedBefore = null,
         [Description("Return only mail the mail server last reported as read (true) or unread (false). Omit to match either. Searching never changes this state.")]
         bool? isRemotelySeen = null,
+        [Description("Return only mail the mail server last reported as flagged (true) or unflagged (false), which is the star most mail clients show. Omit to match either. This is the \\Flagged flag on a message and is unrelated to the Flagged folder role.")]
+        bool? isRemotelyFlagged = null,
+        [Description("Return only mail carrying this keyword, which is a flag a mail client or server set rather than one of the five standard ones, such as $Junk or a label. Matched as a whole keyword without regard to case, up to 64 characters. Omit to match any keyword.")]
+        string? keyword = null,
         [Description("Return only mail that carries attachments (true) or that carries none (false). Omit to match either. Inline images and cryptographic signature parts do not count as attachments.")]
         bool? hasAttachments = null,
         CancellationToken cancellationToken = default)
@@ -203,6 +207,8 @@ internal sealed class ScopedMailKnowledgeRetrieval
             ReceivedOnOrAfter = receivedOnOrAfter,
             ReceivedBefore = receivedBefore,
             IsRemotelySeen = isRemotelySeen,
+            IsRemotelyFlagged = isRemotelyFlagged,
+            Keyword = keyword,
             HasAttachments = hasAttachments,
         };
 
