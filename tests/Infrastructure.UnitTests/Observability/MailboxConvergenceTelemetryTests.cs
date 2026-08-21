@@ -2,11 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Collections.Concurrent;
-using System.Diagnostics.Metrics;
-using System.Globalization;
 using MailFathom.Application.Mail.Mutations.Convergence;
-using MailFathom.Common.Observability;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Observability;
@@ -59,7 +55,7 @@ public sealed class MailboxConvergenceTelemetryTests : IDisposable
     {
         // Arrange
         var account = MailAccountId.Create("counts-by-kind");
-        using var collector = new GaugeCollector();
+        using var measurements = new RecordedMailFathomMeasurements(OutstandingInstrumentName);
 
         // Act
         this.telemetry.Report(account, ReportWith(
@@ -70,7 +66,9 @@ public sealed class MailboxConvergenceTelemetryTests : IDisposable
                 RecordedAt)));
 
         // Assert
-        var published = Assert.Single(collector.Read(OutstandingInstrumentName, account));
+        measurements.ObserveGaugesAfresh();
+
+        var published = Assert.Single(ReportedFor(measurements, OutstandingInstrumentName, account));
         Assert.Equal(2, published.Value);
         Assert.Equal("relocate", published.Tags["mailfathom.mailbox.mutation"]);
         Assert.Equal("dead-lettered", published.Tags["mailfathom.mailbox.mutation.lifecycle"]);
@@ -85,7 +83,7 @@ public sealed class MailboxConvergenceTelemetryTests : IDisposable
     {
         // Arrange
         var account = MailAccountId.Create("age-at-read-time");
-        using var collector = new GaugeCollector();
+        using var measurements = new RecordedMailFathomMeasurements(OldestAgeInstrumentName);
         this.telemetry.Report(account, ReportWith(
             new MailboxMutationLifecycleCount(
                 MailboxMutation.Copy,
@@ -95,9 +93,11 @@ public sealed class MailboxConvergenceTelemetryTests : IDisposable
 
         // Act
         this.clock.Advance(TimeSpan.FromMinutes(30));
-        var ages = collector.Read(OldestAgeInstrumentName, account);
+        measurements.ObserveGaugesAfresh();
 
         // Assert
+        var ages = ReportedFor(measurements, OldestAgeInstrumentName, account);
+
         Assert.Equal(TimeSpan.FromMinutes(30).TotalSeconds, Assert.Single(ages).Value);
     }
 
@@ -110,7 +110,7 @@ public sealed class MailboxConvergenceTelemetryTests : IDisposable
     {
         // Arrange
         var account = MailAccountId.Create("emptied");
-        using var collector = new GaugeCollector();
+        using var measurements = new RecordedMailFathomMeasurements(OutstandingInstrumentName);
         this.telemetry.Report(account, ReportWith(
             new MailboxMutationLifecycleCount(
                 MailboxMutation.Delete,
@@ -122,7 +122,9 @@ public sealed class MailboxConvergenceTelemetryTests : IDisposable
         this.telemetry.Report(account, new MailboxConvergenceReport(1, 0, 0, 0, []));
 
         // Assert
-        Assert.Empty(collector.Read(OutstandingInstrumentName, account));
+        measurements.ObserveGaugesAfresh();
+
+        Assert.Empty(ReportedFor(measurements, OutstandingInstrumentName, account));
     }
 
     /// <summary>Most passes have nothing to do, and a line per account per interval is noise an operator learns to ignore.</summary>
@@ -158,68 +160,20 @@ public sealed class MailboxConvergenceTelemetryTests : IDisposable
     private static MailboxConvergenceReport ReportWith(params MailboxMutationLifecycleCount[] outstanding) =>
         new(0, 0, 0, 0, outstanding);
 
+    /// <summary>Selects what one gauge reported for one account, which is what tells this test's from its neighbours'.</summary>
+    private static IReadOnlyList<RecordedMeasurement> ReportedFor(
+        RecordedMailFathomMeasurements measurements,
+        string instrumentName,
+        MailAccountId accountId) =>
+        [
+            .. measurements.Read(instrumentName).Where(measurement =>
+                Equals(measurement.Tags.GetValueOrDefault(AccountTagName), accountId.Value)),
+        ];
+
     private IReadOnlyList<RecordingLoggerProvider.LogRecord> RecordsFor(MailAccountId accountId) =>
         [
             .. this.logs.Records.Where(record =>
                 record.Properties.TryGetValue("AccountId", out var loggedAccount)
                 && Equals(loggedAccount, accountId.Value)),
         ];
-
-    /// <summary>Reads MailFathom's own meter on demand, which is the only way an observable gauge can be asserted on.</summary>
-    private sealed class GaugeCollector : IDisposable
-    {
-        private readonly MeterListener listener = new();
-
-        // Concurrent because the listener is enabled for every instrument on MailFathom's one meter, so any other test
-        // class publishing to it writes here while this one reads — which a plain list reports as a modified collection.
-        private readonly ConcurrentQueue<PublishedMeasurement> measurements = [];
-
-        internal GaugeCollector()
-        {
-            this.listener.InstrumentPublished = (instrument, activeListener) =>
-            {
-                if (StringComparer.Ordinal.Equals(instrument.Meter.Name, Telemetry.Name))
-                {
-                    activeListener.EnableMeasurementEvents(instrument);
-                }
-            };
-            this.listener.SetMeasurementEventCallback<long>(this.Record);
-            this.listener.SetMeasurementEventCallback<double>(this.Record);
-            this.listener.Start();
-        }
-
-        public void Dispose() => this.listener.Dispose();
-
-        /// <summary>Collects every gauge once and returns what one instrument published for one account.</summary>
-        internal IReadOnlyList<PublishedMeasurement> Read(string instrumentName, MailAccountId accountId)
-        {
-            this.measurements.Clear();
-            this.listener.RecordObservableInstruments();
-
-            return
-            [
-                .. this.measurements.ToArray().Where(measurement =>
-                    StringComparer.Ordinal.Equals(measurement.InstrumentName, instrumentName)
-                    && measurement.Tags.TryGetValue(AccountTagName, out var account)
-                    && Equals(account, accountId.Value)),
-            ];
-        }
-
-        private void Record<TMeasurement>(
-            Instrument instrument,
-            TMeasurement measurement,
-            ReadOnlySpan<KeyValuePair<string, object?>> tags,
-            object? state)
-            where TMeasurement : struct =>
-            this.measurements.Enqueue(new PublishedMeasurement(
-                instrument.Name,
-                Convert.ToDouble(measurement, CultureInfo.InvariantCulture),
-                tags.ToArray().ToDictionary(tag => tag.Key, tag => tag.Value, StringComparer.Ordinal)));
-    }
-
-    /// <summary>One measurement a gauge published, with the dimensions it carried.</summary>
-    private sealed record PublishedMeasurement(
-        string InstrumentName,
-        double Value,
-        IReadOnlyDictionary<string, object?> Tags);
 }

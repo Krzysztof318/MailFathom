@@ -4,8 +4,6 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Diagnostics.Metrics;
-using System.Globalization;
 using MailFathom.Common.Observability;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
@@ -20,7 +18,7 @@ namespace MailFathom.Infrastructure.UnitTests.Observability;
 
 /// <summary>Covers the three endings a mutation is published under, and the dimensions it is published by.</summary>
 /// <remarks>
-/// The listener and the collector both observe the application's own source and meter, which everything MailFathom
+/// The listener and the recorder both observe the application's own source and meter, which everything MailFathom
 /// publishes shares, so each test names an account of its own and reads only what carries it. That is what keeps a
 /// mutation published by another test class at the same moment out of these assertions.
 /// </remarks>
@@ -75,7 +73,7 @@ public sealed class MailboxMutationTelemetryTests : IDisposable
     {
         // Arrange
         var account = MailAccountId.Create("publishes-succeeded");
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(CountInstrumentName);
 
         // Act
         using (var scope = this.telemetry.Begin(
@@ -88,7 +86,7 @@ public sealed class MailboxMutationTelemetryTests : IDisposable
         }
 
         // Assert
-        var counted = Assert.Single(collector.Read(CountInstrumentName, account));
+        var counted = Assert.Single(PublishedFor(measurements, CountInstrumentName, account));
 
         Assert.Equal(1, counted.Value);
         Assert.Equal(MailboxMutation.Relocate.Name, counted.Tags[MutationTagName]);
@@ -112,7 +110,9 @@ public sealed class MailboxMutationTelemetryTests : IDisposable
     {
         // Arrange
         var account = MailAccountId.Create("publishes-cancelled");
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(
+            CountInstrumentName,
+            DurationInstrumentName);
         using var caller = new CancellationTokenSource();
 
         // Act
@@ -122,8 +122,12 @@ public sealed class MailboxMutationTelemetryTests : IDisposable
         }
 
         // Assert
-        Assert.Equal("cancelled", Assert.Single(collector.Read(CountInstrumentName, account)).Tags[OutcomeTagName]);
-        Assert.Equal("cancelled", Assert.Single(collector.Read(DurationInstrumentName, account)).Tags[OutcomeTagName]);
+        Assert.Equal(
+            "cancelled",
+            Assert.Single(PublishedFor(measurements, CountInstrumentName, account)).Tags[OutcomeTagName]);
+        Assert.Equal(
+            "cancelled",
+            Assert.Single(PublishedFor(measurements, DurationInstrumentName, account)).Tags[OutcomeTagName]);
 
         Assert.Equal(ActivityStatusCode.Unset, this.SpanOf(account).Status);
     }
@@ -134,7 +138,7 @@ public sealed class MailboxMutationTelemetryTests : IDisposable
     {
         // Arrange
         var account = MailAccountId.Create("publishes-failed");
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(CountInstrumentName);
 
         // Act
         using (this.telemetry.Begin(MailboxMutation.SetSeen, account, Folder, TestContext.Current.CancellationToken))
@@ -142,7 +146,9 @@ public sealed class MailboxMutationTelemetryTests : IDisposable
         }
 
         // Assert
-        Assert.Equal("failed", Assert.Single(collector.Read(CountInstrumentName, account)).Tags[OutcomeTagName]);
+        Assert.Equal(
+            "failed",
+            Assert.Single(PublishedFor(measurements, CountInstrumentName, account)).Tags[OutcomeTagName]);
         Assert.Equal(ActivityStatusCode.Error, this.SpanOf(account).Status);
     }
 
@@ -177,7 +183,7 @@ public sealed class MailboxMutationTelemetryTests : IDisposable
     {
         // Arrange
         var account = MailAccountId.Create("publishes-filing");
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(CountInstrumentName);
 
         // Act
         using (var scope = this.telemetry.BeginFiling(
@@ -190,63 +196,24 @@ public sealed class MailboxMutationTelemetryTests : IDisposable
         }
 
         // Assert
-        var counted = Assert.Single(collector.Read(CountInstrumentName, account));
+        var counted = Assert.Single(PublishedFor(measurements, CountInstrumentName, account));
 
         Assert.Equal("file-outgoing-copy", counted.Tags[MutationTagName]);
         Assert.Equal("succeeded", counted.Tags[OutcomeTagName]);
     }
 
+    /// <summary>Selects what one instrument published for one account, which is what tells one test's write from another's.</summary>
+    private static IReadOnlyList<RecordedMeasurement> PublishedFor(
+        RecordedMailFathomMeasurements measurements,
+        string instrumentName,
+        MailAccountId accountId) =>
+        [
+            .. measurements.Read(instrumentName).Where(measurement =>
+                Equals(measurement.Tags.GetValueOrDefault(AccountTagName), accountId.Value)),
+        ];
+
     private Activity SpanOf(MailAccountId accountId) =>
         Assert.Single(
             this.published,
             activity => Equals(activity.GetTagItem(AccountTagName), accountId.Value));
-
-    /// <summary>Collects what the application's meter published while one test ran.</summary>
-    private sealed class MeasurementCollector : IDisposable
-    {
-        private readonly MeterListener listener = new();
-        private readonly ConcurrentQueue<PublishedMeasurement> measurements = new();
-
-        internal MeasurementCollector()
-        {
-            this.listener.InstrumentPublished = (instrument, activeListener) =>
-            {
-                if (StringComparer.Ordinal.Equals(instrument.Meter.Name, Telemetry.Name))
-                {
-                    activeListener.EnableMeasurementEvents(instrument);
-                }
-            };
-            this.listener.SetMeasurementEventCallback<long>(this.Record);
-            this.listener.SetMeasurementEventCallback<double>(this.Record);
-            this.listener.Start();
-        }
-
-        public void Dispose() => this.listener.Dispose();
-
-        /// <summary>Returns what one instrument published for one account since this collector started.</summary>
-        internal IReadOnlyList<PublishedMeasurement> Read(string instrumentName, MailAccountId accountId) =>
-        [
-            .. this.measurements.Where(measurement =>
-                StringComparer.Ordinal.Equals(measurement.InstrumentName, instrumentName)
-                && measurement.Tags.TryGetValue(AccountTagName, out var account)
-                && Equals(account, accountId.Value)),
-        ];
-
-        private void Record<TMeasurement>(
-            Instrument instrument,
-            TMeasurement measurement,
-            ReadOnlySpan<KeyValuePair<string, object?>> tags,
-            object? state)
-            where TMeasurement : struct =>
-            this.measurements.Enqueue(new PublishedMeasurement(
-                instrument.Name,
-                Convert.ToDouble(measurement, CultureInfo.InvariantCulture),
-                tags.ToArray().ToDictionary(tag => tag.Key, tag => tag.Value, StringComparer.Ordinal)));
-    }
-
-    /// <summary>One measurement an instrument published, with the dimensions it carried.</summary>
-    private sealed record PublishedMeasurement(
-        string InstrumentName,
-        double Value,
-        IReadOnlyDictionary<string, object?> Tags);
 }

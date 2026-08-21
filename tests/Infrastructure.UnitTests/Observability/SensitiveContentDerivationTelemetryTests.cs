@@ -2,14 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Collections.Concurrent;
-using System.Diagnostics.Metrics;
-using System.Globalization;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Redaction;
-using MailFathom.Common.Observability;
 using MailFathom.Infrastructure.Observability;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Observability;
@@ -39,7 +36,7 @@ public sealed class SensitiveContentDerivationTelemetryTests
     public void RecordDerived_ARedactedText_CountsItAndTimesTheScanItCost()
     {
         // Arrange
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(RedactedInstrumentName, DurationInstrumentName);
 
         // Act
         this.telemetry.RecordDerived(
@@ -47,11 +44,8 @@ public sealed class SensitiveContentDerivationTelemetryTests
             TimeSpan.FromMilliseconds(250));
 
         // Assert
-        var redacted = Assert.Single(collector.Read(RedactedInstrumentName));
-        var duration = Assert.Single(collector.Read(DurationInstrumentName));
-
-        Assert.Equal(1, redacted.Value);
-        Assert.Equal(0.25, duration.Value);
+        Assert.Equal([1d], measurements.ValuesOf(RedactedInstrumentName));
+        Assert.Equal([0.25d], measurements.ValuesOf(DurationInstrumentName));
     }
 
     /// <summary>Which kind of material a mailbox produces is what decides whether a category list is right.</summary>
@@ -59,7 +53,7 @@ public sealed class SensitiveContentDerivationTelemetryTests
     public void RecordDerived_FindingsOfSeveralCategories_CountsEachCategoryOnItsOwnSeries()
     {
         // Arrange
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(FindingsInstrumentName);
 
         // Act
         this.telemetry.RecordDerived(
@@ -74,7 +68,7 @@ public sealed class SensitiveContentDerivationTelemetryTests
             TimeSpan.FromMilliseconds(10));
 
         // Assert
-        var findings = collector.Read(FindingsInstrumentName);
+        var findings = measurements.Read(FindingsInstrumentName);
 
         Assert.Equal(
             [("CloudKey", 2d), ("EmailAddress", 1d)],
@@ -86,7 +80,7 @@ public sealed class SensitiveContentDerivationTelemetryTests
     public void RecordDerived_ATextTheCeilingDidNotCut_ReportsNoOmission()
     {
         // Arrange
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(OmittedInstrumentName);
 
         // Act
         this.telemetry.RecordDerived(
@@ -94,7 +88,7 @@ public sealed class SensitiveContentDerivationTelemetryTests
             TimeSpan.FromMilliseconds(10));
 
         // Assert
-        Assert.Empty(collector.Read(OmittedInstrumentName));
+        Assert.Empty(measurements.Read(OmittedInstrumentName));
     }
 
     /// <summary>What the ceiling cuts here is cut out of the index for as long as the message stays derived.</summary>
@@ -102,7 +96,7 @@ public sealed class SensitiveContentDerivationTelemetryTests
     public void RecordDerived_ATextTheCeilingCut_ReportsHowMuchWasDropped()
     {
         // Arrange
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(OmittedInstrumentName);
 
         // Act
         this.telemetry.RecordDerived(
@@ -110,9 +104,7 @@ public sealed class SensitiveContentDerivationTelemetryTests
             TimeSpan.FromMilliseconds(10));
 
         // Assert
-        var omitted = Assert.Single(collector.Read(OmittedInstrumentName));
-
-        Assert.Equal(4096, omitted.Value);
+        Assert.Equal([4096d], measurements.ValuesOf(OmittedInstrumentName));
     }
 
     /// <summary>A refused derived write is a message that gains no passages at all, which an operator has to see.</summary>
@@ -124,7 +116,7 @@ public sealed class SensitiveContentDerivationTelemetryTests
         string expectedTag)
     {
         // Arrange
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(RefusalsInstrumentName);
         var scanner = Enum.Parse<SensitiveContentScannerKind>(scannerName);
 
         // Act
@@ -132,7 +124,7 @@ public sealed class SensitiveContentDerivationTelemetryTests
 
         // Assert
         var refusal = Assert.Single(
-            collector.Read(RefusalsInstrumentName),
+            measurements.Read(RefusalsInstrumentName),
             measurement => Equals(measurement.Tags[ScannerTagName], expectedTag));
 
         Assert.Equal(1, refusal.Value);
@@ -145,54 +137,4 @@ public sealed class SensitiveContentDerivationTelemetryTests
             confidence: 1,
             SensitiveContentDetector.Create("test", "1"),
             DetectedAt);
-
-    /// <summary>Reads what the counters and the histogram on MailFathom's own meter published.</summary>
-    private sealed class MeasurementCollector : IDisposable
-    {
-        private readonly MeterListener listener = new();
-
-        // Concurrent because the listener is enabled for every instrument on MailFathom's one meter, so any other test
-        // class publishing to it writes here while this one reads — which a plain list reports as a modified collection.
-        private readonly ConcurrentQueue<PublishedMeasurement> measurements = [];
-
-        internal MeasurementCollector()
-        {
-            this.listener.InstrumentPublished = (instrument, activeListener) =>
-            {
-                if (StringComparer.Ordinal.Equals(instrument.Meter.Name, Telemetry.Name))
-                {
-                    activeListener.EnableMeasurementEvents(instrument);
-                }
-            };
-            this.listener.SetMeasurementEventCallback<long>(this.Record);
-            this.listener.SetMeasurementEventCallback<double>(this.Record);
-            this.listener.Start();
-        }
-
-        public void Dispose() => this.listener.Dispose();
-
-        /// <summary>Returns what one instrument published, in order.</summary>
-        internal IReadOnlyList<PublishedMeasurement> Read(string instrumentName) =>
-            [
-                .. this.measurements.ToArray().Where(measurement =>
-                    StringComparer.Ordinal.Equals(measurement.InstrumentName, instrumentName)),
-            ];
-
-        private void Record<TMeasurement>(
-            Instrument instrument,
-            TMeasurement measurement,
-            ReadOnlySpan<KeyValuePair<string, object?>> tags,
-            object? state)
-            where TMeasurement : struct =>
-            this.measurements.Enqueue(new PublishedMeasurement(
-                instrument.Name,
-                Convert.ToDouble(measurement, CultureInfo.InvariantCulture),
-                tags.ToArray().ToDictionary(tag => tag.Key, tag => tag.Value, StringComparer.Ordinal)));
-    }
-
-    /// <summary>One measurement an instrument published, with the dimensions it carried.</summary>
-    private sealed record PublishedMeasurement(
-        string InstrumentName,
-        double Value,
-        IReadOnlyDictionary<string, object?> Tags);
 }

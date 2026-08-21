@@ -69,6 +69,18 @@ internal sealed class RecordedMailFathomMeasurements : IDisposable
     /// <remarks>A gauge is only measured when something asks, so a test that never asks records nothing from one.</remarks>
     internal void ObserveGauges() => this.listener.RecordObservableInstruments();
 
+    /// <summary>Discards what has been recorded and asks every observable instrument being watched again.</summary>
+    /// <remarks>
+    /// A gauge reports the state it is in whenever it is asked, so a second reading appended to the first reads as a
+    /// series rather than as the one state the instrument holds now. A test that asks once while a condition holds and
+    /// once after it has passed is asserting on the second answer alone, which is what discarding the first leaves it.
+    /// </remarks>
+    internal void ObserveGaugesAfresh()
+    {
+        this.recorded.Clear();
+        this.listener.RecordObservableInstruments();
+    }
+
     /// <summary>Gets what one instrument published, in the order it measured.</summary>
     /// <param name="instrumentName">The instrument to read.</param>
     /// <returns>Its measurements, or an empty sequence when it took none.</returns>

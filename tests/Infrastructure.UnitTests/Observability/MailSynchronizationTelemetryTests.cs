@@ -4,11 +4,10 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Diagnostics.Metrics;
-using System.Globalization;
 using MailFathom.Common.Observability;
 using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Observability;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
@@ -104,7 +103,7 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
     {
         // Arrange
         var account = MailAccountId.Create("records-a-failed-cycle");
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(RunDurationInstrumentName);
 
         // Act
         using (var run = this.telemetry.BeginAccountRun(account))
@@ -114,7 +113,7 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
         }
 
         // Assert
-        var duration = Assert.Single(collector.Read(RunDurationInstrumentName, account));
+        var duration = Assert.Single(PublishedFor(measurements, RunDurationInstrumentName, account));
 
         Assert.Equal(30, duration.Value);
         Assert.Equal("failed", duration.Tags[OutcomeTagName]);
@@ -126,7 +125,7 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
     {
         // Arrange
         var account = MailAccountId.Create("records-failed-convergence");
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(RunDurationInstrumentName);
 
         // Act
         using (var run = this.telemetry.BeginAccountRun(account))
@@ -135,7 +134,9 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
         }
 
         // Assert
-        Assert.Equal("failed", Assert.Single(collector.Read(RunDurationInstrumentName, account)).Tags[OutcomeTagName]);
+        Assert.Equal(
+            "failed",
+            Assert.Single(PublishedFor(measurements, RunDurationInstrumentName, account)).Tags[OutcomeTagName]);
     }
 
     /// <summary>Shutdown ends a cycle without an outcome, and an account stopped is not an account that failed.</summary>
@@ -144,7 +145,7 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
     {
         // Arrange
         var account = MailAccountId.Create("records-an-interruption");
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(RunDurationInstrumentName);
 
         // Act
         using (this.telemetry.BeginAccountRun(account))
@@ -154,7 +155,7 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
         // Assert
         Assert.Equal(
             "interrupted",
-            Assert.Single(collector.Read(RunDurationInstrumentName, account)).Tags[OutcomeTagName]);
+            Assert.Single(PublishedFor(measurements, RunDurationInstrumentName, account)).Tags[OutcomeTagName]);
     }
 
     /// <summary>Counting messages is what says a mailbox is being brought in, and the two counts narrow for different reasons.</summary>
@@ -163,7 +164,9 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
     {
         // Arrange
         var account = MailAccountId.Create("counts-its-messages");
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(
+            StoredEmailsInstrumentName,
+            SkippedEmailsInstrumentName);
 
         // Act
         using (var folder = this.telemetry.BeginFolderRun(account))
@@ -172,8 +175,8 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
         }
 
         // Assert
-        var stored = Assert.Single(collector.Read(StoredEmailsInstrumentName, account));
-        var skipped = Assert.Single(collector.Read(SkippedEmailsInstrumentName, account));
+        var stored = Assert.Single(PublishedFor(measurements, StoredEmailsInstrumentName, account));
+        var skipped = Assert.Single(PublishedFor(measurements, SkippedEmailsInstrumentName, account));
 
         Assert.Equal(12, stored.Value);
         Assert.Equal("ARCHIVE", stored.Tags[FolderTagName]);
@@ -196,7 +199,7 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
             "mail_server_unavailable" => folder => folder.MailServerUnavailable("INBOX"),
             _ => folder => folder.UnexpectedFailure("INBOX"),
         };
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(FailuresInstrumentName);
 
         // Act
         using (var folder = this.telemetry.BeginFolderRun(account))
@@ -205,7 +208,7 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
         }
 
         // Assert
-        var failure = Assert.Single(collector.Read(FailuresInstrumentName, account));
+        var failure = Assert.Single(PublishedFor(measurements, FailuresInstrumentName, account));
 
         Assert.Equal(1, failure.Value);
         Assert.Equal(expected, failure.Tags[FailureTagName]);
@@ -222,7 +225,7 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
     {
         // Arrange
         var account = MailAccountId.Create(accountId);
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(FailuresInstrumentName);
 
         // Act
         using (var folder = this.telemetry.BeginFolderRun(account))
@@ -238,7 +241,7 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
         }
 
         // Assert
-        Assert.Empty(collector.Read(FailuresInstrumentName, account));
+        Assert.Empty(PublishedFor(measurements, FailuresInstrumentName, account));
         Assert.Equal(expected, this.PublishedSpan(account, "synchronize_folder").GetTagItem(OutcomeTagName));
     }
 
@@ -248,7 +251,7 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
     {
         // Arrange
         var account = MailAccountId.Create("interrupted-folder");
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(FailuresInstrumentName);
 
         // Act
         using (var folder = this.telemetry.BeginFolderRun(account))
@@ -257,7 +260,7 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
         }
 
         // Assert
-        Assert.Empty(collector.Read(FailuresInstrumentName, account));
+        Assert.Empty(PublishedFor(measurements, FailuresInstrumentName, account));
         Assert.Equal("interrupted", this.PublishedSpan(account, "synchronize_folder").GetTagItem(OutcomeTagName));
     }
 
@@ -267,14 +270,18 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
     {
         // Arrange
         var account = MailAccountId.Create("is-backing-off");
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(
+            BackoffInstrumentName,
+            ConsecutiveFailuresInstrumentName);
 
         // Act
         this.telemetry.RecordScheduledDelay(account, TimeSpan.FromMinutes(8), consecutiveFailureCount: 3);
 
         // Assert
-        Assert.Equal(480, Assert.Single(collector.ReadGauge(BackoffInstrumentName, account)).Value);
-        Assert.Equal(3, Assert.Single(collector.ReadGauge(ConsecutiveFailuresInstrumentName, account)).Value);
+        measurements.ObserveGaugesAfresh();
+
+        Assert.Equal(480, Assert.Single(PublishedFor(measurements, BackoffInstrumentName, account)).Value);
+        Assert.Equal(3, Assert.Single(PublishedFor(measurements, ConsecutiveFailuresInstrumentName, account)).Value);
     }
 
     /// <summary>An account nobody supervises any more must stop reporting, or its last wait reads as an account still waiting.</summary>
@@ -283,7 +290,9 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
     {
         // Arrange
         var account = MailAccountId.Create("left-configuration");
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(
+            BackoffInstrumentName,
+            ConsecutiveFailuresInstrumentName);
 
         this.telemetry.RecordScheduledDelay(account, TimeSpan.FromMinutes(5), consecutiveFailureCount: 0);
 
@@ -291,8 +300,10 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
         this.telemetry.RecordSupervisionEnded(account);
 
         // Assert
-        Assert.Empty(collector.ReadGauge(BackoffInstrumentName, account));
-        Assert.Empty(collector.ReadGauge(ConsecutiveFailuresInstrumentName, account));
+        measurements.ObserveGaugesAfresh();
+
+        Assert.Empty(PublishedFor(measurements, BackoffInstrumentName, account));
+        Assert.Empty(PublishedFor(measurements, ConsecutiveFailuresInstrumentName, account));
     }
 
     /// <summary>The depth is what separates a pipeline that is idle from one whose accounts are all queued behind the bound.</summary>
@@ -307,19 +318,25 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
     {
         // Arrange
         var account = MailAccountId.Create("waits-for-a-slot");
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(
+            QueuedRunsInstrumentName,
+            ActiveRunsInstrumentName);
 
         // Act and assert
         using (this.telemetry.EnterRunQueue())
         using (this.telemetry.EnterRunQueue())
         using (this.telemetry.BeginAccountRun(account))
         {
-            Assert.Contains(collector.ReadUntaggedGauge(QueuedRunsInstrumentName), gauge => gauge.Value == 2);
-            Assert.Contains(collector.ReadUntaggedGauge(ActiveRunsInstrumentName), gauge => gauge.Value == 1);
+            measurements.ObserveGaugesAfresh();
+
+            Assert.Contains(measurements.Read(QueuedRunsInstrumentName), gauge => gauge.Value == 2);
+            Assert.Contains(measurements.Read(ActiveRunsInstrumentName), gauge => gauge.Value == 1);
         }
 
-        Assert.All(collector.ReadUntaggedGauge(QueuedRunsInstrumentName), gauge => Assert.Equal(0, gauge.Value));
-        Assert.All(collector.ReadUntaggedGauge(ActiveRunsInstrumentName), gauge => Assert.Equal(0, gauge.Value));
+        measurements.ObserveGaugesAfresh();
+
+        Assert.All(measurements.Read(QueuedRunsInstrumentName), gauge => Assert.Equal(0, gauge.Value));
+        Assert.All(measurements.Read(ActiveRunsInstrumentName), gauge => Assert.Equal(0, gauge.Value));
     }
 
     /// <summary>
@@ -331,7 +348,7 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
     {
         // Arrange
         var account = MailAccountId.Create("carries-no-mail");
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements();
 
         // Act
         using (var run = this.telemetry.BeginAccountRun(account))
@@ -350,7 +367,8 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
             .SelectMany(activity => activity.TagObjects)
             .Select(tag => tag.Key)
             .Distinct(StringComparer.Ordinal);
-        var measurementTagNames = collector.ReadEverythingFor(account)
+        var measurementTagNames = measurements.Recorded
+            .Where(measurement => Equals(measurement.Tags.GetValueOrDefault(AccountTagName), account.Value))
             .SelectMany(measurement => measurement.Tags.Keys)
             .Distinct(StringComparer.Ordinal);
 
@@ -371,98 +389,19 @@ public sealed class MailSynchronizationTelemetryTests : IDisposable
         "mailfathom.mail.sync.skipped",
     ];
 
+    /// <summary>Selects what one instrument published for one account, which is what tells one test's cycle from another's.</summary>
+    private static IReadOnlyList<RecordedMeasurement> PublishedFor(
+        RecordedMailFathomMeasurements measurements,
+        string instrumentName,
+        MailAccountId accountId) =>
+        [
+            .. measurements.Read(instrumentName).Where(measurement =>
+                Equals(measurement.Tags.GetValueOrDefault(AccountTagName), accountId.Value)),
+        ];
+
     /// <summary>Selects one span this test produced out of whatever the shared source published while it ran.</summary>
     private Activity PublishedSpan(MailAccountId accountId, string operationName) => Assert.Single(
         this.published,
         activity => activity.OperationName == operationName
             && Equals(activity.GetTagItem(AccountTagName), accountId.Value));
-
-    /// <summary>Collects what the application's meter publishes while one test runs.</summary>
-    /// <remarks>
-    /// The collection is concurrent because the writer and the reader are not the same thread: this listener enables
-    /// every instrument of the process-wide meter, and xUnit runs test classes in parallel, so a class publishing its
-    /// own telemetry records here from whichever thread it runs on. Every read filters by instrument and by account for
-    /// the same reason.
-    /// </remarks>
-    private sealed class MeasurementCollector : IDisposable
-    {
-        private readonly MeterListener listener = new();
-        private readonly ConcurrentQueue<PublishedMeasurement> measurements = new();
-
-        internal MeasurementCollector()
-        {
-            this.listener.InstrumentPublished = (instrument, activeListener) =>
-            {
-                if (StringComparer.Ordinal.Equals(instrument.Meter.Name, Telemetry.Name))
-                {
-                    activeListener.EnableMeasurementEvents(instrument);
-                }
-            };
-            this.listener.SetMeasurementEventCallback<long>(this.Record);
-            this.listener.SetMeasurementEventCallback<double>(this.Record);
-            this.listener.Start();
-        }
-
-        public void Dispose() => this.listener.Dispose();
-
-        /// <summary>Returns what one instrument published for one account since this collector started.</summary>
-        internal IReadOnlyList<PublishedMeasurement> Read(string instrumentName, MailAccountId accountId) =>
-        [
-            .. this.measurements.Where(measurement =>
-                StringComparer.Ordinal.Equals(measurement.InstrumentName, instrumentName)
-                && measurement.Tags.TryGetValue(AccountTagName, out var account)
-                && Equals(account, accountId.Value)),
-        ];
-
-        /// <summary>Returns everything published for one account, whichever instrument published it.</summary>
-        internal IReadOnlyList<PublishedMeasurement> ReadEverythingFor(MailAccountId accountId) =>
-        [
-            .. this.measurements.Where(measurement =>
-                measurement.Tags.TryGetValue(AccountTagName, out var account)
-                && Equals(account, accountId.Value)),
-        ];
-
-        /// <summary>Collects the gauges once and returns what one of them published for one account.</summary>
-        internal IReadOnlyList<PublishedMeasurement> ReadGauge(string instrumentName, MailAccountId accountId)
-        {
-            this.CollectGauges();
-
-            return this.Read(instrumentName, accountId);
-        }
-
-        /// <summary>Collects the gauges once and returns what one instrument published for the process.</summary>
-        internal IReadOnlyList<PublishedMeasurement> ReadUntaggedGauge(string instrumentName)
-        {
-            this.CollectGauges();
-
-            return
-            [
-                .. this.measurements.Where(measurement =>
-                    StringComparer.Ordinal.Equals(measurement.InstrumentName, instrumentName)),
-            ];
-        }
-
-        private void CollectGauges()
-        {
-            this.measurements.Clear();
-            this.listener.RecordObservableInstruments();
-        }
-
-        private void Record<TMeasurement>(
-            Instrument instrument,
-            TMeasurement measurement,
-            ReadOnlySpan<KeyValuePair<string, object?>> tags,
-            object? state)
-            where TMeasurement : struct =>
-            this.measurements.Enqueue(new PublishedMeasurement(
-                instrument.Name,
-                Convert.ToDouble(measurement, CultureInfo.InvariantCulture),
-                tags.ToArray().ToDictionary(tag => tag.Key, tag => tag.Value, StringComparer.Ordinal)));
-    }
-
-    /// <summary>One measurement an instrument published, with the dimensions it carried.</summary>
-    private sealed record PublishedMeasurement(
-        string InstrumentName,
-        double Value,
-        IReadOnlyDictionary<string, object?> Tags);
 }

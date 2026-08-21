@@ -2,12 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Collections.Concurrent;
-using System.Diagnostics.Metrics;
-using System.Globalization;
 using MailFathom.Application.Spam.Gating;
-using MailFathom.Common.Observability;
 using MailFathom.Infrastructure.Observability;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Observability;
@@ -38,26 +35,27 @@ public sealed class DerivedWorkGateTelemetryTests
     public void RecordAdmission_OneDecision_CountsItUnderItsOwnAdmission(DerivedWorkAdmission admission, string tag)
     {
         // Arrange
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(AdmissionsInstrumentName);
 
         // Act
         this.telemetry.RecordAdmission(admission);
 
         // Assert
-        Assert.Equal(1, Assert.Single(collector.Read(AdmissionsInstrumentName, tag)).Value);
+        Assert.Equal([tag], measurements.DimensionOf(AdmissionsInstrumentName, AdmissionTagName));
+        Assert.Equal([1d], measurements.ValuesOf(AdmissionsInstrumentName));
     }
 
     [Fact]
     public void RecordDiscardedPassages_AJunkVerdictOverDerivedData_CountsThePassagesItRemoved()
     {
         // Arrange
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(DiscardedInstrumentName);
 
         // Act
         this.telemetry.RecordDiscardedPassages(6);
 
         // Assert
-        Assert.Equal(6, collector.Read(DiscardedInstrumentName).Sum(measurement => measurement.Value));
+        Assert.Equal(6, measurements.ValuesOf(DiscardedInstrumentName).Sum());
     }
 
     /// <summary>A deployment whose classification has caught up removes nothing, and a zero is not a measurement.</summary>
@@ -65,68 +63,12 @@ public sealed class DerivedWorkGateTelemetryTests
     public void RecordDiscardedPassages_AJunkVerdictOverNothingDerived_PublishesNoMeasurement()
     {
         // Arrange
-        using var collector = new MeasurementCollector();
+        using var measurements = new RecordedMailFathomMeasurements(DiscardedInstrumentName);
 
         // Act
         this.telemetry.RecordDiscardedPassages(0);
 
         // Assert
-        Assert.Empty(collector.Read(DiscardedInstrumentName));
+        Assert.Empty(measurements.Read(DiscardedInstrumentName));
     }
-
-    /// <summary>Reads what the counters on MailFathom's own meter published.</summary>
-    private sealed class MeasurementCollector : IDisposable
-    {
-        private readonly MeterListener listener = new();
-
-        // Concurrent because the listener is enabled for every instrument on MailFathom's one meter, so any other test
-        // class publishing to it writes here while this one reads — which a plain list reports as a modified collection.
-        private readonly ConcurrentQueue<PublishedMeasurement> measurements = [];
-
-        internal MeasurementCollector()
-        {
-            this.listener.InstrumentPublished = (instrument, activeListener) =>
-            {
-                if (StringComparer.Ordinal.Equals(instrument.Meter.Name, Telemetry.Name))
-                {
-                    activeListener.EnableMeasurementEvents(instrument);
-                }
-            };
-            this.listener.SetMeasurementEventCallback<long>(this.Record);
-            this.listener.Start();
-        }
-
-        public void Dispose() => this.listener.Dispose();
-
-        /// <summary>Returns what one instrument published, in order.</summary>
-        internal IReadOnlyList<PublishedMeasurement> Read(string instrumentName) =>
-            [
-                .. this.measurements.ToArray().Where(measurement =>
-                    StringComparer.Ordinal.Equals(measurement.InstrumentName, instrumentName)),
-            ];
-
-        /// <summary>Returns what one instrument published for one admission, in order.</summary>
-        internal IReadOnlyList<PublishedMeasurement> Read(string instrumentName, string admission) =>
-            [
-                .. this.Read(instrumentName).Where(measurement =>
-                    measurement.Tags.TryGetValue(AdmissionTagName, out var tag) && Equals(tag, admission)),
-            ];
-
-        private void Record<TMeasurement>(
-            Instrument instrument,
-            TMeasurement measurement,
-            ReadOnlySpan<KeyValuePair<string, object?>> tags,
-            object? state)
-            where TMeasurement : struct =>
-            this.measurements.Enqueue(new PublishedMeasurement(
-                instrument.Name,
-                Convert.ToDouble(measurement, CultureInfo.InvariantCulture),
-                tags.ToArray().ToDictionary(tag => tag.Key, tag => tag.Value, StringComparer.Ordinal)));
-    }
-
-    /// <summary>One measurement an instrument published, with the dimensions it carried.</summary>
-    private sealed record PublishedMeasurement(
-        string InstrumentName,
-        double Value,
-        IReadOnlyDictionary<string, object?> Tags);
 }
