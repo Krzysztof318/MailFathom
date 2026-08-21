@@ -22,4 +22,7 @@ Closes #
 - [ ] No credential, token, private key, real mailbox data, or personal information is in the diff.
 
 <!-- First contribution? CONTRIBUTING.md covers all of the above, including how contributions are
-     licensed — there is nothing to sign, and no acceptance comment to post. -->
+     licensed. One thing is asked of you once and never again: accept the contributor licence
+     agreement in CLA.md by replying to this pull request with the sentence it names. A bot will ask
+     if it applies to you, and the `license/cla` status says where you stand. You keep the copyright
+     in what you write. -->

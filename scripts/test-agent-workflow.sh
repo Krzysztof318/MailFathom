@@ -1230,7 +1230,7 @@ protected_paths_refuses_a_contributor_changing_repository_root_configuration() {
 
   if run_protected_paths_step \
     'outside-contributor' \
-    $'Directory.Build.props\nLICENSE\nNOTICE\nNuGet.config\nglobal.json\nCHANGELOG.md' \
+    $'Directory.Build.props\nLICENSE\nNOTICE\nNuGet.config\nglobal.json\nCHANGELOG.md\nCLA.md' \
     "$output_file" \
     "$summary_file"; then
     printf 'Protected paths allowed a contributor to change the repository-root configuration\n' >&2
@@ -1238,7 +1238,7 @@ protected_paths_refuses_a_contributor_changing_repository_root_configuration() {
   fi
 
   local protected_file
-  for protected_file in Directory.Build.props LICENSE NOTICE NuGet.config global.json CHANGELOG.md; do
+  for protected_file in Directory.Build.props LICENSE NOTICE NuGet.config global.json CHANGELOG.md CLA.md; do
     assert_contains "::error file=${protected_file}::" "$output_file"
   done
 }
@@ -6648,18 +6648,59 @@ a_paid_provider_run_is_never_the_default() {
 }
 
 # `pull_request_target` runs the base branch's workflow with the repository's secrets against a
-# contribution nobody has reviewed. `fathom-review.yml` uses it deliberately, #189 decided so, and
-# `docs/operations/agent-workflow.md` records why the purpose of the rule is still met there — it
-# checks out `base.sha`, executes nothing from the contribution, and starts on a maintainer's act
-# alone. A second one would be none of that, and this is what stops it appearing unnoticed.
-only_the_reviewer_workflow_uses_pull_request_target() {
+# contribution nobody has reviewed. Two workflows use it deliberately and
+# `docs/operations/agent-workflow.md` argues each case separately: `fathom-review.yml` since #189,
+# which checks out `base.sha`, executes nothing from the contribution, and starts on a maintainer's
+# act alone; and `contributor-licence.yml` since #1077, which needs a write-capable token on a
+# fork's pull request to publish `license/cla` and to record an acceptance. A third would be neither,
+# and this is what stops it appearing unnoticed.
+#
+# The licence workflow's whole argument is that nothing from the contribution is ever executed, so
+# the three assertions below carry that property rather than leaving it to the prose: it checks
+# nothing out, the one action it reaches is the token mint, and no step of it runs a command that
+# fetches content. Each would be the first step of handing the App's token to whoever opened the
+# pull request, and the third is the one an added `uses:` line would not announce — a `run:` step
+# shelling out to `git`, `curl`, `wget`, or `gh` against the fork introduces no action reference at
+# all, so the first two assertions would both pass over it. The pattern reads the whole file with
+# its comment lines removed, which is why the prose here names those commands rather than using
+# them: a comment writing `git fetch` as an example would fail the test it is explaining.
+only_the_recorded_workflows_use_pull_request_target() {
   local using_workflows
+  local licence_workflow="$source_repository_root/.github/workflows/contributor-licence.yml"
+  local reached_actions
+  local fetching_commands
+  local failures=''
 
   using_workflows="$(grep -rlE '^[[:space:]]*pull_request_target:' "$source_repository_root/.github/workflows" |
     xargs -r -n1 basename | sort | tr '\n' ' ')"
 
-  if [[ "$using_workflows" != 'fathom-review.yml ' ]]; then
-    printf 'pull_request_target is used by: %s(expected fathom-review.yml alone)\n' "$using_workflows" >&2
+  if [[ "$using_workflows" != 'contributor-licence.yml fathom-review.yml ' ]]; then
+    printf 'pull_request_target is used by: %s(expected contributor-licence.yml and fathom-review.yml alone)\n' \
+      "$using_workflows" >&2
+    return 1
+  fi
+
+  if grep -qE '^[[:space:]]*uses:[[:space:]]*actions/checkout' "$licence_workflow"; then
+    failures+='contributor-licence.yml checks something out, so a contributed tree reaches a job holding the App token. '
+  fi
+
+  reached_actions="$(sed -nE 's|^[[:space:]]*uses:[[:space:]]*([^@[:space:]]+).*|\1|p' "$licence_workflow" |
+    sort -u | tr '\n' ' ')"
+
+  if [[ "$reached_actions" != 'actions/create-github-app-token ' ]]; then
+    failures+="contributor-licence.yml reaches actions beyond the token mint: $reached_actions "
+  fi
+
+  fetching_commands="$(grep -vE '^[[:space:]]*#' "$licence_workflow" |
+    grep -nE "(^|[^[:alnum:]_/-])(git|curl|wget)[[:space:]]|gh[[:space:]]+pr[[:space:]]+checkout|gh[[:space:]]+repo[[:space:]]+clone|/(tar|zip)ball" |
+    tr '\n' ' ' || true)"
+
+  if [[ -n "$fetching_commands" ]]; then
+    failures+="contributor-licence.yml runs a command that fetches content, so a contributed tree can reach a job holding the App token: $fetching_commands"
+  fi
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
     return 1
   fi
 }
@@ -7280,7 +7321,7 @@ run_test the_release_restores_the_annotated_tag_before_asserting_it
 run_test no_channel_builds_an_artifact_before_the_commit_has_verified
 run_test the_mutation_score_is_reported_and_never_gated
 run_test a_paid_provider_run_is_never_the_default
-run_test only_the_reviewer_workflow_uses_pull_request_target
+run_test only_the_recorded_workflows_use_pull_request_target
 run_test a_comment_never_cancels_a_review_in_flight
 run_test the_reviewer_resolves_one_claude_credential_everywhere
 run_test the_development_tooling_never_reaches_a_published_artifact

@@ -50,6 +50,12 @@ name: Protected paths
 #                             pushed to the container registries — so an edit arriving through
 #                             ordinary work is, by construction, out of band. This job is what makes
 #                             that visible while it is still a diff.
+#   `CLA.md`                  the terms every contribution arrives under, and the clause that keeps
+#                             MailFathom's own licensing decision available. A change narrowing it —
+#                             the relicensing grant, the patent termination, the statement that the
+#                             code was the contributor's to give — would be a change to what this
+#                             repository may do with everything merged after it, proposed by
+#                             somebody it would bind
 #   `Directory.Build.props`   the analyzer and warning policy every project inherits, the declared
 #                             version every build is stamped with, and the SPDX and copyright
 #                             metadata that ships inside the assemblies
@@ -141,6 +147,7 @@ jobs:
           protected_names=('.editorconfig' '.gitattributes' '.worktreeinclude' 'AGENTS.md' 'CLAUDE.md')
           protected_files=(
             'CHANGELOG.md'
+            'CLA.md'
             'Directory.Build.props'
             'LICENSE'
             'NOTICE'

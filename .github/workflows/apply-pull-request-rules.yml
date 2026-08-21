@@ -31,9 +31,10 @@ name: Apply pull request rules
 # asked* — and a workflow that tidied the list would erase it. The board write is bounded the other
 # way, by the statuses each rule declares it may act on.
 #
-# `pull_request` rather than `pull_request_target`, which is reserved for `Fathom review` alone and
-# is what `only_the_reviewer_workflow_uses_pull_request_target` in `scripts/test-agent-workflow.sh`
-# keeps true. Nothing here needs the elevated token that trigger carries: the branch is never checked
+# `pull_request` rather than `pull_request_target`, which two workflows hold as recorded exceptions —
+# `Fathom review` and `Contributor licence` — and which
+# `only_the_recorded_workflows_use_pull_request_target` in `scripts/test-agent-workflow.sh` keeps to
+# those two. Nothing here needs the elevated token that trigger carries: the branch is never checked
 # out, nothing from it is executed, and the workspace holds the base commit for one script. What that
 # choice costs is a fork's pull request, where GitHub hands every workflow a read-only token whatever
 # this file declares — the write is refused there and the run says so rather than failing, and the

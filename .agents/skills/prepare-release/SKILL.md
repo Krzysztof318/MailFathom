@@ -393,7 +393,8 @@ What the reading asks:
   get-started are the same document, and it is read by somebody who has not committed to anything yet.
 
 The licensing record is not prunable. `$check-docs-licenses` requires this file to carry that contributions arrive
-under the license by section 5 with nothing signed, that contributors keep their copyright, and that sections 7 and 8
+under the license by section 5 and under the contributor licence agreement in `CLA.md`, that contributors keep their
+copyright, and that sections 7 and 8
 give the software with no warranty and no contributor liability — the last because this is the only one of those files
 rendered outside the repository. Shorten around them.
 

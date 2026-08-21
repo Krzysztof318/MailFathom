@@ -340,8 +340,11 @@ accepted here as a deliberate trade against a manual submission per release, and
 pipeline whose reach extends beyond MailFathom's own artifacts. Rotate it accordingly.
 
 microsoft/winget-pkgs also asks a contributor to have signed Microsoft's open-source Contributor License Agreement.
-That is a one-time act by the account the token belongs to, and it says nothing about this repository's own position:
-MailFathom asks for no contributor agreement, and this is somebody else's repository under somebody else's rules.
+That is a one-time act by the account the token belongs to, and it says nothing about this repository's own position.
+MailFathom collects a contributor licence agreement of its own — `CLA.md`, accepted on the pull request and recorded by
+the `Contributor licence` workflow — and the two have nothing to do with each other: signing Microsoft's is what places
+a submitted manifest under winget-pkgs' licence, in somebody else's repository under somebody else's rules, and it
+neither satisfies nor is satisfied by accepting MailFathom's.
 
 Whenever the job runs again, the page it obliges is the one named above, and `winget search MailFathom.mfctl` is what
 answers which versions the community repository actually carries — a release newer than what the review has reached is
