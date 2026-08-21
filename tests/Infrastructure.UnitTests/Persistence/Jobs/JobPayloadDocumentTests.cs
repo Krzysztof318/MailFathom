@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Scheduling;
@@ -15,7 +16,7 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Jobs;
 
 public sealed class JobPayloadDocumentTests
 {
-    private static EmailOccurrenceJobPayload Payload => EmailOccurrenceJobPayload.For(EmailOccurrenceId.Create(
+    private static ClassifyEmailSpamJobPayload Payload => ClassifyEmailSpamJobPayload.For(EmailOccurrenceId.Create(
         MailAccountId.Create("account-a"),
         new MailFolderResolutionId(
             MailFolderAlias.Create("inbox"),
@@ -56,7 +57,7 @@ public sealed class JobPayloadDocumentTests
     public void Serialize_AnAccountPayload_WritesTheAccountAndReadsItBackAsTheSameReference()
     {
         // Arrange
-        var payload = MailAccountJobPayload.For(MailAccountId.Create("account-a"));
+        var payload = RunScheduledMailRulesJobPayload.For(MailAccountId.Create("account-a"));
 
         // Act
         var document = JobPayloadDocument.Serialize(payload);

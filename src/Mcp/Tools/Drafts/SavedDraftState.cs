@@ -4,7 +4,7 @@
 
 using System.ComponentModel;
 
-namespace MailFathom.Mcp.Tools.Results;
+namespace MailFathom.Mcp.Tools.Drafts;
 
 /// <summary>Publishes whether the owner's own drafts folder shows the draft as it now stands.</summary>
 /// <remarks>

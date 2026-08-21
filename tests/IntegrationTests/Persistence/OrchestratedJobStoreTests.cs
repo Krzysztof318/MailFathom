@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.IntegrationTests.Orchestration;
@@ -138,8 +139,8 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         Assert.Equal(request.Key, job.Key);
         Assert.Equal(SyntheticMailAccount.AccountId, job.AccountId);
         Assert.Equal(
-            ((EmailOccurrenceJobPayload)request.Payload).ToOccurrenceId(),
-            Assert.IsType<EmailOccurrenceJobPayload>(job.Payload).ToOccurrenceId());
+            ((ClassifyEmailSpamJobPayload)request.Payload).ToOccurrenceId(),
+            Assert.IsType<ClassifyEmailSpamJobPayload>(job.Payload).ToOccurrenceId());
     }
 
     /// <summary>
@@ -574,7 +575,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         CancellationToken cancellationToken)
     {
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
-        var payload = EmailOccurrenceJobPayload.For(EmailOccurrenceId.Create(
+        var payload = ClassifyEmailSpamJobPayload.For(EmailOccurrenceId.Create(
             SyntheticMailAccount.AccountId,
             binding.Id,
             ImapUidValidity.Create(90_001),

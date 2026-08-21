@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Scheduling;
 using MailFathom.Domain.Accounts;
@@ -120,7 +121,7 @@ public sealed class HeldSendDispatchHandlerTests
 
         // Act
         var thrown = await Assert.ThrowsAsync<ArgumentException>(
-            () => handler.RunAsync(MailAccountJobPayload.For(Account), TestContext.Current.CancellationToken));
+            () => handler.RunAsync(RunScheduledMailRulesJobPayload.For(Account), TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal("payload", thrown.ParamName);

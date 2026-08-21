@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Spam;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -45,7 +46,7 @@ public sealed class SpamClassificationArrivalsTests
 
         Assert.Equal(JobType.ClassifyEmailSpam, request.JobType);
         Assert.Equal(Account, request.AccountId);
-        Assert.Equal(occurrence, Assert.IsType<EmailOccurrenceJobPayload>(request.Payload).ToOccurrenceId());
+        Assert.Equal(occurrence, Assert.IsType<ClassifyEmailSpamJobPayload>(request.Payload).ToOccurrenceId());
         Assert.Null(request.AvailableAt);
     }
 

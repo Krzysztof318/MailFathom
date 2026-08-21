@@ -7,7 +7,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 
-namespace MailFathom.Application.Jobs;
+namespace MailFathom.Application.Jobs.Payloads;
 
 /// <summary>Points one job at a single stored message occurrence, and at nothing inside the message.</summary>
 /// <remarks>
@@ -27,7 +27,7 @@ namespace MailFathom.Application.Jobs;
 /// identity is <see cref="ToOccurrenceId" />, which validates every component the way the domain types do.
 /// </para>
 /// </remarks>
-public sealed record EmailOccurrenceJobPayload : IJobPayload
+public sealed record ClassifyEmailSpamJobPayload : IJobPayload
 {
     /// <summary>Gets the account whose mailbox the occurrence belongs to.</summary>
     public required string AccountId { get; init; }
@@ -52,11 +52,11 @@ public sealed record EmailOccurrenceJobPayload : IJobPayload
     /// <param name="occurrence">The stable remote occurrence identity.</param>
     /// <returns>The payload naming that occurrence.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrence" /> is <see langword="null" />.</exception>
-    public static EmailOccurrenceJobPayload For(EmailOccurrenceId occurrence)
+    public static ClassifyEmailSpamJobPayload For(EmailOccurrenceId occurrence)
     {
         ArgumentNullException.ThrowIfNull(occurrence);
 
-        return new EmailOccurrenceJobPayload
+        return new ClassifyEmailSpamJobPayload
         {
             AccountId = occurrence.AccountId.Value,
             FolderAlias = occurrence.FolderResolutionId.Alias.Value,

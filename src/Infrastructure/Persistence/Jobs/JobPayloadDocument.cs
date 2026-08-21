@@ -5,6 +5,7 @@
 using System.Text;
 using System.Text.Json;
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Payloads;
 
 namespace MailFathom.Infrastructure.Persistence.Jobs;
 
@@ -49,12 +50,12 @@ internal static class JobPayloadDocument
 
         var document = payload switch
         {
-            EmailOccurrenceJobPayload occurrence =>
-                JsonSerializer.Serialize(occurrence, JobPayloadJsonContext.Default.EmailOccurrenceJobPayload),
-            MailAccountJobPayload account =>
-                JsonSerializer.Serialize(account, JobPayloadJsonContext.Default.MailAccountJobPayload),
-            StoredMailScopeJobPayload scope =>
-                JsonSerializer.Serialize(scope, JobPayloadJsonContext.Default.StoredMailScopeJobPayload),
+            ClassifyEmailSpamJobPayload occurrence =>
+                JsonSerializer.Serialize(occurrence, JobPayloadJsonContext.Default.ClassifyEmailSpamJobPayload),
+            RunScheduledMailRulesJobPayload account =>
+                JsonSerializer.Serialize(account, JobPayloadJsonContext.Default.RunScheduledMailRulesJobPayload),
+            RederiveStoredMailJobPayload scope =>
+                JsonSerializer.Serialize(scope, JobPayloadJsonContext.Default.RederiveStoredMailJobPayload),
             HeldSendJobPayload heldSend =>
                 JsonSerializer.Serialize(heldSend, JobPayloadJsonContext.Default.HeldSendJobPayload),
             RecurringSendJobPayload recurringSend =>
@@ -98,15 +99,15 @@ internal static class JobPayloadDocument
             return jobType switch
             {
                 _ when jobType == JobType.ClassifyEmailSpam =>
-                    JsonSerializer.Deserialize(document, JobPayloadJsonContext.Default.EmailOccurrenceJobPayload)
+                    JsonSerializer.Deserialize(document, JobPayloadJsonContext.Default.ClassifyEmailSpamJobPayload)
                         ?? throw new InvalidOperationException(
                             $"A '{jobType}' job carries a document that describes no payload."),
                 _ when jobType == JobType.RunScheduledMailRules =>
-                    JsonSerializer.Deserialize(document, JobPayloadJsonContext.Default.MailAccountJobPayload)
+                    JsonSerializer.Deserialize(document, JobPayloadJsonContext.Default.RunScheduledMailRulesJobPayload)
                         ?? throw new InvalidOperationException(
                             $"A '{jobType}' job carries a document that describes no payload."),
                 _ when jobType == JobType.RederiveStoredMail =>
-                    JsonSerializer.Deserialize(document, JobPayloadJsonContext.Default.StoredMailScopeJobPayload)
+                    JsonSerializer.Deserialize(document, JobPayloadJsonContext.Default.RederiveStoredMailJobPayload)
                         ?? throw new InvalidOperationException(
                             $"A '{jobType}' job carries a document that describes no payload."),
                 _ when jobType == JobType.DispatchHeldSend =>

@@ -4,6 +4,7 @@
 
 using System.Text.Json.Serialization;
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Payloads;
 
 namespace MailFathom.Infrastructure.Persistence.Jobs;
 
@@ -28,9 +29,9 @@ namespace MailFathom.Infrastructure.Persistence.Jobs;
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     PropertyNameCaseInsensitive = true)]
-[JsonSerializable(typeof(EmailOccurrenceJobPayload))]
+[JsonSerializable(typeof(ClassifyEmailSpamJobPayload))]
 [JsonSerializable(typeof(HeldSendJobPayload))]
 [JsonSerializable(typeof(RecurringSendJobPayload))]
-[JsonSerializable(typeof(MailAccountJobPayload))]
-[JsonSerializable(typeof(StoredMailScopeJobPayload))]
+[JsonSerializable(typeof(RunScheduledMailRulesJobPayload))]
+[JsonSerializable(typeof(RederiveStoredMailJobPayload))]
 internal sealed partial class JobPayloadJsonContext : JsonSerializerContext;

@@ -8,6 +8,7 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
@@ -59,7 +60,7 @@ public sealed class StoredMailRederivationHandlerTests
 
         // Act, Assert
         await Assert.ThrowsAsync<ArgumentException>(() => handler.RunAsync(
-            MailAccountJobPayload.For(WholeAccount.Account),
+            RunScheduledMailRulesJobPayload.For(WholeAccount.Account),
             TestContext.Current.CancellationToken));
     }
 
@@ -248,8 +249,8 @@ public sealed class StoredMailRederivationHandlerTests
         Assert.Equal(EmailsPerPass + 2, this.runs.Find(WholeAccount)!.RederivedEmailCount);
     }
 
-    private static StoredMailScopeJobPayload PayloadOf(StoredMailScope scope) =>
-        StoredMailScopeJobPayload.For(scope.Account, scope.Folder);
+    private static RederiveStoredMailJobPayload PayloadOf(StoredMailScope scope) =>
+        RederiveStoredMailJobPayload.For(scope.Account, scope.Folder);
 
     /// <summary>Ends the scope's run on the first reading taken after the attempt was stopped, and reads through otherwise.</summary>
     /// <remarks>

@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
@@ -237,7 +238,7 @@ public sealed class JobSchedulePassTests
         [
             new StubScheduledJobSource(
             [
-                new ScheduledJob(ScheduleId, MailAccountJobPayload.For(Account), Parse(declaration), Account),
+                new ScheduledJob(ScheduleId, RunScheduledMailRulesJobPayload.For(Account), Parse(declaration), Account),
             ]),
         ],
         this.schedules,

@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Mail.Delivery.Outbox;
 
 namespace MailFathom.Application.Mail.Delivery.Scheduling;

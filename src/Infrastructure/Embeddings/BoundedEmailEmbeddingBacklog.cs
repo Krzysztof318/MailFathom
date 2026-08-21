@@ -4,7 +4,7 @@
 
 using System.Diagnostics.Metrics;
 using System.Threading.Channels;
-using MailFathom.Application.Emails.Embeddings.Generation;
+using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Common.Observability;
 using MailFathom.Domain.Emails;
 

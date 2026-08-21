@@ -5,6 +5,7 @@
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Submission;

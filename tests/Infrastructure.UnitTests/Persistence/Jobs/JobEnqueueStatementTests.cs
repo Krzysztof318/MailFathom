@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -25,7 +26,7 @@ public sealed class JobEnqueueStatementTests
 
     private static JobEnqueueRequest Request => JobEnqueueRequest.Create(
         JobIdempotencyKey.Create("account-a/INBOX#1/12345/4711"),
-        EmailOccurrenceJobPayload.For(EmailOccurrenceId.Create(
+        ClassifyEmailSpamJobPayload.For(EmailOccurrenceId.Create(
             MailAccountId.Create("account-a"),
             new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
             ImapUidValidity.Create(12345),

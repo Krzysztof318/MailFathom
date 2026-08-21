@@ -4,7 +4,7 @@
 
 using System.ComponentModel;
 
-namespace MailFathom.Mcp.Tools.Results;
+namespace MailFathom.Mcp.Tools.Outgoing;
 
 /// <summary>Publishes how far a queued message has got, in words a caller cannot misread as a delivery.</summary>
 /// <remarks>

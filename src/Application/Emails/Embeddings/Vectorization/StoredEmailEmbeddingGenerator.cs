@@ -6,7 +6,7 @@ using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Emails;
 
-namespace MailFathom.Application.Emails.Embeddings.Generation;
+namespace MailFathom.Application.Emails.Embeddings.Vectorization;
 
 /// <summary>Gives every passage of one stored message a vector under one of this instance's generations.</summary>
 /// <remarks>

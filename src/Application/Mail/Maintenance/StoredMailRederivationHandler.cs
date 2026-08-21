@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
 
@@ -78,7 +79,7 @@ public sealed class StoredMailRederivationHandler : IJobHandler
     /// </remarks>
     public async Task RunAsync(IJobPayload payload, CancellationToken cancellationToken)
     {
-        if (payload is not StoredMailScopeJobPayload named)
+        if (payload is not RederiveStoredMailJobPayload named)
         {
             throw new ArgumentException(
                 $"A '{JobType.RederiveStoredMail}' job carries a payload naming one scope of stored mail.",
@@ -175,7 +176,7 @@ public sealed class StoredMailRederivationHandler : IJobHandler
     private async Task HandOnAsync(
         StoredMailRederivationRunId runId,
         StoredMailScope scope,
-        StoredMailScopeJobPayload payload,
+        RederiveStoredMailJobPayload payload,
         IStoredMailRederivationRunScope runScope)
     {
         var next = await this.commitPolicy.CommitAsync(

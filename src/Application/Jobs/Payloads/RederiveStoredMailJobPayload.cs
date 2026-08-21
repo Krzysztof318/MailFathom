@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 
-namespace MailFathom.Application.Jobs;
+namespace MailFathom.Application.Jobs.Payloads;
 
 /// <summary>Points one job at the stored mail of an account, or of one folder of it, and at nothing inside a message.</summary>
 /// <remarks>
@@ -26,7 +26,7 @@ namespace MailFathom.Application.Jobs;
 /// <see cref="ToAccountId" /> and <see cref="ToFolderAlias" />, which validate them the way the domain types do.
 /// </para>
 /// </remarks>
-public sealed record StoredMailScopeJobPayload : IJobPayload
+public sealed record RederiveStoredMailJobPayload : IJobPayload
 {
     /// <summary>Gets the account whose stored mail the work covers.</summary>
     public required string AccountId { get; init; }
@@ -42,7 +42,7 @@ public sealed record StoredMailScopeJobPayload : IJobPayload
     /// <param name="accountId">The account whose stored mail the work covers.</param>
     /// <param name="folderAlias">The one folder of it to cover, or <see langword="null" /> for every folder.</param>
     /// <returns>The payload naming that scope.</returns>
-    public static StoredMailScopeJobPayload For(MailAccountId accountId, MailFolderAlias? folderAlias) => new()
+    public static RederiveStoredMailJobPayload For(MailAccountId accountId, MailFolderAlias? folderAlias) => new()
     {
         AccountId = accountId.Value,
         FolderAlias = folderAlias?.Value,

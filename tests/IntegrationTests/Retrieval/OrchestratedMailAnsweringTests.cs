@@ -5,7 +5,7 @@
 using System.Xml.Linq;
 using MailFathom.AI.Retrieval;
 using MailFathom.Application.Emails.Embeddings;
-using MailFathom.Application.Emails.Embeddings.Generation;
+using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Emails.SearchEmails;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval.AskMail;

@@ -5,8 +5,8 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.AI.Embeddings;
-using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Embeddings.Limits;
+using MailFathom.Application.Emails.Embeddings.Vectorization;
 
 namespace MailFathom.Host.Configuration.Embeddings;
 

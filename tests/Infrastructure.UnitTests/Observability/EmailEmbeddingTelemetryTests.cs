@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Embeddings;
-using MailFathom.Application.Emails.Embeddings.Generation;
+using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
 using MailFathom.TestSupport;

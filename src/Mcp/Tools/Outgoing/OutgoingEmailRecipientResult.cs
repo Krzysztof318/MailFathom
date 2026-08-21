@@ -5,7 +5,7 @@
 using System.ComponentModel;
 using MailFathom.Domain.Delivery;
 
-namespace MailFathom.Mcp.Tools.Results;
+namespace MailFathom.Mcp.Tools.Outgoing;
 
 /// <summary>Publishes what became of one person the caller addressed its message to.</summary>
 /// <remarks>

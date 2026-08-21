@@ -4,6 +4,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MailFathom.Application.Jobs.Payloads;
 
 namespace MailFathom.Application.Jobs;
 
@@ -36,21 +37,23 @@ public readonly record struct JobType
     private JobType(string name) => this.name = name;
 
     /// <summary>Gets the type whose work is deciding whether one stored message occurrence is junk.</summary>
-    /// <remarks>Its payload contract is <see cref="EmailOccurrenceJobPayload" />, which names the occurrence and copies nothing out of the message.</remarks>
+    /// <remarks>Its payload contract is <see cref="ClassifyEmailSpamJobPayload" />, which names the occurrence and copies nothing out of the message.</remarks>
     public static JobType ClassifyEmailSpam { get; } = new("classify-email-spam");
 
     /// <summary>Gets the type whose work is asking for one account's scheduled rules to be run over its whole mailbox.</summary>
     /// <remarks>
-    /// Its payload contract is <see cref="MailAccountJobPayload" />, which names the account and nothing in it. The work
-    /// itself is short: it records that the run is wanted, and the account's own synchronization runs carry the walk.
+    /// Its payload contract is <see cref="RunScheduledMailRulesJobPayload" />, which names the account and nothing in
+    /// it. The work itself is short: it records that the run is wanted, and the account's own synchronization runs
+    /// carry the walk.
     /// </remarks>
     public static JobType RunScheduledMailRules { get; } = new("run-scheduled-mail-rules");
 
     /// <summary>Gets the type whose work is carrying one segment of a re-derivation of a scope's stored mail.</summary>
     /// <remarks>
-    /// Its payload contract is <see cref="StoredMailScopeJobPayload" />, which names the account and the one folder of
-    /// it and nothing inside any message. The work is long: an attempt runs bounded passes over local bytes for as long
-    /// as it is given, and hands whatever it did not reach to a job of its own rather than to the operator's terminal.
+    /// Its payload contract is <see cref="RederiveStoredMailJobPayload" />, which names the account and the one folder
+    /// of it and nothing inside any message. The work is long: an attempt runs bounded passes over local bytes for as
+    /// long as it is given, and hands whatever it did not reach to a job of its own rather than to the operator's
+    /// terminal.
     /// </remarks>
     public static JobType RederiveStoredMail { get; } = new("rederive-stored-mail");
 

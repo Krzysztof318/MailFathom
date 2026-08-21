@@ -3,14 +3,15 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Jobs;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using Xunit;
 
-namespace MailFathom.Application.UnitTests.Jobs;
+namespace MailFathom.Application.UnitTests.Jobs.Payloads;
 
-public sealed class EmailOccurrenceJobPayloadTests
+public sealed class ClassifyEmailSpamJobPayloadTests
 {
     private static EmailOccurrenceId Occurrence => EmailOccurrenceId.Create(
         MailAccountId.Create("account-a"),
@@ -25,7 +26,7 @@ public sealed class EmailOccurrenceJobPayloadTests
     public void ToOccurrenceId_AfterDescribingAnOccurrence_RebuildsTheSameIdentity()
     {
         // Act
-        var payload = EmailOccurrenceJobPayload.For(Occurrence);
+        var payload = ClassifyEmailSpamJobPayload.For(Occurrence);
 
         // Assert
         Assert.Equal(Occurrence, payload.ToOccurrenceId());
@@ -39,7 +40,7 @@ public sealed class EmailOccurrenceJobPayloadTests
     public void JobType_OfAnOccurrencePayload_NamesTheTypeItIsTheContractOf()
     {
         // Act
-        var payload = EmailOccurrenceJobPayload.For(Occurrence);
+        var payload = ClassifyEmailSpamJobPayload.For(Occurrence);
 
         // Assert
         Assert.Equal(JobType.ClassifyEmailSpam, payload.JobType);
@@ -55,16 +56,16 @@ public sealed class EmailOccurrenceJobPayloadTests
         // Arrange
         string[] expected =
         [
-            nameof(EmailOccurrenceJobPayload.AccountId),
-            nameof(EmailOccurrenceJobPayload.FolderAlias),
-            nameof(EmailOccurrenceJobPayload.FolderResolutionGeneration),
-            nameof(EmailOccurrenceJobPayload.UidValidity),
-            nameof(EmailOccurrenceJobPayload.Uid),
-            nameof(EmailOccurrenceJobPayload.JobType),
+            nameof(ClassifyEmailSpamJobPayload.AccountId),
+            nameof(ClassifyEmailSpamJobPayload.FolderAlias),
+            nameof(ClassifyEmailSpamJobPayload.FolderResolutionGeneration),
+            nameof(ClassifyEmailSpamJobPayload.UidValidity),
+            nameof(ClassifyEmailSpamJobPayload.Uid),
+            nameof(ClassifyEmailSpamJobPayload.JobType),
         ];
 
         // Act
-        var declared = typeof(EmailOccurrenceJobPayload)
+        var declared = typeof(ClassifyEmailSpamJobPayload)
             .GetProperties()
             .Select(property => property.Name)
             .Where(name => !string.Equals(name, "EqualityContract", StringComparison.Ordinal))
@@ -78,7 +79,7 @@ public sealed class EmailOccurrenceJobPayloadTests
     public void For_NoOccurrence_IsRefused()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => EmailOccurrenceJobPayload.For(null!));
+        Assert.Throws<ArgumentNullException>(() => ClassifyEmailSpamJobPayload.For(null!));
     }
 
     /// <summary>
@@ -89,7 +90,7 @@ public sealed class EmailOccurrenceJobPayloadTests
     public void ToOccurrenceId_AStoredComponentThatNoLongerValidates_IsRefused()
     {
         // Arrange
-        var payload = EmailOccurrenceJobPayload.For(Occurrence) with { Uid = 0 };
+        var payload = ClassifyEmailSpamJobPayload.For(Occurrence) with { Uid = 0 };
 
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(payload.ToOccurrenceId);

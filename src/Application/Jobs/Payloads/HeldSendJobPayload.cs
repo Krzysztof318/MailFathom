@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 
-namespace MailFathom.Application.Jobs;
+namespace MailFathom.Application.Jobs.Payloads;
 
 /// <summary>Points one job at a message already written down and waiting for the time it was written to leave at.</summary>
 /// <remarks>

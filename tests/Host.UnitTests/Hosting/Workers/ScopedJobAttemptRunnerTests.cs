@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Common.Observability;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -191,7 +192,7 @@ public sealed class ScopedJobAttemptRunnerTests : IDisposable
         JobId.Create(Guid.CreateVersion7(Noon.AddSeconds(uid))),
         JobType.ClassifyEmailSpam,
         JobIdempotencyKey.Create($"account-a/inbox/1/{uid}"),
-        new EmailOccurrenceJobPayload
+        new ClassifyEmailSpamJobPayload
         {
             AccountId = "account-a",
             FolderAlias = "inbox",

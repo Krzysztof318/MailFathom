@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
+using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration.Jobs;
@@ -287,7 +288,7 @@ public sealed class JobWorkerTests
 
         return new ScheduledJob(
             JobScheduleId.Create(identity),
-            MailAccountJobPayload.For(MailAccountId.Create("work")),
+            RunScheduledMailRulesJobPayload.For(MailAccountId.Create("work")),
             recurrence!);
     }
 
@@ -295,7 +296,7 @@ public sealed class JobWorkerTests
         JobId.Create(Guid.CreateVersion7(Noon.AddSeconds(index))),
         JobType.ClassifyEmailSpam,
         JobIdempotencyKey.Create($"account-a/inbox/1/{index}"),
-        new EmailOccurrenceJobPayload
+        new ClassifyEmailSpamJobPayload
         {
             AccountId = "account-a",
             FolderAlias = "inbox",

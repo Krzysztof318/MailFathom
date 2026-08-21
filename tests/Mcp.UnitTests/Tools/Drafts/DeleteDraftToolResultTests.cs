@@ -5,6 +5,7 @@
 using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Failures;
+using MailFathom.Mcp.Tools.Drafts;
 using MailFathom.Mcp.Tools.Results;
 using Xunit;
 
