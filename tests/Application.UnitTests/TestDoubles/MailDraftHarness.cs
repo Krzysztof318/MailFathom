@@ -7,6 +7,7 @@ using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Drafts;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
@@ -193,9 +194,14 @@ internal sealed class MailDraftHarness
             this.transportSecurityPolicies);
 
         this.Filer = new MailDraftFiler(
+            new MailboxCopyAppender(
+                this.writeSessions,
+                destinations,
+                this.Contents,
+                this.transportSecurityPolicies,
+                this.clock),
             this.writeSessions,
             destinations,
-            this.Contents,
             this.Drafts,
             this.transportSecurityPolicies,
             this.commitPolicy,

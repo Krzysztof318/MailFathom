@@ -224,6 +224,7 @@ public sealed class OutboxDeliveryWorkerTests
             collection.AddScoped<MailFolderReferenceResolver>();
             collection.AddScoped<MailFolderResolver>();
             collection.AddScoped<MailboxDestinationResolver>();
+            collection.AddScoped<MailboxCopyAppender>();
             collection.AddScoped<OutgoingMailFiler>();
             collection.AddScoped<OutgoingMailFilingPass>();
 

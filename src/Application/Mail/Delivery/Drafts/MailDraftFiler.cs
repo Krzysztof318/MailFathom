@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
-using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
@@ -45,43 +45,43 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// </remarks>
 public sealed class MailDraftFiler
 {
+    private readonly MailboxCopyAppender appends;
     private readonly IMailboxWriteSessionFactory writeSessions;
     private readonly MailboxDestinationResolver destinations;
-    private readonly IEmailContentStore contentStore;
     private readonly IMailDraftStore drafts;
     private readonly IMailTransportSecurityPolicyReader transportSecurityPolicies;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly TimeProvider timeProvider;
 
-    /// <summary>Initializes the filer from the session it appends through and the record it writes each copy onto.</summary>
-    /// <param name="writeSessions">Opens the one session able to change a mailbox.</param>
+    /// <summary>Initializes the filer from the append it files through and the record it writes each copy onto.</summary>
+    /// <param name="appends">Puts each revision into the drafts folder, in the order that keeps it one copy.</param>
+    /// <param name="writeSessions">Opens the one session able to change a mailbox, which a removal needs of its own.</param>
     /// <param name="destinations">Turns the drafts role into the folder of this account it means.</param>
-    /// <param name="contentStore">Holds the stored MIME each revision is appended from.</param>
     /// <param name="drafts">Keeps the durable account of every draft and every copy of one.</param>
     /// <param name="transportSecurityPolicies">Supplies the connection and authentication policy the commands obey.</param>
     /// <param name="commitPolicy">Commits each movement of the draft.</param>
-    /// <param name="timeProvider">Stamps the copy's internal date and everything the record notes.</param>
+    /// <param name="timeProvider">Stamps everything the record notes.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public MailDraftFiler(
+        MailboxCopyAppender appends,
         IMailboxWriteSessionFactory writeSessions,
         MailboxDestinationResolver destinations,
-        IEmailContentStore contentStore,
         IMailDraftStore drafts,
         IMailTransportSecurityPolicyReader transportSecurityPolicies,
         OptimisticConcurrencyRetryPolicy commitPolicy,
         TimeProvider timeProvider)
     {
+        ArgumentNullException.ThrowIfNull(appends);
         ArgumentNullException.ThrowIfNull(writeSessions);
         ArgumentNullException.ThrowIfNull(destinations);
-        ArgumentNullException.ThrowIfNull(contentStore);
         ArgumentNullException.ThrowIfNull(drafts);
         ArgumentNullException.ThrowIfNull(transportSecurityPolicies);
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
+        this.appends = appends;
         this.writeSessions = writeSessions;
         this.destinations = destinations;
-        this.contentStore = contentStore;
         this.drafts = drafts;
         this.transportSecurityPolicies = transportSecurityPolicies;
         this.commitPolicy = commitPolicy;
@@ -118,7 +118,10 @@ public sealed class MailDraftFiler
         }
         catch (Exception failure)
         {
-            return await this.RecordFailureAsync(draft, FailureCodeOf(failure), MailDraftFilingOutcome.Failed);
+            return await this.RecordFailureAsync(
+                draft,
+                MailboxCopyAppender.FailureCodeOf(failure),
+                MailDraftFilingOutcome.Failed);
         }
     }
 
@@ -162,82 +165,38 @@ public sealed class MailDraftFiler
             : appended;
     }
 
-    /// <summary>Appends the stored message as a new copy in the drafts folder, and confirms what the server said.</summary>
-    /// <remarks>
-    /// Everything that can fail without reaching a mail server happens before the issued write, which is what keeps an
-    /// ordinary connection failure repeatable. Past that write the append may already be in the folder, so every ending
-    /// is recorded as an outcome nobody can settle rather than raised into a retry that would append a second copy.
-    /// </remarks>
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Past the issued write the append may already have reached the folder, so every way it can end has to be recorded as an outcome nobody can settle rather than raised into a retry that would leave a second draft in the owner's folder.")]
+    /// <summary>Appends the stored message as a new copy in the drafts folder, moving the draft as the append passes.</summary>
     private async Task<MailDraftFilingResult> AppendCurrentRevisionAsync(
         MailDraftRecord draft,
         CancellationToken cancellationToken)
     {
-        if (await this.ResolveDraftsFolderAsync(draft, cancellationToken) is not { } destination)
-        {
-            return await this.RecordFailureAsync(
-                draft,
-                MailFathomErrorCode.OutgoingEmailFilingDestinationUnavailable,
-                MailDraftFilingOutcome.DestinationUnavailable);
-        }
-
-        var content = await this.contentStore.FindMailDraftContentAsync(draft.Id, cancellationToken);
-
-        if (content is null || content.RawMime.IsEmpty)
-        {
-            // The record and its message are written in one transaction, so a draft without one describes a revision
-            // that can never be appended rather than a message still being stored.
-            return await this.RecordFailureAsync(
-                draft,
-                MailFathomErrorCode.OutgoingEmailFilingFailedUnexpectedly,
-                MailDraftFilingOutcome.Failed);
-        }
-
-        var transportSecurityPolicy = this.transportSecurityPolicies.GetPolicy(draft.AccountId);
-
-        await using var session = await this.writeSessions.OpenForWritingAsync(
+        var appended = await this.appends.AppendAsync(
             draft.AccountId,
-            destination.Binding,
-            transportSecurityPolicy,
-            cancellationToken);
-
-        await this.commitPolicy.CommitAsync(
-            (persistenceSession, token) => this.drafts.RecordAppendIssuedAsync(
-                persistenceSession,
-                draft.Id,
-                destination.Binding,
-                this.timeProvider.GetUtcNow(),
+            OutgoingMailFiling.Draft,
+            MailboxCopySource.MailDraft(draft.Id),
+            (binding, token) => this.commitPolicy.CommitAsync(
+                (persistenceSession, commitToken) => this.drafts.RecordAppendIssuedAsync(
+                    persistenceSession,
+                    draft.Id,
+                    binding,
+                    this.timeProvider.GetUtcNow(),
+                    commitToken),
                 token),
-            cancellationToken);
-
-        try
-        {
-            var copy = await session.AppendAsync(
-                content.RawMime,
-                OutgoingMailFiling.Draft.Flags,
-                this.timeProvider.GetUtcNow(),
-                cancellationToken);
-
-            // Committed outside the caller's cancellation, because the append has already happened on somebody else's
-            // server and a shutdown that abandoned this write would leave the draft saying the outcome is unknown for
-            // a copy the server named exactly.
-            await this.commitPolicy.CommitAsync(
-                (persistenceSession, token) => this.drafts.RecordAppendConfirmedAsync(
+            copy => this.commitPolicy.CommitAsync(
+                (persistenceSession, commitToken) => this.drafts.RecordAppendConfirmedAsync(
                     persistenceSession,
                     draft.Id,
                     copy,
-                    token),
-                CancellationToken.None);
+                    commitToken),
+                CancellationToken.None),
+            cancellationToken);
 
+        if (appended.Failure is not { } failure)
+        {
             return Result(draft, MailDraftFilingOutcome.Filed);
         }
-        catch (Exception failure)
-        {
-            return await this.RecordFailureAsync(
-                draft,
-                FailureCodeOf(failure),
-                MailDraftFilingOutcome.OutcomeUnknown);
-        }
+
+        return await this.RecordFailureAsync(draft, failure, FilingOutcomeOf(appended.Outcome));
     }
 
     /// <summary>Takes every copy a revision replaced back out of the folder, leaving the current one standing.</summary>
@@ -443,15 +402,16 @@ public sealed class MailDraftFiler
         return Result(draft, outcome, failure);
     }
 
-    /// <summary>Names the code that stands for whatever ended an attempt.</summary>
+    /// <summary>Reads what the append reported as what it means for the draft the copy belongs to.</summary>
     /// <remarks>
-    /// A first-party failure already carries the code an operator looks up, so it is kept. What is left is genuinely
-    /// unaccounted for and says so rather than borrowing a code that would mislead.
+    /// <see cref="MailboxCopyAppendOutcome.Appended" /> never reaches here, because a result carrying no failure is the
+    /// copy that was filed. What is left is a revision that could not be appended, which the draft outlives.
     /// </remarks>
-    private static MailFathomErrorCode FailureCodeOf(Exception failure) => failure switch
+    private static MailDraftFilingOutcome FilingOutcomeOf(MailboxCopyAppendOutcome outcome) => outcome switch
     {
-        MailFathomException named => named.ErrorCode,
-        _ => MailFathomErrorCode.OutgoingEmailFilingFailedUnexpectedly,
+        MailboxCopyAppendOutcome.DestinationUnavailable => MailDraftFilingOutcome.DestinationUnavailable,
+        MailboxCopyAppendOutcome.OutcomeUnknown => MailDraftFilingOutcome.OutcomeUnknown,
+        _ => MailDraftFilingOutcome.Failed,
     };
 
     private static MailDraftFilingResult Result(
