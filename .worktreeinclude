@@ -4,10 +4,14 @@
 .env
 .env.local
 
-# The personal instructions Claude Code loads after CLAUDE.md, where a fork's contributor states which role
-# their sessions run in. Gitignored, so it otherwise exists only in the checkout it was written in, which is
-# never the worktree the work happens in.
-CLAUDE.local.md
+# The personal instructions somebody writes for their own agent sessions: CLAUDE.local.md at the root, which
+# Claude Code loads after CLAUDE.md and where a fork's contributor states which role their sessions run in, and
+# whatever a second stack keeps beside its own work. Gitignored, so one otherwise exists only in the checkout it
+# was written in, which is never the worktree the work happens in. Matched by suffix rather than by that one
+# name because .gitignore covers the suffix too, and only paths that are also gitignored are copied: the pattern
+# can be exactly as wide as the ignore rule it mirrors, so a local instruction file is carried into a worktree
+# because of what it is rather than because somebody remembered to list it here.
+*.local.md
 
 # Claude Code already resolves .claude/settings.local.json to the main checkout, so a worktree sees
 # the same permissions without this line. It is listed anyway so the file is present on disk for
