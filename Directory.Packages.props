@@ -34,6 +34,11 @@
          THIRD_PARTY_LICENSES.md beside it. -->
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageVersion Include="coverlet.MTP" Version="10.0.1" />
+    <!-- The generator behind the property tests, which state an invariant once and let generated inputs hunt for the
+         counterexample an example test cannot reach. It carries no dependency of its own and couples to no test
+         framework — a property is an ordinary [Fact] calling into it — so it costs one assembly in three unit-test
+         projects and changes nothing about how the suite is discovered or run. -->
+    <PackageVersion Include="CsCheck" Version="4.8.0" />
     <!-- Brings AngleSharp 1.6.0 and AngleSharp.Css 1.0.0 transitively, both MIT. The 9.1 line replaced the exact
          AngleSharp 0.17.1 pin the 9.0 line carried, so nothing here forecloses referencing AngleSharp directly, and
          AngleSharp 1.6.0 publishes a net10.0 target of its own. -->

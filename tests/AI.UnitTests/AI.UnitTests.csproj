@@ -2,12 +2,18 @@
   <ItemGroup>
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="xunit.v3.mtp-v2" />
+
+    <!-- The generator the property tests state their invariants over, reached through PropertyCheck below. -->
+    <PackageReference Include="CsCheck" />
   </ItemGroup>
 
   <ItemGroup>
     <Compile Include="..\shared\AdversarialMailCorpus.cs" Link="AdversarialMailCorpus.cs" />
     <Compile Include="..\shared\AdversarialMessage.cs" Link="AdversarialMessage.cs" />
     <Compile Include="..\shared\ExceptionHierarchyAssertion.cs" Link="ExceptionHierarchyAssertion.cs" />
+    <!-- Every property in the repository is sampled through one set of settings, so the wrapper that fixes them is
+         linked into each suite holding a property rather than restated per project. -->
+    <Compile Include="..\shared\PropertyCheck.cs" Link="PropertyCheck.cs" />
     <Compile Include="..\shared\FakeHttpMessageHandler.cs" Link="FakeHttpMessageHandler.cs" />
     <Compile Include="..\shared\RecordedHttpRequest.cs" Link="RecordedHttpRequest.cs" />
     <Compile Include="..\shared\RecordingLoggerProvider.cs" Link="RecordingLoggerProvider.cs" />
