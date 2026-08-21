@@ -105,11 +105,11 @@
     <OutputType>Exe</OutputType>
     <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
     <IsTestProject>true</IsTestProject>
-    <!-- The scaffold suite carries no test yet. Exit code 8 is what the platform reports when a run discovered
-         none, and the backend's own scaffold suites ignore it for the same reason. -->
+    <!-- Exit code 8 is what the platform reports when a run discovers no test, which is what carries a test project
+         from the commit that creates it to the commit that fills it. The backend's own suites ignore it for the same
+         reason. -->
     <TestingPlatformCommandLineArguments>$(TestingPlatformCommandLineArguments) --ignore-exit-code 8</TestingPlatformCommandLineArguments>
-    <!-- Test names use underscores to encode the member, scenario, and expected behavior, and a test states what it
-         asserts in that name rather than in an XML comment. -->
+    <!-- Test names use underscores to encode the member, scenario, and expected behavior. -->
     <NoWarn>$(NoWarn);CA1707;CS1591</NoWarn>
   </PropertyGroup>
 
