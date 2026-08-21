@@ -283,6 +283,29 @@ jobs:
           path: artifacts/benchmarks
           if-no-files-found: warn
 
+  # The second diagnostic on this channel, and it is read on the same terms as the benchmarks above: nothing waits for
+  # it, nothing compares two runs automatically, and a failure is swallowed rather than published as a verdict about the
+  # commit. What it answers is the question line coverage stopped answering — coverage says a line ran, and this says
+  # whether anything asserted its result — and that answer is worth having only while nobody has to reach it, which is
+  # why it is here and not in front of a merge. `docs/operations/agent-workflow.md` § *The mutation score is read, never
+  # enforced* holds the rest.
+  #
+  # It waits for `verify` for the reason every other job here does: a score measured against a commit whose unit tests
+  # had not run would describe a suite nobody knows the state of. It shares the publication condition for a reason of
+  # its own: the score is a property of the revision, so a night on which `main` has not moved has the previous run's
+  # report already describing the same tree, and measuring it again would spend an hour to reprint it.
+  mutation-score:
+    name: Mutation score
+    needs:
+      - decide
+      - verify
+    if: needs.decide.outputs.publish == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/mutation-score.yml
+    with:
+      ref: ${{ needs.decide.outputs.revision }}
+
   publish:
     name: Publish
     needs:

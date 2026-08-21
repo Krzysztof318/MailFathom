@@ -271,6 +271,63 @@ a repository state to fix rather than a verdict to guess at. `CI` is
 unconditional either way, which is what makes this an earlier verdict withheld
 rather than a verdict lost.
 
+### The mutation score is read, never enforced
+
+Coverage stopped discriminating. It has sat above 95% for months, and what it
+reports is that a line ran rather than that anything asserted its result — so a
+test that executes a branch and checks nothing raises the figure exactly as far as
+one that pins the answer down. Mutation testing asks the question coverage stopped
+answering: it changes the production code and reports which changes no test
+noticed. A surviving mutant names a line whose behaviour nothing depends on, which
+is where the next test is worth writing.
+
+That answer is diagnostic, and the whole point of it is lost if it becomes a
+number to reach. So nothing gates on it, in four separate places rather than one:
+`scripts/mutation-score.sh` passes `--break-at 0`, so the score never decides an
+exit status; `mutation-score.yml` sets `continue-on-error`, so nothing else the
+run does decides one either; neither verification script calls the script at all;
+and no pull-request workflow does either. It runs on the nightly channel —
+`nightly.yml` calls `mutation-score.yml`, which calls the script — where tens of
+minutes of runtime and a preview test runner's false positives cost nobody a
+merge. Read the score, act on what survived, and never enforce either. It is the
+same arrangement the hot-path benchmarks sit under one job above it, for the same
+reason `tests/AGENTS.md` § *Cost claims* gives: a measurement worth watching
+across releases is worth nothing as a threshold.
+
+Two projects and no others. `Domain` and `Application` hold the invariants and the
+use cases, which is where a surviving mutant names a missing assertion; the
+adapters under `Infrastructure`, `Mcp`, `Host`, `AI`, and `Cli` would spend the
+runtime generating mutants against a database, a mail server, or a protocol shape,
+and nobody would act on the report. `--project` states that per run rather than
+leaving it to whatever a test project happens to reference.
+
+The runner is Microsoft Testing Platform rather than Stryker's default. That is
+not a preference: `xunit.v3.mtp-v2` carries no VSTest adapter, so the default
+runner finds no tests here at all. Stryker calls its MTP runner preview and says
+so on every run, which is the second reason this is a nightly report and not a
+gate.
+
+Nothing turns the job red, including Stryker failing to produce a report at all.
+That is a diagnostic that did not come out rather than a fault in the commit, and
+a nightly whose image published beside a red job says the opposite: the report is
+missing from the run that should carry it, which is where it is legible.
+
+Each run leaves `mutation-report.html` on the workflow run under
+`mutation-report-<project>`, which is the form the next unit of test work is
+chosen in: every surviving mutant beside the source line it replaced. The step
+summary carries the score and the same survivors counted by mutator, so the shape
+of what the suite is missing is legible without downloading anything. A mutant
+Stryker reports as `NoCoverage` is a survivor no test even reached and counts
+against the score beside `Survived`; one withdrawn as a compile error scores
+nothing either way.
+
+The same script is what to run locally against a suite being worked on, and it
+takes the projects to measure:
+
+```bash
+bash scripts/mutation-score.sh Domain
+```
+
 ## Which remote is the base
 
 Every script above needs one answer: which remote is MailFathom. In the owner's

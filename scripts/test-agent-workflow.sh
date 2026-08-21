@@ -6522,6 +6522,68 @@ no_channel_builds_an_artifact_before_the_commit_has_verified() {
   fi
 }
 
+# The mutation score answers what coverage stopped answering, and it is worth that only while nobody
+# has to reach it. Every way it could quietly become a gate is checked here rather than left to
+# whoever next edits one of the three files it lives in: the runtime is tens of minutes, the test
+# runner it needs is preview, and a score somebody must raise stops being evidence about the suite and
+# becomes a number. `docs/operations/agent-workflow.md` § *The mutation score is read, never enforced*
+# carries the reasoning.
+the_mutation_score_is_reported_and_never_gated() {
+  local workflow_directory="$source_repository_root/.github/workflows"
+  local script="$source_repository_root/scripts/mutation-score.sh"
+  local failures=''
+  local offenders
+  local measured
+
+  [[ "$(extract_workflow_job_uses "$workflow_directory/nightly.yml" mutation-score)" == './.github/workflows/mutation-score.yml' ]] ||
+    failures+='nightly.yml: mutation-score does not call mutation-score.yml. '
+
+  # The one flag deciding whether a score can fail a run. Stryker already defaults it to 0, which is
+  # exactly why the explicit value is asserted: a default nobody wrote down is not a decision anybody
+  # reads, and it moves when the tool moves.
+  grep -qE '^[[:space:]]+--break-at 0( \\)?$' "$script" ||
+    failures+='scripts/mutation-score.sh does not pass --break-at 0, so the score can decide an exit status. '
+
+  # The flag covers the score and nothing else, so everything the run can still fail on is covered here instead — a
+  # preview test runner that crashes, a report that is never written. The hot-path benchmarks one job above are swallowed
+  # the same way and for the reason `tests/AGENTS.md` § *Cost claims* gives.
+  grep -qE '^    continue-on-error: true$' "$workflow_directory/mutation-score.yml" ||
+    failures+='mutation-score.yml does not swallow its own failures, so a broken diagnostic reads as a red nightly. '
+
+  offenders="$(grep -l 'mutation-score' \
+    "$source_repository_root/scripts/verify-fast.sh" \
+    "$source_repository_root/scripts/verify-full.sh" || true)"
+
+  if [[ -n "$offenders" ]]; then
+    failures+="these verification scripts reach the mutation score: $(tr '\n' ' ' <<< "$offenders"). "
+  fi
+
+  # The nightly and the workflow it calls, and nothing else. A pull request reaching this would put
+  # the runtime and the preview runner's false positives in front of a merge.
+  offenders="$(grep -rl 'mutation-score' "$workflow_directory" |
+    grep -vE '/(nightly|mutation-score)\.yml$' || true)"
+
+  if [[ -n "$offenders" ]]; then
+    failures+="these workflows reach the mutation score outside the nightly channel: $(tr '\n' ' ' <<< "$offenders"). "
+  fi
+
+  # Two projects, because a surviving mutant names a missing assertion in the invariants and the use
+  # cases and an adapter detail nobody would act on anywhere else.
+  measured="$(awk '
+    /^        project:$/ { in_matrix = 1; next }
+    in_matrix && /^          - / { printf "%s ", $2; next }
+    in_matrix { exit }
+  ' "$workflow_directory/mutation-score.yml")"
+
+  [[ "$measured" == 'Domain Application ' ]] ||
+    failures+="mutation-score.yml measures '${measured}' rather than Domain and Application. "
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
 # Calling an AI provider is what costs MailFathom money per unit of mail, and ADR 0006 makes a paid
 # call never the default — in the running service and in verification alike. One switch covers every
 # provider the suite reaches, embeddings and chat alike, so a provider added later cannot arrive with
@@ -7156,6 +7218,7 @@ run_test every_write_scope_is_one_the_policy_records
 run_test every_checkout_refuses_to_persist_credentials
 run_test the_release_restores_the_annotated_tag_before_asserting_it
 run_test no_channel_builds_an_artifact_before_the_commit_has_verified
+run_test the_mutation_score_is_reported_and_never_gated
 run_test a_paid_provider_run_is_never_the_default
 run_test only_the_reviewer_workflow_uses_pull_request_target
 run_test a_comment_never_cancels_a_review_in_flight

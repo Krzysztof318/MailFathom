@@ -1,0 +1,101 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+name: Mutation score
+
+# A diagnostic, and deliberately nothing else. Line coverage has sat above 95% for months, so it no longer
+# discriminates: it says a line ran rather than that anything asserted its result. Mutation testing answers the question
+# coverage stopped answering — it changes the production code and reports which changes no test noticed — and that
+# answer says where the next test is worth writing.
+#
+# It belongs on the nightly channel and on no pull request. The runtime is tens of minutes and the preview runner's
+# false positives would cost more than they return in front of a merge, and a gate on a score would turn a diagnostic
+# into a number to game.
+#
+# Nothing it produces can fail anything, which is two separate mechanisms because there are two separate ways a
+# diagnostic becomes a verdict. `scripts/mutation-score.sh` carries `--break-at 0`, so no score decides an exit status;
+# `continue-on-error` below swallows everything else, so a preview test runner that crashes reports a missing diagnostic
+# rather than a red nightly beside a published image. `tests/AGENTS.md` § *Cost claims* states the same rule for the
+# benchmarks this job sits beside, and this is the same kind of measurement on the same channel.
+#
+# Nothing waits for this job either. It is called for its report, the two projects run as separate jobs so one failing
+# still reports the other, and the nightly's image, schema artifact, and binaries neither wait for it nor read it.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'The commit SHA to measure. Resolved by the caller, so what is scored is never re-resolved from a moving ref.'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: Mutation score (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    # The two projects are independent measurements of independent code, so one failing says nothing about the other and
+    # must not cancel it.
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - Domain
+          - Application
+    # A bound on a preview test runner rather than an expectation. A full pass over either project is tens of minutes;
+    # a run still going after three hours has stopped measuring anything.
+    timeout-minutes: 180
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - name: Check out the commit being measured
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # The same cache and the same key as the verification workflow, for the same reason.
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
+
+      # Stryker builds the test project itself, and a build implies a restore that would resolve the closure afresh.
+      # Restoring the solution in locked mode first makes that implicit restore a no-op against the committed lock files
+      # rather than a second opinion about what the pins mean.
+      - name: Restore dependencies
+        run: dotnet restore MailFathom.slnx --locked-mode
+
+      - name: Restore local tools
+        run: dotnet tool restore
+
+      - name: Measure the mutation score
+        env:
+          PROJECT: ${{ matrix.project }}
+        run: |
+          set -euo pipefail
+
+          # The script writes Stryker's own output to standard error and the summary to standard output, so the step
+          # summary carries the score and the surviving mutants by mutator without a log wrapped around them.
+          bash scripts/mutation-score.sh "$PROJECT" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # The HTML report is what the score is read from: it lists every surviving mutant beside the source line it
+      # replaced, which is the form the next unit of test work is chosen in.
+      - name: Upload the mutation report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutation-report-${{ matrix.project }}
+          path: artifacts/mutation/${{ matrix.project }}/reports/
+          if-no-files-found: ignore
