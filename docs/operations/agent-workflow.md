@@ -717,15 +717,25 @@ contributor who has not answered has already been asked, so asking again on ever
 be a notification storm; and confining it to those two events is also what keeps two pushes
 seconds apart from each reading zero prior requests and both posting one.
 
-Two properties are the whole of why this is safe to run with the App's token, and both are
-asserted by `only_the_recorded_workflows_use_pull_request_target` rather than left to this
-page: it checks nothing out, and the one action it reaches is the token mint. A step added
-here that clones the head, restores it, or runs anything out of it hands the token to
-whoever opened the pull request, and the test fails before a reviewer has to notice.
+One property is the whole of why this is safe to run with the App's token — nothing from the
+contribution is ever fetched or executed — and `only_the_recorded_workflows_use_pull_request_target`
+asserts it three ways rather than leaving it to this page: the workflow checks nothing out,
+the one action it reaches is the token mint, and no step of it runs a command that fetches
+content. The third is there because the first two read `uses:` lines alone, and a step that
+shells out to a version-control, download, or CLI command to pull the fork's head adds no
+action reference for them to catch. A step added here that clones the head, restores it, or
+runs anything out of it hands the token to whoever opened the pull request, and the test
+fails before a reviewer has to notice.
 
 The register is appended to by compare-and-swap — the ref is updated with `force=false`, so
 a register that moved under a run produces a rejected call and the run reads again, five
-bounded attempts with jittered backoff. A concurrency group was rejected for the reason it
+bounded attempts with jittered backoff. Only that rejection is read again for: the call's
+own output is kept rather than discarded, and a refusal that is not the non-fast-forward —
+a permission the App does not hold, a ruleset that does not admit it, a branch that is gone
+— ends the step immediately with the message the API sent, because retrying a permanent
+refusal spends the budget proving it four more times while the reason stays invisible. The
+`license/cla` status tells the two apart, and tells both apart from an agreement whose
+version line is missing. A concurrency group was rejected for the reason it
 looks right: with `cancel-in-progress: false` the platform keeps one run queued and cancels
 older pending ones, so two acceptances in the same minute would lose one silently. The
 branch carries a ruleset of its own admitting the `Fathom license` App and nothing else,

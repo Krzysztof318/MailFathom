@@ -132,6 +132,11 @@ jobs:
             | sed -n 's/^\*\*Version \(.*\)\*\*$/\1/p' | head -n 1)
 
           if [ -z "$agreement_version" ]; then
+            # Written before the failure so the status step can name the file that broke. The
+            # register is reachable and the contributor owes nothing here: what is wrong is CLA.md
+            # itself, and a status blaming the register would send whoever reads it to the one place
+            # that is working.
+            printf 'version=error\n' >> "$GITHUB_OUTPUT"
             echo "::error file=CLA.md::CLA.md carries no '**Version x.y**' line, so a signature could not name what it accepted"
             exit 1
           fi
@@ -263,22 +268,38 @@ jobs:
               '{message: $message, tree: $tree, parents: [$parent]}' \
               | gh api "repos/$REPOSITORY/git/commits" --input - --jq '.sha')
 
-            if gh api -X PATCH "repos/$REPOSITORY/git/refs/heads/cla-signatures" \
-                 -F sha="$commit_sha" -F force=false >/dev/null 2>&1; then
+            # `force=false` makes this the compare-and-swap: a register that moved under the run is
+            # refused as a non-fast-forward, which is the one outcome worth reading again for. Every
+            # other refusal is permanent — a missing `Contents` grant, a ruleset that does not admit
+            # this App, a branch that is gone — and retrying one spends the whole budget proving it
+            # four more times while the reason stays invisible. So the call's own output is kept
+            # rather than discarded, the HTTP status decides which of the two happened, and anything
+            # that is not the conflict stops here with the message the API actually sent.
+            if patch_error=$(gh api -X PATCH "repos/$REPOSITORY/git/refs/heads/cla-signatures" \
+                 -F sha="$commit_sha" -F force=false 2>&1 >/dev/null); then
               printf 'Recorded %s accepting agreement %s as %s\n' "$LOGIN" "$AGREEMENT_VERSION" "$commit_sha"
               printf 'recorded=true\n' >> "$GITHUB_OUTPUT"
               exit 0
             fi
 
-            printf 'The register moved under attempt %s; reading it again.\n' "$attempt"
-            sleep $(( attempt + (RANDOM % 3) ))
-            attempt=$(( attempt + 1 ))
+            case "$patch_error" in
+              *'HTTP 422'*)
+                printf 'The register moved under attempt %s; reading it again.\n' "$attempt"
+                sleep $(( attempt + (RANDOM % 3) ))
+                attempt=$(( attempt + 1 ))
+                ;;
+              *)
+                printf 'recorded=error\n' >> "$GITHUB_OUTPUT"
+                printf '::error::The register refused the write for a reason retrying cannot fix: %s\n' "$patch_error"
+                exit 1
+                ;;
+            esac
           done
 
-          # The acceptance was valid and the register would not take it. That is not the same outcome
-          # as never having accepted, and the status step needs to be able to tell them apart — so
-          # the outcome is written before the failure rather than left absent by it.
-          printf 'recorded=error\n' >> "$GITHUB_OUTPUT"
+          # The acceptance was valid and the register kept moving under every attempt. That is not
+          # the same outcome as never having accepted, and it is not the same as the refusal above
+          # either, so the status step is given a value it can tell all three apart by.
+          printf 'recorded=conflict\n' >> "$GITHUB_OUTPUT"
           echo '::error::The register could not be updated after five attempts'
           exit 1
 
@@ -294,6 +315,7 @@ jobs:
           HEAD_SHA: ${{ steps.subject.outputs.head_sha }}
           EXEMPT: ${{ steps.subject.outputs.exempt }}
           SIGNED: ${{ steps.register.outputs.signed }}
+          VERSION: ${{ steps.register.outputs.version }}
           RECORDED: ${{ steps.record.outputs.recorded }}
           NUMBER: ${{ steps.subject.outputs.number }}
         run: |
@@ -305,13 +327,22 @@ jobs:
           elif [ "$SIGNED" = 'true' ] || [ "$RECORDED" = 'true' ]; then
             state=success
             description='The contributor licence agreement has been accepted'
-          elif [ "$RECORDED" = 'error' ]; then
-            # A valid acceptance the register refused. Same reasoning as the branch below and the
-            # opposite side of it: telling a contributor who did accept that they have not is worse
-            # than telling them the machinery broke, because only one of those two sends them to do
-            # something that cannot help.
+          elif [ "$RECORDED" = 'conflict' ]; then
+            # A valid acceptance the register kept moving under. Same reasoning as the two branches
+            # below and the opposite side of them: telling a contributor who did accept that they
+            # have not is worse than telling them the machinery broke, because only one of those two
+            # sends them to do something that cannot help.
             state=error
-            description='The acceptance was read but could not be recorded; the register rejected the write'
+            description='The acceptance was read but the register kept moving under the write; re-running the job records it'
+          elif [ "$RECORDED" = 'error' ]; then
+            state=error
+            description='The acceptance was read but the register refused the write; the workflow log names the reason'
+          elif [ "$VERSION" = 'error' ]; then
+            # The register is fine and so is the contributor: CLA.md itself carries no version line,
+            # so a signature could not name what it accepted. It is a defect in the agreement rather
+            # than in the machinery around it, and the branch below would name the wrong file.
+            state=error
+            description='The licence check could not run; CLA.md carries no version line to accept'
           elif [ -z "$SIGNED" ]; then
             # The register step neither ran nor answered, which is this repository being broken
             # rather than the contributor owing anything. `error` rather than `failure` so the

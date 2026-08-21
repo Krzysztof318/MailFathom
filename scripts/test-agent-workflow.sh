@@ -6656,13 +6656,19 @@ a_paid_provider_run_is_never_the_default() {
 # and this is what stops it appearing unnoticed.
 #
 # The licence workflow's whole argument is that nothing from the contribution is ever executed, so
-# the two assertions below carry that property rather than leaving it to the prose: it checks
-# nothing out, and the one action it reaches is the token mint. Either would be the first step of
-# handing the App's token to whoever opened the pull request.
+# the three assertions below carry that property rather than leaving it to the prose: it checks
+# nothing out, the one action it reaches is the token mint, and no step of it runs a command that
+# fetches content. Each would be the first step of handing the App's token to whoever opened the
+# pull request, and the third is the one an added `uses:` line would not announce — a `run:` step
+# shelling out to `git`, `curl`, `wget`, or `gh` against the fork introduces no action reference at
+# all, so the first two assertions would both pass over it. The pattern reads the whole file with
+# its comment lines removed, which is why the prose here names those commands rather than using
+# them: a comment writing `git fetch` as an example would fail the test it is explaining.
 only_the_recorded_workflows_use_pull_request_target() {
   local using_workflows
   local licence_workflow="$source_repository_root/.github/workflows/contributor-licence.yml"
   local reached_actions
+  local fetching_commands
   local failures=''
 
   using_workflows="$(grep -rlE '^[[:space:]]*pull_request_target:' "$source_repository_root/.github/workflows" |
@@ -6682,7 +6688,15 @@ only_the_recorded_workflows_use_pull_request_target() {
     sort -u | tr '\n' ' ')"
 
   if [[ "$reached_actions" != 'actions/create-github-app-token ' ]]; then
-    failures+="contributor-licence.yml reaches actions beyond the token mint: $reached_actions"
+    failures+="contributor-licence.yml reaches actions beyond the token mint: $reached_actions "
+  fi
+
+  fetching_commands="$(grep -vE '^[[:space:]]*#' "$licence_workflow" |
+    grep -nE "(^|[^[:alnum:]_/-])(git|curl|wget)[[:space:]]|gh[[:space:]]+pr[[:space:]]+checkout|gh[[:space:]]+repo[[:space:]]+clone|/(tar|zip)ball" |
+    tr '\n' ' ' || true)"
+
+  if [[ -n "$fetching_commands" ]]; then
+    failures+="contributor-licence.yml runs a command that fetches content, so a contributed tree can reach a job holding the App token: $fetching_commands"
   fi
 
   if [[ -n "$failures" ]]; then
