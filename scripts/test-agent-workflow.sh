@@ -1399,7 +1399,7 @@ protected_paths_refuses_a_pull_request_larger_than_the_reportable_limit() {
   local summary_file="$test_directory/protected-paths-oversized-summary"
 
   if run_protected_paths_step \
-    'Krzysztof318' \
+    'outside-contributor' \
     'README.md' \
     "$output_file" \
     "$summary_file" \
@@ -1409,6 +1409,29 @@ protected_paths_refuses_a_pull_request_larger_than_the_reportable_limit() {
   fi
 
   assert_contains 'cannot be verified' "$output_file"
+}
+
+# The ceiling refuses an answer that could not be computed, and the owner is the one author for whom
+# that answer decides nothing: every protected path is theirs to change, so the enumeration could only
+# have named which ones. Refusing them there would block a tree-wide rename on a list nobody acts on.
+# The pass still says the list is missing, which is the part the owner does read.
+protected_paths_lets_the_owner_past_the_reportable_limit() {
+  local output_file="$test_directory/protected-paths-oversized-owner-output"
+  local summary_file="$test_directory/protected-paths-oversized-owner-summary"
+
+  if ! run_protected_paths_step \
+    'Krzysztof318' \
+    'README.md' \
+    "$output_file" \
+    "$summary_file" \
+    3001; then
+    printf 'Protected paths refused the owner a pull request too large for the changed-files endpoint\n' >&2
+    return 1
+  fi
+
+  assert_contains 'cannot be listed' "$output_file"
+  assert_excludes '::error' "$output_file"
+  assert_file_content '' "$summary_file"
 }
 
 # The `Typo check` workflow decides in shell which files it hands the checker, and that decision is
@@ -7077,6 +7100,7 @@ run_test protected_paths_allows_dependabot_to_update_the_workflows
 run_test protected_paths_refuses_dependabot_outside_the_workflows
 run_test protected_paths_refuses_an_author_merely_resembling_dependabot
 run_test protected_paths_refuses_a_pull_request_larger_than_the_reportable_limit
+run_test protected_paths_lets_the_owner_past_the_reportable_limit
 run_test typo_check_passes_the_files_the_pull_request_changed
 run_test typo_check_leaves_an_image_out_of_the_file_list
 run_test typo_check_checks_nothing_when_a_pull_request_only_changes_images

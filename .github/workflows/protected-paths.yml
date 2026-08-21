@@ -75,6 +75,10 @@ name: Protected paths
 # just as much: the owner is allowed to change these paths, not expected to have meant to, and an
 # `.editorconfig` that arrived with a rebase is only visible if something says so.
 #
+# One case produces no list at all, because the changed-files endpoint stops at 3000 entries. It is
+# refused for every author the list decides a verdict for, and allowed for the owner, for whom it
+# decides none — the step says which of the two happened rather than passing or failing in silence.
+#
 # It is not a security boundary on its own. A `pull_request` run uses the workflow file as the pull
 # request would leave it, so a change to this file changes the check that judges it. The pair is what
 # holds: weakening the check means editing `.github/`, which needs the code owner's approval, and
@@ -146,10 +150,31 @@ jobs:
           protected_paths="${protected_prefixes[*]} ${protected_names[*]} ${protected_files[*]}"
           reportable_file_limit=3000
 
+          # GitHub logins are compared case-insensitively, because the same account is addressable
+          # under either casing and the two spellings must not decide a gate differently. The answer
+          # is resolved once, here, because both the ceiling below and the verdict at the end of this
+          # step read it.
+          authored_by_owner='no'
+          if [[ "${PULL_REQUEST_AUTHOR,,}" == "${REPOSITORY_OWNER,,}" ]]; then
+            authored_by_owner='yes'
+          fi
+
           # The changed-files endpoint stops at 3000 entries, so a larger pull request cannot be shown
           # to leave the protected paths alone. An answer that could not be computed is not an answer
-          # that clears this check.
+          # that clears this check — for every author whose verdict that answer decides.
+          #
+          # The owner's it does not. Every protected path is theirs to change, so the enumeration
+          # below can only ever tell them *which* ones they touched, and refusing them here withholds
+          # that list and blocks the merge without there being a verdict the list could have altered.
+          # What is lost is the list, so this says so rather than passing in silence. A tree-wide
+          # rename is the change that reaches it: it moves more files than the endpoint reports while
+          # touching a protected path only to correct a path written inside one.
           if (( CHANGED_FILE_COUNT > reportable_file_limit )); then
+            if [[ "$authored_by_owner" == 'yes' ]]; then
+              echo "This pull request changes ${CHANGED_FILE_COUNT} files, more than the ${reportable_file_limit} the changed-files endpoint reports, so the protected paths it touches cannot be listed. The repository owner authored it and every one of those paths is theirs to change, so there is no verdict that list would have decided."
+              exit 0
+            fi
+
             echo "::error::This pull request changes ${CHANGED_FILE_COUNT} files, more than the ${reportable_file_limit} the changed-files endpoint reports, so its changes under ${protected_paths} cannot be verified."
             exit 1
           fi
@@ -214,9 +239,7 @@ jobs:
           echo "This pull request changes ${#protected_changes[@]} protected path(s):"
           printf '  %s\n' "${protected_changes[@]}"
 
-          # GitHub logins are compared case-insensitively, because the same account is addressable
-          # under either casing and the two spellings must not decide a gate differently.
-          if [[ "${PULL_REQUEST_AUTHOR,,}" == "${REPOSITORY_OWNER,,}" ]]; then
+          if [[ "$authored_by_owner" == 'yes' ]]; then
             echo "The repository owner authored this pull request, so those changes are allowed."
             exit 0
           fi
