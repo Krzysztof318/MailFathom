@@ -11,7 +11,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <TestProject Include="$(RepositoryRoot)tests/**/*.csproj" />
+    <TestsDirectoryProject Include="$(RepositoryRoot)tests/**/*.csproj" />
+
+    <!-- The one project under tests/ that is not a suite. `tests/Benchmarks` is a BenchmarkDotNet report: it asserts
+         nothing, gates nothing, and runs from nightly.yml rather than from here, so counting it among the projects this
+         target runs and measures would be counting a report as evidence. It stays in the mismatch check below, because
+         a project missing from MailFathom.slnx is unbuilt and unformatted whether or not it is a test, and
+         .config/testconfig.json excludes its assembly so `Enforce` never meets one it did not expect. -->
+    <NonTestProject Include="$(RepositoryRoot)tests/Benchmarks/Benchmarks.csproj" />
+    <TestProject Include="@(TestsDirectoryProject)" Exclude="@(NonTestProject)" />
     <ProductionProject Include="$(RepositoryRoot)src/**/*.csproj" />
 
     <!-- The two composition roots, and the whole of what this gate deliberately does not measure.
@@ -49,14 +57,14 @@
 
     <ItemGroup>
       <SolutionProjectFileName Include="@(SolutionProjectPath->'%(Filename)%(Extension)')" />
-      <UnlistedTestProject Include="@(TestProject->'%(Filename)%(Extension)')"
+      <UnlistedTestProject Include="@(TestsDirectoryProject->'%(Filename)%(Extension)')"
                            Exclude="@(SolutionProjectFileName)" />
       <UnlistedProductionProject Include="@(ProductionProject->'%(Filename)%(Extension)')"
                                  Exclude="@(SolutionProjectFileName)" />
     </ItemGroup>
 
     <Error Condition="'@(UnlistedTestProject)' != ''"
-           Text="These test projects exist under $(RepositoryRoot)tests but are missing from MailFathom.slnx, so the solution-wide run would skip them: @(UnlistedTestProject, ', ')." />
+           Text="These projects exist under $(RepositoryRoot)tests but are missing from MailFathom.slnx, so the solution-wide run would skip them: @(UnlistedTestProject, ', ')." />
 
     <Error Condition="'@(UnlistedProductionProject)' != ''"
            Text="These production projects exist under $(RepositoryRoot)src but are missing from MailFathom.slnx: @(UnlistedProductionProject, ', ')." />

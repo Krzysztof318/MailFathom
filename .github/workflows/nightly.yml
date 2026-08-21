@@ -209,6 +209,80 @@ jobs:
       ref: ${{ needs.decide.outputs.revision }}
       version: ${{ needs.decide.outputs.version }}
 
+  # What the hot paths cost, measured rather than claimed. It is a report and gates nothing: no job below needs it, a
+  # failure here is swallowed, and nothing compares two runs automatically. That is the whole of why it is on this
+  # channel and not on a pull request — throughput is not measurable on a shared, virtualized runner to a precision any
+  # gate could read, so the number is worth watching across releases and worth nothing as a threshold.
+  #
+  # The claim a change *does* have to satisfy is the other one: `tests/AllocationBudgets.UnitTests` bounds what the same
+  # paths allocate, deterministically, inside the pull-request gate. `tests/AGENTS.md` states which of the two a new
+  # cost claim belongs in.
+  benchmarks:
+    name: Hot-path benchmarks
+    needs:
+      - decide
+      - verify
+    if: needs.decide.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - name: Check out the ref being previewed
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.decide.outputs.revision }}
+          persist-credentials: false
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
+
+      - name: Restore dependencies
+        run: dotnet restore MailFathom.slnx --locked-mode
+
+      # Release, because a benchmark of a debug build measures the compiler rather than the code, and the harness
+      # refuses to run against one.
+      - name: Run the benchmarks
+        run: >-
+          dotnet run --project tests/Benchmarks/Benchmarks.csproj --configuration Release --no-restore
+          -- --filter '*' --artifacts artifacts/benchmarks
+
+      - name: Write the report into the run summary
+        if: always()
+        run: |
+          set -euo pipefail
+
+          shopt -s nullglob
+          reports=(artifacts/benchmarks/results/*-report-github.md)
+
+          if ((${#reports[@]} == 0)); then
+            printf '### Hot-path benchmarks\n\nThe run produced no report.\n' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          printf '### Hot-path benchmarks\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat "${reports[@]}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the full report on the run
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmarks
+          path: artifacts/benchmarks
+          if-no-files-found: warn
+
   publish:
     name: Publish
     needs:

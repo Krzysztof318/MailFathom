@@ -63,6 +63,15 @@
     <InternalsVisibleTo Include="MailFathom.IntegrationTests" />
 
     <!--
+      The two projects that measure what this boundary costs rather than what it answers: the allocation budgets the
+      unit suite gates on, and the nightly throughput report. The MIME readers and the stored-content row they measure
+      are internal like every other adapter here, and a wrapper published for them would put a second shape between the
+      measurement and the path a deployment runs.
+    -->
+    <InternalsVisibleTo Include="MailFathom.AllocationBudgets.UnitTests" />
+    <InternalsVisibleTo Include="MailFathom.Benchmarks" />
+
+    <!--
       NSubstitute proxies a type at run time from a generated assembly, which the two grants above do not name, so an
       internal interface is refused with an accessibility error rather than substituted. ISubmissionClient is one:
       it is the mail library's client contract with the per-recipient replies added, and a test scripts a submission
