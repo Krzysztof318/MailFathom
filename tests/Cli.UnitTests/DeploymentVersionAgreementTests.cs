@@ -4,9 +4,7 @@
 
 using System.Net;
 using MailFathom.Cli.Administration;
-using MailFathom.Cli.Credentials;
 using MailFathom.TestSupport;
-using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Cli.UnitTests;
@@ -20,16 +18,9 @@ namespace MailFathom.Cli.UnitTests;
 /// </remarks>
 public sealed class DeploymentVersionAgreementTests : IDisposable
 {
-    private const string Endpoint = "https://mail.example.test:8443";
+    private const string Endpoint = CliCommandHarness.Endpoint;
 
-    private static readonly Uri EndpointAddress = new(Endpoint);
-
-    private readonly string storeDirectory =
-        Path.Combine(Path.GetTempPath(), $"mailfathom-version-tests-{Guid.NewGuid():N}");
-
-    private readonly RecordingCliConsole console = new();
-
-    private readonly FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero));
+    private readonly CliCommandHarness harness = new(new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero));
 
     /// <summary>The same version on both sides is the ordinary case, and it says nothing at all.</summary>
     [Fact]
@@ -160,14 +151,14 @@ public sealed class DeploymentVersionAgreementTests : IDisposable
             deployment.RecordedRequests,
             recorded => recorded.RequestUri?.AbsolutePath == AdminEndpointRoutes.EmbeddingActivationPath);
         Assert.Contains(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("another release line", StringComparison.Ordinal));
 
         // The other half of the same distinction: this one refuses the command, so it is a failure and not a caution.
         Assert.Contains(
-            this.console.Failures,
+            this.harness.Console.Failures,
             line => line.Contains("another release line", StringComparison.Ordinal));
-        Assert.Empty(this.console.Warnings);
+        Assert.Empty(this.harness.Console.Warnings);
     }
 
     /// <summary>A build difference is a sentence and not a refusal, so the command it was reported on still runs.</summary>
@@ -183,16 +174,16 @@ public sealed class DeploymentVersionAgreementTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("not the same build and problems may occur", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("accepts the stored credential", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("accepts the stored credential", StringComparison.Ordinal));
 
         // A caution, because the command ran and answered. Reporting a build difference in the colour a failure carries
         // would say the reading below it is untrustworthy, which is exactly what this concern does not claim.
         Assert.Contains(
-            this.console.Warnings,
+            this.harness.Console.Warnings,
             line => line.Contains("not the same build and problems may occur", StringComparison.Ordinal));
-        Assert.Empty(this.console.Failures);
+        Assert.Empty(this.harness.Console.Failures);
     }
 
     /// <summary>
@@ -215,7 +206,7 @@ public sealed class DeploymentVersionAgreementTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.True(deployment.WasAskedToActivate());
         Assert.Single(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("not the same build and problems may occur", StringComparison.Ordinal));
     }
 
@@ -239,36 +230,14 @@ public sealed class DeploymentVersionAgreementTests : IDisposable
         Assert.Single(
             deployment.RecordedRequests,
             recorded => recorded.RequestUri?.AbsolutePath == AdminEndpointRoutes.SessionPath);
-        Assert.DoesNotContain(this.console.Errors, line => line.Contains("problems may occur", StringComparison.Ordinal));
+        Assert.DoesNotContain(this.harness.Console.Errors, line => line.Contains("problems may occur", StringComparison.Ordinal));
     }
 
     /// <inheritdoc />
-    public void Dispose()
-    {
-        if (Directory.Exists(this.storeDirectory))
-        {
-            Directory.Delete(this.storeDirectory, recursive: true);
-        }
-    }
+    public void Dispose() => this.harness.Dispose();
 
-    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args)
-    {
-        var store = new CredentialStore(
-            Path.Combine(this.storeDirectory, "credentials.json"),
-            new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key")));
-
-        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
-
-        var context = new CliContext(
-            this.console,
-            store,
-            (endpoint, trust) => FakeDeploymentTransport.Over(deployment, endpoint, trust),
-            FakeMailboxRedirect.Silent(),
-            _ => false,
-            this.clock);
-
-        return CliRunner.RunAsync(context, args);
-    }
+    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args) =>
+        this.harness.RunAsync(deployment, args);
 
     private const string SpendingAssessment = """
         {

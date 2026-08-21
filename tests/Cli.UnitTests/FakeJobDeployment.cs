@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
-using System.Text;
 using MailFathom.Cli.Administration;
 using MailFathom.TestSupport;
 
@@ -86,13 +85,6 @@ internal static class FakeJobDeployment
     {
         var path = request.RequestUri?.AbsolutePath;
 
-        if (path == AdminEndpointRoutes.SessionPath)
-        {
-            return Json(
-                HttpStatusCode.OK,
-                FakeAdminEndpoint.SessionBody("workstation", FakeAdminEndpoint.CommandVersion));
-        }
-
         if (path == AdminEndpointRoutes.JobRetryPath)
         {
             return Json(retry ?? (HttpStatusCode.OK, """{"job":"00000000-0000-0000-0000-000000000000","outcome":"Accepted"}"""));
@@ -108,14 +100,10 @@ internal static class FakeJobDeployment
             return Json(deadLetters ?? Page());
         }
 
-        return Json(HttpStatusCode.NotFound, string.Empty);
+        return FakeAdminEndpoint.AnswerSession(request)
+            ?? FakeAdminEndpoint.Json(HttpStatusCode.NotFound, string.Empty);
     }
 
     private static HttpResponseMessage Json((HttpStatusCode Status, string Body) answer) =>
-        Json(answer.Status, answer.Body);
-
-    private static HttpResponseMessage Json(HttpStatusCode status, string body) => new(status)
-    {
-        Content = new StringContent(body, Encoding.UTF8, "application/json"),
-    };
+        FakeAdminEndpoint.Json(answer.Status, answer.Body);
 }

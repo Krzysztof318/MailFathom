@@ -7,7 +7,6 @@ using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Tracking;
 using MailFathom.Application.Persistence;
-using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
@@ -115,7 +114,10 @@ internal sealed class OutgoingMailTrackingHarness
 
     private static EmailAddress Address(string address)
     {
-        EmailAddress.TryCreate(displayName: null, address, out var parsed);
+        if (!EmailAddress.TryCreate(displayName: null, address, out var parsed))
+        {
+            throw new InvalidOperationException($"The test address '{address}' names no mailbox.");
+        }
 
         return parsed;
     }

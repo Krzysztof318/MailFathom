@@ -3,9 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Cli.Administration;
-using MailFathom.Cli.Credentials;
 using MailFathom.TestSupport;
-using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Cli.UnitTests;
@@ -19,17 +17,10 @@ namespace MailFathom.Cli.UnitTests;
 /// </remarks>
 public sealed class MailboxMaintenanceCommandTests : IDisposable
 {
-    private const string Endpoint = "https://mail.example.test:8443";
+    private const string Endpoint = CliCommandHarness.Endpoint;
     private const string Account = "work";
 
-    private static readonly Uri EndpointAddress = new(Endpoint);
-
-    private readonly string storeDirectory =
-        Path.Combine(Path.GetTempPath(), $"mailfathom-maintenance-tests-{Guid.NewGuid():N}");
-
-    private readonly RecordingCliConsole console = new();
-
-    private readonly FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 16, 12, 0, 0, TimeSpan.Zero));
+    private readonly CliCommandHarness harness = new(new DateTimeOffset(2026, 8, 16, 12, 0, 0, TimeSpan.Zero));
 
     /// <summary>The cost is read and put on the screen before anything is asked, whichever answer follows.</summary>
     [Fact]
@@ -37,7 +28,7 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
     {
         // Arrange
         using var deployment = FakeMaintenanceDeployment.Rewinding(storedEmailCount: 22_500, "INBOX", "ARCHIVE");
-        this.console.AnswerToGive = true;
+        this.harness.Console.AnswerToGive = true;
 
         // Act
         var exitCode = await this.RewindAsync(deployment);
@@ -46,13 +37,13 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(1, deployment.RewindRequestCount());
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("22,500 stored emails would be fetched", StringComparison.Ordinal));
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.StartsWith("Rewound:", StringComparison.Ordinal)
                 && line.EndsWith("INBOX", StringComparison.Ordinal));
-        Assert.Contains("ARCHIVE", this.console.Lines.Select(line => line.Trim()));
+        Assert.Contains("ARCHIVE", this.harness.Console.Lines.Select(line => line.Trim()));
     }
 
     /// <summary>An operator who does not agree leaves the deployment's progress exactly where it was.</summary>
@@ -61,7 +52,7 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
     {
         // Arrange
         using var deployment = FakeMaintenanceDeployment.Rewinding(storedEmailCount: 22_500, "INBOX");
-        this.console.AnswerToGive = false;
+        this.harness.Console.AnswerToGive = false;
 
         // Act
         var exitCode = await this.RewindAsync(deployment);
@@ -69,7 +60,7 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Equal(0, deployment.RewindRequestCount());
-        Assert.Contains("Nothing was rewound.", this.console.Errors);
+        Assert.Contains("Nothing was rewound.", this.harness.Console.Errors);
     }
 
     /// <summary>
@@ -81,7 +72,7 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
     {
         // Arrange
         using var deployment = FakeMaintenanceDeployment.Rewinding(storedEmailCount: 22_500, "INBOX");
-        this.console.AnswersQuestions = false;
+        this.harness.Console.AnswersQuestions = false;
 
         // Act
         var exitCode = await this.RewindAsync(deployment);
@@ -89,7 +80,7 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Equal(0, deployment.RewindRequestCount());
-        Assert.Contains(this.console.Errors, line => line.Contains("--yes", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("--yes", StringComparison.Ordinal));
     }
 
     /// <summary>The flag is an operator stating the agreement in the command, which is what a scripted rewind needs.</summary>
@@ -98,7 +89,7 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
     {
         // Arrange
         using var deployment = FakeMaintenanceDeployment.Rewinding(storedEmailCount: 22_500, "INBOX");
-        this.console.AnswersQuestions = false;
+        this.harness.Console.AnswersQuestions = false;
 
         // Act
         var exitCode = await this.RunAsync(
@@ -114,7 +105,7 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(1, deployment.RewindRequestCount());
-        Assert.Empty(this.console.Questions);
+        Assert.Empty(this.harness.Console.Questions);
     }
 
     /// <summary>
@@ -127,7 +118,7 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
     {
         // Arrange
         using var deployment = FakeMaintenanceDeployment.Rewinding(storedEmailCount: 0);
-        this.console.AnswerToGive = true;
+        this.harness.Console.AnswerToGive = true;
 
         // Act
         var exitCode = await this.RewindAsync(deployment);
@@ -135,9 +126,9 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(1, deployment.RewindRequestCount());
-        Assert.Single(this.console.Questions);
+        Assert.Single(this.harness.Console.Questions);
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("nothing to rewind", StringComparison.Ordinal));
     }
 
@@ -151,7 +142,7 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
     {
         // Arrange
         using var deployment = FakeMaintenanceDeployment.Rewinding(storedEmailCount: 0, "INBOX");
-        this.console.AnswerToGive = true;
+        this.harness.Console.AnswerToGive = true;
 
         // Act
         var exitCode = await this.RewindAsync(deployment);
@@ -159,8 +150,8 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(1, deployment.RewindRequestCount());
-        Assert.Single(this.console.Questions);
-        Assert.Contains(this.console.Lines, line => line.Contains("INBOX", StringComparison.Ordinal));
+        Assert.Single(this.harness.Console.Questions);
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("INBOX", StringComparison.Ordinal));
     }
 
     /// <summary>And declining it discards nothing, which is the half a zero count used to wave through.</summary>
@@ -169,7 +160,7 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
     {
         // Arrange
         using var deployment = FakeMaintenanceDeployment.Rewinding(storedEmailCount: 0);
-        this.console.AnswerToGive = false;
+        this.harness.Console.AnswerToGive = false;
 
         // Act
         var exitCode = await this.RewindAsync(deployment);
@@ -185,7 +176,7 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
     {
         // Arrange
         using var deployment = FakeMaintenanceDeployment.Rewinding(storedEmailCount: 5, "ARCHIVE");
-        this.console.AnswerToGive = true;
+        this.harness.Console.AnswerToGive = true;
 
         // Act
         await this.RunAsync(
@@ -212,7 +203,7 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
     {
         // Arrange
         using var deployment = FakeMaintenanceDeployment.Rewinding(storedEmailCount: 5, "INBOX");
-        this.console.AnswerToGive = true;
+        this.harness.Console.AnswerToGive = true;
 
         // Act
         await this.RewindAsync(deployment);
@@ -239,10 +230,10 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(1, deployment.RederivationRequestCount());
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("has been asked for", StringComparison.Ordinal));
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("mailbox rederive-status --account work", StringComparison.Ordinal));
     }
 
@@ -264,10 +255,10 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("was already under way", StringComparison.Ordinal));
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("500 re-read", StringComparison.Ordinal));
     }
 
@@ -290,7 +281,7 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("queue is full", StringComparison.Ordinal));
     }
 
@@ -314,11 +305,11 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("jobs dead-letters", StringComparison.Ordinal)
                 && line.Contains("jobs retry", StringComparison.Ordinal));
         Assert.DoesNotContain(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("queue is full", StringComparison.Ordinal));
     }
 
@@ -339,7 +330,7 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         Assert.Equal(0, deployment.RederivationRequestCount());
         Assert.Equal("?account=work", deployment.LastRederivationQuery());
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("1,043 re-read", StringComparison.Ordinal));
     }
 
@@ -359,10 +350,10 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
 
         // Assert
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("finished at 2026-08-18 12:41:00Z", StringComparison.Ordinal));
         Assert.DoesNotContain(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("jobs dead-letters", StringComparison.Ordinal));
     }
 
@@ -384,10 +375,10 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
 
         // Assert
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("MIME no reader could parse", StringComparison.Ordinal));
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("stored MIME is gone", StringComparison.Ordinal)
                 && line.Contains("mailbox rewind", StringComparison.Ordinal));
     }
@@ -406,9 +397,9 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("No re-derivation has ever been asked for", StringComparison.Ordinal));
-        Assert.Empty(this.console.Errors);
+        Assert.Empty(this.harness.Console.Errors);
     }
 
     /// <summary>
@@ -437,7 +428,7 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("mailbox rederive --account work --folder archive", StringComparison.Ordinal));
     }
 
@@ -475,30 +466,8 @@ public sealed class MailboxMaintenanceCommandTests : IDisposable
     private Task<int> RederiveStatusAsync(FakeHttpMessageHandler deployment) =>
         this.RunAsync(deployment, "mailbox", "rederive-status", "--account", Account, "--endpoint", Endpoint);
 
-    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args)
-    {
-        var store = new CredentialStore(
-            Path.Combine(this.storeDirectory, "credentials.json"),
-            new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key")));
+    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args) =>
+        this.harness.RunAsync(deployment, args);
 
-        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
-
-        var context = new CliContext(
-            this.console,
-            store,
-            (endpoint, trust) => FakeDeploymentTransport.Over(deployment, endpoint, trust),
-            FakeMailboxRedirect.Silent(),
-            _ => false,
-            this.clock);
-
-        return CliRunner.RunAsync(context, args);
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(this.storeDirectory))
-        {
-            Directory.Delete(this.storeDirectory, recursive: true);
-        }
-    }
+    public void Dispose() => this.harness.Dispose();
 }

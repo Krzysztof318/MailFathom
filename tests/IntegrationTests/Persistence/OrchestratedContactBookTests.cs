@@ -432,7 +432,10 @@ public sealed class OrchestratedContactBookTests(MailFathomOrchestrationFixture 
 
     private static EmailAddress Address(string address)
     {
-        EmailAddress.TryCreate(displayName: null, address, out var emailAddress);
+        if (!EmailAddress.TryCreate(displayName: null, address, out var emailAddress))
+        {
+            throw new InvalidOperationException($"The test address '{address}' names no mailbox.");
+        }
 
         return emailAddress;
     }

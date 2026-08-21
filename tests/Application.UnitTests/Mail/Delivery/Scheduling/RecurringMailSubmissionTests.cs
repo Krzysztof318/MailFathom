@@ -6,9 +6,7 @@ using System.Text;
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent.Storage;
-using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Addressing;
-using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Scheduling;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Application.Persistence;
@@ -17,7 +15,6 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Scheduling;
-using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
@@ -300,7 +297,7 @@ public sealed class RecurringMailSubmissionTests
         return new RecurringMailSubmission(
             accountCatalog,
             new NamedRecipientResolver(new InMemoryContactBookStore()),
-            ComposerThatComposes(),
+            ComposingAuthoredEmails.ThatComposes(ComposedMime),
             recurringSends,
             contentStore,
             new OptimisticConcurrencyRetryPolicy(
@@ -310,42 +307,4 @@ public sealed class RecurringMailSubmissionTests
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend));
     }
 
-    /// <summary>Composes the draft without producing MIME, so a test here says nothing about MIME.</summary>
-    private static IAuthoredEmailComposer ComposerThatComposes()
-    {
-        var composer = Substitute.For<IAuthoredEmailComposer>();
-        composer
-            .Compose(
-                Arg.Any<MailAccountId>(),
-                Arg.Any<OutgoingEmailRequester>(),
-                Arg.Any<AuthoredEmail>(),
-                Arg.Any<MailDeliveryCapabilities>())
-            .Returns(call =>
-            {
-                var authored = call.ArgAt<AuthoredEmail>(2);
-
-                return AuthoredEmailComposition.Composed(new ComposedOutgoingEmail(
-                    OutgoingEmailRequest.Create(
-                        call.ArgAt<MailAccountId>(0),
-                        call.ArgAt<OutgoingEmailRequester>(1),
-                        [.. authored.Recipients.Select(recipient => OutgoingRecipient.Create(
-                            Address(recipient.Address),
-                            recipient.Role,
-                            recipient.Contact))]),
-                    InternetMessageId.Mint("example.test"),
-                    ComposedMime));
-            });
-
-        return composer;
-    }
-
-    private static EmailAddress Address(string address)
-    {
-        if (!EmailAddress.TryCreate(displayName: null, address, out var emailAddress))
-        {
-            throw new InvalidOperationException($"The test address '{address}' names no mailbox.");
-        }
-
-        return emailAddress;
-    }
 }

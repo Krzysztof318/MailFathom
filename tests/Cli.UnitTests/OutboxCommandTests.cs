@@ -4,9 +4,7 @@
 
 using System.Text.Json;
 using MailFathom.Cli.Administration;
-using MailFathom.Cli.Credentials;
 using MailFathom.TestSupport;
-using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Cli.UnitTests;
@@ -20,20 +18,13 @@ namespace MailFathom.Cli.UnitTests;
 /// </remarks>
 public sealed class OutboxCommandTests : IDisposable
 {
-    private const string Endpoint = "https://mail.example.test:8443";
+    private const string Endpoint = CliCommandHarness.Endpoint;
 
     private const string Recipient = "anna@example.test";
 
-    private static readonly Uri EndpointAddress = new(Endpoint);
-
     private static readonly Guid Message = new("6b1e2f4a-3c5d-4e7f-8a9b-0c1d2e3f4a5b");
 
-    private readonly string storeDirectory =
-        Path.Combine(Path.GetTempPath(), $"mailfathom-outbox-tests-{Guid.NewGuid():N}");
-
-    private readonly RecordingCliConsole console = new();
-
-    private readonly FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 19, 12, 0, 0, TimeSpan.Zero));
+    private readonly CliCommandHarness harness = new(new DateTimeOffset(2026, 8, 19, 12, 0, 0, TimeSpan.Zero));
 
     /// <summary>The summary is the first question asked of an outbox, so it prints one figure per stage.</summary>
     [Fact]
@@ -48,10 +39,10 @@ public sealed class OutboxCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        var listing = DrawnListing.ReadFrom(this.console.Lines, "Stage", "Messages");
+        var listing = DrawnListing.ReadFrom(this.harness.Console.Lines, "Stage", "Messages");
         Assert.Equal("2", listing.Cell(listing.Rows[0], "Messages"));
         Assert.Equal("TransmissionBegun", listing.Cell(listing.Rows[1], "Stage"));
-        Assert.Contains(this.console.Lines, line => line.Contains("3 message(s) are still waiting", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("3 message(s) are still waiting", StringComparison.Ordinal));
     }
 
     /// <summary>An empty outbox is the ordinary state of a healthy instance and says so rather than printing zeros alone.</summary>
@@ -66,7 +57,7 @@ public sealed class OutboxCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.console.Lines, line => line.Contains("Nothing is waiting", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Nothing is waiting", StringComparison.Ordinal));
     }
 
     /// <summary>Every value lands under the heading naming it, which is the whole of what the column order is worth.</summary>
@@ -82,7 +73,7 @@ public sealed class OutboxCommandTests : IDisposable
 
         // Assert
         var listing = DrawnListing.ReadFrom(
-            this.console.Lines, "Recorded", "Message", "Account", "Stage", "Attempts", "Failed", "Due");
+            this.harness.Console.Lines, "Recorded", "Message", "Account", "Stage", "Attempts", "Failed", "Due");
         var row = Assert.Single(listing.Rows);
 
         Assert.Equal("2026-08-19 09:00:00Z", listing.Cell(row, "Recorded"));
@@ -107,7 +98,7 @@ public sealed class OutboxCommandTests : IDisposable
 
         // Assert
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("its server never answered", StringComparison.Ordinal));
     }
 
@@ -124,7 +115,7 @@ public sealed class OutboxCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("has been asked to send nothing", StringComparison.Ordinal));
     }
 
@@ -167,7 +158,7 @@ public sealed class OutboxCommandTests : IDisposable
         await this.RunAsync(deployment, "outbox", "list", "--endpoint", Endpoint);
 
         // Assert
-        Assert.DoesNotContain(this.console.Lines, line => line.Contains(Recipient, StringComparison.Ordinal));
+        Assert.DoesNotContain(this.harness.Console.Lines, line => line.Contains(Recipient, StringComparison.Ordinal));
     }
 
     /// <summary>A decision about a send nobody knows the outcome of needs the addresses, so the one reading that was asked by identity prints them.</summary>
@@ -191,7 +182,7 @@ public sealed class OutboxCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains(Recipient, StringComparison.Ordinal)
                 && line.Contains("Pending", StringComparison.Ordinal));
     }
@@ -215,7 +206,7 @@ public sealed class OutboxCommandTests : IDisposable
 
         // Assert
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("second copy", StringComparison.Ordinal));
     }
 
@@ -243,10 +234,10 @@ public sealed class OutboxCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("holds no queued message", StringComparison.Ordinal));
         Assert.DoesNotContain(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("Check the port", StringComparison.Ordinal));
     }
 
@@ -272,7 +263,7 @@ public sealed class OutboxCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(1, deployment.OutboxDecisionRequestCount(AdminEndpointRoutes.OutboxCancellationPath));
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("no recipient of it received anything", StringComparison.Ordinal));
     }
 
@@ -297,7 +288,7 @@ public sealed class OutboxCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("moved past the point this decision applies at", StringComparison.Ordinal));
     }
 
@@ -324,7 +315,7 @@ public sealed class OutboxCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("Its lease is what frees it", StringComparison.Ordinal));
     }
 
@@ -351,7 +342,7 @@ public sealed class OutboxCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("holds no queued message", StringComparison.Ordinal));
     }
 
@@ -377,7 +368,7 @@ public sealed class OutboxCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(1, deployment.OutboxDecisionRequestCount(AdminEndpointRoutes.OutboxRequeuePath));
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("addresses still outstanding", StringComparison.Ordinal));
     }
 
@@ -402,7 +393,7 @@ public sealed class OutboxCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("--despite-refusal", StringComparison.Ordinal));
     }
 
@@ -469,35 +460,13 @@ public sealed class OutboxCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("mailfathom.admin.read", StringComparison.Ordinal)
                 && line.Contains("AdminEndpoint:Authentication", StringComparison.Ordinal));
     }
 
-    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args)
-    {
-        var store = new CredentialStore(
-            Path.Combine(this.storeDirectory, "credentials.json"),
-            new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key")));
+    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args) =>
+        this.harness.RunAsync(deployment, args);
 
-        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
-
-        var context = new CliContext(
-            this.console,
-            store,
-            (endpoint, trust) => FakeDeploymentTransport.Over(deployment, endpoint, trust),
-            FakeMailboxRedirect.Silent(),
-            _ => false,
-            this.clock);
-
-        return CliRunner.RunAsync(context, args);
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(this.storeDirectory))
-        {
-            Directory.Delete(this.storeDirectory, recursive: true);
-        }
-    }
+    public void Dispose() => this.harness.Dispose();
 }

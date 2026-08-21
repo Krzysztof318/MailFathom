@@ -14,7 +14,6 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
-using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
@@ -187,43 +186,8 @@ public sealed class AuthoredMailDraftingTests
         return new AuthoredMailDrafting(
             accountCatalog,
             new NamedRecipientResolver(book ?? new InMemoryContactBookStore()),
-            composer ?? ComposerThatComposes(),
+            composer ?? ComposingAuthoredEmails.ThatComposesDrafts(ComposedMime),
             harness.Book,
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailDraftsWrite));
-    }
-
-    private static IAuthoredEmailComposer ComposerThatComposes()
-    {
-        var composer = Substitute.For<IAuthoredEmailComposer>();
-        composer
-            .ComposeDraft(
-                Arg.Any<MailAccountId>(),
-                Arg.Any<AuthoredEmail>(),
-                Arg.Any<MailDeliveryCapabilities>())
-            .Returns(call =>
-            {
-                var authored = call.ArgAt<AuthoredEmail>(1);
-
-                return MailDraftComposition.Composed(new ComposedMailDraft(
-                    [
-                        .. authored.Recipients.Select(recipient => new MailDraftRecipient(
-                            OutgoingRecipient.Create(
-                                Address(recipient.Address),
-                                recipient.Role,
-                                recipient.Contact),
-                            recipient.Provenance)),
-                    ],
-                    InternetMessageId.Mint("example.test"),
-                    ComposedMime));
-            });
-
-        return composer;
-    }
-
-    private static EmailAddress Address(string address)
-    {
-        Assert.True(EmailAddress.TryCreate(displayName: null, address, out var parsed));
-
-        return parsed;
     }
 }

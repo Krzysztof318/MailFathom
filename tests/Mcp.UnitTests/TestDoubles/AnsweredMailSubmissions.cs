@@ -25,7 +25,6 @@ using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
-using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
@@ -92,7 +91,7 @@ internal static class AnsweredMailSubmissions
         AccessAuthorization? authorization = null)
     {
         var answered = summary ?? AnsweredEmail();
-        composer = ComposerThatComposes();
+        composer = ComposingAuthoredEmails.ThatComposes(ComposedMime);
         var granted = authorization
             ?? AccessAuthorizations.ForCallerGranted(
                 MailFathomPermission.MailSend,
@@ -261,7 +260,7 @@ internal static class AnsweredMailSubmissions
         });
 
         return new MailOutbox(
-            OutgoingEmailStoreThatRecords(),
+            new InMemoryOutgoingEmailStore(timeProvider: new FakeTimeProvider(RecordedAt)),
             Substitute.For<IEmailContentStore>(),
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
@@ -273,85 +272,6 @@ internal static class AnsweredMailSubmissions
             granted,
             OutgoingMailGovernors.Permitting(),
             new FakeTimeProvider(RecordedAt));
-    }
-
-    /// <summary>An outgoing store that keeps one record per idempotency identity, which is what a retry claim rests on.</summary>
-    private static IOutgoingEmailStore OutgoingEmailStoreThatRecords()
-    {
-        var recordsByIdentity = new Dictionary<string, OutgoingEmailRecord>(StringComparer.Ordinal);
-        var store = Substitute.For<IOutgoingEmailStore>();
-        store
-            .OpenAsync(
-                Arg.Any<IPersistenceSession>(),
-                Arg.Any<OutgoingEmailRequest>(),
-                Arg.Any<OutgoingEmailPrincipal>(),
-                Arg.Any<long>(),
-                Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                var request = call.ArgAt<OutgoingEmailRequest>(1);
-                var identity = $"{request.AccountId.Value} {request.Requester.Identity}";
-
-                if (!recordsByIdentity.TryGetValue(identity, out var opened))
-                {
-                    opened = new OutgoingEmailRecord
-                    {
-                        Id = OutgoingEmailId.Create(Guid.CreateVersion7(RecordedAt)),
-                        AccountId = request.AccountId,
-                        Requester = request.Requester,
-                        Principal = call.ArgAt<OutgoingEmailPrincipal>(2),
-                        Recipients = [.. request.Recipients.Select(OutgoingRecipientOutcome.Unanswered)],
-                        Stage = OutgoingEmailStage.Recorded,
-                        MimeByteLength = call.ArgAt<long>(3),
-                        AttemptCount = 0,
-                        RecordedAt = RecordedAt,
-                        StageChangedAt = RecordedAt,
-                        AvailableAt = RecordedAt,
-                        DueAt = null,
-                        LastFailure = null,
-                        LastReplyCode = null,
-                        Filings = [],
-                        LastFilingFailure = null,
-                    };
-
-                    recordsByIdentity[identity] = opened;
-
-                    return OpenedOutgoingEmail.RecordedNow(opened);
-                }
-
-                return OpenedOutgoingEmail.AlreadyRecorded(opened);
-            });
-
-        return store;
-    }
-
-    /// <summary>A composer that produces a message from whatever it is handed, so a tool test says nothing about MIME.</summary>
-    private static IAuthoredEmailComposer ComposerThatComposes()
-    {
-        var composer = Substitute.For<IAuthoredEmailComposer>();
-        composer
-            .Compose(
-                Arg.Any<MailAccountId>(),
-                Arg.Any<OutgoingEmailRequester>(),
-                Arg.Any<AuthoredEmail>(),
-                Arg.Any<MailDeliveryCapabilities>())
-            .Returns(call =>
-            {
-                var authored = call.ArgAt<AuthoredEmail>(2);
-
-                return AuthoredEmailComposition.Composed(new ComposedOutgoingEmail(
-                    OutgoingEmailRequest.Create(
-                        call.ArgAt<MailAccountId>(0),
-                        call.ArgAt<OutgoingEmailRequester>(1),
-                        [.. authored.Recipients.Select(recipient => OutgoingRecipient.Create(
-                            Address(recipient.Address),
-                            recipient.Role,
-                            recipient.Contact))]),
-                    InternetMessageId.Mint("example.test"),
-                    ComposedMime));
-            });
-
-        return composer;
     }
 
     private static EmailAddress Address(string address) =>

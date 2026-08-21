@@ -2,15 +2,12 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.ComponentModel.DataAnnotations;
 using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Domain.Accounts;
-using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Mail;
-using MailFathom.Infrastructure.Secrets.Discovery;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Mail;
@@ -33,9 +30,9 @@ public sealed class OutgoingSendPermissionTests
     public void FindRefusal_AccountWithSendingLeftAtItsDefault_RefusesAsNotEnabled()
     {
         // Arrange
-        var account = CreateAccount();
-        account.Delivery = CreateDelivery();
-        var reader = CreateReader(CreateOptions(account), new DeploymentOptions());
+        var account = ConfiguredMailAccounts.Primary();
+        account.Delivery = ConfiguredMailAccounts.Delivery();
+        var reader = CreateReader(ConfiguredMailAccounts.Holding(account), new DeploymentOptions());
 
         // Act
         var refusal = reader.FindRefusal(Primary);
@@ -50,10 +47,10 @@ public sealed class OutgoingSendPermissionTests
     public void FindRefusal_EnabledAccountOnAnOrdinaryDeployment_RefusesNothing()
     {
         // Arrange
-        var account = CreateAccount();
-        account.Delivery = CreateDelivery();
+        var account = ConfiguredMailAccounts.Primary();
+        account.Delivery = ConfiguredMailAccounts.Delivery();
         account.Delivery.Enabled = true;
-        var reader = CreateReader(CreateOptions(account), new DeploymentOptions());
+        var reader = CreateReader(ConfiguredMailAccounts.Holding(account), new DeploymentOptions());
 
         // Act
         var refusal = reader.FindRefusal(Primary);
@@ -71,11 +68,11 @@ public sealed class OutgoingSendPermissionTests
     public void FindRefusal_ReadOnlyDeployment_RefusesEvenAnEnabledAccountAsItsOwnPosture()
     {
         // Arrange
-        var account = CreateAccount();
-        account.Delivery = CreateDelivery();
+        var account = ConfiguredMailAccounts.Primary();
+        account.Delivery = ConfiguredMailAccounts.Delivery();
         account.Delivery.Enabled = true;
         var deployment = new DeploymentOptions { ReadOnly = true };
-        var reader = CreateReader(CreateOptions(account), deployment);
+        var reader = CreateReader(ConfiguredMailAccounts.Holding(account), deployment);
 
         // Act
         var refusal = reader.FindRefusal(Primary);
@@ -92,11 +89,11 @@ public sealed class OutgoingSendPermissionTests
     public void FindRefusal_DeploymentTurnedReadOnlyAfterComposition_RefusesTheNextSend()
     {
         // Arrange
-        var account = CreateAccount();
-        account.Delivery = CreateDelivery();
+        var account = ConfiguredMailAccounts.Primary();
+        account.Delivery = ConfiguredMailAccounts.Delivery();
         account.Delivery.Enabled = true;
         var deployment = new TestOptionsMonitor<DeploymentOptions>(new DeploymentOptions());
-        var reader = new ConfiguredOutgoingSendPermissionReader(CreateOptions(account), deployment);
+        var reader = new ConfiguredOutgoingSendPermissionReader(ConfiguredMailAccounts.Holding(account), deployment);
         Assert.Null(reader.FindRefusal(Primary));
 
         // Act
@@ -114,10 +111,10 @@ public sealed class OutgoingSendPermissionTests
     public void FindRefusal_AccountThisDeploymentDoesNotServe_RefusesAsNotEnabled()
     {
         // Arrange
-        var account = CreateAccount();
-        account.Delivery = CreateDelivery();
+        var account = ConfiguredMailAccounts.Primary();
+        account.Delivery = ConfiguredMailAccounts.Delivery();
         account.Delivery.Enabled = true;
-        var reader = CreateReader(CreateOptions(account), new DeploymentOptions());
+        var reader = CreateReader(ConfiguredMailAccounts.Holding(account), new DeploymentOptions());
 
         // Act
         var refusal = reader.FindRefusal(MailAccountId.Create("archive"));
@@ -142,11 +139,11 @@ public sealed class OutgoingSendPermissionTests
     public void Validate_SendingEnabledOnAnAccountWithNoSubmissionHost_IsRefused()
     {
         // Arrange
-        var account = CreateAccount();
+        var account = ConfiguredMailAccounts.Primary();
         account.Delivery = new MailAccountDeliveryOptions { Enabled = true };
 
         // Act
-        var results = Validate(CreateOptions(account));
+        var results = ConfiguredMailAccounts.Validate(ConfiguredMailAccounts.Holding(account));
 
         // Assert
         Assert.Contains(
@@ -161,12 +158,12 @@ public sealed class OutgoingSendPermissionTests
     public void Validate_SendingEnabledOnAnAccountWithASubmissionHost_ReportsNoError()
     {
         // Arrange
-        var account = CreateAccount();
-        account.Delivery = CreateDelivery();
+        var account = ConfiguredMailAccounts.Primary();
+        account.Delivery = ConfiguredMailAccounts.Delivery();
         account.Delivery.Enabled = true;
 
         // Act
-        var results = Validate(CreateOptions(account));
+        var results = ConfiguredMailAccounts.Validate(ConfiguredMailAccounts.Holding(account));
 
         // Assert
         Assert.Empty(results);
@@ -176,32 +173,4 @@ public sealed class OutgoingSendPermissionTests
         MailSynchronizationOptions accounts,
         DeploymentOptions deployment) =>
         new(accounts, new TestOptionsMonitor<DeploymentOptions>(deployment));
-
-    private static IReadOnlyList<ValidationResult> Validate(MailSynchronizationOptions options) =>
-        [.. options.Validate(new ValidationContext(options))];
-
-    private static MailSynchronizationOptions CreateOptions(MailSynchronizationAccountOptions account) => new()
-    {
-        Enabled = true,
-        Accounts = [account],
-    };
-
-    private static MailSynchronizationAccountOptions CreateAccount() => new()
-    {
-        AccountId = "primary",
-        DisplayName = "The primary mailbox",
-        Host = "imap.example.test",
-        UserName = "mailfathom@example.test",
-        Secrets = new MailAccountSecretOptions
-        {
-            Password = new ConfiguredSecret { SecretReference = "systemd-credential:imap-primary-password" },
-        },
-    };
-
-    private static MailAccountDeliveryOptions CreateDelivery() => new()
-    {
-        Host = "smtp.example.test",
-        Port = 587,
-        ConnectionSecurity = MailConnectionSecurity.StartTlsRequired,
-    };
 }

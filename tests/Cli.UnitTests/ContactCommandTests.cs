@@ -3,9 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json;
-using MailFathom.Cli.Credentials;
 using MailFathom.TestSupport;
-using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Cli.UnitTests;
@@ -26,9 +24,7 @@ namespace MailFathom.Cli.UnitTests;
 /// </remarks>
 public sealed class ContactCommandTests : IDisposable
 {
-    private const string Endpoint = "https://mail.example.test:8443";
-
-    private static readonly Uri EndpointAddress = new(Endpoint);
+    private const string Endpoint = CliCommandHarness.Endpoint;
 
     private static readonly string Identity = FakeContactDeployment.ContactIdentity.ToString("D");
 
@@ -39,12 +35,7 @@ public sealed class ContactCommandTests : IDisposable
         {"contacts":[{"id":"3f2504e0-4f89-11d3-9a0c-0305e82c3301","displayName":null,"addresses":[],"preferredAddress":null,"note":null,"origin":null,"recordedAt":"2026-08-01T10:00:00+00:00","amendedAt":"2026-08-02T11:00:00+00:00"}],"nextCursor":null}
         """;
 
-    private readonly string storeDirectory =
-        Path.Combine(Path.GetTempPath(), $"mailfathom-contact-tests-{Guid.NewGuid():N}");
-
-    private readonly RecordingCliConsole console = new();
-
-    private readonly FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 16, 12, 0, 0, TimeSpan.Zero));
+    private readonly CliCommandHarness harness = new(new DateTimeOffset(2026, 8, 16, 12, 0, 0, TimeSpan.Zero));
 
     /// <summary>One address is no choice, so the record prefers it without the operator having to say so.</summary>
     [Fact]
@@ -68,7 +59,7 @@ public sealed class ContactCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal("anna@example.test", SentRecord(deployment).GetProperty("preferredAddress").GetString());
-        Assert.Contains(this.console.Lines, line => line.Contains("Anna Kowalska", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Anna Kowalska", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -98,7 +89,7 @@ public sealed class ContactCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Equal(0, deployment.ContactRequestCount(HttpMethod.Post));
-        Assert.Contains(this.console.Errors, line => line.Contains("--preferred", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("--preferred", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -127,7 +118,7 @@ public sealed class ContactCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
-        Assert.Contains(this.console.Errors, line => line.Contains(holder.ToString("D"), StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains(holder.ToString("D"), StringComparison.Ordinal));
     }
 
     /// <summary>Naming a contact both ways, or neither, is a mistake in the invocation rather than a lookup to attempt.</summary>
@@ -170,7 +161,7 @@ public sealed class ContactCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.console.Lines, line => line.Contains("Anna Kowalska", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Anna Kowalska", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -196,7 +187,7 @@ public sealed class ContactCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.All(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => Assert.DoesNotContain("nobody@example.test", line, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -220,7 +211,7 @@ public sealed class ContactCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
 
         var listing = DrawnListing.ReadFrom(
-            this.console.Lines, "Contact", "Name", "Preferred address", "Origin");
+            this.harness.Console.Lines, "Contact", "Name", "Preferred address", "Origin");
 
         Assert.Equal(2, listing.Rows.Count);
         Assert.Equal(
@@ -253,7 +244,7 @@ public sealed class ContactCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
 
         var listing = DrawnListing.ReadFrom(
-            this.console.Lines, "Contact", "Name", "Preferred address", "Origin");
+            this.harness.Console.Lines, "Contact", "Name", "Preferred address", "Origin");
         var row = Assert.Single(listing.Rows);
 
         Assert.Equal("none recorded", listing.Cell(row, "Name"));
@@ -302,7 +293,7 @@ public sealed class ContactCommandTests : IDisposable
 
         // Assert
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("--cursor a-cursor-the-deployment-issued", StringComparison.Ordinal));
     }
 
@@ -380,7 +371,7 @@ public sealed class ContactCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
-        Assert.Contains(this.console.Errors, line => line.Contains("contact promote", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("contact promote", StringComparison.Ordinal));
     }
 
     /// <summary>The added address joins the ones held, and the contact goes on preferring the one it preferred.</summary>
@@ -498,7 +489,7 @@ public sealed class ContactCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Equal(0, deployment.ContactRequestCount(HttpMethod.Put));
-        Assert.Contains(this.console.Errors, line => line.Contains("contact delete", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("contact delete", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -527,7 +518,7 @@ public sealed class ContactCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Equal(0, deployment.ContactRequestCount(HttpMethod.Put));
-        Assert.Contains(this.console.Errors, line => line.Contains("--preferred", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("--preferred", StringComparison.Ordinal));
     }
 
     /// <summary>The address the operator named is gone from the record the command sends, and the rest stay.</summary>
@@ -577,8 +568,8 @@ public sealed class ContactCommandTests : IDisposable
         Assert.Contains(
             deployment.RecordedRequests,
             request => request.RequestUri?.AbsolutePath.EndsWith("/promotion", StringComparison.Ordinal) == true);
-        Assert.Contains(this.console.Lines, line => line.Contains($"Took on contact {Identity}", StringComparison.Ordinal));
-        Assert.DoesNotContain(this.console.Lines, line => line.Contains("Anna Kowalska", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains($"Took on contact {Identity}", StringComparison.Ordinal));
+        Assert.DoesNotContain(this.harness.Console.Lines, line => line.Contains("Anna Kowalska", StringComparison.Ordinal));
     }
 
     /// <summary>Erasing cannot be undone, so the record is shown and the question asked before anything is removed.</summary>
@@ -589,16 +580,16 @@ public sealed class ContactCommandTests : IDisposable
         using var deployment = FakeContactDeployment.Holding(
             lookup: FakeContactDeployment.Lookup(),
             erasure: FakeContactDeployment.Erasure(wasHeld: true, addressesErased: 2));
-        this.console.AnswerToGive = true;
+        this.harness.Console.AnswerToGive = true;
 
         // Act
         var exitCode = await this.RunAsync(deployment, "contact", "delete", "--id", Identity, "--endpoint", Endpoint);
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Single(this.console.Questions);
-        Assert.Contains(this.console.Lines, line => line.Contains("Anna Kowalska", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("2 addresses", StringComparison.Ordinal));
+        Assert.Single(this.harness.Console.Questions);
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Anna Kowalska", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("2 addresses", StringComparison.Ordinal));
     }
 
     /// <summary>The question is about a person, and what it names is the act rather than who it is about.</summary>
@@ -609,14 +600,14 @@ public sealed class ContactCommandTests : IDisposable
         using var deployment = FakeContactDeployment.Holding(
             lookup: FakeContactDeployment.Lookup(),
             erasure: FakeContactDeployment.Erasure(wasHeld: true, addressesErased: 1));
-        this.console.AnswerToGive = true;
+        this.harness.Console.AnswerToGive = true;
 
         // Act
         await this.RunAsync(deployment, "contact", "delete", "--id", Identity, "--endpoint", Endpoint);
 
         // Assert
-        Assert.DoesNotContain("Anna Kowalska", Assert.Single(this.console.Questions), StringComparison.Ordinal);
-        Assert.DoesNotContain("anna@example.test", Assert.Single(this.console.Questions), StringComparison.Ordinal);
+        Assert.DoesNotContain("Anna Kowalska", Assert.Single(this.harness.Console.Questions), StringComparison.Ordinal);
+        Assert.DoesNotContain("anna@example.test", Assert.Single(this.harness.Console.Questions), StringComparison.Ordinal);
     }
 
     /// <summary>A question answered no erases nothing, and says so where a scripted run captures failures.</summary>
@@ -625,7 +616,7 @@ public sealed class ContactCommandTests : IDisposable
     {
         // Arrange
         using var deployment = FakeContactDeployment.Holding(lookup: FakeContactDeployment.Lookup());
-        this.console.AnswerToGive = false;
+        this.harness.Console.AnswerToGive = false;
 
         // Act
         var exitCode = await this.RunAsync(deployment, "contact", "delete", "--id", Identity, "--endpoint", Endpoint);
@@ -633,7 +624,7 @@ public sealed class ContactCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Equal(0, deployment.ContactRequestCount(HttpMethod.Delete));
-        Assert.Contains("Nothing was erased.", this.console.Errors);
+        Assert.Contains("Nothing was erased.", this.harness.Console.Errors);
     }
 
     /// <summary>
@@ -645,7 +636,7 @@ public sealed class ContactCommandTests : IDisposable
     {
         // Arrange
         using var deployment = FakeContactDeployment.Holding(lookup: FakeContactDeployment.Lookup());
-        this.console.AnswersQuestions = false;
+        this.harness.Console.AnswersQuestions = false;
 
         // Act
         var exitCode = await this.RunAsync(deployment, "contact", "delete", "--id", Identity, "--endpoint", Endpoint);
@@ -653,7 +644,7 @@ public sealed class ContactCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Equal(0, deployment.ContactRequestCount(HttpMethod.Delete));
-        Assert.Contains(this.console.Errors, line => line.Contains("--yes", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("--yes", StringComparison.Ordinal));
     }
 
     /// <summary>The flag is what a scripted erasure states its agreement with, and nothing is asked.</summary>
@@ -664,7 +655,7 @@ public sealed class ContactCommandTests : IDisposable
         using var deployment = FakeContactDeployment.Holding(
             lookup: FakeContactDeployment.Lookup(),
             erasure: FakeContactDeployment.Erasure(wasHeld: true, addressesErased: 1));
-        this.console.AnswersQuestions = false;
+        this.harness.Console.AnswersQuestions = false;
 
         // Act
         var exitCode = await this.RunAsync(
@@ -679,7 +670,7 @@ public sealed class ContactCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Empty(this.console.Questions);
+        Assert.Empty(this.harness.Console.Questions);
         Assert.Equal(1, deployment.ContactRequestCount(HttpMethod.Delete));
     }
 
@@ -695,7 +686,7 @@ public sealed class ContactCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Empty(this.console.Questions);
+        Assert.Empty(this.harness.Console.Questions);
         Assert.Equal(0, deployment.ContactRequestCount(HttpMethod.Delete));
     }
 
@@ -706,17 +697,17 @@ public sealed class ContactCommandTests : IDisposable
         // Arrange
         using var deployment = FakeContactDeployment.Holding(
             erasure: FakeContactDeployment.CollectedErasure(contactsErased: 12, addressesErased: 17));
-        this.console.AnswersQuestions = false;
+        this.harness.Console.AnswersQuestions = false;
 
         // Act
         var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--yes", "--endpoint", Endpoint);
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Empty(this.console.Questions);
+        Assert.Empty(this.harness.Console.Questions);
         Assert.Equal(1, deployment.ContactRequestCount(HttpMethod.Delete));
-        Assert.Contains(this.console.Lines, line => line.Contains("12 contacts", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("17 addresses", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("12 contacts", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("17 addresses", StringComparison.Ordinal));
     }
 
     /// <summary>It cannot be undone, so it asks first, and what it asks names nobody it is about to erase.</summary>
@@ -726,15 +717,15 @@ public sealed class ContactCommandTests : IDisposable
         // Arrange
         using var deployment = FakeContactDeployment.Holding(
             erasure: FakeContactDeployment.CollectedErasure(contactsErased: 1, addressesErased: 1));
-        this.console.AnswerToGive = true;
+        this.harness.Console.AnswerToGive = true;
 
         // Act
         var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--endpoint", Endpoint);
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.DoesNotContain("@", Assert.Single(this.console.Questions), StringComparison.Ordinal);
-        Assert.Contains(this.console.Lines, line => line.Contains("1 contact ", StringComparison.Ordinal));
+        Assert.DoesNotContain("@", Assert.Single(this.harness.Console.Questions), StringComparison.Ordinal);
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("1 contact ", StringComparison.Ordinal));
     }
 
     /// <summary>A question answered no erases nothing, and says so where a scripted run captures failures.</summary>
@@ -743,7 +734,7 @@ public sealed class ContactCommandTests : IDisposable
     {
         // Arrange
         using var deployment = FakeContactDeployment.Holding();
-        this.console.AnswerToGive = false;
+        this.harness.Console.AnswerToGive = false;
 
         // Act
         var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--endpoint", Endpoint);
@@ -751,7 +742,7 @@ public sealed class ContactCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Equal(0, deployment.ContactRequestCount(HttpMethod.Delete));
-        Assert.Contains("Nothing was erased.", this.console.Errors);
+        Assert.Contains("Nothing was erased.", this.harness.Console.Errors);
     }
 
     /// <summary>Reading agreement out of whatever was piped in would turn a stray line into an agreement to erase people.</summary>
@@ -760,7 +751,7 @@ public sealed class ContactCommandTests : IDisposable
     {
         // Arrange
         using var deployment = FakeContactDeployment.Holding();
-        this.console.AnswersQuestions = false;
+        this.harness.Console.AnswersQuestions = false;
 
         // Act
         var exitCode = await this.RunAsync(deployment, "contact", "delete-collected", "--endpoint", Endpoint);
@@ -768,7 +759,7 @@ public sealed class ContactCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Equal(0, deployment.ContactRequestCount(HttpMethod.Delete));
-        Assert.Contains(this.console.Errors, line => line.Contains("--yes", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("--yes", StringComparison.Ordinal));
     }
 
     /// <summary>A deployment that collected nobody is the state the operator asked for rather than a failure.</summary>
@@ -784,7 +775,7 @@ public sealed class ContactCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.console.Lines, line => line.Contains("collected nobody", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("collected nobody", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -803,7 +794,7 @@ public sealed class ContactCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
 
-        var document = Assert.Single(this.console.Lines);
+        var document = Assert.Single(this.harness.Console.Lines);
         Assert.Contains("Anna Kowalska", document, StringComparison.Ordinal);
         Assert.Contains("producedAt", document, StringComparison.Ordinal);
     }
@@ -820,8 +811,8 @@ public sealed class ContactCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
-        Assert.Empty(this.console.Lines);
-        Assert.Contains(this.console.Errors, line => line.Contains(Identity, StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(this.harness.Console.Lines);
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains(Identity, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>Every command that acts on one contact needs to be told which, because guessing would act on a person.</summary>
@@ -845,13 +836,7 @@ public sealed class ContactCommandTests : IDisposable
         Assert.Equal(0, deployment.ContactRequestCount(HttpMethod.Get));
     }
 
-    public void Dispose()
-    {
-        if (Directory.Exists(this.storeDirectory))
-        {
-            Directory.Delete(this.storeDirectory, recursive: true);
-        }
-    }
+    public void Dispose() => this.harness.Dispose();
 
     /// <summary>Reads the record a write carried, as the deployment would.</summary>
     /// <remarks>
@@ -869,22 +854,6 @@ public sealed class ContactCommandTests : IDisposable
     private static IReadOnlyList<string?> AddressesOf(JsonElement record) =>
         [.. record.GetProperty("addresses").EnumerateArray().Select(address => address.GetString())];
 
-    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args)
-    {
-        var store = new CredentialStore(
-            Path.Combine(this.storeDirectory, "credentials.json"),
-            new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key")));
-
-        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
-
-        var context = new CliContext(
-            this.console,
-            store,
-            (endpoint, trust) => FakeDeploymentTransport.Over(deployment, endpoint, trust),
-            FakeMailboxRedirect.Silent(),
-            _ => false,
-            this.clock);
-
-        return CliRunner.RunAsync(context, args);
-    }
+    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args) =>
+        this.harness.RunAsync(deployment, args);
 }

@@ -6,7 +6,6 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Threads;
 using MailFathom.Application.SensitiveContent.Egress;
-using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;

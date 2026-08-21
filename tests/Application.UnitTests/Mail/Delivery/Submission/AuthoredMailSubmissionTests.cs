@@ -592,7 +592,7 @@ public sealed class AuthoredMailSubmissionTests
         AccessAuthorization? authorization = null,
         AuthoredSendGovernor? governor = null)
     {
-        composer = ComposerThatComposes();
+        composer = ComposingAuthoredEmails.ThatComposes(ComposedMime);
         signal = new MailOutboxSignal(capacity: 8);
 
         var accountCatalog = Substitute.For<IMailAccountCatalog>();
@@ -627,40 +627,6 @@ public sealed class AuthoredMailSubmissionTests
             governor ?? AuthoredSendGovernors.Permitting(authorization),
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
             new FakeTimeProvider(Recorded));
-    }
-
-    /// <summary>A composer that produces a message from whatever it is handed, so a test says nothing about MIME.</summary>
-    /// <remarks>
-    /// The request it returns carries the recipients the resolution produced, because that is what the outbox writes
-    /// down and what a repeat has to reach the same row for. Everything else about the composition — the headers, the
-    /// encoding, the bytes — belongs to the MimeKit adapter's own suite.
-    /// </remarks>
-    private static IAuthoredEmailComposer ComposerThatComposes()
-    {
-        var composer = Substitute.For<IAuthoredEmailComposer>();
-        composer
-            .Compose(
-                Arg.Any<MailAccountId>(),
-                Arg.Any<OutgoingEmailRequester>(),
-                Arg.Any<AuthoredEmail>(),
-                Arg.Any<MailDeliveryCapabilities>())
-            .Returns(call =>
-            {
-                var authored = call.ArgAt<AuthoredEmail>(2);
-
-                return AuthoredEmailComposition.Composed(new ComposedOutgoingEmail(
-                    OutgoingEmailRequest.Create(
-                        call.ArgAt<MailAccountId>(0),
-                        call.ArgAt<OutgoingEmailRequester>(1),
-                        [.. authored.Recipients.Select(recipient => OutgoingRecipient.Create(
-                            Address(recipient.Address),
-                            recipient.Role,
-                            recipient.Contact))]),
-                    InternetMessageId.Mint("example.test"),
-                    ComposedMime));
-            });
-
-        return composer;
     }
 
     private static Contact ContactOf(string displayName, params string[] addresses) => Contact.Create(

@@ -24,15 +24,10 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
-using MailFathom.Domain.Accounts;
-using MailFathom.Domain.Delivery;
-using MailFathom.Domain.Delivery.Drafts;
-using MailFathom.Domain.Emails;
 using MailFathom.Mcp.Tools.Drafts;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
-using Xunit;
 
 namespace MailFathom.Mcp.UnitTests.TestDoubles;
 
@@ -58,8 +53,14 @@ internal sealed class DraftedMailDeployment
     /// <summary>The instant every record is stamped with, so a result's timestamp is a fact rather than a clock reading.</summary>
     internal static readonly DateTimeOffset Moment = new(2026, 8, 20, 9, 0, 0, TimeSpan.Zero);
 
-    private readonly Dictionary<(string Account, string Requester), OutgoingEmailRecord> outgoingByIdentity = [];
+    /// <summary>The message every composition here answers with, because no test about a tool reads MIME.</summary>
+    private static readonly ReadOnlyMemory<byte> DraftedMime =
+        "Message-ID: <one@example.test>\r\n\r\nHello."u8.ToArray().AsMemory();
+
     private readonly InMemoryMailDraftContentStore contents = new();
+
+    /// <summary>The one clock every store and every use case here reads, so advancing it moves the whole deployment.</summary>
+    private readonly FakeTimeProvider clock = new(Moment);
 
     /// <summary>Assembles the deployment for a caller granted exactly the permissions named.</summary>
     /// <param name="granted">What the entry that admitted the caller resolved to.</param>
@@ -70,7 +71,6 @@ internal sealed class DraftedMailDeployment
                 ? [MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend, MailFathomPermission.MailRead]
                 : granted);
 
-        var clock = new FakeTimeProvider(Moment);
         var persistenceSessions = Substitute.For<IPersistenceSessionFactory>();
         persistenceSessions.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ =>
         {
@@ -83,15 +83,15 @@ internal sealed class DraftedMailDeployment
         var commitPolicy = new OptimisticConcurrencyRetryPolicy(
             persistenceSessions,
             new PersistenceConcurrencyOptions(),
-            clock);
+            this.clock);
 
         var book = new MailDraftBook(
             this.Drafts,
             this.contents,
             commitPolicy,
-            FilerReachingNoFolder(persistenceSessions, this.Drafts, this.contents, commitPolicy, clock),
+            FilerReachingNoFolder(persistenceSessions, this.Drafts, this.contents, commitPolicy, this.clock),
             authorization,
-            clock);
+            this.clock);
 
         var writing = new DraftedMailWriting(
             new AuthoredMailDrafting(
@@ -106,6 +106,7 @@ internal sealed class DraftedMailDeployment
                 book,
                 authorization));
 
+        this.OutgoingEmails = new InMemoryOutgoingEmailStore(timeProvider: this.clock);
         this.SaveTool = new SaveDraftTool(writing);
         this.UpdateTool = new UpdateDraftTool(writing);
         this.DeleteTool = new DeleteDraftTool(book);
@@ -113,7 +114,7 @@ internal sealed class DraftedMailDeployment
             this.Drafts,
             this.contents,
             new MailOutbox(
-                this.OutgoingEmailStoreThatRecords(),
+                this.OutgoingEmails,
                 Substitute.For<IEmailContentStore>(),
                 commitPolicy,
                 new MailOutboxSignal(capacity: 8),
@@ -121,7 +122,7 @@ internal sealed class DraftedMailDeployment
                 Substitute.For<IOutboxOperationStore>(),
                 authorization,
                 OutgoingMailGovernors.Permitting(),
-                clock),
+                this.clock),
             this.OutgoingEmails,
             commitPolicy,
             Bounds,
@@ -133,13 +134,13 @@ internal sealed class DraftedMailDeployment
     internal InMemoryMailDraftStore Drafts { get; } = new();
 
     /// <summary>Gets the composition every draft passes through, so a test can read the message the arguments became.</summary>
-    internal IAuthoredEmailComposer Composer { get; } = ComposerThatComposes();
+    internal IAuthoredEmailComposer Composer { get; } = ComposingAuthoredEmails.ThatComposesDrafts(DraftedMime);
 
     /// <summary>Gets the summaries an answered email is read from, which hold nothing until a test says otherwise.</summary>
     internal IStoredEmailSummaryReader Summaries { get; } = Substitute.For<IStoredEmailSummaryReader>();
 
     /// <summary>Gets the store the promotion writes a send into and reads one back from.</summary>
-    internal IOutgoingEmailStore OutgoingEmails { get; } = Substitute.For<IOutgoingEmailStore>();
+    internal InMemoryOutgoingEmailStore OutgoingEmails { get; }
 
     /// <summary>Gets the tool that writes a draft.</summary>
     internal SaveDraftTool SaveTool { get; }
@@ -198,38 +199,6 @@ internal sealed class DraftedMailDeployment
             clock);
     }
 
-    /// <summary>A composition that composes whatever it is handed, so what a test reads is the arguments rather than MIME.</summary>
-    private static IAuthoredEmailComposer ComposerThatComposes()
-    {
-        var composer = Substitute.For<IAuthoredEmailComposer>();
-        composer
-            .ComposeDraft(
-                Arg.Any<MailAccountId>(),
-                Arg.Any<AuthoredEmail>(),
-                Arg.Any<MailDeliveryCapabilities>())
-            .Returns(call => MailDraftComposition.Composed(new ComposedMailDraft(
-                [
-                    .. call.ArgAt<AuthoredEmail>(1).Recipients.Select(recipient => new MailDraftRecipient(
-                        OutgoingRecipient.Create(
-                            Address(recipient.Address),
-                            recipient.Role,
-                            recipient.Contact),
-                        recipient.Provenance)),
-                ],
-                InternetMessageId.Mint("example.test"),
-                "Message-ID: <one@example.test>\r\n\r\nHello."u8.ToArray().AsMemory())));
-
-        return composer;
-    }
-
-    /// <summary>Reads an address a test wrote, failing the test rather than the composition when it is not one.</summary>
-    private static EmailAddress Address(string? address)
-    {
-        Assert.True(EmailAddress.TryCreate(displayName: null, address!, out var parsed));
-
-        return parsed;
-    }
-
     /// <summary>Builds the authoring an answer is derived through, over a mailbox holding whatever a test put in it.</summary>
     private StoredEmailResponseAuthoring AuthoringOver(AccessAuthorization authorization)
     {
@@ -250,62 +219,5 @@ internal sealed class DraftedMailDeployment
             new NamedRecipientResolver(Substitute.For<IContactDirectory>()),
             Bounds,
             authorization);
-    }
-
-    /// <summary>An outgoing store that keeps one record per idempotency identity, which is what a promoted draft is written into.</summary>
-    /// <remarks>
-    /// It is the port rather than a database, because what a tool test needs from it is the one behaviour a caller can
-    /// observe: one draft promoted twice composes one identity and answers with the record the first call opened.
-    /// </remarks>
-    private IOutgoingEmailStore OutgoingEmailStoreThatRecords()
-    {
-        this.OutgoingEmails
-            .OpenAsync(
-                Arg.Any<IPersistenceSession>(),
-                Arg.Any<OutgoingEmailRequest>(),
-                Arg.Any<OutgoingEmailPrincipal>(),
-                Arg.Any<long>(),
-                Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                var request = call.ArgAt<OutgoingEmailRequest>(1);
-                var identity = (request.AccountId.Value, request.Requester.Identity);
-
-                if (this.outgoingByIdentity.TryGetValue(identity, out var recorded))
-                {
-                    return OpenedOutgoingEmail.AlreadyRecorded(recorded);
-                }
-
-                var opened = new OutgoingEmailRecord
-                {
-                    Id = OutgoingEmailId.Create(Guid.CreateVersion7(Moment)),
-                    AccountId = request.AccountId,
-                    Requester = request.Requester,
-                    Principal = call.ArgAt<OutgoingEmailPrincipal>(2),
-                    Recipients = [.. request.Recipients.Select(OutgoingRecipientOutcome.Unanswered)],
-                    Stage = OutgoingEmailStage.Recorded,
-                    MimeByteLength = call.ArgAt<long>(3),
-                    AttemptCount = 0,
-                    RecordedAt = Moment,
-                    StageChangedAt = Moment,
-                    AvailableAt = Moment,
-                    DueAt = null,
-                    LastFailure = null,
-                    LastReplyCode = null,
-                    Filings = [],
-                    LastFilingFailure = null,
-                };
-
-                this.outgoingByIdentity[identity] = opened;
-
-                return OpenedOutgoingEmail.RecordedNow(opened);
-            });
-
-        this.OutgoingEmails
-            .FindAsync(Arg.Any<OutgoingEmailId>(), Arg.Any<CancellationToken>())
-            .Returns(call => this.outgoingByIdentity.Values.FirstOrDefault(
-                record => record.Id == call.ArgAt<OutgoingEmailId>(0)));
-
-        return this.OutgoingEmails;
     }
 }

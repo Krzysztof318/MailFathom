@@ -4,7 +4,6 @@
 
 using System.Globalization;
 using System.Net;
-using System.Text;
 using MailFathom.Cli.Administration;
 using MailFathom.TestSupport;
 
@@ -193,57 +192,46 @@ internal static class FakeContactDeployment
     {
         var path = request.RequestUri?.AbsolutePath;
 
-        if (path == AdminEndpointRoutes.SessionPath)
-        {
-            return Json(
-                HttpStatusCode.OK,
-                FakeAdminEndpoint.SessionBody("workstation", version ?? FakeAdminEndpoint.CommandVersion));
-        }
-
         if (path == AdminEndpointRoutes.ContactsPath)
         {
             return request.Method == HttpMethod.Get
-                ? Json(HttpStatusCode.OK, page ?? Page(nextCursor: null))
-                : Json(HttpStatusCode.OK, write ?? Written());
+                ? FakeAdminEndpoint.Json(HttpStatusCode.OK, page ?? Page(nextCursor: null))
+                : FakeAdminEndpoint.Json(HttpStatusCode.OK, write ?? Written());
         }
 
         if (path == AdminEndpointRoutes.ContactByAddressPath)
         {
-            return Json(HttpStatusCode.OK, lookup ?? """{"contact":null}""");
+            return FakeAdminEndpoint.Json(HttpStatusCode.OK, lookup ?? """{"contact":null}""");
         }
 
         if (path?.EndsWith("/export", StringComparison.Ordinal) == true)
         {
-            return Json(HttpStatusCode.OK, export ?? """{"contact":null,"producedAt":null}""");
+            return FakeAdminEndpoint.Json(HttpStatusCode.OK, export ?? """{"contact":null,"producedAt":null}""");
         }
 
         if (path?.EndsWith("/promotion", StringComparison.Ordinal) == true)
         {
-            return Json(HttpStatusCode.OK, write ?? Written());
+            return FakeAdminEndpoint.Json(HttpStatusCode.OK, write ?? Written());
         }
 
         if (path == AdminEndpointRoutes.CollectedContactsPath)
         {
-            return Json(HttpStatusCode.OK, erasure ?? CollectedErasure(contactsErased: 2, addressesErased: 3));
+            return FakeAdminEndpoint.Json(HttpStatusCode.OK, erasure ?? CollectedErasure(contactsErased: 2, addressesErased: 3));
         }
 
         if (path?.StartsWith(AdminEndpointRoutes.ContactsPath, StringComparison.Ordinal) == true)
         {
             if (request.Method == HttpMethod.Delete)
             {
-                return Json(HttpStatusCode.OK, erasure ?? Erasure(wasHeld: true, addressesErased: 1));
+                return FakeAdminEndpoint.Json(HttpStatusCode.OK, erasure ?? Erasure(wasHeld: true, addressesErased: 1));
             }
 
             return request.Method == HttpMethod.Get
-                ? Json(HttpStatusCode.OK, lookup ?? """{"contact":null}""")
-                : Json(HttpStatusCode.OK, write ?? Written());
+                ? FakeAdminEndpoint.Json(HttpStatusCode.OK, lookup ?? """{"contact":null}""")
+                : FakeAdminEndpoint.Json(HttpStatusCode.OK, write ?? Written());
         }
 
-        return Json(HttpStatusCode.NotFound, string.Empty);
+        return FakeAdminEndpoint.AnswerSession(request, version)
+            ?? FakeAdminEndpoint.Json(HttpStatusCode.NotFound, string.Empty);
     }
-
-    private static HttpResponseMessage Json(HttpStatusCode status, string body) => new(status)
-    {
-        Content = new StringContent(body, Encoding.UTF8, "application/json"),
-    };
 }

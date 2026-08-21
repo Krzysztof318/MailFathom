@@ -24,6 +24,12 @@
          over them. -->
     <Compile Include="..\shared\InMemoryMailDraftStore.cs" Link="InMemoryMailDraftStore.cs" />
     <Compile Include="..\shared\InMemoryMailDraftContentStore.cs" Link="InMemoryMailDraftContentStore.cs" />
+    <!-- The outbox record a send opens is written by the use cases in Application.UnitTests and by the tools here, so
+         the store that holds one is linked into both rather than hand-rolled per suite. -->
+    <Compile Include="..\shared\InMemoryOutgoingEmailStore.cs" Link="InMemoryOutgoingEmailStore.cs" />
+    <!-- A conversation is assembled by the use case Application.UnitTests proves and by the tools that publish it, and
+         both depend on the same four guarantees the real reader's query makes. -->
+    <Compile Include="..\shared\StubEmailThreadReader.cs" Link="StubEmailThreadReader.cs" />
     <!-- Every boundary holding a guarded egress point asserts the same three states of the guard, so the three are
          built once and linked into each suite that has one. -->
     <Compile Include="..\shared\MarkerSensitiveContentScanner.cs" Link="MarkerSensitiveContentScanner.cs" />

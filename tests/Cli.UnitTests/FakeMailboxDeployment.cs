@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
-using System.Text;
 using MailFathom.Cli.Administration;
 using MailFathom.TestSupport;
 
@@ -23,22 +22,9 @@ internal static class FakeMailboxDeployment
     internal static FakeHttpMessageHandler Answering(string status) =>
         new((request, _) => Task.FromResult(Answer(request, status)));
 
-    private static HttpResponseMessage Answer(HttpRequestMessage request, string status)
-    {
-        var path = request.RequestUri?.AbsolutePath;
-
-        if (path == AdminEndpointRoutes.SessionPath)
-        {
-            return Json(HttpStatusCode.OK, FakeAdminEndpoint.SessionBody("workstation", FakeAdminEndpoint.CommandVersion));
-        }
-
-        return path == AdminEndpointRoutes.MailboxSynchronizationPath
-            ? Json(HttpStatusCode.OK, status)
-            : Json(HttpStatusCode.NotFound, string.Empty);
-    }
-
-    private static HttpResponseMessage Json(HttpStatusCode status, string body) => new(status)
-    {
-        Content = new StringContent(body, Encoding.UTF8, "application/json"),
-    };
+    private static HttpResponseMessage Answer(HttpRequestMessage request, string status) =>
+        FakeAdminEndpoint.AnswerSession(request)
+        ?? (request.RequestUri?.AbsolutePath == AdminEndpointRoutes.MailboxSynchronizationPath
+            ? FakeAdminEndpoint.Json(HttpStatusCode.OK, status)
+            : FakeAdminEndpoint.Json(HttpStatusCode.NotFound, string.Empty));
 }

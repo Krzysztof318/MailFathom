@@ -4,7 +4,6 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
-using System.Text;
 using System.Web;
 using MailFathom.TestSupport;
 
@@ -66,7 +65,7 @@ internal sealed class FakeOAuthDeployment
 
     /// <summary>Gets or sets how the token endpoint answers, which is what a test varies.</summary>
     internal Func<IReadOnlyDictionary<string, string>, HttpResponseMessage> AnswerTokenRequest { get; set; } =
-        _ => Json(HttpStatusCode.OK, TokenResponse("an-access-token", "a-refresh-token", expiresInSeconds: 3600));
+        _ => FakeAdminEndpoint.Json(HttpStatusCode.OK, TokenResponse("an-access-token", "a-refresh-token", expiresInSeconds: 3600));
 
     /// <summary>Gets the form the token endpoint was last posted, so a test can assert what the command asked for.</summary>
     internal IReadOnlyDictionary<string, string> LastTokenRequest { get; private set; } =
@@ -97,14 +96,11 @@ internal sealed class FakeOAuthDeployment
     /// <param name="errorCode">The <c>error</c> the server reports.</param>
     /// <returns>The response.</returns>
     internal static HttpResponseMessage Refusing(string errorCode) =>
-        Json(HttpStatusCode.BadRequest, $$"""{"error":"{{errorCode}}"}""");
+        FakeAdminEndpoint.Json(HttpStatusCode.BadRequest, $$"""{"error":"{{errorCode}}"}""");
 
     /// <summary>Builds the handler every request in the scenario goes through.</summary>
     /// <returns>The handler; the caller disposes it.</returns>
     internal FakeHttpMessageHandler Handler() => new(this.AnswerAsync);
-
-    private static HttpResponseMessage Json(HttpStatusCode status, string body) =>
-        new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Every response is handed to the HttpClient that asked for it, which disposes it; disposing here would return a response whose body cannot be read.")]
     private async Task<HttpResponseMessage> AnswerAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -113,15 +109,15 @@ internal sealed class FakeOAuthDeployment
 
         return path switch
         {
-            MetadataPath => Json(HttpStatusCode.OK, this.ProtectedResourceMetadata()),
+            MetadataPath => FakeAdminEndpoint.Json(HttpStatusCode.OK, this.ProtectedResourceMetadata()),
             OAuthDiscoveryPath when this.PublishesOAuthMetadataAddress =>
-                Json(HttpStatusCode.OK, this.AuthorizationServerMetadata()),
-            OpenIdConnectDiscoveryPath => Json(HttpStatusCode.OK, this.AuthorizationServerMetadata()),
+                FakeAdminEndpoint.Json(HttpStatusCode.OK, this.AuthorizationServerMetadata()),
+            OpenIdConnectDiscoveryPath => FakeAdminEndpoint.Json(HttpStatusCode.OK, this.AuthorizationServerMetadata()),
             "/realms/mailfathom/protocol/openid-connect/token" =>
                 await this.AnswerTokenEndpointAsync(request, cancellationToken),
             "/realms/mailfathom/protocol/openid-connect/auth/device" =>
                 await this.AnswerDeviceAuthorizationEndpointAsync(request, cancellationToken),
-            "/api/admin/session" => Json(
+            "/api/admin/session" => FakeAdminEndpoint.Json(
                 HttpStatusCode.OK,
                 FakeAdminEndpoint.SessionBody("kasia", FakeAdminEndpoint.CommandVersion)),
             _ => new HttpResponseMessage(HttpStatusCode.NotFound),
@@ -135,7 +131,7 @@ internal sealed class FakeOAuthDeployment
     {
         this.LastDeviceAuthorizationRequest = await ReadFormAsync(request, cancellationToken);
 
-        return Json(
+        return FakeAdminEndpoint.Json(
             HttpStatusCode.OK,
             $$"""{"device_code":"a-device-code","user_code":"WDJB-MJHT","verification_uri":"{{this.VerificationUri}}","expires_in":600,"interval":1}""");
     }

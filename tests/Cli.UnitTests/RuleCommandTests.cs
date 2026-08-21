@@ -3,9 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
-using MailFathom.Cli.Credentials;
 using MailFathom.TestSupport;
-using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Cli.UnitTests;
@@ -24,7 +22,7 @@ namespace MailFathom.Cli.UnitTests;
 /// </remarks>
 public sealed class RuleCommandTests : IDisposable
 {
-    private const string Endpoint = "https://mail.example.test:8443";
+    private const string Endpoint = CliCommandHarness.Endpoint;
     private const string Account = "work";
 
     private const string LoadedRules = """
@@ -53,14 +51,7 @@ public sealed class RuleCommandTests : IDisposable
         }
         """;
 
-    private static readonly Uri EndpointAddress = new(Endpoint);
-
-    private readonly string storeDirectory =
-        Path.Combine(Path.GetTempPath(), $"mailfathom-rule-tests-{Guid.NewGuid():N}");
-
-    private readonly RecordingCliConsole console = new();
-
-    private readonly FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 8, 12, 0, 0, TimeSpan.Zero));
+    private readonly CliCommandHarness harness = new(new DateTimeOffset(2026, 8, 8, 12, 0, 0, TimeSpan.Zero));
 
     /// <summary>The order is the answer as much as the rules are, so nothing here sorts what the deployment sent.</summary>
     [Fact]
@@ -76,12 +67,12 @@ public sealed class RuleCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(
             ["file-invoices", "mark-newsletters"],
-            this.console.Lines
+            this.harness.Console.Lines
                 .Where(line => line.StartsWith("file-", StringComparison.Ordinal)
                     || line.StartsWith("mark-", StringComparison.Ordinal))
                 .Select(row => row.Split(' ')[0]));
-        Assert.Contains(this.console.Lines, line => line.Contains("relocate → archive", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("ends the pass", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("relocate → archive", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("ends the pass", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -100,11 +91,11 @@ public sealed class RuleCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             row => row.StartsWith("mark-newsletters", StringComparison.Ordinal)
                 && row.Contains("nothing automatically; 'mfctl rules run' applies it", StringComparison.Ordinal));
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             row => row.StartsWith("file-invoices", StringComparison.Ordinal)
                 && row.Contains("Arrival", StringComparison.Ordinal));
     }
@@ -139,7 +130,7 @@ public sealed class RuleCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             row => row.StartsWith("archive-old-newsletters", StringComparison.Ordinal)
                 && row.Contains("Schedule (daily:03:00:Europe/Warsaw)", StringComparison.Ordinal));
     }
@@ -162,7 +153,7 @@ public sealed class RuleCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         var acceptance = Assert.Single(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.StartsWith("Configuration:", StringComparison.Ordinal));
         Assert.Contains("REFUSED", acceptance, StringComparison.Ordinal);
         Assert.Contains("2 setting(s)", acceptance, StringComparison.Ordinal);
@@ -181,7 +172,7 @@ public sealed class RuleCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.console.Lines, line => line.Contains("declares no rules", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("declares no rules", StringComparison.Ordinal));
     }
 
     /// <summary>Showing a rule names where it is edited, because no command here edits one and never will.</summary>
@@ -196,12 +187,12 @@ public sealed class RuleCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.console.Lines, line => line.Contains("senderDomain, subject", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("senderDomain, subject", StringComparison.Ordinal));
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.StartsWith("Runs on:", StringComparison.Ordinal)
                 && line.Contains("Arrival", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("MailRules", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("MailRules", StringComparison.Ordinal));
     }
 
     /// <summary>A rule named after one of the deployment's own routes is chosen from the set like any other.</summary>
@@ -225,7 +216,7 @@ public sealed class RuleCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.console.Lines, line => line.Contains("isSeen", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("isSeen", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -239,7 +230,7 @@ public sealed class RuleCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
-        Assert.Contains(this.console.Errors, line => line.Contains("mfctl rules list", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("mfctl rules list", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -254,8 +245,8 @@ public sealed class RuleCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(1, deployment.RunRequestCount());
-        Assert.Contains(this.console.Lines, line => line.Contains("has been asked for", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("rules run-status", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("has been asked for", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("rules run-status", StringComparison.Ordinal));
     }
 
     /// <summary>Asking twice is asking once, and the operator is told which of the two happened.</summary>
@@ -270,9 +261,9 @@ public sealed class RuleCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.console.Lines, line => line.Contains("already under way", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("already under way", StringComparison.Ordinal));
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("120 evaluated, 4 matched, 1 skipped", StringComparison.Ordinal));
     }
 
@@ -313,8 +304,8 @@ public sealed class RuleCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(0, deployment.RunRequestCount());
-        Assert.Contains(this.console.Lines, line => line.Contains("under way", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("120 evaluated", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("under way", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("120 evaluated", StringComparison.Ordinal));
     }
 
     /// <summary>A run nobody asked for reads as one unless the answer says what started it, which is why it carries that.</summary>
@@ -339,7 +330,7 @@ public sealed class RuleCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("started by ScheduledRun", StringComparison.Ordinal));
     }
 
@@ -364,7 +355,7 @@ public sealed class RuleCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.console.Lines, line => line.Contains("rules run --account work", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("rules run --account work", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -414,10 +405,10 @@ public sealed class RuleCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("senderDomain, attachmentCount", StringComparison.Ordinal));
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("relocate → archive: Requested", StringComparison.Ordinal));
     }
 
@@ -453,7 +444,7 @@ public sealed class RuleCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("Failed (EvaluationTimedOut)", StringComparison.Ordinal));
     }
 
@@ -481,7 +472,7 @@ public sealed class RuleCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.console.Lines, line => line.Contains("nothing reaches it", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("nothing reaches it", StringComparison.Ordinal));
     }
 
     /// <summary>A rule name may carry a space, so the filters are escaped in one place rather than at a call site.</summary>
@@ -534,7 +525,7 @@ public sealed class RuleCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
-        Assert.Contains(this.console.Errors, line => line.Contains("between 1 and 200", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("between 1 and 200", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -582,7 +573,7 @@ public sealed class RuleCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.console.Lines, line => line.Contains("--cursor MS4xLjEuYWJj", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("--cursor MS4xLjEuYWJj", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -628,30 +619,8 @@ public sealed class RuleCommandTests : IDisposable
         }
         """;
 
-    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args)
-    {
-        var store = new CredentialStore(
-            Path.Combine(this.storeDirectory, "credentials.json"),
-            new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key")));
+    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args) =>
+        this.harness.RunAsync(deployment, args);
 
-        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
-
-        var context = new CliContext(
-            this.console,
-            store,
-            (endpoint, trust) => FakeDeploymentTransport.Over(deployment, endpoint, trust),
-            FakeMailboxRedirect.Silent(),
-            _ => false,
-            this.clock);
-
-        return CliRunner.RunAsync(context, args);
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(this.storeDirectory))
-        {
-            Directory.Delete(this.storeDirectory, recursive: true);
-        }
-    }
+    public void Dispose() => this.harness.Dispose();
 }

@@ -4,7 +4,6 @@
 
 using System.Globalization;
 using System.Net;
-using System.Text;
 using MailFathom.Cli.Administration;
 using MailFathom.TestSupport;
 
@@ -153,46 +152,25 @@ internal static class FakeMaintenanceDeployment
 
     private static HttpResponseMessage AnswerRewind(HttpRequestMessage request, string assessment, string rewind)
     {
-        if (request.RequestUri?.AbsolutePath == AdminEndpointRoutes.SessionPath)
-        {
-            return Json(
-                HttpStatusCode.OK,
-                FakeAdminEndpoint.SessionBody("workstation", FakeAdminEndpoint.CommandVersion));
-        }
-
         if (request.RequestUri?.AbsolutePath == AdminEndpointRoutes.MailboxRewindPath)
         {
-            return Json(HttpStatusCode.OK, request.Method == HttpMethod.Get ? assessment : rewind);
+            return FakeAdminEndpoint.Json(HttpStatusCode.OK, request.Method == HttpMethod.Get ? assessment : rewind);
         }
 
-        return Json(HttpStatusCode.NotFound, string.Empty);
+        return FakeAdminEndpoint.AnswerSession(request)
+            ?? FakeAdminEndpoint.Json(HttpStatusCode.NotFound, string.Empty);
     }
 
     private static HttpResponseMessage AnswerRederivation(HttpRequestMessage request, string start, string state)
     {
-        // The session route is answered unconditionally, because every command settles the two versions there before
-        // its own operation and a double serving only its own route would report a deployment nothing can be
-        // administered on. It is repeated rather than shared with the rewind double, because a helper returning a
-        // response the caller then returns is a disposable this analyzer cannot see through.
-        if (request.RequestUri?.AbsolutePath == AdminEndpointRoutes.SessionPath)
-        {
-            return Json(
-                HttpStatusCode.OK,
-                FakeAdminEndpoint.SessionBody("workstation", FakeAdminEndpoint.CommandVersion));
-        }
-
         if (request.RequestUri?.AbsolutePath == AdminEndpointRoutes.MailboxRederivationPath)
         {
-            return Json(HttpStatusCode.OK, request.Method == HttpMethod.Get ? state : start);
+            return FakeAdminEndpoint.Json(HttpStatusCode.OK, request.Method == HttpMethod.Get ? state : start);
         }
 
-        return Json(HttpStatusCode.NotFound, string.Empty);
+        return FakeAdminEndpoint.AnswerSession(request)
+            ?? FakeAdminEndpoint.Json(HttpStatusCode.NotFound, string.Empty);
     }
 
     private static string Written(bool value) => value ? "true" : "false";
-
-    private static HttpResponseMessage Json(HttpStatusCode status, string body) => new(status)
-    {
-        Content = new StringContent(body, Encoding.UTF8, "application/json"),
-    };
 }

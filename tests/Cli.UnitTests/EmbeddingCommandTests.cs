@@ -4,9 +4,7 @@
 
 using System.Net;
 using MailFathom.Cli.Administration;
-using MailFathom.Cli.Credentials;
 using MailFathom.TestSupport;
-using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Cli.UnitTests;
@@ -19,7 +17,7 @@ namespace MailFathom.Cli.UnitTests;
 /// </remarks>
 public sealed class EmbeddingCommandTests : IDisposable
 {
-    private const string Endpoint = "https://mail.example.test:8443";
+    private const string Endpoint = CliCommandHarness.Endpoint;
 
     private const string SpendingAssessment = """
         {
@@ -51,14 +49,7 @@ public sealed class EmbeddingCommandTests : IDisposable
         }
         """;
 
-    private static readonly Uri EndpointAddress = new(Endpoint);
-
-    private readonly string storeDirectory =
-        Path.Combine(Path.GetTempPath(), $"mailfathom-embedding-tests-{Guid.NewGuid():N}");
-
-    private readonly RecordingCliConsole console = new();
-
-    private readonly FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 8, 12, 0, 0, TimeSpan.Zero));
+    private readonly CliCommandHarness harness = new(new DateTimeOffset(2026, 8, 8, 12, 0, 0, TimeSpan.Zero));
 
     /// <summary>The declaration and the two generations are all in the one answer, because any of them can be the reason search is quiet.</summary>
     [Fact]
@@ -86,9 +77,9 @@ public sealed class EmbeddingCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(AdminEndpointRoutes.EmbeddingStatusPath, deployment.LastPath());
-        Assert.Contains(this.console.Lines, line => line.Contains("a-model", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("nothing outstanding", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("Serving", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("a-model", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("nothing outstanding", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Serving", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -115,8 +106,8 @@ public sealed class EmbeddingCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.console.Lines, line => line.Contains("mfctl embedding activate", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("answered lexically", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("mfctl embedding activate", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("answered lexically", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -150,7 +141,7 @@ public sealed class EmbeddingCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.StartsWith("Next pass:", StringComparison.Ordinal)
                 && line.Contains("due at 2026-08-08 12:00:30Z", StringComparison.Ordinal));
     }
@@ -178,7 +169,7 @@ public sealed class EmbeddingCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         var nextPass = Assert.Single(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.StartsWith("Next pass:", StringComparison.Ordinal));
         Assert.Contains("EmbeddingBackfill:Enabled", nextPass, StringComparison.Ordinal);
 
@@ -192,7 +183,7 @@ public sealed class EmbeddingCommandTests : IDisposable
     public async Task Activate_ATerminalThatAgrees_ReportsTheEstimateFirstAndThenStartsTheReindex()
     {
         // Arrange
-        this.console.AnswerToGive = true;
+        this.harness.Console.AnswerToGive = true;
         using var deployment = FakeEmbeddingDeployment.Answering(
             assessment: SpendingAssessment,
             activation: (HttpStatusCode.OK, ActivationAnswer("ReindexStarted")));
@@ -203,8 +194,8 @@ public sealed class EmbeddingCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.True(deployment.WasAskedToActivate());
-        Assert.Contains(this.console.Lines, line => line.Contains("200,000 characters", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("started a reindex", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("200,000 characters", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("started a reindex", StringComparison.Ordinal));
     }
 
     /// <summary>Declining leaves the provider bill unstarted, which is the whole of what the prompt is for.</summary>
@@ -212,7 +203,7 @@ public sealed class EmbeddingCommandTests : IDisposable
     public async Task Activate_ATerminalThatDeclines_ActivatesNothing()
     {
         // Arrange
-        this.console.AnswerToGive = false;
+        this.harness.Console.AnswerToGive = false;
         using var deployment = FakeEmbeddingDeployment.Answering(
             assessment: SpendingAssessment,
             activation: (HttpStatusCode.OK, ActivationAnswer("ReindexStarted")));
@@ -223,7 +214,7 @@ public sealed class EmbeddingCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.False(deployment.WasAskedToActivate());
-        Assert.Contains(this.console.Errors, line => line.Contains("Nothing was activated", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("Nothing was activated", StringComparison.Ordinal));
     }
 
     /// <summary>A scripted run states the agreement in the command, which is what the flag is for.</summary>
@@ -231,7 +222,7 @@ public sealed class EmbeddingCommandTests : IDisposable
     public async Task Activate_TheFlagSuppliedWithNobodyAtTheTerminal_ActivatesWithoutAsking()
     {
         // Arrange
-        this.console.AnswersQuestions = false;
+        this.harness.Console.AnswersQuestions = false;
         using var deployment = FakeEmbeddingDeployment.Answering(
             assessment: SpendingAssessment,
             activation: (HttpStatusCode.OK, ActivationAnswer("ReindexStarted")));
@@ -242,7 +233,7 @@ public sealed class EmbeddingCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.True(deployment.WasAskedToActivate());
-        Assert.Empty(this.console.Questions);
+        Assert.Empty(this.harness.Console.Questions);
     }
 
     /// <summary>
@@ -253,7 +244,7 @@ public sealed class EmbeddingCommandTests : IDisposable
     public async Task Activate_NobodyAtTheTerminalAndNoFlag_RefusesAndActivatesNothing()
     {
         // Arrange
-        this.console.AnswersQuestions = false;
+        this.harness.Console.AnswersQuestions = false;
         using var deployment = FakeEmbeddingDeployment.Answering(
             assessment: SpendingAssessment,
             activation: (HttpStatusCode.OK, ActivationAnswer("ReindexStarted")));
@@ -264,7 +255,7 @@ public sealed class EmbeddingCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.False(deployment.WasAskedToActivate());
-        Assert.Contains(this.console.Errors, line => line.Contains("--yes", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("--yes", StringComparison.Ordinal));
     }
 
     /// <summary>Asking somebody to confirm a spend the deployment has already said it will not permit is a question with no answer that works.</summary>
@@ -272,7 +263,7 @@ public sealed class EmbeddingCommandTests : IDisposable
     public async Task Activate_AnEstimateTheCeilingRefuses_ReportsBothNumbersAndActivatesNothing()
     {
         // Arrange
-        this.console.AnswerToGive = true;
+        this.harness.Console.AnswerToGive = true;
         using var deployment = FakeEmbeddingDeployment.Answering(
             assessment: SpendingAssessment.Replace(
                 "\"exceedsSpendCeiling\": false",
@@ -286,9 +277,9 @@ public sealed class EmbeddingCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.False(deployment.WasAskedToActivate());
-        Assert.Empty(this.console.Questions);
-        Assert.Contains(this.console.Errors, line => line.Contains("200,000 characters", StringComparison.Ordinal));
-        Assert.Contains(this.console.Errors, line => line.Contains("1,000,000", StringComparison.Ordinal));
+        Assert.Empty(this.harness.Console.Questions);
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("200,000 characters", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("1,000,000", StringComparison.Ordinal));
     }
 
     /// <summary>Re-activating what already serves spends nothing, so it is performed without a question in the way.</summary>
@@ -308,8 +299,8 @@ public sealed class EmbeddingCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Empty(this.console.Questions);
-        Assert.Contains(this.console.Lines, line => line.Contains("Nothing was started", StringComparison.Ordinal));
+        Assert.Empty(this.harness.Console.Questions);
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Nothing was started", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -320,7 +311,7 @@ public sealed class EmbeddingCommandTests : IDisposable
     public async Task Activate_ADeploymentRefusingBecauseAnotherReindexRuns_RepeatsWhatItSaidWithoutAsking()
     {
         // Arrange
-        this.console.AnswerToGive = true;
+        this.harness.Console.AnswerToGive = true;
         using var deployment = FakeEmbeddingDeployment.Answering(
             assessment: SpendingAssessment.Replace(
                 "\"forecast\": \"WouldStartReindex\"",
@@ -335,8 +326,8 @@ public sealed class EmbeddingCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
-        Assert.Empty(this.console.Questions);
-        Assert.Contains(this.console.Errors, line => line.Contains("Cancel it first", StringComparison.Ordinal));
+        Assert.Empty(this.harness.Console.Questions);
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("Cancel it first", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -347,7 +338,7 @@ public sealed class EmbeddingCommandTests : IDisposable
     public async Task Activate_AForecastThisVersionDoesNotRecognize_AsksBeforeActivatingAnything()
     {
         // Arrange
-        this.console.AnswerToGive = false;
+        this.harness.Console.AnswerToGive = false;
         using var deployment = FakeEmbeddingDeployment.Answering(
             assessment: SpendingAssessment.Replace(
                 "\"forecast\": \"WouldStartReindex\"",
@@ -360,7 +351,7 @@ public sealed class EmbeddingCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
-        Assert.Single(this.console.Questions);
+        Assert.Single(this.harness.Console.Questions);
         Assert.False(deployment.WasAskedToActivate());
     }
 
@@ -394,12 +385,12 @@ public sealed class EmbeddingCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.StartsWith("Reindex:", StringComparison.Ordinal)
                 && line.Contains("180 of 500 messages embedded", StringComparison.Ordinal)
                 && line.Contains("1,280 passages left", StringComparison.Ordinal));
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.StartsWith("Serving:", StringComparison.Ordinal)
                 && line.Contains("nothing outstanding", StringComparison.Ordinal));
     }
@@ -416,7 +407,7 @@ public sealed class EmbeddingCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
-        Assert.Contains(this.console.Errors, line => line.Contains("refused the credential", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("refused the credential", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -435,7 +426,7 @@ public sealed class EmbeddingCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("not with anything MailFathom would send", StringComparison.Ordinal));
     }
 
@@ -455,7 +446,7 @@ public sealed class EmbeddingCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains(AdminEndpointRoutes.EmbeddingStatusPath, StringComparison.Ordinal));
     }
 
@@ -471,7 +462,7 @@ public sealed class EmbeddingCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
-        Assert.Contains(this.console.Errors, line => line.Contains("could not be reached", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("could not be reached", StringComparison.Ordinal));
     }
 
     /// <summary>Finding no reindex to stop is reported as what happened rather than as a failure.</summary>
@@ -487,7 +478,7 @@ public sealed class EmbeddingCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(AdminEndpointRoutes.EmbeddingReindexCancellationPath, deployment.LastPath());
-        Assert.Contains(this.console.Lines, line => line.Contains("No reindex was running", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("No reindex was running", StringComparison.Ordinal));
     }
 
     /// <summary>Stopping one abandons the generation being built and leaves search answered from what was serving.</summary>
@@ -502,7 +493,7 @@ public sealed class EmbeddingCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.console.Lines, line => line.Contains("Stopped the reindex", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Stopped the reindex", StringComparison.Ordinal));
     }
 
     private static string ActivationAnswer(string outcome) => $$"""
@@ -513,30 +504,8 @@ public sealed class EmbeddingCommandTests : IDisposable
         }
         """;
 
-    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args)
-    {
-        var store = new CredentialStore(
-            Path.Combine(this.storeDirectory, "credentials.json"),
-            new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key")));
+    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args) =>
+        this.harness.RunAsync(deployment, args);
 
-        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
-
-        var context = new CliContext(
-            this.console,
-            store,
-            (endpoint, trust) => FakeDeploymentTransport.Over(deployment, endpoint, trust),
-            FakeMailboxRedirect.Silent(),
-            _ => false,
-            this.clock);
-
-        return CliRunner.RunAsync(context, args);
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(this.storeDirectory))
-        {
-            Directory.Delete(this.storeDirectory, recursive: true);
-        }
-    }
+    public void Dispose() => this.harness.Dispose();
 }

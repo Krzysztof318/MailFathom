@@ -2,12 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.ComponentModel.DataAnnotations;
 using MailFathom.Domain.Accounts;
-using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Infrastructure.Mail;
-using MailFathom.Infrastructure.Secrets.Discovery;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Mail;
@@ -26,9 +23,9 @@ public sealed class MailDeliverySenderIdentityTests
     public void FindSenderIdentity_AccountWhoseUserNameIsItsAddress_SendsAsThatAddress()
     {
         // Arrange
-        var account = CreateAccount();
-        account.Delivery = CreateDelivery();
-        var options = CreateOptions(account);
+        var account = ConfiguredMailAccounts.Primary();
+        account.Delivery = ConfiguredMailAccounts.Delivery();
+        var options = ConfiguredMailAccounts.Holding(account);
 
         // Act
         var identity = options.FindSenderIdentity(Primary);
@@ -44,12 +41,12 @@ public sealed class MailDeliverySenderIdentityTests
     public void FindSenderIdentity_EndpointNamingItsOwnSender_SendsAsThatAddressAndName()
     {
         // Arrange
-        var account = CreateAccount();
+        var account = ConfiguredMailAccounts.Primary();
         account.UserName = "relay-login";
-        account.Delivery = CreateDelivery();
+        account.Delivery = ConfiguredMailAccounts.Delivery();
         account.Delivery.FromAddress = " office@example.test ";
         account.Delivery.FromDisplayName = "The office";
-        var options = CreateOptions(account);
+        var options = ConfiguredMailAccounts.Holding(account);
 
         // Act
         var identity = options.FindSenderIdentity(Primary);
@@ -64,7 +61,7 @@ public sealed class MailDeliverySenderIdentityTests
     public void FindSenderIdentity_AccountConfiguringNoSubmissionEndpoint_ReadsNothing()
     {
         // Arrange
-        var options = CreateOptions(CreateAccount());
+        var options = ConfiguredMailAccounts.Holding(ConfiguredMailAccounts.Primary());
 
         // Act and assert
         Assert.Null(options.FindSenderIdentity(Primary));
@@ -75,9 +72,9 @@ public sealed class MailDeliverySenderIdentityTests
     public void FindSenderIdentity_AccountThisDeploymentNoLongerConfigures_ReadsNothing()
     {
         // Arrange
-        var account = CreateAccount();
-        account.Delivery = CreateDelivery();
-        var options = CreateOptions(account);
+        var account = ConfiguredMailAccounts.Primary();
+        account.Delivery = ConfiguredMailAccounts.Delivery();
+        var options = ConfiguredMailAccounts.Holding(account);
 
         // Act and assert
         Assert.Null(options.FindSenderIdentity(MailAccountId.Create("secondary")));
@@ -91,13 +88,13 @@ public sealed class MailDeliverySenderIdentityTests
     public void Validate_SubmissionEndpointNamingNoSendingAddress_IsRefused()
     {
         // Arrange
-        var account = CreateAccount();
+        var account = ConfiguredMailAccounts.Primary();
         account.UserName = "relay-login";
-        account.Delivery = CreateDelivery();
-        var options = CreateOptions(account);
+        account.Delivery = ConfiguredMailAccounts.Delivery();
+        var options = ConfiguredMailAccounts.Holding(account);
 
         // Act
-        var results = Validate(options);
+        var results = ConfiguredMailAccounts.Validate(options);
 
         // Assert
         var result = Assert.Single(results);
@@ -112,14 +109,14 @@ public sealed class MailDeliverySenderIdentityTests
     public void Validate_SubmissionEndpointStatingItsSendingAddress_ReportsNoError()
     {
         // Arrange
-        var account = CreateAccount();
+        var account = ConfiguredMailAccounts.Primary();
         account.UserName = "relay-login";
-        account.Delivery = CreateDelivery();
+        account.Delivery = ConfiguredMailAccounts.Delivery();
         account.Delivery.FromAddress = "office@example.test";
-        var options = CreateOptions(account);
+        var options = ConfiguredMailAccounts.Holding(account);
 
         // Act
-        var results = Validate(options);
+        var results = ConfiguredMailAccounts.Validate(options);
 
         // Assert
         Assert.Empty(results);
@@ -130,44 +127,16 @@ public sealed class MailDeliverySenderIdentityTests
     public void Validate_SendingAddressNamingNoMailbox_IsRefused()
     {
         // Arrange
-        var account = CreateAccount();
-        account.Delivery = CreateDelivery();
+        var account = ConfiguredMailAccounts.Primary();
+        account.Delivery = ConfiguredMailAccounts.Delivery();
         account.Delivery.FromAddress = "not-a-mailbox";
-        var options = CreateOptions(account);
+        var options = ConfiguredMailAccounts.Holding(account);
 
         // Act
-        var results = Validate(options);
+        var results = ConfiguredMailAccounts.Validate(options);
 
         // Assert
         Assert.Single(results);
         Assert.Null(options.FindSenderIdentity(Primary));
     }
-
-    private static IReadOnlyList<ValidationResult> Validate(MailSynchronizationOptions options) =>
-        [.. options.Validate(new ValidationContext(options))];
-
-    private static MailSynchronizationOptions CreateOptions(MailSynchronizationAccountOptions account) => new()
-    {
-        Enabled = true,
-        Accounts = [account],
-    };
-
-    private static MailSynchronizationAccountOptions CreateAccount() => new()
-    {
-        AccountId = "primary",
-        DisplayName = "The primary mailbox",
-        Host = "imap.example.test",
-        UserName = "mailfathom@example.test",
-        Secrets = new MailAccountSecretOptions
-        {
-            Password = new ConfiguredSecret { SecretReference = "systemd-credential:imap-primary-password" },
-        },
-    };
-
-    private static MailAccountDeliveryOptions CreateDelivery() => new()
-    {
-        Host = "smtp.example.test",
-        Port = 587,
-        ConnectionSecurity = MailConnectionSecurity.StartTlsRequired,
-    };
 }
