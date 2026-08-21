@@ -44,7 +44,12 @@ otherwise. Communication you conspicuously mark **"Not a Contribution"** is excl
 **"MailFathom"** means the project hosted at <https://github.com/Krzysztof318/MailFathom> and the works
 distributed from it.
 
-**"Owner"** means Krzysztof Kasprowicz, the copyright holder of record named in [`NOTICE`](NOTICE).
+**"Owner"** means Krzysztof Kasprowicz, a sole trader established in the Republic of Poland and trading
+as **IMPE**, who is the copyright holder of record named in [`NOTICE`](NOTICE) and who publishes
+MailFathom from the GitHub account [`Krzysztof318`](https://github.com/Krzysztof318); and any successor
+the agreement is assigned to under clause 2.4. Where the Owner has to be identified beyond that — in a
+transaction, or in a dispute — the business registration behind the trading name is what identifies
+them, and it is supplied on request rather than published here.
 
 ## 2. Grants
 
@@ -71,6 +76,15 @@ day the action is filed.
 
 **2.3 What is not granted.** No trademark rights are granted. Nothing here transfers ownership of your
 Contribution, and nothing here obliges the Owner to use, merge, or distribute it.
+
+**2.4 Who holds these rights.** The Owner may assign this agreement, and the rights granted under it,
+to a successor in interest to MailFathom — a company the Owner forms or controls, or an acquirer of
+the project — and the assignee then stands in the Owner's place. No further acceptance is asked of
+you when that happens, which is the point of saying so here rather than discovering later that every
+past contributor has to be found again.
+
+An assignee takes the obligations with the rights: your Contribution stays yours, clause 2.1 stays
+non-exclusive, and nothing an assignment does can enlarge what you granted.
 
 ## 3. What you state
 
