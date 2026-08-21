@@ -29,6 +29,16 @@ fi
 
 cd "$repository_root"
 
+# Stryker spends half the machine's cores by default, which is the right manners on a machine
+# somebody is also working on and pure waste on a runner that does nothing else — and this is the one
+# job long enough for the difference to decide whether it finishes. `MAILFATHOM_MUTATION_CONCURRENCY`
+# is how a caller that owns the whole machine says so; the workflow sets it to the runner's core
+# count, and a developer leaves it unset and keeps the polite default.
+mutation_concurrency=()
+if [[ -n "${MAILFATHOM_MUTATION_CONCURRENCY:-}" ]]; then
+  mutation_concurrency=(--concurrency "$MAILFATHOM_MUTATION_CONCURRENCY")
+fi
+
 if (($# > 0)); then
   projects=("$@")
 else
@@ -126,7 +136,8 @@ for project in "${projects[@]}"; do
       --output "$output_directory" \
       --break-at 0 \
       --skip-version-check \
-      --verbosity info
+      --verbosity info \
+      "${mutation_concurrency[@]}"
   ) >&2
 
   report="${output_directory}/reports/mutation-report.json"

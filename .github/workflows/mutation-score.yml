@@ -45,9 +45,13 @@ jobs:
         project:
           - Domain
           - Application
-    # A bound on a preview test runner rather than an expectation. A full pass over either project is tens of minutes;
-    # a run still going after three hours has stopped measuring anything.
-    timeout-minutes: 180
+    # A bound rather than an expectation, and it is generous on purpose. A full `Application` pass measured about a
+    # hundred minutes on a ten-core developer machine that was not idle, against about five for `Domain`; a
+    # GitHub-hosted runner has four cores, so the number here has to leave room for a slower one without turning a slow
+    # night into a run that reports nothing. That is the whole failure mode worth avoiding: a job that times out
+    # produces no report at all, which is strictly worse than the same report arriving late on a channel where nothing
+    # waits for it. Standard runners are what this uses — a larger one is a paid plan, and the score is not worth one.
+    timeout-minutes: 300
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_NOLOGO: '1'
@@ -85,6 +89,12 @@ jobs:
           PROJECT: ${{ matrix.project }}
         run: |
           set -euo pipefail
+
+          # Stryker would otherwise take half the runner's cores, which is its default for a machine somebody is also
+          # using. This runner is doing nothing else and is thrown away afterwards, so it spends all of them — the one
+          # free way to make a job of this length shorter, since a bigger runner is a paid plan. Read rather than
+          # written down, because the hosted image's core count is GitHub's to change.
+          export MAILFATHOM_MUTATION_CONCURRENCY="$(nproc)"
 
           # The script writes Stryker's own output to standard error and the summary to standard output, so the step
           # summary carries the score and the surviving mutants by mutator without a log wrapped around them.

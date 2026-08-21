@@ -328,6 +328,13 @@ takes the projects to measure:
 bash scripts/mutation-score.sh Domain
 ```
 
+It leaves Stryker's own concurrency alone, which is half the machine's cores —
+the right manners while somebody is working on that machine, and the reason a
+local `Application` pass takes about an hour and a half. Set
+`MAILFATHOM_MUTATION_CONCURRENCY` to spend more of the machine than that. The
+workflow sets it to the runner's core count, because a hosted runner is doing
+nothing else and is discarded afterwards.
+
 ## Which remote is the base
 
 Every script above needs one answer: which remote is MailFathom. In the owner's
