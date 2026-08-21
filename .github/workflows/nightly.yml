@@ -214,8 +214,8 @@ jobs:
   # channel and not on a pull request — throughput is not measurable on a shared, virtualized runner to a precision any
   # gate could read, so the number is worth watching across releases and worth nothing as a threshold.
   #
-  # The claim a change *does* have to satisfy is the other one: `tests/AllocationBudgets.UnitTests` bounds what the same
-  # paths allocate, deterministically, inside the pull-request gate. `tests/AGENTS.md` states which of the two a new
+  # The claim a change *does* have to satisfy is the other one: `backend/tests/AllocationBudgets.UnitTests` bounds what the same
+  # paths allocate, deterministically, inside the pull-request gate. `backend/tests/AGENTS.md` states which of the two a new
   # cost claim belongs in.
   benchmarks:
     name: Hot-path benchmarks
@@ -256,7 +256,7 @@ jobs:
       # refuses to run against one.
       - name: Run the benchmarks
         run: >-
-          dotnet run --project tests/Benchmarks/Benchmarks.csproj --configuration Release --no-restore
+          dotnet run --project backend/tests/Benchmarks/Benchmarks.csproj --configuration Release --no-restore
           -- --filter '*' --artifacts artifacts/benchmarks
 
       - name: Write the report into the run summary

@@ -1,6 +1,6 @@
 # Mail rules
 
-<!-- describes: src/Application/Rules/**, src/Infrastructure/Rules/**, src/Infrastructure/Persistence/Rules/**, src/Host/Configuration/Rules/** -->
+<!-- describes: backend/src/Application/Rules/**, backend/src/Infrastructure/Rules/**, backend/src/Infrastructure/Persistence/Rules/**, backend/src/Host/Configuration/Rules/** -->
 
 A mail rule selects mail and changes it. It is a name, a condition, the accounts it applies to, the occasions that run
 it, what a match leads to, and whether a match ends the pass, and an owner writes it in the configuration their

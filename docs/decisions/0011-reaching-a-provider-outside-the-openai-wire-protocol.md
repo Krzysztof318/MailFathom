@@ -9,7 +9,7 @@ informed:
 
 # Reach a cloud platform over its own OpenAI-compatible surface with a bearer credential the deployment is handed, and write neither a second wire protocol nor a token-minting credential shape
 
-<!-- describes: src/AI/ProviderAdapters/**, src/AI/Providers/** -->
+<!-- describes: backend/src/AI/ProviderAdapters/**, backend/src/AI/Providers/** -->
 
 ## Context and Problem Statement
 
@@ -86,7 +86,7 @@ It does not say Bedrock or Vertex is supported, tested, or recommended. Both ent
 
 ## Validation
 
-- The client construction is the check: nothing in `src/AI/ProviderAdapters/` is reached with an address or a credential this record does not describe, and a second wire protocol would appear there as a second `IEmbeddingGenerator` or `IChatClient` implementation rather than quietly.
+- The client construction is the check: nothing in `backend/src/AI/ProviderAdapters/` is reached with an address or a credential this record does not describe, and a second wire protocol would appear there as a second `IEmbeddingGenerator` or `IChatClient` implementation rather than quietly.
 - `ProviderEndpointCredentialKind` naming a member that mints its own tokens for a platform other than Microsoft Entra is the concrete signal this record has been superseded; the enum's own contiguity rule makes such a member visible in a diff.
 - The startup rules that already exist carry both entries without amendment: exactly one credential shape per endpoint, an absolute address, and a key refused over plain `http`. Neither platform is a special case in configuration validation, and a change that made one would be a change against this record.
 - [Provider endpoints](../operations/provider-endpoints.md) holds the two entries with their evidence and their dates, and an entry that stops being true is a defect against that page rather than against this one.

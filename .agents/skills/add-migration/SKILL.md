@@ -20,7 +20,7 @@ exists, which includes the persistent local one, not only the ones a release wil
 Clearing local data is a different operation with a different command, and it touches no file:
 
 ```bash
-aspire resource mailfathom-migrations ef-database-reset --apphost src/AppHost/AppHost.csproj --non-interactive
+aspire resource mailfathom-migrations ef-database-reset --apphost backend/src/AppHost/AppHost.csproj --non-interactive
 ```
 
 ## Preconditions
@@ -55,7 +55,7 @@ committed model snapshot and writes files, which has the same answer whether or 
 script points the design-time factory at a port nothing listens on — if generation ever starts requiring a database, it
 fails rather than silently reaching one.
 
-Three files change under `src/Infrastructure/Persistence/Migrations/`: the new migration, its designer file, and the
+Three files change under `backend/src/Infrastructure/Persistence/Migrations/`: the new migration, its designer file, and the
 model snapshot. The snapshot is the only existing file the workflow rewrites, and EF owns it — never hand-edit it. The
 `.editorconfig` beside them is hand-written and relaxes the two diagnostics EF's generator trips.
 
@@ -87,7 +87,7 @@ anywhere but your own machine, it is fixed forward by another migration instead.
 ### 3. Apply it to the orchestrated database
 
 ```bash
-aspire resource mailfathom-migrations ef-database-update --apphost src/AppHost/AppHost.csproj --non-interactive
+aspire resource mailfathom-migrations ef-database-update --apphost backend/src/AppHost/AppHost.csproj --non-interactive
 ```
 
 This is where a database is required and therefore where Aspire is: the command runs against the server the
@@ -104,9 +104,9 @@ Read the dump to confirm the schema PostgreSQL now holds is the one the migratio
 ### 4. Prove the host accepts the schema
 
 ```bash
-aspire stop  --apphost src/AppHost/AppHost.csproj --non-interactive
-aspire start --apphost src/AppHost/AppHost.csproj --non-interactive
-aspire describe --apphost src/AppHost/AppHost.csproj --non-interactive
+aspire stop  --apphost backend/src/AppHost/AppHost.csproj --non-interactive
+aspire start --apphost backend/src/AppHost/AppHost.csproj --non-interactive
+aspire describe --apphost backend/src/AppHost/AppHost.csproj --non-interactive
 ```
 
 `mailfathom-host` must reach `Running` and `Healthy`. The host verifies the migration history and the lexical index's
@@ -120,7 +120,7 @@ Update `docs/architecture/stored-email-schema.md` when the change is visible to 
 migration together with the model change that caused it. A migration committed on its own cannot be reviewed, because
 the reason for it is in the other commit.
 
-CI runs `dotnet ef migrations has-pending-model-changes` on any pull request touching `src/`, so a model change that
+CI runs `dotnet ef migrations has-pending-model-changes` on any pull request touching `backend/src/`, so a model change that
 reaches `main` without its migration fails before merge rather than at a host's startup.
 
 ## When something is stuck
@@ -135,7 +135,7 @@ reaches `main` without its migration fails before merge rather than at a host's 
 
   ```bash
   docker volume ls --filter name=-postgres-data
-  aspire stop --apphost src/AppHost/AppHost.csproj --non-interactive
+  aspire stop --apphost backend/src/AppHost/AppHost.csproj --non-interactive
   docker rm -f $(docker ps -aq --filter volume=<volume>)
   docker volume rm <volume>
   ```

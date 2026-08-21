@@ -42,7 +42,7 @@ on:
       - main
     tags:
       - 'v[0-9]*.[0-9]*.[0-9]*'
-  # The site definition is verified on a pull request that changes it, and deploys nothing. A change under `src/`
+  # The site definition is verified on a pull request that changes it, and deploys nothing. A change under `backend/src/`
   # cannot break this build — an XML comment docfx dislikes is a warning — so the filter deliberately leaves it out
   # rather than adding a multi-minute job to nearly every pull request the repository sees.
   pull_request:

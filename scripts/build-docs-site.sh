@@ -11,7 +11,7 @@ set -euo pipefail
 #   scripts/build-docs-site.sh <output-directory>
 #
 # The output is one version of the published site: the pages under `docs/`, the API reference generated from the XML
-# comments in `src/`, the search index over both, and the artifacts an AI agent reads instead of the rendered pages —
+# comments in `backend/src/`, the search index over both, and the artifacts an AI agent reads instead of the rendered pages —
 # `scripts/write-docs-agent-artifacts.sh` writes those last and states what they are. It is self-contained apart from
 # the version selector, which reads a manifest the site root carries — `scripts/compose-docs-site.sh` writes that, and
 # this script knows nothing about the other versions. docs/operations/documentation-site.md describes how the two fit

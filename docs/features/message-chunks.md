@@ -1,6 +1,6 @@
 # Message chunks
 
-<!-- describes: src/AI/Chunking/**, src/Application/Emails/Chunking/**, src/Infrastructure/Persistence/Emails/EmailChunkWriter.cs, src/Infrastructure/Persistence/Emails/EmailChunkStore.cs, src/Infrastructure/Persistence/Entities/EmailChunkEntity.cs -->
+<!-- describes: backend/src/AI/Chunking/**, backend/src/Application/Emails/Chunking/**, backend/src/Infrastructure/Persistence/Emails/EmailChunkWriter.cs, backend/src/Infrastructure/Persistence/Emails/EmailChunkStore.cs, backend/src/Infrastructure/Persistence/Entities/EmailChunkEntity.cs -->
 
 A message is often too big to be the unit a search answers with. A forwarded thread can carry twenty exchanges, and the
 one paragraph that answers a question is somewhere inside it. MailFathom therefore cuts a message's extracted text

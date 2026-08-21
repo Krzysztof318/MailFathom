@@ -151,7 +151,7 @@ mail-fathom/
 ├── README.md
 ├── .editorconfig
 ├── .gitignore
-├── src/
+├── backend/src/
 │   ├── Domain/
 │   │   ├── Accounts/
 │   │   ├── Folders/
@@ -196,7 +196,7 @@ mail-fathom/
 │       ├── Accounts/
 │       ├── Synchronization/
 │       └── Rag/
-├── tests/
+├── backend/tests/
 │   ├── Domain.UnitTests/
 │   ├── Application.UnitTests/
 │   ├── Infrastructure.UnitTests/
@@ -646,7 +646,7 @@ Retry is restricted to operations that are safe to repeat. Authentication, permi
 
 ## 18. Observability
 
-- Aspire ServiceDefaults provide the initial scaffold for OpenTelemetry logs, metrics, traces, health checks, service discovery hooks where useful, and OTLP export configuration. MailFathom owns that source as `src/Host/ServiceDefaultsExtensions.cs` rather than in the template's repository-root `shared/` directory, because one executable service consumes it. MailFathom extends those defaults rather than duplicating per-project telemetry setup; a second executable service would promote the file to a project both reference, not to a linked source file.
+- Aspire ServiceDefaults provide the initial scaffold for OpenTelemetry logs, metrics, traces, health checks, service discovery hooks where useful, and OTLP export configuration. MailFathom owns that source as `backend/src/Host/ServiceDefaultsExtensions.cs` rather than in the template's repository-root `shared/` directory, because one executable service consumes it. MailFathom extends those defaults rather than duplicating per-project telemetry setup; a second executable service would promote the file to a project both reference, not to a linked source file.
 - Structured JSON logs with account IDs and message IDs, never addresses, subjects, bodies, tokens, or credentials by default.
 - OpenTelemetry traces for MCP calls, database operations, IMAP push or time-based synchronization cycles, retrieval, embedding generation, agent runs, and SMTP delivery when SMTP is implemented.
 - Metrics include sync lag, reconnect count, cached messages, missing content, embedding backlog, retrieval latency, token usage when available, outbox depth when SMTP is implemented, and tool errors.

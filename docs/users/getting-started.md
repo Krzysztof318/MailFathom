@@ -1,6 +1,6 @@
 # Getting started
 
-<!-- describes: src/Mcp/Tools/**, src/Host/Configuration/** -->
+<!-- describes: backend/src/Mcp/Tools/**, backend/src/Host/Configuration/** -->
 
 This page walks from an installed MailFathom to a first successful tool call: provision the credentials, configure a
 mailbox, start the service, verify it, connect an MCP client, and read a result correctly. It assumes an installation

@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.Testing" />
+    <!-- The full hosting package rather than the abstractions the production projects reference: a test composes a real
+         host so that infrastructure's hosted lifecycle events run, which is what makes the PostgreSQL connection string
+         available to anything that opens a connection. -->
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="MailKit" />
+    <PackageReference Include="NSubstitute" />
+    <PackageReference Include="MimeKit" />
+    <PackageReference Include="xRetry.v3" />
+    <PackageReference Include="xunit.v3.mtp-v2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- A collector configuration of its own rather than the .config/testconfig.json the unit suites link. The
+         two ask opposite questions of the same attribute: the unit run excludes everything marked
+         [RequiresIntegrationCoverage] because it cannot reach it, and this run reports on that code and nothing else.
+         The attribute can only be named in the excluding direction — Coverlet has ExcludeByAttribute and no include
+         counterpart — so this file expresses the half it can, by leaving the marker out of ExcludeByAttribute so the
+         marked code is instrumented at all. Narrowing the report to exactly the marked classes is the second step, in
+         scripts/run-integration-tests.sh, which derives a file filter from the marker rather than restating the
+         inventory as a list of types here. -->
+    <None Include="testconfig.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The same builder the unit suites link, because the certificates a real handshake needs are issued by it rather
+         than committed: nothing here provisions material a second way. -->
+    <Compile Include="..\shared\TestCertificates.cs" Link="TestCertificates.cs" />
+    <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
+    <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
+    <!-- The provider contract tests compose the adapters by hand, so they build the guard those adapters take. -->
+    <Compile Include="..\shared\MarkerSensitiveContentScanner.cs" Link="MarkerSensitiveContentScanner.cs" />
+    <Compile Include="..\shared\RecordingSensitiveContentEgressTelemetry.cs" Link="RecordingSensitiveContentEgressTelemetry.cs" />
+    <Compile Include="..\shared\SensitiveContentEgressGuards.cs" Link="SensitiveContentEgressGuards.cs" />
+    <Compile Include="..\shared\ScanningSensitiveContentEgress.cs" Link="ScanningSensitiveContentEgress.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The app model under test, which is also where the Projects.AppHost metadata the testing builder starts comes
+         from. -->
+    <ProjectReference Include="..\..\src\AppHost\AppHost.csproj" />
+    <ProjectReference Include="..\..\src\Infrastructure\Infrastructure.csproj" />
+
+    <!-- The composition root itself, because one test class starts its request pipeline in this process rather than as
+         an orchestrated resource: a middleware order is assembled while a host starts, and a shape that changes which
+         middleware exists cannot be driven through a process the app model configured once. -->
+    <ProjectReference Include="..\..\src\Host\Host.csproj" />
+
+    <!-- The local derivations persistence writes but may not reference, which a composition root supplies and which
+         this suite therefore has to supply too. -->
+    <ProjectReference Include="..\..\src\AI\AI.csproj" />
+
+    <!-- The one implementation of "build a synthetic message" in the repository. This suite is the only consumer of it
+         besides the development command itself, and it references the tool rather than keeping a second builder,
+         because two of them would drift and the mail this suite synchronizes would stop resembling the mail a
+         developer fills a mailbox with. Nothing under backend/src/ references this project and nothing may. -->
+    <ProjectReference Include="..\..\..\tools\SyntheticMail\SyntheticMail.csproj" />
+  </ItemGroup>
+</Project>

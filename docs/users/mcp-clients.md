@@ -1,6 +1,6 @@
 # Connecting the chat client you already use
 
-<!-- describes: src/Mcp/**, src/Host/Security/**, src/Host/Configuration/Endpoints/McpEndpointOptions.cs -->
+<!-- describes: backend/src/Mcp/**, backend/src/Host/Security/**, backend/src/Host/Configuration/Endpoints/McpEndpointOptions.cs -->
 
 [Getting started § connect an MCP client](getting-started.md#7-connect-an-mcp-client) states the two facts every client
 needs — the Streamable HTTP endpoint at `/mcp`, and the key as a bearer credential — and that is the complete answer for

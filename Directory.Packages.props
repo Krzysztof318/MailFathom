@@ -28,7 +28,7 @@
          Windows user, and guards the call with a runtime platform check, so a Linux build carries it and never enters
          it. -->
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.10" />
-    <!-- The throughput harness `tests/Benchmarks` reports with, and nothing else: it is referenced by that project
+    <!-- The throughput harness `backend/tests/Benchmarks` reports with, and nothing else: it is referenced by that project
          alone, ships nowhere, and gates nothing. Its `net8.0` assets are what .NET 10 resolves, and it recognizes
          net10.0 as a runtime of its own. It brings sixteen transitive packages with it, every one of them recorded in
          THIRD_PARTY_LICENSES.md beside it. -->

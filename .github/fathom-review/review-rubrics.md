@@ -148,7 +148,7 @@ that in the summary rather than deciding either way about what it asked for.
 
 ### Tests and documentation
 
-A behavior change carries unit tests, and `tests/AGENTS.md` states what they must look
+A behavior change carries unit tests, and `backend/tests/AGENTS.md` states what they must look
 like: no real clock, no real delay, no wall-clock ordering, no test that cannot fail,
 and a fake that preserves the ordering and identity guarantees of what it replaces.
 Durable documentation is updated in the same change set, and prose that describes a

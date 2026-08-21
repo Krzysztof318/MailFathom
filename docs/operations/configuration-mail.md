@@ -1,6 +1,6 @@
 # Mail configuration
 
-<!-- describes: src/Host/Configuration/Mail/**, src/Host/Configuration/Rules/** -->
+<!-- describes: backend/src/Host/Configuration/Mail/**, backend/src/Host/Configuration/Rules/** -->
 
 Every key deciding which mail is fetched and how, what is sent, what a deployment records about either, what a mailbox
 query and a stored message may cost, and which rules run over what arrives. The tables read as

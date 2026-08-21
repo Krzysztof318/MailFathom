@@ -292,7 +292,7 @@ script at all; and no pull-request workflow does either. It runs on the nightly 
 minutes of runtime and a preview test runner's false positives cost nobody a
 merge. Read the score, act on what survived, and never enforce either. It is the
 same arrangement the hot-path benchmarks sit under one job above it, for the same
-reason `tests/AGENTS.md` § *Cost claims* gives: a measurement worth watching
+reason `backend/tests/AGENTS.md` § *Cost claims* gives: a measurement worth watching
 across releases is worth nothing as a threshold.
 
 Two projects and no others. `Domain` and `Application` hold the invariants and the
@@ -1194,7 +1194,7 @@ happens, so a stuck labelling run must not hold a review open or fail one.
 
 The prompt points the reviewer at this repository's own rules rather than at
 general review practice: root `AGENTS.md`, the nested `AGENTS.md` files under
-`src/`, `tests/`, and `docs/`, the recurring findings in the `review-change`
+`backend/src/`, `backend/tests/`, and `docs/`, the recurring findings in the `review-change`
 skill, and the ADRs and architecture draft that govern the area the change touches. A
 finding names the rule it rests on in a field of its own, and one that applies
 generic advice where this repository has stated a different rule is itself wrong.
@@ -1441,7 +1441,7 @@ turns on whether the repository's own rules already derive it.
 
 A production type to its test is **derived and never written down**. `AGENTS.md`
 requires one primary type per file with a matching file name, and
-`tests/<Boundary>.UnitTests/` mirrors `src/<Boundary>/`, so the mapping is
+`backend/tests/<Boundary>.UnitTests/` mirrors `backend/src/<Boundary>/`, so the mapping is
 already a rule the build enforces; a recorded copy could drift from it. The index
 searches the base tree and the tests the change itself adds, because a change
 that adds a class together with its test is the case where reporting a missing
@@ -1489,7 +1489,7 @@ The patterns a marker declares are resolved the way git's own `:(glob)` pathspec
 resolves them, and the two have to agree: the contract suite validates every marker
 through git, so a pattern the index read more narrowly would be called valid while
 the paths it covers were skipped. That is why `**` between two slashes matches zero
-directories as well as many — `src/**/*Options.cs` credits `src/FooOptions.cs`, not
+directories as well as many — `backend/src/**/*Options.cs` credits `backend/src/FooOptions.cs`, not
 only a nested one — and why a leading `**/` reaches the repository root.
 
 Nothing the index emits is a finding. It says where to look, and it is derived
@@ -1863,9 +1863,9 @@ reached whenever its rule matters.
 | File | Loaded when | Reached because |
 |---|---|---|
 | `AGENTS.md` | Always | `CLAUDE.md` is a single `@AGENTS.md` include |
-| `src/AGENTS.md` | A change under `src/` | The directory cascade. It holds the .NET and C# conventions, which govern test code too, so `tests/AGENTS.md` points at it rather than repeating them |
-| `src/Infrastructure/AGENTS.md` | A change under `src/Infrastructure/` | The directory cascade |
-| `tests/AGENTS.md` | A change under `tests/` | The directory cascade, and root `AGENTS.md` names it wherever tests are owed |
+| `backend/src/AGENTS.md` | A change under `backend/src/` | The directory cascade. It holds the .NET and C# conventions, which govern test code too, so `backend/tests/AGENTS.md` points at it rather than repeating them |
+| `backend/src/Infrastructure/AGENTS.md` | A change under `backend/src/Infrastructure/` | The directory cascade |
+| `backend/tests/AGENTS.md` | A change under `backend/tests/` | The directory cascade, and root `AGENTS.md` names it wherever tests are owed |
 | `docs/AGENTS.md` | A change under `docs/` | The directory cascade |
 | `docs/operations/issue-tracking.md` | An issue is opened, placed, or linked | `start-task` step 8 and `finish-change` both name it at the step that writes the board — the only two points at which the rules are acted on |
 | `docs/operations/agent-workflow.md` | A workflow script or skill is in question | Root `AGENTS.md` § *Agent workflow and verification* opens by naming it |

@@ -1,6 +1,6 @@
 # Provider endpoints, and what each entry rests on
 
-<!-- describes: src/AI/ProviderAdapters/**, src/AI/Embeddings/**, src/AI/Chat/**, tests/IntegrationTests/ProviderAdapters/** -->
+<!-- describes: backend/src/AI/ProviderAdapters/**, backend/src/AI/Embeddings/**, backend/src/AI/Chat/**, backend/tests/IntegrationTests/ProviderAdapters/** -->
 
 > [!WARNING]
 > Some of the steps on this page are performed in a product this project does not control. Any screen, menu, or field
@@ -248,7 +248,7 @@ reached over. That surfaces as *request refused* on the first question.
 
 ## How to exercise an entry yourself
 
-The provider-contract tests in `tests/IntegrationTests/ProviderAdapters/` are what turn a **Documented** entry into a
+The provider-contract tests in `backend/tests/IntegrationTests/ProviderAdapters/` are what turn a **Documented** entry into a
 **Called** one. They run MailFathom's own adapter against whatever address they are given and assert the four things
 only a real service can establish: that the adapter speaks the protocol, authenticates, classifies a real refusal, and
 returns an answer or a vector in the shape the port publishes.

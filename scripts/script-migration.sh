@@ -25,9 +25,9 @@ set -euo pipefail
 # The output is written to standard output rather than to a file, so a review artifact is never left behind in the
 # working tree. It carries schema only and no row, so it holds no mail data and no personal data.
 
-startup_project='src/Host/Host.csproj'
-migrations_project='src/Infrastructure/Infrastructure.csproj'
-migrations_directory='src/Infrastructure/Persistence/Migrations'
+startup_project='backend/src/Host/Host.csproj'
+migrations_project='backend/src/Infrastructure/Infrastructure.csproj'
+migrations_directory='backend/src/Infrastructure/Persistence/Migrations'
 
 if ! repository_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
   printf 'script-migration.sh must run inside a Git worktree.\n' >&2

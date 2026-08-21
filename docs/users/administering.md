@@ -1,6 +1,6 @@
 # Administering your deployment
 
-<!-- describes: src/Cli/** -->
+<!-- describes: backend/src/Cli/** -->
 
 MailFathom ships a command, `mfctl`, that talks to a running deployment from your own machine. This page is the
 user's view of it: what it is for, the path from a running service to a verified sign-in, and what it deliberately

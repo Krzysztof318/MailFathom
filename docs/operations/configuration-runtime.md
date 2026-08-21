@@ -1,6 +1,6 @@
 # Storage, keys, jobs, and logging
 
-<!-- describes: src/Host/Configuration/Provisioning/**, src/Host/Configuration/Persistence/**, src/Host/Configuration/DataEncryption/**, src/Host/Configuration/Jobs/**, src/Host/Configuration/DeploymentOptions.cs, src/Infrastructure/Secrets/Resolution/SecretResolutionOptions.cs, src/Infrastructure/Resilience/OutboundDependencyResilienceOptions.cs -->
+<!-- describes: backend/src/Host/Configuration/Provisioning/**, backend/src/Host/Configuration/Persistence/**, backend/src/Host/Configuration/DataEncryption/**, backend/src/Host/Configuration/Jobs/**, backend/src/Host/Configuration/DeploymentOptions.cs, backend/src/Infrastructure/Secrets/Resolution/SecretResolutionOptions.cs, backend/src/Infrastructure/Resilience/OutboundDependencyResilienceOptions.cs -->
 
 Every key about the deployment itself rather than about the mail passing through it: where its configuration is read
 from and how a secret-bearing value is interpreted, the database it writes to, the key ring that seals what it stores,

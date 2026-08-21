@@ -93,11 +93,11 @@ rule is a wrong finding, and so is one these files already reject.
 - `.agents/skills/review-change/SKILL.md`. Its "Recurring findings" section is the
   distilled history of what review has actually caught here. Work through every category
   the change reaches.
-- `src/AGENTS.md`, `src/Infrastructure/AGENTS.md`, `tests/AGENTS.md`, and
+- `backend/src/AGENTS.md`, `backend/src/Infrastructure/AGENTS.md`, `backend/tests/AGENTS.md`, and
   `docs/AGENTS.md` for the parts of the tree the change touches. A nested file adds
   rules to the root one rather than replacing them. The .NET and C# conventions live in
-  `src/AGENTS.md` and govern test code as well, so a change under `tests/` is judged
-  against both that file and `tests/AGENTS.md`.
+  `backend/src/AGENTS.md` and govern test code as well, so a change under `backend/tests/` is judged
+  against both that file and `backend/tests/AGENTS.md`.
 - `.agents/skills/check-docs-licenses/SKILL.md` for MailFathom's own Apache-2.0 record
   and the third-party licensing rules, and `docs/operations/issue-tracking.md` for what
   an issue and its board placement have to carry.
@@ -410,7 +410,7 @@ delivered, and prose alongside it reaches nobody.
   "findings": [
     {
       "severity": "P1",
-      "path": "src/Infrastructure/Security/ClientCertificates/McpClientCertificateAuthenticator.cs",
+      "path": "backend/src/Infrastructure/Security/ClientCertificates/McpClientCertificateAuthenticator.cs",
       "start_line": null,
       "line": 87,
       "title": "Refuse when a matching profile loses all anchors",

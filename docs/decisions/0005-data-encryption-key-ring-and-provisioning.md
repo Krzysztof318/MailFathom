@@ -9,7 +9,7 @@ informed:
 
 # Seal data at rest under one deployment-wide symmetric key ring, provisioned as a secret reference the operator creates
 
-<!-- describes: src/Host/Configuration/DataEncryption/**, src/Infrastructure/DataEncryption/**, src/Common/AesGcmEnvelope.cs, src/AppHost/Program.cs, src/AppHost/OrchestrationContract.cs -->
+<!-- describes: backend/src/Host/Configuration/DataEncryption/**, backend/src/Infrastructure/DataEncryption/**, backend/src/Common/AesGcmEnvelope.cs, backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs -->
 
 ## Context and Problem Statement
 
@@ -97,7 +97,7 @@ The generating command is therefore `openssl rand -base64 32`, and it is documen
 
 **Local development is the one place where the operator's step is the wrong answer, and the answer is a fixed development constant.** A developer running the Aspire app host is not provisioning a deployment, and a key they have to generate by hand before the first `dotnet run` is ceremony bought for nothing: the local database holds synthetic mail and the machine is not a deployment.
 
-What that exception must not be is generation into a store that can outlive, or be outlived by, the data it protects. `src/AppHost/Program.cs` states the PostgreSQL password as the fixed constant `postgres` rather than generating one for exactly that reason — a generated password persisted per run diverges from a data volume that survives it, because PostgreSQL applies a password when it initializes an empty data directory and never again. A key is worse under the same failure: a diverged password reports an authentication error, and a diverged key leaves every locally sealed row unopenable, reported as nothing but a failed authentication tag.
+What that exception must not be is generation into a store that can outlive, or be outlived by, the data it protects. `backend/src/AppHost/Program.cs` states the PostgreSQL password as the fixed constant `postgres` rather than generating one for exactly that reason — a generated password persisted per run diverges from a data volume that survives it, because PostgreSQL applies a password when it initializes an empty data directory and never again. A key is worse under the same failure: a diverged password reports an authentication error, and a diverged key leaves every locally sealed row unopenable, reported as nothing but a failed authentication tag.
 
 So the app model states the key the way it states the password. `OrchestrationContract.DataEncryptionKeyMaterial` is base64 of the ASCII text `mailfathom-development-only-key!`, handed to the host as a `plaintext:` reference under the key identifier `development`, and it cannot diverge from itself. Resetting the local database is what re-seals it, which is the same act that already recreates the schema. Generation into user secrets was the other candidate and is refused: it is precisely what the password deliberately does not do, and it would reintroduce the divergence this constant exists to remove. A value published in a public repository is not a secret and is not treated as one — it protects one developer's synthetic mail on a container published on the loopback address alone, and a deployment resolves its key from a provisioned reference that this app model builds no part of.
 
@@ -186,5 +186,5 @@ Sealing happens in `Infrastructure` before the value reaches the provider, using
 
 - Issue 329 implements the ring and the first sealed column; issue 330 provisions the key through each channel; issue 331 writes a grant through the administrative endpoint.
 - ADR 0001 governs the port the sealed store is reached through, and ADR 0002 governs where the key ring is bound and mapped.
-- `AesGcmEnvelope` in `src/Common/` is shared with `mfctl`'s own credential store. That store keeps a per-machine key beside its file, which is right for one workstation and is exactly the scheme this decision rejects for a deployment, because a per-machine key gives a replica set as many keys as replicas.
+- `AesGcmEnvelope` in `backend/src/Common/` is shared with `mfctl`'s own credential store. That store keeps a per-machine key beside its file, which is right for one workstation and is exactly the scheme this decision rejects for a deployment, because a per-machine key gives a replica set as many keys as replicas.
 - Revisit this decision if a sealed column ever has to be searched or joined by value, if a deployment target appears where an operator cannot provision a secret before the first start, or if MailFathom gains a first-class key-management adapter — the third would extend the ring's material resolution rather than replace anything recorded here.

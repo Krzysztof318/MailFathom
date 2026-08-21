@@ -1,6 +1,6 @@
 # Stored email schema
 
-<!-- describes: src/Infrastructure/Persistence/**, src/Domain/Emails/**, src/Domain/Delivery/**, src/Application/Emails/Embeddings/** -->
+<!-- describes: backend/src/Infrastructure/Persistence/**, backend/src/Domain/Emails/**, backend/src/Domain/Delivery/**, backend/src/Application/Emails/Embeddings/** -->
 
 `stored_emails` holds the normalized metadata a mailbox timeline is read from. Its raw MIME lives in a separate one-to-one table, `email_message_contents`, and the text derived from that MIME lives in a third, `email_search_documents`, so nothing that lists or filters mail ever loads a `bytea` value, a body's worth of text, or a search vector — let alone tracks one in the change tracker.
 
@@ -1159,7 +1159,7 @@ Table names are the snake_case ones above. Column names are not: the model renam
 
 ## What the integration suite proves
 
-Every claim on this page that is a claim about PostgreSQL rather than about the model is verified by `tests/IntegrationTests` against the orchestrated server, because a unit test cannot reach any of them. The classes involved carry `[RequiresIntegrationCoverage]` for exactly that reason, and [local development](../operations/local-development.md) describes how the suite runs.
+Every claim on this page that is a claim about PostgreSQL rather than about the model is verified by `backend/tests/IntegrationTests` against the orchestrated server, because a unit test cannot reach any of them. The classes involved carry `[RequiresIntegrationCoverage]` for exactly that reason, and [local development](../operations/local-development.md) describes how the suite runs.
 
 - The baseline migration applies to an empty database and leaves no migration pending, and the text search configuration the generated column was built with is read back out of PostgreSQL's own catalogue rather than from the model — which is what lets the startup gate refuse a database whose lexical index disagrees with the running host.
 - The unique index refuses a duplicate occurrence that neither writer could have seen, which is the PostgreSQL-side half of idempotent synchronization: two overlapping runs each stage an insert, and the database rather than the application decides that only one lands.

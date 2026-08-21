@@ -9,7 +9,7 @@ informed:
 
 # Let no tool call transmit mail, publish annotations that describe an irreversible act rather than a destructive one, and make a server-side confirmation the operator's choice that refuses a client which cannot meet it
 
-<!-- describes: src/Mcp/Tools/**, src/Application/Mail/Delivery/**, src/Domain/Delivery/** -->
+<!-- describes: backend/src/Mcp/Tools/**, backend/src/Application/Mail/Delivery/**, backend/src/Domain/Delivery/** -->
 
 ## Context and Problem Statement
 

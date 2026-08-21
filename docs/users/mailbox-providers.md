@@ -1,6 +1,6 @@
 # Configuring a mailbox at your provider
 
-<!-- describes: src/Host/Configuration/Mail/**, src/Infrastructure/Mail/** -->
+<!-- describes: backend/src/Host/Configuration/Mail/**, backend/src/Infrastructure/Mail/** -->
 
 > [!WARNING]
 > Some of the steps on this page are performed in a product this project does not control. Any screen, menu, or field

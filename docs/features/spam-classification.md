@@ -1,6 +1,6 @@
 # Spam classification
 
-<!-- describes: src/Domain/Spam/**, src/Application/Spam/**, src/Application/Folders/IJunkMailFolderCatalog.cs, src/Infrastructure/Persistence/Spam/**, src/Infrastructure/Spam/**, src/Infrastructure/Observability/DerivedWorkGateTelemetry.cs, src/Infrastructure/Mail/Mime/MimeKitEmailSpamHeaderReader.cs, src/Host/Configuration/Spam/** -->
+<!-- describes: backend/src/Domain/Spam/**, backend/src/Application/Spam/**, backend/src/Application/Folders/IJunkMailFolderCatalog.cs, backend/src/Infrastructure/Persistence/Spam/**, backend/src/Infrastructure/Spam/**, backend/src/Infrastructure/Observability/DerivedWorkGateTelemetry.cs, backend/src/Infrastructure/Mail/Mime/MimeKitEmailSpamHeaderReader.cs, backend/src/Host/Configuration/Spam/** -->
 
 A mailbox that an assistant reads is a mailbox somebody else can write to. Mail written to deceive a reader is
 indistinguishable from correspondence once it is a row in a timeline, and the receiving mail server has usually already

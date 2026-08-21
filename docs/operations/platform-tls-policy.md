@@ -1,6 +1,6 @@
 # The platform TLS policy and legacy mail servers
 
-<!-- describes: deploy/openssl/**, src/Infrastructure/Mail/**, src/Infrastructure/Certificates/** -->
+<!-- describes: deploy/openssl/**, backend/src/Infrastructure/Mail/**, backend/src/Infrastructure/Certificates/** -->
 
 Every TLS connection MailFathom makes is handshaked by the system OpenSSL, and OpenSSL refuses parameters its own
 security policy considers too weak before MailFathom sees the server at all. On Ubuntu that policy is compiled in at
@@ -123,7 +123,7 @@ therefore the same act written for a different launcher, and each is equally sup
   output.
 
   ```bash
-  OPENSSL_CONF=/etc/mailfathom/openssl-legacy.cnf dotnet run --project src/Host/Host.csproj
+  OPENSSL_CONF=/etc/mailfathom/openssl-legacy.cnf dotnet run --project backend/src/Host/Host.csproj
   OPENSSL_CONF=/etc/mailfathom/openssl-legacy.cnf dotnet /opt/mailfathom/MailFathom.Host.dll
   ```
 
@@ -168,7 +168,7 @@ therefore the same act written for a different launcher, and each is equally sup
 
   ```bash
   export OPENSSL_CONF=/etc/mailfathom/openssl-legacy.cnf
-  dotnet run --project src/AppHost/AppHost.csproj
+  dotnet run --project backend/src/AppHost/AppHost.csproj
   ```
 
 ## It cannot be an `appsettings.json` setting

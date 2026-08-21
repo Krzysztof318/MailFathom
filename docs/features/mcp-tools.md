@@ -1,6 +1,6 @@
 # MCP tools
 
-<!-- describes: src/Mcp/** -->
+<!-- describes: backend/src/Mcp/** -->
 
 MailFathom publishes Model Context Protocol tools over the Streamable HTTP transport: the mailbox read side, one
 tool that changes the flags and keywords on mail this deployment holds, three that send mail from a mailbox it holds —
@@ -315,7 +315,7 @@ The annotations are contract metadata rather than documentation, so `Mcp.UnitTes
 `tools/list` output: the name, the title, the description, every input property, the descriptions on them, the output
 schema, and each annotation. A descriptor that drifts fails the build.
 
-The whole set is recorded beside those assertions as well, in `tests/PublicSurfaces.UnitTests/mcp-tool-contract.json`,
+The whole set is recorded beside those assertions as well, in `backend/tests/PublicSurfaces.UnitTests/mcp-tool-contract.json`,
 which is every registered descriptor rendered in a fixed order and committed. The per-tool assertions say what a
 descriptor must be; the record says what the surface *is*, so a change to any part of it — a renamed argument, a
 narrowed schema, a tool that arrived or left — reaches a reviewer as a diff rather than as something to notice.

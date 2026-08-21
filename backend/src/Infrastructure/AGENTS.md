@@ -1,0 +1,31 @@
+# Infrastructure Development Instructions
+
+These instructions apply under `backend/src/Infrastructure/` in addition to parent instructions.
+
+## Persistence and EF Core
+
+- Keep `DbContext` scoped and short-lived. It is not thread-safe and must never be shared across concurrent operations.
+- **Map one entity type in one `IEntityTypeConfiguration<T>`, under a `Configurations/` directory beside the store that reads it, and apply it by name from `MailFathomDbContext.OnModelCreating`.** The context declares which types the model holds and in what order their configurations are applied, and nothing about how any one of them is mapped, so adding an entity adds a file rather than editing the file every other branch adding an entity is also editing. A key, index, or constraint name the model states rather than leaves to convention goes on `PersistenceConstraintNames`, because `PersistenceConcurrencyConflicts` and the model tests have to read the same name the mapping declares. `EntityTypeConfigurationTests` fails on a type mapped nowhere, mapped twice, or configured for a model that does not hold it.
+- Use asynchronous EF Core APIs and propagate cancellation tokens.
+- Project queries directly into application read models. Do not load full entity graphs when a bounded projection is sufficient.
+- Use `AsNoTracking` for read-only queries unless identity resolution or change tracking is explicitly required.
+- Avoid lazy loading and hidden N+1 queries. Make related data loading explicit.
+- Keep an EF Core query composed as `IQueryable<T>` until the database has done the filtering, ordering, and projection. `AsEnumerable`, `ToListAsync`, or a `foreach` placed before those operators moves the rest of the pipeline into the process and turns a bounded query into a full table read. The repository's preference for LINQ over hand-written loops is about naming the operation, never about evaluating it on the wrong side of the boundary.
+- Write query predicates and projections from expressions the provider can translate. A local helper method or a domain value object's member inside an `IQueryable` lambda either fails to translate or silently forces client evaluation, so map to and from the domain type outside the query.
+- Express uniqueness, concurrency, and idempotency guarantees in PostgreSQL constraints as well as in application logic.
+- **Decide how a write behaves when two runs reach it at once, before writing it.** Read-then-write over a natural key is the shape that looks safe and is not: each side reads inside its own transaction, so both read nothing and the second one to commit violates the key. A worker on an interval, a sweep, and an account run routinely meet over the same rows, so treat "could another run be here" as a question every write answers rather than one only obviously shared tables raise.
+  - **Prefer optimistic concurrency.** Make the write idempotent from a fresh read, name the constraint its loser violates in `PersistenceConcurrencyConflicts`, and let `OptimisticConcurrencyRetryPolicy` retry it — the retry re-reads what the winner wrote and converges on one row. Naming the constraint is part of the write, not a follow-up: a unique violation that predicate does not name is not a conflict, so it leaves the policy as a provider failure and ends whatever run carried it. The predicate is unit tested for exactly this reason, because nothing else reports an entry that was never added.
+  - **Take an ordinary transaction when the write cannot be made idempotent** — when a second attempt would double an effect rather than reproduce it — holding the rows the decision depends on for as long as the decision needs them, and say in the code why the retry was not available. The transaction still ends before any IMAP, SMTP, or AI call, as the rule below requires.
+- Keep transactions short and define their boundary in the application operation. Do not hold a database transaction open across IMAP, SMTP, or AI network calls.
+- A write repository obtains its `DbContext` from the `IPersistenceSession` it is given and does not inject one. A read method joins no transaction, so it takes no session and uses the scoped context. Never accept a contract parameter the implementation ignores: a session that is not written through guarantees nothing and only appears to.
+- Reach for the change tracker only when a pending insert must be visible before commit, and say so in a comment. Prefer `FindAsync` for primary-key lookups, which already resolves from the tracker. For alternate-key lookups use the shared two-pass helper with a single predicate expression rather than repeating the predicate for the in-memory and database passes.
+- Use `$add-migration` for any model change that needs one, and never regenerate, rename, reorder, or delete an existing migration: an identifier a database has written into its `__EFMigrationsHistory` can never be reached again once it is regenerated. Reviewing a migration as the SQL it produces is part of that workflow rather than an optional extra.
+- Every model change owes a migration, including one that produces no SQL. The `Pending model changes` job compares the compiled model against the committed snapshot on every pull request touching `backend/src/`, so a constraint name or an index filter moves the snapshot and fails there; the fix is a regenerated snapshot, never a hand-edited one.
+- Review generated migrations and SQL. Add indexes from demonstrated query shapes and inspect query plans for performance-critical paths.
+- Use provider-supported parameterization. Never construct SQL from untrusted strings; any dynamic identifier must come from validated application-owned metadata.
+
+## Email protocol safety
+
+- Fetch message bodies with mechanisms that preserve the remote `\Seen` state. Add a regression test for every code path that fetches content.
+- Require explicit opt-in for unencrypted IMAP/SMTP transport and clear-text authentication over an unencrypted connection.
+- Do not disable TLS certificate validation. Support private servers through explicit trusted CA configuration.

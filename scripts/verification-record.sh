@@ -40,7 +40,7 @@ verification_input_scripts=(
 # Everything a gate's verdict depends on inside this checkout: the commit, which paths are in which
 # state, the content of every tracked change, the content of every file Git is not tracking yet, and
 # the scripts above — a change to one of those can move a verdict without touching a single file
-# under `src/`.
+# under `backend/src/`.
 #
 # The content of the *index* is deliberately not in it, only the fact of a staged path, because
 # every step a record can skip reads the working tree rather than the index: the build compiles what

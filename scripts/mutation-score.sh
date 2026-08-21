@@ -110,7 +110,7 @@ summarize_report() {
 }
 
 for project in "${projects[@]}"; do
-  test_project_directory="tests/${project}.UnitTests"
+  test_project_directory="backend/tests/${project}.UnitTests"
 
   if [[ ! -d "$test_project_directory" ]]; then
     printf '%s has no unit-test project at %s.\n' "$project" "$test_project_directory" >&2

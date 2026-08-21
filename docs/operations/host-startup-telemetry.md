@@ -1,8 +1,8 @@
 # Host startup telemetry
 
-<!-- describes: src/Host/Program.cs, src/Host/HostComposition.cs, src/Host/Observability/** -->
+<!-- describes: backend/src/Host/Program.cs, backend/src/Host/HostComposition.cs, backend/src/Host/Observability/** -->
 
-The host reports its own process lifetime through a bootstrap logging pipeline that `src/Host/Program.cs` owns directly. It is built before `WebApplication.CreateBuilder` runs and released when the process leaves.
+The host reports its own process lifetime through a bootstrap logging pipeline that `backend/src/Host/Program.cs` owns directly. It is built before `WebApplication.CreateBuilder` runs and released when the process leaves.
 
 ## Why the host needs a second pipeline
 

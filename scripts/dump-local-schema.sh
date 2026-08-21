@@ -12,7 +12,7 @@ set -euo pipefail
 # dump describe this checkout's database. Nothing here writes a credential anywhere, and the dump is written to standard
 # output so it is never left behind in the working tree by accident.
 
-app_host_project='src/AppHost/AppHost.csproj'
+app_host_project='backend/src/AppHost/AppHost.csproj'
 postgres_resource='postgres'
 database_name='mailfathom'
 

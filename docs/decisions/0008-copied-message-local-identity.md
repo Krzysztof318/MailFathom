@@ -9,7 +9,7 @@ informed:
 
 # Store a copied message as a second local email, and leave the occurrence the only identity a stored row carries
 
-<!-- describes: src/Application/Synchronization/MailboxSynchronizer.cs, src/Application/Mail/Mutations/IMailboxMutationReconciliationStore.cs, src/Domain/Mutations/MailboxMutationRequest.cs -->
+<!-- describes: backend/src/Application/Synchronization/MailboxSynchronizer.cs, backend/src/Application/Mail/Mutations/IMailboxMutationReconciliationStore.cs, backend/src/Domain/Mutations/MailboxMutationRequest.cs -->
 
 ## Context and Problem Statement
 

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="MailKit" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="MimeKit" />
+    <!-- For MailKit's own ISmtpClient, which is what lets the submission session's socket option, its ordering, and
+         its explicit envelope be asserted without a mail server. -->
+    <PackageReference Include="NSubstitute" />
+    <PackageReference Include="xunit.v3.mtp-v2" />
+  </ItemGroup>
+
+  <!-- The development tool, which is not measured by the coverage gate: it sits outside backend/src/ and
+       .config/testconfig.json excludes its assembly by name. The tests are as binding as any other suite regardless —
+       the generator's determinism is the whole promise the tool makes, and it is not something a reader can check. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\tools\SyntheticMail\SyntheticMail.csproj" />
+  </ItemGroup>
+</Project>

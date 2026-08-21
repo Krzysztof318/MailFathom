@@ -9,7 +9,7 @@ informed:
 
 # Serve several users from one deployment, hang ownership on the mail account rather than on the mail, and answer multi-tenancy with a second instance
 
-<!-- describes: src/Application/Access/**, src/Application/Accounts/**, src/Application/Emails/Mailboxes/**, src/Application/Emails/GetEmailContent/**, src/Application/Emails/DownloadAttachment/**, src/Application/Mail/Delivery/Authoring/**, src/Application/Mail/Delivery/Submission/**, src/Application/Mail/Mutations/Authoring/**, src/Infrastructure/Persistence/Emails/StoredEmailSelectionPredicate.cs, src/Infrastructure/Persistence/Emails/Threads/**, src/Infrastructure/Persistence/Entities/**, src/Infrastructure/Persistence/MailFathomDbContext.cs -->
+<!-- describes: backend/src/Application/Access/**, backend/src/Application/Accounts/**, backend/src/Application/Emails/Mailboxes/**, backend/src/Application/Emails/GetEmailContent/**, backend/src/Application/Emails/DownloadAttachment/**, backend/src/Application/Mail/Delivery/Authoring/**, backend/src/Application/Mail/Delivery/Submission/**, backend/src/Application/Mail/Mutations/Authoring/**, backend/src/Infrastructure/Persistence/Emails/StoredEmailSelectionPredicate.cs, backend/src/Infrastructure/Persistence/Emails/Threads/**, backend/src/Infrastructure/Persistence/Entities/**, backend/src/Infrastructure/Persistence/MailFathomDbContext.cs -->
 
 ## Context and Problem Statement
 

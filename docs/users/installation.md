@@ -126,7 +126,7 @@ The publish output is self-contained in licensing terms — it carries `LICENSE`
 there is no packaged unit file or installer yet, so a native installation is assembled by hand:
 
 ```bash
-dotnet publish src/Host/Host.csproj --configuration Release --output /opt/mailfathom
+dotnet publish backend/src/Host/Host.csproj --configuration Release --output /opt/mailfathom
 ```
 
 Build with the SDK pinned in `global.json`. The process is then an ordinary ASP.NET Core service:

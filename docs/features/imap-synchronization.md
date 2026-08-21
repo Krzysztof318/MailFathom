@@ -1,6 +1,6 @@
 # IMAP synchronization
 
-<!-- describes: src/Application/Synchronization/**, src/Domain/Synchronization/**, src/Domain/Folders/**, src/Application/Folders/**, src/Infrastructure/Mail/**, src/Application/Mail/Mutations/**, src/Application/Mail/Maintenance/**, src/Domain/Mutations/**, src/Host/Hosting/Workers/MailSynchronizationCoordinator.cs, src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, src/Host/Hosting/Workers/AccountPushNotificationWatch.cs -->
+<!-- describes: backend/src/Application/Synchronization/**, backend/src/Domain/Synchronization/**, backend/src/Domain/Folders/**, backend/src/Application/Folders/**, backend/src/Infrastructure/Mail/**, backend/src/Application/Mail/Mutations/**, backend/src/Application/Mail/Maintenance/**, backend/src/Domain/Mutations/**, backend/src/Host/Hosting/Workers/MailSynchronizationCoordinator.cs, backend/src/Host/Hosting/Workers/AccountSynchronizationSupervisor.cs, backend/src/Host/Hosting/Workers/AccountPushNotificationWatch.cs -->
 
 MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for an account that asks for it — the moment the mail server says something changed. Both mechanisms run the same synchronization pass over the same read-only session; what differs is only what starts one.
 

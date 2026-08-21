@@ -9,7 +9,7 @@ informed:
 
 # Write to the remote mailbox through a session type no read path can obtain, and scope the never-marks-read guarantee to retrieval
 
-<!-- describes: src/Application/Mail/Mutations/**, src/Application/Mail/Delivery/Filing/**, src/Domain/Mutations/**, src/Domain/Delivery/Filing/**, src/Infrastructure/Mail/MailKit/Writes/**, src/Infrastructure/Observability/** -->
+<!-- describes: backend/src/Application/Mail/Mutations/**, backend/src/Application/Mail/Delivery/Filing/**, backend/src/Domain/Mutations/**, backend/src/Domain/Delivery/Filing/**, backend/src/Infrastructure/Mail/MailKit/Writes/**, backend/src/Infrastructure/Observability/** -->
 
 ## Context and Problem Statement
 

@@ -1,6 +1,6 @@
 # Configuration sources
 
-<!-- describes: src/Host/Configuration/** -->
+<!-- describes: backend/src/Host/Configuration/** -->
 
 MailFathom reads its settings through the ordinary .NET configuration pipeline, plus one addition: a deployment may name a directory or a file of JSON configuration that it provisioned outside the application's own content root. That addition is what makes a Kubernetes ConfigMap mounted as a volume ordinary configuration rather than a shape the host cannot see.
 

@@ -1,6 +1,6 @@
 # Embedding generation
 
-<!-- describes: src/AI/Embeddings/**, src/AI/Providers/**, src/AI/ProviderAdapters/**, src/Application/Emails/Embeddings/**, src/Host/Configuration/Embeddings/**, src/Host/Configuration/Providers/**, src/Host/Hosting/Warnings/AiProviderTransportEncryptionWarning.cs -->
+<!-- describes: backend/src/AI/Embeddings/**, backend/src/AI/Providers/**, backend/src/AI/ProviderAdapters/**, backend/src/Application/Emails/Embeddings/**, backend/src/Host/Configuration/Embeddings/**, backend/src/Host/Configuration/Providers/**, backend/src/Host/Hosting/Warnings/AiProviderTransportEncryptionWarning.cs -->
 
 A chunk is a passage of text. A vector is where that passage lands in a space a model defines, and two vectors of one
 space can be compared, which is what makes semantic search possible at all. This page describes how MailFathom turns

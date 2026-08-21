@@ -18,7 +18,7 @@
 
   <!-- The generator is the one implementation of "build a synthetic message" in the repository, so the integration
        suite composes its seeded mail through this project rather than keeping a second copy that would drift from it.
-       Nothing under src/ references this project, and nothing may: the guard that says so is
+       Nothing under backend/src/ references this project, and nothing may: the guard that says so is
        `the_development_tooling_never_reaches_a_published_artifact` in scripts/test-agent-workflow.sh. -->
   <ItemGroup>
     <InternalsVisibleTo Include="MailFathom.SyntheticMail.UnitTests" />
@@ -33,7 +33,7 @@
     <InternalsVisibleTo Include="MailFathom.Benchmarks" />
 
     <!-- The shared source those two compile that message from is compiled here as well, as every file under
-         tests/shared is, so the project that tests it as a consumer needs the same grant its consumers hold. -->
+         backend/tests/shared is, so the project that tests it as a consumer needs the same grant its consumers hold. -->
     <InternalsVisibleTo Include="MailFathom.SharedSources.UnitTests" />
   </ItemGroup>
 

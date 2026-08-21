@@ -1,6 +1,6 @@
 # Chat generation
 
-<!-- describes: src/AI/Chat/**, src/AI/Providers/**, src/AI/ProviderAdapters/Chat*.cs, src/AI/ProviderAdapters/ProviderChatModelClient.cs, src/AI/ProviderAdapters/ProviderCallFailure*.cs, src/Application/Chat/**, src/Application/AiProviders/**, src/Host/Configuration/Chat/**, src/Host/Configuration/Providers/**, src/Host/Hosting/AiProviderHealthCheck.cs, src/Host/Hosting/Warnings/AiProviderTransportEncryptionWarning.cs, src/Infrastructure/Observability/AiProviderHealthTracker.cs -->
+<!-- describes: backend/src/AI/Chat/**, backend/src/AI/Providers/**, backend/src/AI/ProviderAdapters/Chat*.cs, backend/src/AI/ProviderAdapters/ProviderChatModelClient.cs, backend/src/AI/ProviderAdapters/ProviderCallFailure*.cs, backend/src/Application/Chat/**, backend/src/Application/AiProviders/**, backend/src/Host/Configuration/Chat/**, backend/src/Host/Configuration/Providers/**, backend/src/Host/Hosting/AiProviderHealthCheck.cs, backend/src/Host/Hosting/Warnings/AiProviderTransportEncryptionWarning.cs, backend/src/Infrastructure/Observability/AiProviderHealthTracker.cs -->
 
 Text in, generated text out. This page describes the second kind of outbound AI call MailFathom makes: what a
 deployment declares to enable it, what one call is allowed to spend, what a failing call is classified as, and how an

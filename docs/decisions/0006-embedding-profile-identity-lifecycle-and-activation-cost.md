@@ -9,11 +9,11 @@ informed:
 
 # Identify an embedding profile by the geometry of its vector space, keep that identity immutable, and make activation state what it is about to spend
 
-<!-- describes: src/AI/Chunking/**, src/AI/Embeddings/**, src/AI/ProviderAdapters/**, src/AI/Providers/** -->
+<!-- describes: backend/src/AI/Chunking/**, backend/src/AI/Embeddings/**, backend/src/AI/ProviderAdapters/**, backend/src/AI/Providers/** -->
 
 ## Context and Problem Statement
 
-MailFathom extracts plain text from every synchronized message and indexes it as a `tsvector`, which is what `search_emails` queries today. Nothing derives a vector from that text: `src/AI/Embeddings` and `src/AI/Chunking` are empty directories, and no `embedding_profiles` or `email_embeddings` table exists. The one piece already in place is the `vector` extension, which `MailFathomDbContext` installs so a column of that type can be declared when one is finally added.
+MailFathom extracts plain text from every synchronized message and indexes it as a `tsvector`, which is what `search_emails` queries today. Nothing derives a vector from that text: `backend/src/AI/Embeddings` and `backend/src/AI/Chunking` are empty directories, and no `embedding_profiles` or `email_embeddings` table exists. The one piece already in place is the `vector` extension, which `MailFathomDbContext` installs so a column of that type can be declared when one is finally added.
 
 Section 9.3 of the architecture draft settles the column: pgvector's dimensionless `vector` type paired with an `embedding_profile_id` and an explicit dimension check, so several profiles coexist and each gets its own partial index. What it does not settle is what a profile *is*. Provider, model, dimension, and distance metric are obvious members of that identity; whether the chunk boundary rules belong there is not. Nor does it settle whether a profile is edited or replaced, where the authoritative record of one lives, or what an operator pays at the moment they turn one on — which for an instance holding months of mail is a provider bill and a full re-embed.
 

@@ -1,6 +1,6 @@
 # Embedding backfill
 
-<!-- describes: src/Application/Emails/Embeddings/Backfill/**, src/Application/Emails/Embeddings/Generations/EmbeddingGenerationUpkeep.cs, src/Infrastructure/Persistence/Embeddings/StoredEmailEmbeddingBackfillStore.cs, src/Infrastructure/Observability/EmailEmbeddingBackfillTelemetry.cs, src/Host/Configuration/Embeddings/EmbeddingBackfillOptions.cs, src/Host/Hosting/Workers/MailEmbeddingBackfillWorker.cs -->
+<!-- describes: backend/src/Application/Emails/Embeddings/Backfill/**, backend/src/Application/Emails/Embeddings/Generations/EmbeddingGenerationUpkeep.cs, backend/src/Infrastructure/Persistence/Embeddings/StoredEmailEmbeddingBackfillStore.cs, backend/src/Infrastructure/Observability/EmailEmbeddingBackfillTelemetry.cs, backend/src/Host/Configuration/Embeddings/EmbeddingBackfillOptions.cs, backend/src/Host/Hosting/Workers/MailEmbeddingBackfillWorker.cs -->
 
 [Automatic embedding](automatic-embedding.md) covers mail as it arrives. An instance that has been synchronizing for
 months has everything else, and for that mail the live path never runs at all — nothing revisits a message that was

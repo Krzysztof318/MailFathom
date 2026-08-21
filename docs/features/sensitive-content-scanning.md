@@ -1,6 +1,6 @@
 # Sensitive-content scanning
 
-<!-- describes: src/Application/SensitiveContent/**, src/Host/Configuration/SensitiveContent/**, src/Infrastructure/SensitiveContent/**, src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, src/Host/Hosting/Warnings/StaleDerivedDataStartupReport.cs -->
+<!-- describes: backend/src/Application/SensitiveContent/**, backend/src/Host/Configuration/SensitiveContent/**, backend/src/Infrastructure/SensitiveContent/**, backend/src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, backend/src/Host/Hosting/Warnings/StaleDerivedDataStartupReport.cs -->
 
 Mail carries credentials. A deployment key pasted into a thread, a connection string in a stack trace, an API token a
 colleague sent because it was quicker than a vault — all of it arrives in a mailbox and, from there, would otherwise

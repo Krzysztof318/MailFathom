@@ -21,7 +21,7 @@ namespace MailFathom.SyntheticMail.Generation.SensitiveDecoys;
 /// </para>
 /// <para>
 /// The scanner, the category, and the rule are spelled the way the deployment spells them, and are carried as text
-/// because this project deliberately references nothing under <c>src/</c>. That is a copy, and the tests assert its
+/// because this project deliberately references nothing under <c>backend/src/</c>. That is a copy, and the tests assert its
 /// shape rather than its truth: what would go stale is a name, which the corpus listing prints and a reader compares
 /// against what the scanner reported.
 /// </para>
