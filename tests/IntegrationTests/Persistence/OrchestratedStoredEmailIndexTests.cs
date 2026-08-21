@@ -164,7 +164,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailFathomOrchestrationFix
             FirstTimelinePageSql,
             [FolderIdParameter(folderId), PageSizeParameter(PageSize)],
             cancellationToken);
-        Assert.Contains(MailFathomDbContext.StoredEmailFolderTimelineIndexName, queryPlan, StringComparison.Ordinal);
+        Assert.Contains(PersistenceConstraintNames.StoredEmailFolderTimelineIndexName, queryPlan, StringComparison.Ordinal);
     }
 
     /// <summary>Proves a keyset walk over that order visits every row exactly once.</summary>
@@ -227,7 +227,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailFathomOrchestrationFix
             LexicalSearchSql,
             [ConfigurationParameter(), QueryTextParameter(DistinctiveBodyTerm)],
             cancellationToken);
-        Assert.Contains(MailFathomDbContext.EmailSearchDocumentVectorIndexName, queryPlan, StringComparison.Ordinal);
+        Assert.Contains(PersistenceConstraintNames.EmailSearchDocumentVectorIndexName, queryPlan, StringComparison.Ordinal);
     }
 
     /// <summary>Proves query text carrying SQL and full-text syntax is data on the way in and on the way out.</summary>

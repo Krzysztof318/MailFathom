@@ -73,7 +73,7 @@ public sealed class EmailSearchDocumentModelTests
         // Act
         var index = SearchDocumentEntityType(context)
             .GetIndexes()
-            .FirstOrDefault(candidate => candidate.GetDatabaseName() == MailFathomDbContext.EmailSearchDocumentVectorIndexName);
+            .FirstOrDefault(candidate => candidate.GetDatabaseName() == PersistenceConstraintNames.EmailSearchDocumentVectorIndexName);
 
         // Assert
         Assert.NotNull(index);

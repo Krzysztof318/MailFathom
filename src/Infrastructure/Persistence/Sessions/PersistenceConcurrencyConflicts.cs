@@ -135,25 +135,25 @@ internal static class PersistenceConcurrencyConflicts
         exception.InnerException is PostgresException
         {
             SqlState: PostgresErrorCodes.UniqueViolation,
-            ConstraintName: MailFathomDbContext.SynchronizationCheckpointPrimaryKeyConstraintName
-                or MailFathomDbContext.MailFolderBindingUniqueIndexName
-                or MailFathomDbContext.MailboxAccountPrimaryKeyConstraintName
-                or MailFathomDbContext.MailboxMutationIdentityUniqueIndexName
-                or MailFathomDbContext.MailboxMutationAuditEntryMutationUniqueIndexName
-                or MailFathomDbContext.EmbeddingProfileFingerprintUniqueIndexName
-                or MailFathomDbContext.EmbeddingProfileLifecycleUniqueIndexName
-                or MailFathomDbContext.MailRuleEvaluationRunPrimaryKeyConstraintName
-                or MailFathomDbContext.SpamClassificationRunPrimaryKeyConstraintName
-                or MailFathomDbContext.EmailSpamClassificationPrimaryKeyConstraintName
-                or MailFathomDbContext.EmailChunkOrdinalUniqueIndexName
-                or MailFathomDbContext.EmailEmbeddingPrimaryKeyConstraintName
-                or MailFathomDbContext.MailRederivationPositionPrimaryKeyConstraintName
-                or MailFathomDbContext.MailRederivationRunPrimaryKeyConstraintName
-                or MailFathomDbContext.ContactAddressUniqueIndexName
-                or MailFathomDbContext.OutgoingEmailIdentityUniqueIndexName
-                or MailFathomDbContext.RecurringSendIdentityUniqueIndexName
-                or MailFathomDbContext.OutgoingEmailFilingPrimaryKeyConstraintName
-                or MailFathomDbContext.MailDraftCopyPrimaryKeyConstraintName
-                or MailFathomDbContext.EmailThreadIdentifierPrimaryKeyConstraintName,
+            ConstraintName: PersistenceConstraintNames.SynchronizationCheckpointPrimaryKeyConstraintName
+                or PersistenceConstraintNames.MailFolderBindingUniqueIndexName
+                or PersistenceConstraintNames.MailboxAccountPrimaryKeyConstraintName
+                or PersistenceConstraintNames.MailboxMutationIdentityUniqueIndexName
+                or PersistenceConstraintNames.MailboxMutationAuditEntryMutationUniqueIndexName
+                or PersistenceConstraintNames.EmbeddingProfileFingerprintUniqueIndexName
+                or PersistenceConstraintNames.EmbeddingProfileLifecycleUniqueIndexName
+                or PersistenceConstraintNames.MailRuleEvaluationRunPrimaryKeyConstraintName
+                or PersistenceConstraintNames.SpamClassificationRunPrimaryKeyConstraintName
+                or PersistenceConstraintNames.EmailSpamClassificationPrimaryKeyConstraintName
+                or PersistenceConstraintNames.EmailChunkOrdinalUniqueIndexName
+                or PersistenceConstraintNames.EmailEmbeddingPrimaryKeyConstraintName
+                or PersistenceConstraintNames.MailRederivationPositionPrimaryKeyConstraintName
+                or PersistenceConstraintNames.MailRederivationRunPrimaryKeyConstraintName
+                or PersistenceConstraintNames.ContactAddressUniqueIndexName
+                or PersistenceConstraintNames.OutgoingEmailIdentityUniqueIndexName
+                or PersistenceConstraintNames.RecurringSendIdentityUniqueIndexName
+                or PersistenceConstraintNames.OutgoingEmailFilingPrimaryKeyConstraintName
+                or PersistenceConstraintNames.MailDraftCopyPrimaryKeyConstraintName
+                or PersistenceConstraintNames.EmailThreadIdentifierPrimaryKeyConstraintName,
         };
 }

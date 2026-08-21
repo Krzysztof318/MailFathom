@@ -16,22 +16,22 @@ public sealed class PersistenceConcurrencyConflictsTests
     /// <summary>Every constraint a competing writer can legitimately win.</summary>
     public static TheoryData<string> RecognizedConstraints =>
     [
-        MailFathomDbContext.SynchronizationCheckpointPrimaryKeyConstraintName,
-        MailFathomDbContext.MailFolderBindingUniqueIndexName,
-        MailFathomDbContext.MailboxAccountPrimaryKeyConstraintName,
-        MailFathomDbContext.MailboxMutationIdentityUniqueIndexName,
-        MailFathomDbContext.MailboxMutationAuditEntryMutationUniqueIndexName,
-        MailFathomDbContext.EmbeddingProfileFingerprintUniqueIndexName,
-        MailFathomDbContext.EmbeddingProfileLifecycleUniqueIndexName,
-        MailFathomDbContext.MailRuleEvaluationRunPrimaryKeyConstraintName,
-        MailFathomDbContext.SpamClassificationRunPrimaryKeyConstraintName,
-        MailFathomDbContext.EmailSpamClassificationPrimaryKeyConstraintName,
-        MailFathomDbContext.EmailChunkOrdinalUniqueIndexName,
-        MailFathomDbContext.EmailEmbeddingPrimaryKeyConstraintName,
-        MailFathomDbContext.MailRederivationPositionPrimaryKeyConstraintName,
-        MailFathomDbContext.MailRederivationRunPrimaryKeyConstraintName,
-        MailFathomDbContext.ContactAddressUniqueIndexName,
-        MailFathomDbContext.MailDraftCopyPrimaryKeyConstraintName,
+        PersistenceConstraintNames.SynchronizationCheckpointPrimaryKeyConstraintName,
+        PersistenceConstraintNames.MailFolderBindingUniqueIndexName,
+        PersistenceConstraintNames.MailboxAccountPrimaryKeyConstraintName,
+        PersistenceConstraintNames.MailboxMutationIdentityUniqueIndexName,
+        PersistenceConstraintNames.MailboxMutationAuditEntryMutationUniqueIndexName,
+        PersistenceConstraintNames.EmbeddingProfileFingerprintUniqueIndexName,
+        PersistenceConstraintNames.EmbeddingProfileLifecycleUniqueIndexName,
+        PersistenceConstraintNames.MailRuleEvaluationRunPrimaryKeyConstraintName,
+        PersistenceConstraintNames.SpamClassificationRunPrimaryKeyConstraintName,
+        PersistenceConstraintNames.EmailSpamClassificationPrimaryKeyConstraintName,
+        PersistenceConstraintNames.EmailChunkOrdinalUniqueIndexName,
+        PersistenceConstraintNames.EmailEmbeddingPrimaryKeyConstraintName,
+        PersistenceConstraintNames.MailRederivationPositionPrimaryKeyConstraintName,
+        PersistenceConstraintNames.MailRederivationRunPrimaryKeyConstraintName,
+        PersistenceConstraintNames.ContactAddressUniqueIndexName,
+        PersistenceConstraintNames.MailDraftCopyPrimaryKeyConstraintName,
     ];
 
     [Theory]
@@ -71,7 +71,7 @@ public sealed class PersistenceConcurrencyConflictsTests
             "save failed",
             CreatePostgresException(
                 PostgresErrorCodes.ForeignKeyViolation,
-                MailFathomDbContext.EmailEmbeddingPrimaryKeyConstraintName));
+                PersistenceConstraintNames.EmailEmbeddingPrimaryKeyConstraintName));
 
         // Act
         var isConflict = PersistenceConcurrencyConflicts.IsConcurrencyConflict(exception);

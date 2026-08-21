@@ -49,7 +49,7 @@ public sealed class EmbeddingSchemaModelTests
         var check = Assert.Single(EntityType<EmailEmbeddingEntity>(context).GetCheckConstraints());
 
         // Assert
-        Assert.Equal(MailFathomDbContext.EmailEmbeddingDimensionCheckConstraintName, check.Name);
+        Assert.Equal(PersistenceConstraintNames.EmailEmbeddingDimensionCheckConstraintName, check.Name);
         Assert.Equal(
             $"vector_dims(\"{nameof(EmailEmbeddingEntity.Embedding)}\") = \"{nameof(EmailEmbeddingEntity.Dimension)}\"",
             check.Sql);
@@ -129,7 +129,7 @@ public sealed class EmbeddingSchemaModelTests
         Assert.Equal(
             [nameof(EmailEmbeddingEntity.EmailChunkId), nameof(EmailEmbeddingEntity.EmbeddingProfileId)],
             key.Properties.Select(property => property.Name));
-        Assert.Equal(MailFathomDbContext.EmailEmbeddingPrimaryKeyConstraintName, key.GetName());
+        Assert.Equal(PersistenceConstraintNames.EmailEmbeddingPrimaryKeyConstraintName, key.GetName());
     }
 
     /// <summary>A superseded generation is deleted in bounded batches read by profile, which without this scans the table.</summary>
@@ -142,7 +142,7 @@ public sealed class EmbeddingSchemaModelTests
         // Act
         var index = EntityType<EmailEmbeddingEntity>(context)
             .GetIndexes()
-            .FirstOrDefault(candidate => candidate.GetDatabaseName() == MailFathomDbContext.EmailEmbeddingProfileIndexName);
+            .FirstOrDefault(candidate => candidate.GetDatabaseName() == PersistenceConstraintNames.EmailEmbeddingProfileIndexName);
 
         // Assert
         Assert.NotNull(index);
@@ -165,7 +165,7 @@ public sealed class EmbeddingSchemaModelTests
         var index = EntityType<EmbeddingProfileEntity>(context)
             .GetIndexes()
             .FirstOrDefault(candidate =>
-                candidate.GetDatabaseName() == MailFathomDbContext.EmbeddingProfileFingerprintUniqueIndexName);
+                candidate.GetDatabaseName() == PersistenceConstraintNames.EmbeddingProfileFingerprintUniqueIndexName);
 
         // Assert
         Assert.NotNull(index);
@@ -190,7 +190,7 @@ public sealed class EmbeddingSchemaModelTests
         var index = EntityType<EmbeddingProfileEntity>(context)
             .GetIndexes()
             .FirstOrDefault(candidate =>
-                candidate.GetDatabaseName() == MailFathomDbContext.EmbeddingProfileLifecycleUniqueIndexName);
+                candidate.GetDatabaseName() == PersistenceConstraintNames.EmbeddingProfileLifecycleUniqueIndexName);
 
         // Assert
         Assert.NotNull(index);

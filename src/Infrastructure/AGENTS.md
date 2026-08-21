@@ -5,6 +5,7 @@ These instructions apply under `src/Infrastructure/` in addition to parent instr
 ## Persistence and EF Core
 
 - Keep `DbContext` scoped and short-lived. It is not thread-safe and must never be shared across concurrent operations.
+- **Map one entity type in one `IEntityTypeConfiguration<T>`, under a `Configurations/` directory beside the store that reads it, and apply it by name from `MailFathomDbContext.OnModelCreating`.** The context declares which types the model holds and in what order their configurations are applied, and nothing about how any one of them is mapped, so adding an entity adds a file rather than editing the file every other branch adding an entity is also editing. A key, index, or constraint name the model states rather than leaves to convention goes on `PersistenceConstraintNames`, because `PersistenceConcurrencyConflicts` and the model tests have to read the same name the mapping declares. `EntityTypeConfigurationTests` fails on a type mapped nowhere, mapped twice, or configured for a model that does not hold it.
 - Use asynchronous EF Core APIs and propagate cancellation tokens.
 - Project queries directly into application read models. Do not load full entity graphs when a bounded projection is sufficient.
 - Use `AsNoTracking` for read-only queries unless identity resolution or change tracking is explicitly required.

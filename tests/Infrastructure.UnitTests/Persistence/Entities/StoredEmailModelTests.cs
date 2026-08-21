@@ -24,12 +24,12 @@ public sealed class StoredEmailModelTests
     private static readonly string[] FolderTimelineColumns = ["MailFolderId", "ReceivedAt", "Id"];
 
     [Theory]
-    [InlineData(MailFathomDbContext.StoredEmailAccountTimelineIndexName)]
-    [InlineData(MailFathomDbContext.StoredEmailFolderTimelineIndexName)]
+    [InlineData(PersistenceConstraintNames.StoredEmailAccountTimelineIndexName)]
+    [InlineData(PersistenceConstraintNames.StoredEmailFolderTimelineIndexName)]
     public void StoredEmailModel_TimelineIndex_OrdersByTheReceivedTimestampDescendingWithTheIdentifierAsTiebreaker(string indexName)
     {
         // Arrange
-        var expectedColumns = indexName == MailFathomDbContext.StoredEmailAccountTimelineIndexName
+        var expectedColumns = indexName == PersistenceConstraintNames.StoredEmailAccountTimelineIndexName
             ? AccountTimelineColumns
             : FolderTimelineColumns;
 
@@ -46,8 +46,8 @@ public sealed class StoredEmailModelTests
     /// could date above the newest mail. The contract puts them last and the index has to spell that out.
     /// </summary>
     [Theory]
-    [InlineData(MailFathomDbContext.StoredEmailAccountTimelineIndexName)]
-    [InlineData(MailFathomDbContext.StoredEmailFolderTimelineIndexName)]
+    [InlineData(PersistenceConstraintNames.StoredEmailAccountTimelineIndexName)]
+    [InlineData(PersistenceConstraintNames.StoredEmailFolderTimelineIndexName)]
     public void StoredEmailModel_TimelineIndex_SortsAnUnknownReceivedTimestampLast(string indexName)
     {
         // Act
@@ -63,7 +63,7 @@ public sealed class StoredEmailModelTests
     public void StoredEmailModel_RemoteOccurrenceIdentity_IsUniqueOnFolderUidValidityAndUid()
     {
         // Act
-        var index = FindStoredEmailIndex(MailFathomDbContext.StoredEmailOccurrenceUniqueIndexName);
+        var index = FindStoredEmailIndex(PersistenceConstraintNames.StoredEmailOccurrenceUniqueIndexName);
 
         // Assert
         Assert.True(index.IsUnique);
@@ -72,9 +72,9 @@ public sealed class StoredEmailModelTests
 
     /// <summary>A recipient filter is a containment test over an array, which only a GIN index can serve.</summary>
     [Theory]
-    [InlineData(MailFathomDbContext.StoredEmailToAddressesIndexName, "ToAddresses")]
-    [InlineData(MailFathomDbContext.StoredEmailCcAddressesIndexName, "CcAddresses")]
-    [InlineData(MailFathomDbContext.StoredEmailReplyToAddressesIndexName, "ReplyToAddresses")]
+    [InlineData(PersistenceConstraintNames.StoredEmailToAddressesIndexName, "ToAddresses")]
+    [InlineData(PersistenceConstraintNames.StoredEmailCcAddressesIndexName, "CcAddresses")]
+    [InlineData(PersistenceConstraintNames.StoredEmailReplyToAddressesIndexName, "ReplyToAddresses")]
     public void StoredEmailModel_RecipientArrayIndex_UsesTheInvertedIndexMethod(string indexName, string columnName)
     {
         // Act
@@ -89,7 +89,7 @@ public sealed class StoredEmailModelTests
     public void StoredEmailModel_SenderIndex_CoversTheComparisonFormRatherThanTheWrittenAddress()
     {
         // Act
-        var index = FindStoredEmailIndex(MailFathomDbContext.StoredEmailSenderIndexName);
+        var index = FindStoredEmailIndex(PersistenceConstraintNames.StoredEmailSenderIndexName);
 
         // Assert
         Assert.Equal(["SenderNormalizedAddress"], index.Properties.Select(property => property.Name));
@@ -103,7 +103,7 @@ public sealed class StoredEmailModelTests
     public void StoredEmailModel_ThreadIndex_CoversTheConversationAndTheIdentityItIsAssembledBy()
     {
         // Act
-        var index = FindStoredEmailIndex(MailFathomDbContext.StoredEmailThreadIndexName);
+        var index = FindStoredEmailIndex(PersistenceConstraintNames.StoredEmailThreadIndexName);
 
         // Assert
         Assert.Equal(["EmailThreadId", "Id"], index.Properties.Select(property => property.Name));
