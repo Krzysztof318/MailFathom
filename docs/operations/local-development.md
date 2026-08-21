@@ -517,7 +517,7 @@ implementation of *build a synthetic message* rather than two that would drift.
 
 ## Command-line tooling
 
-The repository provisions no development environment, so install the SDK and any command-line tools on the developer machine. Repository-local tools declared in `.config/dotnet-tools.json` come from `dotnet tool restore`: `reportgenerator` merges the per-assembly Cobertura reports the coverage run produces, and `dotnet-ef` generates and scripts migrations. Both are pinned there because both run in continuous integration, which is also what keeps `dotnet-ef` at one version across every machine instead of at whichever one a developer installed.
+The repository provisions no development environment, so install the SDK and any command-line tools on the developer machine. Repository-local tools declared in `.config/dotnet-tools.json` come from `dotnet tool restore`: `reportgenerator` merges the per-assembly Cobertura reports the coverage run produces, `dotnet-ef` generates and scripts migrations, and `dotnet-stryker` measures the mutation score `Nightly` reports for `Domain` and `Application` through `scripts/mutation-score.sh`. Each is pinned there because each runs in continuous integration, which is also what keeps `dotnet-ef` at one version across every machine instead of at whichever one a developer installed. [The mutation score is read, never enforced](agent-workflow.md#the-mutation-score-is-read-never-enforced) states what that last report answers that coverage no longer does, and why nothing gates on it.
 
 Two tools are installed globally when their workflows are needed:
 
