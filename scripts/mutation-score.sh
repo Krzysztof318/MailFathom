@@ -39,6 +39,12 @@ fi
 # rather than from what Stryker printed. `NoCoverage` is a survivor the suite never even reached, which
 # is why it counts against the score beside `Survived` and appears in the same table; `CompileError`
 # and `Ignored` are mutants Stryker withdrew and score nothing either way.
+#
+# Scoring nothing at all is its own case rather than a clean one. Every mutant withdrawn as a compile
+# error leaves no survivors to list, which reads exactly like a suite that killed everything — so the
+# closing sentence is decided by whether anything was scored before it is decided by whether anything
+# survived. A run that validated nothing has to say so, because that is what a whole test project
+# failing to compile under mutation looks like from here.
 summarize_report() {
   local project="$1"
   local report="$2"
@@ -76,7 +82,8 @@ summarize_report() {
         "| Withdrawn as compile errors | " + ($compileErrors | tostring) + " |",
         ""
       ]
-      + (if ($byMutator | length) == 0 then ["Every scored mutant was killed."]
+      + (if $scored == 0 then ["No mutant was scored, so this run establishes nothing about the suite."]
+         elif ($byMutator | length) == 0 then ["Every scored mutant was killed."]
          else [
            "Mutants no test noticed, by mutator:",
            "",
