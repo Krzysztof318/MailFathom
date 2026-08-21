@@ -80,12 +80,9 @@ public sealed class AuthoredSendGovernor(
             ?? throw new InvalidOperationException(
                 "A send is governed against the caller that asked for it, so it is reached under a principal.");
 
-        foreach (var recipient in request.Recipients)
+        if (recipientPolicy.FindFirstRefusal(request.Recipients) is { } refusal)
         {
-            if (recipientPolicy.Judge(recipient.Address) is { } refusal)
-            {
-                throw OutgoingMailRefusedException.RecipientRefused(refusal);
-            }
+            throw OutgoingMailRefusedException.RecipientRefused(refusal);
         }
 
         var unvouchedCount = await vouching.CountUnvouchedAsync(authored, cancellationToken);

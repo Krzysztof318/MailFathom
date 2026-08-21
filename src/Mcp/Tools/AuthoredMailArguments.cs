@@ -12,6 +12,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Failures;
 
 namespace MailFathom.Mcp.Tools;
 
@@ -143,55 +144,40 @@ internal static class AuthoredMailArguments
     /// <param name="to">The addresses named in the <c>To</c> header, or <see langword="null" /> where the act names none.</param>
     /// <param name="cc">The addresses named in the <c>Cc</c> header, or <see langword="null" />.</param>
     /// <param name="bcc">The addresses named in the <c>Bcc</c> header, or <see langword="null" />.</param>
+    /// <param name="tooManyRecipients">Raises the caller's own refusal for a list longer than a record holds.</param>
+    /// <param name="fieldUnusable">Raises the caller's own refusal for a header carrying an entry that names nobody.</param>
     /// <returns>The recipients the author named, in the order the headers are read in.</returns>
     /// <remarks>
+    /// <para>
     /// The order is the order the headers are read in, which is the order the composition writes them in. Nothing is
     /// deduplicated or parsed here: whether text names a mailbox is the composition's question, and how many people a
     /// message may actually reach is the deployment's number, both asked once for every way a message is authored.
     /// What is answered here is only how long the caller's own lists are, because that is what decides whether they are
     /// expanded at all, and the check therefore belongs in front of the expansion rather than after it.
+    /// </para>
+    /// <para>
+    /// A send and a draft read the same headers and refuse the same values, and differ only in the failure they raise:
+    /// a caller told its <em>submission</em> was refused while saving a draft would read that as a message having been
+    /// offered to a server and turned down, which is the one thing that certainly did not happen. So the act supplies
+    /// the two refusals rather than the reading being written twice, and the code and the sentence stay the same either
+    /// way because both are published from one place.
+    /// </para>
     /// </remarks>
-    /// <exception cref="MailSubmissionRefusedException">Thrown when the three headers name more people than a record holds, or an entry carries no address.</exception>
+    /// <exception cref="MailFathomException">Thrown as whichever refusal the act supplied, when the three headers name more people than a record holds or an entry carries no address.</exception>
     public static IReadOnlyList<NamedRecipient> NamedRecipients(
         IReadOnlyList<string>? to,
         IReadOnlyList<string>? cc,
-        IReadOnlyList<string>? bcc)
+        IReadOnlyList<string>? bcc,
+        Func<MailFathomException> tooManyRecipients,
+        Func<AuthoredEmailRefusal, MailFathomException> fieldUnusable)
     {
         if (Counted(to, cc, bcc) > OutgoingEmailRequest.MaximumRecipientCount)
         {
-            throw MailSubmissionRefusedException.TooManyRecipients();
+            throw tooManyRecipients();
         }
 
         return Collect(to, cc, bcc, out var unusableField)
-            ?? throw MailSubmissionRefusedException.From(
-                new AuthoredEmailRefusal(AuthoredEmailRefusalReason.FieldUnusable, unusableField));
-    }
-
-    /// <summary>Collects the three headers into the one recipient list a draft is written from.</summary>
-    /// <param name="to">The addresses named in the <c>To</c> header, or <see langword="null" /> where the caller named none.</param>
-    /// <param name="cc">The addresses named in the <c>Cc</c> header, or <see langword="null" />.</param>
-    /// <param name="bcc">The addresses named in the <c>Bcc</c> header, or <see langword="null" />.</param>
-    /// <returns>The recipients the author named, in the order the headers are read in.</returns>
-    /// <remarks>
-    /// It reads exactly what <see cref="NamedRecipients" /> reads and refuses exactly what it refuses, and differs in
-    /// the failure it raises: a caller told its <em>submission</em> was refused while saving a draft would read that as
-    /// a message having been offered to a server and turned down, which is the one thing that certainly did not
-    /// happen. The code and the sentence are the same either way, because both are published from one place.
-    /// </remarks>
-    /// <exception cref="MailDraftRefusedException">Thrown when the three headers name more people than a record holds, or an entry carries no address.</exception>
-    public static IReadOnlyList<NamedRecipient> DraftedRecipients(
-        IReadOnlyList<string>? to,
-        IReadOnlyList<string>? cc,
-        IReadOnlyList<string>? bcc)
-    {
-        if (Counted(to, cc, bcc) > OutgoingEmailRequest.MaximumRecipientCount)
-        {
-            throw MailDraftRefusedException.TooManyRecipients();
-        }
-
-        return Collect(to, cc, bcc, out var unusableField)
-            ?? throw MailDraftRefusedException.From(
-                new AuthoredEmailRefusal(AuthoredEmailRefusalReason.FieldUnusable, unusableField));
+            ?? throw fieldUnusable(new AuthoredEmailRefusal(AuthoredEmailRefusalReason.FieldUnusable, unusableField));
     }
 
     /// <summary>Reports whether text could name an account at all, before anything looks for one it names.</summary>

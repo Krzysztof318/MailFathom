@@ -81,4 +81,28 @@ public sealed class OutgoingRecipientPolicy
             ? OutgoingRecipientRefusalReason.OutsideAllowedRecipients
             : null;
     }
+
+    /// <summary>Judges everybody one message is addressed to, and reports the first refusal.</summary>
+    /// <param name="recipients">The addresses the message would be offered to.</param>
+    /// <returns>The reason the first refused recipient is refused, or <see langword="null" /> when the policy admits them all.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="recipients" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// It stops at the first refusal because the message is refused whole either way, which is the reason
+    /// <see cref="Judge" /> states. Reading on would only name a second address the author learns about on the next
+    /// attempt, and the reason reported carries no address at all.
+    /// </remarks>
+    public OutgoingRecipientRefusalReason? FindFirstRefusal(IReadOnlyList<OutgoingRecipient> recipients)
+    {
+        ArgumentNullException.ThrowIfNull(recipients);
+
+        foreach (var recipient in recipients)
+        {
+            if (this.Judge(recipient.Address) is { } refusal)
+            {
+                return refusal;
+            }
+        }
+
+        return null;
+    }
 }

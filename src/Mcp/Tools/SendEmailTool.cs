@@ -129,7 +129,8 @@ internal sealed class SendEmailTool(AuthoredMailSubmission submission)
         var request = new MailSubmissionRequest
         {
             Account = NamedAccount(account),
-            Recipients = AuthoredMailArguments.NamedRecipients(to, cc, bcc),
+            Recipients = AuthoredMailArguments.NamedRecipients(
+                to, cc, bcc, MailSubmissionRefusedException.TooManyRecipients, MailSubmissionRefusedException.From),
             Subject = subject,
             PlainTextBody = plainTextBody,
             HtmlBody = htmlBody,

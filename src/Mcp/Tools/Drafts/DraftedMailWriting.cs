@@ -74,7 +74,12 @@ internal sealed class DraftedMailWriting(AuthoredMailDrafting drafting, Authored
         var request = new MailDraftRequest
         {
             Account = NamedAccount(fields.Account),
-            Recipients = AuthoredMailArguments.DraftedRecipients(fields.To, fields.Cc, fields.Bcc),
+            Recipients = AuthoredMailArguments.NamedRecipients(
+                fields.To,
+                fields.Cc,
+                fields.Bcc,
+                MailDraftRefusedException.TooManyRecipients,
+                MailDraftRefusedException.From),
             Subject = fields.Subject,
             PlainTextBody = fields.PlainTextBody,
             HtmlBody = fields.HtmlBody,
@@ -103,7 +108,12 @@ internal sealed class DraftedMailWriting(AuthoredMailDrafting drafting, Authored
             Act = AuthoredAct(answer),
             PlainTextBody = fields.PlainTextBody,
             HtmlBody = fields.HtmlBody,
-            Recipients = AuthoredMailArguments.DraftedRecipients(fields.To, fields.Cc, fields.Bcc),
+            Recipients = AuthoredMailArguments.NamedRecipients(
+                fields.To,
+                fields.Cc,
+                fields.Bcc,
+                MailDraftRefusedException.TooManyRecipients,
+                MailDraftRefusedException.From),
             Author = Author(),
             Revises = revises,
         };

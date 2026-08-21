@@ -135,7 +135,12 @@ internal sealed class ReplyToEmailTool(AuthoredResponseSubmission submission)
             Act = AuthoredAct(audience),
             PlainTextBody = plainTextBody,
             HtmlBody = htmlBody,
-            Recipients = AuthoredMailArguments.NamedRecipients(to: null, cc, bcc: null),
+            Recipients = AuthoredMailArguments.NamedRecipients(
+                to: null,
+                cc,
+                bcc: null,
+                MailSubmissionRefusedException.TooManyRecipients,
+                MailSubmissionRefusedException.From),
             Requester = AuthoredMailArguments.Requester(idempotencyKey),
         };
 

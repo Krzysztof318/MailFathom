@@ -136,7 +136,8 @@ internal sealed class ForwardEmailTool(AuthoredResponseSubmission submission)
             Act = AuthoredResponseAct.Forward,
             PlainTextBody = plainTextBody,
             HtmlBody = htmlBody,
-            Recipients = AuthoredMailArguments.NamedRecipients(to, cc, bcc),
+            Recipients = AuthoredMailArguments.NamedRecipients(
+                to, cc, bcc, MailSubmissionRefusedException.TooManyRecipients, MailSubmissionRefusedException.From),
             Requester = AuthoredMailArguments.Requester(idempotencyKey),
         };
 

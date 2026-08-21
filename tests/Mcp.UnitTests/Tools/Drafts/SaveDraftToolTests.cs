@@ -287,6 +287,35 @@ public sealed class SaveDraftToolTests
         Assert.Empty(deployment.Drafts.Drafts);
     }
 
+    /// <summary>A list longer than a record holds is refused on its length, as the draft's own refusal rather than a submission's.</summary>
+    /// <remarks>
+    /// The reading is the one every authored act shares, so what this proves is the half that is the draft's: a caller
+    /// saving a draft is never told a <em>submission</em> was refused, because nothing was offered to a server.
+    /// </remarks>
+    [Fact]
+    public async Task SaveDraftAsync_MorePeopleThanARecordHolds_IsRefusedAsADraft()
+    {
+        // Arrange
+        var deployment = new DraftedMailDeployment();
+        var addresses = Enumerable
+            .Range(0, OutgoingEmailRequest.MaximumRecipientCount + 1)
+            .Select(index => $"person{index}@example.test")
+            .ToArray();
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
+            () => deployment.SaveTool.SaveDraftAsync(
+                "Shall we?",
+                DraftedMailDeployment.ServedAccount,
+                "Lunch on Thursday",
+                addresses,
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.AuthoredMailBoundExceeded, refusal.ErrorCode);
+        Assert.Empty(deployment.Drafts.Drafts);
+    }
+
     /// <summary>A recipient that carries no address names nobody, and the refusal says which header rather than what was in it.</summary>
     [Fact]
     public async Task SaveDraftAsync_ARecipientCarryingNoAddress_IsRefusedWithoutRepeatingWhatWasSent()
