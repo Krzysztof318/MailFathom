@@ -10,9 +10,12 @@ name: CI
 # and keep the names they had.
 #
 # What this workflow owns is the change: which work it can affect, whether the pull request carrying it
-# is a draft, and the one required check. The work itself lives in `build-test-format-and-migrations.yml`, which the
-# publishing pipeline calls too — so a release and a nightly are gated on the same build, unit-test,
-# coverage, and formatting checks a pull request is, from one definition rather than from a copy.
+# is a draft, and the one required check. The work itself lives in one called workflow per stack —
+# `build-test-format-and-migrations.yml` for the server, which the publishing pipeline calls too, so a release and a
+# nightly are gated on the same build, unit-test, coverage, and formatting checks a pull request is, from one
+# definition rather than from a copy; and `build-test-frontend.yml` for the client. The two stacks share this gate and
+# nothing else: separate solutions, separate build contracts, separate package pins, and a change to either that
+# cannot reach the other costs nothing in it.
 on:
   pull_request:
     types:
@@ -78,6 +81,7 @@ jobs:
       build: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.build == 'true' }}
       format: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.format == 'true' }}
       model: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.model == 'true' }}
+      frontend: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.frontend == 'true' }}
       helm: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.helm == 'true' }}
     steps:
       # Only a push needs a working copy. A pull request is compared through the REST API, which reads
@@ -94,7 +98,7 @@ jobs:
           persist-credentials: false
 
       # A manual dispatch reaches this job but has neither a pull request to compare against nor a
-      # commit the branch carried before it, so the filter is skipped and all three outputs fall back
+      # commit the branch carried before it, so the filter is skipped and every output falls back
       # to `true` above: an explicitly started run always does the work.
       - name: Detect changed paths
         id: filter
@@ -157,6 +161,23 @@ jobs:
               - '.github/workflows/build-test-format-and-migrations.yml'
               - '.github/workflows/ci.yml'
               - 'backend/Directory.Packages.props'
+            # The client stack, which shares no solution, no build contract, and no package pins with the server —
+            # so this filter names nothing under `backend/` and the three above name nothing under `frontend/`, which
+            # is what makes a change to one stack cost nothing in the other. What it does name beside `frontend/**`
+            # is everything above both stacks that the client build still reads: the SDK and the Uno SDK pin in
+            # `global.json`, the version both stacks stamp from `Version.props`, the feeds `NuGet.config` permits, the
+            # style rules `.editorconfig` turns into build failures through `EnforceCodeStyleInBuild`, and `.config/`,
+            # which holds the banned-symbol list and the test-runner configuration the client's own build contract
+            # links into every project.
+            frontend:
+              - 'frontend/**'
+              - '.config/**'
+              - '.editorconfig'
+              - '.github/workflows/build-test-frontend.yml'
+              - '.github/workflows/ci.yml'
+              - 'NuGet.config'
+              - 'Version.props'
+              - 'global.json'
             # The chart, the values documents it is verified with, the manifests those render, and the script that
             # renders them. Nothing outside `deploy/helm/` reaches a rendering: the chart declares no dependency and
             # takes no version from the build — `helm package --app-version` supplies that at release time — so a
@@ -193,6 +214,26 @@ jobs:
       run-build: ${{ needs.detect-changes.outputs.build == 'true' }}
       run-format: ${{ github.event_name != 'push' && needs.detect-changes.outputs.format == 'true' }}
       run-model: ${{ needs.detect-changes.outputs.model == 'true' }}
+
+  # The client stack's build and unit suite, in `build-test-frontend.yml` for the reason the server's work is in a
+  # called workflow: the definition is one thing whatever comes to call it. What is here is the same pair of questions
+  # the `verify` job above answers — can this change affect the client, and is the pull request carrying it still a
+  # draft — with both asked in the job's own condition rather than one of them passed inward, because there is a single
+  # job on the other side and nothing for a switch to select between.
+  #
+  # The draft exemption is the expensive-job rule rather than a copy of the server's: the browser head compiles native
+  # WebAssembly assets through Emscripten, which is minutes of runner time on a cold cache, so a draft pays for it at
+  # the moment it is marked ready like every other build here. `Workflow contracts` and `Helm chart` are the two jobs
+  # that do run for a draft, and their argument — seconds of runner time, nothing installed — is the one this job
+  # cannot make.
+  frontend:
+    name: Frontend
+    needs:
+      - detect-changes
+    if: (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && needs.detect-changes.outputs.frontend == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-test-frontend.yml
 
   # The one job here that reads the half of the repository the build, formatting, and model jobs cannot
   # see, and the only one that reports on a draft besides the two that cost seconds. `Detect changes`
@@ -279,6 +320,7 @@ jobs:
     needs:
       - detect-changes
       - verify
+      - frontend
       - workflow-contracts
       - helm-chart
     # `always()` rather than `success() || failure()`, because this job has to report on a run that was
@@ -302,6 +344,7 @@ jobs:
         env:
           DETECT_CHANGES_RESULT: ${{ needs.detect-changes.result }}
           VERIFY_RESULT: ${{ needs.verify.result }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
           WORKFLOW_CONTRACTS_RESULT: ${{ needs.workflow-contracts.result }}
           HELM_CHART_RESULT: ${{ needs.helm-chart.result }}
         run: |
@@ -336,6 +379,9 @@ jobs:
 
           require_success 'Detect changes' "$DETECT_CHANGES_RESULT"
           require_success_or_skipped 'Verify' "$VERIFY_RESULT"
+          # A change that reaches nothing the client build reads skips this one, exactly as a change that reaches no
+          # server code skips the job above it.
+          require_success_or_skipped 'Frontend' "$FRONTEND_RESULT"
           # A change that reaches no chart file skips this one, which is the same complete answer `Verify` gives a
           # documentation-only change.
           require_success_or_skipped 'Helm chart' "$HELM_CHART_RESULT"

@@ -10,15 +10,17 @@ This reference is generated from the XML documentation comments in MailFathom's 
 the release named in the version selector carries it. Only this introduction is in the repository; everything under it
 is produced at build time, so a type that is renamed or removed changes the reference in the same commit.
 
-**None of it is a supported public API.** MailFathom ships as a service and a command-line client rather than as a
-library: nothing here is packed to NuGet, and the four surfaces the versioning policy treats as consumed are the
+**None of it is a supported public API.** MailFathom ships as a service, a command-line client, and an application
+rather than as a library: nothing here is packed to NuGet, and the four surfaces the versioning policy treats as consumed are the
 configuration keys, the database schema, the MCP tool contracts, and the HTTP endpoints — not these types. Read this
 reference to follow how a contract is implemented, not to take a dependency on it.
 
 ## What it covers
 
 A namespace appears here when its boundary exposes something publicly. [The solution structure](../architecture/solution-structure.md)
-describes what each of them is for, and why the dependencies between them point the way they do.
+describes what each of them is for, and why the dependencies between them point the way they do. The last row is the
+other stack: the client is a solution of its own that references no project here and reaches the service over HTTP,
+and it is in the same reference because one site describes the whole product.
 
 | Boundary | What you will find |
 | --- | --- |
@@ -28,6 +30,7 @@ describes what each of them is for, and why the dependencies between them point 
 | [Mcp](xref:MailFathom.Mcp) | The protocol mapping, and nothing else |
 | [Common](xref:MailFathom.Common) | What more than one boundary needs and none of them owns |
 | [Host](xref:MailFathom.Host.Configuration.Provisioning) | One exception type, which is all of the host that is public |
+| [Client](xref:MailFathom.Client) | The application: its models, its pages, and the bindable types the MVUX generator writes from each model |
 
 ## What it does not cover, and why that is the point
 

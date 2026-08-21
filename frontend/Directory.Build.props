@@ -78,9 +78,21 @@
 
   <!-- Directory.Packages.props pins the direct versions; the committed packages.lock.json records the transitive
        closure those versions and the Uno SDK's implicit packages resolve to, so a dependency move shows in the diff
-       rather than only in a restore. -->
+       rather than only in a restore.
+
+       The application project is excluded, for the reason backend/Directory.Build.props excludes the two carrying the
+       Aspire graph: part of what it restores is chosen by the toolchain rather than by this repository, so a lock file
+       recorded here would describe the machine that wrote it. The browser head is where that happens. The .NET SDK
+       adds Microsoft.NET.ILLink.Tasks and Microsoft.NET.Sdk.WebAssembly.Pack to the restore graph of a WebAssembly
+       target at the version of the runtime it bundles, and Microsoft.DotNet.HotReload.WebAssembly.Browser to a Debug
+       build of one at its own exact patch version — and global.json rolls forward to the latest feature band by
+       design, so every one of those three moves whenever a machine or a runner installs a newer SDK. A lock file
+       naming them fails the next locked restore with NU1004 having recorded nothing this repository decided; the
+       backend met the same package through the trim analyzers and answered it the same way, by keeping it out of the
+       ordinary restore graph. The unit-test project keeps its lock file: it targets plain net10.0, compiles no head,
+       and its closure is the one this repository's own pins produce. -->
   <PropertyGroup>
-    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestorePackagesWithLockFile Condition="'$(MSBuildProjectName)' != 'Client'">true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
   <PropertyGroup>

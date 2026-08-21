@@ -179,8 +179,11 @@ no project here and neither build reads the other's files.
 - `tests/Client.UnitTests` covers it through that target, on the same xUnit.net v3 and Microsoft Testing Platform the
   service's suites use.
 - Almost no client package version is written in this repository. `UnoFeatures` in the project file names capabilities
-  rather than packages, and the Uno SDK resolves each to a package at the version its own pin decides — which is why
-  the committed `packages.lock.json` files are where those versions are actually readable.
+  rather than packages, and the Uno SDK resolves each to a package at the version its own pin decides, so a restore is
+  where those versions become readable. The unit-test project records its own in a committed `packages.lock.json`; the
+  application project carries none, because a WebAssembly target restores three packages the .NET SDK versions from
+  itself and `global.json` lets the SDK roll forward. `frontend/Directory.Build.props` names them and says what a lock
+  file there would have recorded instead.
 
 The client reaches MailFathom over the endpoints `Host` exposes and shares no type with it. `frontend/AGENTS.md` states
 what governs a change there.
