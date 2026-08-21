@@ -172,6 +172,21 @@ public sealed class EmailContentOptionsTests
         Assert.Contains("LinkLifetime", result.ErrorMessage, StringComparison.Ordinal);
     }
 
+    /// <summary>Both keys one read is bounded by reach the bounds the read truncates at.</summary>
+    [Fact]
+    public void ToReadOptions_ConfiguredSection_CarriesBothKeysTheReadTruncatesAt()
+    {
+        // Arrange
+        var options = new EmailContentOptions { MaxBodyCharacters = 40_000, MaxCharactersPerRead = 90_000 };
+
+        // Act
+        var bounds = options.ToReadOptions();
+
+        // Assert
+        Assert.Equal(40_000, bounds.MaxBodyCharacters);
+        Assert.Equal(90_000, bounds.MaxCharactersPerRead);
+    }
+
     private static ValidationResult[] Validate(EmailContentOptions options)
     {
         var results = new List<ValidationResult>();

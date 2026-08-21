@@ -5,6 +5,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using MailFathom.Application.EmailContent;
 
 namespace MailFathom.Host.Configuration.Persistence;
 
@@ -62,6 +63,14 @@ internal sealed class EmailContentOptions : IValidatableObject
     /// <summary>Gets or sets how long an attachment download link stays redeemable.</summary>
     /// <remarks>An absent block takes the working default. Whether any link is issued at all is decided elsewhere, by whether the deployment declared a public address.</remarks>
     public AttachmentDownloadOptions AttachmentDownloads { get; set; } = new();
+
+    /// <summary>Reads the two keys one read of message content is bounded by.</summary>
+    /// <returns>The bounds the read truncates at.</returns>
+    internal EmailContentReadOptions ToReadOptions() => new()
+    {
+        MaxBodyCharacters = this.MaxBodyCharacters,
+        MaxCharactersPerRead = this.MaxCharactersPerRead,
+    };
 
     /// <summary>Checks what no range attribute can state on its own.</summary>
     /// <param name="validationContext">The context the options framework validates against.</param>

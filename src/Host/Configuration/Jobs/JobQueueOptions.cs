@@ -5,6 +5,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using MailFathom.Application.Jobs.Execution;
 
 namespace MailFathom.Host.Configuration.Jobs;
 
@@ -121,6 +122,24 @@ internal sealed class JobQueueOptions : IValidatableObject
     /// </remarks>
     [Range(typeof(TimeSpan), "00:00:01", "00:10:00")]
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>Reads the six keys one attempt at a job is bounded by.</summary>
+    /// <returns>The settings the worker claims, retries, and gives up under.</returns>
+    /// <remarks>Create refuses an inverted pair, which the options validator has already rejected at startup.</remarks>
+    internal JobExecutionSettings ToExecutionSettings() => JobExecutionSettings.Create(
+        this.BatchSize,
+        this.LeaseDuration,
+        this.ExecutionTimeout,
+        this.MaxAttempts,
+        this.RetryBaseDelay,
+        this.RetryMaxDelay);
+
+    /// <summary>Reads the three keys that say how much of this instance background work may take.</summary>
+    /// <returns>The capacity the gate hands out.</returns>
+    internal JobCapacitySettings ToCapacitySettings() => JobCapacitySettings.Create(
+        this.MaxConcurrentJobs,
+        this.MaxConcurrentJobsPerType,
+        this.MaxQueueDepthPerType);
 
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)

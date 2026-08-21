@@ -194,6 +194,54 @@ public sealed class JobQueueOptionsTests
                 StringComparer.Ordinal));
     }
 
+    /// <summary>Every key one attempt at a job is bounded by reaches the settings the worker runs under.</summary>
+    [Fact]
+    public void ToExecutionSettings_ConfiguredSection_CarriesEveryKeyTheWorkerRunsUnder()
+    {
+        // Arrange
+        var settings = new JobQueueOptions
+        {
+            BatchSize = 6,
+            LeaseDuration = TimeSpan.FromMinutes(9),
+            ExecutionTimeout = TimeSpan.FromMinutes(4),
+            MaxAttempts = 7,
+            RetryBaseDelay = TimeSpan.FromSeconds(15),
+            RetryMaxDelay = TimeSpan.FromMinutes(25),
+        };
+
+        // Act
+        var execution = settings.ToExecutionSettings();
+
+        // Assert
+        Assert.Equal(6, execution.BatchSize);
+        Assert.Equal(TimeSpan.FromMinutes(9), execution.LeaseDuration);
+        Assert.Equal(TimeSpan.FromMinutes(4), execution.ExecutionTimeout);
+        Assert.Equal(7, execution.MaxAttempts);
+        Assert.Equal(TimeSpan.FromSeconds(15), execution.RetryBaseDelay);
+        Assert.Equal(TimeSpan.FromMinutes(25), execution.RetryMaxDelay);
+    }
+
+    /// <summary>All three capacity keys reach the gate, and none is read off a neighbour.</summary>
+    [Fact]
+    public void ToCapacitySettings_ConfiguredSection_CarriesEveryKeyTheGateHandsOut()
+    {
+        // Arrange
+        var settings = new JobQueueOptions
+        {
+            MaxConcurrentJobs = 8,
+            MaxConcurrentJobsPerType = 3,
+            MaxQueueDepthPerType = 900,
+        };
+
+        // Act
+        var capacity = settings.ToCapacitySettings();
+
+        // Assert
+        Assert.Equal(8, capacity.MaxConcurrentJobs);
+        Assert.Equal(3, capacity.MaxConcurrentJobsPerType);
+        Assert.Equal(900, capacity.MaxQueueDepthPerType);
+    }
+
     private static List<ValidationResult> Validate(JobQueueOptions settings)
     {
         var results = new List<ValidationResult>();
