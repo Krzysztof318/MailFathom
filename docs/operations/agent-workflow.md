@@ -284,9 +284,9 @@ is where the next test is worth writing.
 That answer is diagnostic, and the whole point of it is lost if it becomes a
 number to reach. So nothing gates on it, in four separate places rather than one:
 `scripts/mutation-score.sh` passes `--break-at 0`, so the score never decides an
-exit status; `mutation-score.yml` sets `continue-on-error`, so nothing else the
-run does decides one either; neither verification script calls the script at all;
-and no pull-request workflow does either. It runs on the nightly channel —
+exit status; `mutation-score.yml` sets `continue-on-error`, so whatever else this
+job does never decides the nightly run's; neither verification script calls the
+script at all; and no pull-request workflow does either. It runs on the nightly channel —
 `nightly.yml` calls `mutation-score.yml`, which calls the script — where tens of
 minutes of runtime and a preview test runner's false positives cost nobody a
 merge. Read the score, act on what survived, and never enforce either. It is the
@@ -307,10 +307,14 @@ runner finds no tests here at all. Stryker calls its MTP runner preview and says
 so on every run, which is the second reason this is a nightly report and not a
 gate.
 
-Nothing turns the job red, including Stryker failing to produce a report at all.
-That is a diagnostic that did not come out rather than a fault in the commit, and
-a nightly whose image published beside a red job says the opposite: the report is
-missing from the run that should carry it, which is where it is legible.
+No score fails anything, and a score is the only thing that cannot. Stryker
+failing to produce a report at all still turns the job red — the script exits
+non-zero when the JSON report is missing, and the step runs under `pipefail` — and
+that is the one failure worth surfacing, because it says the diagnostic did not
+come out. What `continue-on-error` decides is how far that failure travels: the
+job is marked failed and the nightly run around it stays green, so a missing
+report is legible on the run that should have carried it without implicating the
+image published beside it.
 
 Each run leaves `mutation-report.html` on the workflow run under
 `mutation-report-<project>`, which is the form the next unit of test work is
