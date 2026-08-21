@@ -1,13 +1,14 @@
 # Solution structure
 
-<!-- describes: backend/MailFathom.slnx, backend/Directory.Build.props, Version.props, backend/src/*/*.csproj, backend/tests/*/*.csproj, backend/tools/*/*.csproj, frontend/*/README.md, backend/src/Host/ServiceDefaultsExtensions.cs -->
+<!-- describes: backend/MailFathom.slnx, backend/Directory.Build.props, Version.props, backend/src/*/*.csproj, backend/tests/*/*.csproj, backend/tools/*/*.csproj, frontend/MailFathom.Client.slnx, frontend/Directory.Build.props, frontend/*/*/*.csproj, frontend/*/README.md, backend/src/Host/ServiceDefaultsExtensions.cs -->
 
 MailFathom uses a clean-architecture modular monolith. Dependencies point inward from adapters and hosts toward application and domain contracts.
 
-The solution lives under `backend/`: `backend/src/` holds the projects below and `backend/tests/` the suites that cover
-them. `frontend/` stands beside it with the same two directories, for the frontend application, and carries no project
-yet. What decides which of the two a file belongs to is the stack it is built by rather than what it is about — the
-whole of this page describes `backend/`.
+The service's solution lives under `backend/`: `backend/src/` holds the projects below and `backend/tests/` the suites
+that cover them. `frontend/` stands beside it with the same two directories and a solution of its own,
+`frontend/MailFathom.Client.slnx`, holding the Uno Platform client. What decides which of the two a file belongs to is
+the stack it is built by rather than what it is about — everything on this page except its last section describes
+`backend/`.
 
 The build contract moves down with the solution: `backend/MailFathom.slnx`, `backend/Directory.Build.props`, and
 `backend/Directory.Packages.props` sit beside `backend/src/` and govern it and nothing else. MSBuild walks up from a
@@ -16,11 +17,11 @@ project in the repository — a second stack's heads included, under a single `n
 and an `AssemblyName` prefix written for these boundaries. `backend/tools/` sits under the same root for the same
 reason: it is development tooling this solution references from its tests, and it ships nothing.
 
-Three files stay at the repository root, because each one genuinely governs every stack. `global.json` pins the SDK and
-`NuGet.config` decides which feeds a package may come from, and neither is a decision a stack may take twice.
-`Version.props` carries `<VersionPrefix>` and the two numeric assembly identities derived from it; each stack's own
-`Directory.Build.props` imports it, so a client and a server that ship together report one version rather than two that
-can drift.
+Three files stay at the repository root, because each one genuinely governs every stack. `global.json` pins the SDK —
+and, in `msbuild-sdks`, the Uno SDK version every client package follows from — while `NuGet.config` decides which feeds
+a package may come from, and neither is a decision a stack may take twice. `Version.props` carries `<VersionPrefix>` and
+the two numeric assembly identities derived from it; each stack's own `Directory.Build.props` imports it, so a client
+and a server that ship together report one version rather than two that can drift.
 
 ```mermaid
 flowchart TD
@@ -163,3 +164,23 @@ The coverage marker is asserted against a sample type declared beside its tests,
 `FakeHttpMessageHandler` is the suite's only HTTP double, and it is hand-written because NSubstitute cannot produce one: `HttpMessageHandler.SendAsync` is protected, so no substitute can override it, and adding a third-party HTTP mocking package would introduce a second test-double mechanism without removing that constraint. It records each request as an immutable snapshot taken at send time, because the caller keeps ownership of the request message and may dispose, mutate, or reuse it before an assertion reads it, and answers either from a factory that builds a fresh response per request or from a script consumed one response per request. Two details exist to keep the double from behaving unlike a real transport: responses carry the request that produced them, which `HttpClient` populates only for its own stack, and concurrent requests are recorded in the order they reached the handler rather than in the order their bodies finished being read.
 
 `Host.UnitTests` and `AppHost.UnitTests` are the projects whose subjects are excluded from the coverage denominator, and the two composition roots are the whole of what the gate does not measure. `Host` stays excluded because a composition root's wiring would dilute the measurement of the boundaries that hold the logic, but exclusion from a metric is not exemption from testing: options validation rules, startup fail-fast behavior, and the worker's per-folder failure isolation are decisions the host owns and they are asserted like any other. Anything larger belongs in `Application` or `Infrastructure`, where it counts.
+
+## The client stack
+
+`frontend/` holds one application project and one test project, and `frontend/MailFathom.Client.slnx` is what builds
+them. `frontend/Directory.Build.props` and `frontend/Directory.Packages.props` are its own; the backend solution names
+no project here and neither build reads the other's files.
+
+- `src/Client` is an Uno Platform single project. One project carries every head the application runs as, chosen by
+  target framework: `net10.0-desktop` is the Skia desktop head that runs on Windows, Linux, and macOS, and
+  `net10.0-browserwasm` is the browser head. Its assembly is `MailFathom.Client`.
+- A third target framework, plain `net10.0`, builds no head. It exists so a unit-test project can reference the
+  application, since a test host is neither a browser nor a window.
+- `tests/Client.UnitTests` covers it through that target, on the same xUnit.net v3 and Microsoft Testing Platform the
+  service's suites use.
+- Almost no client package version is written in this repository. `UnoFeatures` in the project file names capabilities
+  rather than packages, and the Uno SDK resolves each to a package at the version its own pin decides — which is why
+  the committed `packages.lock.json` files are where those versions are actually readable.
+
+The client reaches MailFathom over the endpoints `Host` exposes and shares no type with it. `frontend/AGENTS.md` states
+what governs a change there.

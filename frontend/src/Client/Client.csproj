@@ -1,0 +1,40 @@
+<Project Sdk="Uno.Sdk">
+  <PropertyGroup>
+    <!-- The two heads this application is written for, and the plain target beside them. `net10.0-browserwasm` is the
+         browser head and `net10.0-desktop` is the Skia desktop head, which is what runs on Windows. The bare `net10.0`
+         target builds no head at all: it is the reference target a unit-test project references the application
+         through, since a test host is neither a browser nor a desktop window. The mobile heads are deliberately
+         absent — adding `net10.0-android` and `net10.0-ios` here is what opens them, and nothing else in this project
+         has to change for that. -->
+    <TargetFrameworks>net10.0-browserwasm;net10.0-desktop;net10.0</TargetFrameworks>
+
+    <OutputType>Exe</OutputType>
+    <UnoSingleProject>true</UnoSingleProject>
+
+    <ApplicationTitle>MailFathom</ApplicationTitle>
+    <ApplicationId>io.github.krzysztof318.mailfathom</ApplicationId>
+    <!-- The display version is the one number Version.props declares, so the client and the service it talks to never
+         report two. The numeric ApplicationVersion is the store build counter every mobile head demands as an integer;
+         it stays at 1 until a head that publishes to a store exists to increment it. -->
+    <ApplicationDisplayVersion>$(VersionPrefix)</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationPublisher>Krzysztof Kasprowicz</ApplicationPublisher>
+    <Description>The MailFathom client: a mail application with the model in the middle of it.</Description>
+
+    <!-- UnoFeatures is how an Uno single project asks for a capability rather than for a package: the SDK resolves each
+         one to the packages and versions its own pin decides. Material is the design system every brush and style here
+         resolves against, Toolkit adds the controls the shell is built from, Hosting and Logging are the generic-host
+         wiring the application starts through, MVUX is the state model, Navigation is the router, and SkiaRenderer is
+         what makes one rendering path serve every head.
+         https://aka.platform.uno/singleproject-features -->
+    <UnoFeatures>
+      Material;
+      Hosting;
+      Toolkit;
+      Logging;
+      MVUX;
+      Navigation;
+      SkiaRenderer;
+    </UnoFeatures>
+  </PropertyGroup>
+</Project>

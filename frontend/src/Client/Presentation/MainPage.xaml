@@ -1,0 +1,39 @@
+<Page x:Class="MailFathom.Client.Presentation.MainPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:local="using:MailFathom.Client.Presentation"
+      xmlns:mvux="using:Uno.Extensions.Reactive.UI"
+      xmlns:utu="using:Uno.Toolkit.UI"
+      NavigationCacheMode="Required"
+      Background="{ThemeResource BackgroundBrush}">
+  <ScrollViewer IsTabStop="True">
+    <!-- SafeArea keeps the content clear of a notch, a rounded corner, and a system bar, which is the difference
+         between a layout that runs on a phone and one that only fits a window. -->
+    <Grid utu:SafeArea.Insets="VisibleBounds">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition />
+      </Grid.RowDefinitions>
+
+      <utu:NavigationBar Content="MailFathom" />
+
+      <!-- A FeedView renders the three axes of a feed — data, error, progress — rather than only the value, so a
+           screen states what it is doing while it loads and what went wrong when it fails. -->
+      <mvux:FeedView Grid.Row="1"
+                     Source="{Binding Build}">
+        <DataTemplate>
+          <StackPanel HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      Spacing="8">
+            <TextBlock Text="{Binding Data.Product}"
+                       HorizontalAlignment="Center"
+                       Style="{StaticResource TitleLargeTextBlockStyle}" />
+            <TextBlock Text="{Binding Data.Version}"
+                       HorizontalAlignment="Center"
+                       Style="{StaticResource BodyTextBlockStyle}" />
+          </StackPanel>
+        </DataTemplate>
+      </mvux:FeedView>
+    </Grid>
+  </ScrollViewer>
+</Page>

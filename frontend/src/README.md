@@ -1,12 +1,28 @@
-# Frontend sources
+# Client sources
 
-This directory holds the frontend application's own sources, the way `backend/src/` holds the .NET
-solution's projects. It is empty because no frontend project has been added yet; the directory exists
-so that the first one arrives into a decided place rather than deciding one.
+This directory holds the client application, the way `backend/src/` holds the service's projects. It carries one
+project — `Client/`, an Uno Platform single project whose assembly is `MailFathom.Client` — and that project carries
+every head the application runs as rather than one project per platform.
 
-What lands here is the frontend and nothing else. It reaches MailFathom over the endpoints
-`backend/src/Host/` exposes, so it shares no build, no package manifest, and no configuration file
-with the solution beside it — a root-level MSBuild file governs `backend/` alone, and whatever
-manifest a frontend build needs belongs under `frontend/`.
+Two heads are built today. `net10.0-desktop` is the Skia desktop head, which runs on Windows, Linux, and macOS, and
+`net10.0-browserwasm` is the browser head. A third target framework, plain `net10.0`, builds no head: it is the
+reference target [`frontend/tests/`](../tests/README.md) references the application through, since a test host is
+neither a browser nor a window. The mobile heads are not here yet; adding them is a change to `TargetFrameworks` in
+`Client/Client.csproj` and to nothing else.
 
-Tests for what is written here go to [`frontend/tests/`](../tests/README.md).
+What is inside the project:
+
+| Path | What it holds |
+|---|---|
+| `Client/App.xaml`, `App.xaml.cs` | The composition root: the host every head starts through, logging, and the route registry |
+| `Client/Presentation/` | The shell, the pages, and the MVUX models behind them |
+| `Client/Styles/` | The Material palette every brush resolves from — the one place a colour value is written |
+| `Client/Platforms/` | What belongs to one head only: the two entry points, and the browser head's web manifest, linker configuration, and font stylesheet |
+| `Client/Assets/`, `Client/Strings/` | The application icon and splash screen, and the string table |
+
+The application is empty of features. It shows what it is — the product name and the version this build was stamped
+with, read from the assembly rather than written here, so the client and the service report one number.
+
+It reaches MailFathom over the endpoints `backend/src/Host/` exposes and shares nothing else with it: no build file, no
+package manifest, no configuration file, and no type. `frontend/AGENTS.md` states why, and states the conventions
+anything added here follows.

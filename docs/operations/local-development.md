@@ -1,6 +1,6 @@
 # Local development
 
-<!-- describes: scripts/**, global.json, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, backend/src/AppHost/**, backend/src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, backend/tests/IntegrationTests/ProviderAdapters/**, backend/tools/** -->
+<!-- describes: scripts/**, global.json, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, frontend/MailFathom.Client.slnx, frontend/Directory.Packages.props, backend/src/AppHost/**, backend/src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, backend/tests/IntegrationTests/ProviderAdapters/**, backend/tools/** -->
 
 Use the .NET SDK pinned in `global.json`. Test execution is configured for Microsoft Testing Platform through the repository-level `global.json` test runner setting.
 
@@ -645,6 +645,37 @@ dotnet restore backend/MailFathom.slnx --force-evaluate
 ```
 
 Then read the resulting diff before committing it. A bump that moves one direct version and forty transitive ones is a different review from one that moves only itself, and locked mode exists so that difference is visible rather than discovered later.
+
+## Building and testing the client
+
+The client under `frontend/` is a second .NET stack with a solution, build files, and lock files of its own, and
+nothing in the two verification scripts touches it: both build `backend/MailFathom.slnx` alone. Build and test it
+directly:
+
+```bash
+dotnet restore frontend/MailFathom.Client.slnx --locked-mode
+dotnet build frontend/MailFathom.Client.slnx --configuration Release --no-restore
+dotnet test --solution frontend/MailFathom.Client.slnx --configuration Release --no-build
+```
+
+Two things a service checkout does not need have to be present first. The **`wasm-tools` workload** supplies the
+Emscripten toolchain the browser head is compiled with — `dotnet workload install wasm-tools`, and
+`dotnet workload list` shows what a machine already carries. And the **Uno SDK** named in `msbuild-sdks` in
+`global.json` is what resolves every Uno package the client restores: a version is written there rather than in
+`frontend/Directory.Packages.props`, which pins only the analyzers and the test framework. Moving that one number moves
+around sixty packages at once, so regenerate the lock files in the same change and read the diff:
+
+```bash
+dotnet restore frontend/MailFathom.Client.slnx --force-evaluate
+```
+
+Both of the client's projects carry a lock file. Neither exclusion the service stack needs applies here — the Uno SDK
+chooses its packages by target framework rather than by the host platform's runtime identifier, so a lock file written
+on one operating system restores on another.
+
+The desktop head runs on Windows, Linux, and macOS from the one `net10.0-desktop` target, so a `dotnet run` on a Linux
+machine starts the same application a Windows developer sees. The `net10.0` target in the same project builds no head
+and exists so the unit suite can reference the application.
 
 ## Code coverage
 

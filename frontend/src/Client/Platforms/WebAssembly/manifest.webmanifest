@@ -1,0 +1,10 @@
+{
+  "background_color": "#ffffff",
+  "description": "The MailFathom client: a mail application with the model in the middle of it.",
+  "display": "standalone",
+  "name": "MailFathom",
+  "short_name": "MailFathom",
+  "start_url": "/index.html",
+  "theme_color": "#ffffff",
+  "scope": "/"
+}
