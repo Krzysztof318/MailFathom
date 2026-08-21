@@ -542,15 +542,16 @@ The canonical skills are:
 
 [Issue tracking and the roadmap board](issue-tracking.md) holds the issue rules
 themselves: which work needs an issue, what an issue body contains, the `type:*`
-label it carries, the `agent:claimed` marker a session applies when it takes one,
-the `Area`, `Queue` and `Size` fields that place it on the board, the milestone
-that scopes it to a release, and which board transitions belong to the project
-automation rather than to an agent. It sits there rather than in root
-`AGENTS.md` because it is acted on twice per task and read by nothing else, so
-an always-loaded copy would cost every session that touches no issue.
-`start-task` and `finish-change` each name it at the step that writes the board.
-Placing an issue is part of opening it, because the built-in workflows set
-`Status` and nothing else.
+label it carries, the `backend` or `frontend` label saying which stack the work
+lands in and the case that takes neither, the `agent:claimed` marker a session
+applies when it takes one, the `Area`, `Queue` and `Size` fields that place it on
+the board, the milestone that scopes it to a release, and which board transitions
+belong to the project automation rather than to an agent. It sits there rather
+than in root `AGENTS.md` because it is acted on twice per task and read by
+nothing else, so an always-loaded copy would cost every session that touches no
+issue. `start-task` and `finish-change` each name it at the step that writes the
+board. Placing an issue is part of opening it, because the built-in workflows
+set `Status` and nothing else.
 
 That same limit is why `Queue: Next` is written by a skill rather than by an
 automation. No project workflow can set a custom single-select field, and the

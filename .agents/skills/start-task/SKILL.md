@@ -98,9 +98,10 @@ them if that access were ever removed.
    step 6 read.
 9. Place the issue. The label and the milestone need write access to the repository, so they belong
    to the owner's checkout; the board fields need write access to the board, which step 2
-   established. It carries exactly one `type:*` label, an `Area` and a `Queue` value on the board, a
-   milestone when the milestone rule assigns one, and a `Size` value estimated from the scope the
-   body describes. Decide each from the rules on that page rather than asking. `Queue: Next` is never
+   established. It carries exactly one `type:*` label, a `backend` or `frontend` label where the work
+   lands in one of the two stacks and neither where it lands in neither, an `Area` and a `Queue`
+   value on the board, a milestone when the milestone rule assigns one, and a `Size` value estimated
+   from the scope the body describes. Decide each from the rules on that page rather than asking. `Queue: Next` is never
    one of them: the owner chooses it, and `$finish-change` writes it once the pull request exists, so
    a new issue takes `Later`, `Needs decision`, or `Parked`, and a parent takes one of those three by
    the same rules as any other issue. What marks a parent instead is the `parent` label and the `[P] `
@@ -111,7 +112,7 @@ them if that access were ever removed.
    In the fork role, open the issue and stop at what the probe allows. Without board write that is the
    issue alone: an arrival carries no label, no milestone, and no board fields by design, and the
    maintainer's triage pass supplies them. With board write it is the issue plus its `Area`, `Queue`,
-   and `Size`, and the label and milestone still wait for triage. Say which of the two happened in the
+   and `Size`, and the labels and the milestone still wait for triage. Say which of the two happened in the
    brief, so nobody reads the absence as a step that failed.
 10. Claim the issue, in the owner's checkout, once the brief below will read `safe`:
 
@@ -136,7 +137,7 @@ Workspace: <safe or blocked, branch, base branch>
 Scope: <what governs the task, or that nothing does>
 Protected paths: <none reached, or which and what that means for this role>
 Issue: <number and title, or created with reason>
-Placement: <type label, Area, Queue, Size, milestone or none — or what the board probe left to triage>
+Placement: <type label, stack label or neither, Area, Queue, Size, milestone or none — or what the board probe left to triage>
 Claim: <agent:claimed applied, already present, or not applicable in the fork role>
 Required context: <files read>
 Assumptions or blockers: <none or explicit list>
