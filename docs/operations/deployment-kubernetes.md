@@ -560,8 +560,9 @@ Three values documents are what the chart is held against, and each renders a sh
 `release-values.yaml` names an external database, an external analyzer, and an external spam scanner, and turns the
 ingress on. `nightly-values.yaml` selects the unsupported channel with its acknowledgement and renders the analyzer and
 the scanner the chart deploys itself. `defaults-values.yaml` is `values.yaml` plus only what the chart refuses to
-default — an image reference and the Secret the pod mounts — so it renders the shape an operator following the quick
-start gets. That third one is also what keeps the chart's own defaults inside schema validation: Helm validates each
+default — an image reference, the Secret the pod mounts, and the Secret holding the database superuser password, which
+the chart requires whenever it deploys the database itself and so by default — meaning it renders the shape an operator
+following the quick start gets. That third one is also what keeps the chart's own defaults inside schema validation: Helm validates each
 values document coalesced with `values.yaml` against `values.schema.json` during both the lint and the render, and a
 default the schema would reject is overridden by the other two.
 

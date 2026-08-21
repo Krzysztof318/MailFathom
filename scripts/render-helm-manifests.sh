@@ -138,12 +138,26 @@ for values_document in "${values_documents[@]}"; do
   #
   # The render is not what the lint already did. Helm 4's lint reports a template that calls `fail` as an informational
   # line and still passes the chart, so a chart that refuses to render reaches a release green on the lint alone.
-  helm lint "$chart_directory" --strict --values "$values_document"
+  #
+  # A failure of either is counted rather than fatal, for the reason the comparison below is: a run answers about every
+  # values document it was given, so a chart that stopped linting against the first one does not hide what it does to
+  # the second.
+  if ! helm lint "$chart_directory" --strict --values "$values_document"; then
+    printf '::error::The chart does not lint against %s.\n' "$values_document" >&2
+    differing_charts=$(( differing_charts + 1 ))
 
-  {
+    continue
+  fi
+
+  if ! {
     write_golden_header "$values_document"
     helm template "$release_name" "$chart_directory" --values "$values_document" | normalize_rendering
-  } > "$rendering"
+  } > "$rendering"; then
+    printf '::error::The chart does not render against %s.\n' "$values_document" >&2
+    differing_charts=$(( differing_charts + 1 ))
+
+    continue
+  fi
 
   if [[ "$update_golden_files" == 'true' ]]; then
     cp "$rendering" "$golden_file"
