@@ -134,6 +134,8 @@ public sealed class MailAnsweringAgentCompositionTests
                 "receivedOnOrAfter",
                 "receivedBefore",
                 "isRemotelySeen",
+                "isRemotelyFlagged",
+                "keyword",
                 "hasAttachments",
             ],
             tool.JsonSchema.GetProperty("properties").EnumerateObject().Select(property => property.Name));

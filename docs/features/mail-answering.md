@@ -38,6 +38,8 @@ The tool publishes the query and the narrowing `search_emails` publishes to its 
 | `subjectFragment` | Only mail whose subject contains this text, which narrows before anything is ranked |
 | `receivedOnOrAfter`, `receivedBefore` | Only mail received in the range, the start inclusive and the end exclusive |
 | `isRemotelySeen` | Only mail the server last reported as read, or as unread |
+| `isRemotelyFlagged` | Only mail the server last reported as flagged, or as unflagged, which is the star a mail client shows |
+| `keyword` | Only mail carrying this keyword, matched whole and without regard to case |
 | `hasAttachments` | Only mail that carries attachments, or that carries none |
 
 The filters are the greater part of what makes a question reach the mail a search would. A question that is naturally a
@@ -45,10 +47,13 @@ narrowing — one person's mail, one week, mail carrying an attachment — is th
 are both weakest at, so expressing it as words in a query means competing with every other word in that query. Expressed
 as a filter it selects the mail exactly, and the ranking is then left to do the part it is good at.
 
-Two arguments a caller of `search_emails` holds are deliberately withheld, and each for its own reason:
+The arguments a caller of `search_emails` holds and a model does not are deliberately withheld, each for its own reason:
 
 - **The accounts and folders**, because they are the caller's authorization rather than a search preference. A model
   writes queries and never its own boundary.
+- **Whether junk mail is read**, because that is settled when the run resolves the scope above, and a run resolves it
+  excluded. Answering is the path the exclusion exists for: mail written to manipulate whoever reads it now has a model
+  reading it, and a caller hunting a wrongly filed message reaches for the listing or the search that can ask for it.
 - **The result count**, because it is the deployment's bound on how much mail one lookup draws out. The one party with
   an incentive to ask for more mail must not be able to ask for more mail.
 

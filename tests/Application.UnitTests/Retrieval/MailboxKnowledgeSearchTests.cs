@@ -317,6 +317,8 @@ public sealed class MailboxKnowledgeSearchTests
             ReceivedOnOrAfter = FirstJuly,
             ReceivedBefore = FirstJuly.AddDays(7),
             IsRemotelySeen = false,
+            IsRemotelyFlagged = true,
+            Keyword = "$Label",
             HasAttachments = true,
         };
 
@@ -337,6 +339,8 @@ public sealed class MailboxKnowledgeSearchTests
                 Written(FirstJuly.AddDays(7)),
                 "False",
                 "True",
+                "$LABEL",
+                "True",
             ],
             new[]
             {
@@ -346,6 +350,8 @@ public sealed class MailboxKnowledgeSearchTests
                 Written(selection.ReceivedOnOrAfter),
                 Written(selection.ReceivedBefore),
                 selection.IsRemotelySeen?.ToString() ?? Absent,
+                selection.IsRemotelyFlagged?.ToString() ?? Absent,
+                selection.Keyword ?? Absent,
                 selection.HasAttachments?.ToString() ?? Absent,
             });
     }
