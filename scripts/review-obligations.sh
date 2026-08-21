@@ -67,20 +67,28 @@ while IFS=$'\t' read -r status path renamed_path; do
 
   # The patch carries one thing the index needs and the name list cannot: whether a test this change
   # adds names the type of a source file it also changed. A removed file has no patch worth reading.
-  patch=''
+  #
+  # It reaches `jq` as a file rather than as an argument, because Linux caps a *single* argv string
+  # at 32 pages — 128 KiB — however much room the whole argument list has. A patch past that fails
+  # `execve` with `E2BIG`, which under `set -e` ends the run rather than dropping one record: the
+  # whole reading is lost on exactly the large change most likely to owe something.
+  : > "$work_directory/patch"
   if [[ "$local_status" != 'removed' ]]; then
-    patch="$(git diff "$base_ref" -- "$path" | sed -n '/^@@/,$p')"
+    git diff "$base_ref" -- "$path" | sed -n '/^@@/,$p' > "$work_directory/patch"
   fi
 
+  # `--rawfile` reads the file verbatim, trailing newline and all, where the command substitution it
+  # replaces dropped one. The trailing newlines are stripped back off so the record keeps the shape
+  # the pipeline's own `files.json` has, which is what lets both callers share one index.
   jq -nc \
     --arg filename "$path" \
     --arg previous "$previous_path" \
     --arg status "$local_status" \
-    --arg patch "$patch" \
+    --rawfile patch "$work_directory/patch" \
     '{filename: $filename,
       previous_filename: (if $previous == "" then null else $previous end),
       status: $status,
-      patch: (if $patch == "" then null else $patch end)}' \
+      patch: ($patch | sub("\n+$"; "") | if . == "" then null else . end)}' \
     >> "$work_directory/records"
 done < <(git diff --name-status --find-renames "$base_ref")
 
