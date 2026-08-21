@@ -89,7 +89,7 @@ them if that access were ever removed.
 7. Check the task against the protected paths before planning the work, not after the check refuses
    it. `.github/`, `.config/`, `.agents/`, `.claude/`, and `docs/decisions/`, an `.editorconfig`,
    `.gitattributes`, `.worktreeinclude`, `AGENTS.md`, or `CLAUDE.md` at any depth, and the
-   repository-root `CHANGELOG.md`, `Directory.Build.props`, `LICENSE`, `NOTICE`, `NuGet.config`, and
+   repository-root `CHANGELOG.md`, `CLA.md`, `Directory.Build.props`, `LICENSE`, `NOTICE`, `NuGet.config`, and
    `global.json` are refused from any author but the owner. In the fork role, a task that needs one
    of them is a task to raise in an issue instead of to implement; say so now rather than after a
    session spent on a diff that cannot merge.

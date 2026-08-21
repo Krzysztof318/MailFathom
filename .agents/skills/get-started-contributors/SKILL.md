@@ -423,7 +423,7 @@ offer to go deeper on any one of them instead of expanding all six.
 
    - the protected paths — `.github/`, `.config/`, `.agents/`, `.claude/`, `docs/decisions/`, an `.editorconfig`,
      `.gitattributes`, `.worktreeinclude`, `AGENTS.md`, or `CLAUDE.md` at any depth, and the repository-root
-     `CHANGELOG.md`, `Directory.Build.props`, `LICENSE`, `NOTICE`, `NuGet.config`, and `global.json` — are refused from
+     `CHANGELOG.md`, `CLA.md`, `Directory.Build.props`, `LICENSE`, `NOTICE`, `NuGet.config`, and `global.json` — are refused from
      any author but the owner, whatever the change says. Raise one as an issue;
    - **the roadmap board is private, and access to it is the maintainer's to grant.** Project `4` belongs to their
      account, the repository is public and the board is not, and by default a contributor reaches neither: `gh project
