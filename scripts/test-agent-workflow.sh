@@ -4878,6 +4878,37 @@ review_obligations_reports_without_gating() {
   run_review_obligations "$fixture_root" "$output_file"
 }
 
+# Linux caps a *single* argv string at 128 KiB however much room the whole argument list has, so a
+# patch past that fails `execve` and — under `set -e` — ends the run with `Argument list too long`
+# instead of dropping one record. A diff that rewrites or removes a large file is exactly the change
+# most likely to owe a test or a page, so the reading is lost where it is worth the most.
+review_obligations_reports_on_a_patch_past_the_argument_limit() {
+  local fixture_root="$test_directory/review-obligations-large-patch"
+  local output_file="$test_directory/review-obligations-large-patch-output"
+
+  create_review_obligations_fixture "$fixture_root"
+
+  # Nothing is staged here, and the omission is the point rather than an oversight: the fixture's
+  # base commit already carries `MailboxWidget.cs`, so overwriting it is a tracked modification that
+  # `git diff --name-status` reports on its own. The tests above stage what they write because they
+  # write `MailboxSprocket.cs`, which the fixture does not carry — an unstaged file there would be
+  # reported as untracked instead of diffed, which is the case one of them exists to cover.
+  local filler line
+  filler="$(printf 'x%.0s' {1..64})"
+  {
+    printf 'internal sealed class MailboxWidget;\n'
+    for ((line = 0; line < 4000; line++)); do
+      printf '// %s\n' "$filler"
+    done
+  } > "$fixture_root/src/Application/Emails/MailboxWidget.cs"
+
+  run_review_obligations "$fixture_root" "$output_file"
+
+  assert_excludes 'Argument list too long' "$output_file"
+  assert_contains 'Nothing under tests/ names MailboxWidget.' "$output_file"
+  assert_contains 'None of this is a finding.' "$output_file"
+}
+
 # A migration owes no unit test. `AGENTS.md` makes migrations append-only and generated, so an index
 # that listed them would put the same wrong finding in front of the reviewer on every schema change.
 obligation_index_leaves_migrations_out() {
@@ -7074,6 +7105,7 @@ run_test obligation_index_caps_the_tests_it_lists_for_one_type
 run_test review_obligations_reports_a_source_the_working_tree_leaves_untested
 run_test review_obligations_names_the_untracked_paths_no_diff_contains
 run_test review_obligations_reports_without_gating
+run_test review_obligations_reports_on_a_patch_past_the_argument_limit
 run_test obligation_index_leaves_migrations_out
 run_test group_split_gives_every_changed_file_exactly_one_reader
 run_test group_split_never_exceeds_the_reader_ceiling
