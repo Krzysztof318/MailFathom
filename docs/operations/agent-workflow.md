@@ -442,10 +442,14 @@ instead of adding to it; its global `~/.codex/AGENTS.md` is read before the
 repository's files, and that is where the same sentences go. `.gitignore`
 carries `*.local.md` so neither can reach a commit by accident — no protected
 path catches one, because `CLAUDE.local.md` is not `CLAUDE.md` and the guard
-matches a whole file name. `.worktreeinclude` copies `CLAUDE.local.md` into a
-new worktree for the same reason it copies `.env`: a gitignored file otherwise
+matches a whole file name. `.worktreeinclude` copies `*.local.md` into a new
+worktree for the same reason it copies `.env`: a gitignored file otherwise
 exists only in the checkout it was written in, and the workspace an agent works
-in is not that one.
+in is not that one. It matches the same suffix `.gitignore` does rather than the
+one root name, so a local instruction file kept beside a second stack's own work
+arrives in the worktree as well; only paths that are already gitignored are ever
+copied, which is what lets the pattern be exactly as wide as the ignore rule it
+mirrors.
 
 Four sentences are enough, and what earns a place in one is what an agent would
 otherwise get wrong: which remote is which, that project `4` is unreachable and
