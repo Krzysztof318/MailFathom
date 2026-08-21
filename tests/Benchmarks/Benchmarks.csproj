@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A report rather than a suite. Nothing discovers or runs it as a test — `IsTestProject` and
+       `IsTestingPlatformApplication` are both absent, which is what keeps a solution-wide `dotnet test` and the
+       coverage gate away from it — and .config/CodeCoverage.proj excludes it from the projects that suite is made of.
+       It lives under tests/ regardless, because the claim it makes is the other half of the one the allocation budgets
+       make and tests/AGENTS.md sends a reader to both. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="MimeKit" />
+  </ItemGroup>
+
+  <!-- The message the throughput report is measured over, which is the message the allocation budgets are a share of. -->
+  <ItemGroup>
+    <Compile Include="..\shared\LargeSyntheticMessage.cs" Link="LargeSyntheticMessage.cs" />
+    <Compile Include="..\shared\NoTrustedAuthentication.cs" Link="NoTrustedAuthentication.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AI\AI.csproj" />
+    <ProjectReference Include="..\..\src\Application\Application.csproj" />
+    <ProjectReference Include="..\..\src\Infrastructure\Infrastructure.csproj" />
+    <ProjectReference Include="..\..\tools\SyntheticMail\SyntheticMail.csproj" />
+  </ItemGroup>
+</Project>

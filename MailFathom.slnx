@@ -12,8 +12,10 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AI.UnitTests/AI.UnitTests.csproj" />
+    <Project Path="tests/AllocationBudgets.UnitTests/AllocationBudgets.UnitTests.csproj" />
     <Project Path="tests/AppHost.UnitTests/AppHost.UnitTests.csproj" />
     <Project Path="tests/Application.UnitTests/Application.UnitTests.csproj" />
+    <Project Path="tests/Benchmarks/Benchmarks.csproj" />
     <Project Path="tests/Boundaries.UnitTests/Boundaries.UnitTests.csproj" />
     <Project Path="tests/Cli.UnitTests/Cli.UnitTests.csproj" />
     <Project Path="tests/Common.UnitTests/Common.UnitTests.csproj" />

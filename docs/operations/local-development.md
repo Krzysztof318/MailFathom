@@ -122,6 +122,17 @@ both have passed. That covers everything a channel produces rather than the imag
 `mfctl` binaries wait behind the same gate. [The container image](container-image.md#published-images) records
 what they produce and how a published image is verified.
 
+`Nightly` carries one job that publishes nothing and gates nothing: `Hot-path benchmarks` times chunking, ranking, and
+MIME extraction with BenchmarkDotNet and leaves the table on the run and in its summary. No job waits on it and a
+failure there is swallowed, because throughput on a hosted runner is not reproducible to a precision worth blocking a
+channel over — what a change actually has to satisfy is the allocation budget the same paths carry in
+`tests/AllocationBudgets.UnitTests`, which the pull-request gate runs. It does have a local equivalent, and running it
+is how a suspected regression is looked at before anything is claimed about it:
+
+```bash
+dotnet run --project tests/Benchmarks/Benchmarks.csproj --configuration Release -- --filter '*' --artifacts artifacts/benchmarks
+```
+
 Both scripts stop immediately when `HEAD` resolves to `main` or `master`,
 because verification on the integration branch reports on code that no change
 is about to touch. Check out the branch that carries the change first. A
@@ -649,6 +660,8 @@ The collector is the half that has to be told each such name. The Coverlet `Incl
 Two attributes take code out of that denominator, and `.config/testconfig.json` configures the collector to honor both. `[ExcludeFromCodeCoverage]` marks code that should never participate in coverage. `[RequiresIntegrationCoverage]`, declared in `src/shared/RequiresIntegrationCoverageAttribute.cs`, marks code whose verification needs a real database, a real mail server, or a composed host: the EF Core context and its entities, the persistence stores, the file-system and environment secret readers, and the infrastructure registration extensions carry it today. The MailKit adapter deliberately does not, even though the integration suite now exercises it against a real IMAP server, because MailKit publishes `IImapClient` and `IMailFolder` and the adapter is reachable from a unit test through them; it stays in the enforced denominator and the integration suite proves the wire behavior a substitute cannot. Marked code is measured by the integration suite instead, in a separate report that enforces nothing — see [Integration tests](#integration-tests) below. The marker stays once the class is covered there: it records where the verification lives, not whether it has been written, and a class a unit test cannot reach stays unreachable afterwards. Remove it only when unit-testable logic enters the class, which puts every line back into this denominator and is how to check that the exclusion is still earned.
 
 A third exclusion is applied by path rather than by attribute: `.config/CodeCoverage.proj` filters `**/Persistence/Migrations/*.cs` out of the merged report. EF Core generates those files, so they carry no attribute the generator would preserve, and no unit test may execute them — a migration is proven by applying it to a real PostgreSQL server and reviewing the resulting schema. Leaving them in put roughly a thousand uncoverable lines in the denominator and moved the aggregate by more than twenty points, which would have masked a real regression anywhere else.
+
+A fourth exclusion is about which projects the target *runs* rather than which assemblies it measures. `tests/Benchmarks` sits under `tests/` and is not a suite — it asserts nothing and its numbers gate nothing — so `.config/CodeCoverage.proj` names it as the one exception to the glob that finds test projects, and `.config/testconfig.json` excludes its assembly beside `SyntheticMail`'s. It stays in the check that every project under `tests/` appears in `MailFathom.slnx`, because a project missing from the solution is unbuilt, unanalyzed, and unformatted whether or not anything runs it.
 
 Raw Cobertura reports and TRX files are written under `artifacts/coverage/raw/`. The merged Cobertura and HTML reports are written under `artifacts/coverage/report/`. The verification records the two gates write sit beside them under `artifacts/verify/`; the whole directory is ignored, so nothing there is ever staged, and deleting any of it costs one repeated run.
 

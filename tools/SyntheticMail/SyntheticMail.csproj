@@ -23,6 +23,18 @@
   <ItemGroup>
     <InternalsVisibleTo Include="MailFathom.SyntheticMail.UnitTests" />
     <InternalsVisibleTo Include="MailFathom.IntegrationTests" />
+
+    <!--
+      The two projects that measure what a streaming path costs compose their message here for the same reason the
+      integration suite does: a fixture written beside a measurement would be a second answer to "what does a large
+      message look like", and a budget is only reproducible while the message it is a share of is.
+    -->
+    <InternalsVisibleTo Include="MailFathom.AllocationBudgets.UnitTests" />
+    <InternalsVisibleTo Include="MailFathom.Benchmarks" />
+
+    <!-- The shared source those two compile that message from is compiled here as well, as every file under
+         tests/shared is, so the project that tests it as a consumer needs the same grant its consumers hold. -->
+    <InternalsVisibleTo Include="MailFathom.SharedSources.UnitTests" />
   </ItemGroup>
 
   <!-- The developer's own credential file, which `.gitignore` covers as `*.local.json`. It is copied beside the

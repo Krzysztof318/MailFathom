@@ -21,5 +21,13 @@
   <ItemGroup>
     <InternalsVisibleTo Include="MailFathom.AI.UnitTests" />
     <InternalsVisibleTo Include="MailFathom.IntegrationTests" />
+
+    <!--
+      The two projects that measure what this boundary costs rather than what it answers: the allocation budgets the
+      unit suite gates on, and the nightly throughput report. Both are about the chunker, which is internal like every
+      other implementation here, and neither would be measuring the production path through a wrapper.
+    -->
+    <InternalsVisibleTo Include="MailFathom.AllocationBudgets.UnitTests" />
+    <InternalsVisibleTo Include="MailFathom.Benchmarks" />
   </ItemGroup>
 </Project>
