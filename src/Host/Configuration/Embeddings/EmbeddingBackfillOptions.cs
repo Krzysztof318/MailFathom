@@ -4,6 +4,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Emails.Embeddings.Backfill;
 
 namespace MailFathom.Host.Configuration.Embeddings;
 
@@ -54,4 +55,12 @@ internal sealed class EmbeddingBackfillOptions
     /// <summary>Gets or sets how many batches one run processes before it yields until the next interval.</summary>
     [Range(1, 1000)]
     public int MaxBatchesPerRun { get; set; } = 5;
+
+    /// <summary>Reads the two keys one sweep is bounded by.</summary>
+    /// <returns>The bounds the sweep stops at.</returns>
+    internal StoredEmailEmbeddingBackfillOptions ToBackfillOptions() => new()
+    {
+        BatchSize = this.BatchSize,
+        MaxBatchesPerRun = this.MaxBatchesPerRun,
+    };
 }

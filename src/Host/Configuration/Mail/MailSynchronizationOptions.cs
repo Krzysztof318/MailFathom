@@ -7,12 +7,14 @@ using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography.X509Certificates;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Contacts.Collection;
+using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
+using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Synchronization;
@@ -443,6 +445,35 @@ internal sealed class MailSynchronizationOptions
 
     /// <summary>Gets or sets configured accounts and folders to synchronize.</summary>
     public List<MailSynchronizationAccountOptions> Accounts { get; set; } = [];
+
+    /// <summary>Reads the two keys a convergence pass is bounded by.</summary>
+    /// <returns>The bounds the pass runs under.</returns>
+    internal MailboxConvergenceOptions ToConvergenceOptions() => new()
+    {
+        MaxMutationsPerPass = this.MaxMutationsPerConvergencePass,
+        UnknownOutcomeGrace = this.UnknownMutationOutcomeGrace,
+    };
+
+    /// <summary>Reads the five keys one synchronization run is bounded by.</summary>
+    /// <returns>The bounds the run stops at.</returns>
+    internal MailboxSynchronizationOptions ToSynchronizationOptions() => new()
+    {
+        MaxMetadataBatchSize = this.MaxMetadataBatchSize,
+        MaxRawMimeBytes = this.MaxRawMimeBytes,
+        MaxMetadataBatchesPerRun = this.MaxMetadataBatchesPerRun,
+        MaxReconciledEmailsPerRun = this.MaxReconciledEmailsPerRun,
+        MaxContentBytesPerRun = this.MaxContentBytesPerRun,
+    };
+
+    /// <summary>Reads the four keys a MIME walk is bounded by, and whether it verifies a signature for itself.</summary>
+    /// <returns>The limits the parse is performed under.</returns>
+    internal EmailMimeExtractionOptions ToMimeExtractionOptions() => new()
+    {
+        MaxPartCount = this.MaxMimePartCount,
+        MaxNestingDepth = this.MaxMimeNestingDepth,
+        MaxExtractedTextCharacters = this.MaxExtractedTextCharacters,
+        VerifyDkimLocally = this.VerifyDkimLocally,
+    };
 
     /// <summary>Computes the host shutdown budget a configured drain needs to be honored.</summary>
     /// <param name="shutdownDrainTimeout">The configured drain the synchronization coordinator applies.</param>

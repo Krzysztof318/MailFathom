@@ -469,6 +469,60 @@ public sealed class MailDeliveryOptionsTests
         return mailbox;
     }
 
+    /// <summary>Every key one pass over the outbox is bounded by reaches the settings the pass runs under.</summary>
+    [Fact]
+    public void ToOutboxSettings_ConfiguredSection_CarriesEveryKeyThePassRunsUnder()
+    {
+        // Arrange
+        var options = new MailDeliveryOptions
+        {
+            MaxDeliveriesPerPass = 7,
+            LeaseDuration = TimeSpan.FromMinutes(11),
+            AttemptTimeout = TimeSpan.FromMinutes(3),
+            MaxAttempts = 4,
+            RetryBaseDelay = TimeSpan.FromSeconds(45),
+            RetryMaxDelay = TimeSpan.FromMinutes(20),
+            AllowedSendLateness = TimeSpan.FromHours(2),
+        };
+
+        // Act
+        var settings = options.ToOutboxSettings();
+
+        // Assert
+        Assert.Equal(7, settings.MaxDeliveriesPerPass);
+        Assert.Equal(TimeSpan.FromMinutes(11), settings.LeaseDuration);
+        Assert.Equal(TimeSpan.FromMinutes(3), settings.AttemptTimeout);
+        Assert.Equal(4, settings.MaxAttempts);
+        Assert.Equal(TimeSpan.FromSeconds(45), settings.RetryBaseDelay);
+        Assert.Equal(TimeSpan.FromMinutes(20), settings.RetryMaxDelay);
+        Assert.Equal(TimeSpan.FromHours(2), settings.AllowedLateness);
+    }
+
+    /// <summary>Every key a composed message is checked against reaches the bounds, and none is read off a neighbour.</summary>
+    [Fact]
+    public void ToOutgoingEmailBounds_ConfiguredSection_CarriesEveryKeyAMessageIsCheckedAgainst()
+    {
+        // Arrange
+        var options = new MailDeliveryOptions
+        {
+            MaxRecipientCount = 31,
+            MaxBodyCharacters = 32,
+            MaxAttachmentCount = 33,
+            MaxAttachmentBytes = 34L,
+            MaxMessageBytes = 35L,
+        };
+
+        // Act
+        var bounds = options.ToOutgoingEmailBounds();
+
+        // Assert
+        Assert.Equal(31, bounds.MaxRecipientCount);
+        Assert.Equal(32, bounds.MaxBodyCharacters);
+        Assert.Equal(33, bounds.MaxAttachmentCount);
+        Assert.Equal(34L, bounds.MaxAttachmentBytes);
+        Assert.Equal(35L, bounds.MaxMessageBytes);
+    }
+
     private static IReadOnlyList<ValidationResult> Validate(MailDeliveryOptions options) =>
         [.. options.Validate(new ValidationContext(options))];
 

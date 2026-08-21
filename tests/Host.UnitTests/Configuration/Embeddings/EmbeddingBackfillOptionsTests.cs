@@ -82,6 +82,21 @@ public sealed class EmbeddingBackfillOptionsTests
         Assert.Contains(errors, error => error.MemberNames.Contains(expectedMember, StringComparer.Ordinal));
     }
 
+    /// <summary>Both keys one sweep stops at reach the bounds the walk takes.</summary>
+    [Fact]
+    public void ToBackfillOptions_ConfiguredSection_CarriesBothKeysTheSweepStopsAt()
+    {
+        // Arrange
+        var settings = new EmbeddingBackfillOptions { BatchSize = 9, MaxBatchesPerRun = 4 };
+
+        // Act
+        var bounds = settings.ToBackfillOptions();
+
+        // Assert
+        Assert.Equal(9, bounds.BatchSize);
+        Assert.Equal(4, bounds.MaxBatchesPerRun);
+    }
+
     /// <summary>Runs the attribute rules, which is what the options framework does with this type on start.</summary>
     private static List<ValidationResult> ValidateEveryProperty(EmbeddingBackfillOptions settings)
     {

@@ -4,6 +4,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Emails.Extraction;
 
 namespace MailFathom.Host.Configuration.Mail;
 
@@ -35,4 +36,18 @@ internal sealed class MailExtractionBackfillOptions
     /// <summary>Gets or sets how many batches one run processes before it yields until the next interval.</summary>
     [Range(1, 1000)]
     public int MaxBatchesPerRun { get; set; } = 10;
+
+    /// <summary>Reads the two keys one walk is bounded by, beside what the sensitive-content section asks of it.</summary>
+    /// <param name="rebuildsStaleDerivedData">
+    /// Whether a message whose derived copy predates the current scanners is re-read. It comes from the sensitive-content
+    /// section rather than from this one, because it answers a question about that section: an operator switching a
+    /// scanner on is deciding what happens to the mail already stored. The walk that carries it out is this one.
+    /// </param>
+    /// <returns>The bounds the walk stops at.</returns>
+    internal StoredEmailExtractionBackfillOptions ToBackfillOptions(bool rebuildsStaleDerivedData) => new()
+    {
+        BatchSize = this.BatchSize,
+        MaxBatchesPerRun = this.MaxBatchesPerRun,
+        RebuildsStaleDerivedData = rebuildsStaleDerivedData,
+    };
 }

@@ -257,6 +257,36 @@ public static class ServiceCollectionExtensions
         // request.
         services.AddSingleton<IAuthorizationRefusalTelemetry, AuthorizationRefusalTelemetry>();
 
+        AddPersistenceAdapters(services, currentConnectionSettings, textSearchConfiguration);
+        AddEmbeddingAdapters(services);
+        AddStoredMailAdapters(services);
+        AddMailRuleAdapters(services);
+        AddJobQueueAdapters(services);
+        AddSpamClassificationStores(services);
+        AddReadSideStores(services);
+        AddMailContentAdapters(services);
+        AddSynchronization(services);
+        AddMailboxReaders(services);
+        AddSpamClassification(services);
+        AddMailAnswering(services, answeringBudget);
+        AddMailProtocolAdapters(services);
+        AddMailboxMutationRecords(services);
+        AddMailDelivery(services);
+        AddMailboxMutations(services);
+        AddContacts(services);
+
+        return services;
+    }
+
+    /// <summary>Registers the PostgreSQL connection this process owns, the context over it, and the session every store commits through.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="currentConnectionSettings">Supplies where the PostgreSQL connection string and its password currently come from.</param>
+    /// <param name="textSearchConfiguration">The validated PostgreSQL text search configuration the lexical index is built with.</param>
+    private static void AddPersistenceAdapters(
+        IServiceCollection services,
+        Func<IServiceProvider, PostgresConnectionSettings> currentConnectionSettings,
+        PostgresTextSearchConfiguration textSearchConfiguration)
+    {
         // A value rather than an accessor, unlike the connection settings beside it: this one is compiled into the
         // search vector's column definition, so it is fixed for a deployment's schema and a reload cannot adopt a new
         // one without reindexing. Changing it is a migration, not a configuration reload.
@@ -316,6 +346,12 @@ public static class ServiceCollectionExtensions
         // the metadata write does on its way past, because both of those stages may still change what a message is.
         services.AddScoped<IStoredEmailChunkingStore, StoredEmailChunkingStore>();
         services.AddScoped<MailChunkingPass>();
+    }
+
+    /// <summary>Registers the tables a message's vectors live in, the ceilings a generation is spent against, and the operator acts on a profile.</summary>
+    /// <param name="services">The service collection.</param>
+    private static void AddEmbeddingAdapters(IServiceCollection services)
+    {
         // The backlog is a singleton because the bound it enforces is one process-wide limit on how much embedding work
         // is held in memory; a scoped one would hold that bound per scope, and a synchronization run would be offering
         // into a backlog no worker is reading. Registered whether or not this deployment embeds, because the
@@ -366,6 +402,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IEmbeddingWorkloadReader, EmbeddingWorkloadReader>();
         services.AddScoped<CountedEmbeddingActivation>();
         services.AddScoped<EmbeddingStatusReader>();
+    }
+
+    /// <summary>Registers the tables stored mail itself lives in, and the two maintenance walks an operator drives over them.</summary>
+    /// <param name="services">The service collection.</param>
+    private static void AddStoredMailAdapters(IServiceCollection services)
+    {
         services.AddScoped<IEmailMetadataRepository, StoredEmailMetadataRepository>();
         // Placing a message in its conversation is part of both write paths — the arrival that commits it and the
         // re-derivation that re-reads it — so it is registered once rather than composed into either. It holds no
@@ -392,6 +434,12 @@ public static class ServiceCollectionExtensions
         // instance, and a gauge answering per scope would report whichever scope last ran a pass.
         services.AddSingleton<MailExtractionBackfillTelemetry>();
         services.AddScoped<IStoredEmailReconciliationStore, StoredEmailReconciliationStore>();
+    }
+
+    /// <summary>Registers what a rule evaluation writes down and what the administrative surface reads back out of it.</summary>
+    /// <param name="services">The service collection.</param>
+    private static void AddMailRuleAdapters(IServiceCollection services)
+    {
         services.AddScoped<IMailRuleEvaluationStore, MailRuleEvaluationStore>();
         services.AddScoped<IMailRuleEvaluationRunStore, MailRuleEvaluationRunStore>();
         // What the administrative surface asks of the two rule stores. Each is a use case rather than a second port,
@@ -400,6 +448,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<MailRuleHistoryTelemetry>();
         services.AddScoped<IMailRuleExecutionStore, MailRuleExecutionStore>();
         services.AddScoped<MailRuleHistory>();
+    }
+
+    /// <summary>Registers the queue every background pass claims work from, its dead letters, and its recurring schedule.</summary>
+    /// <param name="services">The service collection.</param>
+    private static void AddJobQueueAdapters(IServiceCollection services)
+    {
         // Scoped like every other store, and deliberately not registered beside a worker: nothing here runs a job. It
         // takes no persistence session either, so a caller cannot enlist an enqueue in the transaction that stored the
         // message the work is about.
@@ -415,7 +469,12 @@ public static class ServiceCollectionExtensions
         // A singleton with the instruments on it, for the reason every other telemetry type here is one: an instrument
         // created per scope would publish a second time series for the same measurement.
         services.AddSingleton<JobQueueTelemetry>();
+    }
 
+    /// <summary>Registers what a classification verdict is written to and read back from, whatever this deployment decides to classify.</summary>
+    /// <param name="services">The service collection.</param>
+    private static void AddSpamClassificationStores(IServiceCollection services)
+    {
         // Registered whether or not classification is switched on, for the reason every other store here is: what a
         // deployment decides is whether anything calls it, and a port resolvable only under one configuration is a
         // composition that fails at the moment somebody changes their mind rather than at startup.
@@ -426,7 +485,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISpamClassificationHistoryReader, SpamClassificationHistoryReader>();
         services.AddScoped<SpamClassificationRunReader>();
         services.AddScoped<SpamClassificationHistory>();
+    }
 
+    /// <summary>Registers the read side over stored mail, which takes no persistence session and joins no transaction.</summary>
+    /// <param name="services">The service collection.</param>
+    private static void AddReadSideStores(IServiceCollection services)
+    {
         // The read side takes no persistence session and joins no transaction, so its ports are registered beside the
         // write repositories rather than through one of them.
         services.AddScoped<IStoredEmailTimelineReader, StoredEmailTimelineReader>();
@@ -463,6 +527,12 @@ public static class ServiceCollectionExtensions
         // source asks for a credential and this is what knows the credential lives in PostgreSQL, sealed.
         services.AddScoped<IMailboxRefreshTokenStore, MailboxRefreshTokenStore>();
         services.AddScoped<MailboxRefreshTokenRecorder>();
+    }
+
+    /// <summary>Registers the MimeKit adapters a stored message is parsed, rendered, and served out of, and the signed links an attachment is fetched through.</summary>
+    /// <param name="services">The service collection.</param>
+    private static void AddMailContentAdapters(IServiceCollection services)
+    {
         // MimeKit arrives with MailKit, so message parsing needs no dependency of its own; the adapter keeps its types
         // out of Application the same way the IMAP adapter keeps MailKit's out.
         // Wrapped where a scanner is switched on, because this port is where every derived copy of a body begins: the
@@ -536,6 +606,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAttachmentDownloadTicketReader>(provider => new SignedAttachmentDownloadTicketReader(
             provider.GetRequiredService<DataEncryptionKeyRing>(),
             provider.GetRequiredService<TimeProvider>()));
+    }
+
+    /// <summary>Registers folder resolution and the passes that bring a mailbox and its local copy back into agreement.</summary>
+    /// <param name="services">The service collection.</param>
+    private static void AddSynchronization(IServiceCollection services)
+    {
         services.AddScoped<IMailFolderResolutionStore, MailFolderResolutionStore>();
         services.AddScoped<IStoredMailFolderMirrorStore, StoredMailFolderMirrorStore>();
         services.AddScoped<IMailFolderMappingChangeAuditor, LoggedMailFolderMappingChangeAuditor>();
@@ -554,6 +630,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailboxReconciler>();
         services.AddScoped<StoredEmailExtractionBackfill>();
         services.AddScoped<MailboxScopeResolver>();
+    }
+
+    /// <summary>Registers what a caller-facing read publishes, the two guards every derivation and every egress passes through, and the readers a protocol surface reaches.</summary>
+    /// <param name="services">The service collection.</param>
+    private static void AddMailboxReaders(IServiceCollection services)
+    {
         // Singletons for the reason every other publisher here is one: a span source is a fact about the process, and a
         // scoped instance would build one per request for no gain.
         services.AddSingleton<IMailboxReadTelemetry, MailboxReadTelemetry>();
@@ -589,6 +671,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<EmailContentReader>();
         services.AddScoped<EmailAttachmentDownloadReader>();
         services.AddScoped<MailboxSearchReader>();
+    }
+
+    /// <summary>Registers the classifier itself, the ordering that puts it in front of every other derivation, and what a verdict causes.</summary>
+    /// <param name="services">The service collection.</param>
+    private static void AddSpamClassification(IServiceCollection services)
+    {
         // Both halves of classification, registered for every deployment rather than only where it is switched on: what
         // the switch decides is whether the classifier does anything, and the classifier asks the settings reader that.
         // The scanner is the one dependency a supported deployment may not have — this change ships no implementation of
@@ -619,6 +707,15 @@ public static class ServiceCollectionExtensions
         // classifier resolves nothing from here, which is what keeps a deployment that records verdicts and touches
         // nothing genuinely unable to reach a mailbox through classification.
         services.AddScoped<SpamActionRecorder>();
+    }
+
+    /// <summary>Registers the retrieval one question about the mailbox is served from, the bounds it runs under, and the trail it leaves behind.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="answeringBudget">The validated ceilings one question about the mailbox is subject to.</param>
+    private static void AddMailAnswering(
+        IServiceCollection services,
+        MailAnsweringBudget answeringBudget)
+    {
         // Registered for every deployment rather than only where a chat endpoint was declared, because what it is is a
         // reading of the search above: an instance that answers no questions simply resolves it and never calls it, and
         // the bounds it hands passages over under are the same wherever the retrieval is reached from.
@@ -659,6 +756,12 @@ public static class ServiceCollectionExtensions
         // reason the bounds above are — an instance that answers nothing admits nothing and spends nothing.
         services.AddSingleton<MailAnsweringSpendTracker>();
         services.AddSingleton<IMailAnsweringSpendLedger>(provider => provider.GetRequiredService<MailAnsweringSpendTracker>());
+    }
+
+    /// <summary>Registers the MailKit sessions this process reaches a mail server over, and the token source that authenticates them.</summary>
+    /// <param name="services">The service collection.</param>
+    private static void AddMailProtocolAdapters(IServiceCollection services)
+    {
         // The cache outlives every scope because a token is valid for whichever work unit next needs the account,
         // while the source that fills it is scoped to the configuration snapshot it resolves settings from.
         services.AddSingleton<MailAccessTokenCache>();
@@ -723,6 +826,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRemoteFolderCreator>(provider => new MailKitRemoteFolderCreator(
             provider.GetRequiredService<MailboxWriteConnectionPool>(),
             provider.GetRequiredService<ILogger<MailKitRemoteFolderCreator>>()));
+    }
+
+    /// <summary>Registers what a mutation is written down as before the session that acts on it is opened.</summary>
+    /// <param name="services">The service collection.</param>
+    private static void AddMailboxMutationRecords(IServiceCollection services)
+    {
         // The record is written before the session that acts on it is opened, so the store is registered beside the
         // other repositories that take a persistence session rather than with the mail adapters above.
         services.AddScoped<IMailboxMutationRecordStore, MailboxMutationRecordStore>();
@@ -731,6 +840,12 @@ public static class ServiceCollectionExtensions
         // so a protocol request resolves nothing over the network before it has been decided whether it may write.
         services.AddScoped<IAuthoredMailboxTargetReader, AuthoredMailboxTargetReader>();
         services.AddScoped<MailFlagChangeRecorder>();
+    }
+
+    /// <summary>Registers the outbox, the drafts beside it, the bounds a send is judged against, and every use case that authors one.</summary>
+    /// <param name="services">The service collection.</param>
+    private static void AddMailDelivery(IServiceCollection services)
+    {
         // The outgoing record is written before the delivery session above is opened, and for a stronger reason than the
         // mutation record is: a send is the one act here that cannot be undone once it leaves. The outbox in front of it
         // is what makes the record and the message it points at one write.
@@ -816,6 +931,12 @@ public static class ServiceCollectionExtensions
         // every bound this deployment sets is asked again at the moment the message would leave rather than only when
         // it was written.
         services.AddScoped<MailDraftPromotion>();
+    }
+
+    /// <summary>Registers what a finished mutation leaves behind, the pass that converges an unfinished one, and the gauges both publish.</summary>
+    /// <param name="services">The service collection.</param>
+    private static void AddMailboxMutations(IServiceCollection services)
+    {
         // Read by synchronization rather than by the performer, so that a relocation coming back through an ordinary
         // run is recognized as MailFathom's own instead of being stored as a second email.
         services.AddScoped<IMailboxMutationReconciliationStore, MailboxMutationReconciliationStore>();
@@ -850,7 +971,12 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<IMailAccessTokenSource>(),
             provider.GetRequiredService<OutboundOperationExecutor>(),
             provider.GetRequiredService<ITransientFailureClassifier>()));
+    }
 
+    /// <summary>Registers the contact book, the two caller-facing use cases over it, and the collection that fills it from arriving mail.</summary>
+    /// <param name="services">The service collection.</param>
+    private static void AddContacts(IServiceCollection services)
+    {
         // The contact book. Registered unconditionally, because it is a store rather than a capability a deployment
         // switches on: every surface over it is optional, and none of them can be reached without the book existing.
         services.AddScoped<IContactStore, ContactStore>();
@@ -870,8 +996,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAuthoredMailTally, AuthoredMailTally>();
         services.AddSingleton<IContactCollectionTelemetry, ContactCollectionTelemetry>();
         services.AddScoped<MailContactCollector>();
-
-        return services;
     }
 
     /// <summary>Registers the units of work that turn a message's passages into vectors.</summary>

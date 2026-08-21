@@ -1224,6 +1224,75 @@ public sealed class MailSynchronizationOptionsTests
             .Bind(options, binderOptions => binderOptions.ErrorOnUnknownConfiguration = true));
     }
 
+    /// <summary>Every key a convergence pass is bounded by reaches the bound the application takes.</summary>
+    [Fact]
+    public void ToConvergenceOptions_ConfiguredSection_CarriesEveryKeyThePassIsBoundedBy()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions
+        {
+            MaxMutationsPerConvergencePass = 17,
+            UnknownMutationOutcomeGrace = TimeSpan.FromHours(3),
+        };
+
+        // Act
+        var bounds = options.ToConvergenceOptions();
+
+        // Assert
+        Assert.Equal(17, bounds.MaxMutationsPerPass);
+        Assert.Equal(TimeSpan.FromHours(3), bounds.UnknownOutcomeGrace);
+    }
+
+    /// <summary>Every key one run stops at reaches the bound the application takes, and none is read off a neighbour.</summary>
+    [Fact]
+    public void ToSynchronizationOptions_ConfiguredSection_CarriesEveryKeyTheRunStopsAt()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions
+        {
+            MaxMetadataBatchSize = 11,
+            MaxRawMimeBytes = 12L,
+            MaxMetadataBatchesPerRun = 13,
+            MaxReconciledEmailsPerRun = 14,
+            MaxContentBytesPerRun = 15L,
+        };
+
+        // Act
+        var bounds = options.ToSynchronizationOptions();
+
+        // Assert
+        Assert.Equal(11, bounds.MaxMetadataBatchSize);
+        Assert.Equal(12L, bounds.MaxRawMimeBytes);
+        Assert.Equal(13, bounds.MaxMetadataBatchesPerRun);
+        Assert.Equal(14, bounds.MaxReconciledEmailsPerRun);
+        Assert.Equal(15L, bounds.MaxContentBytesPerRun);
+    }
+
+    /// <summary>Every limit a MIME walk is performed under reaches the parse, including whether it verifies for itself.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ToMimeExtractionOptions_ConfiguredSection_CarriesEveryLimitTheParseIsPerformedUnder(bool verifyDkimLocally)
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions
+        {
+            MaxMimePartCount = 21,
+            MaxMimeNestingDepth = 22,
+            MaxExtractedTextCharacters = 23,
+            VerifyDkimLocally = verifyDkimLocally,
+        };
+
+        // Act
+        var limits = options.ToMimeExtractionOptions();
+
+        // Assert
+        Assert.Equal(21, limits.MaxPartCount);
+        Assert.Equal(22, limits.MaxNestingDepth);
+        Assert.Equal(23, limits.MaxExtractedTextCharacters);
+        Assert.Equal(verifyDkimLocally, limits.VerifyDkimLocally);
+    }
+
     private static TrustAnchorLoader CreateTrustAnchorLoader() =>
         new(new PlaintextOnlySecretReferenceResolver());
 

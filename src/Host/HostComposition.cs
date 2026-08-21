@@ -9,14 +9,10 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts.Collection;
-using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Storage;
-using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generation;
 using MailFathom.Application.Emails.Embeddings.Limits;
-using MailFathom.Application.Emails.Extraction;
-using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Folders;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Scheduling;
@@ -29,7 +25,6 @@ using MailFathom.Application.Mail.Delivery.Scheduling;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
-using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Rules;
@@ -42,7 +37,6 @@ using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.Spam.Runs;
-using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Host.Api;
@@ -564,27 +558,19 @@ internal static class HostComposition
     /// <summary>Maps the bound sections onto the ceilings, budgets, and settings the application layer takes.</summary>
     private static void AddApplicationBounds(WebApplicationBuilder builder)
     {
+        AddMailSynchronizationBounds(builder);
+        AddMailDeliveryBounds(builder);
+        AddStoredMailBounds(builder);
+        AddJobQueue(builder);
+    }
+
+    /// <summary>Maps the synchronization section onto the bounds a run, a convergence pass, and a MIME walk take.</summary>
+    private static void AddMailSynchronizationBounds(WebApplicationBuilder builder)
+    {
         builder.Services.AddScoped(provider =>
-        {
-            var synchronizationSettings = provider.GetRequiredService<MailSynchronizationOptions>();
-            return new MailboxConvergenceOptions
-            {
-                MaxMutationsPerPass = synchronizationSettings.MaxMutationsPerConvergencePass,
-                UnknownOutcomeGrace = synchronizationSettings.UnknownMutationOutcomeGrace,
-            };
-        });
+            provider.GetRequiredService<MailSynchronizationOptions>().ToConvergenceOptions());
         builder.Services.AddScoped(provider =>
-        {
-            var synchronizationSettings = provider.GetRequiredService<MailSynchronizationOptions>();
-            return new MailboxSynchronizationOptions
-            {
-                MaxMetadataBatchSize = synchronizationSettings.MaxMetadataBatchSize,
-                MaxRawMimeBytes = synchronizationSettings.MaxRawMimeBytes,
-                MaxMetadataBatchesPerRun = synchronizationSettings.MaxMetadataBatchesPerRun,
-                MaxReconciledEmailsPerRun = synchronizationSettings.MaxReconciledEmailsPerRun,
-                MaxContentBytesPerRun = synchronizationSettings.MaxContentBytesPerRun,
-            };
-        });
+            provider.GetRequiredService<MailSynchronizationOptions>().ToSynchronizationOptions());
         // A singleton, because the ceiling is one answer for the one content store every account writes into. Reading it
         // per scope would give each concurrent folder run a ceiling of its own, which is the sum it exists to bound.
         builder.Services.AddSingleton(provider => new StoredContentCeiling(
@@ -595,32 +581,18 @@ internal static class HostComposition
         builder.Services.AddSingleton(provider => new RawMimeMemoryBudget(
             provider.GetRequiredService<ISettingsSnapshot<MailSynchronizationOptions>>().Current.MaxInFlightRawMimeBytes));
         builder.Services.AddScoped(provider =>
-        {
-            var synchronizationSettings = provider.GetRequiredService<MailSynchronizationOptions>();
-            return new EmailMimeExtractionOptions
-            {
-                MaxPartCount = synchronizationSettings.MaxMimePartCount,
-                MaxNestingDepth = synchronizationSettings.MaxMimeNestingDepth,
-                MaxExtractedTextCharacters = synchronizationSettings.MaxExtractedTextCharacters,
-                VerifyDkimLocally = synchronizationSettings.VerifyDkimLocally,
-            };
-        });
+            provider.GetRequiredService<MailSynchronizationOptions>().ToMimeExtractionOptions());
+    }
+
+    /// <summary>Maps the delivery section onto the outbox's settings, the ceilings a send is judged against, and what one message may carry.</summary>
+    private static void AddMailDeliveryBounds(WebApplicationBuilder builder)
+    {
         // A singleton, because the outbox's bounds describe the process rather than a work unit: an attempt count is
         // carried across runs on the record, and a lease read per scope would let two passes of the same instance
         // disagree about how long they hold what they claimed. That also means it is read once at startup, which the
         // configuration reference marks as needing a restart.
         builder.Services.AddSingleton(provider =>
-        {
-            var deliverySettings = provider.GetRequiredService<IOptions<MailDeliveryOptions>>().Value;
-            return MailOutboxSettings.Create(
-                deliverySettings.MaxDeliveriesPerPass,
-                deliverySettings.LeaseDuration,
-                deliverySettings.AttemptTimeout,
-                deliverySettings.MaxAttempts,
-                deliverySettings.RetryBaseDelay,
-                deliverySettings.RetryMaxDelay,
-                deliverySettings.AllowedSendLateness);
-        });
+            provider.GetRequiredService<IOptions<MailDeliveryOptions>>().Value.ToOutboxSettings());
         // A singleton for a different reason: it carries accounts from the scope that wrote a record to the loop that
         // delivers it, so a queue per scope would be a queue nobody reads.
         builder.Services.AddSingleton(provider => new MailOutboxSignal(
@@ -641,26 +613,14 @@ internal static class HostComposition
         builder.Services.AddSingleton(provider => new AuthoredSendSettings(
             provider.GetRequiredService<IOptions<MailDeliveryOptions>>().Value.UnvouchedRecipients));
         builder.Services.AddScoped(provider =>
-        {
-            var deliverySettings = provider.GetRequiredService<IOptions<MailDeliveryOptions>>().Value;
-            return new OutgoingEmailBounds
-            {
-                MaxRecipientCount = deliverySettings.MaxRecipientCount,
-                MaxBodyCharacters = deliverySettings.MaxBodyCharacters,
-                MaxAttachmentCount = deliverySettings.MaxAttachmentCount,
-                MaxAttachmentBytes = deliverySettings.MaxAttachmentBytes,
-                MaxMessageBytes = deliverySettings.MaxMessageBytes,
-            };
-        });
+            provider.GetRequiredService<IOptions<MailDeliveryOptions>>().Value.ToOutgoingEmailBounds());
+    }
+
+    /// <summary>Maps the content, backfill, persistence, and search sections onto what a read of stored mail returns and what the walks over it take.</summary>
+    private static void AddStoredMailBounds(WebApplicationBuilder builder)
+    {
         builder.Services.AddScoped(provider =>
-        {
-            var contentSettings = provider.GetRequiredService<IOptions<EmailContentOptions>>().Value;
-            return new EmailContentReadOptions
-            {
-                MaxBodyCharacters = contentSettings.MaxBodyCharacters,
-                MaxCharactersPerRead = contentSettings.MaxCharactersPerRead,
-            };
-        });
+            provider.GetRequiredService<IOptions<EmailContentOptions>>().Value.ToReadOptions());
         // A singleton beside the scoped read bounds above, because what it carries is where this deployment publishes itself
         // and how long a capability it hands out lives — two facts about the process rather than about a request. The two
         // come from different sections deliberately: the address is a property of the installation that anything handing
@@ -672,57 +632,31 @@ internal static class HostComposition
                 .ComposeAddressFor(EmailAttachmentDownloadEndpoint.RoutePrefix),
             provider.GetRequiredService<IOptions<EmailContentOptions>>().Value.AttachmentDownloads.LinkLifetime));
         builder.Services.AddScoped(provider =>
-        {
-            var backfillSettings = provider.GetRequiredService<IOptions<MailExtractionBackfillOptions>>().Value;
-            return new StoredEmailExtractionBackfillOptions
-            {
-                BatchSize = backfillSettings.BatchSize,
-                MaxBatchesPerRun = backfillSettings.MaxBatchesPerRun,
-
-                // Read from the sensitive-content section rather than from the backfill's own, because it answers a question
-                // about that section: an operator switching a scanner on is deciding what happens to the mail already
-                // stored. The walk that carries it out is this one, which is why the value arrives here.
-                RebuildsStaleDerivedData = provider.GetRequiredService<IOptions<SensitiveContentOptions>>()
-                    .Value.RebuildStaleDerivedData,
-            };
-        });
+            provider.GetRequiredService<IOptions<MailExtractionBackfillOptions>>().Value.ToBackfillOptions(
+                provider.GetRequiredService<IOptions<SensitiveContentOptions>>().Value.RebuildStaleDerivedData));
         builder.Services.AddScoped(provider =>
-        {
-            var embeddingBackfillSettings = provider.GetRequiredService<IOptions<EmbeddingBackfillOptions>>().Value;
-            return new StoredEmailEmbeddingBackfillOptions
-            {
-                BatchSize = embeddingBackfillSettings.BatchSize,
-                MaxBatchesPerRun = embeddingBackfillSettings.MaxBatchesPerRun,
-            };
-        });
+            provider.GetRequiredService<IOptions<EmbeddingBackfillOptions>>().Value.ToBackfillOptions());
         builder.Services.AddSingleton(provider => new PersistenceConcurrencyOptions
         {
             MaximumCommitAttempts = provider.GetRequiredService<IOptions<PersistenceOptions>>().Value.MaximumConcurrencyCommitAttempts,
         });
-        // A singleton, because the ordering between the timeout and the lease is one deployment-wide guarantee rather than a
-        // per-scope value, and mapping it here is where the bound options stop being the host's shape and become the
-        // application's. Create refuses an inverted pair, which the options validator has already rejected at startup.
+        // A singleton rather than a scoped value: the bound is a deployment-wide privacy control, so every search in the
+        // process applies the one an operator configured rather than whichever snapshot a scope happened to open under.
         builder.Services.AddSingleton(provider =>
-        {
-            var jobSettings = provider.GetRequiredService<IOptions<JobQueueOptions>>().Value;
-            return JobExecutionSettings.Create(
-                jobSettings.BatchSize,
-                jobSettings.LeaseDuration,
-                jobSettings.ExecutionTimeout,
-                jobSettings.MaxAttempts,
-                jobSettings.RetryBaseDelay,
-                jobSettings.RetryMaxDelay);
-        });
+            provider.GetRequiredService<IOptions<MailboxSearchOptions>>().Value.ToSnippetBounds());
+    }
+
+    /// <summary>Registers the worker that runs durable background work, the bounds it runs under, and the handlers it dispatches to.</summary>
+    private static void AddJobQueue(WebApplicationBuilder builder)
+    {
+        // A singleton, because the ordering between the timeout and the lease is one deployment-wide guarantee rather than a
+        // per-scope value, and mapping it onto the application's settings is where the bound options stop being the host's shape.
+        builder.Services.AddSingleton(provider =>
+            provider.GetRequiredService<IOptions<JobQueueOptions>>().Value.ToExecutionSettings());
         // How much of this instance background work may take is one statement about the instance, so the capacity and the
         // gate that hands it out are singletons: a per-scope ceiling would be a ceiling per pass, which bounds nothing.
         builder.Services.AddSingleton(provider =>
-        {
-            var jobSettings = provider.GetRequiredService<IOptions<JobQueueOptions>>().Value;
-            return JobCapacitySettings.Create(
-                jobSettings.MaxConcurrentJobs,
-                jobSettings.MaxConcurrentJobsPerType,
-                jobSettings.MaxQueueDepthPerType);
-        });
+            provider.GetRequiredService<IOptions<JobQueueOptions>>().Value.ToCapacitySettings());
         builder.Services.AddSingleton<JobConcurrencyGate>();
         // A singleton holding nothing but the scope factory: what it creates per attempt is the scope, and the executor it
         // resolves there is scoped like every other consumer of the persistence session.
@@ -753,13 +687,6 @@ internal static class HostComposition
         // The second source of recurring dispatches, beside the rules': the repetitions an owner declared, read from
         // the database rather than from configuration because that is where somebody makes and stops one.
         builder.Services.AddScoped<IScheduledJobSource, RecurringSendScheduleSource>();
-        // A singleton rather than a scoped value: the bound is a deployment-wide privacy control, so every search in the
-        // process applies the one an operator configured rather than whichever snapshot a scope happened to open under.
-        builder.Services.AddSingleton(provider =>
-        {
-            var searchSettings = provider.GetRequiredService<IOptions<MailboxSearchOptions>>().Value;
-            return EmailSearchSnippetBounds.Create(searchSettings.SnippetsPerEmail, searchSettings.WordsPerSnippet);
-        });
     }
 
     /// <summary>Declares the gates the startup probe waits on, and the validators that report before the workers run.</summary>

@@ -28,6 +28,21 @@ public sealed class MailboxSearchOptionsTests
         Assert.Equal(EmailSearchSnippetBounds.Default.WordsPerSnippet, options.WordsPerSnippet);
     }
 
+    /// <summary>Both keys reach the bounds every search in the process applies.</summary>
+    [Fact]
+    public void ToSnippetBounds_ConfiguredSection_CarriesBothKeysTheSearchApplies()
+    {
+        // Arrange
+        var options = new MailboxSearchOptions { SnippetsPerEmail = 2, WordsPerSnippet = 19 };
+
+        // Act
+        var bounds = options.ToSnippetBounds();
+
+        // Assert
+        Assert.Equal(2, bounds.SnippetsPerEmail);
+        Assert.Equal(19, bounds.WordsPerSnippet);
+    }
+
     /// <summary>The bound is the privacy control, so a value outside the range fails startup rather than being clamped.</summary>
     [Theory]
     [InlineData(0, EmailSearchSnippetBounds.MinimumWordsPerSnippet, nameof(MailboxSearchOptions.SnippetsPerEmail))]

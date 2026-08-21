@@ -4,6 +4,8 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Governance;
 
@@ -159,6 +161,29 @@ internal sealed class MailDeliveryOptions : IValidatableObject
     /// </remarks>
     [Range(1, 1000)]
     public int SignalQueueCapacity { get; set; } = 64;
+
+    /// <summary>Reads the seven keys one pass over the outbox is bounded by.</summary>
+    /// <returns>The settings the pass claims, retries, and gives up under.</returns>
+    /// <remarks>Create refuses a pair the options validator has already rejected at startup, so nothing here has to decide what an unusable one would have meant.</remarks>
+    internal MailOutboxSettings ToOutboxSettings() => MailOutboxSettings.Create(
+        this.MaxDeliveriesPerPass,
+        this.LeaseDuration,
+        this.AttemptTimeout,
+        this.MaxAttempts,
+        this.RetryBaseDelay,
+        this.RetryMaxDelay,
+        this.AllowedSendLateness);
+
+    /// <summary>Reads the five keys a message this deployment composes is bounded by.</summary>
+    /// <returns>The bounds every authored message is checked against.</returns>
+    internal OutgoingEmailBounds ToOutgoingEmailBounds() => new()
+    {
+        MaxRecipientCount = this.MaxRecipientCount,
+        MaxBodyCharacters = this.MaxBodyCharacters,
+        MaxAttachmentCount = this.MaxAttachmentCount,
+        MaxAttachmentBytes = this.MaxAttachmentBytes,
+        MaxMessageBytes = this.MaxMessageBytes,
+    };
 
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)

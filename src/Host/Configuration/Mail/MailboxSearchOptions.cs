@@ -26,4 +26,9 @@ internal sealed class MailboxSearchOptions
     /// <remarks>The floor exists because a shorter extract shows a matched word with nothing around it, which tells a reader nothing the relevance rank does not already.</remarks>
     [Range(EmailSearchSnippetBounds.MinimumWordsPerSnippet, EmailSearchSnippetBounds.MaximumWordsPerSnippet)]
     public int WordsPerSnippet { get; set; } = EmailSearchSnippetBounds.Default.WordsPerSnippet;
+
+    /// <summary>Reads the two keys one search result's extracts are bounded by.</summary>
+    /// <returns>The bounds every search in the process applies.</returns>
+    internal EmailSearchSnippetBounds ToSnippetBounds() =>
+        EmailSearchSnippetBounds.Create(this.SnippetsPerEmail, this.WordsPerSnippet);
 }
