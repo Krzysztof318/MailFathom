@@ -7,7 +7,6 @@ using MailFathom.Application.Mail;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Persistence;
-using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
@@ -126,8 +125,12 @@ public sealed class OrchestratedMailboxMutationAuditTrailTests(MailFathomOrchest
         await CommitInboxBindingAsync(services, cancellationToken);
 
         var subject = $"audit-trail-off-{Guid.NewGuid():N}";
-        var occurrence = await DeliverAndLocateAsync(mailbox, subject, cancellationToken);
-        var storedEmailId = await StoreMetadataAsync(services, occurrence, subject, cancellationToken);
+        var occurrence = await mailbox.DeliverAndLocateAsync(Inbox.Id, subject, cancellationToken);
+        var storedEmailId = await StoredSyntheticEmail.MetadataOnlyAsync(
+            services,
+            occurrence,
+            subject,
+            cancellationToken);
         var unauditedRequester = MailboxMutationRequester.Command($"trail-off-{Guid.NewGuid():N}");
         var request = MailboxMutationRequest.SetSeen(storedEmailId, occurrence, unauditedRequester, isSeen: true);
 
@@ -156,8 +159,12 @@ public sealed class OrchestratedMailboxMutationAuditTrailTests(MailFathomOrchest
         foreach (var mutation in MailboxMutation.All)
         {
             var subject = $"audit-trail-{mutation.Name}-{Guid.NewGuid():N}";
-            var occurrence = await DeliverAndLocateAsync(mailbox, subject, cancellationToken);
-            var storedEmailId = await StoreMetadataAsync(services, occurrence, subject, cancellationToken);
+            var occurrence = await mailbox.DeliverAndLocateAsync(Inbox.Id, subject, cancellationToken);
+            var storedEmailId = await StoredSyntheticEmail.MetadataOnlyAsync(
+                services,
+                occurrence,
+                subject,
+                cancellationToken);
 
             requests.Add(RequestFor(mutation, storedEmailId, occurrence));
         }
@@ -290,44 +297,4 @@ public sealed class OrchestratedMailboxMutationAuditTrailTests(MailFathomOrchest
                     Inbox,
                     token),
                 cancellationToken));
-
-    private static Task<StoredEmailId> StoreMetadataAsync(
-        OrchestratedMailFathomServices services,
-        EmailOccurrenceId occurrence,
-        string subject,
-        CancellationToken cancellationToken) => services.InScopeAsync(
-            async (scope, token) =>
-            {
-                await using var session = await scope.GetRequiredService<IPersistenceSessionFactory>()
-                    .BeginSessionAsync(token);
-
-                var storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                    session,
-                    SyntheticEmail.RemoteMetadataOf(occurrence, subject),
-                    extractedMetadata: null,
-                    StoredEmailContentAvailability.ExceededSizeLimit,
-                    token);
-
-                Assert.Equal(PersistenceCommitResult.Committed, await session.CommitAsync(token));
-
-                return storedEmailId;
-            },
-            cancellationToken);
-
-    private static async Task<EmailOccurrenceId> DeliverAndLocateAsync(
-        OrchestratedMailbox mailbox,
-        string subject,
-        CancellationToken cancellationToken)
-    {
-        await mailbox.DeliverAsync(subject, cancellationToken);
-
-        var inbox = await mailbox.ReadAsync(OrchestratedMailbox.InboxPath, cancellationToken);
-        var delivered = Assert.Single(inbox, email => email.Subject == subject);
-
-        return EmailOccurrenceId.Create(
-            SyntheticMailAccount.AccountId,
-            Inbox.Id,
-            await mailbox.ReadUidValidityAsync(OrchestratedMailbox.InboxPath, cancellationToken),
-            delivered.Uid);
-    }
 }

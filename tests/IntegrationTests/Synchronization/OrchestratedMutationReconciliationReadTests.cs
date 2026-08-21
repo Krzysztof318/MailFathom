@@ -4,7 +4,6 @@
 
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
-using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
@@ -75,7 +74,11 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
         var occurrence = SyntheticEmail.OccurrenceIn(binding, uid: 5001);
-        var storedEmailId = await StoreMetadataAsync(services, occurrence, "relocated", cancellationToken);
+        var storedEmailId = await StoredSyntheticEmail.MetadataOnlyAsync(
+            services,
+            occurrence,
+            "relocated",
+            cancellationToken);
 
         var recordId = await CompletedRelocationAsync(
             services,
@@ -133,9 +136,21 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
         var seenOccurrence = SyntheticEmail.OccurrenceIn(binding, uid: 5002);
         var relocatedOccurrence = SyntheticEmail.OccurrenceIn(binding, uid: 5003);
         var writtenDownOccurrence = SyntheticEmail.OccurrenceIn(binding, uid: 5004);
-        var seenEmailId = await StoreMetadataAsync(services, seenOccurrence, "flagged", cancellationToken);
-        var relocatedEmailId = await StoreMetadataAsync(services, relocatedOccurrence, "moved", cancellationToken);
-        var writtenDownEmailId = await StoreMetadataAsync(services, writtenDownOccurrence, "pending", cancellationToken);
+        var seenEmailId = await StoredSyntheticEmail.MetadataOnlyAsync(
+            services,
+            seenOccurrence,
+            "flagged",
+            cancellationToken);
+        var relocatedEmailId = await StoredSyntheticEmail.MetadataOnlyAsync(
+            services,
+            relocatedOccurrence,
+            "moved",
+            cancellationToken);
+        var writtenDownEmailId = await StoredSyntheticEmail.MetadataOnlyAsync(
+            services,
+            writtenDownOccurrence,
+            "pending",
+            cancellationToken);
 
         var seenRecordId = await CompletedSeenStoreAsync(
             services,
@@ -193,8 +208,16 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
 
         var crowdedOccurrence = SyntheticEmail.OccurrenceIn(binding, uid: 5011);
         var quietOccurrence = SyntheticEmail.OccurrenceIn(binding, uid: 5012);
-        var crowdedEmailId = await StoreMetadataAsync(services, crowdedOccurrence, "triaged", cancellationToken);
-        var quietEmailId = await StoreMetadataAsync(services, quietOccurrence, "read once", cancellationToken);
+        var crowdedEmailId = await StoredSyntheticEmail.MetadataOnlyAsync(
+            services,
+            crowdedOccurrence,
+            "triaged",
+            cancellationToken);
+        var quietEmailId = await StoredSyntheticEmail.MetadataOnlyAsync(
+            services,
+            quietOccurrence,
+            "read once",
+            cancellationToken);
 
         // Written down and completed first, so it is the oldest stage change of the lot and therefore the row a
         // newest-first truncation across the whole answer drops.
@@ -327,41 +350,8 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
     private static Task<MailboxMutationRecordId> OpenAsync(
         OrchestratedMailFathomServices services,
         MailboxMutationRequest request,
-        CancellationToken cancellationToken) => CommitForAsync(
-            services,
+        CancellationToken cancellationToken) => services.CommitProducingAsync(
             async (scope, session, token) => (await scope.GetRequiredService<IMailboxMutationRecordStore>()
                 .OpenAsync(session, request, token)).Id,
-            cancellationToken);
-
-    private static Task<StoredEmailId> StoreMetadataAsync(
-        OrchestratedMailFathomServices services,
-        EmailOccurrenceId occurrence,
-        string subject,
-        CancellationToken cancellationToken) => CommitForAsync(
-            services,
-            (scope, session, token) => scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                session,
-                SyntheticEmail.RemoteMetadataOf(occurrence, subject),
-                extractedMetadata: null,
-                StoredEmailContentAvailability.ExceededSizeLimit,
-                token),
-            cancellationToken);
-
-    /// <summary>Commits one write and hands back what it produced, asserting the commit where it happened.</summary>
-    private static Task<TResult> CommitForAsync<TResult>(
-        OrchestratedMailFathomServices services,
-        Func<IServiceProvider, IPersistenceSession, CancellationToken, Task<TResult>> write,
-        CancellationToken cancellationToken) => services.InScopeAsync(
-            async (scope, token) =>
-            {
-                await using var session = await scope.GetRequiredService<IPersistenceSessionFactory>()
-                    .BeginSessionAsync(token);
-
-                var produced = await write(scope, session, token);
-
-                Assert.Equal(PersistenceCommitResult.Committed, await session.CommitAsync(token));
-
-                return produced;
-            },
             cancellationToken);
 }

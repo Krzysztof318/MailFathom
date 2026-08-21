@@ -9,7 +9,6 @@ using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
-using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
@@ -88,8 +87,12 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
         await CommitInboxBindingAsync(services, cancellationToken);
 
         var subject = $"converge-relocate-{Guid.NewGuid():N}";
-        var occurrence = await DeliverAndLocateAsync(mailbox, subject, cancellationToken);
-        var storedEmailId = await StoreMetadataAsync(services, occurrence, subject, cancellationToken);
+        var occurrence = await mailbox.DeliverAndLocateAsync(Inbox.Id, subject, cancellationToken);
+        var storedEmailId = await StoredSyntheticEmail.MetadataOnlyAsync(
+            services,
+            occurrence,
+            subject,
+            cancellationToken);
         var request = MailboxMutationRequest.Relocate(storedEmailId, occurrence, Requester, ArchivePath);
 
         await StopAfterTheCopyAsync(services, request, occurrence, cancellationToken);
@@ -140,8 +143,12 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
         await CommitInboxBindingAsync(services, cancellationToken);
 
         var subject = $"converge-missing-target-{Guid.NewGuid():N}";
-        var occurrence = await DeliverAndLocateAsync(mailbox, subject, cancellationToken);
-        var storedEmailId = await StoreMetadataAsync(services, occurrence, subject, cancellationToken);
+        var occurrence = await mailbox.DeliverAndLocateAsync(Inbox.Id, subject, cancellationToken);
+        var storedEmailId = await StoredSyntheticEmail.MetadataOnlyAsync(
+            services,
+            occurrence,
+            subject,
+            cancellationToken);
         var request = MailboxMutationRequest.Relocate(storedEmailId, occurrence, Requester, RemovedPath);
         await RecordIntentAsync(services, request, cancellationToken);
 
@@ -191,8 +198,12 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
         await CommitInboxBindingAsync(services, cancellationToken);
 
         var subject = $"converge-copy-{Guid.NewGuid():N}";
-        var occurrence = await DeliverAndLocateAsync(mailbox, subject, cancellationToken);
-        var storedEmailId = await StoreMetadataAsync(services, occurrence, subject, cancellationToken);
+        var occurrence = await mailbox.DeliverAndLocateAsync(Inbox.Id, subject, cancellationToken);
+        var storedEmailId = await StoredSyntheticEmail.MetadataOnlyAsync(
+            services,
+            occurrence,
+            subject,
+            cancellationToken);
         var request = MailboxMutationRequest.Copy(storedEmailId, occurrence, Requester, CopyPath);
 
         await StopAfterTheCopyCommandAsync(services, request, occurrence, cancellationToken);
@@ -376,8 +387,7 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
     private static Task<MailboxMutationRecordId> RecordIntentAsync(
         OrchestratedMailFathomServices services,
         MailboxMutationRequest request,
-        CancellationToken cancellationToken) => CommitForAsync(
-            services,
+        CancellationToken cancellationToken) => services.CommitProducingAsync(
             async (scope, session, token) => (await scope.GetRequiredService<IMailboxMutationRecordStore>()
                 .OpenAsync(session, request, token)).Id,
             cancellationToken);
@@ -436,54 +446,6 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
                     Inbox,
                     token),
                 cancellationToken));
-
-    private static Task<StoredEmailId> StoreMetadataAsync(
-        OrchestratedMailFathomServices services,
-        EmailOccurrenceId occurrence,
-        string subject,
-        CancellationToken cancellationToken) => CommitForAsync(
-            services,
-            (scope, session, token) => scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                session,
-                SyntheticEmail.RemoteMetadataOf(occurrence, subject),
-                extractedMetadata: null,
-                StoredEmailContentAvailability.ExceededSizeLimit,
-                token),
-            cancellationToken);
-
-    private static Task<TResult> CommitForAsync<TResult>(
-        OrchestratedMailFathomServices services,
-        Func<IServiceProvider, IPersistenceSession, CancellationToken, Task<TResult>> write,
-        CancellationToken cancellationToken) => services.InScopeAsync(
-            async (scope, token) =>
-            {
-                await using var session = await scope.GetRequiredService<IPersistenceSessionFactory>()
-                    .BeginSessionAsync(token);
-
-                var produced = await write(scope, session, token);
-
-                Assert.Equal(PersistenceCommitResult.Committed, await session.CommitAsync(token));
-
-                return produced;
-            },
-            cancellationToken);
-
-    private static async Task<EmailOccurrenceId> DeliverAndLocateAsync(
-        OrchestratedMailbox mailbox,
-        string subject,
-        CancellationToken cancellationToken)
-    {
-        await mailbox.DeliverAsync(subject, cancellationToken);
-
-        var inbox = await mailbox.ReadAsync(OrchestratedMailbox.InboxPath, cancellationToken);
-        var delivered = Assert.Single(inbox, email => email.Subject == subject);
-
-        return EmailOccurrenceId.Create(
-            SyntheticMailAccount.AccountId,
-            Inbox.Id,
-            await mailbox.ReadUidValidityAsync(OrchestratedMailbox.InboxPath, cancellationToken),
-            delivered.Uid);
-    }
 
     /// <summary>The columns of one mutation record a test reads back.</summary>
     private sealed record MailboxMutationRow(MailboxMutationStage Stage, int AttemptCount, int? LastFailureCode);

@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.AppHost;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.IntegrationTests.Orchestration;
 using MailFathom.SyntheticMail.Generation;
 using MailKit;
@@ -12,6 +13,7 @@ using MailKit.Net.Imap;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
+using Xunit;
 
 namespace MailFathom.IntegrationTests.Mailbox;
 
@@ -60,6 +62,33 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
         await client.ConnectAsync(endpoints.SmtpHost, endpoints.SmtpPort, SecureSocketOptions.None, cancellationToken);
         await client.SendAsync(message, SyntheticSender, [MailboxRecipient], cancellationToken);
         await client.DisconnectAsync(quit: true, cancellationToken);
+    }
+
+    /// <summary>Delivers one synthetic message and reads back the occurrence identity the server gave it.</summary>
+    /// <param name="folderResolutionId">The binding the occurrence is named under.</param>
+    /// <param name="subject">The subject, which is how the delivered message is recognized among the mailbox's.</param>
+    /// <param name="cancellationToken">Cancels the delivery and the reads that follow it.</param>
+    /// <returns>The occurrence identity, carrying the UIDVALIDITY and UID the server itself assigned.</returns>
+    /// <remarks>
+    /// The binding is the caller's rather than this class's, because a test class binds the one inbox under an alias it
+    /// owns so that its rows cannot be confused with another class's. Only the delivery and the two observations are
+    /// shared; which folder resolution the occurrence is named under is not.
+    /// </remarks>
+    internal async Task<EmailOccurrenceId> DeliverAndLocateAsync(
+        MailFolderResolutionId folderResolutionId,
+        string subject,
+        CancellationToken cancellationToken)
+    {
+        await this.DeliverAsync(subject, cancellationToken);
+
+        var inbox = await this.ReadAsync(InboxPath, cancellationToken);
+        var delivered = Assert.Single(inbox, email => email.Subject == subject);
+
+        return EmailOccurrenceId.Create(
+            SyntheticMailAccount.AccountId,
+            folderResolutionId,
+            await this.ReadUidValidityAsync(InboxPath, cancellationToken),
+            delivered.Uid);
     }
 
     /// <summary>Appends one synthetic message directly to a folder, for folders SMTP delivery does not reach.</summary>

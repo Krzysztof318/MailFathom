@@ -8,7 +8,6 @@ using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
-using MailFathom.Application.Synchronization;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
@@ -76,8 +75,12 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
             await CommitInboxBindingAsync(services, cancellationToken));
 
         var subject = $"resume-relocate-{Guid.NewGuid():N}";
-        var occurrence = await DeliverAndLocateAsync(mailbox, subject, cancellationToken);
-        var storedEmailId = await StoreMetadataAsync(services, occurrence, subject, cancellationToken);
+        var occurrence = await mailbox.DeliverAndLocateAsync(Inbox.Id, subject, cancellationToken);
+        var storedEmailId = await StoredSyntheticEmail.MetadataOnlyAsync(
+            services,
+            occurrence,
+            subject,
+            cancellationToken);
         var request = MailboxMutationRequest.Relocate(storedEmailId, occurrence, Requester, ArchivePath);
 
         await StopAfterTheCopyAsync(services, request, occurrence, cancellationToken);
@@ -132,7 +135,11 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var binding = await OrchestratedFolderBinding.CommitAsync(services, "mutation-identity", cancellationToken);
         var occurrence = SyntheticEmail.OccurrenceIn(binding, uid: 4242U);
-        var storedEmailId = await StoreMetadataAsync(services, occurrence, "mutation-identity", cancellationToken);
+        var storedEmailId = await StoredSyntheticEmail.MetadataOnlyAsync(
+            services,
+            occurrence,
+            "mutation-identity",
+            cancellationToken);
         var request = MailboxMutationRequest.SetSeen(storedEmailId, occurrence, Requester, isSeen: true);
 
         // Act
@@ -176,8 +183,7 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
         EmailOccurrenceId occurrence,
         CancellationToken cancellationToken)
     {
-        var recordId = await CommitForAsync(
-            services,
+        var recordId = await services.CommitProducingAsync(
             async (scope, session, token) => (await scope.GetRequiredService<IMailboxMutationRecordStore>()
                 .OpenAsync(session, request, token)).Id,
             cancellationToken);
@@ -307,56 +313,6 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
                 Inbox,
                 token),
             cancellationToken);
-
-    private static Task<StoredEmailId> StoreMetadataAsync(
-        OrchestratedMailFathomServices services,
-        EmailOccurrenceId occurrence,
-        string subject,
-        CancellationToken cancellationToken) => CommitForAsync(
-            services,
-            (scope, session, token) => scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                session,
-                SyntheticEmail.RemoteMetadataOf(occurrence, subject),
-                extractedMetadata: null,
-                StoredEmailContentAvailability.ExceededSizeLimit,
-                token),
-            cancellationToken);
-
-    /// <summary>Commits one write and hands back what it produced, which the shared helper cannot because it reports the commit.</summary>
-    /// <remarks>The commit result is asserted here instead, so arrangement that silently conflicted fails where it happened.</remarks>
-    private static Task<TResult> CommitForAsync<TResult>(
-        OrchestratedMailFathomServices services,
-        Func<IServiceProvider, IPersistenceSession, CancellationToken, Task<TResult>> write,
-        CancellationToken cancellationToken) => services.InScopeAsync(
-            async (scope, token) =>
-            {
-                await using var session = await scope.GetRequiredService<IPersistenceSessionFactory>()
-                    .BeginSessionAsync(token);
-
-                var produced = await write(scope, session, token);
-
-                Assert.Equal(PersistenceCommitResult.Committed, await session.CommitAsync(token));
-
-                return produced;
-            },
-            cancellationToken);
-
-    private static async Task<EmailOccurrenceId> DeliverAndLocateAsync(
-        OrchestratedMailbox mailbox,
-        string subject,
-        CancellationToken cancellationToken)
-    {
-        await mailbox.DeliverAsync(subject, cancellationToken);
-
-        var inbox = await mailbox.ReadAsync(OrchestratedMailbox.InboxPath, cancellationToken);
-        var delivered = Assert.Single(inbox, email => email.Subject == subject);
-
-        return EmailOccurrenceId.Create(
-            SyntheticMailAccount.AccountId,
-            Inbox.Id,
-            await mailbox.ReadUidValidityAsync(OrchestratedMailbox.InboxPath, cancellationToken),
-            delivered.Uid);
-    }
 
     /// <summary>The columns of one mutation record a test reads back.</summary>
     private sealed record MailboxMutationRow(

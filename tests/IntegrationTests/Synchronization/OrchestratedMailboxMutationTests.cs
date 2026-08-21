@@ -67,7 +67,7 @@ public sealed class OrchestratedMailboxMutationTests(MailFathomOrchestrationFixt
         await mailbox.RecreateFolderAsync(ArchiveFolderName, cancellationToken);
 
         var subject = $"relocate-native-{Guid.NewGuid():N}";
-        var occurrence = await DeliverAndLocateAsync(mailbox, subject, cancellationToken);
+        var occurrence = await mailbox.DeliverAndLocateAsync(Inbox.Id, subject, cancellationToken);
 
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
 
@@ -119,7 +119,7 @@ public sealed class OrchestratedMailboxMutationTests(MailFathomOrchestrationFixt
         var cancellationToken = TestContext.Current.CancellationToken;
         var mailbox = new OrchestratedMailbox(orchestration.MailServer);
         var subject = $"relocate-fallback-{Guid.NewGuid():N}";
-        var occurrence = await DeliverAndLocateAsync(mailbox, subject, cancellationToken);
+        var occurrence = await mailbox.DeliverAndLocateAsync(Inbox.Id, subject, cancellationToken);
 
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
 
@@ -161,8 +161,8 @@ public sealed class OrchestratedMailboxMutationTests(MailFathomOrchestrationFixt
         var neighbourSubject = $"expunge-neighbour-{Guid.NewGuid():N}";
         var targetSubject = $"expunge-target-{Guid.NewGuid():N}";
 
-        var neighbour = await DeliverAndLocateAsync(mailbox, neighbourSubject, cancellationToken);
-        var target = await DeliverAndLocateAsync(mailbox, targetSubject, cancellationToken);
+        var neighbour = await mailbox.DeliverAndLocateAsync(Inbox.Id, neighbourSubject, cancellationToken);
+        var target = await mailbox.DeliverAndLocateAsync(Inbox.Id, targetSubject, cancellationToken);
         await mailbox.MarkDeletedAsync(OrchestratedMailbox.InboxPath, neighbour.Uid, cancellationToken);
 
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
@@ -210,7 +210,7 @@ public sealed class OrchestratedMailboxMutationTests(MailFathomOrchestrationFixt
         var cancellationToken = TestContext.Current.CancellationToken;
         var mailbox = new OrchestratedMailbox(orchestration.MailServer);
         var subject = $"label-target-{Guid.NewGuid():N}";
-        var occurrence = await DeliverAndLocateAsync(mailbox, subject, cancellationToken);
+        var occurrence = await mailbox.DeliverAndLocateAsync(Inbox.Id, subject, cancellationToken);
         await mailbox.MarkSeenAsync(OrchestratedMailbox.InboxPath, occurrence.Uid, cancellationToken);
 
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
@@ -292,23 +292,5 @@ public sealed class OrchestratedMailboxMutationTests(MailFathomOrchestrationFixt
             cancellationToken);
 
         return await session.RelocateAsync(occurrence, ArchivePath, journal, cancellationToken);
-    }
-
-    /// <summary>Delivers one synthetic message and reads back the occurrence identity the server gave it.</summary>
-    private static async Task<EmailOccurrenceId> DeliverAndLocateAsync(
-        OrchestratedMailbox mailbox,
-        string subject,
-        CancellationToken cancellationToken)
-    {
-        await mailbox.DeliverAsync(subject, cancellationToken);
-
-        var inbox = await mailbox.ReadAsync(OrchestratedMailbox.InboxPath, cancellationToken);
-        var delivered = Assert.Single(inbox, email => email.Subject == subject);
-
-        return EmailOccurrenceId.Create(
-            SyntheticMailAccount.AccountId,
-            Inbox.Id,
-            await mailbox.ReadUidValidityAsync(OrchestratedMailbox.InboxPath, cancellationToken),
-            delivered.Uid);
     }
 }
