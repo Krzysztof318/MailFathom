@@ -78,6 +78,7 @@ jobs:
       build: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.build == 'true' }}
       format: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.format == 'true' }}
       model: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.model == 'true' }}
+      helm: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.helm == 'true' }}
     steps:
       # Only a push needs a working copy. A pull request is compared through the REST API, which reads
       # none; a push is compared with `git diff` between the commit the branch carried before it and the
@@ -155,6 +156,14 @@ jobs:
               - '.github/workflows/build-test-format-and-migrations.yml'
               - '.github/workflows/ci.yml'
               - 'Directory.Packages.props'
+            # The chart, the values documents it is verified with, the manifests those render, and the script that
+            # renders them. Nothing outside `deploy/helm/` reaches a rendering: the chart declares no dependency and
+            # takes no version from the build — `helm package --app-version` supplies that at release time — so a
+            # change to the application cannot move a manifest this job compares.
+            helm:
+              - 'deploy/helm/**'
+              - 'scripts/render-helm-manifests.sh'
+              - '.github/workflows/ci.yml'
 
   # The build, the unit-test and coverage gate, `dotnet format`, and the pending-model-changes check live
   # in `build-test-format-and-migrations.yml`, which the publishing pipeline calls as well. What stays
@@ -228,12 +237,49 @@ jobs:
       - name: Run the workflow contracts
         run: bash scripts/test-agent-workflow.sh
 
+  # The deployment contract, which is one of the four public surfaces ADR 0004 names and the one no other job here can
+  # see. Until this existed `helm lint` and `helm template` ran for the first time inside `Publish Helm chart` — after
+  # the image had been published and with re-tagging a release meaning a registry deletion first — so a chart that
+  # stopped rendering was found at the worst moment there is. The release run keeps its own lint and render: a release
+  # gate that trusts an earlier run is not a gate.
+  #
+  # It runs when the change can reach a rendering and skips otherwise, through `Detect changes` rather than a `paths`
+  # filter on the trigger, for the reason stated at the top of this file: a filtered-out workflow reports neither
+  # success nor failure and the required check never arrives.
+  #
+  # No draft condition, like `Workflow contracts` and unlike `Verify`. The job installs nothing, restores nothing, and
+  # costs seconds rather than the minutes an SDK, a restore, and a build cost, so there is nothing to save by deferring
+  # it past the interval in which the chart is actually being written. Helm is the runner image's preinstalled copy,
+  # which is what the release run uses as well;
+  # the rendering the golden files are compared against is normalized so that the Helm version deciding the whitespace
+  # between documents cannot decide the verdict.
+  helm-chart:
+    name: Helm chart
+    needs:
+      - detect-changes
+    if: needs.detect-changes.outputs.helm == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Record the Helm version this run used
+        run: helm version --template '{{ printf "Helm %s\n" .Version }}'
+
+      - name: Lint the chart and render it against the committed manifests
+        run: bash scripts/render-helm-manifests.sh
+
   required-ci:
     name: Required CI
     needs:
       - detect-changes
       - verify
       - workflow-contracts
+      - helm-chart
     # `always()` rather than `success() || failure()`, because this job has to report on a run that was
     # cancelled as well as on one whose dependencies were skipped. Anything weaker leaves the required
     # check itself skipped, which is the state this whole arrangement exists to avoid.
@@ -256,6 +302,7 @@ jobs:
           DETECT_CHANGES_RESULT: ${{ needs.detect-changes.result }}
           VERIFY_RESULT: ${{ needs.verify.result }}
           WORKFLOW_CONTRACTS_RESULT: ${{ needs.workflow-contracts.result }}
+          HELM_CHART_RESULT: ${{ needs.helm-chart.result }}
         run: |
           set -euo pipefail
 
@@ -288,6 +335,9 @@ jobs:
 
           require_success 'Detect changes' "$DETECT_CHANGES_RESULT"
           require_success_or_skipped 'Verify' "$VERIFY_RESULT"
+          # A change that reaches no chart file skips this one, which is the same complete answer `Verify` gives a
+          # documentation-only change.
+          require_success_or_skipped 'Helm chart' "$HELM_CHART_RESULT"
           # Not `require_success_or_skipped`: the contract job has no `if` and no path filter, so it has
           # no way to skip that is not a job that failed to start.
           require_success 'Workflow contracts' "$WORKFLOW_CONTRACTS_RESULT"

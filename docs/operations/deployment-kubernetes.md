@@ -542,18 +542,33 @@ references deleted a month later.
 
 ## Verification
 
-Reading the chart needs only Helm, and it is what a change here is reviewed with:
+Reading the chart needs only Helm, and one script is what a change here is reviewed with:
 
 ```bash
-helm lint     deploy/helm/mailfathom --values deploy/helm/mailfathom/ci/release-values.yaml
-helm template verification deploy/helm/mailfathom --values deploy/helm/mailfathom/ci/nightly-values.yaml
+scripts/render-helm-manifests.sh            # lint, render, and compare against the committed manifests
+scripts/render-helm-manifests.sh --update   # take an intended change into them
 ```
 
-`deploy/helm/mailfathom/ci/` holds those two values files. They are excluded from the packaged chart and name no real
-image and no real database.
+It runs `helm lint --strict` and `helm template` against every values document under `deploy/helm/mailfathom/ci/`, and
+holds each rendering against the manifest committed beside it under `ci/golden/`. Those values documents are excluded
+from the packaged chart and name no real image and no real database; the manifests they render are excluded with them,
+and exist so that a change in what the chart produces appears in a diff rather than only as a failure to produce
+anything. A rendering is normalized before it is compared — trailing whitespace and the blank lines Helm leaves between
+documents go — so the Helm version a machine happens to carry does not decide the verdict.
 
-The release run performs the same two commands as a gate before it publishes anything, against both values files, so a
-chart that does not lint or render is never published. It additionally renders the packaged chart against the digest
+Three values documents are what the chart is held against, and each renders a shape the other two do not.
+`release-values.yaml` names an external database, an external analyzer, and an external spam scanner, and turns the
+ingress on. `nightly-values.yaml` selects the unsupported channel with its acknowledgement and renders the analyzer and
+the scanner the chart deploys itself. `defaults-values.yaml` is `values.yaml` plus only what the chart refuses to
+default — an image reference, the Secret the pod mounts, and the Secret holding the database superuser password, which
+the chart requires whenever it deploys the database itself and so by default — meaning it renders the shape an operator
+following the quick start gets. That third one is also what keeps the chart's own defaults inside schema validation: Helm validates each
+values document coalesced with `values.yaml` against `values.schema.json` during both the lint and the render, and a
+default the schema would reject is overridden by the other two.
+
+The `Helm chart` job of `CI` runs the same script on every pull request that touches `deploy/helm/`, which is where a
+chart that stopped rendering is now found. The release run lints and renders again before it publishes anything, so a
+chart that does not lint or render is never published; it additionally renders the packaged chart against the digest
 the release published and refuses one that would deploy anything else.
 
 Installing the chart into a real cluster and asserting what only a running deployment can answer — that the pod reaches

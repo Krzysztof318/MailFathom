@@ -247,7 +247,8 @@ The suite runs in two places and the second one is not a convenience. `CI`'s
 every push to `main` after a merge, which is what makes these contracts a property
 of the repository rather than of whoever remembered the gate: the change detection
 in that workflow routes `.github/`, `docs/`, `scripts/`, and `.agents/` to no other
-job, because none of them can move a build, a formatting verdict, or the EF Core
+job — bar the one script that renders the Helm chart, which the `Helm chart` job
+reads — because none of them can move a build, a formatting verdict, or the EF Core
 model, and the merge is the moment the tree they describe changes without any pull
 request having been wrong. A fork's pull request has no local gate behind it at
 all, and it is a fork's contributor who is most likely to change a workflow or a

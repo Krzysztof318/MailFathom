@@ -1,0 +1,418 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+#
+# Rendered from deploy/helm/mailfathom with deploy/helm/mailfathom/ci/defaults-values.yaml by scripts/render-helm-manifests.sh.
+# Committed so a change in what the chart produces is visible in the diff rather than only a failure to
+# produce anything. Regenerate with: scripts/render-helm-manifests.sh --update
+---
+# Source: mailfathom/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mailfathom
+  labels:
+    helm.sh/chart: mailfathom-0.0.0
+    app.kubernetes.io/name: mailfathom
+    app.kubernetes.io/instance: mailfathom
+    app.kubernetes.io/version: ""
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: mailfathom
+automountServiceAccountToken: false
+---
+# Source: mailfathom/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mailfathom-config
+  labels:
+    helm.sh/chart: mailfathom-0.0.0
+    app.kubernetes.io/name: mailfathom
+    app.kubernetes.io/instance: mailfathom
+    app.kubernetes.io/version: ""
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: mailfathom
+data:
+---
+# Source: mailfathom/templates/postgres-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mailfathom-postgres-init
+  labels:
+    helm.sh/chart: mailfathom-0.0.0
+    app.kubernetes.io/name: mailfathom-postgres
+    app.kubernetes.io/instance: mailfathom
+    app.kubernetes.io/version: "0.8.6-pg18"
+    app.kubernetes.io/component: database
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: mailfathom
+data:
+  10-create-mailfathom-database.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    readonly database_name="${MAILFATHOM_DATABASE:?The MailFathom database name was not set.}"
+    readonly database_role="${MAILFATHOM_DATABASE_ROLE:?The MailFathom database role was not set.}"
+    readonly password_file="${MAILFATHOM_DATABASE_PASSWORD_FILE:?The MailFathom database password file was not named.}"
+
+    if [[ ! -r "$password_file" ]]; then
+      printf 'The MailFathom database password was not mounted at %s.\n' "$password_file" >&2
+      exit 1
+    fi
+
+    # One trailing newline is stripped, because a secret written by an editor almost always ends with one and an
+    # untrimmed byte becomes part of the password. This is the same rule MailFathom's own secret resolution applies,
+    # and the `x` sentinel is what keeps it to one: command substitution strips every trailing newline on its own, so a
+    # password genuinely ending in two would be created here with both removed and presented later with only one.
+    database_password="$(cat -- "$password_file"; printf 'x')"
+    database_password="${database_password%x}"
+    database_password="${database_password%$'\n'}"
+
+    if [[ -z "$database_password" ]]; then
+      printf 'The MailFathom database password at %s is empty.\n' "$password_file" >&2
+      exit 1
+    fi
+
+    # The password reaches psql as a variable rather than as interpolated SQL, so a value containing a quotation mark
+    # cannot end the string it was meant to be inside. `:'name'` is psql's own quoting of a variable as a literal.
+    psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 \
+      --username "$POSTGRES_USER" \
+      --dbname "$POSTGRES_DB" \
+      --set database_role="$database_role" \
+      --set database_name="$database_name" \
+      --set database_password="$database_password" <<'INITIALIZE_ROLE_AND_DATABASE'
+    CREATE ROLE :"database_role" WITH LOGIN PASSWORD :'database_password';
+    CREATE DATABASE :"database_name" WITH OWNER :"database_role";
+    INITIALIZE_ROLE_AND_DATABASE
+
+    # Connected to the new database, still as the superuser, because installing an extension is the second thing an
+    # ordinary role may not do. Nothing else in the schema is created here: the tables, indexes, and constraints are
+    # the release's SQL artifact, and creating any of them now would leave two mechanisms describing one schema.
+    psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 \
+      --username "$POSTGRES_USER" \
+      --dbname "$database_name" \
+      --command 'CREATE EXTENSION IF NOT EXISTS vector;'
+
+    printf 'Created database %s owned by role %s, with the vector extension installed.\n' "$database_name" "$database_role"
+---
+# Source: mailfathom/templates/postgres-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailfathom-postgres
+  labels:
+    helm.sh/chart: mailfathom-0.0.0
+    app.kubernetes.io/name: mailfathom-postgres
+    app.kubernetes.io/instance: mailfathom
+    app.kubernetes.io/version: "0.8.6-pg18"
+    app.kubernetes.io/component: database
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: mailfathom
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: mailfathom-postgres
+    app.kubernetes.io/instance: mailfathom
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: postgresql
+      protocol: TCP
+---
+# Source: mailfathom/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailfathom
+  labels:
+    helm.sh/chart: mailfathom-0.0.0
+    app.kubernetes.io/name: mailfathom
+    app.kubernetes.io/instance: mailfathom
+    app.kubernetes.io/version: ""
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: mailfathom
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: mailfathom
+    app.kubernetes.io/instance: mailfathom
+---
+# Source: mailfathom/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailfathom
+  labels:
+    helm.sh/chart: mailfathom-0.0.0
+    app.kubernetes.io/name: mailfathom
+    app.kubernetes.io/instance: mailfathom
+    app.kubernetes.io/version: ""
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: mailfathom
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mailfathom
+      app.kubernetes.io/instance: mailfathom
+  template:
+    metadata:
+      annotations:
+        checksum/config: 243a3d43bc74f382c06f3414255c6a7bb191695204d774f59fb700df7b3073d5
+      labels:
+        app.kubernetes.io/name: mailfathom
+        app.kubernetes.io/instance: mailfathom
+    spec:
+      serviceAccountName: mailfathom
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1654
+        runAsGroup: 1654
+        runAsNonRoot: true
+        runAsUser: 1654
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: mailfathom
+          image: "example/mailfathom:0.1.0-verification"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: Production
+            - name: McpEndpoint__Port
+              value: "8080"
+            - name: HealthEndpoints__Port
+              value: "8081"
+            - name: ConfigurationSources__Directory
+              value: "/etc/mailfathom/config"
+            - name: DOTNET_USE_POLLING_FILE_WATCHER
+              value: "1"
+            - name: ConnectionStrings__mailfathom
+              value: "Host=mailfathom-postgres;Port=5432;Database=mailfathom;Username=mailfathom"
+            - name: Persistence__Password__Name
+              value: "mailfathom-database-password"
+            - name: Persistence__Password__SecretReference
+              value: "file:/etc/mailfathom/secrets/mailfathom-database-password"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/mailfathom/config
+              readOnly: true
+            - name: secrets
+              mountPath: /etc/mailfathom/secrets
+              readOnly: true
+            - name: temporary
+              mountPath: /tmp
+          startupProbe:
+            httpGet:
+              path: /started
+              port: health
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /alive
+              port: health
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            limits:
+              cpu: "2"
+              memory: 1Gi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+      volumes:
+        - name: config
+          configMap:
+            name: mailfathom-config
+        - name: secrets
+          secret:
+            secretName: mailfathom-secrets
+            defaultMode: 0400
+        - name: temporary
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+---
+# Source: mailfathom/templates/postgres-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mailfathom-postgres
+  labels:
+    helm.sh/chart: mailfathom-0.0.0
+    app.kubernetes.io/name: mailfathom-postgres
+    app.kubernetes.io/instance: mailfathom
+    app.kubernetes.io/version: "0.8.6-pg18"
+    app.kubernetes.io/component: database
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: mailfathom
+spec:
+  replicas: 1
+  serviceName: mailfathom-postgres
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mailfathom-postgres
+      app.kubernetes.io/instance: mailfathom
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          helm.sh/chart: mailfathom-0.0.0
+          app.kubernetes.io/name: mailfathom-postgres
+          app.kubernetes.io/instance: mailfathom
+          app.kubernetes.io/version: "0.8.6-pg18"
+          app.kubernetes.io/component: database
+          app.kubernetes.io/managed-by: Helm
+          app.kubernetes.io/part-of: mailfathom
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 20Gi
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mailfathom-postgres
+        app.kubernetes.io/instance: mailfathom
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: postgres
+          image: "docker.io/pgvector/pgvector:0.8.6-pg18"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_DB
+              value: postgres
+            - name: POSTGRES_PASSWORD_FILE
+              value: "/etc/mailfathom/postgres-superuser/postgres-superuser-password"
+            - name: MAILFATHOM_DATABASE
+              value: "mailfathom"
+            - name: MAILFATHOM_DATABASE_ROLE
+              value: "mailfathom"
+            - name: MAILFATHOM_DATABASE_PASSWORD_FILE
+              value: "/etc/mailfathom/secrets/mailfathom-database-password"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+            - name: initialization
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+            - name: secrets
+              mountPath: /etc/mailfathom/secrets
+              readOnly: true
+            - name: superuser
+              mountPath: /etc/mailfathom/postgres-superuser
+              readOnly: true
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: temporary
+              mountPath: /tmp
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - --quiet
+                - --host=127.0.0.1
+                - --username=postgres
+                - --dbname=mailfathom
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            exec:
+              command:
+                - pg_isready
+                - --quiet
+                - --host=127.0.0.1
+                - --username=postgres
+                - --dbname=mailfathom
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
+          resources:
+            limits:
+              cpu: "2"
+              memory: 2Gi
+            requests:
+              cpu: 250m
+              memory: 512Mi
+      volumes:
+        - name: initialization
+          configMap:
+            name: mailfathom-postgres-init
+            defaultMode: 0555
+        - name: secrets
+          secret:
+            secretName: mailfathom-secrets
+            defaultMode: 0400
+            items:
+              - key: mailfathom-database-password
+                path: mailfathom-database-password
+        - name: superuser
+          secret:
+            secretName: mailfathom-postgres-superuser
+            defaultMode: 0400
+            items:
+              - key: postgres-superuser-password
+                path: postgres-superuser-password
+        - name: run
+          emptyDir: {}
+        - name: temporary
+          emptyDir: {}
