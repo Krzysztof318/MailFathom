@@ -4888,6 +4888,11 @@ review_obligations_reports_on_a_patch_past_the_argument_limit() {
 
   create_review_obligations_fixture "$fixture_root"
 
+  # Nothing is staged here, and the omission is the point rather than an oversight: the fixture's
+  # base commit already carries `MailboxWidget.cs`, so overwriting it is a tracked modification that
+  # `git diff --name-status` reports on its own. The tests above stage what they write because they
+  # write `MailboxSprocket.cs`, which the fixture does not carry — an unstaged file there would be
+  # reported as untracked instead of diffed, which is the case one of them exists to cover.
   local filler line
   filler="$(printf 'x%.0s' {1..64})"
   {
