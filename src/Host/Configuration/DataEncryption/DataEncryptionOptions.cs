@@ -32,6 +32,9 @@ namespace MailFathom.Host.Configuration.DataEncryption;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed partial class DataEncryptionOptions : IValidatableObject
 {
+    /// <summary>The configuration section these settings are bound from.</summary>
+    public const string SectionName = "DataEncryption";
+
     /// <summary>Gets or sets the identifier of the key new values are sealed under.</summary>
     /// <remarks>
     /// Moving it to another configured key is the whole of a rotation's first half: from that moment every value

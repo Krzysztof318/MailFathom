@@ -24,6 +24,9 @@ namespace MailFathom.Host.Configuration.Embeddings;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed class EmbeddingBackfillOptions
 {
+    /// <summary>The configuration section these settings are bound from.</summary>
+    public const string SectionName = "EmbeddingBackfill";
+
     /// <summary>Gets or sets whether the backfill runs.</summary>
     /// <remarks>
     /// On by default, because an instance that has been synchronizing for months would otherwise activate a profile and

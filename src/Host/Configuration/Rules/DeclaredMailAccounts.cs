@@ -36,9 +36,6 @@ namespace MailFathom.Host.Configuration.Rules;
 /// </remarks>
 internal static class DeclaredMailAccounts
 {
-    /// <summary>The configuration section the accounts are declared in.</summary>
-    private const string SynchronizationSectionName = "MailSynchronization";
-
     /// <summary>Reads the declared accounts straight from configuration, before any binding has happened.</summary>
     /// <param name="configuration">The configuration the host is composing itself from.</param>
     /// <returns>The accounts, in the order they are declared.</returns>
@@ -50,7 +47,7 @@ internal static class DeclaredMailAccounts
         return
         [
             .. configuration
-                .GetSection($"{SynchronizationSectionName}:{nameof(MailSynchronizationOptions.Accounts)}")
+                .GetSection($"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Accounts)}")
                 .GetChildren()
                 .Select(ReadAccount)
                 .OfType<DeclaredMailAccount>(),

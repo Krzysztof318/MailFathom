@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="xunit.v3.mtp-v2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The golden files are read from the source tree rather than from the build output, because a run that
+         regenerates one has to rewrite the committed file itself. The path is carried as assembly metadata instead of
+         through [CallerFilePath], which a deterministic build rewrites to a source-root-relative form that resolves to
+         nothing at run time. -->
+    <AssemblyMetadata Include="MailFathom.PublicSurfaceGoldenDirectory" Value="$(MSBuildProjectDirectory)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The two surfaces this suite records live in two boundaries: the tool descriptors are composed by Mcp and the
+         configuration sections are bound by Host. Both are referenced so a renamed options type or a renamed tool
+         breaks the build here rather than silently emptying a golden file. -->
+    <ProjectReference Include="..\..\src\Host\Host.csproj" />
+    <ProjectReference Include="..\..\src\Mcp\Mcp.csproj" />
+  </ItemGroup>
+</Project>

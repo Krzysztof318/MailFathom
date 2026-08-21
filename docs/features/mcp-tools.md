@@ -315,6 +315,11 @@ The annotations are contract metadata rather than documentation, so `Mcp.UnitTes
 `tools/list` output: the name, the title, the description, every input property, the descriptions on them, the output
 schema, and each annotation. A descriptor that drifts fails the build.
 
+The whole set is recorded beside those assertions as well, in `tests/PublicSurfaces.UnitTests/mcp-tool-contract.json`,
+which is every registered descriptor rendered in a fixed order and committed. The per-tool assertions say what a
+descriptor must be; the record says what the surface *is*, so a change to any part of it — a renamed argument, a
+narrowed schema, a tool that arrived or left — reaches a reviewer as a diff rather than as something to notice.
+
 Enumerations travel as their names, camel-cased — `newestFirst`, `exceededSizeLimit`, `lexical` — never as ordinals. Each one is a
 type this boundary owns rather than the domain enumeration describing the same states, because the member names *are* the
 published wire values: sharing the domain's type would make a rename inside the domain a silent change to the protocol.

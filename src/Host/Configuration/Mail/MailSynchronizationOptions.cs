@@ -30,6 +30,9 @@ namespace MailFathom.Host.Configuration.Mail;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed class MailSynchronizationOptions : IValidatableObject
 {
+    /// <summary>The configuration section these settings are bound from.</summary>
+    public const string SectionName = "MailSynchronization";
+
     /// <summary>The shutdown budget the .NET Generic Host applies when nothing configures one.</summary>
     private static readonly TimeSpan DefaultHostShutdownTimeout = TimeSpan.FromSeconds(30);
 

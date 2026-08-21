@@ -45,6 +45,9 @@
     <!-- The composition and the pipeline are internal, and the integration suite starts both: what middleware order a
          started host actually serves a request through exists nowhere else. -->
     <InternalsVisibleTo Include="MailFathom.IntegrationTests" />
+    <!-- Every configuration section is bound into an internal options class, so the suite that records the published
+         configuration key set has to name those classes to walk them. -->
+    <InternalsVisibleTo Include="MailFathom.PublicSurfaces.UnitTests" />
   </ItemGroup>
 
   <!-- The native artifact is this project's publish output, and so is the container image, which copies that output

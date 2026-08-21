@@ -17,6 +17,9 @@ namespace MailFathom.Host.Configuration.Mail;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed class MailExtractionBackfillOptions
 {
+    /// <summary>The configuration section these settings are bound from.</summary>
+    public const string SectionName = "MailExtractionBackfill";
+
     /// <summary>Gets or sets whether the backfill runs.</summary>
     /// <remarks>
     /// On by default, because a deployment that stored mail before extraction existed would otherwise keep that mail
