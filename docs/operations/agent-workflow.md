@@ -561,15 +561,15 @@ that already exists is already in use, and a pull request opened by neither
 `finish-change` nor `prepare-release` moves nothing.
 
 Those rules describe an issue an agent opened. A public repository also receives
-issues nobody here opened, and one arrives with no `type:*` label and no board
-fields because none of the rules reached its author. The same page holds that
-path too: the missing `type:*` label is what marks an issue untriaged, triage
-either places it by the ordinary rules or closes it as `not planned` with a
-reason, a question moves to Discussions instead of being given a label so the
-board has somewhere to put it, and a contribution is read cheapest-check-first —
-required checks, then `Protected paths`, then the code-owner review. The `Triage`
-board view is where an arrival waits, and an item the project opened itself never
-reaches it.
+issues nobody here opened, and one arrives with no `type:*` label, no stack
+label, and no board fields because none of the rules reached its author. The
+same page holds that path too: the missing `type:*` label is what marks an issue
+untriaged, triage either places it by the ordinary rules or closes it as `not
+planned` with a reason, a question moves to Discussions instead of being given a
+label so the board has somewhere to put it, and a contribution is read
+cheapest-check-first — required checks, then `Protected paths`, then the
+code-owner review. The `Triage` board view is where an arrival waits, and an
+item the project opened itself never reaches it.
 
 The three Discussions categories that routing rule names — `Q&A`, `Ideas`, and
 `Announcements` — are the ones this project answers. The remaining defaults

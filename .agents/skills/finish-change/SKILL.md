@@ -98,7 +98,7 @@ Push: <remote and branch>
 Pull request: <URL, and the base repository it targets>
 Issue link: <Closes #N confirmed in the published body>
 Queue: <Next confirmed on the board after the pull request existed, or not applicable (no board write)>
-Placement: <type label, Area, Size, milestone or none — or what this session's access left to triage>
+Placement: <type label, stack label or neither, Area, Size, milestone or none — or what this session's access left to triage>
 ```
 
 Never claim completion without fresh evidence for every line.
