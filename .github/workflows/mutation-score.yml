@@ -45,12 +45,14 @@ jobs:
         project:
           - Domain
           - Application
-    # A bound rather than an expectation, and it is generous on purpose. A full `Application` pass measured about a
-    # hundred minutes on a ten-core developer machine that was not idle, against about five for `Domain`; a
-    # GitHub-hosted runner has four cores, so the number here has to leave room for a slower one without turning a slow
-    # night into a run that reports nothing. That is the whole failure mode worth avoiding: a job that times out
-    # produces no report at all, which is strictly worse than the same report arriving late on a channel where nothing
-    # waits for it. Standard runners are what this uses — a larger one is a paid plan, and the score is not worth one.
+    # A bound rather than an expectation, and it is generous on purpose. A full `Application` pass measured 64 minutes
+    # on a ten-core developer machine that was not idle, against 5 for `Domain` — the two differ by that much because
+    # `Application` mutates into 3955 testable mutants against `Domain`'s 1764, over a suite whose tests are slower
+    # apiece. A GitHub-hosted runner has four cores, so this leaves room for one slower than that measurement without
+    # turning a slow night into a run that reports nothing. That is the whole failure mode worth avoiding: a job that
+    # times out produces no report at all, which is strictly worse than the same report arriving late on a channel where
+    # nothing waits for it. Standard runners are what this uses — a larger one is a paid plan, and the score is not
+    # worth one.
     timeout-minutes: 300
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
