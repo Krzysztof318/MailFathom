@@ -93,7 +93,7 @@ public sealed class MailContactCollector
     /// are read again per message and stop the work before the bound is ever asked.
     /// </remarks>
     public ContactCollectionRun OpenRun(MailAccountId accountId, MailFolderSpecialUse? folderRole) =>
-        new(folderRole, new ContactCollectionBudget(this.settingsReader.SettingsFor(accountId).MaxContactsPerRun));
+        new(folderRole, new ContactCollectionBudget(this.settingsReader.GetContactCollectionSettings(accountId).MaxContactsPerRun));
 
     /// <summary>Records whoever one committed message says the account corresponds with.</summary>
     /// <param name="metadata">What was read out of the message that was just stored.</param>
@@ -114,7 +114,7 @@ public sealed class MailContactCollector
         ArgumentNullException.ThrowIfNull(run);
 
         var accountId = metadata.OccurrenceId.AccountId;
-        var settings = this.settingsReader.SettingsFor(accountId);
+        var settings = this.settingsReader.GetContactCollectionSettings(accountId);
 
         if (!settings.IsEnabled || CollectedRoleIn(run.FolderRole) is not { } role)
         {

@@ -17,5 +17,5 @@ public interface IContactCollectionSettingsReader
     /// <summary>Reads what one account collects.</summary>
     /// <param name="accountId">The account whose mail is being synchronized.</param>
     /// <returns>The settings, or <see cref="ContactCollectionSettings.CollectingNothing" /> for an account this deployment does not configure.</returns>
-    ContactCollectionSettings SettingsFor(MailAccountId accountId);
+    ContactCollectionSettings GetContactCollectionSettings(MailAccountId accountId);
 }

@@ -73,7 +73,7 @@ public sealed class OutgoingMailFilingConfigurationTests
         }));
 
         // Act
-        var folder = options.FindFolderPlayingRole(Primary, MailFolderSpecialUse.Outbox);
+        var folder = options.Readers.FolderMappings.FindFolderPlayingRole(Primary, MailFolderSpecialUse.Outbox);
 
         // Assert
         Assert.NotNull(folder);
@@ -95,7 +95,7 @@ public sealed class OutgoingMailFilingConfigurationTests
         }));
 
         // Act
-        var folder = options.FindFolderPlayingRole(Primary, MailFolderSpecialUse.Outbox);
+        var folder = options.Readers.FolderMappings.FindFolderPlayingRole(Primary, MailFolderSpecialUse.Outbox);
 
         // Assert
         Assert.Null(folder);
@@ -112,7 +112,7 @@ public sealed class OutgoingMailFilingConfigurationTests
         var options = OptionsFor(CreateAccount());
 
         // Act
-        var filesSentCopy = options.FilesSentCopy(Primary);
+        var filesSentCopy = options.Readers.OutgoingMailFilingPolicies.FilesSentCopy(Primary);
 
         // Assert
         Assert.True(filesSentCopy);
@@ -131,7 +131,7 @@ public sealed class OutgoingMailFilingConfigurationTests
         };
 
         // Act
-        var filesSentCopy = OptionsFor(account).FilesSentCopy(Primary);
+        var filesSentCopy = OptionsFor(account).Readers.OutgoingMailFilingPolicies.FilesSentCopy(Primary);
 
         // Assert
         Assert.False(filesSentCopy);
@@ -145,7 +145,7 @@ public sealed class OutgoingMailFilingConfigurationTests
         var options = OptionsFor(CreateAccount());
 
         // Act
-        var filesSentCopy = options.FilesSentCopy(MailAccountId.Create("withdrawn"));
+        var filesSentCopy = options.Readers.OutgoingMailFilingPolicies.FilesSentCopy(MailAccountId.Create("withdrawn"));
 
         // Assert
         Assert.True(filesSentCopy);

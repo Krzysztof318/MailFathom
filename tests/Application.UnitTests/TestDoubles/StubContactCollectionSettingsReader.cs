@@ -20,5 +20,5 @@ internal sealed class StubContactCollectionSettingsReader(ContactCollectionSetti
         new(ContactCollectionSettings.CollectingNothing);
 
     /// <inheritdoc />
-    public ContactCollectionSettings SettingsFor(MailAccountId accountId) => settings;
+    public ContactCollectionSettings GetContactCollectionSettings(MailAccountId accountId) => settings;
 }

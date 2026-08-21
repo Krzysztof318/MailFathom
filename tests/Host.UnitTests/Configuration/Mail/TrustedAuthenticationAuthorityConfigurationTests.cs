@@ -24,7 +24,7 @@ public sealed class TrustedAuthenticationAuthorityConfigurationTests
         var options = OptionsFor(account);
 
         // Act
-        var authority = options.GetTrustedAuthority(MailAccountId.Create("primary"));
+        var authority = options.Readers.TrustedAuthenticationAuthorities.GetTrustedAuthority(MailAccountId.Create("primary"));
 
         // Assert
         Assert.True(authority.NamesAServer);
@@ -37,7 +37,7 @@ public sealed class TrustedAuthenticationAuthorityConfigurationTests
     public void GetTrustedAuthority_AccountNamingNoServer_BelievesNothing()
     {
         // Act
-        var authority = OptionsFor(CreateAccount("primary")).GetTrustedAuthority(MailAccountId.Create("primary"));
+        var authority = OptionsFor(CreateAccount("primary")).Readers.TrustedAuthenticationAuthorities.GetTrustedAuthority(MailAccountId.Create("primary"));
 
         // Assert
         Assert.Equal(TrustedAuthenticationAuthority.None, authority);
@@ -48,7 +48,7 @@ public sealed class TrustedAuthenticationAuthorityConfigurationTests
     public void GetTrustedAuthority_AccountThisSnapshotNoLongerNames_BelievesNothing()
     {
         // Act
-        var authority = OptionsFor(CreateAccount("primary")).GetTrustedAuthority(MailAccountId.Create("removed"));
+        var authority = OptionsFor(CreateAccount("primary")).Readers.TrustedAuthenticationAuthorities.GetTrustedAuthority(MailAccountId.Create("removed"));
 
         // Assert
         Assert.Equal(TrustedAuthenticationAuthority.None, authority);

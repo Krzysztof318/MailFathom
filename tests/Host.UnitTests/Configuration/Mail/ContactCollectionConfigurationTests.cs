@@ -19,7 +19,7 @@ public sealed class ContactCollectionConfigurationTests
     public void SettingsFor_AnAccountThatConfiguredNothing_CollectsNobody()
     {
         // Act
-        var settings = OptionsFor(AccountAt("work", "owner@work.example")).SettingsFor(MailAccountId.Create("work"));
+        var settings = OptionsFor(AccountAt("work", "owner@work.example")).Readers.ContactCollection.GetContactCollectionSettings(MailAccountId.Create("work"));
 
         // Assert
         Assert.False(settings.IsEnabled);
@@ -39,7 +39,7 @@ public sealed class ContactCollectionConfigurationTests
         };
 
         // Act
-        var settings = OptionsFor(account).SettingsFor(MailAccountId.Create("work"));
+        var settings = OptionsFor(account).Readers.ContactCollection.GetContactCollectionSettings(MailAccountId.Create("work"));
 
         // Assert
         Assert.True(settings.IsEnabled);
@@ -57,8 +57,8 @@ public sealed class ContactCollectionConfigurationTests
         var options = OptionsFor(work, AccountAt("personal", "owner@personal.example"));
 
         // Act
-        var onWork = options.SettingsFor(MailAccountId.Create("work"));
-        var onPersonal = options.SettingsFor(MailAccountId.Create("personal"));
+        var onWork = options.Readers.ContactCollection.GetContactCollectionSettings(MailAccountId.Create("work"));
+        var onPersonal = options.Readers.ContactCollection.GetContactCollectionSettings(MailAccountId.Create("personal"));
 
         // Assert
         Assert.True(onWork.IsEnabled);
@@ -74,7 +74,7 @@ public sealed class ContactCollectionConfigurationTests
         work.ContactCollection = new ContactCollectionOptions { Enabled = true };
 
         // Act
-        var settings = OptionsFor(work).SettingsFor(MailAccountId.Create("removed"));
+        var settings = OptionsFor(work).Readers.ContactCollection.GetContactCollectionSettings(MailAccountId.Create("removed"));
 
         // Assert
         Assert.False(settings.IsEnabled);
@@ -91,7 +91,7 @@ public sealed class ContactCollectionConfigurationTests
         var options = OptionsFor(work, AccountAt("personal", "owner@personal.example"));
 
         // Act
-        var policy = options.SettingsFor(MailAccountId.Create("work")).Policy;
+        var policy = options.Readers.ContactCollection.GetContactCollectionSettings(MailAccountId.Create("work")).Policy;
 
         // Assert
         Assert.False(policy.Admits(AddressOf("owner@personal.example")));
@@ -123,7 +123,7 @@ public sealed class ContactCollectionConfigurationTests
         };
 
         // Act
-        var policy = OptionsFor(account).SettingsFor(MailAccountId.Create("work")).Policy;
+        var policy = OptionsFor(account).Readers.ContactCollection.GetContactCollectionSettings(MailAccountId.Create("work")).Policy;
 
         // Assert
         Assert.Equal(expectedAdmitted, policy.Admits(AddressOf("anna@mail.partner.example")));
@@ -143,7 +143,7 @@ public sealed class ContactCollectionConfigurationTests
         };
 
         // Act
-        var policy = OptionsFor(account).SettingsFor(MailAccountId.Create("work")).Policy;
+        var policy = OptionsFor(account).Readers.ContactCollection.GetContactCollectionSettings(MailAccountId.Create("work")).Policy;
 
         // Assert
         Assert.False(policy.Admits(AddressOf("billing-eu@partner.example")));
@@ -167,7 +167,7 @@ public sealed class ContactCollectionConfigurationTests
         };
 
         // Act
-        var policy = OptionsFor(account).SettingsFor(MailAccountId.Create("work")).Policy;
+        var policy = OptionsFor(account).Readers.ContactCollection.GetContactCollectionSettings(MailAccountId.Create("work")).Policy;
 
         // Assert
         Assert.True(policy.Admits(AddressOf("anna@partner.example")));

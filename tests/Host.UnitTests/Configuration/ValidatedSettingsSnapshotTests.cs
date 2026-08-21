@@ -318,7 +318,7 @@ public sealed class ValidatedSettingsSnapshotTests
         // Assert
         Assert.Equal(
             MailConnectionSecurity.StartTlsRequired,
-            harness.Settings.Current.GetPolicy(MailAccountId.Create("primary")).ConnectionSecurity);
+            harness.Settings.Current.Readers.TransportSecurityPolicies.GetPolicy(MailAccountId.Create("primary")).ConnectionSecurity);
     }
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The harness owns the settings and every test disposes the harness.")]
