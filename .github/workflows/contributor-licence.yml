@@ -1,0 +1,359 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+name: Contributor licence
+
+# Asks an external contributor to accept `CLA.md` and records the acceptance, so that the right to
+# publish MailFathom under other terms survives the first contribution this repository takes from
+# somebody other than the owner. ADR 0015 holds why the agreement exists and why the record lives
+# where it does; this file is only how it is collected.
+#
+# `pull_request_target` rather than `pull_request`, because a pull request from a fork gets neither
+# the repository's secrets nor a write-capable token under `pull_request`, and both are needed to
+# publish a status and to write the register. That trigger runs the workflow file from the base
+# branch and grants a token with write access while the event describes a branch anybody can push
+# to, which is why the one rule this file cannot break is below.
+#
+# **Nothing here checks out, builds, or executes the head of the pull request.** Every step reads
+# event metadata and the GitHub API and nothing else, so there is no point at which a fork's content
+# is interpreted. A step added here that clones the head, restores it, or runs anything out of it
+# hands the App's token to whoever opened the pull request.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+  issue_comment:
+    types: [created]
+
+# The workflow token is unused: every call below carries the App's installation token instead, so
+# the default grant is emptied rather than narrowed. `pull_request_target` would otherwise hand a
+# write-capable `GITHUB_TOKEN` to a job whose event is attacker-influenced.
+permissions: {}
+
+jobs:
+  agreement:
+    name: Record the contributor's acceptance
+    runs-on: ubuntu-latest
+
+    # An `issue_comment` fires for an issue as readily as for a pull request, and the two are the
+    # same event with a different payload. A comment on a closed or merged pull request is ignored
+    # too: an acceptance is asked for while the contribution is still open, and recording one
+    # afterwards would leave a signature nothing ever verified against a live status.
+    if: >-
+      github.event_name == 'pull_request_target'
+      || (github.event.issue.pull_request != null && github.event.issue.state == 'open')
+
+    steps:
+      # `create-github-app-token` exchanges the App's identifier and private key for an installation
+      # token scoped to this repository, valid for an hour and revoked when the job ends, so the
+      # long-lived credential in the secret store is a signing key rather than something that can
+      # call the API on its own. The `Fathom license` App needs exactly three permissions:
+      # `Pull requests: Read and write` to comment, `Commit statuses: Read and write` to publish the
+      # verdict, and `Contents: Read and write` to append to the register branch.
+      #
+      # `client-id` rather than `app-id`: the action deprecated the numeric App id in v3 and warns on
+      # every run that still passes it. A variable rather than a secret, because an identifier is not
+      # a credential and keeping it out of the secret store is what makes a failed run say which App
+      # it tried to authenticate as instead of printing `***`.
+      - name: Mint the licence App's token
+        id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.LICENSE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.LICENSE_APP_PRIVATE_KEY }}
+
+      # Both events are reduced to the same five facts here rather than read out of two different
+      # payload shapes further down. The pull request is fetched even under `pull_request_target`,
+      # where the payload already carries it, because `synchronize` reports the head the event was
+      # queued for and the status has to name the head that exists now.
+      - name: Resolve the pull request and its author
+        id: subject
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          set -euo pipefail
+
+          pull_request=$(gh api "repos/$REPOSITORY/pulls/$NUMBER")
+
+          login=$(printf '%s' "$pull_request" | jq -r '.user.login')
+          user_id=$(printf '%s' "$pull_request" | jq -r '.user.id')
+          user_type=$(printf '%s' "$pull_request" | jq -r '.user.type')
+          association=$(printf '%s' "$pull_request" | jq -r '.author_association')
+          head_sha=$(printf '%s' "$pull_request" | jq -r '.head.sha')
+
+          # Who owes nothing. A bot's output is not a work of authorship anybody could grant rights
+          # in, and `OWNER`, `MEMBER`, and `COLLABORATOR` are the accounts that already hold write
+          # access here — the owner's own contributions are covered by owning the copyright, and a
+          # collaborator is somebody the owner added deliberately. Everyone else is external, which
+          # is the whole population this workflow exists for.
+          exempt=false
+          case "$user_type" in
+            Bot) exempt=true ;;
+          esac
+          case "$association" in
+            OWNER | MEMBER | COLLABORATOR) exempt=true ;;
+          esac
+
+          {
+            printf 'number=%s\n' "$NUMBER"
+            printf 'login=%s\n' "$login"
+            printf 'user_id=%s\n' "$user_id"
+            printf 'head_sha=%s\n' "$head_sha"
+            printf 'exempt=%s\n' "$exempt"
+          } >> "$GITHUB_OUTPUT"
+
+          printf 'Pull request #%s by %s (%s, %s); exempt=%s\n' \
+            "$NUMBER" "$login" "$user_type" "$association" "$exempt"
+
+      # The agreement's own version, read from the file rather than repeated here, so bumping the
+      # document is one edit and a signature always names what was actually accepted. The blob id is
+      # recorded beside it: a version number says which agreement, and the object id says which
+      # bytes, which is the part that answers a later question about what somebody agreed to.
+      - name: Read the agreement and the register
+        id: register
+        if: steps.subject.outputs.exempt == 'false'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+          USER_ID: ${{ steps.subject.outputs.user_id }}
+        run: |
+          set -euo pipefail
+
+          agreement=$(gh api "repos/$REPOSITORY/contents/CLA.md?ref=${{ github.event.repository.default_branch }}")
+          agreement_blob=$(printf '%s' "$agreement" | jq -r '.sha')
+          agreement_version=$(printf '%s' "$agreement" | jq -r '.content' | base64 -d \
+            | sed -n 's/^\*\*Version \(.*\)\*\*$/\1/p' | head -n 1)
+
+          if [ -z "$agreement_version" ]; then
+            echo "::error file=CLA.md::CLA.md carries no '**Version x.y**' line, so a signature could not name what it accepted"
+            exit 1
+          fi
+
+          # A 404 here is the register branch or its file having gone missing, which is a broken
+          # repository rather than an unsigned contributor: failing loudly is what keeps a missing
+          # register from reading as "nobody has ever accepted".
+          if ! register=$(gh api "repos/$REPOSITORY/contents/signatures.json?ref=cla-signatures" 2>/dev/null); then
+            echo "::error::signatures.json is not readable on the cla-signatures branch; the register has to exist before an acceptance can be recorded"
+            exit 1
+          fi
+
+          signed=$(printf '%s' "$register" | jq -r '.content' | base64 -d \
+            | jq -r --argjson id "$USER_ID" --arg version "$agreement_version" \
+                'any(.signatures[]; .githubUserId == $id and .agreementVersion == $version)')
+
+          {
+            printf 'version=%s\n' "$agreement_version"
+            printf 'blob=%s\n' "$agreement_blob"
+            printf 'signed=%s\n' "$signed"
+          } >> "$GITHUB_OUTPUT"
+
+          printf 'Agreement %s (%s); already accepted by this account: %s\n' \
+            "$agreement_version" "$agreement_blob" "$signed"
+
+      # The acceptance itself. Only a comment by the pull request's own author counts, which is what
+      # stops a third party from accepting an agreement on somebody else's behalf, and the sentence
+      # is matched on normalised text so that quoting, casing, and stray whitespace do not turn a
+      # plain acceptance into a rejection.
+      - name: Record an acceptance posted on the pull request
+        id: record
+        if: >-
+          github.event_name == 'issue_comment'
+          && steps.subject.outputs.exempt == 'false'
+          && steps.register.outputs.signed == 'false'
+          && github.event.comment.user.login == steps.subject.outputs.login
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          NUMBER: ${{ steps.subject.outputs.number }}
+          LOGIN: ${{ steps.subject.outputs.login }}
+          USER_ID: ${{ steps.subject.outputs.user_id }}
+          AGREEMENT_VERSION: ${{ steps.register.outputs.version }}
+          AGREEMENT_BLOB: ${{ steps.register.outputs.blob }}
+        run: |
+          set -euo pipefail
+
+          expected='i have read the mailfathom contributor licence agreement and i accept it'
+          normalised=$(printf '%s' "$COMMENT_BODY" | tr '[:upper:]' '[:lower:]' | tr -s '[:space:]' ' ')
+
+          case "$normalised" in
+            *"$expected"*) ;;
+            *)
+              echo 'The comment is not an acceptance; nothing recorded.'
+              printf 'recorded=false\n' >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
+          recorded_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          # Appending is a compare-and-swap rather than a push, because two pull requests can accept
+          # the agreement in the same minute and each run reads the register before it writes one.
+          # The ref is updated with `force=false`, which GitHub refuses when the branch has moved
+          # since the read, so a lost update becomes a rejected call and the loop reads again. Five
+          # bounded attempts with jittered backoff, per the reliability rules in `AGENTS.md`; nothing
+          # here retries anything but this one conflict.
+          attempt=1
+          while [ "$attempt" -le 5 ]; do
+            head_commit=$(gh api "repos/$REPOSITORY/git/ref/heads/cla-signatures" --jq '.object.sha')
+            base_tree=$(gh api "repos/$REPOSITORY/git/commits/$head_commit" --jq '.tree.sha')
+
+            current=$(gh api "repos/$REPOSITORY/contents/signatures.json?ref=$head_commit" --jq '.content' | base64 -d)
+
+            already=$(printf '%s' "$current" | jq -r --argjson id "$USER_ID" --arg version "$AGREEMENT_VERSION" \
+              'any(.signatures[]; .githubUserId == $id and .agreementVersion == $version)')
+            if [ "$already" = "true" ]; then
+              echo 'Another run recorded this acceptance first; nothing to append.'
+              printf 'recorded=true\n' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            updated=$(printf '%s' "$current" | jq \
+              --arg login "$LOGIN" \
+              --argjson id "$USER_ID" \
+              --argjson pull "$NUMBER" \
+              --argjson comment "$COMMENT_ID" \
+              --arg version "$AGREEMENT_VERSION" \
+              --arg blob "$AGREEMENT_BLOB" \
+              --arg at "$recorded_at" \
+              '.signatures += [{
+                 login: $login,
+                 githubUserId: $id,
+                 pullRequest: $pull,
+                 commentId: $comment,
+                 agreementVersion: $version,
+                 agreementBlob: $blob,
+                 recordedAt: $at
+               }]')
+
+            # Every write below hands `gh api` a pre-built body on standard input rather than field
+            # flags. `-f` sends strings and `-F` reads a file, but neither expresses an array of
+            # objects, which is exactly the shape a tree entry has — and a field syntax that quietly
+            # does not mean what it looks like would produce a tree with no entry in it.
+            blob_sha=$(jq -n --arg content "$updated" '{encoding: "utf-8", content: $content}' \
+              | gh api "repos/$REPOSITORY/git/blobs" --input - --jq '.sha')
+
+            tree_sha=$(jq -n --arg base "$base_tree" --arg sha "$blob_sha" \
+              '{base_tree: $base, tree: [{path: "signatures.json", mode: "100644", type: "blob", sha: $sha}]}' \
+              | gh api "repos/$REPOSITORY/git/trees" --input - --jq '.sha')
+
+            commit_sha=$(jq -n \
+              --arg message "Record $LOGIN accepting the contributor licence agreement $AGREEMENT_VERSION in #$NUMBER" \
+              --arg tree "$tree_sha" \
+              --arg parent "$head_commit" \
+              '{message: $message, tree: $tree, parents: [$parent]}' \
+              | gh api "repos/$REPOSITORY/git/commits" --input - --jq '.sha')
+
+            if gh api -X PATCH "repos/$REPOSITORY/git/refs/heads/cla-signatures" \
+                 -F sha="$commit_sha" -F force=false >/dev/null 2>&1; then
+              printf 'Recorded %s accepting agreement %s as %s\n' "$LOGIN" "$AGREEMENT_VERSION" "$commit_sha"
+              printf 'recorded=true\n' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            printf 'The register moved under attempt %s; reading it again.\n' "$attempt"
+            sleep $(( attempt + (RANDOM % 3) ))
+            attempt=$(( attempt + 1 ))
+          done
+
+          echo '::error::The register could not be updated after five attempts'
+          exit 1
+
+      # One context, published on every run so the pull request always carries a current answer
+      # rather than a stale one from before the last push. `success` for an exempt author too: a
+      # status that is simply absent is indistinguishable from one that has not run yet, and this
+      # context is meant to become a required check once it has proved itself.
+      - name: Publish the licence status
+        if: always() && steps.subject.outputs.head_sha != ''
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ steps.subject.outputs.head_sha }}
+          EXEMPT: ${{ steps.subject.outputs.exempt }}
+          SIGNED: ${{ steps.register.outputs.signed }}
+          RECORDED: ${{ steps.record.outputs.recorded }}
+          NUMBER: ${{ steps.subject.outputs.number }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EXEMPT" = 'true' ]; then
+            state=success
+            description='No agreement is required from this author'
+          elif [ "$SIGNED" = 'true' ] || [ "$RECORDED" = 'true' ]; then
+            state=success
+            description='The contributor licence agreement has been accepted'
+          elif [ -z "$SIGNED" ]; then
+            # The register step neither ran nor answered, which is this repository being broken
+            # rather than the contributor owing anything. `error` rather than `failure` so the
+            # difference reaches whoever reads the status: telling a contributor they have not
+            # accepted an agreement, when what happened is that the register could not be read,
+            # sends them to do something that would not have helped.
+            state=error
+            description='The licence check could not run; the signature register was unreadable'
+          else
+            state=failure
+            description='The author has not accepted the contributor licence agreement yet'
+          fi
+
+          gh api "repos/$REPOSITORY/statuses/$HEAD_SHA" \
+            -f state="$state" \
+            -f context='license/cla' \
+            -f description="$description" \
+            -f target_url="https://github.com/$REPOSITORY/blob/${{ github.event.repository.default_branch }}/CLA.md" \
+            >/dev/null
+
+          printf 'license/cla = %s (%s)\n' "$state" "$description"
+
+      # Asked for once per pull request rather than on every push. A contributor who has not answered
+      # yet has already been asked, and repeating it on each `synchronize` turns a request into a
+      # notification storm on exactly the pull request somebody is still working on.
+      - name: Ask for the agreement
+        if: >-
+          steps.subject.outputs.exempt == 'false'
+          && steps.register.outputs.signed == 'false'
+          && steps.record.outputs.recorded != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+          NUMBER: ${{ steps.subject.outputs.number }}
+          LOGIN: ${{ steps.subject.outputs.login }}
+          VERSION: ${{ steps.register.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          marker='<!-- mailfathom:contributor-licence -->'
+
+          # `--slurp` and a separate `jq` rather than `--paginate --jq`, which applies the filter to
+          # each page and prints one result per page: a pull request past the first page of comments
+          # would answer `0` twice, which is not `0`, and the request would silently never be made
+          # on the one pull request long enough to need it. The two cannot be combined — `gh` refuses
+          # `--slurp` beside `--jq` — so the filter runs downstream of the whole set.
+          asked=$(gh api "repos/$REPOSITORY/issues/$NUMBER/comments" --paginate --slurp \
+            | jq --arg marker "$marker" '[.[][] | select(.body | contains($marker))] | length')
+
+          if [ "$asked" != '0' ]; then
+            echo 'The agreement has already been asked for on this pull request.'
+            exit 0
+          fi
+
+          cat > comment.md <<COMMENT
+          $marker
+          Thanks for the contribution, @$LOGIN. Before it can be merged, this repository asks you to accept its [contributor licence agreement](https://github.com/$REPOSITORY/blob/${{ github.event.repository.default_branch }}/CLA.md), version $VERSION.
+
+          **You keep the copyright in what you wrote.** The agreement asks for two things Apache-2.0 section 5 does not carry: a licence broad enough that MailFathom can be published under other terms in future without tracing every past contributor, and your statement that the code was yours to give. It is worth the two minutes it takes to read.
+
+          To accept, reply on this pull request with exactly:
+
+          \`\`\`text
+          I have read the MailFathom Contributor Licence Agreement and I accept it.
+          \`\`\`
+
+          The acceptance is recorded on the \`cla-signatures\` branch and the \`license/cla\` status turns green. You will not be asked again.
+          COMMENT
+
+          jq -n --rawfile body comment.md '{body: $body}' \
+            | gh api "repos/$REPOSITORY/issues/$NUMBER/comments" --input - >/dev/null
+          printf 'Asked %s to accept agreement %s\n' "$LOGIN" "$VERSION"

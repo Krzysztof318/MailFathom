@@ -157,6 +157,8 @@ Fix it in the commit rather than on top of it. A secret that reached a commit is
 
 **Nothing runs until a maintainer approves the run.** A workflow triggered by a pull request from a fork waits for someone with write access to release it, so on your first push the checks sit unstarted rather than red, and every later push waits the same way. That is GitHub's protection against a fork running this repository's workflows unreviewed, not a fault in your branch and not something you can retry your way past. Two consequences worth knowing: a check that has not started tells you nothing about your change, so read it as a queue rather than as a signal; and if you are working with an agent, say so in its instructions, because an agent watching for a verdict will otherwise keep waiting for one that cannot arrive yet. Run the gates locally in the meantime — they are the same ones.
 
+One check does not wait, and seeing it move alone is not a sign that the rest are stuck. `license/cla` runs on `pull_request_target`, which GitHub runs in the context of this repository's base branch rather than of your head — the base branch is trusted, so that trigger runs regardless of the approval setting that holds everything else. Nothing from your branch is checked out, built, or executed by it. It is also the one check you can turn green yourself, by accepting the agreement as [*Licensing your contribution*](#licensing-your-contribution) describes.
+
 Two checks gate the merge and both always report once the run is approved:
 
 - **`Required CI`** — the build, the unit tests, the coverage threshold, and formatting.
@@ -178,7 +180,22 @@ MailFathom is licensed under the [Apache License, Version 2.0](LICENSE), and **y
 
 > Unless You explicitly state otherwise, any Contribution intentionally submitted for inclusion in the Work by You to the Licensor shall be under the terms and conditions of this License, without any additional terms or conditions.
 
-That is the whole mechanism. **There is no contributor licence agreement and no developer certificate of origin**, there is nothing to sign, and no bot will ask you to post an acceptance comment. You keep the copyright in what you write, and the patent grant in section 3 travels with the contribution because section 5 pulls the whole license in.
+That is what makes your contribution usable, and it is not quite the whole mechanism. This repository also asks you to accept its [contributor licence agreement](CLA.md) once, on your first pull request. **You keep the copyright in what you write** — the agreement is a licence, not a transfer, and it is non-exclusive, so your own rights in your work are undiminished and you may do anything you like with it elsewhere.
+
+It exists for the two things section 5 does not carry, and it is worth knowing which:
+
+- **The freedom to publish MailFathom under other terms later.** Section 5 grants the right to distribute your contribution under Apache-2.0 and nothing wider. Without the agreement, one merged contribution would make any later licensing decision — a different open-source licence, or a commercial licence sold beside it — impossible to take without finding and asking every past contributor individually. The agreement keeps that decision available. It does not announce one: MailFathom is Apache-2.0, it stays Apache-2.0, and this changes nothing about what you or anyone else may do with it.
+- **Your statement that the code was yours to give.** Section 5 says which licence a contribution arrives under. It never says the person submitting it was entitled to submit it, and that is the subject of the next section.
+
+Accepting is one comment on your pull request, from the account that opened it:
+
+```text
+I have read the MailFathom Contributor Licence Agreement and I accept it.
+```
+
+The `Contributor licence` workflow reads it, records the acceptance, and turns the `license/cla` status green. What it records — your GitHub account and its numeric id, the pull request and the comment, the version of the agreement, and the exact revision of `CLA.md` you accepted — is written to the [`cla-signatures`](https://github.com/Krzysztof318/MailFathom/tree/cla-signatures) branch of this repository, in the open. Nothing is sent to a third-party service, and the record holds no more about you than the pull request already does. You are asked once, not per pull request; a bot, the owner, and anyone with write access here are not asked at all. [ADR 0015](docs/decisions/0015-contributor-licence-agreement-and-where-assent-is-recorded.md) records why the agreement exists and why the register lives where it does.
+
+The patent grant in section 3 of the licence travels with your contribution because section 5 pulls the whole license in, and clause 2.2 of the agreement restates it so that it survives a change of licence made under clause 2.1.
 
 What the license cannot check for you is whether the code was yours to give. Before you open a pull request, satisfy yourself that:
 

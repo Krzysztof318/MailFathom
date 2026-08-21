@@ -123,11 +123,15 @@ offer to go deeper on any one of them instead of expanding all six.
    clone carries. Each directory's own `AGENTS.md` governs it, and the table in the root one says which to read when.
 
 4. **The licence, and the one mistake that cannot be undone.** MailFathom is Apache-2.0, and section 5 puts a
-   contribution under the same licence by the act of submitting it: there is no CLA, no DCO, nothing to sign, and no bot
-   asking for an acknowledgement comment. The contributor keeps the copyright in what they write. What the licence
-   cannot check is whether the code was theirs to give — so anything copied from a GPL, AGPL, SSPL, BUSL, or
-   Commons Clause project, pasted from an answer with restrictive terms, or produced by a model that reproduced such
-   code, is the one defect a follow-up commit cannot repair, because it has to come out of the history. A new
+   contribution under the same licence by the act of submitting it. Beside that, the repository asks for its contributor
+   licence agreement in `CLA.md`, accepted once by replying to the first pull request with the sentence it names — a bot
+   asks when it applies, and the `license/cla` status says where the contributor stands. It is a licence rather than a
+   transfer: the contributor keeps the copyright in what they write, and what it adds over section 5 is the freedom to
+   publish MailFathom under other terms later, and the contributor's own statement that the code was theirs to give.
+   ADR 0015 records why. That statement is the part no licence and no agreement can check for them — so anything copied
+   from a GPL, AGPL, SSPL, BUSL, or Commons Clause project, pasted from an answer with restrictive terms, or produced by
+   a model that reproduced such code, is the one defect a follow-up commit cannot repair, because it has to come out of
+   the history. A new
    dependency, service, image, or copied sample also needs a row in `THIRD_PARTY_LICENSES.md` in the same pull request.
    `CONTRIBUTING.md` § *Licensing your contribution* is the whole of it.
 

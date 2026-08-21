@@ -687,6 +687,41 @@ request exactly as it reads any other. What it does need is `BOARD_PROJECT_TOKEN
 classic token carrying the `project` scope that `Fathom review`'s two writes need, and
 without it the job says so and ends green.
 
+### The licence a contribution earns
+
+`Contributor licence` asks an external contributor to accept `CLA.md` and records the
+acceptance. It is a separate workflow rather than a job of the pipeline above, and the two
+reasons are the same fact read twice: it needs a write-capable token on a pull request from
+a fork, which `pull_request` never supplies, and it needs `issue_comment`, which the
+labelling pipeline has no use for. Folding it in would put the elevated trigger on the run
+that also derives every label, which widens the exception the next section grants rather
+than containing it.
+
+What it derives is one commit status, `license/cla`, published on every run so a pull
+request always carries a current answer rather than one from before the last push. An author
+who is the owner, a collaborator, or a bot earns `success` without being asked anything —
+`success` rather than nothing, because an absent status and one that has not run yet are
+indistinguishable. Everyone else earns it by replying to their own pull request with the
+sentence `CLA.md` names; the workflow appends an entry to `signatures.json` on the
+`cla-signatures` branch and the status turns green. The request is made once per pull
+request rather than on every push, because a contributor who has not answered has already
+been asked.
+
+Two properties are the whole of why this is safe to run with the App's token, and both are
+asserted by `only_the_recorded_workflows_use_pull_request_target` rather than left to this
+page: it checks nothing out, and the one action it reaches is the token mint. A step added
+here that clones the head, restores it, or runs anything out of it hands the token to
+whoever opened the pull request, and the test fails before a reviewer has to notice.
+
+The register is appended to by compare-and-swap — the ref is updated with `force=false`, so
+a register that moved under a run produces a rejected call and the run reads again, five
+bounded attempts with jittered backoff. A concurrency group was rejected for the reason it
+looks right: with `cancel-in-progress: false` the platform keeps one run queued and cancels
+older pending ones, so two acceptances in the same minute would lose one silently. The
+branch carries a ruleset of its own admitting the `Fathom license` App and nothing else,
+which is what makes the register evidence rather than a file the party it speaks about can
+edit. ADR 0015 holds the decision and `CLA.md` the agreement.
+
 ## Review on the pull request
 
 `review-change` reviews the diff before it leaves the workspace. Two reviewers
@@ -1080,8 +1115,8 @@ fix for an earlier finding is what a second pass is for.
 Every other workflow in this repository is forbidden to use
 `pull_request_target`, because the trigger hands repository secrets to a run
 started by a pull request, and the rule exists so contributed code never executes
-with them. `Fathom review` uses it anyway, as one recorded exception rather than
-as a rule the repository quietly breaks.
+with them. `Fathom review` uses it anyway, as the first of two recorded
+exceptions rather than as a rule the repository quietly breaks.
 
 The exception holds because the trigger is what the workflow needs and the danger
 is not what it does. `issue_comment` and a label event carry no head ref to run,
@@ -1101,14 +1136,18 @@ used to, under the same deny list, and what each returns is untrusted text on th
 same terms as the diff that produced it — which is why the judge confirms a
 candidate against the file before it can become a finding.
 
+`Contributor licence` is the second exception, and it inherits none of this
+reasoning: it argues its own case above, on the narrower ground that it executes nothing
+from anywhere because it checks nothing out at all.
+
 The exception is scoped to this workflow and to that shape. It is revoked by any
 change that checks out, builds, restores, or executes the branch under review,
 that grants a reader or the judge a shell, a writer, or a network tool, that lets
 a job other than the judge hold a credential that writes, that adds
 `workflow_dispatch` — a dispatch takes a ref, which would let the branch supply
 the job that receives the Claude credential — or that lets a trigger other than a
-maintainer's label or comment reach a fork. A second workflow wanting the trigger
-does not inherit this reasoning; it argues its own case or uses `pull_request`.
+maintainer's label or comment reach a fork. A third workflow wanting the trigger
+does not inherit either argument; it makes its own or uses `pull_request`.
 
 ### What bounds the cost
 
