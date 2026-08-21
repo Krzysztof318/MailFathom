@@ -12,7 +12,7 @@ using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Failures;
 using Microsoft.Extensions.Time.Testing;
 
-namespace MailFathom.Application.UnitTests.TestDoubles;
+namespace MailFathom.TestSupport;
 
 /// <summary>Holds outgoing records in memory, with the lease and the stage rules the real store enforces.</summary>
 /// <remarks>

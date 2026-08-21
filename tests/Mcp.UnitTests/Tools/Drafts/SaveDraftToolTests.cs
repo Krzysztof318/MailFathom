@@ -7,7 +7,6 @@ using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Failures;
 using MailFathom.Mcp.Tools.Results;
 using MailFathom.Mcp.UnitTests.TestDoubles;
-using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Mcp.UnitTests.Tools.Drafts;
@@ -50,7 +49,7 @@ public sealed class SaveDraftToolTests
         Assert.Equal(1, result.RecipientCount);
         Assert.Equal(DraftedMailDeployment.Moment, result.SavedAt);
         Assert.Single(deployment.Drafts.Drafts);
-        Assert.Empty(deployment.OutgoingEmails.ReceivedCalls());
+        Assert.Empty(deployment.OutgoingEmails.OpenRequests);
     }
 
     /// <summary>The account maps no drafts folder here, so the draft is held and the owner's own client shows nothing yet.</summary>

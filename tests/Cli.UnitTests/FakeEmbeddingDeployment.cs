@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
-using System.Text;
 using MailFathom.Cli.Administration;
 using MailFathom.TestSupport;
 
@@ -61,38 +60,29 @@ internal static class FakeEmbeddingDeployment
     {
         var path = request.RequestUri?.AbsolutePath;
 
-        if (path == AdminEndpointRoutes.SessionPath)
-        {
-            return Json(HttpStatusCode.OK, FakeAdminEndpoint.SessionBody("workstation", version));
-        }
-
         if (path == AdminEndpointRoutes.EmbeddingStatusPath && status is { } statusBody)
         {
-            return Json(HttpStatusCode.OK, statusBody);
+            return FakeAdminEndpoint.Json(HttpStatusCode.OK, statusBody);
         }
 
         if (path == AdminEndpointRoutes.EmbeddingActivationPath && request.Method == HttpMethod.Get
             && assessment is { } assessmentBody)
         {
-            return Json(HttpStatusCode.OK, assessmentBody);
+            return FakeAdminEndpoint.Json(HttpStatusCode.OK, assessmentBody);
         }
 
         if (path == AdminEndpointRoutes.EmbeddingActivationPath && request.Method == HttpMethod.Post
             && activation is { } answered)
         {
-            return Json(answered.Status, answered.Body);
+            return FakeAdminEndpoint.Json(answered.Status, answered.Body);
         }
 
         if (path == AdminEndpointRoutes.EmbeddingReindexCancellationPath && cancellation is { } cancellationBody)
         {
-            return Json(HttpStatusCode.OK, cancellationBody);
+            return FakeAdminEndpoint.Json(HttpStatusCode.OK, cancellationBody);
         }
 
-        return Json(HttpStatusCode.NotFound, string.Empty);
+        return FakeAdminEndpoint.AnswerSession(request, version)
+            ?? FakeAdminEndpoint.Json(HttpStatusCode.NotFound, string.Empty);
     }
-
-    private static HttpResponseMessage Json(HttpStatusCode status, string body) => new(status)
-    {
-        Content = new StringContent(body, Encoding.UTF8, "application/json"),
-    };
 }

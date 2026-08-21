@@ -3,9 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
-using MailFathom.Cli.Credentials;
 using MailFathom.TestSupport;
-using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Cli.UnitTests;
@@ -19,18 +17,11 @@ namespace MailFathom.Cli.UnitTests;
 /// </remarks>
 public sealed class FolderCommandTests : IDisposable
 {
-    private const string Endpoint = "https://mail.example.test:8443";
+    private const string Endpoint = CliCommandHarness.Endpoint;
     private const string Account = "work";
     private const string Folder = "archive";
 
-    private static readonly Uri EndpointAddress = new(Endpoint);
-
-    private readonly string storeDirectory =
-        Path.Combine(Path.GetTempPath(), $"mailfathom-folder-tests-{Guid.NewGuid():N}");
-
-    private readonly RecordingCliConsole console = new();
-
-    private readonly FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 8, 12, 0, 0, TimeSpan.Zero));
+    private readonly CliCommandHarness harness = new(new DateTimeOffset(2026, 8, 8, 12, 0, 0, TimeSpan.Zero));
 
     /// <summary>A folder small enough for one pass is one request, and the command says the folder now holds none.</summary>
     [Fact]
@@ -47,7 +38,7 @@ public sealed class FolderCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(1, deployment.ErasureRequestCount());
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("12 stored emails erased", StringComparison.Ordinal)
                 && line.Contains("ARCHIVE", StringComparison.Ordinal));
     }
@@ -73,7 +64,7 @@ public sealed class FolderCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(3, deployment.ErasureRequestCount());
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("1043 stored emails erased", StringComparison.Ordinal));
     }
 
@@ -91,7 +82,7 @@ public sealed class FolderCommandTests : IDisposable
 
         // Assert
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("500 stored emails erased so far", StringComparison.Ordinal));
     }
 
@@ -114,7 +105,7 @@ public sealed class FolderCommandTests : IDisposable
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Equal(1, deployment.ErasureRequestCount());
         Assert.Contains(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("would not make progress", StringComparison.Ordinal));
     }
 
@@ -132,7 +123,7 @@ public sealed class FolderCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("stored nothing", StringComparison.Ordinal));
     }
 
@@ -152,7 +143,7 @@ public sealed class FolderCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
-        Assert.Contains(Refusal, this.console.Errors);
+        Assert.Contains(Refusal, this.harness.Console.Errors);
     }
 
     /// <summary>The two names the deployment needs, and nothing else: no rule, no filter, no mail.</summary>
@@ -202,30 +193,8 @@ public sealed class FolderCommandTests : IDisposable
         "--endpoint",
         Endpoint);
 
-    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args)
-    {
-        var store = new CredentialStore(
-            Path.Combine(this.storeDirectory, "credentials.json"),
-            new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key")));
+    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args) =>
+        this.harness.RunAsync(deployment, args);
 
-        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
-
-        var context = new CliContext(
-            this.console,
-            store,
-            (endpoint, trust) => FakeDeploymentTransport.Over(deployment, endpoint, trust),
-            FakeMailboxRedirect.Silent(),
-            _ => false,
-            this.clock);
-
-        return CliRunner.RunAsync(context, args);
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(this.storeDirectory))
-        {
-            Directory.Delete(this.storeDirectory, recursive: true);
-        }
-    }
+    public void Dispose() => this.harness.Dispose();
 }

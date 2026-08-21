@@ -3,9 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
-using MailFathom.Cli.Credentials;
 using MailFathom.TestSupport;
-using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Cli.UnitTests;
@@ -24,19 +22,12 @@ namespace MailFathom.Cli.UnitTests;
 /// </remarks>
 public sealed class SpamCommandTests : IDisposable
 {
-    private const string Endpoint = "https://mail.example.test:8443";
+    private const string Endpoint = CliCommandHarness.Endpoint;
     private const string Account = "work";
 
     private const string EmptyPage = """{"classifications":[],"nextCursor":null}""";
 
-    private static readonly Uri EndpointAddress = new(Endpoint);
-
-    private readonly string storeDirectory =
-        Path.Combine(Path.GetTempPath(), $"mailfathom-spam-tests-{Guid.NewGuid():N}");
-
-    private readonly RecordingCliConsole console = new();
-
-    private readonly FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 12, 12, 0, 0, TimeSpan.Zero));
+    private readonly CliCommandHarness harness = new(new DateTimeOffset(2026, 8, 12, 12, 0, 0, TimeSpan.Zero));
 
     /// <summary>Without <c>--apply</c> the command asks for a run that changes nothing, and says how to ask for one that does.</summary>
     [Fact]
@@ -52,10 +43,10 @@ public sealed class SpamCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(1, deployment.ClassificationRunRequestCount());
-        Assert.Contains(this.console.Lines, line => line.Contains("has been asked for", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("dry run", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("--apply", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("spam run-status", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("has been asked for", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("dry run", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("--apply", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("spam run-status", StringComparison.Ordinal));
     }
 
     /// <summary>What the terminal asked for reaches the deployment as the request body, which is the whole agreement.</summary>
@@ -93,7 +84,7 @@ public sealed class SpamCommandTests : IDisposable
         Assert.Contains("\"rescore\": true", body, StringComparison.Ordinal);
         Assert.Contains("\"INBOX\"", body, StringComparison.Ordinal);
         Assert.Contains("\"ARCHIVE\"", body, StringComparison.Ordinal);
-        Assert.Contains(this.console.Lines, line => line.Contains("yes —", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("yes —", StringComparison.Ordinal));
     }
 
     /// <summary>Asking twice is asking once, and the operator is told the terms they sent were not applied.</summary>
@@ -117,8 +108,8 @@ public sealed class SpamCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.console.Lines, line => line.Contains("already under way", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("were not applied", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("already under way", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("were not applied", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -158,8 +149,8 @@ public sealed class SpamCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(0, deployment.ClassificationRunRequestCount());
-        Assert.Contains(this.console.Lines, line => line.Contains("under way", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("120 scored", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("under way", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("120 scored", StringComparison.Ordinal));
     }
 
     /// <summary>What a dry run found is the decision an operator is about to make, so the report names how to make it.</summary>
@@ -184,10 +175,10 @@ public sealed class SpamCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("would be acted on", StringComparison.Ordinal));
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("Nothing has been changed on the mail server", StringComparison.Ordinal));
     }
 
@@ -212,7 +203,7 @@ public sealed class SpamCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.console.Lines, line => line.Contains("spam run --account work", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("spam run --account work", StringComparison.Ordinal));
     }
 
     /// <summary>The signals print by name, which is how they are recorded and the whole reason the record is safe to read.</summary>
@@ -255,9 +246,9 @@ public sealed class SpamCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.console.Lines, line => line.Contains("Spam (Scanner 15.2/5)", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("X-Spam-Flag, BAYES_99", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("relocate", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Spam (Scanner 15.2/5)", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("X-Spam-Flag, BAYES_99", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("relocate", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -326,9 +317,9 @@ public sealed class SpamCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.console.Lines, line => line.Contains("--cursor MS4xLjEuYWJj", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("no profile", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("none", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("--cursor MS4xLjEuYWJj", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("no profile", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("none", StringComparison.Ordinal));
     }
 
     /// <summary>Nothing recorded for an account is an answer, and the answer says what would produce one.</summary>
@@ -350,7 +341,7 @@ public sealed class SpamCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.console.Lines, line => line.Contains("spam run --account work", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("spam run --account work", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -420,30 +411,8 @@ public sealed class SpamCommandTests : IDisposable
         }
         """;
 
-    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args)
-    {
-        var store = new CredentialStore(
-            Path.Combine(this.storeDirectory, "credentials.json"),
-            new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key")));
+    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args) =>
+        this.harness.RunAsync(deployment, args);
 
-        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
-
-        var context = new CliContext(
-            this.console,
-            store,
-            (endpoint, trust) => FakeDeploymentTransport.Over(deployment, endpoint, trust),
-            FakeMailboxRedirect.Silent(),
-            _ => false,
-            this.clock);
-
-        return CliRunner.RunAsync(context, args);
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(this.storeDirectory))
-        {
-            Directory.Delete(this.storeDirectory, recursive: true);
-        }
-    }
+    public void Dispose() => this.harness.Dispose();
 }

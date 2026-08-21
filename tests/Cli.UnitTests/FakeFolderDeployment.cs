@@ -4,7 +4,6 @@
 
 using System.Globalization;
 using System.Net;
-using System.Text;
 using MailFathom.Cli.Administration;
 using MailFathom.TestSupport;
 
@@ -76,25 +75,14 @@ internal static class FakeFolderDeployment
     {
         var path = request.RequestUri?.AbsolutePath;
 
-        if (path == AdminEndpointRoutes.SessionPath)
-        {
-            return Json(
-                HttpStatusCode.OK,
-                FakeAdminEndpoint.SessionBody("workstation", FakeAdminEndpoint.CommandVersion));
-        }
-
         if (path == AdminEndpointRoutes.FolderErasurePath && passes.Length > 0)
         {
             var pass = remaining.Count > 0 ? remaining.Dequeue() : passes[^1];
 
-            return Json(pass.Status, pass.Body);
+            return FakeAdminEndpoint.Json(pass.Status, pass.Body);
         }
 
-        return Json(HttpStatusCode.NotFound, string.Empty);
+        return FakeAdminEndpoint.AnswerSession(request)
+            ?? FakeAdminEndpoint.Json(HttpStatusCode.NotFound, string.Empty);
     }
-
-    private static HttpResponseMessage Json(HttpStatusCode status, string body) => new(status)
-    {
-        Content = new StringContent(body, Encoding.UTF8, "application/json"),
-    };
 }

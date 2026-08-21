@@ -90,6 +90,47 @@ internal static class FakeAdminEndpoint
             """;
     }
 
+    /// <summary>Builds one JSON answer, which is the only content type these doubles serve.</summary>
+    /// <param name="status">The status it answers with.</param>
+    /// <param name="body">The body it answers with.</param>
+    /// <returns>The answer.</returns>
+    /// <remarks>
+    /// Every double that routes by path answers this way, so the encoding and the media type are one decision here
+    /// rather than one per command family. It hands back the message rather than a handler, because those doubles
+    /// decide which route they are answering before they decide what to say.
+    /// </remarks>
+    internal static HttpResponseMessage Json(HttpStatusCode status, string body) => new(status)
+    {
+        Content = new StringContent(body, Encoding.UTF8, "application/json"),
+    };
+
+    /// <summary>Answers the session route the way every command's preflight meets it, or nothing for another route.</summary>
+    /// <param name="request">The request the command sent.</param>
+    /// <param name="version">The version to report, or <see langword="null" /> for this command's own.</param>
+    /// <returns>The session answer, or <see langword="null" /> when the request is for something else.</returns>
+    /// <remarks>
+    /// <para>
+    /// Every command settles the two versions here before its own operation, so each routing double carried the same
+    /// branch and a double serving only its own route would report a deployment nothing can be administered on.
+    /// Returning <see langword="null" /> rather than a 404 is what lets a double reach it without a second path
+    /// comparison of its own.
+    /// </para>
+    /// <para>
+    /// A double reaches it where it would otherwise answer 404, and the position is not a choice about precedence: the
+    /// session path is a sibling of every command route under the same prefix, so no route a double claims can be this
+    /// one. Written that way rather than as a leading branch because a response assigned to a local before being
+    /// returned is a disposable CA2000 cannot see through, while one coalesced into the return is.
+    /// </para>
+    /// </remarks>
+    internal static HttpResponseMessage? AnswerSession(HttpRequestMessage request, string? version = null)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return request.RequestUri?.AbsolutePath == AdminEndpointRoutes.SessionPath
+            ? Json(HttpStatusCode.OK, SessionBody("workstation", version ?? CommandVersion))
+            : null;
+    }
+
     /// <summary>Builds an endpoint that answers with a status and no usable body.</summary>
     /// <param name="status">The status it answers with.</param>
     /// <returns>The endpoint.</returns>

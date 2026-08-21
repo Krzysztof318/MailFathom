@@ -4,9 +4,7 @@
 
 using System.Net;
 using MailFathom.Cli.Administration;
-using MailFathom.Cli.Credentials;
 using MailFathom.TestSupport;
-using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Cli.UnitTests;
@@ -20,18 +18,11 @@ namespace MailFathom.Cli.UnitTests;
 /// </remarks>
 public sealed class JobCommandTests : IDisposable
 {
-    private const string Endpoint = "https://mail.example.test:8443";
-
-    private static readonly Uri EndpointAddress = new(Endpoint);
+    private const string Endpoint = CliCommandHarness.Endpoint;
 
     private static readonly Guid Job = new("2f1c1d6c-6f0b-4a5e-9f3d-0f9b2a5c7e11");
 
-    private readonly string storeDirectory =
-        Path.Combine(Path.GetTempPath(), $"mailfathom-job-tests-{Guid.NewGuid():N}");
-
-    private readonly RecordingCliConsole console = new();
-
-    private readonly FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 13, 12, 0, 0, TimeSpan.Zero));
+    private readonly CliCommandHarness harness = new(new DateTimeOffset(2026, 8, 13, 12, 0, 0, TimeSpan.Zero));
 
     /// <summary>The reading is what the decisions are taken from, so it prints the identifier and why the job stopped.</summary>
     [Fact]
@@ -46,9 +37,9 @@ public sealed class JobCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains(this.console.Lines, line => line.Contains(Job.ToString("D"), StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains(Job.ToString("D"), StringComparison.Ordinal));
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("Permanent PayloadUnreadable after 5 attempt(s)", StringComparison.Ordinal));
     }
 
@@ -70,7 +61,7 @@ public sealed class JobCommandTests : IDisposable
 
         // Assert
         var listing = DrawnListing.ReadFrom(
-            this.console.Lines, "Stopped", "Job", "Kind", "Failed", "Work", "Queued");
+            this.harness.Console.Lines, "Stopped", "Job", "Kind", "Failed", "Work", "Queued");
         var row = Assert.Single(listing.Rows);
 
         Assert.Equal("2026-08-13 09:30:00Z", listing.Cell(row, "Stopped"));
@@ -93,8 +84,8 @@ public sealed class JobCommandTests : IDisposable
         await this.RunAsync(deployment, "jobs", "dead-letters", "--endpoint", Endpoint);
 
         // Assert
-        Assert.Contains(this.console.Lines, line => line.Contains("jobs retry --job", StringComparison.Ordinal));
-        Assert.Contains(this.console.Lines, line => line.Contains("jobs drop --job", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("jobs retry --job", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("jobs drop --job", StringComparison.Ordinal));
     }
 
     /// <summary>An empty queue is the ordinary state of a healthy instance, and it says so rather than printing nothing.</summary>
@@ -110,7 +101,7 @@ public sealed class JobCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
-            this.console.Lines,
+            this.harness.Console.Lines,
             line => line.Contains("Nothing has dead-lettered", StringComparison.Ordinal));
     }
 
@@ -162,7 +153,7 @@ public sealed class JobCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(1, deployment.DecisionRequestCount(AdminEndpointRoutes.JobRetryPath));
-        Assert.Contains(this.console.Lines, line => line.Contains("back in the queue", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("back in the queue", StringComparison.Ordinal));
     }
 
     /// <summary>Dropping keeps the record, and the command says so, because "dropped" reads like a deletion otherwise.</summary>
@@ -186,7 +177,7 @@ public sealed class JobCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(1, deployment.DecisionRequestCount(AdminEndpointRoutes.JobDropPath));
-        Assert.Contains(this.console.Lines, line => line.Contains("keeps the failure", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("keeps the failure", StringComparison.Ordinal));
     }
 
     /// <summary>An identifier matching no job of this deployment is the mistake an operator makes with two deployments open.</summary>
@@ -212,7 +203,7 @@ public sealed class JobCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("holds no job", StringComparison.Ordinal));
     }
 
@@ -235,7 +226,7 @@ public sealed class JobCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("mailfathom.admin.read", StringComparison.Ordinal)
                 && line.Contains("AdminEndpoint:Authentication", StringComparison.Ordinal));
     }
@@ -256,7 +247,7 @@ public sealed class JobCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("was not admitted to this operation", StringComparison.Ordinal)
                 && !line.Contains("AdminEndpoint:Authentication", StringComparison.Ordinal));
     }
@@ -282,7 +273,7 @@ public sealed class JobCommandTests : IDisposable
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(
-            this.console.Errors,
+            this.harness.Console.Errors,
             line => line.Contains("no longer dead-lettered", StringComparison.Ordinal));
     }
 
@@ -304,30 +295,8 @@ public sealed class JobCommandTests : IDisposable
         Assert.Equal(0, deployment.DecisionRequestCount(AdminEndpointRoutes.JobDropPath));
     }
 
-    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args)
-    {
-        var store = new CredentialStore(
-            Path.Combine(this.storeDirectory, "credentials.json"),
-            new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key")));
+    private Task<int> RunAsync(FakeHttpMessageHandler deployment, params string[] args) =>
+        this.harness.RunAsync(deployment, args);
 
-        store.Save("production", EndpointAddress, "not-a-real-key", "workstation");
-
-        var context = new CliContext(
-            this.console,
-            store,
-            (endpoint, trust) => FakeDeploymentTransport.Over(deployment, endpoint, trust),
-            FakeMailboxRedirect.Silent(),
-            _ => false,
-            this.clock);
-
-        return CliRunner.RunAsync(context, args);
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(this.storeDirectory))
-        {
-            Directory.Delete(this.storeDirectory, recursive: true);
-        }
-    }
+    public void Dispose() => this.harness.Dispose();
 }

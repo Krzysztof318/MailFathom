@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
-using System.Text;
 using MailFathom.Cli.Administration;
 using MailFathom.TestSupport;
 
@@ -142,13 +141,6 @@ internal static class FakeOutboxDeployment
     {
         var path = request.RequestUri?.AbsolutePath;
 
-        if (path == AdminEndpointRoutes.SessionPath)
-        {
-            return Json(
-                HttpStatusCode.OK,
-                FakeAdminEndpoint.SessionBody("workstation", FakeAdminEndpoint.CommandVersion));
-        }
-
         if (path == AdminEndpointRoutes.OutboxSummaryPath)
         {
             return Json(summary ?? Summary(outstandingCount: 0));
@@ -176,14 +168,10 @@ internal static class FakeOutboxDeployment
             return Json(send ?? (HttpStatusCode.NotFound, string.Empty));
         }
 
-        return Json(HttpStatusCode.NotFound, string.Empty);
+        return FakeAdminEndpoint.AnswerSession(request)
+            ?? FakeAdminEndpoint.Json(HttpStatusCode.NotFound, string.Empty);
     }
 
     private static HttpResponseMessage Json((HttpStatusCode Status, string Body) answer) =>
-        Json(answer.Status, answer.Body);
-
-    private static HttpResponseMessage Json(HttpStatusCode status, string body) => new(status)
-    {
-        Content = new StringContent(body, Encoding.UTF8, "application/json"),
-    };
+        FakeAdminEndpoint.Json(answer.Status, answer.Body);
 }

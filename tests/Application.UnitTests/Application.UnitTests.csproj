@@ -25,6 +25,12 @@
          them. -->
     <Compile Include="..\shared\InMemoryMailDraftStore.cs" Link="InMemoryMailDraftStore.cs" />
     <Compile Include="..\shared\InMemoryMailDraftContentStore.cs" Link="InMemoryMailDraftContentStore.cs" />
+    <!-- The outbox record a send opens is written by the use cases here and by the tools over them, so the store that
+         holds one is linked into both rather than hand-rolled per suite. -->
+    <Compile Include="..\shared\InMemoryOutgoingEmailStore.cs" Link="InMemoryOutgoingEmailStore.cs" />
+    <!-- A conversation is assembled by the use case here and by the tools that publish it, and both depend on the same
+         four guarantees the real reader's query makes. -->
+    <Compile Include="..\shared\StubEmailThreadReader.cs" Link="StubEmailThreadReader.cs" />
     <!-- The body text is the one mail-rule fact whose resolution costs a read, and both this project and
          Infrastructure.UnitTests prove a claim about how often it happens. -->
     <Compile Include="..\shared\RecordingMailRuleBodyTextReader.cs" Link="RecordingMailRuleBodyTextReader.cs" />

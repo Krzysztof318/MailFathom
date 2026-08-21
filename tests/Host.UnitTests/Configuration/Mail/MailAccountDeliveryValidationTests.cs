@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.ComponentModel.DataAnnotations;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration.Mail;
@@ -23,10 +22,10 @@ public sealed class MailAccountDeliveryValidationTests
     public void Validate_AccountConfiguringNoSubmissionEndpoint_ReportsNoError()
     {
         // Arrange
-        var options = CreateOptions(CreateAccount());
+        var options = ConfiguredMailAccounts.Holding(ConfiguredMailAccounts.Primary());
 
         // Act
-        var results = Validate(options);
+        var results = ConfiguredMailAccounts.Validate(options);
 
         // Assert
         Assert.Empty(results);
@@ -38,12 +37,12 @@ public sealed class MailAccountDeliveryValidationTests
     public void Validate_CompleteSubmissionEndpoint_ReportsNoErrorAndPublishesItsPolicy()
     {
         // Arrange
-        var account = CreateAccount();
-        account.Delivery = CreateDelivery();
-        var options = CreateOptions(account);
+        var account = ConfiguredMailAccounts.Primary();
+        account.Delivery = ConfiguredMailAccounts.Delivery();
+        var options = ConfiguredMailAccounts.Holding(account);
 
         // Act
-        var results = Validate(options);
+        var results = ConfiguredMailAccounts.Validate(options);
 
         // Assert
         Assert.Empty(results);
@@ -59,10 +58,10 @@ public sealed class MailAccountDeliveryValidationTests
     public void GetDeliveryPolicy_EndpointsWithDifferentConnectionSecurity_ReadsEachUnderItsOwn()
     {
         // Arrange
-        var account = CreateAccount();
+        var account = ConfiguredMailAccounts.Primary();
         account.TransportSecurity.ConnectionSecurity = MailConnectionSecurity.TlsOnConnect;
-        account.Delivery = CreateDelivery();
-        var options = CreateOptions(account);
+        account.Delivery = ConfiguredMailAccounts.Delivery();
+        var options = ConfiguredMailAccounts.Holding(account);
 
         // Act
         var readingPolicy = options.GetPolicy(MailAccountId.Create("primary"));
@@ -87,12 +86,12 @@ public sealed class MailAccountDeliveryValidationTests
         MailTransportSecurityViolation expectedViolation)
     {
         // Arrange
-        var account = CreateAccount();
-        account.Delivery = CreateDelivery();
+        var account = ConfiguredMailAccounts.Primary();
+        account.Delivery = ConfiguredMailAccounts.Delivery();
         account.Delivery.ConnectionSecurity = connectionSecurity;
 
         // Act
-        var results = Validate(CreateOptions(account));
+        var results = ConfiguredMailAccounts.Validate(ConfiguredMailAccounts.Holding(account));
 
         // Assert
         Assert.Contains(
@@ -107,12 +106,12 @@ public sealed class MailAccountDeliveryValidationTests
     public void Validate_SubmissionEndpointWithAnUndefinedConnectionMode_IsRefused()
     {
         // Arrange
-        var account = CreateAccount();
-        account.Delivery = CreateDelivery();
+        var account = ConfiguredMailAccounts.Primary();
+        account.Delivery = ConfiguredMailAccounts.Delivery();
         account.Delivery.ConnectionSecurity = (MailConnectionSecurity)99;
 
         // Act
-        var results = Validate(CreateOptions(account));
+        var results = ConfiguredMailAccounts.Validate(ConfiguredMailAccounts.Holding(account));
 
         // Assert
         Assert.Contains(
@@ -129,12 +128,12 @@ public sealed class MailAccountDeliveryValidationTests
     public void Validate_SubmissionPortOutsideTheRange_IsRefused(int port)
     {
         // Arrange
-        var account = CreateAccount();
-        account.Delivery = CreateDelivery();
+        var account = ConfiguredMailAccounts.Primary();
+        account.Delivery = ConfiguredMailAccounts.Delivery();
         account.Delivery.Port = port;
 
         // Act
-        var results = Validate(CreateOptions(account));
+        var results = ConfiguredMailAccounts.Validate(ConfiguredMailAccounts.Holding(account));
 
         // Assert
         Assert.Contains(results, result => result.ErrorMessage!.Contains("submission port", StringComparison.Ordinal));
@@ -145,7 +144,7 @@ public sealed class MailAccountDeliveryValidationTests
     public void Validate_DeliveryCredentialWithoutASubmissionHost_IsRefused()
     {
         // Arrange
-        var account = CreateAccount();
+        var account = ConfiguredMailAccounts.Primary();
         account.Delivery = new MailAccountDeliveryOptions
         {
             Secrets = new MailAccountSecretOptions
@@ -155,7 +154,7 @@ public sealed class MailAccountDeliveryValidationTests
         };
 
         // Act
-        var results = Validate(CreateOptions(account));
+        var results = ConfiguredMailAccounts.Validate(ConfiguredMailAccounts.Holding(account));
 
         // Assert
         Assert.Contains(results, result => result.ErrorMessage!.Contains("no submission host", StringComparison.Ordinal));
@@ -169,14 +168,14 @@ public sealed class MailAccountDeliveryValidationTests
     public void Validate_SubmissionOnlyDeploymentWithNoCredentialAnywhere_IsRefused()
     {
         // Arrange
-        var account = CreateAccount();
+        var account = ConfiguredMailAccounts.Primary();
         account.Secrets = new MailAccountSecretOptions();
-        account.Delivery = CreateDelivery();
-        var options = CreateOptions(account);
+        account.Delivery = ConfiguredMailAccounts.Delivery();
+        var options = ConfiguredMailAccounts.Holding(account);
         options.Enabled = false;
 
         // Act
-        var results = Validate(options);
+        var results = ConfiguredMailAccounts.Validate(options);
 
         // Assert
         Assert.Contains(results, result => result.ErrorMessage!.Contains("no password secret reference", StringComparison.Ordinal));
@@ -187,13 +186,13 @@ public sealed class MailAccountDeliveryValidationTests
     public void Validate_SubmissionOnlyDeploymentInheritingTheAccountsCredential_ReportsNoError()
     {
         // Arrange
-        var account = CreateAccount();
-        account.Delivery = CreateDelivery();
-        var options = CreateOptions(account);
+        var account = ConfiguredMailAccounts.Primary();
+        account.Delivery = ConfiguredMailAccounts.Delivery();
+        var options = ConfiguredMailAccounts.Holding(account);
         options.Enabled = false;
 
         // Act
-        var results = Validate(options);
+        var results = ConfiguredMailAccounts.Validate(options);
 
         // Assert
         Assert.Empty(results);
@@ -204,12 +203,12 @@ public sealed class MailAccountDeliveryValidationTests
     public void ResolveUserName_DeliveryBlockNamingItsOwnLogin_PrefersItOverTheAccounts()
     {
         // Arrange
-        var delivery = CreateDelivery();
+        var delivery = ConfiguredMailAccounts.Delivery();
         delivery.UserName = "relay-user";
 
         // Act, Assert
         Assert.Equal("relay-user", delivery.ResolveUserName("mailfathom@example.test"));
-        Assert.Equal("mailfathom@example.test", CreateDelivery().ResolveUserName("mailfathom@example.test"));
+        Assert.Equal("mailfathom@example.test", ConfiguredMailAccounts.Delivery().ResolveUserName("mailfathom@example.test"));
     }
 
     /// <summary>A delivery secret block naming no reference reads as absent, so the account's credential is what is presented.</summary>
@@ -221,7 +220,7 @@ public sealed class MailAccountDeliveryValidationTests
         {
             Password = new ConfiguredSecret { SecretReference = "systemd-credential:imap-primary-password" },
         };
-        var delivery = CreateDelivery();
+        var delivery = ConfiguredMailAccounts.Delivery();
         delivery.Secrets = new MailAccountSecretOptions { Password = new ConfiguredSecret() };
 
         // Act, Assert
@@ -266,38 +265,10 @@ public sealed class MailAccountDeliveryValidationTests
         var options = new MailSynchronizationOptions { Enabled = false, Accounts = [account] };
 
         // Act
-        var results = Validate(options);
+        var results = ConfiguredMailAccounts.Validate(options);
 
         // Assert
         Assert.Empty(results);
         Assert.NotNull(options.FindSenderIdentity(MailAccountId.Create("primary")));
     }
-
-    private static IReadOnlyList<ValidationResult> Validate(MailSynchronizationOptions options) =>
-        [.. options.Validate(new ValidationContext(options))];
-
-    private static MailSynchronizationOptions CreateOptions(MailSynchronizationAccountOptions account) => new()
-    {
-        Enabled = true,
-        Accounts = [account],
-    };
-
-    private static MailSynchronizationAccountOptions CreateAccount() => new()
-    {
-        AccountId = "primary",
-        DisplayName = "The primary mailbox",
-        Host = "imap.example.test",
-        UserName = "mailfathom@example.test",
-        Secrets = new MailAccountSecretOptions
-        {
-            Password = new ConfiguredSecret { SecretReference = "systemd-credential:imap-primary-password" },
-        },
-    };
-
-    private static MailAccountDeliveryOptions CreateDelivery() => new()
-    {
-        Host = "smtp.example.test",
-        Port = 587,
-        ConnectionSecurity = MailConnectionSecurity.StartTlsRequired,
-    };
 }

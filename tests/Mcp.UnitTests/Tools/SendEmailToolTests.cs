@@ -17,7 +17,6 @@ using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
-using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
@@ -387,7 +386,7 @@ public sealed class SendEmailToolTests
         out IAuthoredEmailComposer composer,
         AccessAuthorization? authorization = null)
     {
-        composer = ComposerThatComposes();
+        composer = ComposingAuthoredEmails.ThatComposes(ComposedMime);
         var granted = authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend);
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
@@ -404,7 +403,7 @@ public sealed class SendEmailToolTests
             new NamedRecipientResolver(Substitute.For<IContactDirectory>()),
             composer,
             new MailOutbox(
-                OutgoingEmailStoreThatRecords(),
+                new InMemoryOutgoingEmailStore(timeProvider: new FakeTimeProvider(Recorded)),
                 Substitute.For<IEmailContentStore>(),
                 new OptimisticConcurrencyRetryPolicy(
                     sessionFactory,
@@ -419,90 +418,6 @@ public sealed class SendEmailToolTests
             AuthoredSendGovernors.Permitting(granted),
             granted,
             new FakeTimeProvider(Recorded)));
-    }
-
-    /// <summary>An outgoing store that keeps one record per idempotency identity, which is what the tool's retry claim rests on.</summary>
-    /// <remarks>
-    /// It is the port rather than a database, because what a tool test needs from it is the one behaviour a caller can
-    /// observe through this tool: the same key answers with the record the first call wrote. Everything else about the
-    /// row — the columns, the constraint, the stages — is the store's own suite and the integration suite's.
-    /// </remarks>
-    private static IOutgoingEmailStore OutgoingEmailStoreThatRecords()
-    {
-        var recordsByIdentity = new Dictionary<string, OutgoingEmailRecord>(StringComparer.Ordinal);
-        var store = Substitute.For<IOutgoingEmailStore>();
-        store
-            .OpenAsync(
-                Arg.Any<IPersistenceSession>(),
-                Arg.Any<OutgoingEmailRequest>(),
-                Arg.Any<OutgoingEmailPrincipal>(),
-                Arg.Any<long>(),
-                Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                var request = call.ArgAt<OutgoingEmailRequest>(1);
-                var identity = $"{request.AccountId.Value}\u0000{request.Requester.Identity}";
-
-                if (!recordsByIdentity.TryGetValue(identity, out var opened))
-                {
-                    opened = new OutgoingEmailRecord
-                    {
-                        Id = OutgoingEmailId.Create(Guid.CreateVersion7(Recorded)),
-                        AccountId = request.AccountId,
-                        Requester = request.Requester,
-                        Principal = call.ArgAt<OutgoingEmailPrincipal>(2),
-                        Recipients = [.. request.Recipients.Select(OutgoingRecipientOutcome.Unanswered)],
-                        Stage = OutgoingEmailStage.Recorded,
-                        MimeByteLength = call.ArgAt<long>(3),
-                        AttemptCount = 0,
-                        RecordedAt = Recorded,
-                        StageChangedAt = Recorded,
-                        AvailableAt = Recorded,
-                        DueAt = null,
-                        LastFailure = null,
-                        LastReplyCode = null,
-                        Filings = [],
-                        LastFilingFailure = null,
-                    };
-
-                    recordsByIdentity[identity] = opened;
-
-                    return OpenedOutgoingEmail.RecordedNow(opened);
-                }
-
-                return OpenedOutgoingEmail.AlreadyRecorded(opened);
-            });
-
-        return store;
-    }
-
-    /// <summary>A composer that produces a message from whatever it is handed, so a tool test says nothing about MIME.</summary>
-    private static IAuthoredEmailComposer ComposerThatComposes()
-    {
-        var composer = Substitute.For<IAuthoredEmailComposer>();
-        composer
-            .Compose(
-                Arg.Any<MailAccountId>(),
-                Arg.Any<OutgoingEmailRequester>(),
-                Arg.Any<AuthoredEmail>(),
-                Arg.Any<MailDeliveryCapabilities>())
-            .Returns(call =>
-            {
-                var authored = call.ArgAt<AuthoredEmail>(2);
-
-                return AuthoredEmailComposition.Composed(new ComposedOutgoingEmail(
-                    OutgoingEmailRequest.Create(
-                        call.ArgAt<MailAccountId>(0),
-                        call.ArgAt<OutgoingEmailRequester>(1),
-                        [.. authored.Recipients.Select(recipient => OutgoingRecipient.Create(
-                            Address(recipient.Address),
-                            recipient.Role,
-                            recipient.Contact))]),
-                    InternetMessageId.Mint("example.test"),
-                    ComposedMime));
-            });
-
-        return composer;
     }
 
     private static EmailAddress Address(string address)

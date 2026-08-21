@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
-using System.Text;
 using MailFathom.Cli.Administration;
 using MailFathom.TestSupport;
 
@@ -62,37 +61,26 @@ internal static class FakeSpamDeployment
     {
         var path = request.RequestUri?.AbsolutePath;
 
-        if (path == AdminEndpointRoutes.SessionPath)
-        {
-            return Json(
-                HttpStatusCode.OK,
-                FakeAdminEndpoint.SessionBody("workstation", FakeAdminEndpoint.CommandVersion));
-        }
-
         if (path == AdminEndpointRoutes.SpamClassificationRunsPath
             && request.Method == HttpMethod.Post
             && runStart is { } started)
         {
-            return Json(started.Status, started.Body);
+            return FakeAdminEndpoint.Json(started.Status, started.Body);
         }
 
         if (path == AdminEndpointRoutes.SpamClassificationRunsPath
             && request.Method == HttpMethod.Get
             && runState is { } stateBody)
         {
-            return Json(HttpStatusCode.OK, stateBody);
+            return FakeAdminEndpoint.Json(HttpStatusCode.OK, stateBody);
         }
 
         if (path == AdminEndpointRoutes.SpamClassificationsPath && classifications is { } answered)
         {
-            return Json(answered.Status, answered.Body);
+            return FakeAdminEndpoint.Json(answered.Status, answered.Body);
         }
 
-        return Json(HttpStatusCode.NotFound, string.Empty);
+        return FakeAdminEndpoint.AnswerSession(request)
+            ?? FakeAdminEndpoint.Json(HttpStatusCode.NotFound, string.Empty);
     }
-
-    private static HttpResponseMessage Json(HttpStatusCode status, string body) => new(status)
-    {
-        Content = new StringContent(body, Encoding.UTF8, "application/json"),
-    };
 }
