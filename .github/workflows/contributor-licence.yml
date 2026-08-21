@@ -153,9 +153,12 @@ jobs:
             "$agreement_version" "$agreement_blob" "$signed"
 
       # The acceptance itself. Only a comment by the pull request's own author counts, which is what
-      # stops a third party from accepting an agreement on somebody else's behalf, and the sentence
-      # is matched on normalised text so that quoting, casing, and stray whitespace do not turn a
-      # plain acceptance into a rejection.
+      # stops a third party from accepting an agreement on somebody else's behalf, and the comment
+      # has to *be* the sentence rather than contain it. Casing, surrounding whitespace, and a
+      # trailing full stop are normalised away so that a plain acceptance is not read as a rejection;
+      # nothing else is. An acceptance is a legal act, and a contributor who pastes the sentence into
+      # a question about whether to accept it has not accepted it — a substring match cannot tell the
+      # two apart, and would record the wrong one as binding.
       - name: Record an acceptance posted on the pull request
         id: record
         if: >-
@@ -177,10 +180,18 @@ jobs:
           set -euo pipefail
 
           expected='i have read the mailfathom contributor licence agreement and i accept it'
+
+          # Lowercased, every run of whitespace collapsed to one space, then the leading and trailing
+          # spaces and one optional trailing full stop removed. What survives is compared for
+          # equality, so the comment has to be the sentence and nothing else.
           normalised=$(printf '%s' "$COMMENT_BODY" | tr '[:upper:]' '[:lower:]' | tr -s '[:space:]' ' ')
+          normalised=${normalised# }
+          normalised=${normalised% }
+          normalised=${normalised%.}
+          normalised=${normalised% }
 
           case "$normalised" in
-            *"$expected"*) ;;
+            "$expected") ;;
             *)
               echo 'The comment is not an acceptance; nothing recorded.'
               printf 'recorded=false\n' >> "$GITHUB_OUTPUT"
@@ -307,12 +318,22 @@ jobs:
 
           printf 'license/cla = %s (%s)\n' "$state" "$description"
 
-      # Asked for once per pull request rather than on every push. A contributor who has not answered
-      # yet has already been asked, and repeating it on each `synchronize` turns a request into a
-      # notification storm on exactly the pull request somebody is still working on.
+      # Asked for when the pull request opens or reopens, and on no other event. A contributor who
+      # has not answered yet has already been asked, so repeating it on each `synchronize` would turn
+      # a request into a notification storm on exactly the pull request somebody is still working on.
+      #
+      # Restricting the event is also what bounds the check-then-act race below to something that
+      # cannot happen twice: two pushes seconds apart raise two `synchronize` events, and each could
+      # read zero prior request comments before either posted, but neither of them reaches this step.
+      # `opened` fires once for a pull request by definition, and a `reopened` cannot coincide with
+      # it. The marker check stays as the second guard, and the residual it leaves — a duplicated
+      # comment, if GitHub ever delivered one of those two events twice — is cosmetic, which is why
+      # it is not worth the mechanism the register append carries. That one is compare-and-swap
+      # because losing an acceptance loses evidence; this one would only say the same thing twice.
       - name: Ask for the agreement
         if: >-
-          steps.subject.outputs.exempt == 'false'
+          (github.event.action == 'opened' || github.event.action == 'reopened')
+          && steps.subject.outputs.exempt == 'false'
           && steps.register.outputs.signed == 'false'
           && steps.record.outputs.recorded != 'true'
         env:
@@ -345,7 +366,7 @@ jobs:
 
           **You keep the copyright in what you wrote.** The agreement asks for two things Apache-2.0 section 5 does not carry: a licence broad enough that MailFathom can be published under other terms in future without tracing every past contributor, and your statement that the code was yours to give. It is worth the two minutes it takes to read.
 
-          To accept, reply on this pull request with exactly:
+          To accept, reply on this pull request with this sentence as the whole of your comment — nothing before it and nothing after, because an acceptance has to be unmistakable:
 
           \`\`\`text
           I have read the MailFathom Contributor Licence Agreement and I accept it.

@@ -702,10 +702,16 @@ request always carries a current answer rather than one from before the last pus
 who is the owner, a collaborator, or a bot earns `success` without being asked anything —
 `success` rather than nothing, because an absent status and one that has not run yet are
 indistinguishable. Everyone else earns it by replying to their own pull request with the
-sentence `CLA.md` names; the workflow appends an entry to `signatures.json` on the
-`cla-signatures` branch and the status turns green. The request is made once per pull
-request rather than on every push, because a contributor who has not answered has already
-been asked.
+sentence `CLA.md` names, as the whole of the comment; the workflow appends an entry to
+`signatures.json` on the `cla-signatures` branch and the status turns green. The sentence has
+to *be* the comment rather than appear in it, because an acceptance is a legal act and a
+contributor quoting it inside a question about whether to accept has not accepted — casing,
+surrounding whitespace, and a trailing full stop are normalised away, and nothing else is.
+
+The request is made when the pull request opens or reopens, and on no other event. A
+contributor who has not answered has already been asked, so asking again on every push would
+be a notification storm; and confining it to those two events is also what keeps two pushes
+seconds apart from each reading zero prior requests and both posting one.
 
 Two properties are the whole of why this is safe to run with the App's token, and both are
 asserted by `only_the_recorded_workflows_use_pull_request_target` rather than left to this

@@ -119,11 +119,17 @@ Accepting is one comment on your pull request, from the GitHub account that auth
 I have read the MailFathom Contributor Licence Agreement and I accept it.
 ```
 
-The `Fathom license` workflow reads the comment, records the acceptance, and turns the `license/cla`
-status green. What it records — your GitHub account and its numeric id, the pull request and the comment
-that carried the acceptance, the version of this agreement, and the commit this file stood at — lives on
-the `cla-signatures` branch of this repository, in the open, and is not sent anywhere else. That record
-is the evidence the agreement exists; it holds no more of your data than the pull request already does.
+Post that sentence as the whole of your comment, with nothing before it and nothing after. Casing,
+surrounding whitespace, and a trailing full stop are ignored; anything else is not, because a sentence
+quoted inside a question about whether to accept is not an acceptance and nothing reading the comment
+afterwards could tell the two apart.
+
+The `Contributor licence` workflow reads the comment, records the acceptance, and turns the
+`license/cla` status green. What it records — your GitHub account and its numeric id, the pull request
+and the comment that carried the acceptance, the version of this agreement, and the exact revision of
+this file you accepted — lives on the `cla-signatures` branch of this repository, in the open, and is
+not sent anywhere else. That record is the evidence the agreement exists; it holds no more of your data
+than the pull request already does.
 
 Once recorded, you never do this again. A later version of this agreement is a new acceptance, asked for
 in the same way.
