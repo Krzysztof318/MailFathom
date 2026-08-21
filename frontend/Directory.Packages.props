@@ -1,0 +1,26 @@
+<Project>
+  <!-- The client stack's package pins, and only its own. Nothing is shared with backend/Directory.Packages.props: a
+       version that appears in both is written twice on purpose, because the two stacks move independently and a single
+       file above them would make every backend bump a client bump as well.
+
+       What is absent here is the larger half of what the client restores. Uno.Sdk supplies the version of every Uno
+       package a head pulls in, chosen from the SDK version pinned in the repository-root global.json and from the
+       `UnoFeatures` the project declares, so upgrading Uno is a change to that one pin rather than to a list of
+       thirty. See https://aka.platform.uno/using-uno-sdk#implicit-packages. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.302" />
+    <PackageVersion Include="Roslynator.Analyzers" Version="4.13.1" />
+    <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="4.13.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="coverlet.MTP" Version="10.0.1" />
+    <PackageVersion Include="xunit.analyzers" Version="1.27.0" />
+    <PackageVersion Include="xunit.v3.mtp-v2" Version="3.2.2" />
+  </ItemGroup>
+</Project>
