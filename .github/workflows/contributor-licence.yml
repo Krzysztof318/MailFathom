@@ -35,6 +35,11 @@ jobs:
     name: Record the contributor's acceptance
     runs-on: ubuntu-latest
 
+    # A handful of sequential API calls and, at worst, five retries with a few seconds of backoff
+    # between them: this job finishes in under a minute or it has hung. Without a ceiling it would sit
+    # on the Actions default of six hours, holding a runner and telling nobody anything.
+    timeout-minutes: 10
+
     # An `issue_comment` fires for an issue as readily as for a pull request, and the two are the
     # same event with a different payload. A comment on a closed or merged pull request is ignored
     # too: an acceptance is asked for while the contribution is still open, and recording one
@@ -270,6 +275,10 @@ jobs:
             attempt=$(( attempt + 1 ))
           done
 
+          # The acceptance was valid and the register would not take it. That is not the same outcome
+          # as never having accepted, and the status step needs to be able to tell them apart — so
+          # the outcome is written before the failure rather than left absent by it.
+          printf 'recorded=error\n' >> "$GITHUB_OUTPUT"
           echo '::error::The register could not be updated after five attempts'
           exit 1
 
@@ -296,6 +305,13 @@ jobs:
           elif [ "$SIGNED" = 'true' ] || [ "$RECORDED" = 'true' ]; then
             state=success
             description='The contributor licence agreement has been accepted'
+          elif [ "$RECORDED" = 'error' ]; then
+            # A valid acceptance the register refused. Same reasoning as the branch below and the
+            # opposite side of it: telling a contributor who did accept that they have not is worse
+            # than telling them the machinery broke, because only one of those two sends them to do
+            # something that cannot help.
+            state=error
+            description='The acceptance was read but could not be recorded; the register rejected the write'
           elif [ -z "$SIGNED" ]; then
             # The register step neither ran nor answered, which is this repository being broken
             # rather than the contributor owing anything. `error` rather than `failure` so the

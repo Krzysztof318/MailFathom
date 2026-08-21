@@ -43,7 +43,7 @@ Chosen option: "collected by this repository's own workflow, recorded on a branc
 
 The agreement is assignable, and that clause is there for the same reason the agreement is. The rights are held today by a natural person; they may later be held by a company the owner forms or by an acquirer, and under Polish law a transfer of economic copyright is void unless made in writing. An agreement naming only the present holder would leave every contributor to be found again at exactly the moment that is most expensive — which is the failure this decision exists to prevent, one level up. Clause 2.4 therefore names the successor in advance and takes nothing further from the contributor: an assignee stands in the owner's place and can enlarge nothing that was granted.
 
-Acceptance is one comment on the pull request the contributor already opened, from the account that authored it. The `Contributor licence` workflow reads the comment, appends an entry to `signatures.json` on the `cla-signatures` branch, and publishes a `license/cla` commit status. An author who is the owner, a collaborator, or a bot is passed without being asked.
+Acceptance is one comment on the pull request the contributor already opened, from the account that authored it. The `Contributor licence` workflow reads the comment, appends an entry to `signatures.json` on the `cla-signatures` branch, and publishes a `license/cla` commit status. An author whose `author_association` is `OWNER`, `COLLABORATOR`, or `MEMBER`, or whose account is a bot, is passed without being asked — those are the accounts that already hold write access, and the third of them arises only if this repository ever moves under an organisation.
 
 Three consequences of that shape are decisions in their own right:
 

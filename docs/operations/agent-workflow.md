@@ -699,7 +699,9 @@ than containing it.
 
 What it derives is one commit status, `license/cla`, published on every run so a pull
 request always carries a current answer rather than one from before the last push. An author
-who is the owner, a collaborator, or a bot earns `success` without being asked anything —
+who is the owner, a collaborator, an organisation member where the repository is owned by
+one, or a bot earns `success` without being asked anything — those are the accounts that
+already hold write access here, and the workflow reads them off `author_association` —
 `success` rather than nothing, because an absent status and one that has not run yet are
 indistinguishable. Everyone else earns it by replying to their own pull request with the
 sentence `CLA.md` names, as the whole of the comment; the workflow appends an entry to
