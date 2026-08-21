@@ -18,6 +18,9 @@ namespace MailFathom.Host.Configuration.Mail;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed class MailboxSearchOptions
 {
+    /// <summary>The configuration section these settings are bound from.</summary>
+    public const string SectionName = "MailboxSearch";
+
     /// <summary>Gets or sets how many highlighted extracts one search result may carry.</summary>
     [Range(1, EmailSearchSnippetBounds.MaximumSnippetsPerEmail)]
     public int SnippetsPerEmail { get; set; } = EmailSearchSnippetBounds.Default.SnippetsPerEmail;

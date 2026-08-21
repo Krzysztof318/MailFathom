@@ -28,6 +28,9 @@ namespace MailFathom.Host.Configuration.Embeddings;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed class EmbeddingOptions : IValidatableObject
 {
+    /// <summary>The configuration section these settings are bound from.</summary>
+    public const string SectionName = "Embeddings";
+
     /// <summary>The characters one period may send where a deployment declares no ceiling of its own.</summary>
     /// <remarks>
     /// Fifty million characters a day is roughly twelve million tokens, which at the price of a small embedding model

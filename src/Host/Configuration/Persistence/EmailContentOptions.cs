@@ -26,6 +26,9 @@ namespace MailFathom.Host.Configuration.Persistence;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed class EmailContentOptions : IValidatableObject
 {
+    /// <summary>The configuration section these settings are bound from.</summary>
+    public const string SectionName = "EmailContent";
+
     /// <summary>Gets or sets the maximum number of characters one body representation returns.</summary>
     /// <remarks>
     /// <para>

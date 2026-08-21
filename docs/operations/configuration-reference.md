@@ -60,6 +60,13 @@ constraint fails startup with the configuration path in the message. The two exc
 entries — `Logging` and `ConnectionStrings` — and the single-key `Secrets:Interpretation`, which is read with a
 default rather than bound as a section.
 
+**Against what.** These four pages are written for a reader, and a generated record sits beside them for a reviewer:
+`tests/PublicSurfaces.UnitTests/configuration-keys.txt` carries every key the host binds, the type it binds as, and
+whether the section is refused without it, rendered from the options classes themselves. It is the mechanical half of
+the same inventory — no defaults, no constraints, no prose — and it exists so that a key renamed, retyped, or removed
+appears as a diff in the pull request that did it. Where the two disagree, the generated file is what the code does and
+the table is what needs fixing.
+
 ## Environment-only settings
 
 A few settings are read from the environment alone, because they configure the process before configuration exists or

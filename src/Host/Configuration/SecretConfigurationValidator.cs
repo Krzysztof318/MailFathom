@@ -38,11 +38,11 @@ namespace MailFathom.Host.Configuration;
 /// </remarks>
 internal sealed partial class SecretConfigurationValidator
 {
-    private const string MailSynchronizationConfigurationPath = "MailSynchronization";
+    private const string MailSynchronizationConfigurationPath = MailSynchronizationOptions.SectionName;
 
-    private const string PersistenceConfigurationPath = "Persistence";
+    private const string PersistenceConfigurationPath = PersistenceOptions.SectionName;
 
-    private const string DataEncryptionConfigurationPath = "DataEncryption";
+    private const string DataEncryptionConfigurationPath = DataEncryptionOptions.SectionName;
 
     private readonly TimeProvider timeProvider;
 

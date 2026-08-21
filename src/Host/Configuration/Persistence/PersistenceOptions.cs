@@ -18,6 +18,9 @@ namespace MailFathom.Host.Configuration.Persistence;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed class PersistenceOptions : IValidatableObject
 {
+    /// <summary>The configuration section these settings are bound from.</summary>
+    public const string SectionName = "Persistence";
+
     /// <summary>Gets or sets the maximum number of complete local write attempts after concurrency conflicts, including the first attempt.</summary>
     [Range(1, 10)]
     public int MaximumConcurrencyCommitAttempts { get; set; } = 2;

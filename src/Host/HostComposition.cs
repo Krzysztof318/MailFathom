@@ -152,7 +152,7 @@ internal static class HostComposition
         // "PermittedAuthenticationMechanism" would otherwise be ignored and silently replaced by the default allow-list.
         builder.Services.AddOptions<MailSynchronizationOptions>()
             .Bind(
-                builder.Configuration.GetSection("MailSynchronization"),
+                builder.Configuration.GetSection(MailSynchronizationOptions.SectionName),
                 binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             .ValidateDataAnnotations()
             .ValidateOnStart();
@@ -167,13 +167,13 @@ internal static class HostComposition
         // is what a shutdown budget is by nature.
         builder.Services.Configure<HostOptions>(hostOptions => hostOptions.ShutdownTimeout =
             MailSynchronizationOptions.ResolveHostShutdownBudget(builder.Configuration.GetValue(
-                "MailSynchronization:ShutdownDrainTimeout",
+                $"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.ShutdownDrainTimeout)}",
                 new MailSynchronizationOptions().ShutdownDrainTimeout)));
         // Bound strictly for the same reason as mail transport: a misspelled "Passwrod" would leave the secret block
         // undiscovered, start the host on a passwordless connection string, and surface as an authentication failure later.
         builder.Services.AddOptions<PersistenceOptions>()
             .Bind(
-                builder.Configuration.GetSection("Persistence"),
+                builder.Configuration.GetSection(PersistenceOptions.SectionName),
                 binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             .ValidateDataAnnotations()
             .ValidateOnStart();
@@ -181,19 +181,19 @@ internal static class HostComposition
         // undiscovered and search would quietly keep showing the default amount of every matched message.
         builder.Services.AddOptions<MailboxSearchOptions>()
             .Bind(
-                builder.Configuration.GetSection("MailboxSearch"),
+                builder.Configuration.GetSection(MailboxSearchOptions.SectionName),
                 binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             .ValidateDataAnnotations()
             .ValidateOnStart();
         builder.Services.AddOptions<MailExtractionBackfillOptions>()
             .Bind(
-                builder.Configuration.GetSection("MailExtractionBackfill"),
+                builder.Configuration.GetSection(MailExtractionBackfillOptions.SectionName),
                 binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             .ValidateDataAnnotations()
             .ValidateOnStart();
         builder.Services.AddOptions<EmailContentOptions>()
             .Bind(
-                builder.Configuration.GetSection("EmailContent"),
+                builder.Configuration.GetSection(EmailContentOptions.SectionName),
                 binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             .ValidateDataAnnotations()
             .ValidateOnStart();
@@ -218,7 +218,7 @@ internal static class HostComposition
         // ADR 0006 makes a supported state rather than a startup failure.
         builder.Services.AddOptions<EmbeddingOptions>()
             .Bind(
-                builder.Configuration.GetSection("Embeddings"),
+                builder.Configuration.GetSection(EmbeddingOptions.SectionName),
                 binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             .ValidateDataAnnotations()
             .ValidateOnStart();
@@ -251,7 +251,7 @@ internal static class HostComposition
         // through the mail it already had is a rate an operator changes while watching a provider bill.
         builder.Services.AddOptions<EmbeddingBackfillOptions>()
             .Bind(
-                builder.Configuration.GetSection("EmbeddingBackfill"),
+                builder.Configuration.GetSection(EmbeddingBackfillOptions.SectionName),
                 binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             .ValidateDataAnnotations()
             .ValidateOnStart();
@@ -260,7 +260,7 @@ internal static class HostComposition
         // instance the queue may take belongs here.
         builder.Services.AddOptions<JobQueueOptions>()
             .Bind(
-                builder.Configuration.GetSection("Jobs"),
+                builder.Configuration.GetSection(JobQueueOptions.SectionName),
                 binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             .ValidateDataAnnotations()
             .ValidateOnStart();
@@ -269,7 +269,7 @@ internal static class HostComposition
         // secret-name uniqueness scope. ADR 0005 records the whole decision.
         builder.Services.AddOptions<DataEncryptionOptions>()
             .Bind(
-                builder.Configuration.GetSection("DataEncryption"),
+                builder.Configuration.GetSection(DataEncryptionOptions.SectionName),
                 binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             .ValidateDataAnnotations()
             .ValidateOnStart();
@@ -745,7 +745,7 @@ internal static class HostComposition
         // embeds at all decides which services exist, and that decision is taken before the container that would resolve
         // an options snapshot. Only the presence of a chain is read this way — every rule about what the chain declares is
         // validated on start, where a failure reports every problem at once instead of the first one to be built.
-        var declaredEmbeddings = builder.Configuration.GetSection("Embeddings").Get<EmbeddingOptions>();
+        var declaredEmbeddings = builder.Configuration.GetSection(EmbeddingOptions.SectionName).Get<EmbeddingOptions>();
 
         // Registered whichever way that reads, because the synchronization run offers every committed message into the
         // backlog and does not ask whether anything is embedding: an instance with no provider simply holds a backlog nobody
