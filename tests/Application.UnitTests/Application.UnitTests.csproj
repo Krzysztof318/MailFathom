@@ -3,10 +3,16 @@
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="xunit.v3.mtp-v2" />
+
+    <!-- The generator the property tests state their invariants over, reached through PropertyCheck below. -->
+    <PackageReference Include="CsCheck" />
   </ItemGroup>
 
   <ItemGroup>
     <Compile Include="..\shared\ExceptionHierarchyAssertion.cs" Link="ExceptionHierarchyAssertion.cs" />
+    <!-- Every property in the repository is sampled through one set of settings, so the wrapper that fixes them is
+         linked into each suite holding a property rather than restated per project. -->
+    <Compile Include="..\shared\PropertyCheck.cs" Link="PropertyCheck.cs" />
     <!-- Every use case behind a protected surface takes the authorization, so the principal a test states is composed
          the same way wherever one is arranged rather than once per suite. -->
     <Compile Include="..\shared\AccessAuthorizations.cs" Link="AccessAuthorizations.cs" />
