@@ -25,7 +25,9 @@ namespace MailFathom.Application.Mail.Delivery.Filing;
 /// <b>The order of the two writes is the whole of the safety here.</b> An <c>APPEND</c> issued twice is a second
 /// message in somebody's folder rather than a repeat of the first, and nothing that folder shows afterwards tells the
 /// two apart. So the caller's record of the copy is made durable before the command goes out, and everything that can
-/// fail without reaching a mail server happens before that write. The two writes are the caller's because the row they
+/// fail without leaving a copy in the folder happens before that write. Opening the session does reach the server —
+/// it connects, authenticates, and selects the folder — but none of that puts a message anywhere, which is what makes
+/// an attempt that ended before the issued write repeatable. The two writes are the caller's because the row they
 /// move belongs to the caller, but when each of them runs is not: they are taken as callbacks so the ordering cannot
 /// hold on one filing path and lapse on another.
 /// </para>
@@ -100,9 +102,11 @@ public sealed class MailboxCopyAppender
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="source" />, <paramref name="recordIssuedAsync" />, or <paramref name="recordConfirmedAsync" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="filing" /> is the unspecified struct default.</exception>
     /// <remarks>
-    /// A caller that stops before the issued write gets an <see cref="OperationCanceledException" /> and a mail server
-    /// that was never reached, so the next pass files the copy as though this attempt had never started. Past that
-    /// write nothing is raised, because a shutdown there says nothing about a command that may already be in flight.
+    /// A caller that stops before the issued write gets an <see cref="OperationCanceledException" /> and no
+    /// <c>APPEND</c> issued, so the next pass files the copy as though this attempt had never started. That says
+    /// nothing about whether the server was reached: a stop while the session is opening can arrive after the
+    /// connection, the authentication, or the folder selection, none of which leaves anything in the folder. Past the
+    /// issued write nothing is raised, because a shutdown there says nothing about a command that may be in flight.
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Past the issued write the append may already have reached the folder, so every way it can end has to be recorded as an outcome nobody can settle rather than raised into a retry that would file a second copy.")]
     public async Task<MailboxCopyAppendResult> AppendAsync(
@@ -144,7 +148,7 @@ public sealed class MailboxCopyAppender
             transportSecurityPolicy,
             cancellationToken);
 
-        // Written only once everything that could fail without reaching a mail server already has. From here on a
+        // Written only once everything that can fail without leaving a copy in the folder already has. From here on a
         // failure leaves the caller's row saying the append may have happened, which is what stops a second copy — so
         // anything that can be established first is established first.
         await recordIssuedAsync(destination.Binding, cancellationToken);
