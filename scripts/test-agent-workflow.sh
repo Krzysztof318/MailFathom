@@ -7194,6 +7194,41 @@ workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/.github/pull-request/call-github-api.sh" ]]
 }
 
+# `scripts/update-dependencies.sh` surveys by default and writes only when it is told to, and the
+# three refusals below are what keeps that true from the outside. `--verify` runs the full gate, and
+# a gate is worth something only over a tree the run that started it changed — asking for one after a
+# read-only survey would prove the branch as it already stood and report it as the update having been
+# verified. The unknown-argument refusals are the other half of the same property: a mistyped flag
+# that fell through to the default would be a survey silently doing something else.
+#
+# Nothing here reaches the network, which is what makes it a contract rather than a run: every path
+# asserted below is decided before the first pin is read.
+the_dependency_survey_refuses_what_would_write_without_being_asked() {
+  local script="$source_repository_root/scripts/update-dependencies.sh"
+
+  [[ -x "$script" ]] || {
+    printf 'scripts/update-dependencies.sh is not executable\n' >&2
+    return 1
+  }
+
+  if "$script" --verify > /dev/null 2>&1; then
+    printf 'update-dependencies.sh accepted --verify with no --apply beside it\n' >&2
+    return 1
+  fi
+
+  if "$script" --only nothing > /dev/null 2>&1; then
+    printf 'update-dependencies.sh accepted an unknown family\n' >&2
+    return 1
+  fi
+
+  if "$script" --rewrite-everything > /dev/null 2>&1; then
+    printf 'update-dependencies.sh accepted an unknown argument\n' >&2
+    return 1
+  fi
+
+  "$script" --help > /dev/null
+}
+
 # The per-file licensing mark, everywhere the analyzer that applies it cannot reach. IDE0073 reads
 # C# and rewrites a `.cs` header to match `file_header_template`, so the source files stay consistent
 # without anyone typing one; the workflows, the scripts, the chart, the unit sources, and the skills
@@ -7725,6 +7760,7 @@ run_test the_required_check_aggregates_every_job_in_ci
 run_test the_stacks_change_filters_name_no_path_in_each_other
 run_test the_gates_decide_from_the_change_filters_ci_declares
 run_test workflow_scripts_use_flat_manual_layout
+run_test the_dependency_survey_refuses_what_would_write_without_being_asked
 run_test every_yaml_file_carries_the_license_header
 run_test every_browser_asset_carries_the_license_header
 run_test every_container_unit_carries_the_license_header
