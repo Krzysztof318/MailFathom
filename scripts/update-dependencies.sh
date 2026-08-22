@@ -50,8 +50,10 @@ set -euo pipefail
 readonly usage='Usage: scripts/update-dependencies.sh [--apply] [--verify] [--only nuget|tools|sdk|actions|images]'
 
 # Ordered longest first, because a shorter alternative that is a prefix of a longer one would otherwise win: without it
-# `Apache-2.0` in a register row reads as no match at all and `BSD-3-Clause` reads as `BSD`.
-readonly licence_pattern='Apache-2\.0|BSD-3-Clause|BSD-2-Clause|PostgreSQL License|LGPL-[0-9.]+(-or-later|-only)?|NOASSERTION|MPL-2\.0|CC-BY-[0-9.]+|Unicode|MS-PL|MIT|ISC|CC0'
+# `Apache-2.0` in a register row reads as no match at all and `BSD-3-Clause` reads as `BSD`. `PostgreSQL License` sits
+# ahead of the bare `PostgreSQL` for the same reason — the register writes the licence's full name where a package's own
+# metadata declares the SPDX identifier, and both have to resolve to the same thing.
+readonly licence_pattern='Apache-2\.0|BSD-3-Clause|BSD-2-Clause|PostgreSQL License|LGPL-[0-9.]+(-or-later|-only)?|NOASSERTION|PostgreSQL|MPL-2\.0|CC-BY-[0-9.]+|Unicode|MS-PL|MIT|ISC|CC0'
 
 readonly register_file='THIRD_PARTY_LICENSES.md'
 readonly global_json='global.json'
@@ -206,20 +208,37 @@ github_version_tags() {
 
 ### The register side. Both readers are pattern reads over prose and are reported as such.
 
+# Escapes a component name for use inside an extended regular expression, so a dot in a package identifier matches a dot
+# rather than any character.
+as_pattern() {
+  sed -E 's#[][\\.*^$/+?(){}|]#\\&#g' <<< "$1"
+}
+
+# The register names a component inside prose, so a mention is matched as a whole identifier rather than as a substring:
+# every character an identifier can carry is refused on both sides of it. Without that boundary,
+# `Npgsql.EntityFrameworkCore.PostgreSQL` reads the row for `Aspire.Npgsql.EntityFrameworkCore.PostgreSQL` as its own and
+# comes back recording that row's licence beside its own — a widened set that could absorb the very change the licence
+# column exists to show. `Microsoft.Extensions.AI` against `Microsoft.Extensions.AI.Abstractions` is the same collision
+# one level up.
+#
+# What the boundary does not fix is prose naming a component without a version, which is why this stays a pattern read
+# reported as one rather than a lookup: the row is where a disagreement is confirmed.
+register_mentions() {
+  grep -nE "(^|[^A-Za-z0-9._/-])$(as_pattern "$1")([^A-Za-z0-9._-]|$)" "$register_file" 2> /dev/null || true
+}
+
 register_recorded_licences() {
   local recorded
-  recorded="$(grep -F -- "$1" "$register_file" 2> /dev/null | grep -oE "$licence_pattern" | sort -u | paste -sd',' -)" || true
+  recorded="$(register_mentions "$1" | grep -oE "$licence_pattern" | sort -u | paste -sd',' -)" || true
   [[ -z "$recorded" ]] && printf 'not-named' || printf '%s' "$recorded"
 }
 
-# A register row names a package as `MailKit 4.17.0` and an image as `pgvector/pgvector:0.8.6-pg18`, so both separators
-# are tried. Whichever matches, what comes back is a line number to open rather than an assertion about the row.
+# A register row names a package as `MailKit 4.17.0` and an image as `pgvector/pgvector:0.8.6-pg18`, so the separator is
+# left out of it: a mention of the component, on a line that also carries the version it moved from. What comes back is a
+# line number to open rather than an assertion about the row.
 register_lines_naming() {
   local lines
-  lines="$({
-    grep -nF -- "$1 $2" "$register_file" 2> /dev/null || true
-    grep -nF -- "$1:$2" "$register_file" 2> /dev/null || true
-  } | cut -d: -f1 | sort -un | paste -sd',' -)" || true
+  lines="$(register_mentions "$1" | grep -F -- "$2" | cut -d: -f1 | sort -un | paste -sd',' -)" || true
   [[ -z "$lines" ]] && printf 'none' || printf '%s' "$lines"
 }
 
@@ -379,24 +398,68 @@ collect_image_references() {
   fi
 }
 
-resolve_image_latest() {
-  local repository="$1" tag="$2" tag_pattern tags token
+# Which registry a reference lives in is decided once, because a tag list and a digest are read from the same host and
+# routing them separately is how one of them ends up asking Docker Hub for an image it does not serve. Anything without a
+# recognised host is Docker Hub, whether it was written with `docker.io/` in front of it or without.
+registry_of() {
+  case "$1" in
+    mcr.microsoft.com/*) printf 'mcr' ;;
+    ghcr.io/*) printf 'ghcr' ;;
+    *) printf 'dockerhub' ;;
+  esac
+}
 
-  case "$repository" in
-    mcr.microsoft.com/*)
-      tags="$(fetch "https://mcr.microsoft.com/v2/${repository#mcr.microsoft.com/}/tags/list" | jq -r '.tags[]?')" || true
+ghcr_pull_token() {
+  fetch "https://ghcr.io/token?scope=repository:${1#ghcr.io/}:pull&service=ghcr.io" | jq -r '.token // empty'
+}
+
+registry_tags() {
+  local repository="$1" token
+
+  case "$(registry_of "$repository")" in
+    mcr)
+      fetch "https://mcr.microsoft.com/v2/${repository#mcr.microsoft.com/}/tags/list" | jq -r '.tags[]?'
       ;;
-    ghcr.io/*)
-      token="$(fetch "https://ghcr.io/token?scope=repository:${repository#ghcr.io/}:pull&service=ghcr.io" | jq -r '.token // empty')" || true
-      [[ -n "$token" ]] &&
-        tags="$(fetch -H "Authorization: Bearer $token" "https://ghcr.io/v2/${repository#ghcr.io/}/tags/list" | jq -r '.tags[]?')" || true
+    ghcr)
+      token="$(ghcr_pull_token "$repository")" || true
+      [[ -n "${token:-}" ]] || return 0
+      fetch -H "Authorization: Bearer $token" "https://ghcr.io/v2/${repository#ghcr.io/}/tags/list" | jq -r '.tags[]?'
       ;;
     *)
-      # Everything else is Docker Hub, whether it was written with the registry host or without it.
-      tags="$(fetch "https://hub.docker.com/v2/repositories/${repository#docker.io/}/tags/?page_size=100" \
-        | jq -r '.results[]?.name')" || true
+      fetch "https://hub.docker.com/v2/repositories/${repository#docker.io/}/tags/?page_size=100" | jq -r '.results[]?.name'
       ;;
   esac
+}
+
+# What the repository's `latest` tag resolves to now, which is the only comparison a digest pin admits. The two registry
+# APIs answer it in a `Docker-Content-Digest` response header; Docker Hub's own API carries it as a field, and taking it
+# there avoids a second token exchange.
+registry_latest_digest() {
+  local repository="$1" token
+  local accept='application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json'
+
+  case "$(registry_of "$repository")" in
+    mcr)
+      fetch -I -H "Accept: $accept" "https://mcr.microsoft.com/v2/${repository#mcr.microsoft.com/}/manifests/latest" \
+        | tr -d '\r' | sed -n 's/^[Dd]ocker-[Cc]ontent-[Dd]igest: //p'
+      ;;
+    ghcr)
+      token="$(ghcr_pull_token "$repository")" || true
+      [[ -n "${token:-}" ]] || return 0
+      fetch -I -H "Authorization: Bearer $token" -H "Accept: $accept" \
+        "https://ghcr.io/v2/${repository#ghcr.io/}/manifests/latest" \
+        | tr -d '\r' | sed -n 's/^[Dd]ocker-[Cc]ontent-[Dd]igest: //p'
+      ;;
+    *)
+      fetch "https://hub.docker.com/v2/repositories/${repository#docker.io/}/tags/latest" | jq -r '.digest // empty'
+      ;;
+  esac
+}
+
+resolve_image_latest() {
+  local repository="$1" tag="$2" tag_pattern tags
+
+  tags="$(registry_tags "$repository")" || true
 
   [[ -n "${tags:-}" ]] || { printf 'unresolved'; return; }
 
@@ -414,9 +477,9 @@ resolve_image_latest() {
 }
 
 resolve_image_digest() {
-  local repository="$1" digest
+  local digest
 
-  digest="$(fetch "https://hub.docker.com/v2/repositories/${repository#docker.io/}/tags/latest" | jq -r '.digest // empty')" || true
+  digest="$(registry_latest_digest "$1")" || true
   [[ -z "$digest" ]] && printf 'unresolved' || printf '%s' "$digest"
 }
 
@@ -459,19 +522,26 @@ survey_image_pins() {
 # recorded *any* of what the upstream now declares. Flagging unless it recorded all of them would report a dual licence
 # as a change every time, which is the failure mode that trains a reader to stop looking.
 register_records_any_of() {
-  local declared="$1" recorded="$2" identifier
+  local declared="$1" recorded="$2" identifier found='false'
 
   # A here-string rather than a pipe into `grep -q`: `-q` exits on the first match, and under `pipefail` the SIGPIPE it
   # sends back reaches the pipeline's status as 141, which reads exactly like "no match".
   while read -r identifier; do
     [[ -n "$identifier" ]] || continue
+    found='true'
 
     if grep -qF -- "$identifier" <<< "$recorded"; then
       return 0
     fi
   done < <(grep -oE "$licence_pattern" <<< "$declared" || true)
 
-  return 1
+  # An identifier the list above does not know is a licence nobody here has met, not a licence that changed. Falling back
+  # to comparing the declared expression whole keeps the weaker answer instead of reporting a difference the reader would
+  # find is none — an unrecognised identifier is worth widening the list for, and worth reading the row for, but it is
+  # not evidence.
+  [[ "$found" == 'true' ]] && return 1
+
+  grep -qF -- "$declared" <<< "$recorded"
 }
 
 state_of() {
@@ -552,12 +622,30 @@ report() {
 
 ### Applying.
 
+# Writes one pin and answers whether it moved, which is not the same question as whether the write succeeded. `sed -i`
+# exits 0 whether or not it substituted anything, so its status says the file was opened rather than that the version
+# changed — and a `uses:` line carrying an inline comment after the reference is exactly the case where the two answers
+# differ, because the survey's extraction accepts trailing content and an end-anchored pattern does not. Comparing the
+# touched files before and after settles it for every family at once, so `--apply`'s report is what happened rather than
+# what was attempted.
 rewrite_pin() {
-  local family="$1" component="$2" pinned="$3" latest="$4" source="$5" temporary
+  local family="$1" component="$2" pinned="$3" latest="$4" source="$5"
+  local before after temporary reference="${component%@*}"
+  local -a touched=()
+
+  case "$family" in
+    nuget | tools | sdk) touched=("$source") ;;
+    actions) mapfile -t touched < <(grep -rlF "uses: $component" "$workflow_directory" 2> /dev/null || true) ;;
+    *) return 1 ;;
+  esac
+
+  ((${#touched[@]} > 0)) || return 1
+
+  before="$(cat "${touched[@]}" | cksum)"
 
   case "$family" in
     nuget)
-      sed -i -E "s|(<PackageVersion Include=\"${component//./\\.}\" Version=\")${pinned//./\\.}(\")|\1$latest\2|" "$source"
+      sed -i -E "s#(<PackageVersion Include=\"$(as_pattern "$component")\" Version=\")$(as_pattern "$pinned")(\")#\1$latest\2#" "$source"
       ;;
     tools)
       temporary="$work_directory/tools.json"
@@ -570,13 +658,18 @@ rewrite_pin() {
       mv "$temporary" "$source"
       ;;
     actions)
-      grep -rlF "uses: $component" "$workflow_directory" \
-        | xargs --no-run-if-empty sed -i "s|uses: ${component//./\\.}\$|uses: ${component%@*}@$latest|"
-      ;;
-    *)
-      return 1
+      # Two expressions rather than one anchored pattern: a reference at the end of its line, and a reference followed by
+      # anything an action reference cannot itself contain, which is where an inline comment sits.
+      sed -i -E \
+        -e "s#uses: $(as_pattern "$component")\$#uses: $reference@$latest#" \
+        -e "s#uses: $(as_pattern "$component")([^A-Za-z0-9._-])#uses: $reference@$latest\1#" \
+        "${touched[@]}"
       ;;
   esac
+
+  after="$(cat "${touched[@]}" | cksum)"
+
+  [[ "$before" != "$after" ]]
 }
 
 apply_moved_pins() {

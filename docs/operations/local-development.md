@@ -769,6 +769,8 @@ It never edits `THIRD_PARTY_LICENSES.md` either. A row there is a completed revi
 
 The survey needs the network: nuget.org, the .NET release index, GitHub through `gh`, and the three registries the images live in. It is not part of either verification script and nothing gates on it, for the reason [the actions section below](#keeping-the-pinned-actions-current) gives about proposals: what a dependency is worth updating to is a judgement each time, and this is the reading that makes the judgement cheap.
 
+Taking that judgement is the `update-dependencies` skill, which runs the survey before `start-task` — it writes nothing and needs no branch, so that order is what lets the issue describe pins whose state is known — then decides, then applies on the branch, then rewrites the register rows by hand from the line numbers the run printed. [Dependency update pull requests](agent-workflow.md#dependency-update-pull-requests) holds the four questions a bump answers and why no updater opens one here.
+
 ## Building and testing the client
 
 The client under `frontend/` is a second .NET stack with a solution, build files, and lock files of its own. Three

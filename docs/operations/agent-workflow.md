@@ -1974,6 +1974,19 @@ upstream patch arrives without a commit, and a major arrives when somebody looks
 updater is not what does it. A bump is therefore ordinary task-shaped work — a
 branch, an issue, and the skills — rather than a pull request that appears.
 
+`update-dependencies` is the skill for it, and it is entered only when the task
+in front of the session *is* a dependency update: a pin being behind is never a
+tidy-up to fold into an unrelated change. It runs the survey first, before
+`start-task`, because the survey writes nothing and needs no branch, and that
+order is what lets the issue describe a hundred pins whose state is known rather
+than an intention. Then the decision, which is the step with no command in it and
+which the four questions below are; then `--apply` on the branch, corrected
+against that decision, because the script moves every behind pin it can and is
+not where the decision was made; then the register, by hand, from the line
+numbers the run printed. The two pin families the script refuses to rewrite — the
+SDK floor, and a container image written across four assets — are refused by the
+skill too, and each is a task of its own.
+
 One author can still open one without a task behind it. `Dependabot security
 updates` is a repository setting, off today and one click from not being, and an
 advisory the owner decides to act on that way arrives as a pull request from
@@ -2047,6 +2060,7 @@ reached whenever its rule matters.
 | `docs/operations/local-development.md` | The SDK, database, packages, or Actions policy are involved | Root `AGENTS.md` and `CONTRIBUTING.md` both point at it for setup, and it is where the settings that live outside Git are recorded |
 | `.agents/skills/check-docs-licenses/SKILL.md` | Every change | It is the mandatory completion gate, so the licensing rules it holds are read on every change by construction |
 | `.agents/skills/add-migration/SKILL.md` | A model change needs a migration | Root `AGENTS.md` names it as the only way to add one |
+| `.agents/skills/update-dependencies/SKILL.md` | The task is to move dependency pins | Root `AGENTS.md` names it beside the survey script, and § *Dependency update pull requests* above names it where a bump is described |
 
 Each nested `CLAUDE.md` imports its sibling `AGENTS.md`.
 
