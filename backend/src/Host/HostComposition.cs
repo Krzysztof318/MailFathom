@@ -97,8 +97,13 @@ internal static class HostComposition
     internal const string AdminCertificateStoreKey = "mailfathom.admin";
 
     /// <summary>Tells the container which of the three certificate stores belongs to the client endpoint.</summary>
-    /// <remarks>Keyed for the reason the administrative one is, and beside it rather than sharing it: one endpoint's profiles must never decide what another presents.</remarks>
-    internal const string ClientCertificateStoreKey = "mailfathom.client";
+    /// <remarks>
+    /// Keyed for the reason the administrative one is, and beside it rather than sharing it: one endpoint's profiles
+    /// must never decide what another presents. It is named after the endpoint rather than after its certificates,
+    /// because a "client certificate" everywhere else in this project is the one a caller presents for mutual TLS,
+    /// and this store holds the server certificate the client surface presents to a caller.
+    /// </remarks>
+    internal const string ClientEndpointCertificateStoreKey = "mailfathom.client";
 
     /// <summary>Registers every service this process runs on.</summary>
     /// <param name="builder">The application builder being composed.</param>
@@ -1289,7 +1294,7 @@ internal static class HostComposition
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<ILogger<TransportServerCertificateStore>>()));
 
-        builder.Services.AddKeyedSingleton(ClientCertificateStoreKey, (provider, _) => new TransportServerCertificateStore(
+        builder.Services.AddKeyedSingleton(ClientEndpointCertificateStoreKey, (provider, _) => new TransportServerCertificateStore(
             clientEndpointSettings.Https,
             $"{ClientEndpointOptions.SectionName}:{nameof(ClientEndpointOptions.Https)}",
             provider.GetRequiredService<TlsServerCertificateLoader>(),
@@ -1346,7 +1351,7 @@ internal static class HostComposition
                         .GetRequiredKeyedService<TransportServerCertificateStore>(AdminCertificateStoreKey)
                         .Find(listener, serverName)
                     ?? kestrelOptions.ApplicationServices
-                        .GetRequiredKeyedService<TransportServerCertificateStore>(ClientCertificateStoreKey)
+                        .GetRequiredKeyedService<TransportServerCertificateStore>(ClientEndpointCertificateStoreKey)
                         .Find(listener, serverName),
                 kestrelOptions.ApplicationServices.GetRequiredService<HealthEndpointCertificate>));
         }
