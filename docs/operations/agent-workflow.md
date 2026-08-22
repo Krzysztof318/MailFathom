@@ -45,12 +45,12 @@ verifying pass — `scripts/verify-full.sh` for the server and the `Frontend` jo
 of `CI` for the client — which is how the two the client scaffold carried came to
 light at all.
 
-That argument belongs to the service solution alone, because the loop is the one
-thing here that formats the client without building it. A client diagnostic with
-no code fix is reported by the `Frontend` job of `CI` instead — its Release build
-fails on the rule through the same two properties in
-`frontend/Directory.Build.props`, and the `Verify formatting` step beside it
-reports whatever a repairing pass nobody ran would have rewritten.
+The three rules the build does report reach a client file later than they reach a
+service one, because the loop is the one thing here that formats the client
+without building it. `frontend/Directory.Build.props` sets the same two
+properties, so the `Frontend` job's Release build fails on them exactly as the
+service build does — but that job is in `CI`, and locally the loop repairs what
+it can and reports nothing.
 
 What the repairing pass is for is the remainder, which is real and is invisible
 to a build: the ordering of using directives and a missing final newline are

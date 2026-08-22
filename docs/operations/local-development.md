@@ -50,17 +50,21 @@ the file it points at, and it names the untracked paths no diff contains rather
 than describing less than the change while looking complete.
 
 The fast script restores the solution, builds it in Release configuration, runs
-all unit tests without rebuilding, and formats the C# files the branch changed.
-It is the only one that rewrites source files, and the one `dotnet format` pass
-it runs is a repairing one.
+all unit tests without rebuilding, and formats the C# files the branch changed —
+each against whichever of the two solutions holds it, which
+[Building and testing the client](#building-and-testing-the-client) describes for
+the client half. It is the only one that rewrites source files, and every
+`dotnet format` pass it runs is a repairing one.
 
-Nothing behind it verifies, because the build in front of it already reported.
-`backend/Directory.Build.props` sets `EnforceCodeStyleInBuild` beside
-`TreatWarningsAsErrors` and `.editorconfig` gives the IDE rules severity
-`warning`, so `IDE0005`, `IDE0055`, `IDE0073`, and `IDE0060` are build errors
-naming their file and line — a diagnostic with no code fix fails the script
-several steps before formatting is reached. What the repairing pass adds is what
-no build sees: the ordering of using directives and a missing final newline are
+Nothing behind it verifies, because the build in front of it has already reported
+most of what there is to report. `backend/Directory.Build.props` sets
+`EnforceCodeStyleInBuild` beside `TreatWarningsAsErrors` and `.editorconfig` gives
+the IDE rules severity `warning`, so `IDE0005`, `IDE0055`, and `IDE0073` are build
+errors naming their file and line, several steps before formatting is reached.
+`IDE0060` is the one that is neither: it has no code fix for the repairing pass to
+apply, and the Release build passes over it despite the same `warning` severity,
+so only a verifying pass ever names it. What the repairing pass adds is what no
+build sees: the ordering of using directives and a missing final newline are
 `dotnet format`'s own passes rather than analyzer rules, and both have code
 fixes, so rewriting them is the whole answer.
 
