@@ -7275,6 +7275,63 @@ every_browser_asset_carries_the_license_header() {
   (( failures == 0 ))
 }
 
+# MailFathom.code-workspace is what a contributor opens, because the repository root is not a solution
+# directory: each stack owns its own solution and a root opened on its own loads neither. Two things
+# about that file are contracts rather than preferences, and both are asserted here because both fail
+# silently — as an editor that loads nothing rather than as a build that stops.
+#
+# The first is the order of the folders. The Uno Platform extension resolves its solution from
+# `workspace.workspaceFolders[0]` and from nowhere else, and where it finds none it scans that one
+# directory for project files without descending. So `frontend` has to be listed first; with `backend`
+# there instead the extension would find a solution naming no Uno project, report `Uno SDK not found`,
+# and leave the client unavailable in the editor. Nothing else notices, which is why this does.
+#
+# The second is the licensing header. A `.code-workspace` is JSON with comments, so it carries the
+# module form of the three lines — the same `//` form a script under docfx/ uses — and no glob above
+# reaches it.
+the_editor_workspace_opens_the_client_first() {
+  local workspace="$source_repository_root/MailFathom.code-workspace"
+  local expected actual first_folder
+
+  if [[ ! -f "$workspace" ]]; then
+    printf 'MailFathom.code-workspace is missing; it is the documented way to open this repository\n' >&2
+    return 1
+  fi
+
+  expected="$(module_license_header)"
+  actual="$(head -n 3 "$workspace")"
+  if [[ "$actual" != "$expected" ]]; then
+    printf 'MailFathom.code-workspace does not open with the license header\n' >&2
+    return 1
+  fi
+
+  first_folder="$(awk '
+    /"folders"/ { in_folders = 1; next }
+    in_folders && /"path"/ {
+      match($0, /"path"[[:space:]]*:[[:space:]]*"[^"]*"/)
+      chunk = substr($0, RSTART, RLENGTH)
+      sub(/.*:[[:space:]]*"/, "", chunk)
+      sub(/"$/, "", chunk)
+      print chunk
+      exit
+    }
+  ' "$workspace")"
+
+  if [[ "$first_folder" != "frontend" ]]; then
+    printf 'MailFathom.code-workspace lists "%s" first. The Uno Platform extension reads workspaceFolders[0], so frontend has to be\n' \
+      "$first_folder" >&2
+    return 1
+  fi
+
+  if [[ ! -f "$source_repository_root/frontend/MailFathom.Client.slnx" ]] ||
+     [[ ! -f "$source_repository_root/backend/MailFathom.slnx" ]]; then
+    printf 'MailFathom.code-workspace names a folder whose solution is not where it says\n' >&2
+    return 1
+  fi
+
+  return 0
+}
+
 # The Podman Quadlet sources under deploy/quadlet/. A systemd unit file is an INI document whose
 # comment character is `#`, so it carries the same three lines a workflow does rather than a form of
 # its own — but no glob above reaches it, and Quadlet reads the extension rather than the content, so
@@ -7672,6 +7729,7 @@ run_test every_yaml_file_carries_the_license_header
 run_test every_browser_asset_carries_the_license_header
 run_test every_container_unit_carries_the_license_header
 run_test every_xaml_file_carries_the_license_header
+run_test the_editor_workspace_opens_the_client_first
 run_test every_shell_script_carries_the_license_header
 run_test every_skill_declares_its_license
 run_test no_tracked_text_file_carries_a_nul_byte
