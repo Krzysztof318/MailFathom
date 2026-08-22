@@ -7203,6 +7203,109 @@ workflow_scripts_use_flat_manual_layout() {
 #
 # Nothing here reaches the network, which is what makes it a contract rather than a run: every path
 # asserted below is decided before the first pin is read.
+# `rewrite_pin` is the only thing that writes a tracked pin file, it does so with `sed`, and the values it splices in
+# come from a remote server — which is exactly where an escaping defect already reached this script once. So the test
+# runs the real function text against fixtures rather than asserting anything about the survey around it: it sources
+# the three functions out of the script and gives them a temporary tree, which needs no network and no repository.
+#
+# Extracting by name is deliberate. A rename or a reshaped body fails this loudly, which is the right answer for a
+# function nothing else covers, and `source` rather than `eval` is what keeps the body from being expanded at the
+# moment it is defined.
+the_dependency_rewrite_encodes_a_hostile_version_into_a_pin_file() {
+  local script="$source_repository_root/scripts/update-dependencies.sh"
+  local fixture="$test_directory/dependency-rewrite"
+  # Every character the replacement side of a `sed` script gives its own meaning: the delimiter, the whole-match
+  # reference, and a backslash. A version this shape is not one nuget.org would publish; the point is that the writer
+  # never has to know that.
+  local hostile='9.9.9-rc.1&#\x'
+  local outcome
+
+  rm -rf "$fixture"
+  mkdir -p "$fixture/workflows"
+
+  cat > "$fixture/Directory.Packages.props" << 'PROPS'
+<Project>
+  <ItemGroup>
+    <PackageVersion Include="Some.Package" Version="1.0.0" />
+    <PackageVersion Include="Some.Package.Extras" Version="1.0.0" />
+  </ItemGroup>
+</Project>
+PROPS
+
+  cat > "$fixture/workflows/ci.yml" << 'WORKFLOW'
+jobs:
+  build:
+    steps:
+      - uses: owner/action@v1
+      - uses: owner/action@v1 # pinned for a reason this fixture does not care about
+      - uses: owner/action-extras@v1
+WORKFLOW
+
+  outcome="$(
+    set -uo pipefail
+    source <(
+      sed -n \
+        -e '/^as_pattern() {$/,/^}$/p' \
+        -e '/^as_replacement() {$/,/^}$/p' \
+        -e '/^rewrite_pin() {$/,/^}$/p' \
+        "$script"
+    )
+
+    work_directory="$fixture"
+    workflow_directory="$fixture/workflows"
+
+    rewrite_pin nuget 'Some.Package' '1.0.0' "$hostile" "$fixture/Directory.Packages.props" \
+      && printf 'nuget-moved\n'
+    rewrite_pin actions 'owner/action@v1' 'v1' "$hostile" '' \
+      && printf 'actions-moved\n'
+    # The same rewrite a second time changes nothing, and the answer has to be that nothing moved rather than that
+    # `sed` opened the file.
+    rewrite_pin nuget 'Some.Package' '1.0.0' "$hostile" "$fixture/Directory.Packages.props" \
+      || printf 'nuget-refused-a-second-time\n'
+  )"
+
+  local expected='nuget-moved
+actions-moved
+nuget-refused-a-second-time'
+
+  if [[ "$outcome" != "$expected" ]]; then
+    printf 'rewrite_pin reported %q where %q was expected\n' "$outcome" "$expected" >&2
+    return 1
+  fi
+
+  if ! grep -qF "<PackageVersion Include=\"Some.Package\" Version=\"$hostile\" />" "$fixture/Directory.Packages.props"; then
+    printf 'the package version was not written back verbatim:\n%s\n' \
+      "$(cat "$fixture/Directory.Packages.props")" >&2
+    return 1
+  fi
+
+  # The longer identifier shares a prefix with the shorter one, so a pattern that did not close on the quote would
+  # take both.
+  if ! grep -qF '<PackageVersion Include="Some.Package.Extras" Version="1.0.0" />' "$fixture/Directory.Packages.props"; then
+    printf 'a package sharing the rewritten one'"'"'s prefix was rewritten too:\n%s\n' \
+      "$(cat "$fixture/Directory.Packages.props")" >&2
+    return 1
+  fi
+
+  if [[ "$(grep -cF "uses: owner/action@$hostile" "$fixture/workflows/ci.yml")" != '2' ]]; then
+    printf 'both references were expected to move, including the one carrying a trailing comment:\n%s\n' \
+      "$(cat "$fixture/workflows/ci.yml")" >&2
+    return 1
+  fi
+
+  if ! grep -qF '# pinned for a reason this fixture does not care about' "$fixture/workflows/ci.yml"; then
+    printf 'the trailing comment did not survive the rewrite:\n%s\n' \
+      "$(cat "$fixture/workflows/ci.yml")" >&2
+    return 1
+  fi
+
+  if ! grep -qF 'uses: owner/action-extras@v1' "$fixture/workflows/ci.yml"; then
+    printf 'an action sharing the rewritten one'"'"'s prefix was rewritten too:\n%s\n' \
+      "$(cat "$fixture/workflows/ci.yml")" >&2
+    return 1
+  fi
+}
+
 the_dependency_survey_refuses_what_would_write_without_being_asked() {
   local script="$source_repository_root/scripts/update-dependencies.sh"
 
@@ -7761,6 +7864,7 @@ run_test the_stacks_change_filters_name_no_path_in_each_other
 run_test the_gates_decide_from_the_change_filters_ci_declares
 run_test workflow_scripts_use_flat_manual_layout
 run_test the_dependency_survey_refuses_what_would_write_without_being_asked
+run_test the_dependency_rewrite_encodes_a_hostile_version_into_a_pin_file
 run_test every_yaml_file_carries_the_license_header
 run_test every_browser_asset_carries_the_license_header
 run_test every_container_unit_carries_the_license_header
