@@ -179,12 +179,6 @@ public sealed class DeploymentSignIn
                 "The sign-in came back without an authorization code, so there was nothing to exchange.");
     }
 
-    /// <summary>Writes a query the way a form-encoded one is written.</summary>
-    /// <remarks>
-    /// Hand-rolled because <c>System.Web</c> is not part of a net10.0 library's framework, and because the alternative —
-    /// reading a <see cref="FormUrlEncodedContent" /> back as a string — would make building an address an asynchronous
-    /// operation for no gain.
-    /// </remarks>
     /// <summary>Adds this request's parameters to whatever query the authorization endpoint already publishes.</summary>
     /// <remarks>
     /// RFC 6749 section 3.1: an authorization endpoint may carry a query component of its own — a tenant's policy
@@ -199,6 +193,12 @@ public sealed class DeploymentSignIn
         return published.Length == 0 ? parameters : $"{published}&{parameters}";
     }
 
+    /// <summary>Writes a query the way a form-encoded one is written.</summary>
+    /// <remarks>
+    /// Hand-rolled because <c>System.Web</c> is not part of a net10.0 library's framework, and because the alternative —
+    /// reading a <see cref="FormUrlEncodedContent" /> back as a string — would make building an address an asynchronous
+    /// operation for no gain.
+    /// </remarks>
     private static string Encode(IEnumerable<KeyValuePair<string, string>> parameters) =>
         string.Join(
             '&',

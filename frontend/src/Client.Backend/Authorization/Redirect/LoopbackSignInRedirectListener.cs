@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net;
@@ -27,7 +28,7 @@ namespace MailFathom.Client.Backend.Authorization.Redirect;
 /// why the browser head supplies its own.
 /// </para>
 /// </remarks>
-public sealed class LoopbackSignInRedirectListener : ISignInRedirectListener
+internal sealed class LoopbackSignInRedirectListener : ISignInRedirectListener
 {
     private static readonly byte[] CompletionPage = Encoding.UTF8.GetBytes(
         """
@@ -63,7 +64,7 @@ public sealed class LoopbackSignInRedirectListener : ISignInRedirectListener
 
     /// <summary>Binds a free loopback port and prepares to answer one redirect on it.</summary>
     /// <exception cref="DeploymentFailure">Thrown when nothing on this machine can listen for the redirect.</exception>
-    public LoopbackSignInRedirectListener()
+    internal LoopbackSignInRedirectListener()
     {
         var port = ReserveLoopbackPort();
 
@@ -91,9 +92,10 @@ public sealed class LoopbackSignInRedirectListener : ISignInRedirectListener
 
     /// <inheritdoc />
     /// <remarks>
-    /// One redirect and no more. Anything arriving before it — a browser prefetch, a scan, a stale tab — is answered and
-    /// ignored rather than treated as the authorization, because only a request echoing the value this sign-in
-    /// generated can be the one that was waited for, and that comparison belongs to the caller.
+    /// Waits until a request carries something addressed to this flow. Anything arriving before it — a browser
+    /// prefetch, a scan, a stale tab — is answered and discarded rather than treated as the authorization, because a
+    /// port bound a moment ago answers whatever reaches it. Whether what arrives belongs to <em>this</em> sign-in is a
+    /// stronger question and stays the caller's: only the state comparison answers it.
     /// </remarks>
     public async Task<SignInRedirect> AuthorizeAsync(Uri authorizationUrl, CancellationToken cancellationToken)
     {
@@ -178,7 +180,7 @@ public sealed class LoopbackSignInRedirectListener : ISignInRedirectListener
             using var browser = Process.Start(
                 new ProcessStartInfo(authorizationUrl.AbsoluteUri) { UseShellExecute = true });
         }
-        catch (Exception failure) when (failure is System.ComponentModel.Win32Exception or PlatformNotSupportedException or InvalidOperationException)
+        catch (Exception failure) when (failure is Win32Exception or PlatformNotSupportedException or InvalidOperationException)
         {
             throw new DeploymentFailure(
                 DeploymentFailureReason.Unusable,
@@ -227,7 +229,7 @@ public sealed class LoopbackSignInRedirectListener : ISignInRedirectListener
 }
 
 /// <summary>Opens a loopback listener per sign-in, which is the default on every head that has sockets.</summary>
-public sealed class LoopbackSignInRedirectListenerFactory : ISignInRedirectListenerFactory
+internal sealed class LoopbackSignInRedirectListenerFactory : ISignInRedirectListenerFactory
 {
     /// <inheritdoc />
     public ISignInRedirectListener Open() => new LoopbackSignInRedirectListener();

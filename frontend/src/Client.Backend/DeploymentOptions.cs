@@ -62,10 +62,13 @@ public sealed record DeploymentOptions
         // An origin, not a mount point. MailFathom serves its client surface at /api/client and derives the resource
         // identifier a token is issued for from that same prefix, so there is no sub-path deployment to support — and a
         // path written here would be dropped silently when a route resolves against it, which is a deployment somebody
-        // configured and never reached, with nothing saying why.
+        // configured and never reached, with nothing saying why. Embedded credentials are refused by the same check
+        // rather than by one of their own: this client authenticates with the token it was issued, so a password in an
+        // address is a credential nothing here would use and everything here would carry.
         if (address.AbsolutePath != "/"
             || !string.IsNullOrEmpty(address.Query)
-            || !string.IsNullOrEmpty(address.Fragment))
+            || !string.IsNullOrEmpty(address.Fragment)
+            || !string.IsNullOrEmpty(address.UserInfo))
         {
             throw new ArgumentException(
                 $"'{address}' carries more than an origin. MailFathom serves the client surface at '{DeploymentRoutes.Prefix}', so state the scheme, host, and port and nothing else.",

@@ -63,10 +63,12 @@ public sealed class DeploymentOptionsTests
     [InlineData("https://mail.example/mailfathom/")]
     [InlineData("https://mail.example/?tenant=mail")]
     [InlineData("https://mail.example/#mail")]
+    [InlineData("https://somebody:secret@mail.example/")]
     public void Constructor_AnAddressCarryingMoreThanAnOrigin_IsRefusedRatherThanSilentlyDropped(string address)
     {
         // Arrange, Act, Assert
-        // A route resolves against the origin, so a path written here would never be reached and nothing would say so.
+        // A route resolves against the origin, so a path written here would never be reached and nothing would say so,
+        // and a credential written into the address would be carried on every request instead of being dropped.
         Assert.Throws<ArgumentException>(
             "address",
             () => new DeploymentOptions(new Uri(address), "the-client"));
