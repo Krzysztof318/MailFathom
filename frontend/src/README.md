@@ -24,5 +24,5 @@ The application is empty of features. It shows what it is — the product name a
 with, read from the assembly rather than written here, so the client and the service report one number.
 
 It reaches MailFathom over the endpoints `backend/src/Host/` exposes and shares nothing else with it: no build file, no
-package manifest, no configuration file, and no type. `frontend/AGENTS.md` states why, and states the conventions
-anything added here follows.
+package manifest, no configuration file, and no type. `AGENTS.md` beside this file states why, and states the
+conventions anything added here follows.

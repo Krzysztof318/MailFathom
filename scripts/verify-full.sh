@@ -18,6 +18,8 @@ cd "$repository_root"
 source "$(dirname "${BASH_SOURCE[0]}")/resolve-base-remote.sh"
 # shellcheck source=scripts/list-branch-changes.sh
 source "$(dirname "${BASH_SOURCE[0]}")/list-branch-changes.sh"
+# shellcheck source=scripts/resolve-changed-stacks.sh
+source "$(dirname "${BASH_SOURCE[0]}")/resolve-changed-stacks.sh"
 # shellcheck source=scripts/verification-record.sh
 source "$(dirname "${BASH_SOURCE[0]}")/verification-record.sh"
 
@@ -90,16 +92,32 @@ if ! removed_paths="$(list_removed_or_renamed_paths)"; then
   exit 1
 fi
 
-# Everything under `frontend/` is left out, because this gate verifies `backend/MailFathom.slnx` and
-# `--include` selects within the workspace `dotnet format` loaded: a client path in this list would
-# name no file the service solution holds, and a branch that changed only client C# would pay a whole
-# workspace load to verify nothing. The client's own verdict comes from the `Frontend` job of `CI`,
-# and its repairing pass from `scripts/verify-fast.sh`.
+# Everything under `frontend/` is left out of this list, because it scopes the service solution's
+# `--include` and that selects within the workspace `dotnet format` loaded: a client path here would
+# name no file the service solution holds. The client's own formatting is verified over its whole
+# solution below, which is what the `Frontend` job of `CI` does and needs no list at all.
 mapfile -t changed_service_csharp_files < <(printf '%s\n' "$changed_paths" | grep -E '\.cs$' | grep -Ev '^frontend/' | sort --unique)
-# Both lists feed this one, because a shared style input that was deleted decides as much as one that
-# was edited: the files under a removed `.editorconfig` are read against the rules above it from that
+# Both lists feed the next two, because a path that was deleted decides as much as one that was
+# edited: the files under a removed `.editorconfig` are read against the rules above it from that
 # commit on, and none of them had to be touched for their verdict to move.
+mapfile -t touched_paths < <(printf '%s\n%s\n' "$changed_paths" "$removed_paths" | grep -Ev '^$' | sort --unique)
 mapfile -t touched_other_paths < <(printf '%s\n%s\n' "$changed_paths" "$removed_paths" | grep -Ev '(^$|\.cs$)' | sort --unique)
+
+# Which stack's flow this change earns, from the same two lists `ci.yml` gives `detect-changes` and
+# the same ones the fast loop reads; `scripts/resolve-changed-stacks.sh` carries them and the
+# reasoning. A change that reaches neither runs no solution here, which leaves the whole-tree
+# contracts and the whitespace checks below as the whole of this gate's answer about it — and that is
+# the complete answer, because nothing else in either stack can be broken by a file no build reads.
+run_service_stack=''
+run_client_stack=''
+
+if change_reaches_service_stack "${touched_paths[@]}"; then
+  run_service_stack='yes'
+fi
+
+if change_reaches_client_stack "${touched_paths[@]}"; then
+  run_client_stack='yes'
+fi
 
 verification_digest="$(resolve_verification_digest)"
 
@@ -116,6 +134,12 @@ if [[ -z "${VERIFY_FORCE:-}" ]] && verification_already_recorded 'verify-full' "
   # The whitespace checks below still run: they are the one part of this gate that reads the base
   # rather than the tree, and they cost nothing.
 else
+  # A change no build reads leaves the contract suite and the whitespace checks as the whole of this
+  # gate's answer, which is worth saying rather than leaving as a run that built nothing in silence.
+  if [[ -z "$run_service_stack" && -z "$run_client_stack" ]]; then
+    printf 'This change reaches neither stack, so no solution is restored, built, tested, or measured here.\n'
+  fi
+
   # What the contract suite asserts is a property of the whole tree — a licensing header in every
   # `.yml`, `.sh`, Helm template, and `SKILL.md`, a `describes:` marker resolving to something, a
   # table-of-contents entry behind every published page — and all but one of those are carried by a
@@ -160,36 +184,57 @@ else
   set +e
   (
     set -e
-    dotnet tool restore
-    dotnet restore backend/MailFathom.slnx --locked-mode
-    dotnet build backend/MailFathom.slnx --configuration Release --no-restore
-    dotnet msbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release
 
-    # Verifying rather than repairing, which is the whole difference between this gate and the fast
-    # loop: a change that never went through the loop is caught here rather than quietly rewritten at
-    # the point it is about to be committed.
-    #
-    # The scope follows what can actually move a verdict. Formatting is a property of a file, so the
-    # files the branch changed are what this branch can have broken, and everything else was verified
-    # by whatever change last touched it — the same argument `ci.yml` makes for asking a pull request
-    # rather than a push. A shared style input is the exception, because it changes the answer for
-    # files this branch never opened, and it is the one case that still costs the whole solution.
-    if names_shared_style_input "${touched_other_paths[@]}"; then
-      dotnet format backend/MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic
-    elif ((${#changed_service_csharp_files[@]} > 0)); then
-      # The one case the loop settles for this gate. Its repairing pass is the same tool over the
-      # same file set from the same `list_changed_paths`, and a record exists only where that pass
-      # left every file byte-for-byte as it found them — so asking again whether they need rewriting
-      # has one possible answer. The whole-solution branch above is never settled this way, because
-      # the loop never formatted that scope.
-      if [[ -z "${VERIFY_FORCE:-}" ]] \
-        && verification_already_recorded 'verify-fast' "$verification_digest"; then
-        printf 'Formatting: the fast loop repaired exactly this content at %s without rewriting a file, so the verifying pass over the same files is skipped.\n' \
-          "$(verification_recorded_at 'verify-fast')"
-      else
-        dotnet format backend/MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic \
-          --include "${changed_service_csharp_files[@]}"
+    if [[ -n "$run_service_stack" ]]; then
+      dotnet tool restore
+      dotnet restore backend/MailFathom.slnx --locked-mode
+      dotnet build backend/MailFathom.slnx --configuration Release --no-restore
+      dotnet msbuild .config/CodeCoverage.proj -t:Collect -p:Configuration=Release
+
+      # Verifying rather than repairing, which is the whole difference between this gate and the fast
+      # loop: a change that never went through the loop is caught here rather than quietly rewritten
+      # at the point it is about to be committed.
+      #
+      # The scope follows what can actually move a verdict. Formatting is a property of a file, so
+      # the files the branch changed are what this branch can have broken, and everything else was
+      # verified by whatever change last touched it — the same argument `ci.yml` makes for asking a
+      # pull request rather than a push. A shared style input is the exception, because it changes
+      # the answer for files this branch never opened, and it is the one case that still costs the
+      # whole solution.
+      if names_shared_style_input "${touched_other_paths[@]}"; then
+        dotnet format backend/MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic
+      elif ((${#changed_service_csharp_files[@]} > 0)); then
+        # The one case the loop settles for this gate. Its repairing pass is the same tool over the
+        # same file set from the same `list_changed_paths`, and a record exists only where that pass
+        # left every file byte-for-byte as it found them — so asking again whether they need
+        # rewriting has one possible answer. The whole-solution branch above is never settled this
+        # way, because the loop never formatted that scope.
+        if [[ -z "${VERIFY_FORCE:-}" ]] \
+          && verification_already_recorded 'verify-fast' "$verification_digest"; then
+          printf 'Formatting: the fast loop repaired exactly this content at %s without rewriting a file, so the verifying pass over the same files is skipped.\n' \
+            "$(verification_recorded_at 'verify-fast')"
+        else
+          dotnet format backend/MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic \
+            --include "${changed_service_csharp_files[@]}"
+        fi
       fi
+    fi
+
+    # The client stack's flow: the three commands the `Frontend` job of `CI` runs, and its verifying
+    # formatting pass. No coverage target, because `.config/CodeCoverage.proj` measures projects
+    # under `backend/src/` and there is no client code to measure yet — the client's suite runs and
+    # is not weighed against a threshold, exactly as it is in the pipeline.
+    #
+    # The formatting pass takes no `--include`, which is the one place the two stacks differ here.
+    # `dotnet format` loads the whole solution whatever the scope, and this one holds two projects
+    # against the service solution's several dozen, so scoping it would buy a fraction of a pass that
+    # has already been paid for by the build in front of it — while the whole-solution form is what
+    # `CI` verifies and therefore the verdict a branch is actually held to.
+    if [[ -n "$run_client_stack" ]]; then
+      dotnet restore frontend/MailFathom.Client.slnx --locked-mode
+      dotnet build frontend/MailFathom.Client.slnx --configuration Release --no-restore
+      dotnet test --solution frontend/MailFathom.Client.slnx --configuration Release --no-build
+      dotnet format frontend/MailFathom.Client.slnx --no-restore --verify-no-changes --verbosity diagnostic
     fi
   )
   dotnet_chain_status=$?

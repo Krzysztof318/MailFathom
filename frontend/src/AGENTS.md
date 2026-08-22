@@ -1,13 +1,17 @@
-# Client Instructions
+# Client Source Development Instructions
 
-These instructions apply under `frontend/` in addition to the repository root instructions. Everything the root file
-states holds here — the English rule, the branch rule, the licensing header, the documentation obligations, and the
-privacy classification of anything that touches mail — and nothing below repeats one of them.
+These instructions apply under `frontend/src/` in addition to the repository root instructions. Everything the root
+file states holds here — the English rule, the branch rule, the licensing header, the documentation obligations, and
+the privacy classification of anything that touches mail — and nothing below repeats one of them.
 
 What does *not* reach here is `backend/src/AGENTS.md`. Those are the conventions of a service: API and failure design,
 dependency injection over a generic host, outbound HTTP client lifetimes, asynchronous return types at a use-case
 boundary. A view is none of those things, and the directory cascade never loads that file for a change under
 `frontend/`, so this one carries the client's half in full rather than by reference.
+
+The client's own tests are governed by `frontend/tests/AGENTS.md`, which points back here for everything below:
+a test in this stack is C# compiled by the same build with the same analyzers, so the conventions on this page hold
+there exactly as they hold here.
 
 ## What this application is
 
@@ -89,7 +93,34 @@ theme-aware — a screen that states its own is a screen that stops following th
 - **Prefer the existing style to a new one, and a lightweight-styling override to a full `ControlTemplate`.** A copied
   template stops receiving the design system's fixes.
 
-## Project and test layout
+## Awaiting, and the context an await captures
+
+The server's rule is the opposite of this one, and it is opposite because the framework is. ASP.NET Core installs no
+synchronization context at all, so `ConfigureAwait(false)` there changes nothing and only adds a call to every line —
+which is why `backend/src/AGENTS.md` refuses it as a blanket habit. A UI framework does install one: the thread that
+draws carries a context bound to its dispatcher, an `await` on that thread captures it, and the continuation is put
+back on the thread the visual tree may be touched from. So the question here is never *style*. It is whether this
+particular continuation has to come back.
+
+- **Write `ConfigureAwait(false)` wherever the continuation does not touch the UI**, which is nearly everything a model
+  does. Uno runs a model off the UI thread by design — commands and state updates from a generated bindable type
+  always run on a background thread, and the generated layer marshals to the dispatcher when a binding needs it — so a
+  model's awaits have no context worth capturing, and saying so is what keeps the continuation off a dispatcher queue
+  it never needed. The same holds for an HTTP call, a serialization step, and anything reached through a service.
+- **Never write it where the continuation touches the visual tree.** A code-behind handler, a focus or keyboard
+  handler, an animation started from a visual state, and anything that reads or writes a `DependencyObject` all run on
+  the UI thread, and the context they capture is the whole of what puts the continuation back on it. Discarding it
+  leaves the next line touching a control from the wrong thread, which is a run-time failure rather than a slow path.
+- **Do not answer a discarded context with a dispatcher call.** Marshalling back by hand to undo a
+  `ConfigureAwait(false)` costs a queue hop and leaves two statements saying what one omission said; the continuation
+  that needs the UI thread is the one that keeps its context.
+- **This is judged by reading rather than by running.** The browser head is single-threaded, so a discarded context
+  costs nothing there and every continuation lands on the one thread there is — a defect introduced this way is
+  invisible in the browser and fails on desktop. Nothing checks it either: `frontend/Directory.Build.props` states why
+  `Microsoft.VisualStudio.Threading.Analyzers` is absent from this stack, and the rule it would apply — `VSTHRD111`,
+  which asks for `ConfigureAwait` on every await — is the blanket habit this section refuses in both directions.
+
+## Project and build layout
 
 ```
 frontend/
@@ -97,7 +128,7 @@ frontend/
   Directory.Build.props      the client's build contract, importing the root Version.props
   Directory.Packages.props   the client's own pins; Uno's own packages come from the SDK
   src/Client/                the application — one Uno single project, every head inside it
-  tests/Client.UnitTests/    the unit suite
+  tests/Client.UnitTests/    the unit suite, governed by frontend/tests/AGENTS.md
 ```
 
 - **The two stacks share no build file.** `frontend/Directory.Build.props` and `frontend/Directory.Packages.props` are
@@ -114,23 +145,21 @@ frontend/
   the installed SDK, which `global.json` deliberately lets roll forward, so a lock file naming them records the machine
   that wrote it and fails the next locked restore. `frontend/Directory.Build.props` carries the whole reasoning, and
   `backend/Directory.Build.props` carries the same decision for the two projects holding the Aspire graph.
-- **A test project mirrors the source it covers**, exactly as `backend/tests/` does: `tests/Client.UnitTests/Presentation/`
-  covers `src/Client/Presentation/`.
-- **Nothing under `frontend/` reaches into `backend/`**, and `backend/MailFathom.slnx` names no project here. Neither
-  verification script builds or tests this solution, so a client change proves itself by building this solution and
-  running this suite — by hand before pushing, and in the `Frontend` job of `CI`, which is what the required check
-  waits for. A green `scripts/verify-full.sh` still says nothing about whether a change made here compiles.
-- **Formatting is the one part of that the local loop does reach.** `scripts/verify-fast.sh` runs the repairing
-  `dotnet format` pass over the client C# files a branch changed, restoring `frontend/MailFathom.Client.slnx` only when
-  there are any, and the `Verify formatting` step of the `Frontend` job reports whatever a branch that skipped the loop
-  left behind. Never invoke `dotnet format` by hand here, for the reason the repository never does: both halves already
-  run where they belong. Loading this solution needs the `wasm-tools` workload the client build needs, so the loop
-  fails on a machine set up for the server alone rather than skipping the pass quietly.
+- **Nothing under `frontend/` reaches into `backend/`**, and `backend/MailFathom.slnx` names no project here. What the
+  two stacks share is the required check and the two gates that decide from the changed paths which of them to run;
+  `scripts/verify-fast.sh` and `scripts/verify-full.sh` restore, build, and test this solution when the change reaches
+  it, and neither of them so much as loads it when the change stays in `backend/`. Loading it needs the `wasm-tools`
+  workload the client build needs, so the flow fails on a machine set up for the service alone rather than skipping
+  quietly, and `docs/operations/local-development.md` names the workload beside the client's own commands.
 - **That rule is about the build, and the Aspire app host is not one.** `backend/src/AppHost/Program.cs` starts the
   browser head as a resource named `mailfathom-client`, from a path and a command line: no backend project references
   one here, no project here enters `backend/MailFathom.slnx`, and MSBuild is never told the two are related — a clean
   build of the backend solution mentions nothing under `frontend/`. What the app host holds is a directory it starts a
   process in, which is a run-time arrangement rather than a compile-time one, and the rule above is unchanged by it.
+- **Formatting comes in the two halves it comes in everywhere here.** `scripts/verify-fast.sh` runs the repairing
+  `dotnet format` pass over the client C# files a branch changed; `scripts/verify-full.sh` and the `Verify formatting`
+  step of `CI`'s `Frontend` job run the verifying pass over the whole solution. Never invoke `dotnet format` by hand,
+  for the reason the repository never does: both halves already run where they belong.
 
 ## Running the client
 
@@ -140,7 +169,7 @@ whichever launch profile is given. `net10.0-desktop` is the head to start from a
 is the one an orchestration starts.
 
 The ordinary local start is therefore the Aspire app host, which brings up the database, the migrated schema, the
-service, and this client together — [running locally with Aspire](../docs/operations/local-development.md#the-client-resource)
+service, and this client together — [running locally with Aspire](../../docs/operations/local-development.md#the-client-resource)
 records what the client resource costs, what it needs installed, and how to run the orchestration without it. Starting
 the browser head needs the `wasm-tools` workload; the Uno SDK is pinned in the repository-root `global.json` and
 restored like any other.
@@ -165,29 +194,3 @@ never references a backend project, never links a backend source file, and never
   event.
 - **How the client authenticates has not been decided.** Until it is, do not invent one — no token cache, no credential
   store, no refresh loop.
-
-## Testing
-
-The repository's standing rule holds here rather than lapsing into "UI cannot be unit-tested": **a behaviour change
-carries tests.** Most of a screen's behaviour lives in its model, and a model is a plain record that needs no visual
-tree, so most of it is reachable by an ordinary unit test.
-
-- **The suite is xUnit.net v3 on Microsoft Testing Platform**, the same framework and runner `backend/tests/` uses, so
-  one `dotnet test` contract covers the repository. Do not adopt the Uno template's NUnit default, and do not add a
-  second assertion library.
-- **Name a test `Member_Scenario_ExpectedBehavior`** and follow Arrange, Act, Assert, as the backend suites do.
-- **Assert a feed by awaiting it** — `var value = await model.SomeFeed;` — or by enumerating its messages where the
-  progress and error axes are the subject. Uno documents a `Uno.Extensions.Reactive.Testing` package with a `FeedTests`
-  base and a `.Record()` extension for this; **it is not usable here.** The last version published to nuget.org is
-  2.5.11, from September 2023, and it binds `Uno.Extensions.Reactive` 2.5.11 while the SDK pin resolves 7.2.3 — its
-  `FeedRecorder` no longer compiles against the current API, and it would drag MSTest and VSTest into a suite that runs
-  on Microsoft Testing Platform. Reach for it if a version matching the pinned Uno.Extensions line is ever published;
-  until then the model's own public surface is the seam.
-- **A model reaching a service is tested against a fake of that service**, hand-written or substituted at the port, the
-  same way the backend tests an adapter boundary.
-- **What genuinely needs a running head stays out of the unit suite**: XAML that has to be parsed, a layout that has to
-  be measured, navigation that has to move a frame, and anything platform-specific. Name such a case in the pull
-  request rather than asserting it indirectly, and leave it for the UI-test project a later change adds — an
-  `Uno.UITest` head is a decision that has not been taken yet, so do not add one as a side effect of a feature.
-- **The Uno App MCP is evidence, not a test.** A screenshot and a visual-tree snapshot are how a change is shown to
-  work; they prove nothing on somebody else's machine and never stand in for a test.

@@ -18,6 +18,8 @@ cd "$repository_root"
 source "$(dirname "${BASH_SOURCE[0]}")/resolve-base-remote.sh"
 # shellcheck source=scripts/list-branch-changes.sh
 source "$(dirname "${BASH_SOURCE[0]}")/list-branch-changes.sh"
+# shellcheck source=scripts/resolve-changed-stacks.sh
+source "$(dirname "${BASH_SOURCE[0]}")/resolve-changed-stacks.sh"
 # shellcheck source=scripts/verification-record.sh
 source "$(dirname "${BASH_SOURCE[0]}")/verification-record.sh"
 
@@ -33,11 +35,34 @@ fi
 
 verification_digest="$(resolve_verification_digest)"
 
-# What the branch changed is read here rather than beside the formatting passes below, because one of
-# the things it decides is whether this run happens at all. It costs a handful of git invocations.
+# What the branch changed is read here rather than beside the flows below, because one of the things
+# it decides is whether this run happens at all. It costs a handful of git invocations.
 if ! changed_paths="$(list_changed_paths)"; then
-  printf 'verify-fast.sh cannot determine which files the branch changed. Formatting the wrong scope proves nothing, so fix the repository state instead.\n' >&2
+  printf 'verify-fast.sh cannot determine which files the branch changed. Verifying the wrong scope proves nothing, so fix the repository state instead.\n' >&2
   exit 1
+fi
+
+if ! removed_paths="$(list_removed_or_renamed_paths)"; then
+  printf 'verify-fast.sh cannot determine which files the branch removed. Verifying the wrong scope proves nothing, so fix the repository state instead.\n' >&2
+  exit 1
+fi
+
+# Which stack's flow this change earns, decided from the paths rather than by whoever started the
+# run — the same question `ci.yml` answers in `detect-changes`, from the same two lists.
+# `scripts/resolve-changed-stacks.sh` carries them and the reasoning. Removals feed the decision
+# beside the changes, because deleting the last file of a project moves what the solution builds as
+# surely as editing one does, and `list_changed_paths` deliberately reports no deletion.
+mapfile -t touched_paths < <(printf '%s\n%s\n' "$changed_paths" "$removed_paths" | grep -Ev '^$' | sort --unique)
+
+run_service_stack=''
+run_client_stack=''
+
+if change_reaches_service_stack "${touched_paths[@]}"; then
+  run_service_stack='yes'
+fi
+
+if change_reaches_client_stack "${touched_paths[@]}"; then
+  run_client_stack='yes'
 fi
 
 # One list per solution, because `--include` selects within the workspace `dotnet format` loaded: a
@@ -47,22 +72,11 @@ fi
 mapfile -t changed_service_csharp_files < <(printf '%s\n' "$changed_paths" | grep -E '\.cs$' | grep -Ev '^frontend/' | sort --unique)
 mapfile -t changed_client_csharp_files < <(printf '%s\n' "$changed_paths" | grep -E '^frontend/.+\.cs$' | sort --unique)
 
-# The full gate builds, tests, collects coverage over the same suite, and verifies the formatting
-# this loop repairs, so a green run of it over this content leaves nothing here to find. The
+# The full gate builds, tests, and verifies the formatting this loop repairs, in whichever stacks
+# this change reaches, so a green run of it over this content leaves nothing here to find. The
 # implication runs one way only: passing the loop says nothing about coverage or the contract suite.
-#
-# That subsumption stops at the service solution. The client's repairing pass below is the one thing
-# this loop does that the full gate has no counterpart for, so a branch carrying a client C# file
-# reads only its own record: the full gate's would be a claim about a solution that gate never
-# loaded.
 if [[ -z "${VERIFY_FORCE:-}" ]]; then
-  proving_gates=('verify-fast')
-
-  if ((${#changed_client_csharp_files[@]} == 0)); then
-    proving_gates+=('verify-full')
-  fi
-
-  for proving_gate in "${proving_gates[@]}"; do
+  for proving_gate in 'verify-fast' 'verify-full'; do
     if verification_already_recorded "$proving_gate" "$verification_digest"; then
       report_verification_already_recorded 'verify-fast' "$proving_gate"
       exit 0
@@ -70,20 +84,19 @@ if [[ -z "${VERIFY_FORCE:-}" ]]; then
   done
 fi
 
-# Locked mode here and not only in the final gate, for the same reason formatting runs here: a pin
-# moved without regenerating the lock files fails restore with NU1004, and discovering that after the
-# whole coverage collection has already run wastes the loop this script exists to shorten. Regenerate
-# with `dotnet restore backend/MailFathom.slnx --force-evaluate` as part of the change that moves the pin.
-dotnet restore backend/MailFathom.slnx --locked-mode
-dotnet build backend/MailFathom.slnx --configuration Release --no-restore
-dotnet test --solution backend/MailFathom.slnx --configuration Release --no-build
-
-# One pass, and a repairing one, because this is the only step in either gate that rewrites a file
-# rather than reporting on it. What it repairs is the part of formatting the build cannot see:
-# `backend/Directory.Build.props` sets `EnforceCodeStyleInBuild` beside `TreatWarningsAsErrors` and
-# `.editorconfig` gives the IDE rules severity `warning`, so the Release build above already fails on
-# `IDE0055`, `IDE0005`, and `IDE0073` with the file and line — while the ordering of using directives
-# and a missing final newline are `dotnet format`'s own passes and appear nowhere in a build.
+# The service stack's flow. Locked mode here and not only in the final gate, for the same reason
+# formatting runs here: a pin moved without regenerating the lock files fails restore with NU1004,
+# and discovering that after the whole coverage collection has already run wastes the loop this
+# script exists to shorten. Regenerate with `dotnet restore backend/MailFathom.slnx --force-evaluate`
+# as part of the change that moves the pin.
+#
+# One formatting pass, and a repairing one, because this is the only step in either gate that
+# rewrites a file rather than reporting on it. What it repairs is the part of formatting the build
+# cannot see: `backend/Directory.Build.props` sets `EnforceCodeStyleInBuild` beside
+# `TreatWarningsAsErrors` and `.editorconfig` gives the IDE rules severity `warning`, so the Release
+# build above already fails on `IDE0055`, `IDE0005`, and `IDE0073` with the file and line — while the
+# ordering of using directives and a missing final newline are `dotnet format`'s own passes and
+# appear nowhere in a build.
 #
 # So a second `--verify-no-changes` pass here would restate the build's verdict at the cost of
 # another full workspace load. What it could still report is a diagnostic with no code fix, which
@@ -96,21 +109,40 @@ dotnet test --solution backend/MailFathom.slnx --configuration Release --no-buil
 # every invocation and analyzes whatever is in scope, so the whole solution costs several times what
 # a handful of files costs. Splitting the run into the `whitespace`, `style`, and `analyzers`
 # subcommands does not help: it pays that workspace load three times.
-if ((${#changed_service_csharp_files[@]} > 0)); then
-  dotnet format backend/MailFathom.slnx --no-restore --include "${changed_service_csharp_files[@]}"
+if [[ -n "$run_service_stack" ]]; then
+  dotnet restore backend/MailFathom.slnx --locked-mode
+  dotnet build backend/MailFathom.slnx --configuration Release --no-restore
+  dotnet test --solution backend/MailFathom.slnx --configuration Release --no-build
+
+  if ((${#changed_service_csharp_files[@]} > 0)); then
+    dotnet format backend/MailFathom.slnx --no-restore --include "${changed_service_csharp_files[@]}"
+  fi
 fi
 
-# The client's half of the same pass, over its own solution because it shares none with the service.
-# Both the restore and the workspace load are conditional rather than paid up front, which is what
-# keeps this loop costing a branch that opened no client file exactly what it cost before: the client
-# restore is the expensive part of a stack most sessions never touch, and it is skipped entirely
-# rather than made cheap. A machine set up for the service alone has no `wasm-tools` workload and
-# cannot evaluate the browser head, so this step fails there — the same thing that would stop it
-# building the client at all, and `docs/operations/local-development.md` names the workload beside
-# the client's own commands for that reason.
-if ((${#changed_client_csharp_files[@]} > 0)); then
+# The client stack's flow, over its own solution because it shares none with the service. One command
+# builds every target framework the solution declares — `net10.0-desktop`, `net10.0-browserwasm`, and
+# the plain `net10.0` reference target the unit suite references the application through — which is
+# what the `Frontend` job of `CI` builds and the same three commands it runs.
+#
+# The whole of it is conditional rather than paid up front, which is what keeps this loop costing a
+# branch that stayed in `backend/` exactly what it cost before the client existed. A machine set up
+# for the service alone has no `wasm-tools` workload and cannot compile the browser head, so this
+# flow fails there rather than skipping quietly; `docs/operations/local-development.md` names the
+# workload beside the client's own commands for that reason.
+if [[ -n "$run_client_stack" ]]; then
   dotnet restore frontend/MailFathom.Client.slnx --locked-mode
-  dotnet format frontend/MailFathom.Client.slnx --no-restore --include "${changed_client_csharp_files[@]}"
+  dotnet build frontend/MailFathom.Client.slnx --configuration Release --no-restore
+  dotnet test --solution frontend/MailFathom.Client.slnx --configuration Release --no-build
+
+  if ((${#changed_client_csharp_files[@]} > 0)); then
+    dotnet format frontend/MailFathom.Client.slnx --no-restore --include "${changed_client_csharp_files[@]}"
+  fi
+fi
+
+# A change no build reads — documentation, a skill, a deployment asset — runs neither flow and says
+# so, because a gate that prints nothing and exits zero reads as a gate that was not run.
+if [[ -z "$run_service_stack" && -z "$run_client_stack" ]]; then
+  printf 'This change reaches neither stack, so no solution was restored, built, or tested. Run scripts/verify-full.sh for what the whole-tree contracts have to say about it.\n'
 fi
 
 # Records nothing when that pass rewrote a file, because the build and the tests above ran against
