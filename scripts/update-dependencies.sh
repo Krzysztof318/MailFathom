@@ -118,8 +118,12 @@ trap 'rm -rf "$work_directory"' EXIT
 
 readonly records="$work_directory/records"
 readonly moved="$work_directory/moved"
+# What `--apply` actually wrote, which is narrower than what the survey found behind: a family this script refuses to
+# rewrite never reaches it, and neither does a rewrite that failed.
+readonly rewritten="$work_directory/rewritten"
 : > "$records"
 : > "$moved"
+: > "$rewritten"
 
 # One record per pin, in the order the survey met it. `state` is derived rather than recorded, so a family only has to
 # say what it found and what the upstream now publishes.
@@ -693,6 +697,7 @@ apply_moved_pins() {
 
     if rewrite_pin "$family" "$component" "$pinned" "$latest" "$source"; then
       printf '  rewritten   %-48s %s -> %s\n' "$component" "$pinned" "$latest"
+      printf '%s\t%s\t%s\t%s\t%s\n' "$family" "$component" "$pinned" "$latest" "$source" >> "$rewritten"
       applied=$((applied + 1))
       # Only a package version changes what a restore resolves. A tool manifest is restored on its own and an action
       # reference reaches no project, so neither obliges a lock file and neither is worth a four-minute restore.
@@ -740,14 +745,17 @@ regenerate_lock_files() {
   done
 }
 
+# Read from what `--apply` wrote rather than from what the survey found behind, and reached only after it ran. The
+# register records the versions this repository carries, so a pin nothing rewrote obliges it nothing: naming one here
+# would send a reader to edit a row that is still true.
 report_register_obligations() {
   local family component pinned latest source lines
 
-  [[ -s "$moved" ]] || return 0
+  [[ -s "$rewritten" ]] || return 0
 
   printf '\n== What THIRD_PARTY_LICENSES.md now says about a version that moved ==\n'
-  printf '%s\n' 'Each line below names a register line that still carries the version it moved from. A row is a completed'
-  printf '%s\n' 'review written as prose, so it is rewritten by hand rather than by this script.'
+  printf '%s\n' 'Each line below names a register line that still carries the version this run moved away from. A row is a'
+  printf '%s\n' 'completed review written as prose, so it is rewritten by hand rather than by this script.'
   printf '\n'
 
   while IFS=$'\t' read -r family component pinned latest source; do
@@ -755,7 +763,7 @@ report_register_obligations() {
     # without its reference. Nothing else in a component name carries an `@`.
     lines="$(register_lines_naming "${component%@*}" "$pinned")"
     printf '  %-52s %s:%s\n' "${component%@*} $pinned" "$register_file" "$lines"
-  done < "$moved"
+  done < "$rewritten"
 }
 
 ### The run.
@@ -772,9 +780,8 @@ report
 
 if [[ "$apply_pins" == 'true' ]]; then
   apply_moved_pins
+  report_register_obligations
 fi
-
-report_register_obligations
 
 printf '\nThis reports and never gates. Confirm every line at the source it names before acting on it.\n'
 
