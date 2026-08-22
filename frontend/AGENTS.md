@@ -126,6 +126,28 @@ frontend/
   left behind. Never invoke `dotnet format` by hand here, for the reason the repository never does: both halves already
   run where they belong. Loading this solution needs the `wasm-tools` workload the client build needs, so the loop
   fails on a machine set up for the server alone rather than skipping the pass quietly.
+- **That rule is about the build, and the Aspire app host is not one.** `backend/src/AppHost/Program.cs` starts the
+  browser head as a resource named `mailfathom-client`, from a path and a command line: no backend project references
+  one here, no project here enters `backend/MailFathom.slnx`, and MSBuild is never told the two are related — a clean
+  build of the backend solution mentions nothing under `frontend/`. What the app host holds is a directory it starts a
+  process in, which is a run-time arrangement rather than a compile-time one, and the rule above is unchanged by it.
+
+## Running the client
+
+`dotnet run --project frontend/src/Client/Client.csproj --framework <head>` is how a head starts, and the framework has
+to be named: this project declares three, and `dotnet run` refuses a multi-targeted project without `--framework`
+whichever launch profile is given. `net10.0-desktop` is the head to start from an IDE or by hand; `net10.0-browserwasm`
+is the one an orchestration starts.
+
+The ordinary local start is therefore the Aspire app host, which brings up the database, the migrated schema, the
+service, and this client together — [running locally with Aspire](../docs/operations/local-development.md#the-client-resource)
+records what the client resource costs, what it needs installed, and how to run the orchestration without it. Starting
+the browser head needs the `wasm-tools` workload; the Uno SDK is pinned in the repository-root `global.json` and
+restored like any other.
+
+**The client does not yet learn the service's address from anywhere.** It has no HTTP client to configure, and a
+browser head reads no environment the app model could set, so nothing is wired rather than something being wired that
+could not be read. Do not invent a mechanism for it as a side effect of a screen.
 
 ## Reaching the backend
 

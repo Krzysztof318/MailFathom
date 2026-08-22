@@ -417,11 +417,14 @@ else
     // port for the proxy it would put in front of a resource and refuses an endpoint that declares none while asking
     // for no proxy — and no proxy is what keeps the socket a client reaches the socket Kestrel opened.
     //
-    // Both are found in one call whether or not either is pinned, because that is what makes them different from each
-    // other; a pinned value then replaces the one it was found for and the other stays where it was put.
-    var foundPorts = OrchestrationContract.FindFreePorts(2);
+    // All three are found in one call whether or not any is pinned, because that is what makes them different from each
+    // other; a pinned value then replaces the one it was found for and the others stay where they were put. The third
+    // belongs to the client below, and is found here rather than beside it for that reason: a second call would release
+    // these before choosing, and two sockets handed one number is a run that fails on whichever binds second.
+    var foundPorts = OrchestrationContract.FindFreePorts(3);
     var mcpEndpointPort = PinnedPort(OrchestrationContract.PinnedMcpEndpointPortKey) ?? foundPorts[0];
     var healthEndpointsPort = PinnedPort(OrchestrationContract.PinnedHealthEndpointsPortKey) ?? foundPorts[1];
+    var clientPort = PinnedPort(OrchestrationContract.PinnedClientPortKey) ?? foundPorts[2];
 
     mailFathomHost
         // The MCP endpoint's own socket, stated to the app model and injected into the host's own configuration key, so
@@ -471,6 +474,48 @@ else
             targetPort: healthEndpointsPort,
             isProxied: false,
             env: "HealthEndpoints__Port");
+
+    // The client, in the one topology it belongs to. What the app model reaches into the other stack with is a
+    // directory and a command: no project under frontend/ enters backend/MailFathom.slnx, no backend project references
+    // one, and MSBuild is never told the two are related — so a build of the service still restores nothing the client
+    // needs, and starting the client still costs the Uno SDK and the wasm-tools workload the client's own build costs.
+    // The boundary the repository keeps is a compile-time one, and this is a process the orchestration starts beside
+    // another process.
+    //
+    // An executable rather than a project resource, because the client declares three target frameworks and Aspire runs
+    // a project resource through `dotnet run --project`, whose argument list carries no framework: the command refuses
+    // a multi-targeted project before it builds anything, and neither a launch profile nor ProjectResourceOptions
+    // supplies one. Naming the head on the command line is what starts the browser one.
+    //
+    // No launch profile, so the profiles in frontend/src/Client/Properties/launchSettings.json stay what an IDE reads.
+    // The first of them is what `dotnet run` would otherwise take, and it opens a browser window on every start — which
+    // an orchestration that already publishes the address as an endpoint does not need to do for the developer.
+    if (OrchestrationContract.ResolveClientEnabled(builder.Configuration[OrchestrationContract.ClientEnabledKey]))
+    {
+        builder
+            .AddExecutable(
+                OrchestrationContract.ClientResourceName,
+                "dotnet",
+                Path.Combine(builder.AppHostDirectory, OrchestrationContract.ClientProjectDirectory),
+                "run",
+                "--framework",
+                OrchestrationContract.ClientBrowserTargetFramework,
+                "--no-launch-profile")
+            // The address the development server binds, stated to it and published to the app model as one number, so
+            // the endpoint the dashboard links is the endpoint the browser head is served on. Unproxied for the reason
+            // the host's sockets are: what the app model publishes is then what a browser connects to.
+            //
+            // On loopback, because a WebAssembly bundle built in Debug against a developer's own machine is not
+            // something anything on a local network has any business loading.
+            .WithEnvironment(
+                OrchestrationContract.ClientServerUrlsVariable,
+                $"http://127.0.0.1:{clientPort.ToString(CultureInfo.InvariantCulture)}")
+            .WithHttpEndpoint(
+                name: OrchestrationContract.ClientHttpEndpointName,
+                port: clientPort,
+                targetPort: clientPort,
+                isProxied: false);
+    }
 }
 
 // Host is the startup project because it is the project resource the connection string is issued to; Infrastructure

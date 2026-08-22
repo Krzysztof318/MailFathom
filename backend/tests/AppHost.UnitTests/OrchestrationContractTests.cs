@@ -197,7 +197,7 @@ public sealed class OrchestrationContractTests
 
     /// <summary>Each socket is pinned under a key of its own, which is what lets one be pinned while the others stay allocated.</summary>
     [Fact]
-    public void PinnedPortKeys_TheThreeSocketsTheOrdinaryTopologyPublishes_AreStatedSeparately()
+    public void PinnedPortKeys_TheFourSocketsTheOrdinaryTopologyPublishes_AreStatedSeparately()
     {
         // Act
         string[] keys =
@@ -205,6 +205,7 @@ public sealed class OrchestrationContractTests
             OrchestrationContract.PinnedMcpEndpointPortKey,
             OrchestrationContract.PinnedHealthEndpointsPortKey,
             OrchestrationContract.PinnedPostgresPortKey,
+            OrchestrationContract.PinnedClientPortKey,
         ];
 
         // Assert
@@ -258,6 +259,58 @@ public sealed class OrchestrationContractTests
 
         // Assert
         Assert.Empty(ports);
+    }
+
+    /// <summary>Nothing stated starts the client, which is what makes one command bring up a MailFathom with a face on it.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ResolveClientEnabled_NothingStated_StartsTheClient(string? statedValue)
+    {
+        // Act
+        var clientEnabled = OrchestrationContract.ResolveClientEnabled(statedValue);
+
+        // Assert
+        Assert.True(clientEnabled);
+    }
+
+    /// <summary>A developer who stated a value gets it, which is how a machine without the WebAssembly workload runs the rest.</summary>
+    [Theory]
+    [InlineData("false", false)]
+    [InlineData("False", false)]
+    [InlineData("  false  ", false)]
+    [InlineData("true", true)]
+    [InlineData("TRUE", true)]
+    public void ResolveClientEnabled_ValueStated_ReturnsIt(string statedValue, bool expectedClientEnabled)
+    {
+        // Act
+        var clientEnabled = OrchestrationContract.ResolveClientEnabled(statedValue);
+
+        // Assert
+        Assert.Equal(expectedClientEnabled, clientEnabled);
+    }
+
+    /// <summary>A value that is not a boolean fails the run naming the key, rather than starting what it was asked not to.</summary>
+    /// <remarks>
+    /// The whole reason a developer states this key is that building a WebAssembly bundle costs them something, so
+    /// reading an unrecognized value as the default would spend exactly what they were avoiding and say nothing.
+    /// </remarks>
+    [Theory]
+    [InlineData("0")]
+    [InlineData("1")]
+    [InlineData("no")]
+    [InlineData("yes")]
+    [InlineData("off")]
+    [InlineData("disabled")]
+    public void ResolveClientEnabled_ValueIsNotABoolean_FailsNamingTheKey(string statedValue)
+    {
+        // Act
+        var failure = Assert.Throws<InvalidOperationException>(
+            () => OrchestrationContract.ResolveClientEnabled(statedValue));
+
+        // Assert
+        Assert.Contains(OrchestrationContract.ClientEnabledKey, failure.Message, StringComparison.Ordinal);
     }
 
     private static string IdentifierOf(string prefix) =>
