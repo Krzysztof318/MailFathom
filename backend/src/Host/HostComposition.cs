@@ -32,6 +32,7 @@ using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
+using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Spam;
@@ -337,6 +338,13 @@ internal static class HostComposition
             // once. Every consumer redacts through this one instance, which is what keeps the derived path and the read
             // path from drifting into two redactions of the same message.
             builder.Services.AddSingleton<SensitiveContentRedactor>();
+            // Composed here rather than in Infrastructure for the reason the analyzer profile is: which findings stop a
+            // send comes out of this section, and Infrastructure binds no configuration. It is registered only where a
+            // scanner is switched on, so the screen resolves nothing on a deployment that scans nothing and answers
+            // every act without asking.
+            builder.Services.AddSingleton(provider => SensitiveContentPlanMapper.MapScreeningPolicy(
+                provider.GetRequiredService<IOptions<SensitiveContentOptions>>().Value,
+                provider.GetRequiredService<SensitiveContentPlan>()));
         }
 
         return declaredSensitiveContent;

@@ -11,13 +11,15 @@ namespace MailFathom.TestSupport;
 /// <summary>Records what the egress guard reported, so a test can assert it without a metric listener.</summary>
 /// <remarks>
 /// Hand-written rather than substituted because what these tests assert is a sequence — which egress points were
-/// guarded, in which order, and which of them were refused — and a recorded list reports that without a matcher. It is
-/// shared because every boundary holding a guarded egress point needs the same one.
+/// guarded, in which order, which of them a scanner could not answer for, and which of them a screen stopped — and a
+/// recorded list reports that without a matcher. It is shared because every boundary holding a guarded egress point
+/// needs the same one.
 /// </remarks>
 internal sealed class RecordingSensitiveContentEgressTelemetry : ISensitiveContentEgressTelemetry
 {
     private readonly List<GuardedEgress> guarded = [];
     private readonly List<RefusedEgress> refused = [];
+    private readonly List<StoppedEgress> stopped = [];
     private readonly List<GuardedOperation> operations = [];
 
     /// <summary>Gets every text that passed a guard, in the order the guards ran.</summary>
@@ -25,6 +27,9 @@ internal sealed class RecordingSensitiveContentEgressTelemetry : ISensitiveConte
 
     /// <summary>Gets every egress a scanner refused, in the order the refusals happened.</summary>
     public IReadOnlyList<RefusedEgress> Refused => this.refused;
+
+    /// <summary>Gets every act a screen stopped, in the order the refusals happened.</summary>
+    public IReadOnlyList<StoppedEgress> Stopped => this.stopped;
 
     /// <summary>Gets every guarded operation that was opened, in the order they began.</summary>
     public IReadOnlyList<GuardedOperation> Operations => this.operations;
@@ -40,6 +45,14 @@ internal sealed class RecordingSensitiveContentEgressTelemetry : ISensitiveConte
     /// <inheritdoc />
     public void RecordRefused(SensitiveContentEgressPoint egressPoint, SensitiveContentScannerKind scanner) =>
         this.refused.Add(new RefusedEgress(egressPoint, scanner));
+
+    /// <inheritdoc />
+    public void RecordStopped(SensitiveContentEgressPoint egressPoint, SensitiveContentEgressRefusal refusal)
+    {
+        ArgumentNullException.ThrowIfNull(refusal);
+
+        this.stopped.Add(new StoppedEgress(egressPoint, refusal));
+    }
 
     /// <inheritdoc />
     public ISensitiveContentGuardScope BeginGuardedOperation(
@@ -103,4 +116,11 @@ internal sealed class RecordingSensitiveContentEgressTelemetry : ISensitiveConte
     /// <param name="EgressPoint">Where the text was going, and did not.</param>
     /// <param name="Scanner">The scanner that could not answer.</param>
     internal sealed record RefusedEgress(SensitiveContentEgressPoint EgressPoint, SensitiveContentScannerKind Scanner);
+
+    /// <summary>One act a screen stopped because of what the text carried.</summary>
+    /// <param name="EgressPoint">Where the text was going, and did not.</param>
+    /// <param name="Refusal">What stopped it.</param>
+    internal sealed record StoppedEgress(
+        SensitiveContentEgressPoint EgressPoint,
+        SensitiveContentEgressRefusal Refusal);
 }

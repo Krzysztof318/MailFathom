@@ -102,6 +102,31 @@ public sealed class ScanningSensitiveContentEgressTests
             egress.Telemetry.Refused.Select(recorded => recorded.EgressPoint));
     }
 
+    /// <summary>
+    /// The screen shares the deployment's redactor and its plan, and screens for whichever scanner the deployment was
+    /// built around — a screen built for the other one would let every test's marker through.
+    /// </summary>
+    [Theory]
+    [InlineData(SensitiveContentScannerKind.Secrets)]
+    [InlineData(SensitiveContentScannerKind.Pii)]
+    public async Task Screen_ADeploymentWithOneSwitchOn_StopsAnActUnderTheSwitchItWasGiven(
+        SensitiveContentScannerKind scanner)
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider, scanner);
+
+        // Act
+        var refusal = await egress.Screen.ScreenAsync(
+            SensitiveContentEgressPoint.OutgoingMail,
+            [$"the key is {Marker}"],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(egress.Screen.IsActive);
+        Assert.NotNull(refusal);
+        Assert.Equal(scanner, refusal.Scanner);
+    }
+
     /// <summary>The redactor holds a deployment's concurrency permits, so the holder releases it rather than the test.</summary>
     [Fact]
     public async Task Dispose_ADeploymentATestFinishedWith_ReleasesTheRedactionItHeld()

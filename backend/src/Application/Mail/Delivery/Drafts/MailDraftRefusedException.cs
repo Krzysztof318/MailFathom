@@ -5,6 +5,7 @@
 using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Failures;
 
 namespace MailFathom.Application.Mail.Delivery.Drafts;
@@ -137,4 +138,33 @@ public sealed class MailDraftRefusedException : MailFathomException
     public static MailDraftRefusedException NotAddressed() => new(
         MailFathomErrorCode.MailDraftNotAddressed,
         "The draft names nobody to send it to, so there is no message to queue.");
+
+    /// <summary>Reports a draft this deployment will not put on a mail server, because of what the message carries.</summary>
+    /// <param name="refusal">What the screen stopped it with.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="refusal" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the refusal names a reason this system does not declare.</exception>
+    /// <remarks>
+    /// The two sentences are this act's own rather than the submission's, for the reason every refusal here is: a
+    /// caller told its <em>message</em> was not queued when it asked to save a draft would go looking for a send that
+    /// never happened. The code is shared with the submission, because the remedy is the same one.
+    /// </remarks>
+    public static MailDraftRefusedException ContentRefused(SensitiveContentEgressRefusal refusal)
+    {
+        ArgumentNullException.ThrowIfNull(refusal);
+
+        return refusal.Reason switch
+        {
+            SensitiveContentEgressRefusalReason.ContentFound => new MailDraftRefusedException(
+                MailFathomErrorCode.OutgoingMailContentRefused,
+                $"This deployment screens what it puts on a mail server, and this message carries content it classes as {refusal.Category}, so no draft was written. Take that material out of the message and save it again."),
+            SensitiveContentEgressRefusalReason.TextExceededScanCeiling => new MailDraftRefusedException(
+                MailFathomErrorCode.OutgoingMailNotFullyScanned,
+                "This message is longer than one sensitive-content scan analyzes, so nothing established what all of it carries and no draft was written. Save a shorter message, or ask the operator to raise the analyzed ceiling."),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(refusal),
+                refusal.Reason,
+                "The sensitive-content egress refusal reason is not one this system declares."),
+        };
+    }
 }

@@ -34,6 +34,18 @@ public interface ISensitiveContentEgressTelemetry
     /// <param name="scanner">Which switched-on scanner could not answer.</param>
     void RecordRefused(SensitiveContentEgressPoint egressPoint, SensitiveContentScannerKind scanner);
 
+    /// <summary>Records one act stopped because a screened egress point carried material the deployment will not let leave.</summary>
+    /// <param name="egressPoint">Where the text was about to go, and did not.</param>
+    /// <param name="refusal">What stopped it, which names a scanner and a category or says the text outran the ceiling.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="refusal" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// A separate instrument from the one above, because the two are opposite facts about a deployment. A scan that
+    /// could not run says the analyzer is down and nothing about the mail; a scan that stopped an act says the scanner
+    /// is working and somebody tried to send something. Counting them together would make an outage read as a mailbox
+    /// full of credentials, and a mailbox full of credentials read as an outage.
+    /// </remarks>
+    void RecordStopped(SensitiveContentEgressPoint egressPoint, SensitiveContentEgressRefusal refusal);
+
     /// <summary>Opens the report of one guarded operation, which is what a caller actually waits on.</summary>
     /// <param name="egressPoint">Where the texts this operation guards are going.</param>
     /// <param name="cancellationToken">The caller's token, read as the scope is disposed to tell a shutdown from an operation that broke.</param>

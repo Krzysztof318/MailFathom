@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Xml.Linq;
 using MailFathom.Application.Access;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Security.Transport;
@@ -365,6 +366,26 @@ public sealed class HostCompositionTests
         Assert.DoesNotContain(
             registrations,
             registration => registration.Name == PersonalDataAnalyzerHealthCheck.Name);
+    }
+
+    /// <summary>
+    /// Screening a send is composed from two registrations a scanner switch turns on and one default that stands in when
+    /// it does not, so a deployment that never named a scanner has to reach a screen that scans nothing rather than
+    /// nothing at all — the outbox asks for one on every enqueue.
+    /// </summary>
+    [Theory]
+    [InlineData("probes only", false)]
+    [InlineData("secret scanning", true)]
+    public async Task Compose_TheOutgoingMailScreen_IsActiveOnlyWhereAScannerIsSwitchedOn(string shape, bool expected)
+    {
+        // Arrange
+        await using var provider = ComposeServices(shape).BuildServiceProvider();
+
+        // Act
+        var screen = provider.GetRequiredService<SensitiveContentEgressScreen>();
+
+        // Assert
+        Assert.Equal(expected, screen.IsActive);
     }
 
     /// <summary>

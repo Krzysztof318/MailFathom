@@ -704,6 +704,7 @@ public sealed class AuthoredResponseSubmissionTests
             Substitute.For<IOutboxOperationStore>(),
             granted,
             OutgoingMailGovernors.Permitting(),
+            OutgoingMailScreenings.Inactive(),
             new FakeTimeProvider(Recorded));
     }
 

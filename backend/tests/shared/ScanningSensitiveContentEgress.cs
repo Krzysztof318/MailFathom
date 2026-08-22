@@ -13,7 +13,8 @@ namespace MailFathom.TestSupport;
 /// <para>
 /// Every boundary that hands text to somebody else asserts the same two things about a switched-on scanner — that a
 /// detected value is replaced before the text leaves, and that a detector which cannot answer refuses the operation —
-/// so both are built here rather than assembled per suite out of a plan, a redactor, and a scanner.
+/// so both are built here rather than assembled per suite out of a plan, a redactor, and a scanner. The screen beside
+/// the guard is the same deployment answering the other question, which is whether an act may happen at all.
 /// </para>
 /// <para>
 /// It holds the redactor the guard runs through, which is what makes it disposable: the redactor owns the concurrency
@@ -30,24 +31,36 @@ internal sealed class ScanningSensitiveContentEgress : IDisposable
         SensitiveContentScanBounds bounds,
         TimeProvider timeProvider)
     {
+        var plan = SensitiveContentPlan.Create(
+            bounds,
+            [
+                SensitiveContentScannerPlan.Create(
+                    scanner.Scanner,
+                    [MarkerSensitiveContentScanner.Category],
+                    []),
+            ]);
+
         this.Scanner = scanner;
         this.Telemetry = new RecordingSensitiveContentEgressTelemetry();
-        this.redactor = new SensitiveContentRedactor(
-            SensitiveContentPlan.Create(
-                bounds,
-                [
-                    SensitiveContentScannerPlan.Create(
-                        scanner.Scanner,
-                        [MarkerSensitiveContentScanner.Category],
-                        []),
-                ]),
-            [scanner],
-            timeProvider);
+        this.redactor = new SensitiveContentRedactor(plan, [scanner], timeProvider);
         this.Guard = new SensitiveContentEgressGuard(this.redactor, this.Telemetry, timeProvider);
+        this.Screen = new SensitiveContentEgressScreen(
+            this.redactor,
+            SensitiveContentScreeningPolicy.Create(plan, [scanner.Scanner]),
+            this.Telemetry,
+            timeProvider);
     }
 
     /// <summary>Gets the guard a consumer is handed.</summary>
     public SensitiveContentEgressGuard Guard { get; }
+
+    /// <summary>Gets the screen a consumer is handed, which refuses an act rather than redacting a result.</summary>
+    /// <remarks>
+    /// It stops on the same scanner the guard redacts through, so a test never has to state twice which switch this
+    /// deployment has on. A consumer wanting a deployment that detects the marker and lets it leave anyway builds the
+    /// screen itself, which is a case of its own and belongs where it is asserted.
+    /// </remarks>
+    public SensitiveContentEgressScreen Screen { get; }
 
     /// <summary>Gets what the guard reported, so a test can read which egress points were guarded and which refused.</summary>
     public RecordingSensitiveContentEgressTelemetry Telemetry { get; }

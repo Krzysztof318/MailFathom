@@ -37,6 +37,17 @@ nowhere to ask **fails startup** rather than running unprotected.
 | `SensitiveContent:ScanTimeout` | TimeSpan | `00:00:15` | One second to two minutes, per call to one scanner — which for the personal-data scanner covers every configured language together rather than each. A scan that misses it is refused rather than served unscanned, and on the derivation path that refusal ends the synchronization run carrying it, so a budget below what the analyzer spends on a large body leaves a folder repeating the same batch. It also bounds one personal-data readiness scrape whole, so naming more languages costs more analyzer requests and never a longer scrape | restart |
 | `SensitiveContent:MaximumConcurrentScans` | int | `4` | 1 – 256, across the process | restart |
 | `SensitiveContent:RebuildStaleDerivedData` | bool | `false` | Read only while a scanner is on; re-derives every message whose derived text predates the current configuration | restart |
+| `SensitiveContent:ScreenOutgoingMailFor:<n>` | string | `Secrets` | Each entry names a scanner — `Secrets` or `Pii`, matched ignoring capitalization — whose findings cancel a send or a draft save. An absent key is the default; a written empty array screens nothing; a scanner named here that is switched off screens nothing | restart |
+
+**Screening outgoing mail refuses acts rather than rewriting messages**, which is why what it screens for is a key of
+its own rather than the scanner switches above. A credential in a message somebody is sending is what it exists for and
+almost no correspondence carries one, so the default is `Secrets` and a deployment that switched that scanner on gets
+it without asking. `Pii` is not in the default and adding it is a deliberate posture: ordinary mail is made of names
+and addresses, so screening for personal data refuses very nearly every message a caller tries to send. Writing
+`"ScreenOutgoingMailFor": []` keeps both scanners redacting everywhere else and stops them cancelling anything.
+[Outgoing mail is screened rather than
+redacted](../features/sensitive-content-scanning.md#outgoing-mail-is-screened-rather-than-redacted) holds which acts it
+covers, what is read, and what a caller is told.
 
 **The rebuild switch spends a whole mailbox.** Switching a scanner on, or widening what it looks for, protects what is
 derived from that moment onward and reaches nothing already extracted, chunked, or embedded — the host reports how many

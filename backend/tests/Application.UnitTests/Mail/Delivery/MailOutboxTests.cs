@@ -10,7 +10,9 @@ using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
+using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
@@ -28,6 +30,9 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery;
 
 public sealed class MailOutboxTests
 {
+    /// <summary>The literal the screened deployment's detector reports, which stands in for a credential in a message.</summary>
+    private const string ScreenedMarker = "AKIAEXAMPLEKEY";
+
     private static readonly MailAccountId Account = MailAccountId.Create("work");
 
     private static readonly DateTimeOffset Authored = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
@@ -152,6 +157,7 @@ public sealed class MailOutboxTests
             Substitute.For<IOutboxOperationStore>(),
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
             OutgoingMailGovernors.Permitting(),
+            OutgoingMailScreenings.Inactive(),
             TimeProvider.System);
 
         // Act
@@ -376,6 +382,96 @@ public sealed class MailOutboxTests
             Arg.Any<OutgoingEmailId>(),
             Arg.Any<ReadOnlyMemory<byte>>(),
             Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A message carrying what this deployment screens outgoing mail for is refused at the one way in, so no record,
+    /// no stored message, and no signal survives it — and the refusal names the category rather than the message.
+    /// </summary>
+    [Fact]
+    public async Task EnqueueAsync_MessageCarryingScreenedMaterial_RefusesAndWritesNothing()
+    {
+        // Arrange
+        var store = new InMemoryOutgoingEmailStore();
+        var contentStore = Substitute.For<IEmailContentStore>();
+        var signal = new MailOutboxSignal(capacity: 4);
+
+        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System);
+
+        var outbox = CreateOutbox(
+            store,
+            contentStore,
+            signal: signal,
+            screening: OutgoingMailScreenings.Through(egress.Screen));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
+            () => outbox.EnqueueAsync(
+                CreateRequest("mfctl-4f2a"),
+                Encoding.UTF8.GetBytes($"the deployment key is {ScreenedMarker}"),
+                CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.OutgoingMailContentRefused, refusal.ErrorCode);
+        Assert.Contains(MarkerSensitiveContentScanner.Category.Name, refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(ScreenedMarker, refusal.Message, StringComparison.Ordinal);
+        Assert.Empty(store.OpenRequests);
+        Assert.Equal(0, signal.Depth);
+        await contentStore.DidNotReceive().SaveOutgoingContentAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<OutgoingEmailId>(),
+            Arg.Any<ReadOnlyMemory<byte>>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A message carrying nothing the deployment screens for is queued exactly as an unscreened one is.</summary>
+    [Fact]
+    public async Task EnqueueAsync_ScreenedDeploymentAndAnOrdinaryMessage_QueuesIt()
+    {
+        // Arrange
+        var store = new InMemoryOutgoingEmailStore();
+
+        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System);
+
+        var outbox = CreateOutbox(
+            store,
+            Substitute.For<IEmailContentStore>(),
+            screening: OutgoingMailScreenings.Through(egress.Screen));
+
+        // Act
+        var opened = await outbox.EnqueueAsync(
+            CreateRequest("mfctl-4f2a"),
+            Encoding.UTF8.GetBytes("an ordinary message"),
+            CancellationToken.None);
+
+        // Assert
+        Assert.True(opened.WasRecordedNow);
+        Assert.Single(store.OpenRequests);
+    }
+
+    /// <summary>
+    /// A scanner that cannot say what the message carries refuses the send rather than queueing it unscreened, which is
+    /// the fail-closed answer every other consumer of the port gives.
+    /// </summary>
+    [Fact]
+    public async Task EnqueueAsync_ScannerThatCannotAnswer_RefusesRatherThanQueueingUnscreened()
+    {
+        // Arrange
+        var store = new InMemoryOutgoingEmailStore();
+
+        using var egress = ScanningSensitiveContentEgress.Unavailable(TimeProvider.System);
+
+        var outbox = CreateOutbox(
+            store,
+            Substitute.For<IEmailContentStore>(),
+            screening: OutgoingMailScreenings.Through(egress.Screen));
+
+        // Act
+        await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(
+            () => outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None));
+
+        // Assert
+        Assert.Empty(store.OpenRequests);
     }
 
     /// <summary>A message naming a recipient the policy refuses is refused whole, and no part of it becomes a record.</summary>
@@ -655,6 +751,7 @@ public sealed class MailOutboxTests
         OutgoingMailGovernor? governor = null,
         IJobStore? jobs = null,
         IOutboxOperationStore? outboxOperations = null,
+        OutgoingMailScreening? screening = null,
         TimeProvider? timeProvider = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
@@ -676,6 +773,7 @@ public sealed class MailOutboxTests
             outboxOperations ?? Substitute.For<IOutboxOperationStore>(),
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
             governor ?? OutgoingMailGovernors.Permitting(),
+            screening ?? OutgoingMailScreenings.Inactive(),
             timeProvider ?? TimeProvider.System);
     }
 

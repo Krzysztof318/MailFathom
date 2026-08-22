@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Delivery.Governance;
 using MailFathom.Domain.Failures;
 
@@ -150,4 +151,40 @@ public sealed class OutgoingMailRefusedException : MailFathomException
     public static OutgoingMailRefusedException RecipientUnvouched() => new(
         MailFathomErrorCode.OutgoingRecipientUnvouched,
         "This deployment sends only to people it holds a record of, and one recipient of this message is not one of them, so the whole message is refused.");
+
+    /// <summary>Reports a message this deployment will not transmit, because of what the message carries.</summary>
+    /// <param name="refusal">What the screen stopped it with.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="refusal" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the refusal names a reason this system does not declare.</exception>
+    /// <remarks>
+    /// <para>
+    /// It names the category of material and nothing else about the finding, which is the same rule the refusals above
+    /// keep about a recipient: a category is one of this deployment's own configured names, while a rule name and a
+    /// position would say where in the message the credential is, on a line that reaches a log.
+    /// </para>
+    /// <para>
+    /// The message is refused whole rather than transmitted with the material removed. Replacing part of a body would
+    /// send words the author never wrote under their own address, and nobody on either end of the message would be able
+    /// to tell that anything had been changed.
+    /// </para>
+    /// </remarks>
+    public static OutgoingMailRefusedException ContentRefused(SensitiveContentEgressRefusal refusal)
+    {
+        ArgumentNullException.ThrowIfNull(refusal);
+
+        return refusal.Reason switch
+        {
+            SensitiveContentEgressRefusalReason.ContentFound => new OutgoingMailRefusedException(
+                MailFathomErrorCode.OutgoingMailContentRefused,
+                $"This deployment screens the mail it sends, and this message carries content it classes as {refusal.Category}, so nothing was queued. Take that material out of the message and ask again."),
+            SensitiveContentEgressRefusalReason.TextExceededScanCeiling => new OutgoingMailRefusedException(
+                MailFathomErrorCode.OutgoingMailNotFullyScanned,
+                "This message is longer than one sensitive-content scan analyzes, so nothing established what all of it carries and nothing was queued. Send a shorter message, or ask the operator to raise the analyzed ceiling."),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(refusal),
+                refusal.Reason,
+                "The sensitive-content egress refusal reason is not one this system declares."),
+        };
+    }
 }

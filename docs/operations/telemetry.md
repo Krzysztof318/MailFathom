@@ -912,11 +912,12 @@ is counted.
 
 ### What guarding an egress point publishes
 
-Sensitive-content scanning publishes five instruments, all of them tagged with
-`mailfathom.sensitive_content.egress_point` — `chat_prompt`, `hosted_embedding_input`, `mcp_snippet`, or
-`mcp_email_content`. The egress point is on every one of them because it is what an operator acts on: "something was
-redacted" says nothing, while a scanner finding credentials in retrieved extracts and nothing in subjects, or adding two
-seconds to a listing and nothing to an embedding call, is where a category list or a bound gets changed. It is also how
+Sensitive-content scanning publishes six instruments, all of them tagged with
+`mailfathom.sensitive_content.egress_point` — `chat_prompt`, `hosted_embedding_input`, `mcp_snippet`,
+`mcp_email_content`, or `outgoing_mail`. The egress point is on every one of them because it is what an operator acts
+on: "something was redacted" says nothing, while a scanner finding credentials in retrieved extracts and nothing in
+subjects, or adding two seconds to a listing and nothing to an embedding call, is where a category list or a bound gets
+changed. It is also how
 the cost of scanning a whole message is read: `mcp_email_content` is the point a reader waits on, kept apart from the
 snippet scanning that would otherwise average it away.
 
@@ -933,12 +934,20 @@ beneath the read that asked for the payload, so one call's guarding is readable 
 | `mailfathom.sensitive_content.findings` | How many detections were replaced, split by `mailfathom.sensitive_content.category` |
 | `mailfathom.sensitive_content.omitted` | How many characters the analyzed ceiling dropped rather than hand on unscanned |
 | `mailfathom.sensitive_content.refusals` | How many operations a scanner that could not answer refused, by `mailfathom.sensitive_content.scanner` |
+| `mailfathom.sensitive_content.stopped` | How many acts were cancelled because the material found is material this deployment will not let leave, by `mailfathom.sensitive_content.scanner` and `mailfathom.sensitive_content.category` |
 | `mailfathom.sensitive_content.scan.duration` | What scanning added to one guarded operation |
+
+**The stopped count is the one series about an act that did not happen**, and today `outgoing_mail` is the only point
+that produces it: everywhere else a finding is redacted and the operation continues. Both of its tags are written
+whatever stopped the act, and an act stopped because the analyzed ceiling cut the text reads `not_scanned` in each —
+a value rather than an absent tag, because a series missing one dimension is a second series and a query summing this
+counter by scanner would silently drop every length refusal. Which findings stop an act is the operator's, and
+[`SensitiveContent:ScreenOutgoingMailFor`](configuration-ai.md#sensitivecontent) is where it is written.
 
 The findings are split by category rather than totalled because which kind of material a mailbox is producing is what
 decides whether a category list is right, and a total says only that the feature is switched on. The omitted count is
 recorded only when the ceiling actually cut something: a zero on every guarded text would make the series say the
-ceiling is in play on ordinary mail, which is the one question that instrument exists to answer. All five read zero on a
+ceiling is in play on ordinary mail, which is the one question that instrument exists to answer. All six read zero on a
 deployment with both switches off, because nothing is constructed there.
 
 Nothing published here is mail or derived from it. The three tags are MailFathom's own closed sets, and the values are

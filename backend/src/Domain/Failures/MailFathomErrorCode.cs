@@ -658,6 +658,34 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode OutgoingEmailNoLongerCancellable { get; } = new(58001);
 
+    /// <summary>Gets subcategory 9, content policy: a message carries material this deployment screens outgoing mail for, so the act was refused rather than the text rewritten.</summary>
+    /// <remarks>
+    /// <para>
+    /// A subcategory of its own because nothing about the request decided it. The caller may send, the recipients are
+    /// admitted, the period has room, and the fields compose — what refused the act is what the message says, which is
+    /// the one thing none of the subcategories above is about.
+    /// </para>
+    /// <para>
+    /// It names the category of material and never a rule, a position, or any part of what was found, for the reason
+    /// every record of a finding here names those two and no more: a refusal is a line in a log, and the position of a
+    /// credential written into one recreates the leak the screen exists to prevent.
+    /// </para>
+    /// <para>
+    /// One code covers a send and a draft. The two acts are described differently in the sentence beside it, because a
+    /// caller told its draft was refused when it asked to send would look for a message that does not exist — but the
+    /// remedy is the same one in both: take the material out of the message and ask again.
+    /// </para>
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingMailContentRefused { get; } = new(59001);
+
+    /// <summary>Gets subcategory 9, content policy: a message is longer than one scan analyzes, so nothing established what its remainder carries.</summary>
+    /// <remarks>
+    /// Separate from the code above because the remedy is separate and because nothing was found: the author shortens
+    /// the message, or the operator raises the analyzed ceiling. Telling them a category was detected would send them
+    /// looking through a message for material no scanner ever reported.
+    /// </remarks>
+    public static MailFathomErrorCode OutgoingMailNotFullyScanned { get; } = new(59002);
+
     #endregion
 
     #region Category 6 — Embedding providers
@@ -825,6 +853,8 @@ public readonly record struct MailFathomErrorCode
         MailAnsweringBudgetExhausted,
         OutgoingMailCeilingReached,
         OutgoingEmailNoLongerCancellable,
+        OutgoingMailContentRefused,
+        OutgoingMailNotFullyScanned,
         EmbeddingProviderCredentialRejected,
         EmbeddingProviderUnavailable,
         EmbeddingVectorShapeUnexpected,

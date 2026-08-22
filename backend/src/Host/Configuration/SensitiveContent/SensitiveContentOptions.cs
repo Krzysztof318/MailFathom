@@ -41,6 +41,39 @@ internal sealed class SensitiveContentOptions : IValidatableObject
     /// <summary>Gets where that analyzer is, what language it is asked in, and how sure it must be.</summary>
     public PersonalDataAnalyzerOptions PersonalDataAnalyzer { get; } = new();
 
+    /// <summary>Gets or sets which scanners stop an outgoing message rather than being read for a placeholder.</summary>
+    /// <remarks>
+    /// <para>
+    /// The switches above decide what this deployment <em>detects</em>, and it detects the same things everywhere. This
+    /// decides what a detection <em>does</em> on the one path where redaction is not an answer: a message being queued
+    /// for transmission or filed as a draft is somebody's own text, so a finding refuses the act instead of being
+    /// replaced in it. Naming a scanner here is what turns its findings into refusals; a scanner not named goes on
+    /// guarding every other path exactly as before.
+    /// </para>
+    /// <para>
+    /// <b>The default is the secrets scanner alone, and the omission of the other one is the point.</b> A credential in
+    /// a message somebody is sending was never meant to be in it, while the names, addresses, and signature blocks the
+    /// personal-data scanner reports are most of what ordinary correspondence is made of — a deployment that let those
+    /// stop a send would have turned sending off by a longer route. An operator handling regulated correspondence names
+    /// both and accepts that.
+    /// </para>
+    /// <para>
+    /// A scanner named here while its own switch is off screens nothing, and that is not refused: the switch is what
+    /// decides whether a scanner runs at all, and a deployment that turned one off has answered for every path it would
+    /// have reached. Writing an empty list screens nothing at all, which is how a deployment keeps redaction on every
+    /// other path and lets its own mail leave unscreened.
+    /// </para>
+    /// <para>
+    /// It is an array rather than the <c>IList</c> its neighbours use, because <c>[]</c> has to be distinguishable from
+    /// an absent key here and only an array property tells the two apart: the binder leaves a list untouched at its
+    /// default, so an operator writing an empty list would silently get the default instead of the nothing they asked
+    /// for. The entries stay <c>string</c> and are parsed rather than bound as the enum, because a bound element that
+    /// fails to convert is dropped and a one-entry list whose only entry was mistyped would arrive as the empty list,
+    /// which now means something.
+    /// </para>
+    /// </remarks>
+    public string[]? ScreenOutgoingMailFor { get; set; }
+
     /// <summary>Gets or sets the greatest number of characters one scan analyzes.</summary>
     /// <remarks>
     /// Text beyond it is dropped from the result rather than handed on unscanned. The default matches what a single
@@ -109,9 +142,42 @@ internal sealed class SensitiveContentOptions : IValidatableObject
                 [nameof(this.ScanTimeout)]);
         }
 
+        foreach (var result in this.FindScreeningErrors())
+        {
+            yield return result;
+        }
+
         foreach (var result in this.FindAnalyzerErrors())
         {
             yield return result;
+        }
+    }
+
+    /// <summary>Finds what is wrong with the scanners named as stopping an outgoing message.</summary>
+    /// <remarks>
+    /// The spelling is all that is judged. A name that is not one of the two scanners would otherwise be dropped in
+    /// silence and read as a deployment that screens less than its own file says it does, which is the failure mode
+    /// every list in this section is validated against. A correctly spelled scanner whose switch is off is not judged,
+    /// for the reason stated where the key is declared.
+    /// </remarks>
+    private IEnumerable<ValidationResult> FindScreeningErrors()
+    {
+        if (this.ScreenOutgoingMailFor is not { } named)
+        {
+            yield break;
+        }
+
+        var accepted = Enum.GetNames<SensitiveContentScannerKind>();
+
+        var unknown = named
+            .Where(scanner => !accepted.Contains(scanner, StringComparer.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (unknown.Length > 0)
+        {
+            yield return new ValidationResult(
+                $"{SectionName}:{nameof(this.ScreenOutgoingMailFor)} names '{string.Join("', '", unknown)}', and every entry is one of the scanners this deployment can switch on: {string.Join(", ", accepted)}.",
+                [nameof(this.ScreenOutgoingMailFor)]);
         }
     }
 

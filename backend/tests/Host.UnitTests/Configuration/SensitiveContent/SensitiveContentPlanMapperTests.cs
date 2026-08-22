@@ -263,4 +263,88 @@ public sealed class SensitiveContentPlanMapperTests
         Assert.Throws<InvalidOperationException>(() => SensitiveContentPlanMapper.MapAnalyzerProfile(noAddress));
         Assert.Throws<ArgumentNullException>(() => SensitiveContentPlanMapper.MapAnalyzerProfile(null!));
     }
+
+    /// <summary>
+    /// A deployment that switched a scanner on and said nothing about outgoing mail screens for secrets, because a key
+    /// in a message is the case this feature exists for and no ordinary correspondence carries one.
+    /// </summary>
+    [Fact]
+    public void MapScreeningPolicy_ADeploymentThatNamedNothing_ScreensForSecrets()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions();
+        settings.Secrets.Enabled = true;
+        settings.Pii.Enabled = true;
+        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog, PersonalDataCatalog])!;
+
+        // Act
+        var policy = SensitiveContentPlanMapper.MapScreeningPolicy(settings, plan);
+
+        // Assert
+        Assert.True(policy.RefusesAnything);
+        Assert.Equal(SensitiveContentScannerKind.Secrets, policy.StoppedBy(FindingOf("CloudKey")));
+        Assert.Null(policy.StoppedBy(FindingOf("PersonName")));
+    }
+
+    /// <summary>
+    /// Personal data is what ordinary correspondence is made of, so screening for it stops nearly every message and is
+    /// never reached without the operator naming it.
+    /// </summary>
+    [Fact]
+    public void MapScreeningPolicy_ADeploymentThatNamedBothScanners_ScreensForBoth()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions { ScreenOutgoingMailFor = ["Secrets", "pii"] };
+        settings.Secrets.Enabled = true;
+        settings.Pii.Enabled = true;
+        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog, PersonalDataCatalog])!;
+
+        // Act
+        var policy = SensitiveContentPlanMapper.MapScreeningPolicy(settings, plan);
+
+        // Assert
+        Assert.Equal(SensitiveContentScannerKind.Secrets, policy.StoppedBy(FindingOf("CloudKey")));
+        Assert.Equal(SensitiveContentScannerKind.Pii, policy.StoppedBy(FindingOf("PersonName")));
+    }
+
+    /// <summary>Naming nothing is how an operator keeps a scanner redacting without ever stopping a send.</summary>
+    [Fact]
+    public void MapScreeningPolicy_ADeploymentThatNamedNoScanner_ScreensNothing()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions { ScreenOutgoingMailFor = [] };
+        settings.Secrets.Enabled = true;
+        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog])!;
+
+        // Act
+        var policy = SensitiveContentPlanMapper.MapScreeningPolicy(settings, plan);
+
+        // Assert
+        Assert.False(policy.RefusesAnything);
+        Assert.Null(policy.StoppedBy(FindingOf("CloudKey")));
+    }
+
+    /// <summary>A scanner named for screening but never switched on has nothing to screen with, and stops nothing.</summary>
+    [Fact]
+    public void MapScreeningPolicy_AScannerNamedWhoseSwitchIsOff_ScreensNothing()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions { ScreenOutgoingMailFor = ["Pii"] };
+        settings.Secrets.Enabled = true;
+        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog, PersonalDataCatalog])!;
+
+        // Act
+        var policy = SensitiveContentPlanMapper.MapScreeningPolicy(settings, plan);
+
+        // Assert
+        Assert.False(policy.RefusesAnything);
+    }
+
+    private static SensitiveContentFinding FindingOf(string category) =>
+        SensitiveContentFinding.Create(
+            SensitiveContentRule.Create(SensitiveContentCategory.Create(category), $"{category}-rule"),
+            SensitiveContentSpan.Create(0, length: 4),
+            confidence: 1,
+            SensitiveContentDetector.Create("test", "1"),
+            new DateTimeOffset(2026, 8, 22, 9, 0, 0, TimeSpan.Zero));
 }

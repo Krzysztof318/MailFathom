@@ -45,4 +45,22 @@ public enum SensitiveContentEgressPoint
     /// the listing would average the two into a number describing neither.
     /// </remarks>
     McpEmailContent = 3,
+
+    /// <summary>A message this deployment is about to put on a mail server: one being queued for transmission, and one being filed as a draft.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is the one member a redaction never reaches.</b> Every point above publishes something a reader is shown,
+    /// so removing what a scanner found still answers the question that was asked. Here the text is a message somebody
+    /// wrote, and rewriting it would transmit words its author never chose under their own address — so this point is
+    /// screened by <see cref="SensitiveContentEgressScreen" /> and the act is refused instead. A deployment reads that
+    /// difference on the instruments, which is why the point carries a member rather than being folded into one above.
+    /// </para>
+    /// <para>
+    /// A draft shares it with a send rather than taking a member of its own, because what both do is put the author's
+    /// text on a server this deployment does not own. That the drafts folder is the owner's own mailbox narrows who
+    /// reads it and changes nothing about where the bytes end up, and a message written into it is one <c>send_draft</c>
+    /// call away from a recipient.
+    /// </para>
+    /// </remarks>
+    OutgoingMail = 4,
 }

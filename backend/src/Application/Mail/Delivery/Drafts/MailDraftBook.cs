@@ -5,7 +5,9 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
@@ -42,6 +44,7 @@ public sealed class MailDraftBook
     private readonly IEmailContentStore contentStore;
     private readonly OptimisticConcurrencyRetryPolicy retryPolicy;
     private readonly MailDraftFiler filer;
+    private readonly OutgoingMailScreening screening;
     private readonly AccessAuthorization authorization;
     private readonly TimeProvider timeProvider;
 
@@ -50,6 +53,7 @@ public sealed class MailDraftBook
     /// <param name="contentStore">Holds the composed MIME each revision is.</param>
     /// <param name="retryPolicy">Commits the record and the message together.</param>
     /// <param name="filer">Brings the drafts folder into step with what was written.</param>
+    /// <param name="screening">Answers whether what the draft says is something this deployment lets onto a mail server.</param>
     /// <param name="authorization">Answers whether whoever reached this is admitted to write a draft at all.</param>
     /// <param name="timeProvider">Stamps every instant the record carries.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
@@ -58,6 +62,7 @@ public sealed class MailDraftBook
         IEmailContentStore contentStore,
         OptimisticConcurrencyRetryPolicy retryPolicy,
         MailDraftFiler filer,
+        OutgoingMailScreening screening,
         AccessAuthorization authorization,
         TimeProvider timeProvider)
     {
@@ -65,6 +70,7 @@ public sealed class MailDraftBook
         ArgumentNullException.ThrowIfNull(contentStore);
         ArgumentNullException.ThrowIfNull(retryPolicy);
         ArgumentNullException.ThrowIfNull(filer);
+        ArgumentNullException.ThrowIfNull(screening);
         ArgumentNullException.ThrowIfNull(authorization);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
@@ -72,6 +78,7 @@ public sealed class MailDraftBook
         this.contentStore = contentStore;
         this.retryPolicy = retryPolicy;
         this.filer = filer;
+        this.screening = screening;
         this.authorization = authorization;
         this.timeProvider = timeProvider;
     }
@@ -85,7 +92,8 @@ public sealed class MailDraftBook
     /// <returns>The draft as it stands once the mailbox has been brought into step with it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="author" /> or <paramref name="composed" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the act the author names is not what reached this.</exception>
-    /// <exception cref="MailDraftRefusedException">Thrown when <paramref name="revises" /> names no draft of this account that is still being written.</exception>
+    /// <exception cref="MailDraftRefusedException">Thrown when <paramref name="revises" /> names no draft of this account that is still being written, or when the message carries material this deployment screens outgoing mail for.</exception>
+    /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the message carries, which refuses the draft rather than filing it unscreened.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when the write did not commit on any allowed attempt.</exception>
     /// <remarks>
     /// The revision is durable before any command reaches the mail server, which is what makes a replacement
@@ -107,6 +115,14 @@ public sealed class MailDraftBook
         if (revises is { } revisedDraftId)
         {
             await this.RequireRevisableAsync(accountId, revisedDraftId, cancellationToken);
+        }
+
+        // Before the write, so a refused draft leaves neither a record nor a message nor a copy in the mailbox — and
+        // asked on every revision rather than on the first one alone, because a revision is a new message and because a
+        // draft written before the screen was switched on would otherwise carry its way past it one edit at a time.
+        if (await this.screening.FindRefusalAsync(composed.RawMime, cancellationToken) is { } screened)
+        {
+            throw MailDraftRefusedException.ContentRefused(screened);
         }
 
         var writtenAt = this.timeProvider.GetUtcNow();

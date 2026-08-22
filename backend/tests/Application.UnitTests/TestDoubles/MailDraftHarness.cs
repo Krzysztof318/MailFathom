@@ -9,6 +9,7 @@ using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Outbox;
+using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
@@ -66,6 +67,7 @@ internal sealed class MailDraftHarness
     private readonly TimeProvider clock;
 
     private StubMailFolderMappings mappings = StubMailFolderMappings.Nothing;
+    private OutgoingMailScreening screening = OutgoingMailScreenings.Inactive();
 
     internal MailDraftHarness(
         TimeProvider clock,
@@ -174,6 +176,17 @@ internal sealed class MailDraftHarness
     /// <summary>Gets or sets what the server does when asked to take a copy back out, which defaults to doing it.</summary>
     internal Func<ImapUidValidity, ImapUid, Task> Withdraw { get; set; } = (_, _) => Task.CompletedTask;
 
+    /// <summary>Puts a screening in front of the book, and rebuilds it so the next save meets that screening.</summary>
+    /// <param name="outgoingMailScreening">What the book asks before it writes anything down.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="outgoingMailScreening" /> is <see langword="null" />.</exception>
+    internal void ScreenWith(OutgoingMailScreening outgoingMailScreening)
+    {
+        ArgumentNullException.ThrowIfNull(outgoingMailScreening);
+
+        this.screening = outgoingMailScreening;
+        this.BeginNewScope();
+    }
+
     /// <summary>Rebuilds everything a work unit owns, which is what makes the next call a later run.</summary>
     /// <remarks>
     /// Only the destination resolver's memory actually turns over, and that is the point: a folder that moved is met by
@@ -212,6 +225,7 @@ internal sealed class MailDraftHarness
             this.Contents,
             this.commitPolicy,
             this.Filer,
+            this.screening,
             this.authorization,
             this.clock);
 

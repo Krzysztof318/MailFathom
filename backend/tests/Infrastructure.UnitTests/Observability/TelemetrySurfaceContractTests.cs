@@ -687,6 +687,12 @@ public sealed class TelemetrySurfaceContractTests
         {
             Egress.RecordGuarded(egressPoint, redacted, TimeSpan.FromMilliseconds(4));
             Egress.RecordRefused(egressPoint, SensitiveContentScannerKind.Pii);
+            Egress.RecordStopped(
+                egressPoint,
+                SensitiveContentEgressRefusal.ContentFound(
+                    SensitiveContentScannerKind.Secrets,
+                    SensitiveContentCategory.Create("CloudKey")));
+            Egress.RecordStopped(egressPoint, SensitiveContentEgressRefusal.NotFullyScanned());
         }
     }
 }

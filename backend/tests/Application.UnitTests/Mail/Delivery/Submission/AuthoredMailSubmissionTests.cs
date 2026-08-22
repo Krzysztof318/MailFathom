@@ -623,6 +623,7 @@ public sealed class AuthoredMailSubmissionTests
                 Substitute.For<IOutboxOperationStore>(),
                 authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
                 OutgoingMailGovernors.Permitting(),
+                OutgoingMailScreenings.Inactive(),
                 new FakeTimeProvider(Recorded)),
             governor ?? AuthoredSendGovernors.Permitting(authorization),
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
