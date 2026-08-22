@@ -274,6 +274,52 @@ public static class OrchestrationContract
     /// <summary>The EF Core migration tool resource.</summary>
     public const string MigrationsResourceName = "mailfathom-migrations";
 
+    /// <summary>The MailFathom client resource, which serves the browser head beside the service it talks to.</summary>
+    /// <remarks>
+    /// <para>
+    /// An executable resource rather than a project one, and the difference is the client's target frameworks rather
+    /// than its directory. Aspire runs a project resource through <c>dotnet run --project</c>, whose argument list
+    /// carries no framework — <c>ProjectResourceOptions</c> exposes a launch profile and nothing that would select a
+    /// target — while the client declares three of them, so the command exits with <c>Your project targets multiple
+    /// frameworks. Specify which framework to run using '--framework'.</c> before it builds anything. Naming the head
+    /// on the command line is what starts the browser one, and only an executable resource can.
+    /// </para>
+    /// <para>
+    /// Present only in a developer's topology. The integration suite starts this same app model to test the service,
+    /// and a browser head there would build a WebAssembly bundle on every run that no test reads.
+    /// </para>
+    /// </remarks>
+    public const string ClientResourceName = "mailfathom-client";
+
+    /// <summary>The client project's directory, relative to the app host's own.</summary>
+    /// <remarks>
+    /// A path rather than a reference, which is the whole of what the app model asks of the other stack: MSBuild is
+    /// never told the two projects are related, so <c>backend/MailFathom.slnx</c> still names no project under
+    /// <c>frontend/</c> and building the service restores nothing the client needs. What the app host holds is a
+    /// directory it starts a process in.
+    /// </remarks>
+    public const string ClientProjectDirectory = "../../../frontend/src/Client";
+
+    /// <summary>The target framework the client resource starts, which is the browser head.</summary>
+    /// <remarks>
+    /// Stated here rather than read from the client's project file, because it is this app model's choice of head
+    /// rather than the client's list of them: the desktop head is started from an IDE, and an orchestration adds
+    /// nothing to it. It has to name one of the frameworks <c>frontend/src/Client/Client.csproj</c> declares, and a
+    /// run whose name matches none of them fails on this resource alone.
+    /// </remarks>
+    public const string ClientBrowserTargetFramework = "net10.0-browserwasm";
+
+    /// <summary>The endpoint the client's development server answers the browser head on.</summary>
+    public const string ClientHttpEndpointName = "http";
+
+    /// <summary>The environment variable the client's development server reads the address it binds from.</summary>
+    /// <remarks>
+    /// The .NET SDK's WebAssembly host is an ASP.NET Core server, so it takes its address the way one does. Stating it
+    /// is what makes the number the app model published and the number the server bound the same; left unset, the host
+    /// takes a pair of ports of its own choosing and the dashboard would link an address nothing is served on.
+    /// </remarks>
+    public const string ClientServerUrlsVariable = "ASPNETCORE_URLS";
+
     /// <summary>The IMAP and SMTP server the integration-test topology synchronizes against.</summary>
     /// <remarks>
     /// Present only under <see cref="IntegrationTestingArgument" />. A developer's orchestration synchronizes the
@@ -522,6 +568,27 @@ public static class OrchestrationContract
     /// <remarks>Read the way <see cref="PinnedMcpEndpointPortKey" /> is. Pinning it is what a database tool configured once wants; leaving it unset is what lets a second checkout start a server of its own.</remarks>
     public const string PinnedPostgresPortKey = "Ports:Postgres";
 
+    /// <summary>The configuration key a developer states the client's development server port under to pin it.</summary>
+    /// <remarks>Read the way <see cref="PinnedMcpEndpointPortKey" /> is. Pinning it is what a bookmarked browser tab wants; leaving it unset is what lets a second checkout serve a head of its own.</remarks>
+    public const string PinnedClientPortKey = "Ports:Client";
+
+    /// <summary>The configuration key a developer states <see langword="false" /> under to run the orchestration without the client.</summary>
+    /// <remarks>
+    /// <para>
+    /// Starting the browser head builds a WebAssembly bundle, which needs the <c>wasm-tools</c> workload installed and
+    /// costs a minute the first time. That is a fact about one machine rather than about this repository, so it is
+    /// stated where the pinned ports are — the app host's own user secrets, out of every checkout — and its
+    /// environment form, <c>Client__Enabled</c>, is what leaves the client out of a single run.
+    /// </para>
+    /// <para>
+    /// Read from configuration rather than from the argument list, unlike <see cref="IntegrationTestingArgument" />,
+    /// and the difference is what each one decides. The argument selects a topology, so an ambient value could divert
+    /// an ordinary run onto the ephemeral database; this removes one resource from a topology already selected, which
+    /// is a thing a developer who set it meant and a thing no other run is harmed by.
+    /// </para>
+    /// </remarks>
+    public const string ClientEnabledKey = "Client:Enabled";
+
     /// <summary>The lowest number a pinned port may state.</summary>
     private const int MinimumPortNumber = 1;
 
@@ -590,6 +657,33 @@ public static class OrchestrationContract
         }
 
         return port;
+    }
+
+    /// <summary>Reads whether this run starts the client, from the value configuration holds under <see cref="ClientEnabledKey" />.</summary>
+    /// <param name="statedValue">The value configuration holds under that key, or <see langword="null" /> when it holds none.</param>
+    /// <returns><see langword="true" /> unless the developer stated otherwise, which is what makes one command bring up a working MailFathom.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when a stated value is not a boolean.</exception>
+    /// <remarks>
+    /// A stated value that is not a boolean is refused rather than ignored, for the reason an unusable pinned port is:
+    /// a developer who wrote <c>0</c> or <c>no</c> asked for the client to stay out of the run, and starting it anyway
+    /// would build a WebAssembly bundle they were trying to avoid while nothing said why.
+    /// </remarks>
+    public static bool ResolveClientEnabled(string? statedValue)
+    {
+        if (string.IsNullOrWhiteSpace(statedValue))
+        {
+            return true;
+        }
+
+        var statedBoolean = statedValue.Trim();
+
+        if (!bool.TryParse(statedBoolean, out var clientEnabled))
+        {
+            throw new InvalidOperationException(
+                $"{ClientEnabledKey} is '{statedBoolean}', which is not true or false. State one of those, or leave it unset to start the client with the rest of the orchestration.");
+        }
+
+        return clientEnabled;
     }
 
     /// <summary>Finds free TCP ports for the sockets the orchestration publishes without a proxy in front of them.</summary>

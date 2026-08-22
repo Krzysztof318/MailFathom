@@ -169,11 +169,14 @@ daemon:
 dotnet run --project backend/src/AppHost/AppHost.csproj
 ```
 
-Three resources come up, in dependency order. The `postgres` container starts first and has to report healthy; the
-`mailfathom-migrations` resource then applies every pending migration to it; and `mailfathom-host` waits for that run
+Four resources come up, three of them in dependency order. The `postgres` container starts first and has to report
+healthy; the `mailfathom-migrations` resource then applies every pending migration to it; and `mailfathom-host` waits
+for that run
 to complete before starting, which is why the schema gate that fails a fresh deployment on purpose never fires on a
 local run — the explicit schema step the deployments require is performed here by the orchestration, before the host
-looks. The host runs in the `Development` environment on two sockets, the MCP endpoint's on `localhost` and the probes'
+looks. The fourth is `mailfathom-client`, which serves the browser head and waits for none of them, since a static file
+server has nothing to wait for; it is [described below](#the-client-resource).
+The host runs in the `Development` environment on two sockets, the MCP endpoint's on `localhost` and the probes'
 on `127.0.0.1`, each on a free port the run takes unless this checkout [pinned one](#pinning-a-port); the
 dashboard reports the numbers it took. There is no local TLS listener: MailFathom
 never serves one out of an ASP.NET Core development certificate, so a developer who wants TLS configures
@@ -192,25 +195,72 @@ and MailFathom refuses that variable outright, because each surface states where
 endpoint is published without ever reaching it. That is also why the resource carries no `WithHttpHealthCheck`, which
 derives its address from an HTTP endpoint this app model declares none of.
 
+### The client resource
+
+`mailfathom-client` is the browser head of the client under `frontend/`, served on a socket of its own that the
+dashboard lists like any other endpoint. It is what makes `aspire run` bring up a MailFathom with a face on it rather
+than a service and a second terminal.
+
+It is an **executable** resource rather than a project one, and the reason is the client's target frameworks rather
+than its directory. Aspire starts a project resource by running `dotnet run --project <path> --configuration Debug
+--no-launch-profile`, and that argument list carries no framework — `ProjectResourceOptions` exposes a launch profile
+and nothing that selects a target. `frontend/src/Client/Client.csproj` declares three, so the command exits with
+`Your project targets multiple frameworks. Specify which framework to run using '--framework'.` before it builds
+anything, whichever launch profile is named. The app model therefore runs `dotnet run --framework net10.0-browserwasm
+--no-launch-profile` in the client's own directory, which is the one shape that starts a head. The profiles in
+`frontend/src/Client/Properties/launchSettings.json` stay what an IDE reads; the first of them opens a browser window
+on every start, which an orchestration that already publishes the address does not need to do.
+
+Nothing about this is a reference. The app host holds a path and a command, MSBuild is never told the two projects are
+related, and `backend/MailFathom.slnx` still names no project under `frontend/` — so building or testing the service
+restores nothing the client needs. What the client's own build costs is paid by starting **this resource**: it needs
+the **`wasm-tools` workload**, which `dotnet workload install wasm-tools` provides, and it takes about a minute the
+first time it builds a bundle. The Uno SDK needs no installation of its own — `msbuild-sdks` in `global.json` pins it
+and NuGet restores it. On a machine without the workload this resource fails on its own, naming the workload the .NET
+SDK wants, while PostgreSQL, the migrations, and the host still start.
+
+To run the orchestration without it at all, state so in the app host's own user secrets, where the pinned ports live
+and for the same reason — it is a decision about one machine rather than about a checkout:
+
+```bash
+dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Client:Enabled" "false"
+```
+
+Its environment form leaves the client out of a single run: `Client__Enabled=false dotnet run --project
+backend/src/AppHost/AppHost.csproj`. A value that is neither `true` nor `false` fails the app host at startup naming
+the key, rather than being ignored and building the bundle the developer was avoiding.
+
+The `IntegrationTesting=true` switch that selects the ephemeral topology leaves the client out of it entirely, the way
+it decides every other resource there: a suite that tests the service would otherwise build a WebAssembly bundle on
+every run that no test reads.
+
+**What the client is not yet given is the service's address.** The app model can hand a value to the process it starts,
+and the browser head does not run in that process — it runs in a browser, which reads none of its environment. The
+client has no HTTP client to configure yet either, so nothing is wired today rather than something being wired that
+could not be read; [issue #1097](https://github.com/Krzysztof318/MailFathom/issues/1097) owns delivering the address
+into the head, and the cross-origin permission that comes with it.
+
 ### Pinning a port
 
 Every port this topology publishes is taken free per run, which is what lets several checkouts of this repository run
 their orchestrations at the same time: a fixed port is one port, and the second run to ask for it fails to bind and
 exits. The integration-test topology has never used a fixed one, for that same reason.
 
-A port taken per run moves between runs, and an address written once into an MCP client's configuration or a database
-tool should not have to. So each socket is pinned on its own, in the app host's own user secrets — where a decision
-about one machine belongs, out of every checkout:
+A port taken per run moves between runs, and an address written once into an MCP client's configuration, a database
+tool, or a browser tab should not have to. So each socket is pinned on its own, in the app host's own user secrets —
+where a decision about one machine belongs, out of every checkout:
 
 ```bash
 dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:McpEndpoint" "8080"
 dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:HealthEndpoints" "8081"
 dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:Postgres" "5432"
+dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:Client" "5000"
 ```
 
 `8080` and `8081` are the ports [the container image](container-image.md) publishes and `5432` is PostgreSQL's own, so
-those three values are what makes a local run answer where a deployment does. Each key is read on its own, so pinning
-the MCP endpoint leaves the probes and the database on whatever the run takes. A value that is not a port number
+those three values are what makes a local run answer where a deployment does; `Ports:Client` answers a different want,
+which is a browser tab that survives a restart of the orchestration. Each key is read on its own, so pinning the MCP
+endpoint leaves the probes, the database, and the client on whatever the run takes. A value that is not a port number
 between `1` and `65535` fails the app host at startup naming the key, rather than being ignored and leaving the address
 to move anyway.
 
@@ -218,7 +268,7 @@ That store is keyed by the `UserSecretsId` in `backend/src/AppHost/AppHost.cspro
 pinned there is pinned for **every checkout on the machine** — which is the collision above, taken deliberately for the
 address it buys. It is also loaded in the `Development` environment only, which is what the app host's only launch
 profile runs it in. The environment form of each key is what pins a port for one run: `Ports__McpEndpoint`,
-`Ports__HealthEndpoints`, and `Ports__Postgres` are read after the store and therefore win over it.
+`Ports__HealthEndpoints`, `Ports__Postgres`, and `Ports__Client` are read after the store and therefore win over it.
 
 ```bash
 Ports__McpEndpoint=8080 dotnet run --project backend/src/AppHost/AppHost.csproj
