@@ -1,0 +1,32 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+namespace MailFathom.Client.Backend;
+
+/// <summary>Where a deployment answers, relative to the address the composing host supplied.</summary>
+/// <remarks>
+/// <para>
+/// The client is configured with an address and appends the rest, so these paths are the whole of what it assumes
+/// about the other side. Stated together rather than beside each caller, because they are one agreement with the
+/// service: the deployment publishes the client surface beneath the prefix and derives its resource identifier from
+/// that same prefix, which is what puts the metadata document exactly where RFC 9728 says to look for it.
+/// </para>
+/// <para>
+/// The same agreement is stated at the other end, in <c>backend/src/Cli/Administration/AdminEndpointRoutes.cs</c> for
+/// the administrative surface. Two lists that happen to share a shape are not duplication — they are one contract
+/// stated at each end, and sharing a constant across the two stacks is exactly the compile-time coupling
+/// <c>frontend/src/AGENTS.md</c> refuses.
+/// </para>
+/// </remarks>
+internal static class DeploymentRoutes
+{
+    /// <summary>The prefix every client route is served beneath.</summary>
+    internal const string Prefix = "/api/client";
+
+    /// <summary>Where a deployment reports what a presented credential makes the caller.</summary>
+    internal const string SessionPath = $"{Prefix}/session";
+
+    /// <summary>Where a deployment publishes what a client must obtain before it holds any credential.</summary>
+    internal const string ProtectedResourceMetadataPath = $"/.well-known/oauth-protected-resource{Prefix}";
+}

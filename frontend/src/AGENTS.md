@@ -128,16 +128,28 @@ frontend/
   Directory.Build.props      the client's build contract, importing the root Version.props
   Directory.Packages.props   the client's own pins; Uno's own packages come from the SDK
   src/Client/                the application — one Uno single project, every head inside it
-  tests/Client.UnitTests/    the unit suite, governed by frontend/tests/AGENTS.md
+  src/Client.Backend/        everything that reaches the service — plain net10.0, and no Uno package
+  tests/Client.UnitTests/    the unit suite over both, governed by frontend/tests/AGENTS.md
 ```
 
+- **Two projects, and what separates them is the compiler rather than a folder.** `src/Client/` is the application:
+  the heads, the XAML, the models, the styles. `src/Client.Backend/` is everything that talks to the service, and it
+  targets plain `net10.0` with no Uno package and no WinUI assembly in its graph — so `using Microsoft.UI.Xaml` written
+  there does not compile, and neither does a `DependencyObject` in a service call. That is the rule this page states
+  about a model taking on a view's work, made into a reference graph rather than something a reviewer has to remember.
+  The reference goes one way and only one way: `Client` references `Client.Backend`, never the reverse.
+- **The browser head is the one place the application project sets `AllowUnsafeBlocks`**, and it is set for a generator
+  rather than for any code written here. `[JSImport]` marshals through pointers, so the interop source generator emits
+  unsafe code and refuses to run without the property — `SYSLIB1074` says so by name. Nothing under
+  `Platforms/WebAssembly/` contains an `unsafe` block of its own, which is why the property is conditioned on that one
+  target framework instead of declared for the project.
 - **The two stacks share no build file.** `frontend/Directory.Build.props` and `frontend/Directory.Packages.props` are
   this stack's own, and a property that has to hold in both is written in both rather than lifted to the root — with
   one exception, `Version.props`, which both import so the client and the service report one number.
 - **The Uno version is a single pin**: `msbuild-sdks` in the repository-root `global.json`. Every Uno package version
   follows from it, which is why almost nothing Uno publishes appears in `Directory.Packages.props`. A capability is
   asked for through `UnoFeatures` in the project file rather than by adding a package reference.
-- **The unit-test project carries a lock file and the application project does not**, and restore runs in locked mode
+- **Every project here carries a lock file except the application one**, and restore runs in locked mode
   wherever it is gated. Regenerate deliberately with `dotnet restore frontend/MailFathom.Client.slnx --force-evaluate`
   in the change that moves a pin, and read the transitive diff. The exclusion is not a gap to close: the .NET SDK puts
   `Microsoft.NET.ILLink.Tasks`, `Microsoft.NET.Sdk.WebAssembly.Pack`, and — in a Debug build —
@@ -226,9 +238,12 @@ records what the client resource costs, what it needs installed, and how to run 
 the browser head needs the `wasm-tools` workload; the Uno SDK is pinned in the repository-root `global.json` and
 restored like any other.
 
-**The client does not yet learn the service's address from anywhere.** It has no HTTP client to configure, and a
-browser head reads no environment the app model could set, so nothing is wired rather than something being wired that
-could not be read. Do not invent a mechanism for it as a side effect of a screen.
+**The client does not yet learn the service's address from anywhere.** It has an HTTP client now, and that client is
+built around not deciding this: `AddMailFathomDeployment` takes the address as an argument, nothing in
+`Client.Backend` has a default, and nothing composes one from a literal. What is still missing is the host's half —
+where the composing head reads the address from — and a browser head reads no environment the app model could set, so
+nothing is wired rather than something being wired that could not be read. Do not invent a mechanism for it as a side
+effect of a screen.
 
 ## Reaching the backend
 
@@ -236,13 +251,42 @@ The client is an HTTP client of `backend/src/Host` and nothing more. It speaks t
 never references a backend project, never links a backend source file, and never receives a type defined under
 `backend/src/`.
 
+**All of it lives in `src/Client.Backend/`**, and a screen reaches the service only through what that assembly
+publishes. Nothing under `src/Client/` opens an `HttpClient`, holds a token, or writes a route — the boundary above is
+what keeps that from being a rule somebody has to enforce by reading.
+
 - **The contract is the wire format**, so the client declares its own types for what it sends and receives, named for
   what the client does with them. Two records that happen to have the same fields on both sides of an HTTP call are not
-  duplication — they are one contract stated at each end, and coupling them would put a domain type in a view.
+  duplication — they are one contract stated at each end, and coupling them would put a domain type in a view. The same
+  holds for the OAuth code: `Client.Backend` carries its own proof key, anti-forgery value, and metadata addresses
+  rather than sharing `backend/src/Common/OAuth/`, for exactly the reason nothing here reaches into `backend/`.
 - **Serialization is source-generated.** The browser head is trimmed, and a reflection-based `ReadFromJsonAsync` is
-  removed by the trimmer rather than reported; `.config/BannedSymbols.txt` already refuses those overloads.
+  removed by the trimmer rather than reported; `.config/BannedSymbols.txt` already refuses those overloads. One
+  `JsonSerializerContext` covers every document the client reads.
+- **Where the deployment is, is the composing host's to state**, never this assembly's. `AddMailFathomDeployment` takes
+  the address and the timeout as arguments; there is no default address anywhere and nothing composes one from a
+  literal, because a client that guessed would reach somebody else's deployment on a mistyped value. What it does
+  refuse is a clear-text address to anything but this machine: every request carries the signed-in token, so `http` to
+  a routable host would hand it to whatever is on the path. `backend/src/Host/Configuration/DeploymentOptions.cs`
+  draws the same line about the address that deployment publishes, and for the same reason.
 - **Everything the backend returns about mail is personal data**, and the root instructions' classification follows it
   across the wire: it is not logged, not written to local storage without a stated reason, and not put in a telemetry
-  event.
-- **How the client authenticates has not been decided.** Until it is, do not invent one — no token cache, no credential
-  store, no refresh loop.
+  event. A failure message never carries a deployment's own answer back either — the body is text from a machine this
+  process does not own, and a screen that repeated it would be putting an attacker's words in MailFathom's voice.
+- **Signing in is authorization code with PKCE**, which is the grant `mfctl` performs against the administrative
+  surface and for the same reason: a desktop binary and a WebAssembly bundle are both readable by whoever runs them, so
+  this is a public client and holds no secret. Where to sign in is discovered rather than configured — the deployment's
+  RFC 9728 document names the authorization server, and that server's own discovery document names the endpoints — and
+  a discovery document that does not report the issuer that led to it is refused, so nothing can move a sign-in to a
+  server the deployment never named.
+- **One step of that is head-specific, and it is a port**: `ISignInRedirectListener` puts the authorization page in
+  front of the person and catches what comes back. The desktop head binds a loopback address and starts the platform's
+  browser at it, as `mfctl` does; the browser head opens a window on the application's own origin and reads the
+  redirect out of it. **The browser head must not navigate the document away** — that destroys the page along with the
+  proof key and the anti-forgery value, leaving browser storage as the only place to put them back, which is exactly
+  what this application does not do.
+- **The access token lives in memory for the process's lifetime and nowhere else** — no file, no browser storage, no
+  platform credential store — and it is not readable outside `Client.Backend`: a screen may ask whether somebody is
+  signed in, and the handler in the transport pipeline is the only thing that sees the token. No refresh token is asked
+  for or kept, so the session ends when the issued token does and the person signs in again. A cache that survives a
+  restart is a separate decision with its own privacy reasoning; do not take it as a side effect of a screen.

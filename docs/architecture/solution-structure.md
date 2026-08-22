@@ -167,23 +167,35 @@ The coverage marker is asserted against a sample type declared beside its tests,
 
 ## The client stack
 
-`frontend/` holds one application project and one test project, and `frontend/MailFathom.Client.slnx` is what builds
-them. `frontend/Directory.Build.props` and `frontend/Directory.Packages.props` are its own; the backend solution names
-no project here and neither build reads the other's files.
+`frontend/` holds two source projects and one test project, and `frontend/MailFathom.Client.slnx` is what builds them.
+`frontend/Directory.Build.props` and `frontend/Directory.Packages.props` are its own; the backend solution names no
+project here and neither build reads the other's files.
 
 - `src/Client` is an Uno Platform single project. One project carries every head the application runs as, chosen by
   target framework: `net10.0-desktop` is the Skia desktop head that runs on Windows, Linux, and macOS, and
   `net10.0-browserwasm` is the browser head. Its assembly is `MailFathom.Client`.
 - A third target framework, plain `net10.0`, builds no head. It exists so a unit-test project can reference the
   application, since a test host is neither a browser nor a window.
-- `tests/Client.UnitTests` covers it through that target, on the same xUnit.net v3 and Microsoft Testing Platform the
-  service's suites use.
+- `src/Client.Backend` is everything that reaches the service: the typed client, the wire records and their
+  source-generated readers, and the OAuth sign-in. It targets that plain `net10.0` alone and references no Uno package,
+  which is the point of it — the boundary between a view and a service call is a reference graph here rather than a
+  convention, so a WinUI type written in it does not compile. `Client` references it and it references nothing here.
+- The one step of signing in that a head cannot share is a port, `ISignInRedirectListener`. The loopback implementation
+  the desktop head uses ships in `Client.Backend`; the browser head's lives under `src/Client/Platforms/WebAssembly/`,
+  because it needs the JavaScript interop only that target framework compiles — and that interop is why the browser
+  head is the one place the application project sets `AllowUnsafeBlocks`, which the `[JSImport]` generator requires.
+- `tests/Client.UnitTests` covers both, referencing the application through its plain target and `Client.Backend`
+  directly, on the same xUnit.net v3 and Microsoft Testing Platform the service's suites use.
 - Almost no client package version is written in this repository. `UnoFeatures` in the project file names capabilities
   rather than packages, and the Uno SDK resolves each to a package at the version its own pin decides, so a restore is
-  where those versions become readable. The unit-test project records its own in a committed `packages.lock.json`; the
-  application project carries none, because a WebAssembly target restores three packages the .NET SDK versions from
-  itself and `global.json` lets the SDK roll forward. `frontend/Directory.Build.props` names them and says what a lock
-  file there would have recorded instead.
+  where those versions become readable. `Client.Backend` is the exception and pins one package by hand,
+  `Microsoft.Extensions.Http`, because a plain library resolves the typed-client registration as an ordinary package
+  rather than from a shared framework. Both it and the unit-test project record their closure in a committed
+  `packages.lock.json`; the application project carries none, because a WebAssembly target restores three packages the
+  .NET SDK versions from itself and `global.json` lets the SDK roll forward. `frontend/Directory.Build.props` names
+  them and says what a lock file there would have recorded instead.
 
-The client reaches MailFathom over the endpoints `Host` exposes and shares no type with it. `frontend/src/AGENTS.md`
-states what governs a change there, and `frontend/tests/AGENTS.md` what governs one in its suite.
+The client reaches MailFathom over the endpoints `Host` exposes and shares no type with it — its wire records and its
+OAuth code are its own, stated again at this end rather than referenced across the boundary. Which deployment it
+reaches is the composing host's to supply, and nothing supplies it yet. `frontend/src/AGENTS.md` states what governs a
+change there, and `frontend/tests/AGENTS.md` what governs one in its suite.

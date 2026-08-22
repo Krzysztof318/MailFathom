@@ -18,6 +18,13 @@
     <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="4.13.1" />
   </ItemGroup>
 
+  <!-- What the client's own service assembly restores. Microsoft.Extensions.Http is the typed-client registration and
+       the delegating-handler pipeline; a plain net10.0 library resolves it as an ordinary package rather than from a
+       shared framework, which is why it is pinned here and nowhere in the backend's own list. -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.10" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageVersion Include="coverlet.MTP" Version="10.0.1" />
     <PackageVersion Include="xunit.analyzers" Version="1.27.0" />

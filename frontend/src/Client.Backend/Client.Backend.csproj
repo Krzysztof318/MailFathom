@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Plain net10.0, and that is the whole point of this project. The Uno single project beside it declares three
+         target frameworks and holds every XAML type the client has; this one references no Uno package and no WinUI
+         assembly, so a `using Microsoft.UI.Xaml` written here does not compile. What frontend/src/AGENTS.md states as
+         prose about a model taking on a view's work, this states as a reference graph.
+
+         It is also the target the unit suite already references the application through, so the two projects a test
+         reaches are one target framework rather than two. -->
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The typed-client registration and the delegating-handler pipeline it composes. Everything else this project
+         needs — System.Net.Http.Json, the source-generated serializer, and the cryptography behind a proof key — is in
+         the shared framework a net10.0 library already resolves. -->
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="MailFathom.Client.UnitTests" />
+  </ItemGroup>
+</Project>
