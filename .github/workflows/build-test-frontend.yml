@@ -1,0 +1,76 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+name: Build and test the frontend
+
+# The client stack's half of the required check: both heads compiled and the unit suite run, defined once so that
+# whatever else comes to need it — a nightly, a release, a packaging run — is gated on the same definition rather than
+# on a copy of these steps. `build-test-format-and-migrations.yml` is the same arrangement for the server, and the two
+# deliberately share nothing but the `CI` workflow that calls them: separate solutions, separate build contracts,
+# separate package pins, and therefore separate jobs.
+#
+# What is not here is the decision about whether to run at all. That needs the changed files, which the caller has and
+# this workflow does not, so `CI` gates the job that calls this rather than passing a switch inward. The server's
+# workflow takes three switches because it holds three jobs a change can affect independently; this one holds a single
+# job, and a job-level condition in the caller says the same thing with nothing to keep in step.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-unit-test-client:
+    name: Build and unit test the client
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # The browser head compiles native WebAssembly assets — SkiaSharp's, and the runtime's own — through the
+      # Emscripten toolchain the `wasm-tools` workload carries, and `actions/setup-dotnet` installs an SDK with no
+      # workloads at all. Without this step the build fails at `net10.0-browserwasm` with NETSDK1147, naming the
+      # workload rather than anything about this repository. The desktop head needs nothing installed: Skia reaches it
+      # as an ordinary NuGet package, and `net10.0-desktop` is one target framework for Windows, Linux, and macOS
+      # alike, so compiling it on the Linux runner compiles exactly the code the Windows one would.
+      - name: Install the WebAssembly workload
+        run: dotnet workload install wasm-tools
+
+      # `frontend/Directory.Packages.props` pins the direct versions, the committed lock files fix the transitive
+      # closure, `NuGet.config` decides which sources any of it may come from, and `global.json` pins both the SDK and
+      # the Uno SDK that chooses every Uno package version — so the key covers all four. The client's own cache entry
+      # rather than a share of the server's: the two graphs overlap barely, and one key over both would evict on every
+      # change to either.
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-client-${{ runner.os }}-${{ hashFiles('frontend/Directory.Packages.props', 'global.json', 'NuGet.config', 'frontend/**/packages.lock.json') }}
+
+      # Locked, like every other gated restore here. What it enforces in this solution is the unit-test project's lock
+      # file alone: the application project deliberately carries none, because the browser head's restore graph is
+      # partly the SDK's rather than this repository's, and `frontend/Directory.Build.props` states which packages and
+      # why. Locked mode passes over a project with no lock file rather than failing on it, which is how the server's
+      # solution already restores past the two projects carrying the Aspire graph.
+      - name: Restore dependencies
+        run: dotnet restore frontend/MailFathom.Client.slnx --locked-mode
+
+      # One command builds every target framework the solution declares: `net10.0-desktop`, `net10.0-browserwasm`, and
+      # the plain `net10.0` reference target the unit suite references the application through.
+      - name: Build both heads
+        run: dotnet build frontend/MailFathom.Client.slnx --configuration Release --no-restore
+
+      - name: Run unit tests
+        run: dotnet test --solution frontend/MailFathom.Client.slnx --configuration Release --no-build

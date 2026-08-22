@@ -11,7 +11,7 @@ set -euo pipefail
 #   scripts/build-docs-site.sh <output-directory>
 #
 # The output is one version of the published site: the pages under `docs/`, the API reference generated from the XML
-# comments in `backend/src/`, the search index over both, and the artifacts an AI agent reads instead of the rendered pages —
+# comments in `backend/src/` and `frontend/src/`, the search index over both, and the artifacts an AI agent reads instead of the rendered pages —
 # `scripts/write-docs-agent-artifacts.sh` writes those last and states what they are. It is self-contained apart from
 # the version selector, which reads a manifest the site root carries — `scripts/compose-docs-site.sh` writes that, and
 # this script knows nothing about the other versions. docs/operations/documentation-site.md describes how the two fit
@@ -25,6 +25,10 @@ set -euo pipefail
 # documentation. It is not locked, unlike the verification scripts: this script also runs against older release tags,
 # where the lock files record what that tag pinned, and a lock file is only a claim about its own commit.
 #
+# Both solutions are restored, because the reference now documents both stacks. The client's costs a restore and no
+# workload: docfx reads it through the plain `net10.0` reference target its own configuration names, so no head is
+# compiled here and the Emscripten toolchain the browser head needs is never reached.
+#
 # **A link docfx cannot resolve fails the build.** A relative link between two published pages is rewritten to the page
 # it points at, and one that resolves to nothing is left as written — which reaches a reader as a 404 rather than as a
 # broken build. That is the failure this refuses to publish, and it is why a link out of the published set is written
@@ -32,7 +36,8 @@ set -euo pipefail
 # reports plenty else worth reading and nothing else worth stopping for, so the other warnings stay warnings.
 
 readonly configuration_file='docfx/docfx.json'
-readonly solution_file='backend/MailFathom.slnx'
+readonly backend_solution_file='backend/MailFathom.slnx'
+readonly frontend_solution_file='frontend/MailFathom.Client.slnx'
 readonly generated_metadata_directory='docfx/api'
 # `UidNotFound` is the same defect reached the other way: a `xref:` naming a type or a namespace the reference no
 # longer generates. A page that links into the API reference is written against names the code owns, so it is the one
@@ -84,7 +89,8 @@ build_log="$(mktemp)"
 trap 'rm --force "$build_log"' EXIT
 
 dotnet tool restore
-dotnet restore "$solution_file"
+dotnet restore "$backend_solution_file"
+dotnet restore "$frontend_solution_file"
 dotnet docfx "$configuration_file" --output "$output_directory" --log "$build_log"
 
 # The log is one JSON object per line, and each diagnostic docfx classifies carries the code the line below matches.

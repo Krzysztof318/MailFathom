@@ -6888,6 +6888,60 @@ the_required_check_aggregates_every_job_in_ci() {
   fi
 }
 
+# The two stacks share the required check and nothing else, and the change filters are where that either holds or
+# quietly stops holding. A `frontend/` path in one of the server's filters would make every client change pay for a
+# server build, and a `backend/` path in the client's would do the reverse — neither fails anything, so neither is
+# visible in a run, and both are exactly the edit somebody makes while adding a path they were unsure where to put.
+# The disjointness is asserted rather than the whole list, because which paths belong to a stack is a decision the
+# workflow's own comments carry; what may never happen is one stack's directory appearing in the other's filter.
+the_stacks_change_filters_name_no_path_in_each_other() {
+  local ci_workflow="$source_repository_root/.github/workflows/ci.yml"
+  local filters filter_name path failures=''
+
+  # One `<filter>\t<path>` line per path the `filters:` block declares, with the block's own comment lines and
+  # everything after it dropped. Inside the block literal a filter name sits at twelve spaces and a path at fourteen,
+  # which is what tells the two apart; the first line indented less than that is the end of the literal.
+  filters="$(awk '
+    /^          filters: \|$/ { in_filters = 1; next }
+    in_filters && /^[[:space:]]*$/ { next }
+    in_filters && !/^            / { exit }
+    in_filters && /^            [a-zA-Z0-9_-]+:[[:space:]]*$/ { name = $1; sub(/:$/, "", name); next }
+    in_filters && /^              - / {
+      path = $2
+      gsub(/^.|.$/, "", path)
+      print name "\t" path
+    }
+  ' "$ci_workflow")"
+
+  [[ -n "$filters" ]] || {
+    printf 'ci.yml declares no change filters, or the block moved.\n' >&2
+    return 1
+  }
+
+  while IFS=$'\t' read -r filter_name path; do
+    [[ -n "$filter_name" ]] || continue
+
+    if [[ "$filter_name" == 'frontend' && "$path" == backend/* ]]; then
+      failures+="the frontend filter names $path. "
+    fi
+
+    if [[ "$filter_name" != 'frontend' && "$path" == frontend/* ]]; then
+      failures+="the $filter_name filter names $path. "
+    fi
+  done <<< "$filters"
+
+  grep -qxF $'frontend\tfrontend/**' <<< "$filters" ||
+    failures+='ci.yml has no frontend filter covering frontend/**. '
+
+  [[ "$(extract_workflow_job_uses "$ci_workflow" frontend)" == './.github/workflows/build-test-frontend.yml' ]] ||
+    failures+='ci.yml: the frontend job does not call build-test-frontend.yml. '
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
 workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/scripts/inspect-workspace.sh" ]]
   [[ -x "$source_repository_root/scripts/assert-release-tag.sh" ]]
@@ -7374,6 +7428,7 @@ run_test a_comment_never_cancels_a_review_in_flight
 run_test the_reviewer_resolves_one_claude_credential_everywhere
 run_test the_development_tooling_never_reaches_a_published_artifact
 run_test the_required_check_aggregates_every_job_in_ci
+run_test the_stacks_change_filters_name_no_path_in_each_other
 run_test workflow_scripts_use_flat_manual_layout
 run_test every_yaml_file_carries_the_license_header
 run_test every_browser_asset_carries_the_license_header

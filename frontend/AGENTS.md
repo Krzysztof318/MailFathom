@@ -106,14 +106,20 @@ frontend/
 - **The Uno version is a single pin**: `msbuild-sdks` in the repository-root `global.json`. Every Uno package version
   follows from it, which is why almost nothing Uno publishes appears in `Directory.Packages.props`. A capability is
   asked for through `UnoFeatures` in the project file rather than by adding a package reference.
-- **Lock files are committed here too**, and restore runs in locked mode wherever it is gated. Regenerate deliberately
-  with `dotnet restore frontend/MailFathom.Client.slnx --force-evaluate` in the change that moves a pin, and read the
-  transitive diff.
+- **The unit-test project carries a lock file and the application project does not**, and restore runs in locked mode
+  wherever it is gated. Regenerate deliberately with `dotnet restore frontend/MailFathom.Client.slnx --force-evaluate`
+  in the change that moves a pin, and read the transitive diff. The exclusion is not a gap to close: the .NET SDK puts
+  `Microsoft.NET.ILLink.Tasks`, `Microsoft.NET.Sdk.WebAssembly.Pack`, and — in a Debug build —
+  `Microsoft.DotNet.HotReload.WebAssembly.Browser` into a WebAssembly target's restore graph at versions that follow
+  the installed SDK, which `global.json` deliberately lets roll forward, so a lock file naming them records the machine
+  that wrote it and fails the next locked restore. `frontend/Directory.Build.props` carries the whole reasoning, and
+  `backend/Directory.Build.props` carries the same decision for the two projects holding the Aspire graph.
 - **A test project mirrors the source it covers**, exactly as `backend/tests/` does: `tests/Client.UnitTests/Presentation/`
   covers `src/Client/Presentation/`.
 - **Nothing under `frontend/` reaches into `backend/`**, and `backend/MailFathom.slnx` names no project here. Both
   verification scripts build the backend solution alone, so a client change proves itself by building this solution and
-  running this suite.
+  running this suite — by hand before pushing, and in the `Frontend` job of `CI`, which is what the required check
+  waits for. A green `scripts/verify-full.sh` says nothing about a change made here.
 
 ## Reaching the backend
 

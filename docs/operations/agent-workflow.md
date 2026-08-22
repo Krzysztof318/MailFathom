@@ -135,6 +135,44 @@ suite instead of waiting it out, and says its verdict was not collected, because
 a broken build is not a tree worth reporting contract findings about and a
 compile error is worth answering in twenty seconds rather than a hundred.
 
+### The client stack is gated by `CI` alone
+
+Neither script touches `frontend/`. Both restore, build, test, and format
+`backend/MailFathom.slnx` and stop there, and the client's own solution is
+verified by the `Frontend` job of `CI`, which calls
+`.github/workflows/build-test-frontend.yml` the way `Verify` calls the server's
+workflow. That is a decision rather than an omission, and it rests on what a
+local step would cost against what it would add.
+
+What it would cost is the whole of both gates, paid by every change. The client
+builds three target frameworks, one of which compiles native WebAssembly assets
+through the Emscripten toolchain in the `wasm-tools` workload — minutes on a
+cold cache, and a workload no service checkout installs, so the fast loop would
+either fail on a machine set up for the server or grow a probe deciding whether
+to run. Neither is a loop that answers in seconds. What it would add is nothing
+the pull request does not already get: the same three commands run in `CI` on
+every change that reaches the client, and a client change is one nothing else in
+this repository builds, so there is no window in which the local verdict would
+arrive earlier than the pipeline's on work that was already going somewhere
+else.
+
+The consequence to know rather than to discover: **a change under `frontend/`
+passes both scripts without either having read it.** Build and test it directly
+before pushing — [Building and testing the client](local-development.md#building-and-testing-the-client)
+carries the three commands, including why the restore names its configuration —
+and treat the green gate as a statement about the server solution alone. The
+same asymmetry runs the other way and is worth stating once: the change filters
+in `ci.yml` keep each stack's jobs off the other stack's changes, and
+`scripts/test-agent-workflow.sh` asserts that neither filter names a path in the
+other's directory.
+
+The client's formatting is the one part of the server's contract with no
+counterpart yet. `dotnet format` comes in two halves — a repairing pass in the
+fast loop and a verifying pass in the full gate and in `CI` — and adding the
+verifying half alone would report a defect the loop has no way to repair. That
+pair moves together or not at all, so it moves when the local gates take on the
+client rather than before.
+
 ### A gate does not prove the same tree twice
 
 Both scripts record what they verified. A run that passes writes a digest under
