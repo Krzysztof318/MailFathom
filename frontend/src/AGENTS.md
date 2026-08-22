@@ -265,7 +265,10 @@ what keeps that from being a rule somebody has to enforce by reading.
   `JsonSerializerContext` covers every document the client reads.
 - **Where the deployment is, is the composing host's to state**, never this assembly's. `AddMailFathomDeployment` takes
   the address and the timeout as arguments; there is no default address anywhere and nothing composes one from a
-  literal, because a client that guessed would reach somebody else's deployment on a mistyped value.
+  literal, because a client that guessed would reach somebody else's deployment on a mistyped value. What it does
+  refuse is a clear-text address to anything but this machine: every request carries the signed-in token, so `http` to
+  a routable host would hand it to whatever is on the path. `backend/src/Host/Configuration/DeploymentOptions.cs`
+  draws the same line about the address that deployment publishes, and for the same reason.
 - **Everything the backend returns about mail is personal data**, and the root instructions' classification follows it
   across the wire: it is not logged, not written to local storage without a stated reason, and not put in a telemetry
   event. A failure message never carries a deployment's own answer back either — the body is text from a machine this

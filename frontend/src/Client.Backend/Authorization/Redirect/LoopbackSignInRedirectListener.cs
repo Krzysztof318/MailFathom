@@ -125,6 +125,16 @@ public sealed class LoopbackSignInRedirectListener : ISignInRedirectListener
             // Stopping the listener is how the wait is cancelled, so the exception that produces is the cancellation.
             throw new OperationCanceledException(cancellationToken);
         }
+        catch (Exception failure) when (failure is not (OperationCanceledException or DeploymentFailure))
+        {
+            // Everything else the socket layer can raise while waiting — the port taken from under this listener, the
+            // browser dropping the connection mid-answer — reaches a caller written against the one exception this
+            // port documents. Anything not translated here arrives as a type that caller has no reason to catch.
+            throw new DeploymentFailure(
+                DeploymentFailureReason.Unusable,
+                "The sign-in could not be completed on this machine, so nothing was signed in.",
+                failure);
+        }
     }
 
     /// <inheritdoc />
@@ -195,17 +205,24 @@ public sealed class LoopbackSignInRedirectListener : ISignInRedirectListener
             _ => null,
         };
 
-        response.StatusCode = (int)(page is null ? HttpStatusCode.NotFound : HttpStatusCode.OK);
-        response.ContentLength64 = page?.Length ?? 0;
-
-        if (page is not null)
+        try
         {
-            response.ContentType = "text/html; charset=utf-8";
+            response.StatusCode = (int)(page is null ? HttpStatusCode.NotFound : HttpStatusCode.OK);
+            response.ContentLength64 = page?.Length ?? 0;
 
-            await response.OutputStream.WriteAsync(page, cancellationToken).ConfigureAwait(false);
+            if (page is not null)
+            {
+                response.ContentType = "text/html; charset=utf-8";
+
+                await response.OutputStream.WriteAsync(page, cancellationToken).ConfigureAwait(false);
+            }
         }
-
-        response.Close();
+        finally
+        {
+            // A tab closed mid-write, or a cancelled wait, must not leave the request open for the rest of the
+            // listener's life — the loop above goes on to wait for the next one.
+            response.Close();
+        }
     }
 }
 

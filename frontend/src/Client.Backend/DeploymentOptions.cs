@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Net;
+
 namespace MailFathom.Client.Backend;
 
 /// <summary>Which MailFathom deployment this client reaches, and as which registered client it signs in to one.</summary>
@@ -31,7 +33,7 @@ public sealed record DeploymentOptions
     /// <param name="clientId">The client identifier registered with the deployment's authorization server.</param>
     /// <param name="timeout">How long a single request may take, or <see langword="null" /> for <see cref="DefaultTimeout" />.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="address" /> or <paramref name="clientId" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when the address is not an absolute web address or carries more than an origin, or the client identifier is blank.</exception>
+    /// <exception cref="ArgumentException">Thrown when the address is not an absolute web address, is clear text to a host that is not loopback, or carries more than an origin, or when the client identifier is blank.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the timeout is not positive.</exception>
     public DeploymentOptions(Uri address, string clientId, TimeSpan? timeout = null)
     {
@@ -43,6 +45,17 @@ public sealed record DeploymentOptions
         {
             throw new ArgumentException(
                 $"'{address}' is not an absolute http or https address, so no route could be resolved against it.",
+                nameof(address));
+        }
+
+        // The registration puts the access token on every request sent to this address, so clear text to anything but
+        // this machine hands the token to whatever is on the path. Loopback is where clear text is a development
+        // posture rather than an exposure, which is the same line backend/src/Host/Configuration/DeploymentOptions.cs
+        // draws about the address that deployment publishes.
+        if (address.Scheme == Uri.UriSchemeHttp && !IsLoopback(address))
+        {
+            throw new ArgumentException(
+                $"'{address}' is clear text to a host that is not loopback. Every request this client sends carries the signed-in token, so state an https address.",
                 nameof(address));
         }
 
@@ -76,4 +89,14 @@ public sealed record DeploymentOptions
 
     /// <summary>Gets how long a single request to the deployment may take.</summary>
     public TimeSpan Timeout { get; }
+
+    /// <summary>Decides whether an address names this machine, which is where clear text is a posture rather than an exposure.</summary>
+    /// <remarks>
+    /// <see cref="Uri.IsLoopback" /> answers for an address literal and for the reserved name; a host that resolves to
+    /// a loopback address elsewhere is not one, and treating it as one would let DNS decide whether the token travels
+    /// in clear text.
+    /// </remarks>
+    private static bool IsLoopback(Uri address) =>
+        address.IsLoopback
+        || (IPAddress.TryParse(address.Host, out var literal) && IPAddress.IsLoopback(literal));
 }

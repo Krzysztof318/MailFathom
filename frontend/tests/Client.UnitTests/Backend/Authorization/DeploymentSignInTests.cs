@@ -353,7 +353,7 @@ public sealed class DeploymentSignInTests
     }
 
     [Fact]
-    public async Task SignInAsync_AnAbandonedSignIn_ReleasesWhatTheHeadReservedForTheRedirect()
+    public async Task SignInAsync_ARefusedSignIn_ReleasesWhatTheHeadReservedForTheRedirect()
     {
         // Arrange
         using var harness = new DeploymentHarness(

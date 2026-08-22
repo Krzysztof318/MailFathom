@@ -38,6 +38,28 @@ public sealed class DeploymentOptionsTests
     }
 
     [Theory]
+    [InlineData("http://mail.example/")]
+    [InlineData("http://192.0.2.10:8080/")]
+    public void Constructor_AClearTextAddressToAnotherHost_IsRefusedBecauseEveryRequestCarriesTheToken(string address)
+    {
+        // Arrange, Act, Assert
+        Assert.Throws<ArgumentException>("address", () => new DeploymentOptions(new Uri(address), "the-client"));
+    }
+
+    [Theory]
+    [InlineData("http://localhost:5000/")]
+    [InlineData("http://127.0.0.1:5000/")]
+    [InlineData("http://[::1]:5000/")]
+    public void Constructor_AClearTextAddressOnThisMachine_IsAllowedAsTheDevelopmentPostureItIs(string address)
+    {
+        // Arrange, Act
+        var options = new DeploymentOptions(new Uri(address), "the-client");
+
+        // Assert
+        Assert.Equal(new Uri(address), options.Address);
+    }
+
+    [Theory]
     [InlineData("https://mail.example/mailfathom/")]
     [InlineData("https://mail.example/?tenant=mail")]
     [InlineData("https://mail.example/#mail")]
