@@ -793,6 +793,18 @@ around sixty packages at once, so regenerate the lock files in the same change a
 dotnet restore frontend/MailFathom.Client.slnx --force-evaluate
 ```
 
+That restore also brings four packages nothing in this repository asks for and that are not open source, so this is
+where the fact belongs rather than only in the register. `Uno.Sdk.Extras`, `Uno.UI.HotDesign`, `Uno.UI.App.Mcp`, and
+`Uno.Settings.DevServer` are Uno Platform Studio's design-time tooling — the visual designer, the App MCP server an
+agent drives a running app through, and the settings channel between them. The Uno SDK adds `Uno.Sdk.Extras` and
+`Uno.Settings.DevServer` to any project it builds, and `Uno.UI.HotDesign` and `Uno.UI.App.Mcp` to a head whose
+`OutputType` is `Exe`. `Uno.Sdk.Extras` carries an end-user licence agreement between Uno Platform and whoever
+restores it, inside the package's own `LICENSE.md`; the other three declare no licence at all. The decision is taken and they stay: they run on a developer's machine, no artifact carries them — a Release
+build excludes the designer's and the MCP server's assets, and the other two are MSBuild and tools packages with
+nothing to reference — and the agreement binds the developer whose restore fetched them rather than being anything
+MailFathom passes on. `THIRD_PARTY_LICENSES.md` holds the verdict, the evidence behind it, and the one question still
+open with Uno.
+
 The unit-test project carries a lock file and the application project does not, which is the service stack's own
 exclusion arriving here for its own reason. The .NET SDK puts three packages into the restore graph of a WebAssembly
 target that this repository never asked for — `Microsoft.NET.ILLink.Tasks` and `Microsoft.NET.Sdk.WebAssembly.Pack` at

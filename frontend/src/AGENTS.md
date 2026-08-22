@@ -196,6 +196,23 @@ Bundling the native VLC libraries — the `VideoLAN.LibVLC.*` packages, which no
 licence review** and is not covered by the one above. VideoLAN publishes its software under GNU GPL v2 *or* LGPL
 rather than under one licence, so what a native bundle carries has to be read before it is added, not after.
 
+## Uno Platform Studio's tooling is in this graph, and no artifact may carry it
+
+The section above is about a copyleft licence a packaged artifact would have to satisfy. One more component here
+carries a condition, and it runs the other way: it may not be packaged at all. Uno Platform Studio's tooling —
+`Uno.Sdk.Extras`, `Uno.UI.HotDesign`, `Uno.UI.App.Mcp`, and `Uno.Settings.DevServer` — is not open source. One carries
+an end-user licence agreement forbidding distribution to a third party, and the other three declare no licence at all.
+The SDK adds them whatever this project file says, `THIRD_PARTY_LICENSES.md` carries the verdict — they stay — and that
+verdict rests on a build fact rather than on an intention: **no artifact may carry any of the four.**
+
+What keeps them out is already in the build rather than in a property anyone has to remember. Two of the four have no
+`lib` to reference — one is MSBuild targets, the other a tools directory — and the SDK drops the designer's and the App
+MCP's assets when `Optimize` is `true`, which is what a Release build sets. So the rule is the one that follows from
+that: a head is packaged for distribution from a Release build. A published Debug build of any head, or a head that
+turns `Optimize` off in Release, ships somebody else's proprietary assemblies. `UnoDisableHotDesign` and
+`UnoDisableMCPSupport` would keep two of the four out of the graph entirely; neither is set, because the tooling they
+would remove is the tooling this stack is worked with.
+
 ## Running the client
 
 `dotnet run --project frontend/src/Client/Client.csproj --framework <head>` is how a head starts, and the framework has
