@@ -116,10 +116,16 @@ frontend/
   `backend/Directory.Build.props` carries the same decision for the two projects holding the Aspire graph.
 - **A test project mirrors the source it covers**, exactly as `backend/tests/` does: `tests/Client.UnitTests/Presentation/`
   covers `src/Client/Presentation/`.
-- **Nothing under `frontend/` reaches into `backend/`**, and `backend/MailFathom.slnx` names no project here. Both
-  verification scripts build the backend solution alone, so a client change proves itself by building this solution and
+- **Nothing under `frontend/` reaches into `backend/`**, and `backend/MailFathom.slnx` names no project here. Neither
+  verification script builds or tests this solution, so a client change proves itself by building this solution and
   running this suite — by hand before pushing, and in the `Frontend` job of `CI`, which is what the required check
-  waits for. A green `scripts/verify-full.sh` says nothing about a change made here.
+  waits for. A green `scripts/verify-full.sh` still says nothing about whether a change made here compiles.
+- **Formatting is the one part of that the local loop does reach.** `scripts/verify-fast.sh` runs the repairing
+  `dotnet format` pass over the client C# files a branch changed, restoring `frontend/MailFathom.Client.slnx` only when
+  there are any, and the `Verify formatting` step of the `Frontend` job reports whatever a branch that skipped the loop
+  left behind. Never invoke `dotnet format` by hand here, for the reason the repository never does: both halves already
+  run where they belong. Loading this solution needs the `wasm-tools` workload the client build needs, so the loop
+  fails on a machine set up for the server alone rather than skipping the pass quietly.
 
 ## Reaching the backend
 

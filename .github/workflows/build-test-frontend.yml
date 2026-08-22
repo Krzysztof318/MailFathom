@@ -12,10 +12,21 @@ name: Build and test the frontend
 #
 # What is not here is the decision about whether to run at all. That needs the changed files, which the caller has and
 # this workflow does not, so `CI` gates the job that calls this rather than passing a switch inward. The server's
-# workflow takes three switches because it holds three jobs a change can affect independently; this one holds a single
-# job, and a job-level condition in the caller says the same thing with nothing to keep in step.
+# workflow takes a switch per job because it holds three jobs a change can affect independently; this one holds a
+# single job, and a job-level condition in the caller says the same thing with nothing to keep in step.
+#
+# The one switch it does take is not about the changed files at all. Formatting is the one verdict here that a pull
+# request settles for good — it is a property of the files a change wrote, and two changes that merged without seeing
+# each other cannot break it — so the server asks it on a pull request and never on a push to `main`, and the client
+# is held to the same rule from the same caller rather than to whichever one somebody remembered.
 on:
   workflow_call:
+    inputs:
+      run-format:
+        description: 'Whether to verify the client solution''s formatting.'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -74,3 +85,17 @@ jobs:
 
       - name: Run unit tests
         run: dotnet test --solution frontend/MailFathom.Client.slnx --configuration Release --no-build
+
+      # The verifying half of the pair whose repairing half is in `scripts/verify-fast.sh`: the loop rewrites the
+      # client files a branch changed, and this says whether a change that never went through the loop still needs it.
+      # `--no-restore` because the restore above already ran in this job, and last because a compile error and a
+      # failing test are the answers worth reaching first — the pass loads a Roslyn workspace of its own, so nothing
+      # in front of it makes it cheaper.
+      #
+      # A step here rather than a job of its own, unlike the server. A second job would pay for a second checkout, a
+      # second SDK, a second `wasm-tools` workload install, and a second restore to run a pass that costs well under a
+      # minute; the server's `dotnet format` job is separate because three switches select between three jobs there,
+      # and this workflow has one job to select.
+      - name: Verify formatting
+        if: inputs.run-format
+        run: dotnet format frontend/MailFathom.Client.slnx --no-restore --verify-no-changes --verbosity diagnostic
