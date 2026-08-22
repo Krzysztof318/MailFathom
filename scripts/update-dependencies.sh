@@ -513,10 +513,37 @@ survey_image_pins() {
     [[ -n "$latest" ]] || latest='unresolved'
 
     recorded="$(register_recorded_licences "$repository")"
-    carriers="$(git grep -l -F -- "$repository" -- deploy backend/src/AppHost 2> /dev/null | paste -sd',' -)" || true
+    carriers="$(image_carriers "$repository")"
 
     record 'images' "$repository" "$tag" "$latest" 'see register' "$recorded" "$note; carried by ${carriers:-none}" 'deploy'
   done < <(collect_image_references | sort -u)
+}
+
+# Every asset but one writes an image reference as a single string, so a literal search finds them all. The chart is the
+# exception: `values.yaml` splits the same reference across `registry:` and `repository:`, and the combined form appears
+# on no line of it. That is also the one file an operator edits by hand — the golden manifests under `ci/golden/` render
+# the combined form and are found either way, but they are written by `scripts/render-helm-manifests.sh --update` rather
+# than typed — so a search that misses it reports a blast radius smaller than the real one, and Helm silently keeps
+# pulling an image the other three delivery paths have moved away from.
+#
+# The paired `registry:` is not also matched. A repository path is already specific enough to name one image here, and
+# requiring the pair would buy nothing while making the search depend on the two staying adjacent.
+image_carriers() {
+  local repository="$1" path="$1"
+
+  # A registry host is what the first segment is when it carries a dot, a port, or is `localhost`; anything else is the
+  # first segment of a Docker Hub path, which the chart writes whole.
+  case "${repository%%/*}" in
+    *.* | *:* | localhost) path="${repository#*/}" ;;
+  esac
+
+  {
+    git grep -l -F -- "$repository" -- deploy backend/src/AppHost 2> /dev/null || true
+
+    if [[ "$path" != "$repository" ]]; then
+      git grep -l -F -- "repository: $path" -- deploy/helm 2> /dev/null || true
+    fi
+  } | sort -u | paste -sd',' -
 }
 
 ### Reporting.
