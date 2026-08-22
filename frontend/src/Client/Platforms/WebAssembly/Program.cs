@@ -9,7 +9,7 @@ namespace MailFathom.Client;
 /// <summary>The browser head's entry point. It hosts the same <see cref="App"/> every other head does.</summary>
 internal static class Program
 {
-    private static async Task Main(string[] args)
+    private static async Task Main()
     {
         var host = UnoPlatformHostBuilder.Create()
             .App(() => new App())

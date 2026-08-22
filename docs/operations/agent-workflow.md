@@ -23,18 +23,34 @@ bash scripts/verify-fast.sh
 The fast loop restores, builds Release, runs the unit tests, and then formats the
 C# files the branch changed: everything committed since `origin/main`, staged,
 modified, or newly added. It is the only workflow script that rewrites source
-files, and the single `dotnet format` pass it runs is a repairing one.
-Formatting is skipped when the branch changed no C# file.
+files, and every `dotnet format` pass it runs is a repairing one. Each file is
+formatted against the solution that holds it — `backend/MailFathom.slnx`, or
+`frontend/MailFathom.Client.slnx` for a path under `frontend/`, which the loop
+restores only when the branch changed one such file. Formatting is skipped when
+the branch changed no C# file, and the client half is skipped when it changed
+none of the client's; [What gates the client stack](#what-gates-the-client-stack)
+carries what that costs and what it leaves to `CI`.
 
 There is no verifying pass behind it, because the build in front of it has
 already made that report. `backend/Directory.Build.props` sets `EnforceCodeStyleInBuild`
 beside `TreatWarningsAsErrors`, and `.editorconfig` gives the IDE rules severity
 `warning`, so a file with an unnecessary using, a missing licensing header, or
 formatting the rules reject fails the Release build with `error IDE0005`,
-`error IDE0073`, and `error IDE0055`, each naming its file and line. A
-diagnostic with no code fix — `IDE0060` is the usual one — is therefore not
-something a formatting pass has to surface: it failed the build several steps
-earlier and the script never reached formatting at all.
+`error IDE0073`, and `error IDE0055`, each naming its file and line.
+
+One rule sits outside both halves of that. `IDE0060` has no code fix, so the
+repairing pass cannot act on it, and the Release build passes over it in either
+stack despite `.editorconfig` setting it to `warning`. What names it is the
+verifying pass — `scripts/verify-full.sh` for the server and the `Frontend` job
+of `CI` for the client — which is how the two the client scaffold carried came to
+light at all.
+
+That argument belongs to the service solution alone, because the loop is the one
+thing here that formats the client without building it. A client diagnostic with
+no code fix is reported by the `Frontend` job of `CI` instead — its Release build
+fails on the rule through the same two properties in
+`frontend/Directory.Build.props`, and the `Verify formatting` step beside it
+reports whatever a repairing pass nobody ran would have rewritten.
 
 What the repairing pass is for is the remainder, which is real and is invisible
 to a build: the ordering of using directives and a missing final newline are
@@ -135,11 +151,11 @@ suite instead of waiting it out, and says its verdict was not collected, because
 a broken build is not a tree worth reporting contract findings about and a
 compile error is worth answering in twenty seconds rather than a hundred.
 
-### The client stack is gated by `CI` alone
+### What gates the client stack
 
-Neither script touches `frontend/`. Both restore, build, test, and format
-`backend/MailFathom.slnx` and stop there, and the client's own solution is
-verified by the `Frontend` job of `CI`, which calls
+Neither script builds or tests `frontend/`. Both restore, build, and test
+`backend/MailFathom.slnx` and stop there, and the client's build and unit suite
+are the `Frontend` job of `CI`, which calls
 `.github/workflows/build-test-frontend.yml` the way `Verify` calls the server's
 workflow. That is a decision rather than an omission, and it rests on what a
 local step would cost against what it would add.
@@ -147,31 +163,56 @@ local step would cost against what it would add.
 What it would cost is the whole of both gates, paid by every change. The client
 builds three target frameworks, one of which compiles native WebAssembly assets
 through the Emscripten toolchain in the `wasm-tools` workload — minutes on a
-cold cache, and a workload no service checkout installs, so the fast loop would
-either fail on a machine set up for the server or grow a probe deciding whether
-to run. Neither is a loop that answers in seconds. What it would add is nothing
-the pull request does not already get: the same three commands run in `CI` on
-every change that reaches the client, and a client change is one nothing else in
-this repository builds, so there is no window in which the local verdict would
-arrive earlier than the pipeline's on work that was already going somewhere
-else.
+cold cache. What it would add is nothing the pull request does not already get:
+the same three commands run in `CI` on every change that reaches the client, and
+a client change is one nothing else in this repository builds, so there is no
+window in which the local verdict would arrive earlier than the pipeline's on
+work that was already going somewhere else.
 
-The consequence to know rather than to discover: **a change under `frontend/`
-passes both scripts without either having read it.** Build and test it directly
-before pushing — [Building and testing the client](local-development.md#building-and-testing-the-client)
-carries the three commands, including why the restore names its configuration —
-and treat the green gate as a statement about the server solution alone. The
-same asymmetry runs the other way and is worth stating once: the change filters
-in `ci.yml` keep each stack's jobs off the other stack's changes, and
-`scripts/test-agent-workflow.sh` asserts that neither filter names a path in the
-other's directory.
+Formatting is the one part that does run locally, because its repairing half has
+nowhere else it can run: a pipeline reports a defect, and only a local pass fixes
+it in the tree somebody is editing. `dotnet format` comes in two halves for that
+reason, and a verifying half with no repairing half in front of it reports
+something nobody has a way to act on except by hand — which is why #1083 left
+both out and this pair moved together. The repairing pass is in
+`scripts/verify-fast.sh` beside the service one; the verifying pass is the
+`Verify formatting` step of the `Frontend` job, skipped on a push to `main` for
+the same reason the server's `dotnet format` job is. What each covers is what it
+covers for the server: `EnforceCodeStyleInBuild` and `TreatWarningsAsErrors` in
+`frontend/Directory.Build.props` fail the client's build on `IDE0005`,
+`IDE0073`, and `IDE0055`, the repairing pass fixes the ordering of using
+directives and a missing final newline, and the verifying pass reports what
+neither reached.
 
-The client's formatting is the one part of the server's contract with no
-counterpart yet. `dotnet format` comes in two halves — a repairing pass in the
-fast loop and a verifying pass in the full gate and in `CI` — and adding the
-verifying half alone would report a defect the loop has no way to repair. That
-pair moves together or not at all, so it moves when the local gates take on the
-client rather than before.
+Three things follow from the loop holding both stacks:
+
+- **A branch that changed no C# file under `frontend/` neither restores nor
+  loads the client solution.** Each list of changed files is formatted against
+  the solution that holds it, and the client's restore is inside its own branch
+  rather than at the top of the script — so the loop costs a service change
+  exactly what it cost before, which
+  `verify_fast_runs_restore_build_tests_and_formatting` asserts by comparing the
+  whole invocation log rather than a line of it.
+- **A branch that did change one needs the `wasm-tools` workload**, because
+  `dotnet format` evaluates the browser head like any other project in that
+  solution. It is the same prerequisite the client build has, and
+  [Building and testing the client](local-development.md#building-and-testing-the-client)
+  names it.
+- **The full gate's record no longer answers for the loop on a client change.**
+  The full gate reads the service solution alone, so its record is a claim about
+  that solution; a loop honouring it on a branch carrying a client C# file would
+  skip the very pass it exists to run. The loop therefore reads only its own
+  record there, and reads both everywhere else.
+
+The consequence to know rather than to discover is unchanged for everything
+formatting does not cover: **a change under `frontend/` compiles and runs its
+tests nowhere in either script.** Build and test it directly before pushing —
+[Building and testing the client](local-development.md#building-and-testing-the-client)
+carries the three commands — and treat a green full gate as a statement about
+the server solution alone. The same asymmetry runs the other way and is worth
+stating once: the change filters in `ci.yml` keep each stack's jobs off the
+other stack's changes, and `scripts/test-agent-workflow.sh` asserts that neither
+filter names a path in the other's directory.
 
 ### A gate does not prove the same tree twice
 

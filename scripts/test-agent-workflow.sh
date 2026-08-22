@@ -255,12 +255,34 @@ run_test() {
   fi
 }
 
+# The client is a second solution with a formatting pass of its own, so a contract about it needs a
+# client C# file the branch changed. It is added and removed inside one test rather than carried by
+# the fixture branch, because the contract below asserts the *whole* invocation log of a service-only
+# change — which is where the guarantee that a branch opening no client file pays nothing lives.
+add_client_change() {
+  mkdir -p "$repository_root/frontend/src/Client"
+  printf '<Solution />\n' > "$repository_root/frontend/MailFathom.Client.slnx"
+  printf 'namespace Fixture;\n' > "$repository_root/frontend/src/Client/Sample.cs"
+  # Staged rather than left untracked, because the full gate refuses untracked files before it
+  # decides anything and two of the contracts below run it.
+  git -C "$repository_root" add frontend
+}
+
+remove_client_change() {
+  git -C "$repository_root" rm --quiet --cached -r frontend
+  rm -rf "$repository_root/frontend"
+}
+
 # One repairing pass and no verifying one. The verifying pass would restate the Release build two
 # lines above it: `EnforceCodeStyleInBuild` and `TreatWarningsAsErrors` turn every IDE rule the
 # `.editorconfig` sets to `warning` into a build error, so a diagnostic with no code fix has already
 # failed the run before formatting is reached. What the repairing pass is here for is the part no
 # build reports — the ordering of using directives, a missing final newline — and repairing it is
 # something only this script does.
+#
+# The whole log is asserted rather than a line of it, and that is what states the client's cost: a
+# branch that changed no file under `frontend/` neither restores nor loads the client solution, so
+# the run this contract describes is byte-for-byte what it was before the client had a pass at all.
 verify_fast_runs_restore_build_tests_and_formatting() {
   : > "$invocation_log"
 
@@ -272,6 +294,45 @@ verify_fast_runs_restore_build_tests_and_formatting() {
   assert_file_content \
     $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --solution backend/MailFathom.slnx --configuration Release --no-build\nformat backend/MailFathom.slnx --no-restore --include backend/src/Sample.cs' \
     "$invocation_log"
+}
+
+# The other half of the same decision. Each solution is formatted with the files that belong to it,
+# and the client's restore is part of its branch rather than of the run: `dotnet format` needs a
+# restored solution, and the `--no-restore` above is only true of the service one, which this loop
+# restored at the top for its build.
+verify_fast_formats_each_solution_with_its_own_changed_files() {
+  add_client_change
+  : > "$invocation_log"
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  )
+
+  remove_client_change
+  assert_file_content \
+    $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --solution backend/MailFathom.slnx --configuration Release --no-build\nformat backend/MailFathom.slnx --no-restore --include backend/src/Sample.cs\nrestore frontend/MailFathom.Client.slnx --locked-mode\nformat frontend/MailFathom.Client.slnx --no-restore --include frontend/src/Client/Sample.cs' \
+    "$invocation_log"
+}
+
+# And the full gate leaves the client out of the list it verifies, for the reason `--include` makes
+# unavoidable: it selects within the workspace `dotnet format` loaded, so a client path handed to the
+# service solution names nothing there. Without the split, a branch that changed only client C# would
+# pay a whole workspace load to verify no file at all.
+verify_full_verifies_the_service_solution_with_service_files_alone() {
+  add_client_change
+  : > "$invocation_log"
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  )
+
+  remove_client_change
+  assert_contains \
+    'format backend/MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic --include backend/src/Sample.cs' \
+    "$invocation_log"
+  assert_excludes 'frontend' "$invocation_log"
 }
 
 # The fixture branch changes one C# file and nothing else, which is also the case the scoped
@@ -476,7 +537,8 @@ verify_fast_runs_again_once_the_tree_changed() {
 }
 
 # The full gate builds, tests, collects coverage over the same suite, and verifies the formatting the
-# loop repairs, so its record answers for the loop as well.
+# loop repairs, so its record answers for the loop as well — over the service solution, which is as
+# far as that gate reads. The contract below is the other side of that sentence.
 verify_fast_accepts_the_record_the_full_gate_wrote() {
   (
     cd "$repository_root"
@@ -491,6 +553,30 @@ verify_fast_accepts_the_record_the_full_gate_wrote() {
   )
 
   assert_file_content '' "$invocation_log"
+}
+
+# The client's repairing pass is the one thing the loop does that the full gate has no counterpart
+# for, so on a branch carrying a client C# file the full gate's record proves nothing about it. A
+# loop that honoured that record would leave the client files it exists to repair unrepaired, and the
+# defect would surface in `CI` instead — which is exactly the split the repairing and verifying
+# halves were paired to avoid.
+verify_fast_refuses_the_full_gate_record_for_a_client_change() {
+  add_client_change
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  )
+
+  : > "$invocation_log"
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  )
+
+  remove_client_change
+  assert_contains 'format frontend/MailFathom.Client.slnx' "$invocation_log"
 }
 
 # And never the other way round — with one exception, which is why both halves are asserted from one
@@ -7194,7 +7280,9 @@ no_tracked_text_file_carries_a_nul_byte() {
 }
 
 run_test verify_fast_runs_restore_build_tests_and_formatting
+run_test verify_fast_formats_each_solution_with_its_own_changed_files
 run_test verify_full_runs_tests_once_through_coverage
+run_test verify_full_verifies_the_service_solution_with_service_files_alone
 run_test verify_full_runs_workflow_contracts_for_a_change_beyond_csharp
 run_test verify_full_skips_workflow_contracts_for_a_csharp_only_change
 run_test verify_full_runs_workflow_contracts_when_the_branch_removed_a_path
@@ -7205,6 +7293,7 @@ run_test verify_fast_skips_a_tree_it_already_proved
 run_test verify_full_leaves_the_record_alone_when_it_skips
 run_test verify_fast_runs_again_once_the_tree_changed
 run_test verify_fast_accepts_the_record_the_full_gate_wrote
+run_test verify_fast_refuses_the_full_gate_record_for_a_client_change
 run_test verify_full_refuses_the_fast_loop_record_except_for_the_formatting_pass
 run_test verify_fast_records_nothing_when_formatting_rewrote_a_file
 run_test verify_full_records_nothing_when_it_failed

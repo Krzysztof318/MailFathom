@@ -90,7 +90,12 @@ if ! removed_paths="$(list_removed_or_renamed_paths)"; then
   exit 1
 fi
 
-mapfile -t changed_csharp_files < <(printf '%s\n' "$changed_paths" | grep -E '\.cs$' | sort --unique)
+# Everything under `frontend/` is left out, because this gate verifies `backend/MailFathom.slnx` and
+# `--include` selects within the workspace `dotnet format` loaded: a client path in this list would
+# name no file the service solution holds, and a branch that changed only client C# would pay a whole
+# workspace load to verify nothing. The client's own verdict comes from the `Frontend` job of `CI`,
+# and its repairing pass from `scripts/verify-fast.sh`.
+mapfile -t changed_service_csharp_files < <(printf '%s\n' "$changed_paths" | grep -E '\.cs$' | grep -Ev '^frontend/' | sort --unique)
 # Both lists feed this one, because a shared style input that was deleted decides as much as one that
 # was edited: the files under a removed `.editorconfig` are read against the rules above it from that
 # commit on, and none of them had to be touched for their verdict to move.
@@ -171,7 +176,7 @@ else
     # files this branch never opened, and it is the one case that still costs the whole solution.
     if names_shared_style_input "${touched_other_paths[@]}"; then
       dotnet format backend/MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic
-    elif ((${#changed_csharp_files[@]} > 0)); then
+    elif ((${#changed_service_csharp_files[@]} > 0)); then
       # The one case the loop settles for this gate. Its repairing pass is the same tool over the
       # same file set from the same `list_changed_paths`, and a record exists only where that pass
       # left every file byte-for-byte as it found them — so asking again whether they need rewriting
@@ -183,7 +188,7 @@ else
           "$(verification_recorded_at 'verify-fast')"
       else
         dotnet format backend/MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic \
-          --include "${changed_csharp_files[@]}"
+          --include "${changed_service_csharp_files[@]}"
       fi
     fi
   )

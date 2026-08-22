@@ -234,6 +234,11 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/build-test-frontend.yml
+    with:
+      # The same exemption the server's `run-format` gets above, and it is the whole of this switch rather than a repeat
+      # of the change detection the job condition already applied: whether the client's formatting can have moved is a
+      # question the `frontend` filter answers, and whether it is worth asking again on a merge is this one.
+      run-format: ${{ github.event_name != 'push' }}
 
   # The one job here that reads the half of the repository the build, formatting, and model jobs cannot
   # see, and the only one that reports on a draft besides the two that cost seconds. `Detect changes`
