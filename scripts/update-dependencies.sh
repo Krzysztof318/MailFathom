@@ -206,8 +206,13 @@ github_licence() {
   [[ -z "$spdx" ]] && printf 'unresolved' || printf '%s' "$spdx"
 }
 
+# `--paginate` is insurance rather than a fix. Measured across every action this repository pins, this endpoint returns
+# the whole matching set in one response and carries no `Link` header — `github/codeql-action` answers with 403 refs and
+# `crate-ci/typos` with 355 — so the flag costs one request today exactly as its absence did. It is here because the
+# newest major is computed from this list, and a page boundary appearing upstream would not fail: it would quietly
+# report a pin as current.
 github_version_tags() {
-  gh api "repos/$1/git/matching-refs/tags/v" --jq '.[].ref' 2> /dev/null | sed 's|^refs/tags/||' || true
+  gh api --paginate "repos/$1/git/matching-refs/tags/v" --jq '.[].ref' 2> /dev/null | sed 's|^refs/tags/||' || true
 }
 
 ### The register side. Both readers are pattern reads over prose and are reported as such.
@@ -216,6 +221,16 @@ github_version_tags() {
 # rather than any character.
 as_pattern() {
   sed -E 's#[][\\.*^$/+?(){}|]#\\&#g' <<< "$1"
+}
+
+# And for the replacement side, which has its own three specials and not the pattern's: `&` stands for the whole match,
+# a backslash opens an escape, and the delimiter ends the replacement early. A version or a tag reaches this from a
+# remote server, so it is encoded for the context it lands in rather than trusted to contain none of them. The pattern
+# escape is not reusable here — `\.` in a replacement is undefined rather than a literal dot — which is why this is a
+# second function rather than one shared with the line above. Delimited with `|` because sed ends a script on its own
+# delimiter even inside a bracket expression, and `#` is one of the characters this class has to name.
+as_replacement() {
+  sed -E 's|[\\&#]|\\&|g' <<< "$1"
 }
 
 # The register names a component inside prose, so a mention is matched as a whole identifier rather than as a substring:
@@ -676,7 +691,7 @@ rewrite_pin() {
 
   case "$family" in
     nuget)
-      sed -i -E "s#(<PackageVersion Include=\"$(as_pattern "$component")\" Version=\")$(as_pattern "$pinned")(\")#\1$latest\2#" "$source"
+      sed -i -E "s#(<PackageVersion Include=\"$(as_pattern "$component")\" Version=\")$(as_pattern "$pinned")(\")#\1$(as_replacement "$latest")\2#" "$source"
       ;;
     tools)
       temporary="$work_directory/tools.json"
@@ -692,8 +707,8 @@ rewrite_pin() {
       # Two expressions rather than one anchored pattern: a reference at the end of its line, and a reference followed by
       # anything an action reference cannot itself contain, which is where an inline comment sits.
       sed -i -E \
-        -e "s#uses: $(as_pattern "$component")\$#uses: $reference@$latest#" \
-        -e "s#uses: $(as_pattern "$component")([^A-Za-z0-9._-])#uses: $reference@$latest\1#" \
+        -e "s#uses: $(as_pattern "$component")\$#uses: $(as_replacement "$reference@$latest")#" \
+        -e "s#uses: $(as_pattern "$component")([^A-Za-z0-9._-])#uses: $(as_replacement "$reference@$latest")\1#" \
         "${touched[@]}"
       ;;
   esac
