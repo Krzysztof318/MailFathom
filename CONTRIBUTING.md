@@ -112,6 +112,8 @@ bash scripts/verify-fast.sh
 
 It restores, builds, runs the unit tests, and then formats the C# files your branch changed. **It rewrites working-tree files by design** — that is how a style diagnostic reaches you in seconds rather than after the full gate has run. Review what it changed.
 
+It does that in whichever of the two stacks your change reaches, decided from the paths you touched rather than by you: the server's solution for a change under `backend/`, the client's for one under `frontend/`, both for a change to a file above them such as `global.json`, and neither for a change no build reads. The lists are the ones `ci.yml` uses, so the gate builds what the pipeline will. Building the client needs the `wasm-tools` workload — `dotnet workload install wasm-tools` — and the flow fails rather than skipping without it.
+
 Do not invoke `dotnet format` by hand. Both of its modes already run where they belong — the loop repairs the files you changed, the full gate verifies them — and a hand-run pass over the whole solution costs minutes to report what the build has already told you: a style rule with no automatic fix fails the Release build above, naming its file and line.
 
 Before you commit, stage your files and run the full gate:
@@ -121,7 +123,7 @@ git add <your files>
 bash scripts/verify-full.sh
 ```
 
-The full gate fetches `origin main` and refuses a branch that does not contain that freshly fetched base, so rebase when it complains; verifying against a stale base proves nothing about the branch that will actually merge. It builds, runs the complete unit-test and coverage gate, verifies formatting over the C# files you changed — over the whole solution when you touched an `.editorconfig` or one of the shared build files — runs the workflow contract suite beside all of that where your change can have moved something it asserts, and checks the diff. It rejects remaining untracked files, so a newly added file cannot slip past diff validation.
+The full gate fetches `origin main` and refuses a branch that does not contain that freshly fetched base, so rebase when it complains; verifying against a stale base proves nothing about the branch that will actually merge. In the server stack it builds, runs the complete unit-test and coverage gate, and verifies formatting over the C# files you changed — over the whole solution when you touched an `.editorconfig` or one of the shared build files. In the client stack it builds both heads, runs that suite, and verifies formatting over the whole of its two-project solution. Beside all of that it runs the workflow contract suite where your change can have moved something it asserts, and it checks the diff. It rejects remaining untracked files, so a newly added file cannot slip past diff validation.
 
 Neither script proves the same tree twice. Each records a digest of what it verified under `artifacts/verify/`, which is ignored and never staged, and a run handed a tree it has already passed over prints the earlier run and stops in under a second. So run the gate rather than working out whether the last run still counts: a failing run records nothing, a fast loop whose formatting pass rewrote a file records nothing, and `VERIFY_FORCE=1` runs everything regardless.
 

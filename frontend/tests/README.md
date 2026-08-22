@@ -11,10 +11,10 @@ The suite is xUnit.net v3 on Microsoft Testing Platform, the same framework and 
 dotnet test --solution frontend/MailFathom.Client.slnx
 ```
 
-The rule `backend/tests/AGENTS.md` states about structure holds here for the same reason it holds there: a test
-directory follows the structure of the code it covers, so `Client.UnitTests/Presentation/` covers
-`src/Client/Presentation/`.
+The structure rule is the repository's rather than this stack's: a test directory follows the structure of the code it
+covers, so `Client.UnitTests/Presentation/` covers `src/Client/Presentation/`, exactly as `backend/tests/` mirrors
+`backend/src/`.
 
 What it asserts today is what a scaffold has to say for itself — that the client reports the product and version the
-build declares, and that the MVUX model behind the only screen yields it. `frontend/AGENTS.md` § *Testing* states what
+build declares, and that the MVUX model behind the only screen yields it. `AGENTS.md` beside this file states what
 belongs here, how a feed is asserted, and what is deliberately left to a head that actually runs.

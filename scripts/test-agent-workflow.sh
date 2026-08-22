@@ -273,6 +273,51 @@ remove_client_change() {
   rm -rf "$repository_root/frontend"
 }
 
+# A change no build reads runs neither stack's flow, which is the whole of what the change filters
+# buy locally: before them, a documentation-only branch paid for a Release build and the entire unit
+# suite of a solution it could not have broken. What still answers for such a change is the contract
+# suite and the whitespace checks in the full gate, neither of which is a stack's flow.
+verify_fast_runs_no_stack_flow_for_a_change_no_build_reads() {
+  : > "$invocation_log"
+  git -C "$repository_root" checkout --quiet --detach origin/main
+  stage_documentation_change
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-fast.sh"
+  ) > "$test_directory/verify-fast-no-stack-output" 2>&1
+
+  discard_documentation_change
+  git -C "$repository_root" checkout --quiet "$fixture_branch"
+
+  assert_file_content '' "$invocation_log"
+  assert_contains 'This change reaches neither stack' "$test_directory/verify-fast-no-stack-output"
+}
+
+verify_full_runs_no_stack_flow_for_a_change_no_build_reads() {
+  local gate_output="$test_directory/verify-full-no-stack-output"
+
+  : > "$invocation_log"
+  : > "$workflow_invocation_log"
+  git -C "$repository_root" checkout --quiet --detach origin/main
+  stage_documentation_change
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  ) > "$gate_output" 2>&1
+
+  discard_documentation_change
+  git -C "$repository_root" checkout --quiet "$fixture_branch"
+
+  # The suite is the answer such a change earns, and it is the whole of it: nothing was restored,
+  # built, tested, measured, or formatted. The gate says so, because a run that built nothing in
+  # silence reads as a run that did not happen.
+  assert_file_content 'workflow-contracts' "$workflow_invocation_log"
+  assert_file_content '' "$invocation_log"
+  assert_contains 'This change reaches neither stack' "$gate_output"
+}
+
 # One repairing pass and no verifying one. The verifying pass would restate the Release build two
 # lines above it: `EnforceCodeStyleInBuild` and `TreatWarningsAsErrors` turn every IDE rule the
 # `.editorconfig` sets to `warning` into a build error, so a diagnostic with no code fix has already
@@ -282,7 +327,7 @@ remove_client_change() {
 #
 # The whole log is asserted rather than a line of it, and that is what states the client's cost: a
 # branch that changed no file under `frontend/` neither restores nor loads the client solution, so
-# the run this contract describes is byte-for-byte what it was before the client had a pass at all.
+# the run this contract describes is byte-for-byte what it was before the client stack existed.
 verify_fast_runs_restore_build_tests_and_formatting() {
   : > "$invocation_log"
 
@@ -296,11 +341,11 @@ verify_fast_runs_restore_build_tests_and_formatting() {
     "$invocation_log"
 }
 
-# The other half of the same decision. Each solution is formatted with the files that belong to it,
-# and the client's restore is part of its branch rather than of the run: `dotnet format` needs a
-# restored solution, and the `--no-restore` above is only true of the service one, which this loop
-# restored at the top for its build.
-verify_fast_formats_each_solution_with_its_own_changed_files() {
+# The other half of the same decision. A branch that reaches both stacks runs both flows, each over
+# its own solution and formatted with the files that belong to it, and the client's restore is part
+# of its own branch rather than of the run: `dotnet format` needs a restored solution, and the
+# `--no-restore` above is only true of the service one, which this flow restored for its own build.
+verify_fast_runs_the_flow_of_each_stack_the_change_reaches() {
   add_client_change
   : > "$invocation_log"
 
@@ -311,15 +356,17 @@ verify_fast_formats_each_solution_with_its_own_changed_files() {
 
   remove_client_change
   assert_file_content \
-    $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --solution backend/MailFathom.slnx --configuration Release --no-build\nformat backend/MailFathom.slnx --no-restore --include backend/src/Sample.cs\nrestore frontend/MailFathom.Client.slnx --locked-mode\nformat frontend/MailFathom.Client.slnx --no-restore --include frontend/src/Client/Sample.cs' \
+    $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --solution backend/MailFathom.slnx --configuration Release --no-build\nformat backend/MailFathom.slnx --no-restore --include backend/src/Sample.cs\nrestore frontend/MailFathom.Client.slnx --locked-mode\nbuild frontend/MailFathom.Client.slnx --configuration Release --no-restore\ntest --solution frontend/MailFathom.Client.slnx --configuration Release --no-build\nformat frontend/MailFathom.Client.slnx --no-restore --include frontend/src/Client/Sample.cs' \
     "$invocation_log"
 }
 
-# And the full gate leaves the client out of the list it verifies, for the reason `--include` makes
-# unavoidable: it selects within the workspace `dotnet format` loaded, so a client path handed to the
-# service solution names nothing there. Without the split, a branch that changed only client C# would
-# pay a whole workspace load to verify no file at all.
-verify_full_verifies_the_service_solution_with_service_files_alone() {
+# The full gate over the same branch, where the two stacks differ in one place and nowhere else: the
+# service solution is verified with the files the branch changed, because `--include` selects within
+# the workspace `dotnet format` loaded and the service workspace is several dozen projects, while the
+# client solution is verified whole — two projects, and the verdict the `Frontend` job of `CI` holds
+# a branch to. A client path in the service list would name no file that solution holds, which is
+# what the split exists for.
+verify_full_verifies_each_solution_the_change_reaches() {
   add_client_change
   : > "$invocation_log"
 
@@ -332,7 +379,38 @@ verify_full_verifies_the_service_solution_with_service_files_alone() {
   assert_contains \
     'format backend/MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic --include backend/src/Sample.cs' \
     "$invocation_log"
-  assert_excludes 'frontend' "$invocation_log"
+  assert_contains 'build frontend/MailFathom.Client.slnx --configuration Release --no-restore' "$invocation_log"
+  assert_contains 'test --solution frontend/MailFathom.Client.slnx --configuration Release --no-build' "$invocation_log"
+  assert_contains \
+    'format frontend/MailFathom.Client.slnx --no-restore --verify-no-changes --verbosity diagnostic' \
+    "$invocation_log"
+  assert_excludes 'format frontend/MailFathom.Client.slnx --no-restore --verify-no-changes --verbosity diagnostic --include' \
+    "$invocation_log"
+}
+
+# A file above both stacks is the case neither filter owns alone. `global.json` pins the SDK the
+# service compiles with and the Uno SDK that chooses every client package, so a change to it moves
+# both and both flows run — which is the answer `ci.yml` gives it as well, through the same entry in
+# both of its filters.
+verify_full_runs_both_flows_for_a_change_above_both_stacks() {
+  : > "$invocation_log"
+  # Detached at the base, so `global.json` is the only path the change carries and each flow is
+  # earned by it rather than by the C# file the fixture branch already holds.
+  git -C "$repository_root" checkout --quiet --detach origin/main
+  printf '{}\n' > "$repository_root/global.json"
+  git -C "$repository_root" add global.json
+
+  (
+    cd "$repository_root"
+    "$scripts_directory/verify-full.sh"
+  )
+
+  git -C "$repository_root" rm --quiet --force --cached global.json
+  rm -f "$repository_root/global.json"
+  git -C "$repository_root" checkout --quiet "$fixture_branch"
+
+  assert_contains 'build backend/MailFathom.slnx --configuration Release --no-restore' "$invocation_log"
+  assert_contains 'build frontend/MailFathom.Client.slnx --configuration Release --no-restore' "$invocation_log"
 }
 
 # The fixture branch changes one C# file and nothing else, which is also the case the scoped
@@ -555,12 +633,12 @@ verify_fast_accepts_the_record_the_full_gate_wrote() {
   assert_file_content '' "$invocation_log"
 }
 
-# The client's repairing pass is the one thing the loop does that the full gate has no counterpart
-# for, so on a branch carrying a client C# file the full gate's record proves nothing about it. A
-# loop that honoured that record would leave the client files it exists to repair unrepaired, and the
-# defect would surface in `CI` instead — which is exactly the split the repairing and verifying
-# halves were paired to avoid.
-verify_fast_refuses_the_full_gate_record_for_a_client_change() {
+# And it answers on a client change too, which it did not while the full gate read the service
+# solution alone. The gate now verifies the client solution whole, so a passing record says every
+# file in it is already formatted — which leaves the loop's repairing pass over a subset of those
+# files one possible outcome. The record therefore subsumes the loop in both stacks or in neither,
+# and there is no branch shape that has to read only its own.
+verify_fast_accepts_the_full_gate_record_for_a_client_change() {
   add_client_change
 
   (
@@ -576,7 +654,7 @@ verify_fast_refuses_the_full_gate_record_for_a_client_change() {
   )
 
   remove_client_change
-  assert_contains 'format frontend/MailFathom.Client.slnx' "$invocation_log"
+  assert_file_content '' "$invocation_log"
 }
 
 # And never the other way round — with one exception, which is why both halves are asserted from one
@@ -715,21 +793,30 @@ verify_full_formats_the_whole_solution_when_a_shared_style_input_was_removed() {
 # A change that wrote no C# file has nothing for `dotnet format` to be asked about, in either
 # direction: there is no file to verify and no shared input that would widen the scope to the
 # solution. The suite still runs, because that change is exactly what it reads.
+# A change the service filter reaches without carrying a C# file: the solution is built and tested,
+# because a file it reads moved, and nothing is formatted, because formatting is a property of a file
+# and this branch wrote none the formatter reads. The non-C# path is under `backend/src/` rather than
+# one of the shared style inputs, which have a whole-solution pass of their own two contracts below.
 verify_full_formats_nothing_when_no_csharp_file_changed() {
   : > "$invocation_log"
   : > "$workflow_invocation_log"
   git -C "$repository_root" checkout --quiet --detach origin/main
-  stage_documentation_change
+  # `backend/src/` holds only the fixture branch's C# file, so it does not exist at the base.
+  mkdir --parents "$repository_root/backend/src"
+  printf 'note\n' > "$repository_root/backend/src/note.txt"
+  git -C "$repository_root" add backend/src/note.txt
 
   (
     cd "$repository_root"
     "$scripts_directory/verify-full.sh"
   )
 
-  discard_documentation_change
+  git -C "$repository_root" rm --quiet --force --cached backend/src/note.txt
+  rm -f "$repository_root/backend/src/note.txt"
   git -C "$repository_root" checkout --quiet "$fixture_branch"
 
   assert_file_content 'workflow-contracts' "$workflow_invocation_log"
+  assert_contains 'msbuild .config/CodeCoverage.proj' "$invocation_log"
   assert_excludes 'format backend/MailFathom.slnx' "$invocation_log"
 }
 
@@ -969,12 +1056,18 @@ verify_fast_skips_formatting_when_no_csharp_file_changed() {
 
   : > "$invocation_log"
   git -C "$repository_root" checkout --quiet --detach origin/main
+  # `backend/src/` holds only the fixture branch's C# file, so it does not exist at the base.
+  mkdir --parents "$repository_root/backend/src"
+  printf 'note\n' > "$repository_root/backend/src/note.txt"
+  git -C "$repository_root" add backend/src/note.txt
 
   (
     cd "$repository_root"
     "$scripts_directory/verify-fast.sh"
   ) > /dev/null 2>&1 || script_status=$?
 
+  git -C "$repository_root" rm --quiet --force --cached backend/src/note.txt
+  rm -f "$repository_root/backend/src/note.txt"
   git -C "$repository_root" checkout --quiet "$fixture_branch"
 
   if ((script_status != 0)); then
@@ -6980,14 +7073,11 @@ the_required_check_aggregates_every_job_in_ci() {
 # visible in a run, and both are exactly the edit somebody makes while adding a path they were unsure where to put.
 # The disjointness is asserted rather than the whole list, because which paths belong to a stack is a decision the
 # workflow's own comments carry; what may never happen is one stack's directory appearing in the other's filter.
-the_stacks_change_filters_name_no_path_in_each_other() {
-  local ci_workflow="$source_repository_root/.github/workflows/ci.yml"
-  local filters filter_name path failures=''
-
-  # One `<filter>\t<path>` line per path the `filters:` block declares, with the block's own comment lines and
-  # everything after it dropped. Inside the block literal a filter name sits at twelve spaces and a path at fourteen,
-  # which is what tells the two apart; the first line indented less than that is the end of the literal.
-  filters="$(awk '
+# One `<filter>\t<path>` line per path `ci.yml`'s `filters:` block declares, with the block's own comment lines and
+# everything after it dropped. Inside the block literal a filter name sits at twelve spaces and a path at fourteen,
+# which is what tells the two apart; the first line indented less than that is the end of the literal.
+list_ci_change_filters() {
+  awk '
     /^          filters: \|$/ { in_filters = 1; next }
     in_filters && /^[[:space:]]*$/ { next }
     in_filters && !/^            / { exit }
@@ -6997,7 +7087,14 @@ the_stacks_change_filters_name_no_path_in_each_other() {
       gsub(/^.|.$/, "", path)
       print name "\t" path
     }
-  ' "$ci_workflow")"
+  ' "$1"
+}
+
+the_stacks_change_filters_name_no_path_in_each_other() {
+  local ci_workflow="$source_repository_root/.github/workflows/ci.yml"
+  local filters filter_name path failures=''
+
+  filters="$(list_ci_change_filters "$ci_workflow")"
 
   [[ -n "$filters" ]] || {
     printf 'ci.yml declares no change filters, or the block moved.\n' >&2
@@ -7021,6 +7118,54 @@ the_stacks_change_filters_name_no_path_in_each_other() {
 
   [[ "$(extract_workflow_job_uses "$ci_workflow" frontend)" == './.github/workflows/build-test-frontend.yml' ]] ||
     failures+='ci.yml: the frontend job does not call build-test-frontend.yml. '
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
+# The pipeline and the two local gates answer *which stack does this change reach* from the same
+# lists, and they hold those lists in two files because neither can read the other's: a shell script
+# cannot ask `dorny/paths-filter` what it would match, and a workflow cannot source a script. What
+# keeps the copies one decision is this contract. Without it the drift is silent in the direction
+# that matters most — a path added to `ci.yml` alone leaves the local gate skipping a stack the
+# pipeline is about to build, so the branch passes locally and fails minutes later on a file the
+# developer had in front of them.
+the_gates_decide_from_the_change_filters_ci_declares() {
+  local ci_workflow="$source_repository_root/.github/workflows/ci.yml"
+  local filters pairing stack_name ci_filter_name failures=''
+  local ci_paths script_paths
+
+  filters="$(list_ci_change_filters "$ci_workflow")"
+
+  [[ -n "$filters" ]] || {
+    printf 'ci.yml declares no change filters, or the block moved.\n' >&2
+    return 1
+  }
+
+  # Each stack's list beside the `ci.yml` filter it is the copy of. The two names differ because the
+  # workflow names the server's filter after what it gates rather than after the stack.
+  for pairing in 'service build' 'client frontend'; do
+    read -r stack_name ci_filter_name <<< "$pairing"
+    ci_paths="$(awk -F'\t' -v name="$ci_filter_name" '$1 == name { print $2 }' <<< "$filters" | sort)"
+
+    # Sourced in a subshell of its own, so the arrays this asserts on cannot leak into the suite.
+    script_paths="$(
+      # shellcheck source=scripts/resolve-changed-stacks.sh
+      source "$source_repository_root/scripts/resolve-changed-stacks.sh"
+
+      case "$stack_name" in
+        service) printf '%s\n' "${service_stack_filter[@]}" ;;
+        client) printf '%s\n' "${client_stack_filter[@]}" ;;
+      esac
+    )"
+    script_paths="$(sort <<< "$script_paths")"
+
+    if [[ "$ci_paths" != "$script_paths" ]]; then
+      failures+="the $stack_name stack filter in scripts/resolve-changed-stacks.sh disagrees with ci.yml's $ci_filter_name filter: $(diff <(printf '%s\n' "$ci_paths") <(printf '%s\n' "$script_paths") | tr '\n' ' '). "
+    fi
+  done
 
   if [[ -n "$failures" ]]; then
     printf '%s\n' "$failures" >&2
@@ -7280,9 +7425,12 @@ no_tracked_text_file_carries_a_nul_byte() {
 }
 
 run_test verify_fast_runs_restore_build_tests_and_formatting
-run_test verify_fast_formats_each_solution_with_its_own_changed_files
+run_test verify_fast_runs_the_flow_of_each_stack_the_change_reaches
+run_test verify_fast_runs_no_stack_flow_for_a_change_no_build_reads
+run_test verify_full_runs_no_stack_flow_for_a_change_no_build_reads
+run_test verify_full_runs_both_flows_for_a_change_above_both_stacks
 run_test verify_full_runs_tests_once_through_coverage
-run_test verify_full_verifies_the_service_solution_with_service_files_alone
+run_test verify_full_verifies_each_solution_the_change_reaches
 run_test verify_full_runs_workflow_contracts_for_a_change_beyond_csharp
 run_test verify_full_skips_workflow_contracts_for_a_csharp_only_change
 run_test verify_full_runs_workflow_contracts_when_the_branch_removed_a_path
@@ -7293,7 +7441,7 @@ run_test verify_fast_skips_a_tree_it_already_proved
 run_test verify_full_leaves_the_record_alone_when_it_skips
 run_test verify_fast_runs_again_once_the_tree_changed
 run_test verify_fast_accepts_the_record_the_full_gate_wrote
-run_test verify_fast_refuses_the_full_gate_record_for_a_client_change
+run_test verify_fast_accepts_the_full_gate_record_for_a_client_change
 run_test verify_full_refuses_the_fast_loop_record_except_for_the_formatting_pass
 run_test verify_fast_records_nothing_when_formatting_rewrote_a_file
 run_test verify_full_records_nothing_when_it_failed
@@ -7518,6 +7666,7 @@ run_test the_reviewer_resolves_one_claude_credential_everywhere
 run_test the_development_tooling_never_reaches_a_published_artifact
 run_test the_required_check_aggregates_every_job_in_ci
 run_test the_stacks_change_filters_name_no_path_in_each_other
+run_test the_gates_decide_from_the_change_filters_ci_declares
 run_test workflow_scripts_use_flat_manual_layout
 run_test every_yaml_file_carries_the_license_header
 run_test every_browser_asset_carries_the_license_header

@@ -34,6 +34,7 @@ verification_input_scripts=(
   "$verification_record_scripts_directory/verify-full.sh"
   "$verification_record_scripts_directory/resolve-base-remote.sh"
   "$verification_record_scripts_directory/list-branch-changes.sh"
+  "$verification_record_scripts_directory/resolve-changed-stacks.sh"
   "$verification_record_scripts_directory/verification-record.sh"
 )
 

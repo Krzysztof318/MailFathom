@@ -185,5 +185,5 @@ no project here and neither build reads the other's files.
   itself and `global.json` lets the SDK roll forward. `frontend/Directory.Build.props` names them and says what a lock
   file there would have recorded instead.
 
-The client reaches MailFathom over the endpoints `Host` exposes and shares no type with it. `frontend/AGENTS.md` states
-what governs a change there.
+The client reaches MailFathom over the endpoints `Host` exposes and shares no type with it. `frontend/src/AGENTS.md`
+states what governs a change there, and `frontend/tests/AGENTS.md` what governs one in its suite.
