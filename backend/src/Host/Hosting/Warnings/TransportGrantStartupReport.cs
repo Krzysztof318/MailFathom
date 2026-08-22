@@ -20,22 +20,24 @@ namespace MailFathom.Host.Hosting.Warnings;
 /// inferring it later from what a credential turned out to be able to do.
 /// </para>
 /// <para>
-/// Both endpoints are reported by one service and each entry separately, because the two surfaces draw from disjoint
-/// halves of the vocabulary and an operator who narrowed one credential has to be able to read back that they narrowed
-/// the one they meant. An entry is named by its configuration path, which is the position they would edit; nothing here
+/// Every configured endpoint is reported by one service and each entry separately, because an operator who narrowed one
+/// credential has to be able to read back that they narrowed the one they meant. Two of the three surfaces draw from
+/// the same half of the vocabulary, which is what makes the endpoint each line names the part that cannot be inferred.
+/// An entry is named by its configuration path, which is the position they would edit; nothing here
 /// names a key, a public key, a token, an authorization server, or a subject, because a grant is what the deployment
 /// wrote and never who presented something.
 /// </para>
 /// <para>
 /// It records rather than warns, including for the surface that configures no entry at all. That posture is already a
-/// warning — <see cref="McpTransportAuthenticationWarning" /> and <see cref="AdminTransportSecurityWarning" /> each say
+/// warning — <see cref="McpTransportAuthenticationWarning" />, <see cref="AdminTransportSecurityWarning" />, and
+/// <see cref="ClientTransportSecurityWarning" /> each say
 /// what it means that anything reaching the address is served — and what this adds is the half those cannot state,
 /// which is how much such a caller then holds. Saying it twice at warning level would make the second one noise and the
 /// first one easier to scroll past.
 /// </para>
 /// <para>
 /// It runs as a hosted service so it appears among the other startup diagnostics, and it is registered whether or not
-/// either endpoint is enabled, because it is the report that decides whether it has anything to say.
+/// any endpoint is enabled, because it is the report that decides whether it has anything to say.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]

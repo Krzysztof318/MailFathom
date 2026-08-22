@@ -94,6 +94,41 @@ public sealed class TransportClearTextRedirectReportTests
         Assert.Contains("AdminEndpoint:Https:Redirect:Enabled", record.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task StartAsync_AClientEndpointRedirecting_NamesItsOwnClearTextPort()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var report = ReportFor(new McpEndpointOptions(), new AdminEndpointOptions(), logs, ClientTerminatingTls());
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.Single(logs.Records);
+        Assert.Equal(8080, Assert.Contains("ClearTextPort", record.Properties));
+        Assert.Equal("https://client.example.test:8643", Assert.Contains("RedirectTargets", record.Properties));
+        Assert.Contains("ClientEndpoint:Https:Redirect:Enabled", record.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Every enabled surface opens a socket of its own, so a deployment serving three reads three lines.</summary>
+    [Fact]
+    public async Task StartAsync_AllThreeSurfacesRedirecting_ReportsOneLinePerSurface()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var report = ReportFor(McpTerminatingTls(), AdminTerminatingTls(), logs, ClientTerminatingTls());
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(3, logs.Records.Count);
+        Assert.Contains(logs.Records, record => record.Message.Contains("MCP endpoint", StringComparison.Ordinal));
+        Assert.Contains(logs.Records, record => record.Message.Contains("administrative endpoint", StringComparison.Ordinal));
+        Assert.Contains(logs.Records, record => record.Message.Contains("client endpoint", StringComparison.Ordinal));
+    }
+
     /// <summary>Nothing was bound, so naming a port would send an operator looking for a listener that is not there.</summary>
     [Fact]
     public async Task StartAsync_ARedirectTurnedOff_SaysNothing()
@@ -169,6 +204,14 @@ public sealed class TransportClearTextRedirectReportTests
     {
         var settings = new AdminEndpointOptions { Enabled = true, Transport = EndpointTransport.HttpAndHttps };
         settings.Https.Endpoints.Add(Profile(domain: "admin.example.test", port: 8543));
+
+        return settings;
+    }
+
+    private static ClientEndpointOptions ClientTerminatingTls()
+    {
+        var settings = new ClientEndpointOptions { Enabled = true, Transport = EndpointTransport.HttpAndHttps };
+        settings.Https.Endpoints.Add(Profile(domain: "client.example.test", port: 8643));
 
         return settings;
     }

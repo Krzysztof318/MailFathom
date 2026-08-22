@@ -7,7 +7,7 @@ using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Security.Transport;
 
-/// <summary>Covers which browser origins the MCP endpoint answers.</summary>
+/// <summary>Covers which browser origins a transport surface answers.</summary>
 public sealed class BrowserOriginPolicyTests
 {
     [Theory]

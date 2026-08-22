@@ -80,6 +80,49 @@ public sealed class TransportRequestTimeoutStartupReportTests
     }
 
     [Fact]
+    public async Task StartAsync_EnabledClientEndpointWithoutACeiling_WarnsThatNothingBoundsTheRequest()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var report = ReportFor(
+            new McpEndpointOptions(),
+            new AdminEndpointOptions(),
+            logs,
+            EnabledClientEndpoint(new TransportRequestTimeoutOptions { Enabled = false }));
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.Single(logs.Records);
+        Assert.Equal(LogLevel.Warning, record.Level);
+        Assert.Equal("client", Assert.Contains("EndpointName", record.Properties));
+        Assert.Equal("/api/client", Assert.Contains("EndpointPath", record.Properties));
+        Assert.Equal("ClientEndpoint:RequestTimeout", Assert.Contains("RequestTimeoutSection", record.Properties));
+    }
+
+    [Fact]
+    public async Task StartAsync_EnabledClientEndpointWithACeiling_StatesTheDurationItAbandonsARequestAt()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var report = ReportFor(
+            new McpEndpointOptions(),
+            new AdminEndpointOptions(),
+            logs,
+            EnabledClientEndpoint(new TransportRequestTimeoutOptions { Duration = TimeSpan.FromSeconds(45) }));
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.Single(logs.Records);
+        Assert.Equal(LogLevel.Information, record.Level);
+        Assert.Equal("client", Assert.Contains("EndpointName", record.Properties));
+        Assert.Equal(TimeSpan.FromSeconds(45), Assert.Contains("RequestTimeout", record.Properties));
+    }
+
+    [Fact]
     public async Task StartAsync_EnabledEndpointWithACeiling_StatesTheDurationItAbandonsARequestAt()
     {
         // Arrange
@@ -200,6 +243,12 @@ public sealed class TransportRequestTimeoutStartupReportTests
     };
 
     private static AdminEndpointOptions EnabledAdminEndpoint(TransportRequestTimeoutOptions requestTimeoutSettings) => new()
+    {
+        Enabled = true,
+        RequestTimeout = requestTimeoutSettings,
+    };
+
+    private static ClientEndpointOptions EnabledClientEndpoint(TransportRequestTimeoutOptions requestTimeoutSettings) => new()
     {
         Enabled = true,
         RequestTimeout = requestTimeoutSettings,
