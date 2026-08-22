@@ -273,6 +273,11 @@ what keeps that from being a rule somebody has to enforce by reading.
   across the wire: it is not logged, not written to local storage without a stated reason, and not put in a telemetry
   event. A failure message never carries a deployment's own answer back either — the body is text from a machine this
   process does not own, and a screen that repeated it would be putting an attacker's words in MailFathom's voice.
+- **The surface it reaches is `/api/client`**, the backend's third transport surface, served only where a deployment
+  enabled `ClientEndpoint`. It is not the MCP endpoint and not the administrative one: a credential admitted by either
+  of those authenticates nothing here. Today it answers one route, `GET /api/client/session`, reporting the running
+  version and the grant the caller's credential carries and nothing that identifies that credential;
+  [the client endpoint](../../docs/operations/client-endpoint.md) is the page.
 - **Signing in is authorization code with PKCE**, which is the grant `mfctl` performs against the administrative
   surface and for the same reason: a desktop binary and a WebAssembly bundle are both readable by whoever runs them, so
   this is a public client and holds no secret. Where to sign in is discovered rather than configured — the deployment's

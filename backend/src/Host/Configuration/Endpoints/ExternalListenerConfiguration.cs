@@ -69,7 +69,7 @@ internal static class ExternalListenerConfiguration
             .Where(key => !string.IsNullOrWhiteSpace(configuration[key.ConfigurationKey])
                 || !string.IsNullOrWhiteSpace(configuration[key.Variable]))
             .Select(static key =>
-                $"{key.Variable} — MailFathom serves no listener of its own from this variable. Each surface states where it is served in its own section: '{McpEndpointOptions.SectionName}:BindAddress' and '{McpEndpointOptions.SectionName}:Port' for the MCP endpoint, '{AdminEndpointOptions.SectionName}:*' for the administrative one, and '{HealthEndpointOptions.SectionName}:*' for the probes. Move the address there and remove this variable."));
+                $"{key.Variable} — MailFathom serves no listener of its own from this variable. Each surface states where it is served in its own section: '{McpEndpointOptions.SectionName}:BindAddress' and '{McpEndpointOptions.SectionName}:Port' for the MCP endpoint, '{AdminEndpointOptions.SectionName}:*' for the administrative one, '{ClientEndpointOptions.SectionName}:*' for the client one, and '{HealthEndpointOptions.SectionName}:*' for the probes. Move the address there and remove this variable."));
 
         // A child without a URL binds nothing, which is what makes an endpoint carrying only defaults harmless.
         errors.AddRange(configuration.GetSection(KestrelEndpointsSectionName)

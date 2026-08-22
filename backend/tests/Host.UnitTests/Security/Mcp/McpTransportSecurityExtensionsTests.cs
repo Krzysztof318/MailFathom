@@ -221,7 +221,9 @@ public sealed class McpTransportSecurityExtensionsTests
         Assert.NotNull(published);
         Assert.Equal(["mailfathom.read", "offline_access"], published.ScopesSupported);
         Assert.Equal(
-            ProtectedResourceMetadataDocument.For([new TransportAuthenticationOptions { OAuth = oauthSettings }]).ScopesSupported,
+            ProtectedResourceMetadataDocument.For(
+                [new TransportAuthenticationOptions { OAuth = oauthSettings }],
+                McpEndpointOptions.GrantedSurface).ScopesSupported,
             published.ScopesSupported);
     }
 

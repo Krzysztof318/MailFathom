@@ -94,7 +94,7 @@ internal sealed class McpEndpointOptions
     public IList<string> PublishedToolCategories { get; } = [];
 
     /// <summary>Gets or sets which browser origins the endpoint answers.</summary>
-    public McpCorsOptions Cors { get; set; } = new();
+    public TransportCorsOptions Cors { get; set; } = new();
 
     /// <summary>Gets or sets under which domains and certificates Kestrel terminates TLS for this endpoint.</summary>
     /// <remarks>
@@ -173,7 +173,7 @@ internal sealed class McpEndpointOptions
         var settings = section.Get<McpEndpointOptions>(binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             ?? new McpEndpointOptions();
 
-        if (!section.GetSection($"{nameof(Cors)}:{nameof(McpCorsOptions.AllowedOrigins)}").Exists())
+        if (!section.GetSection($"{nameof(Cors)}:{nameof(TransportCorsOptions.AllowedOrigins)}").Exists())
         {
             settings.Cors.ServeEveryBrowserOrigin();
         }

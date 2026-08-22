@@ -33,7 +33,18 @@ public sealed class SurfaceIsolationTests
     public void ListenerServesPath_AnAdministrativePathWhereTheSurfaceIsNotServed_IsRefused() =>
         Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Mcp | ServedSurfaces.Probes, "/api/admin/accounts"));
 
-    /// <summary>The MCP surface owns whatever the other two do not claim, so a path added to it later needs no rule of its own.</summary>
+    [Fact]
+    public void ListenerServesPath_AClientPathWhereTheSurfaceIsServed_IsServed() =>
+        Assert.True(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Client, "/api/client/session"));
+
+    /// <summary>A mailbox served to a client must not answer on a port published for an agent or an operator.</summary>
+    [Fact]
+    public void ListenerServesPath_AClientPathWhereTheSurfaceIsNotServed_IsRefused() =>
+        Assert.False(SurfaceIsolation.ListenerServesPath(
+            ServedSurfaces.Mcp | ServedSurfaces.Admin | ServedSurfaces.Probes,
+            "/api/client/session"));
+
+    /// <summary>The MCP surface owns whatever the other three do not claim, so a path added to it later needs no rule of its own.</summary>
     [Fact]
     public void ListenerServesPath_TheMcpRouteWhereTheEndpointIsServed_IsServed() =>
         Assert.True(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Mcp, "/mcp"));
@@ -47,11 +58,13 @@ public sealed class SurfaceIsolationTests
     public void ListenerServesPath_APortServingEverySurface_AnswersEveryPath()
     {
         // Arrange
-        const ServedSurfaces everySurface = ServedSurfaces.Mcp | ServedSurfaces.Admin | ServedSurfaces.Probes;
+        const ServedSurfaces everySurface =
+            ServedSurfaces.Mcp | ServedSurfaces.Admin | ServedSurfaces.Client | ServedSurfaces.Probes;
 
         // Act, Assert
         Assert.True(SurfaceIsolation.ListenerServesPath(everySurface, "/mcp"));
         Assert.True(SurfaceIsolation.ListenerServesPath(everySurface, "/api/admin/accounts"));
+        Assert.True(SurfaceIsolation.ListenerServesPath(everySurface, "/api/client/session"));
         Assert.True(SurfaceIsolation.ListenerServesPath(everySurface, "/health"));
     }
 
@@ -61,6 +74,7 @@ public sealed class SurfaceIsolationTests
     {
         Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.None, "/mcp"));
         Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.None, "/api/admin/accounts"));
+        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.None, "/api/client/session"));
         Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.None, "/health"));
     }
 
@@ -76,8 +90,25 @@ public sealed class SurfaceIsolationTests
         Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Mcp, metadataPath));
     }
 
+    /// <summary>The client's document sits at the root for the same reason, and its reader arrives on the client listener holding nothing.</summary>
+    [Fact]
+    public void ListenerServesPath_TheClientMetadataDocument_FollowsTheClientSurface()
+    {
+        // Arrange
+        const string metadataPath = "/.well-known/oauth-protected-resource/api/client";
+
+        // Act, Assert
+        Assert.True(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Client, metadataPath));
+        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Mcp | ServedSurfaces.Admin, metadataPath));
+    }
+
     /// <summary>Matched by segment, so a path that merely starts with the same letters is not mistaken for one of these.</summary>
     [Fact]
     public void IsAdminPath_APathSharingThePrefixesLetters_IsNotAdministrative() =>
         Assert.False(SurfaceIsolation.IsAdminPath("/api/administrators"));
+
+    /// <summary>The same segment rule on the client prefix, which shares its letters with a plausible route of its own.</summary>
+    [Fact]
+    public void IsClientPath_APathSharingThePrefixesLetters_IsNotTheClientSurface() =>
+        Assert.False(SurfaceIsolation.IsClientPath("/api/clients"));
 }

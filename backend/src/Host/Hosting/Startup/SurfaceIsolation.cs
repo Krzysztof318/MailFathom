@@ -38,11 +38,15 @@ internal static class SurfaceIsolation
     private static readonly PathString AdminProtectedResourceMetadataPath =
         new(ProtectedResourceMetadataAddress.BeneathRoutePrefix(AdminEndpointOptions.RoutePrefix));
 
+    /// <summary>The client surface's document, which sits outside its route prefix for the same reason the administrative one does.</summary>
+    private static readonly PathString ClientProtectedResourceMetadataPath =
+        new(ProtectedResourceMetadataAddress.BeneathRoutePrefix(ClientEndpointOptions.RoutePrefix));
+
     /// <summary>Reports whether a listener serving these surfaces answers this path.</summary>
     /// <param name="served">The surfaces served on the listener the request arrived at.</param>
     /// <param name="path">The request path.</param>
     /// <returns><see langword="true" /> when the listener serves the path, otherwise <see langword="false" />.</returns>
-    /// <remarks>The MCP surface owns everything the other two do not claim, which is what keeps a path added to it later from having to be listed here.</remarks>
+    /// <remarks>The MCP surface owns everything the other three do not claim, which is what keeps a path added to it later from having to be listed here.</remarks>
     internal static bool ListenerServesPath(ServedSurfaces served, PathString path)
     {
         if (HealthProbe.IsProbePath(path))
@@ -53,6 +57,11 @@ internal static class SurfaceIsolation
         if (IsAdminPath(path))
         {
             return served.HasFlag(ServedSurfaces.Admin);
+        }
+
+        if (IsClientPath(path))
+        {
+            return served.HasFlag(ServedSurfaces.Client);
         }
 
         return served.HasFlag(ServedSurfaces.Mcp);
@@ -75,6 +84,14 @@ internal static class SurfaceIsolation
     internal static bool IsAdminPath(PathString path) =>
         path.StartsWithSegments(AdminEndpointOptions.RoutePrefix, StringComparison.OrdinalIgnoreCase)
         || path.Equals(AdminProtectedResourceMetadataPath, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Reports whether a request path is one the client surface answers.</summary>
+    /// <param name="path">The request path.</param>
+    /// <returns><see langword="true" /> when the path is the client surface's, otherwise <see langword="false" />.</returns>
+    /// <remarks>Matched exactly as the administrative surface's paths are, and for the same two reasons: by segment, so a path such as <c>/api/clients</c> is not mistaken for one of these, and with the protected resource metadata document counted in even though RFC 9728 places it outside the route prefix.</remarks>
+    internal static bool IsClientPath(PathString path) =>
+        path.StartsWithSegments(ClientEndpointOptions.RoutePrefix, StringComparison.OrdinalIgnoreCase)
+        || path.Equals(ClientProtectedResourceMetadataPath, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Refuses every request whose listener does not serve its path.</summary>
     /// <param name="app">The application pipeline being composed.</param>

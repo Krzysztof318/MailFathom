@@ -57,6 +57,15 @@ public static class ClientAssertion
     /// <remarks>Separate from <see cref="McpAudience" /> for the reason the surfaces are separate at all: reading a mailbox and administering the service that reads it are different authorities.</remarks>
     public const string AdminAudience = "urn:mailfathom:admin";
 
+    /// <summary>The audience an assertion presented to the client endpoint must name.</summary>
+    /// <remarks>
+    /// Separate from <see cref="McpAudience" /> even though both surfaces read the same mailbox, because an audience
+    /// names the transport a credential was minted for rather than what it may then do. An agent's assertion is held by
+    /// a program an operator configured, and a client's by a mail application a person signs in to; a credential minted
+    /// for either must not be presentable at the other's endpoint.
+    /// </remarks>
+    public const string ClientAudience = "urn:mailfathom:client";
+
     /// <summary>The longest window an assertion may claim between the moment it is verified and its own expiry.</summary>
     /// <remarks>
     /// <para>

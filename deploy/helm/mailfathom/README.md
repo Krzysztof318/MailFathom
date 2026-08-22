@@ -85,11 +85,11 @@ Upgrading takes the same step **before** the new pods roll: the new pod refuses 
 | Pod Security Standard | **Restricted**, and the schema keeps the load-bearing settings from being switched off — `runAsNonRoot`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`, `seccompProfile: RuntimeDefault` |
 | User | `1654`, the unprivileged `app` account — never root |
 | Writable paths | An in-memory `emptyDir` at `/tmp`, which is the only path the runtime writes to |
-| Service | Port `8080`, serving `/mcp` over plain HTTP |
+| Service | Port `8080`, over plain HTTP. It carries whichever surfaces the configuration enabled — `/mcp`, `/api/admin`, and `/api/client` all default to that container port — and answers `404` on the prefix of one that is off |
 | Probes | `/started`, `/health`, and `/alive` on `probes.port`, `8081` by default, which the Service never publishes |
 | Service account token | Not mounted. MailFathom calls no Kubernetes API. |
 
-**The pod terminates no TLS and asks for no credential to start.** An ingress or a service mesh in front of it owns TLS termination and whatever client authentication the cluster imposes. Every gate MailFathom has of its own — API keys, OAuth, an `Origin` gate, client certificates, rate limits — is a ConfigMap entry under `config.files` rather than a chart value; [the MCP endpoint](https://krzysztof318.github.io/MailFathom/operations/mcp-endpoint.html) is the page. An OAuth deployment should not skip `ReverseProxy:TrustedProxies`, because the public scheme and host are read from any peer until you name your ingress.
+**The pod terminates no TLS and asks for no credential to start.** An ingress or a service mesh in front of it owns TLS termination and whatever client authentication the cluster imposes. Every gate MailFathom has of its own — API keys, OAuth, an `Origin` gate, client certificates, rate limits — is a ConfigMap entry under `config.files` rather than a chart value; [the MCP endpoint](https://krzysztof318.github.io/MailFathom/operations/mcp-endpoint.html) is the page. Which surfaces are served is the same kind of entry: `ClientEndpoint` is what a MailFathom client reaches and is off unless a deployment writes it, and publishing it through the ingress means adding `/api/client` to `ingress.hosts[].paths` and naming the page's origin in `ClientEndpoint:Cors:AllowedOrigins` — [the client endpoint](https://krzysztof318.github.io/MailFathom/operations/client-endpoint.html) is that page. An OAuth deployment should not skip `ReverseProxy:TrustedProxies`, because the public scheme and host are read from any peer until you name your ingress.
 
 ## The chart version and the application version are one number
 

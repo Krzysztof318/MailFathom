@@ -2,7 +2,7 @@
 
 <!-- describes: backend/src/Host/Configuration/Endpoints/**, backend/src/Host/Configuration/Access/** -->
 
-Every key deciding where each of the three surfaces is served, what a caller has to present to reach one, and how much
+Every key deciding where each of the four surfaces is served, what a caller has to present to reach one, and how much
 traffic and how long a request each will take. What an admitted caller may then do is a grant rather than a listener
 setting, and [what a credential may do](permissions.md) is the whole of it. The tables read as
 [the configuration reference](configuration-reference.md#how-to-read-the-tables) says they do, and that page is the map
@@ -10,9 +10,10 @@ to the rest of the sections.
 
 ## Where each surface is served
 
-Every socket this process opens is named by the section of the surface that owns it, and by nothing else. `McpEndpoint`
-and `AdminEndpoint` each state a `BindAddress`, a `Port`, and a `Transport`; `HealthEndpoints` states the same three
-under a smaller set of TLS settings. Read those three sections and you have read every listener the process binds.
+Every socket this process opens is named by the section of the surface that owns it, and by nothing else. `McpEndpoint`,
+`AdminEndpoint`, and `ClientEndpoint` each state a `BindAddress`, a `Port`, and a `Transport`; `HealthEndpoints` states
+the same three under a smaller set of TLS settings. Read those four sections and you have read every listener the
+process binds.
 
 **The host's own ways of naming a listener are refused at startup.** `ASPNETCORE_URLS`, `ASPNETCORE_HTTP_PORTS`,
 `ASPNETCORE_HTTPS_PORTS`, `--urls`, and any endpoint under `Kestrel:Endpoints` each fail the process with a message
@@ -28,8 +29,9 @@ would hold a socket nothing configured.
 
 ### `Transport`
 
-`McpEndpoint:Transport` and `AdminEndpoint:Transport` decide what the surface's clear-text socket does. The HTTPS half
-is the profiles under `Https:Endpoints`, each with its own domain, certificate, TLS floor, and HTTP versions.
+`McpEndpoint:Transport`, `AdminEndpoint:Transport`, and `ClientEndpoint:Transport` each decide what that surface's
+clear-text socket does. The HTTPS half is the profiles under `Https:Endpoints`, each with its own domain, certificate,
+TLS floor, and HTTP versions.
 
 | Value | The socket at `BindAddress`:`Port` | `Https:Endpoints` |
 | --- | --- | --- |
@@ -50,9 +52,9 @@ because the probes carry one certificate rather than profiles, its `HttpAndHttps
 
 ### Sharing a socket
 
-Two surfaces, or all three, may name one port. That is the posture a single-node deployment behind one ingress wants —
-one socket to publish and one backend to route — and it is why both request-serving surfaces default to `8080` for clear
-text and `8443` for a profile. The port is bound once and serves each surface's own paths; which paths a request may ask
+Two surfaces, or all four, may name one port. That is the posture a single-node deployment behind one ingress wants —
+one socket to publish and one backend to route — and it is why all three request-serving surfaces default to `8080` for
+clear text and `8443` for a profile. The port is bound once and serves each surface's own paths; which paths a request may ask
 for is decided from the port it arrived on, so a surface that is not on that port is still refused there with a `404`.
 
 **What sharing costs is exposure.** The probes answer without a credential and the administrative surface is a different
@@ -145,7 +147,7 @@ routing and listeners — while key and certificate material is read per request
 | --- | --- | --- | --- | --- |
 | `McpEndpoint:Enabled` | bool | `false` | — | restart |
 | `McpEndpoint:BindAddress` | string | `0.0.0.0` | An IP address; binds the clear-text socket, which `HttpsOnly` does not open | restart |
-| `McpEndpoint:Port` | int | `8080` | 1–65535. The administrative endpoint's default as well — see [sharing a socket](#sharing-a-socket) | restart |
+| `McpEndpoint:Port` | int | `8080` | 1–65535. The administrative and client endpoints' default as well — see [sharing a socket](#sharing-a-socket) | restart |
 | `McpEndpoint:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` — see [`Transport`](#transport) | restart |
 | `McpEndpoint:Authentication` | list of credentials | empty | One entry per accepted credential; empty warns at startup. A value written here rather than a list fails startup | restart |
 | `McpEndpoint:PublishedToolCategories` | string list | absent = every category | `mailbox`, `flags`, `sending`, `drafts`, `answering`, `contacts`, in any case; a name nothing publishes fails startup naming the value and listing what is accepted. Only narrows — see [what the endpoint publishes](#what-the-endpoint-publishes) | restart |
@@ -258,12 +260,13 @@ plain-HTTP deployment presents none, which a `Required` profile refuses.
 | `…:TrustAnchors` | list of secret blocks | — | At least one; the authorities the client's chain must anchor in | restart; material per handshake |
 | `…:SubjectAlternativeNames` | string list | — | At least one; a DNS name the certificate must carry | restart |
 
-### Rate limiting — `McpEndpoint:RateLimiting` and `AdminEndpoint:RateLimiting`
+### Rate limiting
 
-One of the two endpoint subsections where every value has a product default — [request timeout](#request-timeout--mcpendpointrequesttimeout-and-adminendpointrequesttimeout)
+One of the two endpoint subsections where every value has a product default — [request timeout](#request-timeout)
 is the other — so an enabled endpoint is bounded whether or not
-anyone wrote a number. Both endpoints carry it, with the same keys, defaults, and validation, and configure it
-independently: neither one's traffic reaches the other's limits. [Rate limiting](mcp-endpoint.md#rate-limiting) records
+anyone wrote a number. `McpEndpoint:RateLimiting`, `AdminEndpoint:RateLimiting`, and `ClientEndpoint:RateLimiting`
+carry it, with the same keys, defaults, and validation, and configure it
+independently: no endpoint's traffic reaches another's limits. [Rate limiting](mcp-endpoint.md#rate-limiting) records
 whose capacity a request spends, and [administering a deployment](admin-endpoint.md#rate-limiting) records the one
 behavioural difference on the administrative endpoint — its burst is the endpoint's rather than one caller's, because
 that surface judges a credential behind the limiter.
@@ -278,11 +281,11 @@ that surface judges a credential behind the limiter.
 | `…:ReplenishmentPeriod` | TimeSpan | `00:01:00` | 1 s – 1 h | restart |
 | `…:RequestQueueLimit` | int | `0` | 0 – 1000, and below `MaxConcurrentRequests` | restart |
 
-### Request timeout — `McpEndpoint:RequestTimeout` and `AdminEndpoint:RequestTimeout`
+### Request timeout
 
 How long one request may run before the endpoint abandons it, answering `504` and releasing the concurrency permit it
-held. Defaulted throughout like the rate limits, carried by both endpoints with the same keys, and configured
-independently of them — because how much traffic is admitted and how long an admitted request may hold what it was
+held. Defaulted throughout like the rate limits, carried by all three request-serving endpoints with the same keys, and
+configured independently of them — because how much traffic is admitted and how long an admitted request may hold what it was
 admitted with are different questions, and a deployment may already have one answered in front of the process without
 the other.
 
@@ -304,6 +307,10 @@ deployment serving no AI-backed tool narrows it instead: every other MCP tool an
 bounded query, so a minute is generous there. `AdminEndpoint` reaches no provider at all, which makes it the endpoint to
 narrow without having to ask what a tool call needs.
 
+**Both are attached to each surface's own routes rather than applied as the process's default policy.** A default
+limiter or a default ceiling would count a readiness probe against the capacity a caller is spending, so a deployment
+under load would start failing the probe that decides whether it is taken out of service.
+
 The ceiling is applied ahead of the rate limiter, so time a request spends waiting for a limiter lease is inside it.
 That wait is nothing under the default queue limits of `0`, and is the whole point of the ordering once a queue is
 configured: a request queued for its caller's tokens already holds a concurrency permit.
@@ -319,16 +326,46 @@ request or per handshake. [Administering a deployment](admin-endpoint.md) is the
 | --- | --- | --- | --- | --- |
 | `AdminEndpoint:Enabled` | bool | `false` | — | restart |
 | `AdminEndpoint:BindAddress` | string | `0.0.0.0` | An IP address; binds the clear-text socket, which `HttpsOnly` does not open | restart |
-| `AdminEndpoint:Port` | int | `8080` | 1–65535. The MCP endpoint's default as well, so enabling both without stating a port publishes one shared socket — see [sharing a socket](#sharing-a-socket) | restart |
+| `AdminEndpoint:Port` | int | `8080` | 1–65535. The MCP and client endpoints' default as well, so enabling several without stating a port publishes one shared socket — see [sharing a socket](#sharing-a-socket) | restart |
 | `AdminEndpoint:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` — the same setting the MCP endpoint carries, read the same way | restart |
 | `AdminEndpoint:Authentication` | list of credentials | empty | Same shape and rules as [`McpEndpoint:Authentication:<n>`](#the-accepted-credentials--mcpendpointauthenticationn), with three additions: every `OAuth` block's `Resource` must end in `/api/admin`, because that is where these routes answer and what `mfctl` appends to find the metadata document; a client assertion presented here names the audience `urn:mailfathom:admin` rather than `urn:mailfathom:mcp`; and `Permissions` draws from the administrative half of [the published set](permissions.md#the-published-set), so a name or a pattern reaching only the mail half fails startup here | restart; material per request |
 | `AdminEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as `McpEndpoint:Https:Endpoints:<n>`, read under the two `Transport` modes that terminate TLS | restart; material per handshake |
 | `AdminEndpoint:Https:Redirect` | block | on | Same shape and rules as `McpEndpoint:Https:Redirect`; its socket is this surface's own `BindAddress` and `Port`, so terminating TLS on both surfaces opens two clear-text ports that do not collide | restart |
 | `AdminEndpoint:RateLimiting` | block | bounded | Same shape, defaults, and rules as `McpEndpoint:RateLimiting` above; applied whether or not it is written | restart |
-| `AdminEndpoint:RequestTimeout` | block | bounded | Same shape, defaults, and rules as [`McpEndpoint:RequestTimeout`](#request-timeout--mcpendpointrequesttimeout-and-adminendpointrequesttimeout) above; applied whether or not it is written. This surface reaches no AI provider, so it is the one the default can be narrowed on freely | restart |
+| `AdminEndpoint:RequestTimeout` | block | bounded | Same shape, defaults, and rules as [`McpEndpoint:RequestTimeout`](#request-timeout) above; applied whether or not it is written. This surface reaches no AI provider, so it is the one the default can be narrowed on freely | restart |
 
 The routes are served beneath `/api/admin`, which is a constant rather than a setting: a client is configured with a
 host and a port and appends the rest.
+
+## `ClientEndpoint`
+
+Whether the surface the MailFathom client reaches is served, and what a client must present. Its own listener, its own
+credentials, and its own authorization servers, exactly as the administrative endpoint has: a key configured under
+`McpEndpoint` or `AdminEndpoint` authenticates nothing here, and one configured here authenticates nothing there. The
+whole section is **restart**, while key material is read per request. [The client endpoint](client-endpoint.md) is the
+page.
+
+What a grant here draws on is the mailbox half of [the published set](permissions.md#the-published-set) — the same half
+the MCP endpoint's grants come from, because the client reads the mail an agent reads. Only the transport is separate.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `ClientEndpoint:Enabled` | bool | `false` | — | restart |
+| `ClientEndpoint:BindAddress` | string | `0.0.0.0` | An IP address; binds the clear-text socket, which `HttpsOnly` does not open | restart |
+| `ClientEndpoint:Port` | int | `8080` | 1–65535. The other two request-serving endpoints' default as well — see [sharing a socket](#sharing-a-socket) | restart |
+| `ClientEndpoint:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` — the same setting the other endpoints carry, read the same way | restart |
+| `ClientEndpoint:Authentication` | list of credentials | empty | Same shape and rules as [`McpEndpoint:Authentication:<n>`](#the-accepted-credentials--mcpendpointauthenticationn), with three additions: every `OAuth` block's `Resource` must end in `/api/client`, because that is where these routes answer and what the client appends to find the metadata document; a client assertion presented here names the audience `urn:mailfathom:client`; and `Permissions` draws from the mail half of [the published set](permissions.md#the-published-set), so a name or a pattern reaching only the administrative half fails startup here | restart; material per request |
+| `ClientEndpoint:Cors` | block | every origin | Same shape and rules as [`McpEndpoint:Cors`](#browser-origins--mcpendpointcors), configured separately. The setting the administrative endpoint has no use for and the one a browser-hosted client cannot start without — see [browser origins](client-endpoint.md#browser-origins) | restart |
+| `ClientEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as `McpEndpoint:Https:Endpoints:<n>`, read under the two `Transport` modes that terminate TLS | restart; material per handshake |
+| `ClientEndpoint:Https:Redirect` | block | on | Same shape and rules as `McpEndpoint:Https:Redirect`; its socket is this surface's own `BindAddress` and `Port` | restart |
+| `ClientEndpoint:RateLimiting` | block | bounded | Same shape, defaults, and rules as [`McpEndpoint:RateLimiting`](#rate-limiting) above; applied whether or not it is written | restart |
+| `ClientEndpoint:RequestTimeout` | block | bounded | Same shape, defaults, and rules as [`McpEndpoint:RequestTimeout`](#request-timeout) above; applied whether or not it is written | restart |
+
+There is no `ClientCertificateProfiles` here: the trust question a certificate answers is a second one this surface does
+not yet ask.
+
+The routes are served beneath `/api/client`, which is a constant rather than a setting, for the reason `/api/admin` is
+one — a client is configured with a host and a port and appends the rest. There is no version segment in it.
 
 ## `HealthEndpoints`
 

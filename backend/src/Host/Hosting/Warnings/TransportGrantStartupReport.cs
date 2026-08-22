@@ -45,27 +45,34 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
 
     private const string AdminEndpointName = "administrative";
 
+    private const string ClientEndpointName = "client";
+
     private const string NothingGranted = "nothing";
 
     private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly AdminEndpointOptions adminEndpointSettings;
+    private readonly ClientEndpointOptions clientEndpointSettings;
     private readonly ILogger<TransportGrantStartupReport> logger;
 
     /// <summary>Initializes a new startup report.</summary>
     /// <param name="mcpEndpointSettings">The MCP endpoint settings startup was composed from.</param>
     /// <param name="adminEndpointSettings">The administrative endpoint settings startup was composed from.</param>
+    /// <param name="clientEndpointSettings">The client endpoint settings startup was composed from.</param>
     /// <param name="logger">The startup logger.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="mcpEndpointSettings" /> or <paramref name="adminEndpointSettings" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when an endpoint settings argument is <see langword="null" />.</exception>
     public TransportGrantStartupReport(
         IOptions<McpEndpointOptions> mcpEndpointSettings,
         IOptions<AdminEndpointOptions> adminEndpointSettings,
+        IOptions<ClientEndpointOptions> clientEndpointSettings,
         ILogger<TransportGrantStartupReport> logger)
     {
         ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
         ArgumentNullException.ThrowIfNull(adminEndpointSettings);
+        ArgumentNullException.ThrowIfNull(clientEndpointSettings);
 
         this.mcpEndpointSettings = mcpEndpointSettings.Value;
         this.adminEndpointSettings = adminEndpointSettings.Value;
+        this.clientEndpointSettings = clientEndpointSettings.Value;
         this.logger = logger;
     }
 
@@ -90,6 +97,16 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
                 AdminEndpointOptions.SectionName,
                 AdminEndpointOptions.GrantedSurface,
                 [.. this.adminEndpointSettings.Authentication]);
+        }
+
+        if (this.clientEndpointSettings.Enabled)
+        {
+            this.Report(
+                ClientEndpointName,
+                ClientEndpointOptions.RoutePrefix,
+                ClientEndpointOptions.SectionName,
+                ClientEndpointOptions.GrantedSurface,
+                [.. this.clientEndpointSettings.Authentication]);
         }
 
         return Task.CompletedTask;

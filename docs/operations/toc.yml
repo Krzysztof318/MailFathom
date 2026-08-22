@@ -74,6 +74,9 @@
     - name: The administrative endpoint
       href: admin-endpoint.md
       description: How mfctl reaches a running deployment, and what that deployment has to have enabled before it will answer.
+    - name: The client endpoint
+      href: client-endpoint.md
+      description: Where the MailFathom client reaches the service, what a deployment enables before it answers, and what a person's mail client presents to get in.
     - name: Health endpoints
       href: health-endpoints.md
       description: What each of the three probes consults, which port they answer on, and how a deployment turns them off or puts TLS in front of them.

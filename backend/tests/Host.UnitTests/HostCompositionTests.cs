@@ -94,6 +94,13 @@ public sealed class HostCompositionTests
                 new("AdminEndpoint:Authentication:0:ApiKey:Name", "operator"),
                 new("AdminEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key-either"),
             ],
+            ["client served"] =
+            [
+                new("ClientEndpoint:Enabled", "true"),
+                new("ClientEndpoint:Port", "8084"),
+                new("ClientEndpoint:Authentication:0:ApiKey:Name", "desktop-client"),
+                new("ClientEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-client-key"),
+            ],
             ["mail synchronized"] =
             [
                 new("MailSynchronization:Enabled", "true"),
@@ -136,6 +143,10 @@ public sealed class HostCompositionTests
                 new("AdminEndpoint:Port", "8082"),
                 new("AdminEndpoint:Authentication:0:ApiKey:Name", "operator"),
                 new("AdminEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key-either"),
+                new("ClientEndpoint:Enabled", "true"),
+                new("ClientEndpoint:Port", "8084"),
+                new("ClientEndpoint:Authentication:0:ApiKey:Name", "desktop-client"),
+                new("ClientEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-client-key"),
                 new("MailSynchronization:Enabled", "true"),
                 new("MailSynchronization:Accounts:0:AccountId", "personal"),
                 new("MailSynchronization:Accounts:0:DisplayName", "Personal"),
@@ -246,28 +257,57 @@ public sealed class HostCompositionTests
         Assert.True(surfaces.Admin.Enabled);
         Assert.True(surfaces.Health.Enabled);
         Assert.True(surfaces.IsRateLimited);
+        Assert.False(surfaces.Client.Enabled);
         Assert.Equal(3, surfaces.Listeners.Listeners.Count);
     }
 
     /// <summary>
-    /// Which authentication schemes exist is decided here rather than by either surface, and the four shapes below are
-    /// every combination a deployment can be configured into. A surface that authenticates nothing registers nothing,
-    /// so no handler exists that could compare a credential the operator never configured; and wherever either of them
-    /// does authenticate, the application's default is MailFathom's own scheme rather than a surface's, because a
+    /// The client surface is its own listener, its own bounds, and its own credentials, so a deployment that enabled it
+    /// alone hands the pipeline exactly that. It is asserted separately from the pair above because the failure worth
+    /// catching is a surface that composes into the same values as another one — which resolves cleanly and serves the
+    /// wrong deployment.
+    /// </summary>
+    [Fact]
+    public void Compose_ReportsTheClientSurfaceSeparatelyFromTheOthers()
+    {
+        // Arrange
+        var builder = ConfiguredBuilder("client served");
+
+        // Act
+        var surfaces = HostComposition.Compose(builder);
+
+        // Assert
+        Assert.True(surfaces.Client.Enabled);
+        Assert.False(surfaces.Mcp.Enabled);
+        Assert.False(surfaces.Admin.Enabled);
+        Assert.NotNull(surfaces.ClientRateLimits);
+        Assert.NotNull(surfaces.ClientRequestTimeout);
+    }
+
+    /// <summary>
+    /// Which authentication schemes exist is decided here rather than by any surface, and the shapes below are every
+    /// combination of three a deployment can be configured into. A surface that authenticates nothing registers
+    /// nothing, so no handler exists that could compare a credential the operator never configured; and wherever any of
+    /// them does authenticate, the application's default is MailFathom's own scheme rather than a surface's, because a
     /// surface claiming the default would authenticate every request the process serves with its own credentials.
     /// </summary>
     [Theory]
-    [InlineData(true, true)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
+    [InlineData(true, true, true)]
+    [InlineData(true, true, false)]
+    [InlineData(true, false, true)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, true)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
     public void Compose_WithASurfaceAuthenticating_RegistersThatSurfacesSchemesBehindTheApplicationDefault(
         bool mcpAuthenticates,
-        bool adminAuthenticates)
+        bool adminAuthenticates,
+        bool clientAuthenticates)
     {
         // Arrange
         var builder = ConfiguredBuilder(
             "probes only",
-            BothSurfacesServed(mcpAuthenticates, adminAuthenticates));
+            EverySurfaceServed(mcpAuthenticates, adminAuthenticates, clientAuthenticates));
 
         // Act
         HostComposition.Compose(builder);
@@ -279,12 +319,13 @@ public sealed class HostCompositionTests
         Assert.Equal(DefaultTransportAuthentication.SchemeName, authentication.DefaultScheme);
         Assert.Equal(mcpAuthenticates, authentication.SchemeMap.Keys.Any(IsMcpScheme));
         Assert.Equal(adminAuthenticates, authentication.SchemeMap.Keys.Any(IsAdminScheme));
+        Assert.Equal(clientAuthenticates, authentication.SchemeMap.Keys.Any(IsClientScheme));
     }
 
     /// <summary>
-    /// The fourth shape, where neither surface authenticates. Nothing registers the authentication services at all,
-    /// which is what the pipeline reads to decide that it has no authentication middleware to run — a deployment
-    /// serving only anonymous surfaces must not gain one.
+    /// The eighth shape, where no surface authenticates. Nothing registers the authentication services at all, which is
+    /// what the pipeline reads to decide that it has no authentication middleware to run — a deployment serving only
+    /// anonymous surfaces must not gain one.
     /// </summary>
     [Fact]
     public void Compose_WithNeitherSurfaceAuthenticating_RegistersNoAuthenticationAtAll()
@@ -292,7 +333,7 @@ public sealed class HostCompositionTests
         // Arrange
         var builder = ConfiguredBuilder(
             "probes only",
-            BothSurfacesServed(mcpAuthenticates: false, adminAuthenticates: false));
+            EverySurfaceServed(mcpAuthenticates: false, adminAuthenticates: false, clientAuthenticates: false));
 
         // Act
         HostComposition.Compose(builder);
@@ -423,14 +464,17 @@ public sealed class HostCompositionTests
         Assert.Equal(McpToolCategory.All, published.Categories);
     }
 
-    /// <summary>Both surfaces served, each authenticating or not, which is the matrix the schemes are asserted across.</summary>
-    private static IReadOnlyList<KeyValuePair<string, string?>> BothSurfacesServed(
+    /// <summary>Every surface served, each authenticating or not, which is the matrix the schemes are asserted across.</summary>
+    private static IReadOnlyList<KeyValuePair<string, string?>> EverySurfaceServed(
         bool mcpAuthenticates,
-        bool adminAuthenticates) =>
+        bool adminAuthenticates,
+        bool clientAuthenticates) =>
     [
         new("McpEndpoint:Enabled", "true"),
         new("AdminEndpoint:Enabled", "true"),
         new("AdminEndpoint:Port", "8082"),
+        new("ClientEndpoint:Enabled", "true"),
+        new("ClientEndpoint:Port", "8084"),
         .. mcpAuthenticates
             ?
             [
@@ -445,6 +489,13 @@ public sealed class HostCompositionTests
                 new KeyValuePair<string, string?>("AdminEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key-either"),
             ]
             : Array.Empty<KeyValuePair<string, string?>>(),
+        .. clientAuthenticates
+            ?
+            [
+                new("ClientEndpoint:Authentication:0:ApiKey:Name", "desktop-client"),
+                new KeyValuePair<string, string?>("ClientEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-client-key"),
+            ]
+            : Array.Empty<KeyValuePair<string, string?>>(),
     ];
 
     private static bool IsMcpScheme(string schemeName) =>
@@ -452,6 +503,9 @@ public sealed class HostCompositionTests
 
     private static bool IsAdminScheme(string schemeName) =>
         schemeName.StartsWith($"MailFathom:{TransportSurface.Admin.Name}:", StringComparison.Ordinal);
+
+    private static bool IsClientScheme(string schemeName) =>
+        schemeName.StartsWith($"MailFathom:{TransportSurface.Client.Name}:", StringComparison.Ordinal);
 
     /// <summary>Composes one shape and hands back what it registered.</summary>
     private static IServiceCollection ComposeServices(string shape)

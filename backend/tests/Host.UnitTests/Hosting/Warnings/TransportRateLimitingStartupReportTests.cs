@@ -227,13 +227,15 @@ public sealed class TransportRateLimitingStartupReportTests
     private static TransportRateLimitingStartupReport ReportFor(
         McpEndpointOptions mcpEndpointSettings,
         AdminEndpointOptions adminEndpointSettings,
-        RecordingLoggerProvider logs)
+        RecordingLoggerProvider logs,
+        ClientEndpointOptions? clientEndpointSettings = null)
     {
         using var loggerFactory = LoggerFactory.Create(logging => logging.AddProvider(logs));
 
         return new TransportRateLimitingStartupReport(
             Options.Create(mcpEndpointSettings),
             Options.Create(adminEndpointSettings),
+            Options.Create(clientEndpointSettings ?? new ClientEndpointOptions()),
             loggerFactory.CreateLogger<TransportRateLimitingStartupReport>());
     }
 }

@@ -19,8 +19,8 @@ namespace MailFathom.Host.Hosting.Warnings;
 /// moment it starts rather than the first time a caller is refused.
 /// </para>
 /// <para>
-/// Both endpoints are reported by one service, and each is reported separately, because the two carry independent
-/// numbers and an operator who narrowed one has to be able to read back that they narrowed the one they meant. A
+/// Every endpoint is reported by one service, and each is reported separately, because they carry independent numbers
+/// and an operator who narrowed one has to be able to read back that they narrowed the one they meant. A
 /// disabled endpoint contributes nothing rather than a line saying it is off, which is what keeps the report about
 /// limits that are in force.
 /// </para>
@@ -32,7 +32,7 @@ namespace MailFathom.Host.Hosting.Warnings;
 /// <para>
 /// It reports what an operator configured and nothing about who is calling: no client name, no address, no origin. It
 /// runs as a hosted service so it appears among the other startup diagnostics, and it is registered whether or not
-/// either endpoint is enabled, because it is the report that decides whether it has anything to say.
+/// any endpoint is enabled, because it is the report that decides whether it has anything to say.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]
@@ -42,25 +42,32 @@ internal sealed partial class TransportRateLimitingStartupReport : IHostedServic
 
     private const string AdminEndpointName = "administrative";
 
+    private const string ClientEndpointName = "client";
+
     private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly AdminEndpointOptions adminEndpointSettings;
+    private readonly ClientEndpointOptions clientEndpointSettings;
     private readonly ILogger<TransportRateLimitingStartupReport> logger;
 
     /// <summary>Initializes a new startup report.</summary>
     /// <param name="mcpEndpointSettings">The MCP endpoint settings startup was composed from.</param>
     /// <param name="adminEndpointSettings">The administrative endpoint settings startup was composed from.</param>
+    /// <param name="clientEndpointSettings">The client endpoint settings startup was composed from.</param>
     /// <param name="logger">The startup logger.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="mcpEndpointSettings" /> or <paramref name="adminEndpointSettings" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when an endpoint settings argument is <see langword="null" />.</exception>
     public TransportRateLimitingStartupReport(
         IOptions<McpEndpointOptions> mcpEndpointSettings,
         IOptions<AdminEndpointOptions> adminEndpointSettings,
+        IOptions<ClientEndpointOptions> clientEndpointSettings,
         ILogger<TransportRateLimitingStartupReport> logger)
     {
         ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
         ArgumentNullException.ThrowIfNull(adminEndpointSettings);
+        ArgumentNullException.ThrowIfNull(clientEndpointSettings);
 
         this.mcpEndpointSettings = mcpEndpointSettings.Value;
         this.adminEndpointSettings = adminEndpointSettings.Value;
+        this.clientEndpointSettings = clientEndpointSettings.Value;
         this.logger = logger;
     }
 
@@ -83,6 +90,15 @@ internal sealed partial class TransportRateLimitingStartupReport : IHostedServic
                 AdminEndpointOptions.RoutePrefix,
                 $"{AdminEndpointOptions.SectionName}:{nameof(AdminEndpointOptions.RateLimiting)}",
                 this.adminEndpointSettings.RateLimiting);
+        }
+
+        if (this.clientEndpointSettings.Enabled)
+        {
+            this.Report(
+                ClientEndpointName,
+                ClientEndpointOptions.RoutePrefix,
+                $"{ClientEndpointOptions.SectionName}:{nameof(ClientEndpointOptions.RateLimiting)}",
+                this.clientEndpointSettings.RateLimiting);
         }
 
         return Task.CompletedTask;

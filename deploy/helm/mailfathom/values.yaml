@@ -380,6 +380,14 @@ service:
 # MailFathom speaks plain HTTP and terminates no TLS of its own. TLS belongs to the ingress, which is also the only place
 # a certificate has to exist — the chart never templates, issues, or stores certificate material. Name a Secret the
 # cluster already holds, whether an operator created it or cert-manager did.
+#
+# The paths below are what the ingress publishes, and each one belongs to a surface the application serves only if its
+# own configuration section enabled it: `/mcp` to `McpEndpoint`, `/api/admin` to `AdminEndpoint`, and `/api/client` to
+# `ClientEndpoint`. Publishing a path whose section is off routes to a listener that answers 404, and enabling a section
+# without publishing its path leaves it reachable only inside the cluster — which is a legitimate posture for the
+# administrative surface and never one for the client, whose caller is somebody's own machine. A browser-hosted client
+# also needs `ClientEndpoint:Cors:AllowedOrigins` to name the origin the page is served from, since the ingress answers
+# no preflight on the application's behalf.
 ingress:
   enabled: false
   className: ""

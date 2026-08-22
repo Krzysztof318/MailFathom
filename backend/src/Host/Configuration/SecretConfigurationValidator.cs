@@ -307,6 +307,38 @@ internal sealed partial class SecretConfigurationValidator
         return errors;
     }
 
+    /// <summary>Finds everything an operator must fix before the client endpoint's secrets can be used.</summary>
+    /// <param name="candidate">The bound endpoint settings, which are read once during composition.</param>
+    /// <param name="cancellationToken">Cancels the resolution.</param>
+    /// <returns>One message per unusable setting, empty when the section's secrets are all usable.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="candidate" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// A disabled endpoint configures no credentials worth proving, and validating them anyway would fail a host over
+    /// one nothing was going to read. The structural rules of the section are its own and run during composition; this
+    /// covers the secrets it carries, on exactly the terms every other section's secrets are covered.
+    /// </remarks>
+    internal async Task<IReadOnlyList<string>> FindClientEndpointConfigurationErrorsAsync(
+        ClientEndpointOptions candidate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        if (!candidate.Enabled)
+        {
+            return [];
+        }
+
+        var errors = new List<string>(
+            await this.FindSecretReferenceErrorsAsync(ClientEndpointOptions.SectionName, candidate, cancellationToken));
+
+        errors.AddRange(await this.FindClientPublicKeyErrorsAsync(
+            ClientEndpointOptions.SectionName,
+            candidate.Authentication,
+            cancellationToken));
+
+        return errors;
+    }
+
     /// <summary>Reads every configured client public key and reports the material no assertion could be verified against.</summary>
     /// <remarks>
     /// <para>

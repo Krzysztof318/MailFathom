@@ -3,19 +3,20 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json.Serialization;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
-using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Transport;
 
 namespace MailFathom.Host.Api;
 
-/// <summary>Publishes the RFC 9728 document <c>mfctl login</c> reads before it holds any credential.</summary>
+/// <summary>Publishes the RFC 9728 document a client reads before it holds any credential.</summary>
 /// <remarks>
 /// <para>
 /// The document is what makes OAuth sign-in something an operator can run rather than something they have to prepare
-/// for. Without it the command would need the issuer, the resource identifier, and the required scopes written on its
-/// own command line — three values the deployment already knows and the operator would be copying by hand, with a
-/// mistyped one presenting as a token the endpoint refuses for reasons the client cannot see.
+/// for. Without it <c>mfctl login</c> would need the issuer, the resource identifier, and the required scopes written on
+/// its own command line — three values the deployment already knows and the operator would be copying by hand, with a
+/// mistyped one presenting as a token the endpoint refuses for reasons the client cannot see. The mail client cannot be
+/// given them by hand at all: it is a page, and the address it was configured with is the only thing it starts from.
 /// </para>
 /// <para>
 /// Served unauthenticated, which is the only way it can be served: its reader is a client that has nothing to
@@ -25,27 +26,31 @@ namespace MailFathom.Host.Api;
 /// </para>
 /// <para>
 /// Mapped as a route rather than published from an authentication handler, which is where the MCP surface's equivalent
-/// comes from. That difference is the MCP SDK's rather than a decision here; both documents are composed from the same
-/// configured resource and answer at the same RFC 9728 location relative to it.
+/// comes from. That difference is the MCP SDK's rather than a decision here; every one of these documents is composed
+/// from the same configured resource and answers at the same RFC 9728 location relative to it.
 /// </para>
 /// </remarks>
-internal static class AdminProtectedResourceMetadataEndpoint
+internal static class ProtectedResourceMetadataEndpoint
 {
-    /// <summary>Maps the document at the address its resource identifier places it.</summary>
+    /// <summary>Maps one surface's document at the address its resource identifier places it.</summary>
     /// <param name="endpoints">The route builder.</param>
     /// <param name="methods">The endpoint's configured credential entries, in configuration order.</param>
+    /// <param name="grantedSurface">The half of the permission vocabulary the endpoint's grants draw from, which decides what an entry narrowed by token scopes advertises.</param>
+    /// <returns>The mapped route, so a surface can attach what only its own document needs.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoints" /> or <paramref name="methods" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when no entry states OAuth, which is a surface accepting no token at all.</exception>
-    internal static void MapAdminProtectedResourceMetadata(
+    /// <remarks>Two surfaces map one of these — the administrative endpoint and the client endpoint — and the surface is a parameter rather than a constant so neither can publish the other's advertised scopes.</remarks>
+    internal static RouteHandlerBuilder MapProtectedResourceMetadata(
         this IEndpointRouteBuilder endpoints,
-        IReadOnlyList<TransportAuthenticationOptions> methods)
+        IReadOnlyList<TransportAuthenticationOptions> methods,
+        ProtectedSurface grantedSurface)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
         ArgumentNullException.ThrowIfNull(methods);
 
-        var document = ProtectedResourceMetadataDocument.For(methods);
+        var document = ProtectedResourceMetadataDocument.For(methods, grantedSurface);
 
-        endpoints.MapGet(
+        return endpoints.MapGet(
             ProtectedResourceMetadataAddress.PathFor(document.Resource),
             () => Results.Ok(document));
     }
@@ -72,6 +77,7 @@ internal sealed record ProtectedResourceMetadataDocument(
 {
     /// <summary>Describes what one endpoint's OAuth settings publish.</summary>
     /// <param name="methods">The endpoint's configured credential entries, in configuration order.</param>
+    /// <param name="grantedSurface">The half of the permission vocabulary the endpoint's grants draw from.</param>
     /// <returns>The document.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="methods" /> is <see langword="null" />.</exception>
     /// <remarks>
@@ -80,9 +86,11 @@ internal sealed record ProtectedResourceMetadataDocument(
     /// from one configuration. What is this record's own is the wire shape: the JSON names RFC 9728 fixes, and the
     /// bearer method and resource name that are constants rather than settings.
     /// </remarks>
-    internal static ProtectedResourceMetadataDocument For(IReadOnlyList<TransportAuthenticationOptions> methods)
+    internal static ProtectedResourceMetadataDocument For(
+        IReadOnlyList<TransportAuthenticationOptions> methods,
+        ProtectedSurface grantedSurface)
     {
-        var published = PublishedOAuthMetadata.For(methods, AdminEndpointOptions.GrantedSurface);
+        var published = PublishedOAuthMetadata.For(methods, grantedSurface);
 
         return new ProtectedResourceMetadataDocument(
             published.Resource,

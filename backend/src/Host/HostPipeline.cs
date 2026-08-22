@@ -6,6 +6,7 @@ using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
+using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Mcp;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Mcp;
@@ -50,6 +51,8 @@ internal static class HostPipeline
         // configured registers nothing either.
         var mcpAuthenticates = composition.Mcp is { Enabled: true, RequiresAuthentication: true };
         var adminAuthenticates = composition.Admin is { Enabled: true, RequiresAuthentication: true };
+        var clientAuthenticates = composition.Client is { Enabled: true, RequiresAuthentication: true };
+        var anySurfaceAuthenticates = mcpAuthenticates || adminAuthenticates || clientAuthenticates;
 
         // First, ahead of the exception handler and of every isolation check, so that nothing downstream ever reads a
         // scheme or host the proxy already corrected. Discovery, the challenge, any address composed from a request,
@@ -69,12 +72,23 @@ internal static class HostPipeline
 
         MapHealthProbes(app, composition);
 
+        if (composition.Mcp.Enabled || composition.Client.Enabled)
+        {
+            // One CORS middleware for every surface that answers a browser, added here rather than inside either
+            // surface's own composition: a second copy would run every policy twice, and the policy a request is
+            // judged by comes from the endpoint it matched rather than from where the middleware was added. It stands
+            // ahead of authentication, because whether this deployment serves a page's origin does not depend on which
+            // credential the page attached, and ahead of the MCP origin check below so a preflight is answered by the
+            // middleware that owns preflight rather than reaching a check written for real requests.
+            app.UseCors();
+        }
+
         if (composition.Mcp.Enabled)
         {
             ComposeMcpSurface(app, composition);
         }
 
-        if (mcpAuthenticates || adminAuthenticates)
+        if (anySurfaceAuthenticates)
         {
             // One authentication middleware, on the application rather than in a branch, and here rather than earlier
             // or later. Behind the forwarded headers, so a credential is judged against the scheme the client actually
@@ -90,7 +104,9 @@ internal static class HostPipeline
             app.UseAuthentication();
         }
 
-        if (composition.McpRequestTimeout is not null || composition.AdminRequestTimeout is not null)
+        if (composition.McpRequestTimeout is not null
+            || composition.AdminRequestTimeout is not null
+            || composition.ClientRequestTimeout is not null)
         {
             // Ahead of the rate limiter, so the ceiling covers the time a request spends waiting for a lease as well as
             // the time it spends being served. That wait is nothing under the default queue limits of zero, and is the
@@ -111,17 +127,23 @@ internal static class HostPipeline
             app.UseRateLimiter();
         }
 
-        if (mcpAuthenticates || adminAuthenticates)
+        if (anySurfaceAuthenticates)
         {
             // One authorization middleware serves every endpoint that requires it, whichever surface asked for it;
-            // adding it twice would run every policy twice. It is what judges the administrative credential, which is
-            // why that surface's limiter above runs in front of it and why its callers share one bucket.
+            // adding it twice would run every policy twice. It is what judges the administrative and the client
+            // credential, which is why those surfaces' limiters above run in front of it and why each one's callers
+            // share a bucket.
             app.UseAuthorization();
         }
 
         if (composition.Admin.Enabled)
         {
             ComposeAdminSurface(app, composition);
+        }
+
+        if (composition.Client.Enabled)
+        {
+            ComposeClientSurface(app, composition);
         }
     }
 
@@ -186,11 +208,6 @@ internal static class HostPipeline
     /// </remarks>
     private static void ComposeMcpSurface(WebApplication app, ComposedHostSurfaces composition)
     {
-        // CORS first, so a browser's preflight is answered by the middleware that owns preflight rather than reaching a
-        // check written for real requests. The origin check then runs ahead of authentication, because whether this
-        // deployment serves a page's origin does not depend on which credential the page attached.
-        app.UseCors();
-
         if (composition.Mcp.AllowsOAuth)
         {
             // The policy reaches the MCP route as endpoint metadata, and the protected resource metadata document has
@@ -303,7 +320,55 @@ internal static class HostPipeline
         {
             // Outside the group the requirement was attached to, and deliberately: its reader is a client that has no
             // credential yet and is reading this to find out where to obtain one.
-            app.MapAdminProtectedResourceMetadata([.. composition.Admin.Authentication]);
+            app.MapProtectedResourceMetadata(
+                [.. composition.Admin.Authentication],
+                AdminEndpointOptions.GrantedSurface);
+        }
+    }
+
+    /// <summary>Maps the client routes, the CORS policy they answer under, and the requirement they carry.</summary>
+    /// <remarks>
+    /// The client routes are pre-authenticated by nothing, exactly as the administrative ones are: the authorization
+    /// middleware authenticates with the schemes this surface's policy names, so requiring the policy is both what
+    /// admits a caller and what establishes who they are — and because that runs behind the limiter, every client
+    /// caller shares one partition until its credential has been judged. That is the stronger bound for the threat the
+    /// limit exists against, which is unbounded key guessing.
+    /// <para>
+    /// The CORS policy is required on the endpoints rather than applied as a default, for the reason the limits and the
+    /// ceiling are: the probes and the other surfaces answer on routes this policy must never decide anything about.
+    /// </para>
+    /// </remarks>
+    private static void ComposeClientSurface(WebApplication app, ComposedHostSurfaces composition)
+    {
+        var clientApi = app
+            .MapClientApi()
+            .RequireCors(ClientTransportSecurityExtensions.CorsPolicyName);
+
+        if (composition.ClientRateLimits is not null)
+        {
+            clientApi.RequireRateLimiting(TransportSurface.Client.RateLimitingPolicyName);
+        }
+
+        if (composition.ClientRequestTimeout is not null)
+        {
+            clientApi.WithRequestTimeout(TransportSurface.Client.RequestTimeoutPolicyName);
+        }
+
+        if (composition.Client.RequiresAuthentication)
+        {
+            clientApi.RequireAuthorization(TransportSurface.Client.AccessPolicyName);
+        }
+
+        if (composition.Client.AllowsOAuth)
+        {
+            // Outside the group the requirement was attached to, for the reason the administrative document is. It
+            // carries the CORS policy of its own, because unlike that surface's reader this one is a page: a document
+            // a browser is refused permission to read is a client that cannot discover where to authorize, which is the
+            // one thing it needed before it could hold any credential at all.
+            app.MapProtectedResourceMetadata(
+                    [.. composition.Client.Authentication],
+                    ClientEndpointOptions.GrantedSurface)
+                .RequireCors(ClientTransportSecurityExtensions.CorsPolicyName);
         }
     }
 }

@@ -83,6 +83,20 @@ internal readonly record struct TransportSurface
         ClientAssertion.AdminAudience,
         AdminEndpointOptions.GrantedSurface);
 
+    /// <summary>Gets the surface serving the API the MailFathom client reaches.</summary>
+    /// <remarks>
+    /// It draws on the same half of the permission vocabulary <see cref="Mcp" /> does, because the client reads the
+    /// mailbox an agent reads and a second vocabulary for the same operations would be two names for one authority.
+    /// What is separate is everything else: its own listener, its own credentials, its own bounds, and an assertion
+    /// audience of its own — so a key provisioned for an agent authenticates nothing in the mail client, and the
+    /// client's own credential authenticates nothing on either other surface.
+    /// </remarks>
+    internal static TransportSurface Client { get; } = new(
+        "Client",
+        ClientEndpointOptions.RoutePrefix,
+        ClientAssertion.ClientAudience,
+        ClientEndpointOptions.GrantedSurface);
+
     /// <summary>Gets whether this value names a surface rather than the unusable struct default.</summary>
     internal bool IsSpecified => this.name is not null;
 

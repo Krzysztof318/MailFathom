@@ -19,7 +19,7 @@ namespace MailFathom.Host.Security.Endpoints;
 /// </para>
 /// <para>
 /// A protected resource metadata document *is* published, by
-/// <see cref="Api.AdminProtectedResourceMetadataEndpoint" /> rather than from here, because <c>mfctl login</c> is
+/// <see cref="Api.ProtectedResourceMetadataEndpoint" /> rather than from here, because <c>mfctl login</c> is
 /// exactly the client this surface once had none of: one that arrives holding nothing and has to find out where to
 /// authorize. It is mapped as a route instead of registered here because it belongs to no authentication scheme —
 /// its whole purpose is to answer a caller that has not authenticated.

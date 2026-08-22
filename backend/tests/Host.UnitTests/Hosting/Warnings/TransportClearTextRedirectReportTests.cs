@@ -190,13 +190,15 @@ public sealed class TransportClearTextRedirectReportTests
     private static TransportClearTextRedirectReport ReportFor(
         McpEndpointOptions mcpEndpointSettings,
         AdminEndpointOptions adminEndpointSettings,
-        RecordingLoggerProvider logs)
+        RecordingLoggerProvider logs,
+        ClientEndpointOptions? clientEndpointSettings = null)
     {
         using var loggerFactory = LoggerFactory.Create(logging => logging.AddProvider(logs));
 
         return new TransportClearTextRedirectReport(
             Options.Create(mcpEndpointSettings),
             Options.Create(adminEndpointSettings),
+            Options.Create(clientEndpointSettings ?? new ClientEndpointOptions()),
             loggerFactory.CreateLogger<TransportClearTextRedirectReport>());
     }
 }

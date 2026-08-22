@@ -26,7 +26,7 @@ namespace MailFathom.Host.Hosting.Warnings;
 /// </para>
 /// <para>
 /// It reports what an operator configured and nothing about who is calling. It runs as a hosted service so it appears
-/// among the other startup diagnostics, and it is registered whether or not either endpoint is enabled, because it is
+/// among the other startup diagnostics, and it is registered whether or not any endpoint is enabled, because it is
 /// the report that decides whether it has anything to say.
 /// </para>
 /// </remarks>
@@ -37,25 +37,32 @@ internal sealed partial class TransportRequestTimeoutStartupReport : IHostedServ
 
     private const string AdminEndpointName = "administrative";
 
+    private const string ClientEndpointName = "client";
+
     private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly AdminEndpointOptions adminEndpointSettings;
+    private readonly ClientEndpointOptions clientEndpointSettings;
     private readonly ILogger<TransportRequestTimeoutStartupReport> logger;
 
     /// <summary>Initializes a new startup report.</summary>
     /// <param name="mcpEndpointSettings">The MCP endpoint settings startup was composed from.</param>
     /// <param name="adminEndpointSettings">The administrative endpoint settings startup was composed from.</param>
+    /// <param name="clientEndpointSettings">The client endpoint settings startup was composed from.</param>
     /// <param name="logger">The startup logger.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="mcpEndpointSettings" /> or <paramref name="adminEndpointSettings" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when an endpoint settings argument is <see langword="null" />.</exception>
     public TransportRequestTimeoutStartupReport(
         IOptions<McpEndpointOptions> mcpEndpointSettings,
         IOptions<AdminEndpointOptions> adminEndpointSettings,
+        IOptions<ClientEndpointOptions> clientEndpointSettings,
         ILogger<TransportRequestTimeoutStartupReport> logger)
     {
         ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
         ArgumentNullException.ThrowIfNull(adminEndpointSettings);
+        ArgumentNullException.ThrowIfNull(clientEndpointSettings);
 
         this.mcpEndpointSettings = mcpEndpointSettings.Value;
         this.adminEndpointSettings = adminEndpointSettings.Value;
+        this.clientEndpointSettings = clientEndpointSettings.Value;
         this.logger = logger;
     }
 
@@ -78,6 +85,15 @@ internal sealed partial class TransportRequestTimeoutStartupReport : IHostedServ
                 AdminEndpointOptions.RoutePrefix,
                 $"{AdminEndpointOptions.SectionName}:{nameof(AdminEndpointOptions.RequestTimeout)}",
                 this.adminEndpointSettings.RequestTimeout);
+        }
+
+        if (this.clientEndpointSettings.Enabled)
+        {
+            this.Report(
+                ClientEndpointName,
+                ClientEndpointOptions.RoutePrefix,
+                $"{ClientEndpointOptions.SectionName}:{nameof(ClientEndpointOptions.RequestTimeout)}",
+                this.clientEndpointSettings.RequestTimeout);
         }
 
         return Task.CompletedTask;

@@ -8,10 +8,16 @@ using MailFathom.Infrastructure.Security.Transport;
 
 namespace MailFathom.Host.Configuration.Access;
 
-/// <summary>Which browser origins the MCP endpoint answers, and what it tells a browser it may read.</summary>
+/// <summary>Which browser origins a transport surface answers, and what it tells a browser it may read.</summary>
 /// <remarks>
 /// <para>
-/// Allowing every origin is the default because the endpoint is not protected by who is calling it — it is protected by
+/// One section shared by the two surfaces a browser reaches, because the question and its three postures are the same
+/// for both: the MCP endpoint, whose browser clients are MCP hosts running in a page, and the client endpoint, whose
+/// WebAssembly head calls it from a page origin. Each surface binds its own copy, so neither one's origins reach the
+/// other's traffic.
+/// </para>
+/// <para>
+/// Allowing every origin is the default because a surface is not protected by who is calling it — it is protected by
 /// the credential the caller presents. Narrowing the origins is worth doing where a browser-hosted client is the only
 /// intended consumer, and it is the control the MCP transport specification asks for against DNS rebinding, but it
 /// authenticates nothing on its own and is never the reason a request is trusted.
@@ -29,7 +35,7 @@ namespace MailFathom.Host.Configuration.Access;
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
-internal sealed class McpCorsOptions
+internal sealed class TransportCorsOptions
 {
     /// <summary>The entry that stands for every browser origin rather than for one an operator could have written.</summary>
     public const string AnyOriginValue = "*";
@@ -37,7 +43,8 @@ internal sealed class McpCorsOptions
     /// <summary>Gets the browser origins served, for example <c>https://client.example.test</c>, or <see cref="AnyOriginValue" /> for all of them.</summary>
     /// <remarks>
     /// It reads as <see cref="AnyOriginValue" /> when a deployment configures no list at all, which
-    /// <see cref="McpEndpointOptions.ReadFrom" /> applies, because the binder cannot tell an absent list from an empty
+    /// <see cref="McpEndpointOptions.ReadFrom" /> and <see cref="ClientEndpointOptions.ReadFrom" /> each apply, because
+    /// the binder cannot tell an absent list from an empty
     /// one and the two mean opposite things here. The property's own default is therefore the empty list rather than
     /// the permissive one: the permissive default belongs to the configured section, and an object built any other way
     /// starts from the posture that serves no browser rather than from the one that serves every page on the internet.
@@ -73,22 +80,22 @@ internal sealed class McpCorsOptions
     /// <summary>Maps the configured list onto the policy the endpoint judges a request's origin by.</summary>
     /// <returns>The origin policy.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the settings have not passed <see cref="FindConfigurationErrors" />.</exception>
-    public McpOriginPolicy ToOriginPolicy()
+    public BrowserOriginPolicy ToOriginPolicy()
     {
         if (this.ServesEveryBrowserOrigin)
         {
-            return McpOriginPolicy.AllowingAnyOrigin;
+            return BrowserOriginPolicy.AllowingAnyOrigin;
         }
 
         if (this.AllowedOrigins.Count == 0)
         {
-            return McpOriginPolicy.ServingNoBrowserOrigin;
+            return BrowserOriginPolicy.ServingNoBrowserOrigin;
         }
 
         var normalizedOrigins = this.NormalizedAllowedOrigins().ToArray();
 
         return normalizedOrigins.Length == this.AllowedOrigins.Count
-            ? McpOriginPolicy.Restricting(normalizedOrigins)
+            ? BrowserOriginPolicy.Restricting(normalizedOrigins)
             : throw new InvalidOperationException(
                 "The configured origins were mapped before they were validated, so at least one of them is unusable.");
     }
@@ -108,7 +115,7 @@ internal sealed class McpCorsOptions
         {
             var settingPath = $"{nameof(this.AllowedOrigins)}:{index}";
 
-            if (!McpOriginPolicy.TryNormalize(configuredOrigin, out var normalizedOrigin))
+            if (!BrowserOriginPolicy.TryNormalize(configuredOrigin, out var normalizedOrigin))
             {
                 yield return $"{settingPath} — '{configuredOrigin}' is not an origin; write a scheme, a host, and a port where the port is not the scheme's default, and nothing else.";
             }
@@ -120,7 +127,7 @@ internal sealed class McpCorsOptions
     }
 
     private IEnumerable<string> NormalizedAllowedOrigins() => this.AllowedOrigins
-        .Select(configuredOrigin => McpOriginPolicy.TryNormalize(configuredOrigin, out var normalizedOrigin)
+        .Select(configuredOrigin => BrowserOriginPolicy.TryNormalize(configuredOrigin, out var normalizedOrigin)
             ? normalizedOrigin
             : null)
         .OfType<string>();

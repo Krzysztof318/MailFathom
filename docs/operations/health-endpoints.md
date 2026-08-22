@@ -56,10 +56,11 @@ configured. The service-defaults scaffold MailFathom started from served the pro
 every container and Kubernetes deployment with nothing to ask and every development run serving them on the listener
 its MCP clients reach.
 
-### The probe listener is one of three, and only one
+### The probe listener is one of four, and only one
 
 Every surface this process serves binds its own listeners from its own section: the probes from `HealthEndpoints`, the
-protocol surface from `McpEndpoint`, and the administrative surface from `AdminEndpoint`. Nothing else opens a socket
+protocol surface from `McpEndpoint`, the administrative surface from `AdminEndpoint`, and the client surface from
+`ClientEndpoint`. Nothing else opens a socket
 here, and the host's own ways of naming one — `ASPNETCORE_URLS`, `ASPNETCORE_HTTP_PORTS`, `ASPNETCORE_HTTPS_PORTS`, and
 `Kestrel:Endpoints` — are refused at startup rather than ignored, because Kestrel drops the first three as soon as a
 listener is bound in code and binds the last beside them on a socket no section describes.
@@ -149,9 +150,10 @@ limiting. That is the stated posture, not an omission:
 - An orchestrator holds no credential and has nowhere to get one. A probe that could be refused for its credential is a
   probe that reports a process as failed while it is working.
 - A throttled probe fails, and a failed liveness probe restarts the container. A limiter on this listener would convert
-  a burst of polling into an outage, so neither the [MCP endpoint's rate limits](mcp-endpoint.md#rate-limiting) nor the
-  [administrative endpoint's](admin-endpoint.md#rate-limiting) ever extend to it — the process-wide limiter recognizes a
-  request by the route prefix it arrived under and explicitly applies no limit to one belonging to neither surface.
+  a burst of polling into an outage, so no endpoint's rate limits ever extend to it — the
+  [MCP endpoint's](mcp-endpoint.md#rate-limiting), the [administrative endpoint's](admin-endpoint.md#rate-limiting), and
+  the [client endpoint's](client-endpoint.md#what-bounds-the-traffic) are each attached to that surface's own routes
+  rather than applied as the process's default policy, so a probe route carries none of them.
 
 **One bound does reach this listener**, and it is the exception that proves how the rule above is drawn.
 [`ConnectionLimits`](configuration-endpoints.md#connectionlimits) is a ceiling on connections rather than on requests,
@@ -288,7 +290,7 @@ probes:
 cannot drift. The kubelet reaches a container port on the pod's own address without the Service publishing it, which is
 what keeps the probe listener off the network the MCP endpoint is served on. Setting it to `8080` is refused by the
 values schema, and that refusal is the chart's alone — the host would share the socket, as [the probe listener is one of
-three, and only one](#the-probe-listener-is-one-of-three-and-only-one) describes, which is exactly what publishing the
+four, and only one](#the-probe-listener-is-one-of-four-and-only-one) describes, which is exactly what publishing the
 probes on the port the Service carries would then mean.
 
 The rendered probes are the ones the schema pins: `/started` for startup, `/health` for readiness, `/alive` for

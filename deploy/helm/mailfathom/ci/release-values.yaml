@@ -40,6 +40,26 @@ config:
               }
             }
           ]
+        },
+        "ClientEndpoint": {
+          "Enabled": true,
+          "Cors": {
+            "AllowedOrigins": [ "https://mailfathom.example.test" ]
+          },
+          "Authentication": [
+            {
+              "OAuth": {
+                "Resource": "https://mailfathom.example.test/api/client",
+                "AuthorizationServers": [
+                  {
+                    "Name": "workforce",
+                    "Issuer": "https://sso.example.test/realms/mailfathom",
+                    "AuthorizedSubjects": [ "11111111-2222-3333-4444-555555555555" ]
+                  }
+                ]
+              }
+            }
+          ]
         }
       }
 
@@ -70,6 +90,11 @@ ingress:
     - host: mailfathom.example.test
       paths:
         - path: /mcp
+          pathType: Prefix
+
+        # The client surface is published beside the MCP one, because the shape it is enabled in above is the one whose
+        # caller is a browser on somebody's own machine rather than a workload inside the cluster.
+        - path: /api/client
           pathType: Prefix
   tls:
     - secretName: mailfathom-tls

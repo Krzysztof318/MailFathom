@@ -37,20 +37,22 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
     private readonly ISettingsSnapshot<DataEncryptionOptions> dataEncryptionSettings;
     private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly AdminEndpointOptions adminEndpointSettings;
+    private readonly ClientEndpointOptions clientEndpointSettings;
     private readonly SecretConfigurationValidator validator;
     private readonly SecretResolutionOptions resolutionOptions;
     private readonly HostStartupGates startupGates;
     private readonly ILogger<SecretConfigurationStartupValidator> logger;
 
     /// <summary>Initializes a new secret configuration startup validator.</summary>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="mcpEndpointSettings" />, <paramref name="adminEndpointSettings" />, or <paramref name="startupGates" /> is <see langword="null" />.</exception>
-    /// <remarks>Both endpoints' settings arrive as the composed value rather than as a snapshot, because each section is read once while the host is built and takes a restart to change.</remarks>
+    /// <exception cref="ArgumentNullException">Thrown when an endpoint settings argument or <paramref name="startupGates" /> is <see langword="null" />.</exception>
+    /// <remarks>Every endpoint's settings arrive as the composed value rather than as a snapshot, because each section is read once while the host is built and takes a restart to change.</remarks>
     public SecretConfigurationStartupValidator(
         ISettingsSnapshot<MailSynchronizationOptions> mailSynchronizationSettings,
         ISettingsSnapshot<PersistenceOptions> persistenceSettings,
         ISettingsSnapshot<DataEncryptionOptions> dataEncryptionSettings,
         IOptions<McpEndpointOptions> mcpEndpointSettings,
         IOptions<AdminEndpointOptions> adminEndpointSettings,
+        IOptions<ClientEndpointOptions> clientEndpointSettings,
         SecretConfigurationValidator validator,
         SecretResolutionOptions resolutionOptions,
         HostStartupGates startupGates,
@@ -58,6 +60,7 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
     {
         ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
         ArgumentNullException.ThrowIfNull(adminEndpointSettings);
+        ArgumentNullException.ThrowIfNull(clientEndpointSettings);
         ArgumentNullException.ThrowIfNull(startupGates);
 
         this.mailSynchronizationSettings = mailSynchronizationSettings;
@@ -65,6 +68,7 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
         this.dataEncryptionSettings = dataEncryptionSettings;
         this.mcpEndpointSettings = mcpEndpointSettings.Value;
         this.adminEndpointSettings = adminEndpointSettings.Value;
+        this.clientEndpointSettings = clientEndpointSettings.Value;
         this.validator = validator;
         this.resolutionOptions = resolutionOptions;
         this.startupGates = startupGates;
@@ -100,6 +104,11 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
         failures.AddRange(
             await this.validator.FindAdminEndpointConfigurationErrorsAsync(
                 this.adminEndpointSettings,
+                cancellationToken));
+
+        failures.AddRange(
+            await this.validator.FindClientEndpointConfigurationErrorsAsync(
+                this.clientEndpointSettings,
                 cancellationToken));
 
         if (failures.Count > 0)

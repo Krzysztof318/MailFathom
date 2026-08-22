@@ -8,7 +8,7 @@ using Xunit;
 namespace MailFathom.Infrastructure.UnitTests.Security.Transport;
 
 /// <summary>Covers which browser origins the MCP endpoint answers.</summary>
-public sealed class McpOriginPolicyTests
+public sealed class BrowserOriginPolicyTests
 {
     [Theory]
     [InlineData("https://client.example.test", "https://client.example.test")]
@@ -20,7 +20,7 @@ public sealed class McpOriginPolicyTests
     public void TryNormalize_AnOrigin_ProducesTheFormABrowserSends(string configuredValue, string expectedOrigin)
     {
         // Arrange, Act
-        var normalized = McpOriginPolicy.TryNormalize(configuredValue, out var normalizedOrigin);
+        var normalized = BrowserOriginPolicy.TryNormalize(configuredValue, out var normalizedOrigin);
 
         // Assert
         Assert.True(normalized);
@@ -42,7 +42,7 @@ public sealed class McpOriginPolicyTests
     public void TryNormalize_AnythingThatIsNotAnHttpOrigin_IsRefused(string? configuredValue)
     {
         // Arrange, Act
-        var normalized = McpOriginPolicy.TryNormalize(configuredValue, out var normalizedOrigin);
+        var normalized = BrowserOriginPolicy.TryNormalize(configuredValue, out var normalizedOrigin);
 
         // Assert
         Assert.False(normalized);
@@ -53,7 +53,7 @@ public sealed class McpOriginPolicyTests
     public void Permits_TheAllowAnyOriginPolicy_ServesEveryOrigin()
     {
         // Arrange
-        var policy = McpOriginPolicy.AllowingAnyOrigin;
+        var policy = BrowserOriginPolicy.AllowingAnyOrigin;
 
         // Act, Assert
         Assert.True(policy.AllowsAnyOrigin);
@@ -66,7 +66,7 @@ public sealed class McpOriginPolicyTests
     public void Permits_TheNoBrowserOriginPolicy_RefusesEveryOriginAndServesARequestCarryingNone()
     {
         // Arrange
-        var policy = McpOriginPolicy.ServingNoBrowserOrigin;
+        var policy = BrowserOriginPolicy.ServingNoBrowserOrigin;
 
         // Act, Assert
         Assert.False(policy.AllowsAnyOrigin);
@@ -80,7 +80,7 @@ public sealed class McpOriginPolicyTests
     public void Permits_AListedOrigin_IsServedAndAnUnlistedOneIsNot()
     {
         // Arrange
-        var policy = McpOriginPolicy.Restricting(
+        var policy = BrowserOriginPolicy.Restricting(
             ["https://client.example.test", "https://other-client.example.test"]);
 
         // Act, Assert
@@ -97,7 +97,7 @@ public sealed class McpOriginPolicyTests
     public void Permits_AnOriginDifferingOnlyInSchemeHostOrPort_IsNotServed(string presentedOrigin)
     {
         // Arrange
-        var policy = McpOriginPolicy.Restricting(["https://client.example.test"]);
+        var policy = BrowserOriginPolicy.Restricting(["https://client.example.test"]);
 
         // Act, Assert
         Assert.False(policy.Permits(presentedOrigin));
@@ -110,7 +110,7 @@ public sealed class McpOriginPolicyTests
     public void Permits_ARequestCarryingNoOrigin_IsServedEvenUnderARestrictingPolicy(string? presentedOrigin)
     {
         // Arrange
-        var policy = McpOriginPolicy.Restricting(["https://client.example.test"]);
+        var policy = BrowserOriginPolicy.Restricting(["https://client.example.test"]);
 
         // Act, Assert
         Assert.True(policy.Permits(presentedOrigin));
@@ -121,7 +121,7 @@ public sealed class McpOriginPolicyTests
     public void Permits_AnOpaqueOrigin_IsNotServedUnderARestrictingPolicy()
     {
         // Arrange
-        var policy = McpOriginPolicy.Restricting(["https://client.example.test"]);
+        var policy = BrowserOriginPolicy.Restricting(["https://client.example.test"]);
 
         // Act, Assert
         Assert.False(policy.Permits("null"));
@@ -131,6 +131,6 @@ public sealed class McpOriginPolicyTests
     public void Restricting_NoOrigin_ThrowsBecauseItWouldServeNoBrowserAtAll()
     {
         // Arrange, Act, Assert
-        Assert.Throws<ArgumentException>(() => McpOriginPolicy.Restricting([]));
+        Assert.Throws<ArgumentException>(() => BrowserOriginPolicy.Restricting([]));
     }
 }
