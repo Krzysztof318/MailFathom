@@ -1696,7 +1696,8 @@ duplication nothing downstream can withdraw. That is what `idempotentHint` `true
 ### Every bound is asked now rather than when the draft was written
 
 Whether sending is on for the account, whether every recipient is somebody this deployment may write to, the ceilings,
-and the size bound are all asked at the promotion. So are the two bounds that are about the caller rather than the
+the size bound, and the [outgoing-mail screen](mail-delivery.md#what-must-not-leave-in-a-message) are all asked at the
+promotion, so a draft written before an operator switched screening on is judged by the screen as it stands today. So are the two bounds that are about the caller rather than the
 deployment: this caller's own ceiling for the period, and — where an operator set `MailDelivery:UnvouchedRecipients` to
 `Refuse` — the posture on a recipient nothing here vouches for, which answers `53009`. A draft records where each of its
 addresses came from, so promoting a drafted reply is judged as that reply would have been and promoting a message
@@ -1729,8 +1730,12 @@ configured bound is `51014` naming the number; an account this deployment does n
 `Delivery` block behind a promotion is `56002`; an email that cannot be answered is `53005` for
 [the four reasons a reply gives](#what-a-reply-and-a-forward-refuse); a promotion naming a recipient the caller wrote
 out itself that nothing here vouches for is `53009`, on a deployment whose `MailDelivery:UnvouchedRecipients` is
-`Refuse`; and a draft asked to be sent that names nobody is `53010` `MailDraftNotAddressed` — the one refusal that is
-about the draft rather than about the deployment, whose remedy is `update_draft` rather than a second save.
+`Refuse`; a draft asked to be sent that names nobody is `53010` `MailDraftNotAddressed` — the one refusal that is
+about the draft rather than about the deployment, whose remedy is `update_draft` rather than a second save; and a draft
+carrying material this deployment will not let leave is `59001` naming the category, or `59002` where one of its
+screened values was longer than the analyzed ceiling. Those last two answer `save_draft` and `update_draft` as much as
+`send_draft`, because the screen is asked where a draft is written as well as where one is promoted, and the remedy is
+editing the message rather than asking again.
 
 Every one of them names a field, a bound, or a count and never a value, so no refusal carries an address, a subject, or
 a line of what somebody wrote.

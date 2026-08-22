@@ -45,6 +45,32 @@ public sealed class OutgoingMailScreeningTests
         await reader.DidNotReceive().ReadAsync(Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// Bytes that are no message are refused whatever the deployment screens for, because an argument guard that fired
+    /// on one deployment and not on another would let the draft book file a draft of nothing wherever screening is off.
+    /// </summary>
+    [Fact]
+    public async Task FindRefusalAsync_EmptyBytesOnADeploymentThatScreensNothing_RefusesTheArgument()
+    {
+        // Arrange
+        var reader = Substitute.For<IOutgoingMailTextReader>();
+        var screening = new OutgoingMailScreening(
+            reader,
+            new SensitiveContentEgressScreen(
+                redactor: null,
+                SensitiveContentScreeningPolicy.ScreeningNothing(),
+                new RecordingSensitiveContentEgressTelemetry(),
+                this.timeProvider));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<ArgumentException>(
+            () => screening.FindRefusalAsync(ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal("rawMime", refusal.ParamName);
+        await reader.DidNotReceive().ReadAsync(Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>());
+    }
+
     /// <summary>What is screened is the composed message rather than anything an author supplied, which is what covers every route into the outbox identically.</summary>
     [Fact]
     public async Task FindRefusalAsync_ASwitchedOnDeployment_ScreensWhatTheMessageSays()

@@ -41,15 +41,30 @@ public sealed class OutgoingMailScreening(
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the message carries, which stops the act.</exception>
     /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken" /> is cancelled.</exception>
     /// <remarks>
+    /// <para>
     /// The answer is returned rather than raised, because the two callers refuse in different words: one did not queue
     /// a message and the other did not write a draft, and a shared exception would tell one author about the other's
     /// act. What is not returned is anything about the finding beyond the category — see
     /// <see cref="SensitiveContentEgressRefusal" /> for what that costs and why.
+    /// </para>
+    /// <para>
+    /// The emptiness guard is above the active test rather than left to the reader, so what may be handed to this
+    /// method does not depend on what an operator switched on. The outbox refuses empty bytes of its own accord and
+    /// the draft book does not, and a deployment screening nothing would otherwise file a draft of no message at all
+    /// while a screening one refused it.
+    /// </para>
     /// </remarks>
     public async Task<SensitiveContentEgressRefusal?> FindRefusalAsync(
         ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken)
     {
+        if (rawMime.IsEmpty)
+        {
+            throw new ArgumentException(
+                "An outgoing message is screened from the MIME it will be transmitted as.",
+                nameof(rawMime));
+        }
+
         if (!screen.IsActive)
         {
             return null;

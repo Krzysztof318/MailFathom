@@ -573,8 +573,9 @@ examine, on the same line every other guarded point here draws.
 would have written anything.** So a screened message leaves no record, no stored payload, and no draft revision behind,
 and a draft being revised keeps the text it already had — but the caller's own ceiling has already been charged, because
 admitting a send is what charges it and nothing releases the charge when a later step refuses. A caller whose message
-the screen stops has spent one message and its recipients out of its period, and asking again with the material removed
-is another. The account's and the deployment's ceilings are unaffected, since those are counted from the outgoing
+the screen stops has spent one message and its recipients out of its period — and asking again under the key it first
+used costs nothing further, since the charge is keyed on the send's own idempotency identity and a second ask under
+that key is admitted without being charged again. Only a fresh key spends another message and its recipients. The account's and the deployment's ceilings are unaffected, since those are counted from the outgoing
 records and the refusal writes none.
 
 A caller reads `59001` naming the category, or `59002` where one screened value — the subject or either body — was
