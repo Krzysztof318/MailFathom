@@ -37,4 +37,30 @@
       SkiaRenderer;
     </UnoFeatures>
   </PropertyGroup>
+
+  <!-- The browser head alone, and for one generator rather than for any code written here. `[JSImport]` marshals its
+       arguments through pointers, so the interop source generator emits unsafe code and refuses to run without this —
+       SYSLIB1074 says so by name. Nothing under Platforms/WebAssembly/ contains an `unsafe` block of its own, and no
+       other head compiles that directory, which is why the property is scoped to the one target framework that needs
+       it rather than declared for the project. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!-- The bootstrapper deploys and loads what it finds embedded under WasmScripts, but the Uno SDK only ever adds one
+       file there by itself: Uno.SingleProject.Wasm.targets includes AppManifest.js by name and globs nothing. A second
+       script therefore has to be named here, or it stays an ordinary None item, never reaches the bundle, and the
+       functions it defines are simply absent at run time — with the failure arriving as a JavaScript name the interop
+       cannot resolve rather than as anything the build said. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
+    <None Remove="Platforms/WebAssembly/WasmScripts/*.js" />
+    <EmbeddedResource Include="Platforms/WebAssembly/WasmScripts/*.js"
+                      Exclude="Platforms/WebAssembly/WasmScripts/AppManifest.js" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Everything that talks to the service, in an assembly that cannot reference a XAML type. The reference goes
+         this way and only this way: Client.Backend knows nothing about a view, and the compiler is what says so. -->
+    <ProjectReference Include="..\Client.Backend\Client.Backend.csproj" />
+  </ItemGroup>
 </Project>

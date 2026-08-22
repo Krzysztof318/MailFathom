@@ -11,5 +11,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Client\Client.csproj" />
+    <!-- Named as well as reached through the application, because this suite covers it directly and a reference that
+         only arrives transitively is one a later change to the application could take away. -->
+    <ProjectReference Include="..\..\src\Client.Backend\Client.Backend.csproj" />
   </ItemGroup>
 </Project>

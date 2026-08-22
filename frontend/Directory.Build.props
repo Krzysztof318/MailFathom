@@ -89,8 +89,8 @@
        design, so every one of those three moves whenever a machine or a runner installs a newer SDK. A lock file
        naming them fails the next locked restore with NU1004 having recorded nothing this repository decided; the
        backend met the same package through the trim analyzers and answered it the same way, by keeping it out of the
-       ordinary restore graph. The unit-test project keeps its lock file: it targets plain net10.0, compiles no head,
-       and its closure is the one this repository's own pins produce. -->
+       ordinary restore graph. Every other project keeps its lock file: Client.Backend and the unit-test project both
+       target plain net10.0, compile no head, and resolve the closure this repository's own pins produce. -->
   <PropertyGroup>
     <RestorePackagesWithLockFile Condition="'$(MSBuildProjectName)' != 'Client'">true</RestorePackagesWithLockFile>
   </PropertyGroup>
