@@ -1,6 +1,6 @@
 # Local development
 
-<!-- describes: scripts/**, global.json, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, frontend/MailFathom.Client.slnx, frontend/Directory.Packages.props, backend/src/AppHost/**, backend/src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, backend/tests/IntegrationTests/ProviderAdapters/**, backend/tools/** -->
+<!-- describes: scripts/**, global.json, MailFathom.code-workspace, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, frontend/MailFathom.Client.slnx, frontend/Directory.Packages.props, backend/src/AppHost/**, backend/src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, backend/tests/IntegrationTests/ProviderAdapters/**, backend/tools/** -->
 
 Use the .NET SDK pinned in `global.json`. Test execution is configured for Microsoft Testing Platform through the repository-level `global.json` test runner setting.
 
@@ -9,6 +9,46 @@ Use the .NET SDK pinned in `global.json`. Test execution is configured for Micro
 A development machine also needs **OpenSSL 3.0 or later**, because every TLS connection a running MailFathom makes — to the mail server, to PostgreSQL — is handshaked by the system library rather than by .NET, and its security policy decides which servers are reachable at all. **1.1.1 is the hard floor**: .NET 10 requires it on Unix and [fails to start](https://learn.microsoft.com/en-us/dotnet/core/compatibility/cryptography/10.0/openssl-version-requirement) without it. **Anything between 1.1.1 and 3.0 may work and may not** — it is out of upstream support and nothing in this repository is verified against it, so treat a failure that reproduces only there as an environment problem rather than a defect.
 
 Nothing has to be configured for a mail server that clears the distribution's default policy, which is nearly all of them: a checkout that sets nothing runs at that full-strength policy and negotiates the newest TLS both ends support. Relaxing it is an opt-in for one process — a development mailbox on a server the policy refuses is what [the platform TLS policy](platform-tls-policy.md) is for, and it applies to the host however the host is started.
+
+## Opening the repository in an editor
+
+**The repository root is not a solution directory.** Each stack owns its own — `backend/MailFathom.slnx` and
+`frontend/MailFathom.Client.slnx` — so the root holds no `.sln`, no `.slnx`, and no `.csproj`, and `dotnet restore` run
+there fails with `MSB1003` for the same reason an editor opened there loads nothing.
+
+Rider and Visual Studio open a solution rather than a directory, so neither notices. **VS Code opens a directory**, and
+opening the root gives an editor with no project loaded and one confusing error: the Uno Platform extension reports
+`Uno SDK not found`, which names the state it ended in rather than the step that failed. Its own log has the sequence —
+no solution in the opened folder, a scan of that folder that finds no project, then that message. The Uno SDK is not
+the problem; `global.json` names it and the package restores.
+
+Open `MailFathom.code-workspace` at the repository root instead:
+
+```bash
+code MailFathom.code-workspace
+```
+
+It opens `frontend/`, `backend/`, and the repository itself as three folders, recommends the extensions both stacks
+need, and carries launch configurations for the client's two heads and for the Aspire app host with and without the
+client. `.vscode/` stays gitignored, so everything the repository decides is in that one file and everything a
+contributor decides stays theirs.
+
+**The client is listed first, and that is a contract rather than a preference.** The Uno Platform extension resolves
+its solution from `workspace.workspaceFolders[0]` and from nowhere else; where it finds none it scans that one
+directory without descending. Listing `backend/` first would hand it a solution naming no Uno project, and client work
+would be unavailable in the editor with no indication of why. `scripts/test-agent-workflow.sh` asserts the order, so a
+future edit cannot quietly undo it. C# Dev Kit reads every folder regardless, and its Solution Explorer switches
+between the two solutions.
+
+Two things follow from the Uno extension's own behavior once it is loaded. It reports `Multiple (2) projects are
+loaded, select one using the UI in the status bar` — the client and its unit-test project — and picking
+`Client.csproj` there is what starts the Dev Server. And **signing in to Uno Platform Studio needs a desktop session**,
+which a headless server does not have. The Dev Server says so itself: *this application cannot run without an active
+X11 environment (the DISPLAY environment variable is not set); running in a container or in a Remote VS Code mode is
+not yet supported.* Signing in from an editor running on a machine with a display is the supported answer, and
+forwarding X11 to one — the sign-in window is an ordinary X client — is the other. Nothing about building, testing, or
+running the client depends on it: the licence gates two tools of the Uno App MCP and nothing else, and Hot Reload, the
+Toolkit, and the rest of the App MCP are free-tier.
 
 ## Commands
 
