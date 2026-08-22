@@ -745,6 +745,32 @@ dotnet restore backend/MailFathom.slnx --force-evaluate
 
 Then read the resulting diff before committing it. A bump that moves one direct version and forty transitive ones is a different review from one that moves only itself, and locked mode exists so that difference is visible rather than discovered later.
 
+## Reading every pin against its upstream
+
+A version reaches a run from one of six files, in five syntaxes: the `PackageVersion` entries of both stacks, the tool versions in `.config/dotnet-tools.json`, the SDK floor and the `msbuild-sdks` entries in `global.json`, the `uses:` references in `.github/workflows/`, and the container image tags and digests the deployment assets and the AppHost carry. `scripts/update-dependencies.sh` reads all of them in one pass, against the upstream that publishes each and against the terms `THIRD_PARTY_LICENSES.md` recorded when that version was reviewed.
+
+```bash
+scripts/update-dependencies.sh                      # survey every pin and report; writes nothing
+scripts/update-dependencies.sh --apply              # and rewrite the pins that can be written mechanically
+scripts/update-dependencies.sh --apply --verify     # and then run scripts/verify-full.sh over the result
+scripts/update-dependencies.sh --only nuget         # one family at a time: nuget, tools, sdk, actions, images
+```
+
+Each pin comes back as `current`, `behind`, `ahead`, `moved`, or `unknown`, beside the licence identifier its upstream declares *now* and the identifiers the register records for it. A disagreement between those two is printed as a line to read rather than as a failure, which is the same contract [`scripts/review-obligations.sh`](agent-workflow.md#entry-points) carries: the licence is read from the upstream's own metadata and the register side is read out of prose by pattern, so a flag is a place to look and never a conclusion. `moved` belongs to a digest pin alone: two digests are either equal or they are not, and which of them is newer is not a question a digest can answer, so a difference is reported as a difference rather than ranked. The whole run exits zero whatever it found, and a family whose host does not answer is reported as `unresolved` rather than ending the survey.
+
+`--apply` rewrites four of the six: both `Directory.Packages.props`, `.config/dotnet-tools.json`, `global.json`'s `msbuild-sdks`, and the workflow references. It regenerates the lock files afterwards, with the `--force-evaluate` restore above, and only when a package version actually moved — a tool manifest and an action reference reach no project graph, so neither obliges one.
+
+Two families are surveyed and never rewritten:
+
+- **`global.json`'s `sdk.version` is a floor rather than a version.** `rollForward: latestFeature` means the toolchain a run executes is chosen on the machine, so moving the floor changes what this repository *requires* rather than what it uses, and that decides who can build it.
+- **A container image pin is written in up to four assets in four syntaxes** — a Compose default, a Helm value split across `registry`, `repository`, and either `tag` or `digest`, a Quadlet unit source, and an AppHost call — and two of them are digests. Moving one also obliges the golden manifests under `deploy/helm/mailfathom/ci/golden/`, which only `scripts/render-helm-manifests.sh --update` may write. The survey names every file carrying each reference so the blast radius is visible; the edit stays a person's.
+
+It never edits `THIRD_PARTY_LICENSES.md` either. A row there is a completed review written as prose — what the component is used for, what its terms oblige, which of them a distribution has to discharge — and a machine cannot restate one. What `--apply` prints instead, for every pin it actually rewrote, is the register lines still naming the version that pin moved from, by line number, so that edit is guided rather than searched for. A survey prints none of it: a pin nothing moved leaves the register saying something still true, and sending a reader to a correct row is worse than saying nothing.
+
+The survey needs the network: nuget.org, the .NET release index, GitHub through `gh`, and the three registries the images live in. It is not part of either verification script and nothing gates on it, for the reason [the actions section below](#keeping-the-pinned-actions-current) gives about proposals: what a dependency is worth updating to is a judgement each time, and this is the reading that makes the judgement cheap.
+
+Taking that judgement is the `update-dependencies` skill, which runs the survey before `start-task` — it writes nothing and needs no branch, so that order is what lets the issue describe pins whose state is known — then decides, then applies on the branch, then rewrites the register rows by hand from the line numbers the run printed. [Dependency update pull requests](agent-workflow.md#dependency-update-pull-requests) holds the four questions a bump answers and why no updater opens one here.
+
 ## Building and testing the client
 
 The client under `frontend/` is a second .NET stack with a solution, build files, and lock files of its own. Three
@@ -1201,11 +1227,14 @@ is a version number somebody still has to research; what it costs is a pull requ
 reads every week.
 
 So a major is caught by looking, and the looking is worth scheduling rather than assuming. The two
-questions are whether a newer major exists and whether this repository would have chosen it, and
-both are answered from the upstream release notes rather than from the version number:
+questions are whether a newer major exists and whether this repository would have chosen it, and only
+the first of them is mechanical. [`scripts/update-dependencies.sh`](#reading-every-pin-against-its-upstream)
+answers it for every action at once, beside the licence each upstream declares now — it reads a moving
+reference against the newest major rather than against the newest release, so it never proposes an
+exact tag lower than what a run already executes, which is what an update written the other way round
+does. The second question is read from the upstream release notes and nowhere else:
 
 ```bash
-gh api repos/<owner>/<action>/git/matching-refs/tags/v --jq '[.[].ref | sub("refs/tags/";"")]'
 gh api repos/<owner>/<action>/releases/tags/<tag> --jq '.body'
 ```
 
