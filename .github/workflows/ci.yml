@@ -329,9 +329,9 @@ jobs:
     #
     # The push exclusion does not weaken that. This job exists to be the `main` ruleset's one required
     # check, and a ruleset evaluates a pull request; on a push there is nothing waiting for a conclusion.
-    # The three results it reads all arrive on their own there — each of those jobs runs, and a failed
-    # one fails the run, which is what the badge and the Actions list report — so a fourth job restating
-    # that verdict under a fourth name would add a check rather than an answer. On every event the
+    # The four results it reads all arrive on their own there — each of those jobs runs, and a failed
+    # one fails the run, which is what the badge and the Actions list report — so a fifth job restating
+    # that verdict under a fifth name would add a check rather than an answer. On every event the
     # ruleset does read, this job runs under exactly this name — which is the invariant the comment
     # below is about.
     if: always() && github.event_name != 'push'
