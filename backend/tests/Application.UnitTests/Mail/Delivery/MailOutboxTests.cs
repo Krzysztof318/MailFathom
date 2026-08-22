@@ -396,7 +396,7 @@ public sealed class MailOutboxTests
         var contentStore = Substitute.For<IEmailContentStore>();
         var signal = new MailOutboxSignal(capacity: 4);
 
-        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System);
+        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, new FakeTimeProvider(Authored));
 
         var outbox = CreateOutbox(
             store,
@@ -431,7 +431,7 @@ public sealed class MailOutboxTests
         // Arrange
         var store = new InMemoryOutgoingEmailStore();
 
-        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System);
+        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, new FakeTimeProvider(Authored));
 
         var outbox = CreateOutbox(
             store,
@@ -459,7 +459,7 @@ public sealed class MailOutboxTests
         // Arrange
         var store = new InMemoryOutgoingEmailStore();
 
-        using var egress = ScanningSensitiveContentEgress.Unavailable(TimeProvider.System);
+        using var egress = ScanningSensitiveContentEgress.Unavailable(new FakeTimeProvider(Authored));
 
         var outbox = CreateOutbox(
             store,

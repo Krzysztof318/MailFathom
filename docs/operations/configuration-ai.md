@@ -43,7 +43,9 @@ nowhere to ask **fails startup** rather than running unprotected.
 its own rather than the scanner switches above. A credential in a message somebody is sending is what it exists for and
 almost no correspondence carries one, so the default is `Secrets` and a deployment that switched that scanner on gets
 it without asking. `Pii` is not in the default and adding it is a deliberate posture: ordinary mail is made of names
-and addresses, so screening for personal data refuses very nearly every message a caller tries to send. Writing
+and addresses, so screening for personal data refuses very nearly every message a caller tries to send. A deployment
+running the personal-data scanner and not the secret one therefore screens no outgoing mail until it names `Pii` here,
+because the default names a scanner it has switched off. Writing
 `"ScreenOutgoingMailFor": []` keeps both scanners redacting everywhere else and stops them cancelling anything.
 [Outgoing mail is screened rather than
 redacted](../features/sensitive-content-scanning.md#outgoing-mail-is-screened-rather-than-redacted) holds which acts it

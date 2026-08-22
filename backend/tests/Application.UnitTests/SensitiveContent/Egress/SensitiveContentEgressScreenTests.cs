@@ -110,21 +110,40 @@ public sealed class SensitiveContentEgressScreenTests
         Assert.Equal([$"subject with {Marker}"], egress.Scanner.ScannedTexts);
     }
 
+    /// <summary>
+    /// The screen is switched on and the scan runs; what the scanner found is simply not a category this deployment
+    /// stops an act for. That is the case <c>ScreenOutgoingMailFor</c> exists to make possible — a scanner redacting
+    /// everywhere else while a send goes through — so a policy read as stopping everything it can see would refuse
+    /// nearly every message a deployment with the personal-data scanner on tried to send.
+    /// </summary>
     [Fact]
-    public async Task ScreenAsync_AFindingOfACategoryNothingScreensFor_LetsTheActThrough()
+    public async Task ScreenAsync_AFindingOfACategoryNothingScreensFor_ScansItAndLetsTheActThrough()
     {
         // Arrange
         var scanner = new MarkerSensitiveContentScanner(Marker, SensitiveContentScannerKind.Secrets, this.timeProvider);
+
+        // The deployment screens for a category of the same switched-on scanner that the scanner never reports, so the
+        // screen is active, the text is scanned, and the finding reaches the policy and is answered no by it.
         var plan = SensitiveContentPlan.Create(
             SensitiveContentScanBounds.Default,
-            [SensitiveContentScannerPlan.Create(scanner.Scanner, [MarkerSensitiveContentScanner.Category], [])]);
+            [SensitiveContentScannerPlan.Create(
+                scanner.Scanner,
+                [MarkerSensitiveContentScanner.Category, SensitiveContentCategory.Create("PrivateKey")],
+                [])]);
         var telemetry = new RecordingSensitiveContentEgressTelemetry();
 
         using var redactor = new SensitiveContentRedactor(plan, [scanner], this.timeProvider);
 
         var screen = new SensitiveContentEgressScreen(
             redactor,
-            SensitiveContentScreeningPolicy.Create(plan, [SensitiveContentScannerKind.Pii]),
+            SensitiveContentScreeningPolicy.Create(
+                SensitiveContentPlan.Create(
+                    SensitiveContentScanBounds.Default,
+                    [SensitiveContentScannerPlan.Create(
+                        scanner.Scanner,
+                        [SensitiveContentCategory.Create("PrivateKey")],
+                        [])]),
+                [SensitiveContentScannerKind.Secrets]),
             telemetry,
             this.timeProvider);
 
@@ -135,8 +154,10 @@ public sealed class SensitiveContentEgressScreenTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.False(screen.IsActive);
+        Assert.True(screen.IsActive);
         Assert.Null(refusal);
+        Assert.Equal([$"the key is {Marker}"], scanner.ScannedTexts);
+        Assert.Single(telemetry.Guarded);
         Assert.Empty(telemetry.Stopped);
     }
 

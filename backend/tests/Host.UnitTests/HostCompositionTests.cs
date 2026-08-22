@@ -373,10 +373,19 @@ public sealed class HostCompositionTests
     /// it does not, so a deployment that never named a scanner has to reach a screen that scans nothing rather than
     /// nothing at all — the outbox asks for one on every enqueue.
     /// </summary>
+    /// <remarks>
+    /// The personal-data shape is the row worth having, because switching a scanner on is not what makes the screen
+    /// active: <c>ScreenOutgoingMailFor</c> defaults to <c>Secrets</c> alone, so a deployment running the personal-data
+    /// scanner and nothing else redacts everywhere else and stops no send. An operator reading that as protection in
+    /// force is exactly the misreading the composition has to be pinned against.
+    /// </remarks>
     [Theory]
     [InlineData("probes only", false)]
     [InlineData("secret scanning", true)]
-    public async Task Compose_TheOutgoingMailScreen_IsActiveOnlyWhereAScannerIsSwitchedOn(string shape, bool expected)
+    [InlineData("personal-data scanning", false)]
+    public async Task Compose_TheOutgoingMailScreen_IsActiveOnlyWhereAScreenedScannerIsSwitchedOn(
+        string shape,
+        bool expected)
     {
         // Arrange
         await using var provider = ComposeServices(shape).BuildServiceProvider();

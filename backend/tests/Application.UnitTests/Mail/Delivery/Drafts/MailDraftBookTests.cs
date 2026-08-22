@@ -286,7 +286,7 @@ public sealed class MailDraftBookTests
         var harness = Harness();
         harness.MapDraftsFolder(Account);
 
-        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System);
+        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, new FakeTimeProvider(Moment));
 
         harness.ScreenWith(OutgoingMailScreenings.Through(egress.Screen));
 
@@ -319,7 +319,7 @@ public sealed class MailDraftBookTests
         harness.MapDraftsFolder(Account);
         var draft = await SaveAsync(harness, "first version");
 
-        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System);
+        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, new FakeTimeProvider(Moment));
 
         harness.ScreenWith(OutgoingMailScreenings.Through(egress.Screen));
 
@@ -348,7 +348,7 @@ public sealed class MailDraftBookTests
         var harness = Harness();
         harness.MapDraftsFolder(Account);
 
-        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, TimeProvider.System);
+        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, new FakeTimeProvider(Moment));
 
         harness.ScreenWith(OutgoingMailScreenings.Through(egress.Screen));
 

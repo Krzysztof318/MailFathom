@@ -74,15 +74,15 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
         this.guardedTextCount = Telemetry.Meter.CreateCounter<long>(
             "mailfathom.sensitive_content.guarded",
             unit: "{text}",
-            description: "Texts scanned before they crossed out of the deployment, by egress point.");
+            description: "Texts scanned before they were published or allowed to leave, by egress point.");
         this.findingCount = Telemetry.Meter.CreateCounter<long>(
             "mailfathom.sensitive_content.findings",
             unit: "{finding}",
-            description: "Sensitive-content findings redacted before egress, by egress point and category.");
+            description: "Sensitive-content findings detected before egress — redacted where the point redacts, stopping the act where it screens — by egress point and category.");
         this.omittedCharacterCount = Telemetry.Meter.CreateCounter<long>(
             "mailfathom.sensitive_content.omitted",
             unit: "{character}",
-            description: "Characters dropped at the analyzed ceiling rather than handed on unscanned, by egress point.");
+            description: "Characters dropped at the analyzed ceiling rather than trusted unscanned, by egress point.");
         this.refusalCount = Telemetry.Meter.CreateCounter<long>(
             "mailfathom.sensitive_content.refusals",
             unit: "{refusal}",

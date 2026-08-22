@@ -150,7 +150,9 @@ is which findings matter, because a redaction and a refusal are not the same act
 - **`Pii` is named or it is absent.** A mailbox is made of names, addresses, and signature blocks, so a deployment that
   screened outgoing mail for personal data would refuse nearly every message somebody tried to send. That is a
   defensible configuration for regulated correspondence and a broken one everywhere else, which is why it is written
-  down rather than inherited.
+  down rather than inherited. The consequence to read twice: a deployment running **only** the personal-data scanner
+  screens no outgoing mail at all until it names `Pii` here, because the default names a scanner that deployment has
+  switched off.
 - **`[]` switches screening off** while the scanners keep redacting everywhere else, and is how an operator says that
   what leaves through a model may be redacted but what a person sends is theirs.
 - **A scanner named here but switched off screens nothing**, because it detects nothing to screen with. Naming one is

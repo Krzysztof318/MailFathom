@@ -930,12 +930,18 @@ beneath the read that asked for the payload, so one call's guarding is readable 
 
 | Instrument | What it answers |
 | --- | --- |
-| `mailfathom.sensitive_content.guarded` | How many texts were scanned before they crossed out of the deployment |
-| `mailfathom.sensitive_content.findings` | How many detections were replaced, split by `mailfathom.sensitive_content.category` |
-| `mailfathom.sensitive_content.omitted` | How many characters the analyzed ceiling dropped rather than hand on unscanned |
+| `mailfathom.sensitive_content.guarded` | How many texts were scanned before something was done with them — published at the four redacting points, or allowed to leave at `outgoing_mail` |
+| `mailfathom.sensitive_content.findings` | How many detections were made, split by `mailfathom.sensitive_content.category`. What followed depends on the point: replaced at the four redacting ones, and at `outgoing_mail` either counted and let through or, where the deployment screens for that category, the reason the act was stopped |
+| `mailfathom.sensitive_content.omitted` | How many characters the analyzed ceiling dropped rather than trust unscanned — dropped from what was published at the four redacting points, and at `outgoing_mail` the reason the act was stopped |
 | `mailfathom.sensitive_content.refusals` | How many operations a scanner that could not answer refused, by `mailfathom.sensitive_content.scanner` |
 | `mailfathom.sensitive_content.stopped` | How many acts were cancelled because the material found is material this deployment will not let leave, by `mailfathom.sensitive_content.scanner` and `mailfathom.sensitive_content.category` |
 | `mailfathom.sensitive_content.scan.duration` | What scanning added to one guarded operation |
+
+**Three of these rows mean something slightly different at `outgoing_mail`**, because that point rewrites nothing:
+the redaction runs there only to reach its findings and the redacted text is discarded. So a detection counted at
+`outgoing_mail` is a detection *made* rather than one removed from something a reader received, and a message that was
+stopped never left at all. Reading `findings{egress_point="outgoing_mail"}` as credentials taken out of transmitted
+mail would be reading it exactly backwards — nothing was transmitted, and nothing was rewritten.
 
 **The stopped count is the one series about an act that did not happen**, and today `outgoing_mail` is the only point
 that produces it: everywhere else a finding is redacted and the operation continues. Both of its tags are written

@@ -866,12 +866,12 @@ public static class ServiceCollectionExtensions
         // against one reload of the account list it was scheduled from.
         services.AddScoped<IOutgoingMailUsageReader, OutgoingMailUsageReader>();
         services.AddScoped<OutgoingMailGovernor>();
-        // What the message says, asked beside what the bounds allow and by the same two callers. The reader is a
-        // singleton because it holds nothing at all — it is handed bytes and parses them — while the screening around
-        // it is scoped with the outbox and the draft book that ask it, so one work unit screens against one resolution
-        // of everything else it is judging the message by.
+        // What the message says, asked beside what the bounds allow and by the same two callers. Both are singletons
+        // because neither holds anything: the reader is handed bytes and parses them, and the screening composes it
+        // with the process-wide screen over the process-wide policy. A scope would resolve the same two objects it
+        // did last time, so scoping it would allocate per work unit and buy nothing.
         services.AddSingleton<IOutgoingMailTextReader, MimeKitOutgoingMailTextReader>();
-        services.AddScoped<OutgoingMailScreening>();
+        services.AddSingleton<OutgoingMailScreening>();
         services.AddScoped<MailOutbox>();
         // The operator's view of the same records, registered beside the outbox rather than with the administrative
         // endpoint that serves it today: the grant is asked in the use case, so a second entrypoint reaching it is

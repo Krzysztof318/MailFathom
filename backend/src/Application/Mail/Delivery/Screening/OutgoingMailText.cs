@@ -19,9 +19,17 @@ namespace MailFathom.Application.Mail.Delivery.Screening;
 /// <para>
 /// <b>Three is the whole count, and that is what bounds the work.</b> One screened act is at most three scans, whatever
 /// the message is addressed to or carries, so this path needs no ceiling of its own the way a consumer screening a
-/// collection of participants does. Headers are not among them: an address, a display name, and a message identity are
-/// composed by this deployment or supplied as the recipients a caller already stated, and every one of them is judged
-/// by the recipient policy that runs beside this screen.
+/// collection of participants does.
+/// </para>
+/// <para>
+/// <b>No header is among the three, and they are not all covered by the same thing.</b> A message identity is composed
+/// by this deployment out of values it chose, so there is nothing in one a caller could have put there. An address is
+/// judged beside this screen by <c>OutgoingRecipientPolicy</c>, which is what decides whether the message may go to
+/// that person at all. <b>A display name is neither</b>: the policy reads the address alone, and the composer writes
+/// the name into the header having checked it only for an embedded line break. Nothing published today lets a caller
+/// state one — every recipient is an address, or a contact whose name this deployment holds — so this is a gap in what
+/// is guaranteed rather than a value going out unexamined. An entrypoint that does let a caller name a recipient in
+/// their own words is what would make it one, and screening the header is what it would owe.
 /// </para>
 /// <para>
 /// Attachments are not read. What they carry is their own question, and answering it here would mean decoding every
