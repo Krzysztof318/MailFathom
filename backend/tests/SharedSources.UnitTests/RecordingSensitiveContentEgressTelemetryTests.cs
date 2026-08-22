@@ -100,6 +100,30 @@ public sealed class RecordingSensitiveContentEgressTelemetryTests
     }
 
     [Fact]
+    public void RecordStopped_SeveralStoppedActs_AreKeptWithTheRefusalEachCarried()
+    {
+        // Arrange
+        var telemetry = new RecordingSensitiveContentEgressTelemetry();
+        var found = SensitiveContentEgressRefusal.ContentFound(
+            SensitiveContentScannerKind.Secrets,
+            SensitiveContentCategory.Create("CloudKey"));
+        var unscanned = SensitiveContentEgressRefusal.NotFullyScanned();
+
+        // Act
+        telemetry.RecordStopped(SensitiveContentEgressPoint.OutgoingMail, found);
+        telemetry.RecordStopped(SensitiveContentEgressPoint.OutgoingMail, unscanned);
+
+        // Assert
+        Assert.Equal(
+            [
+                (SensitiveContentEgressPoint.OutgoingMail, found),
+                (SensitiveContentEgressPoint.OutgoingMail, unscanned),
+            ],
+            telemetry.Stopped.Select(stopped => (stopped.EgressPoint, stopped.Refusal)));
+        Assert.Empty(telemetry.Guarded);
+    }
+
+    [Fact]
     public void RecordGuarded_NoRedaction_IsRefusedAsAnArgument()
     {
         // Arrange

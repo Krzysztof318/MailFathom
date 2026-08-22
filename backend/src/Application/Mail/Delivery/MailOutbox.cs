@@ -10,7 +10,9 @@ using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
+using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Delivery;
 
@@ -34,6 +36,13 @@ namespace MailFathom.Application.Mail.Delivery;
 /// the operator's answer rather than the caller's, so they have to hold for work no caller requested. Whether sending
 /// is on for the account at all, who the deployment may write to, and how much may leave in a period are all decided
 /// before anything is written down, which is what makes a refusal cost nothing and leave nothing behind.
+/// </para>
+/// <para>
+/// What the message <em>says</em> is asked here for exactly those reasons and answered differently. A deployment that
+/// screens outgoing mail refuses a message carrying material it will not let leave, and refuses it whole rather than
+/// sending a redacted version of it — every other point this scanner guards publishes something to a reader, where
+/// removing what was found still answers the question; here the text is somebody's message, and rewriting it would put
+/// words they never chose under their own address.
 /// </para>
 /// <para>
 /// Enqueuing is idempotent by the identity the request carries. The same authored request arriving twice — a rule that
@@ -68,6 +77,7 @@ namespace MailFathom.Application.Mail.Delivery;
 /// <param name="outboxOperations">Writes the withdrawal of a message that has not begun to leave, which is one transition however it was asked for.</param>
 /// <param name="authorization">Answers whether whoever reached this is admitted to ask for the send the request states it is.</param>
 /// <param name="governor">Answers whether this deployment may send this message at all, whoever is asking.</param>
+/// <param name="screening">Answers whether what the message says is something this deployment lets leave.</param>
 /// <param name="timeProvider">Says whether a recorded send is due now or is being held for later.</param>
 public sealed class MailOutbox(
     IOutgoingEmailStore outgoingEmails,
@@ -78,6 +88,7 @@ public sealed class MailOutbox(
     IOutboxOperationStore outboxOperations,
     AccessAuthorization authorization,
     OutgoingMailGovernor governor,
+    OutgoingMailScreening screening,
     TimeProvider timeProvider)
 {
     /// <summary>The word every held send's dispatch job is keyed by, so one record has one such job however often it is enqueued.</summary>
@@ -91,7 +102,8 @@ public sealed class MailOutbox(
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="rawMime" /> is empty.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the act the request names as its origin is not what reached this: a caller granted <see cref="MailFathomPermission.MailSend" /> for a command, and MailFathom's own identity for a rule.</exception>
-    /// <exception cref="OutgoingMailRefusedException">Thrown when sending is not enabled for the account or the deployment is read-only, when a recipient is one the recipient policy refuses, or when the period has reached a ceiling.</exception>
+    /// <exception cref="OutgoingMailRefusedException">Thrown when sending is not enabled for the account or the deployment is read-only, when a recipient is one the recipient policy refuses, when the period has reached a ceiling, or when the message carries material this deployment screens outgoing mail for.</exception>
+    /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the message carries, which refuses the send rather than queueing it unscreened.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when the write lost its race for the same identity on every allowed attempt.</exception>
     /// <remarks>
     /// The message is not recomposed for a request that already has a record, and the bytes supplied here are then
@@ -119,6 +131,18 @@ public sealed class MailOutbox(
         // deployment may no longer act on — and answering it from the record written under the older posture would make
         // an idempotency key a way to carry a permission forward.
         await governor.RequirePermittedAsync(request, cancellationToken);
+
+        // After the governor and before the write, which is the order of cost and the order of authority. A deployment
+        // that may not send at all, or may not write to these people, is answered without a scan; only a send that has
+        // cleared every bound the operator set is worth spending an analyzer round trip on. And like the governor, this
+        // is asked on every enqueue including one whose identity already has a record: a request repeated after the
+        // screen was switched on, or after its category list widened, is a request this deployment may no longer act
+        // on, and answering it from the record written under the older posture would make an idempotency key a way to
+        // carry a message past a policy.
+        if (await screening.FindRefusalAsync(rawMime, cancellationToken) is { } screened)
+        {
+            throw OutgoingMailRefusedException.ContentRefused(screened);
+        }
 
         var committed = await retryPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>

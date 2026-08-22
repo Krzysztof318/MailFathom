@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text;
 using MailFathom.Host.Configuration.SensitiveContent;
 using Microsoft.Extensions.Configuration;
 using Xunit;
@@ -203,6 +204,7 @@ public sealed class SensitiveContentOptionsBindingTests
     [InlineData("SensitiveContent:PersonalDataAnalyzer:Endpont", "http://presidio-analyzer:3000")]
     [InlineData("SensitiveContent:PersonalDataAnalyser:Endpoint", "http://presidio-analyzer:3000")]
     [InlineData("SensitiveContent:PersonalDataAnalyzer:MinimumConfidance", "0.6")]
+    [InlineData("SensitiveContent:ScreenOutgoingMailsFor:0", "Secrets")]
     public void Bind_AnUnrecognizedKey_FailsRatherThanBeingIgnored(string key, string value)
     {
         // Arrange
@@ -248,6 +250,63 @@ public sealed class SensitiveContentOptionsBindingTests
         Assert.False((settings ?? new SensitiveContentOptions()).IsAnyScannerEnabled);
     }
 
+    /// <summary>The screened scanners are read from configuration in the order the operator wrote them.</summary>
+    [Fact]
+    public void Bind_ScreenOutgoingMailForNamingScanners_ReadsEveryEntry()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["SensitiveContent:Secrets:Enabled"] = "true",
+            ["SensitiveContent:ScreenOutgoingMailFor:0"] = "Secrets",
+            ["SensitiveContent:ScreenOutgoingMailFor:1"] = "Pii",
+        });
+
+        // Act
+        var settings = Bind(configuration);
+
+        // Assert
+        Assert.NotNull(settings.ScreenOutgoingMailFor);
+        Assert.Equal(["Secrets", "Pii"], settings.ScreenOutgoingMailFor);
+    }
+
+    /// <summary>
+    /// An operator switching outgoing-mail screening off writes an empty array, and the key never written is what the
+    /// default is read from. Only an array-typed property tells the two apart — a list would bind both to empty — so the
+    /// empty array is asserted through a source that can express one.
+    /// </summary>
+    [Fact]
+    public void Bind_ScreenOutgoingMailForWrittenAsAnEmptyArray_ReadsItAsNamingNothing()
+    {
+        // Arrange
+        var configuration = JsonConfigurationFrom(
+            """{ "SensitiveContent": { "Secrets": { "Enabled": true }, "ScreenOutgoingMailFor": [] } }""");
+
+        // Act
+        var settings = Bind(configuration);
+
+        // Assert
+        Assert.NotNull(settings.ScreenOutgoingMailFor);
+        Assert.Empty(settings.ScreenOutgoingMailFor);
+    }
+
+    /// <summary>A deployment that never named the key takes the product's own default rather than screening nothing.</summary>
+    [Fact]
+    public void Bind_ADeploymentThatNeverNamedTheKey_LeavesItAbsent()
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["SensitiveContent:Secrets:Enabled"] = "true",
+        });
+
+        // Act
+        var settings = Bind(configuration);
+
+        // Assert
+        Assert.Null(settings.ScreenOutgoingMailFor);
+    }
+
     /// <summary>Bound exactly as the composition root binds it, so a misspelling refused there is refused here.</summary>
     private static SensitiveContentOptions Bind(IConfiguration configuration)
     {
@@ -264,4 +323,14 @@ public sealed class SensitiveContentOptionsBindingTests
         new ConfigurationBuilder()
             .AddInMemoryCollection(values)
             .Build();
+
+    /// <summary>Reads a section from JSON, which is the one source that can state a written empty array.</summary>
+    private static IConfiguration JsonConfigurationFrom(string json)
+    {
+        using var document = new MemoryStream(Encoding.UTF8.GetBytes(json));
+
+        return new ConfigurationBuilder()
+            .AddJsonStream(document)
+            .Build();
+    }
 }

@@ -471,6 +471,7 @@ public sealed class MailDraftPromotionTests
             Substitute.For<IOutboxOperationStore>(),
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
             governor ?? OutgoingMailGovernors.Permitting(),
+            OutgoingMailScreenings.Inactive(),
             new FakeTimeProvider(Moment));
 
         return new MailDraftPromotion(

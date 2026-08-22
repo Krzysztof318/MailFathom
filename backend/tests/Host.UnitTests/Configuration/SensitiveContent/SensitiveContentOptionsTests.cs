@@ -363,6 +363,68 @@ public sealed class SensitiveContentOptionsTests
         Assert.Equal(0.4, settings.PersonalDataAnalyzer.MinimumConfidence);
     }
 
+    /// <summary>An absent key is what the default reads from, so it may not be an empty list the mapper cannot tell apart.</summary>
+    [Fact]
+    public void Defaults_ScreenOutgoingMailFor_NamesNothingAtAll()
+    {
+        // Act
+        var settings = new SensitiveContentOptions();
+
+        // Assert
+        Assert.Null(settings.ScreenOutgoingMailFor);
+    }
+
+    /// <summary>A scanner spelled wrongly reads as protection in force and screens nothing, so startup refuses it.</summary>
+    [Fact]
+    public void Validate_ScreenOutgoingMailForNamingSomethingThatIsNotAScanner_IsReported()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions { ScreenOutgoingMailFor = ["Secrets", "Secret"] };
+
+        // Act
+        var results = settings.Validate(new ValidationContext(settings)).ToArray();
+
+        // Assert
+        Assert.Contains(
+            results,
+            result => result.MemberNames.Contains(nameof(SensitiveContentOptions.ScreenOutgoingMailFor))
+                && result.ErrorMessage!.Contains("'Secret'", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("Secrets")]
+    [InlineData("secrets")]
+    [InlineData("PII")]
+    public void Validate_ScreenOutgoingMailForNamingAScannerInAnySpelling_IsAccepted(string named)
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions { ScreenOutgoingMailFor = [named] };
+
+        // Act
+        var results = settings.Validate(new ValidationContext(settings)).ToArray();
+
+        // Assert
+        Assert.DoesNotContain(
+            results,
+            result => result.MemberNames.Contains(nameof(SensitiveContentOptions.ScreenOutgoingMailFor)));
+    }
+
+    /// <summary>Naming nothing is how an operator switches outgoing-mail screening off, rather than a list to refuse.</summary>
+    [Fact]
+    public void Validate_ScreenOutgoingMailForNamingNoScanner_IsAccepted()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions { ScreenOutgoingMailFor = [] };
+
+        // Act
+        var results = settings.Validate(new ValidationContext(settings)).ToArray();
+
+        // Assert
+        Assert.DoesNotContain(
+            results,
+            result => result.MemberNames.Contains(nameof(SensitiveContentOptions.ScreenOutgoingMailFor)));
+    }
+
     [Fact]
     public void CatalogValidator_ConfigurationNamingSomethingNoScannerDetects_FailsStartup()
     {

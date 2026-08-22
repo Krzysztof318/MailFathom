@@ -21,6 +21,7 @@ using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Filing;
 using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
+using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
@@ -54,6 +55,9 @@ internal sealed class DraftedMailDeployment
     /// <summary>The instant every record is stamped with, so a result's timestamp is a fact rather than a clock reading.</summary>
     internal static readonly DateTimeOffset Moment = new(2026, 8, 20, 9, 0, 0, TimeSpan.Zero);
 
+    /// <summary>A word the composed message carries, which is what a test screening this deployment screens for.</summary>
+    internal const string ComposedWord = "Hello";
+
     /// <summary>The message every composition here answers with, because no test about a tool reads MIME.</summary>
     private static readonly ReadOnlyMemory<byte> DraftedMime =
         "Message-ID: <one@example.test>\r\n\r\nHello."u8.ToArray().AsMemory();
@@ -66,7 +70,22 @@ internal sealed class DraftedMailDeployment
     /// <summary>Assembles the deployment for a caller granted exactly the permissions named.</summary>
     /// <param name="granted">What the entry that admitted the caller resolved to.</param>
     internal DraftedMailDeployment(params MailFathomPermission[] granted)
+        : this(OutgoingMailScreenings.Inactive(), granted)
     {
+    }
+
+    /// <summary>Assembles the deployment of an operator who screens what a draft and a send carry.</summary>
+    /// <param name="screening">The screening both the draft book and the outbox judge a composed message through.</param>
+    /// <param name="granted">What the entry that admitted the caller resolved to.</param>
+    /// <remarks>
+    /// The screening is one object rather than one apiece, because a deployment screens what leaves it rather than
+    /// whichever act happened to reach the boundary — a draft the operator's own rules refuse is refused when it is
+    /// written and again when it is promoted.
+    /// </remarks>
+    internal DraftedMailDeployment(OutgoingMailScreening screening, params MailFathomPermission[] granted)
+    {
+        ArgumentNullException.ThrowIfNull(screening);
+
         var authorization = AccessAuthorizations.ForCallerGranted(
             granted.Length == 0
                 ? [MailFathomPermission.MailDraftsWrite, MailFathomPermission.MailSend, MailFathomPermission.MailRead]
@@ -91,6 +110,7 @@ internal sealed class DraftedMailDeployment
             this.contents,
             commitPolicy,
             FilerReachingNoFolder(persistenceSessions, this.Drafts, this.contents, commitPolicy, this.clock),
+            screening,
             authorization,
             this.clock);
 
@@ -123,6 +143,7 @@ internal sealed class DraftedMailDeployment
                 Substitute.For<IOutboxOperationStore>(),
                 authorization,
                 OutgoingMailGovernors.Permitting(),
+                screening,
                 this.clock),
             this.OutgoingEmails,
             commitPolicy,

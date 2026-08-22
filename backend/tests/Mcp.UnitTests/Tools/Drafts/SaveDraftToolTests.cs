@@ -5,9 +5,12 @@
 using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Failures;
+using MailFathom.Mcp.Failures;
 using MailFathom.Mcp.Tools.Drafts;
 using MailFathom.Mcp.Tools.Results;
 using MailFathom.Mcp.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Mcp.UnitTests.Tools.Drafts;
@@ -165,6 +168,39 @@ public sealed class SaveDraftToolTests
         // Assert
         Assert.Equal(MailFathomErrorCode.AuthoredMailFieldRefused, refusal.ErrorCode);
         Assert.Empty(deployment.Drafts.Drafts);
+    }
+
+    /// <summary>
+    /// A draft is a message the deployment holds, so an operator screening what leaves it screens a draft too: what the
+    /// screen refuses is never written down, and the caller reads why rather than being told the tool failed.
+    /// </summary>
+    /// <remarks>
+    /// The marker is a word this deployment's own composition carries, because what the screen judges is the composed
+    /// message rather than the arguments — a marker planted in the body alone would prove the wrong thing.
+    /// </remarks>
+    [Fact]
+    public async Task SaveDraftAsync_ADraftCarryingScreenedMaterial_RefusesReadablyAndWritesNothing()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(
+            DraftedMailDeployment.ComposedWord,
+            new FakeTimeProvider(DraftedMailDeployment.Moment));
+        var deployment = new DraftedMailDeployment(OutgoingMailScreenings.Through(egress.Screen));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
+            () => deployment.SaveTool.SaveDraftAsync(
+                "Shall we?",
+                DraftedMailDeployment.ServedAccount,
+                "Lunch on Thursday",
+                [Recipient],
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.OutgoingMailContentRefused, refusal.ErrorCode);
+        Assert.True(McpToolFailure.CanDescribeToClient(refusal), refusal.ErrorCode.ToString());
+        Assert.Empty(deployment.Drafts.Drafts);
+        Assert.Empty(deployment.OutgoingEmails.OpenRequests);
     }
 
     /// <summary>Naming the email a draft answers and naming which answer it is go together, because neither states an answer alone.</summary>

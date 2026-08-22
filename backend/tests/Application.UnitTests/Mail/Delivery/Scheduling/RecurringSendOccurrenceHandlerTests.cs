@@ -247,6 +247,7 @@ public sealed class RecurringSendOccurrenceHandlerTests
                 Substitute.For<IOutboxOperationStore>(),
                 AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process),
                 OutgoingMailGovernors.Permitting(),
+                OutgoingMailScreenings.Inactive(),
                 this.clock);
 
             this.Handler = new RecurringSendOccurrenceHandler(

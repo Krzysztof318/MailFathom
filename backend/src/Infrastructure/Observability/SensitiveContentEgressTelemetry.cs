@@ -45,6 +45,14 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
     /// <summary>How many texts one guarded operation scanned, which is what its duration has to be read against.</summary>
     private const string GuardedTextCountTagName = "mailfathom.sensitive_content.texts";
 
+    /// <summary>What the scanner and the category read as on an act stopped because nothing analyzed the whole text.</summary>
+    /// <remarks>
+    /// A value rather than an omitted tag, because a series with one tag missing is a second series: an operator asking
+    /// this counter to break down by scanner would see every length refusal disappear from the answer rather than
+    /// appear under a name they can read.
+    /// </remarks>
+    private const string NotScannedTagValue = "not_scanned";
+
     /// <summary>How the operation ended, which separates a scan that answered from one that could not and one that stopped.</summary>
     private const string OutcomeTagName = "mailfathom.sensitive_content.outcome";
 
@@ -57,6 +65,7 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
     private readonly Counter<long> findingCount;
     private readonly Counter<long> omittedCharacterCount;
     private readonly Counter<long> refusalCount;
+    private readonly Counter<long> stoppedCount;
     private readonly Histogram<double> scanDuration;
 
     /// <summary>Initializes the instruments every guarded egress reports through.</summary>
@@ -65,19 +74,23 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
         this.guardedTextCount = Telemetry.Meter.CreateCounter<long>(
             "mailfathom.sensitive_content.guarded",
             unit: "{text}",
-            description: "Texts scanned before they crossed out of the deployment, by egress point.");
+            description: "Texts scanned before egress, whatever followed the scan — including one that stopped the act — by egress point.");
         this.findingCount = Telemetry.Meter.CreateCounter<long>(
             "mailfathom.sensitive_content.findings",
             unit: "{finding}",
-            description: "Sensitive-content findings redacted before egress, by egress point and category.");
+            description: "Sensitive-content findings detected before egress — redacted where the point redacts, stopping the act where it screens — by egress point and category.");
         this.omittedCharacterCount = Telemetry.Meter.CreateCounter<long>(
             "mailfathom.sensitive_content.omitted",
             unit: "{character}",
-            description: "Characters dropped at the analyzed ceiling rather than handed on unscanned, by egress point.");
+            description: "Characters dropped at the analyzed ceiling rather than trusted unscanned, by egress point.");
         this.refusalCount = Telemetry.Meter.CreateCounter<long>(
             "mailfathom.sensitive_content.refusals",
             unit: "{refusal}",
             description: "Egress operations refused because a switched-on scanner could not answer, by egress point and scanner.");
+        this.stoppedCount = Telemetry.Meter.CreateCounter<long>(
+            "mailfathom.sensitive_content.stopped",
+            unit: "{act}",
+            description: "Acts stopped because a screened egress point carried material this deployment will not let leave, by egress point, scanner, and category.");
         this.scanDuration = Telemetry.Meter.CreateHistogram<double>(
             "mailfathom.sensitive_content.scan.duration",
             unit: "s",
@@ -126,6 +139,26 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
             });
 
     /// <inheritdoc />
+    public void RecordStopped(SensitiveContentEgressPoint egressPoint, SensitiveContentEgressRefusal refusal)
+    {
+        ArgumentNullException.ThrowIfNull(refusal);
+
+        var tags = new TagList { { EgressPointTagName, TagOf(egressPoint) } };
+
+        // Both tags are written whatever the reason, and a ceiling refusal writes the same literal into each. An absent
+        // tag would make the two reasons two shapes of the same series, so a query summing the counter by scanner would
+        // quietly drop every act stopped for length.
+        tags.Add(
+            ScannerTagName,
+            refusal.Scanner is { } scanner
+                ? SensitiveContentDerivationTelemetry.TagOf(scanner)
+                : NotScannedTagValue);
+        tags.Add(CategoryTagName, refusal.Category?.Name ?? NotScannedTagValue);
+
+        this.stoppedCount.Add(1, tags);
+    }
+
+    /// <inheritdoc />
     public ISensitiveContentGuardScope BeginGuardedOperation(
         SensitiveContentEgressPoint egressPoint,
         CancellationToken cancellationToken)
@@ -148,6 +181,7 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
         SensitiveContentEgressPoint.HostedEmbeddingInput => "hosted_embedding_input",
         SensitiveContentEgressPoint.McpSnippet => "mcp_snippet",
         SensitiveContentEgressPoint.McpEmailContent => "mcp_email_content",
+        SensitiveContentEgressPoint.OutgoingMail => "outgoing_mail",
         _ => "unknown",
     };
 

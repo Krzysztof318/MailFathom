@@ -1,6 +1,6 @@
 # Sensitive-content scanning
 
-<!-- describes: backend/src/Application/SensitiveContent/**, backend/src/Host/Configuration/SensitiveContent/**, backend/src/Infrastructure/SensitiveContent/**, backend/src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, backend/src/Host/Hosting/Warnings/StaleDerivedDataStartupReport.cs -->
+<!-- describes: backend/src/Application/SensitiveContent/**, backend/src/Application/Mail/Delivery/Screening/**, backend/src/Host/Configuration/SensitiveContent/**, backend/src/Infrastructure/SensitiveContent/**, backend/src/Application/Emails/Extraction/RedactingEmailMimeReader.cs, backend/src/Host/Hosting/Warnings/StaleDerivedDataStartupReport.cs -->
 
 Mail carries credentials. A deployment key pasted into a thread, a connection string in a stack trace, an API token a
 colleague sent because it was quicker than a vault — all of it arrives in a mailbox and, from there, would otherwise
@@ -18,6 +18,7 @@ The boundary is **egress and derived data**, never ingestion. The table names th
 | --- | --- |
 | Extracted text, chunks, and the embeddings built from them | Redacted before they are written, so the placeholder is what is stored and later retrieved |
 | Text handed to a model, to a hosted embedding endpoint, or back through an MCP tool | Redacted in flight, on every call |
+| The message a caller asks this deployment to send or to hold as a draft | **Nothing is rewritten.** What is found cancels the act instead |
 | The stored RFC 822 bytes | **Nothing.** They are never rewritten |
 
 Raw MIME stays byte-exact because it is the fetched artifact and the local source of truth: redacting it would break
@@ -46,7 +47,7 @@ below.
 ## The guarded egress points
 
 Every place text leaves this deployment goes through one guard, and the guard is told which place it is. There are
-four, and the register is closed: a fifth is a code change rather than a configuration one, which is what makes the
+five, and the register is closed: a sixth is a code change rather than a configuration one, which is what makes the
 list below answerable by reading it.
 
 | Egress point | What crosses it |
@@ -55,6 +56,7 @@ list below answerable by reading it.
 | `hosted_embedding_input` | Every passage sent to a hosted embedding endpoint |
 | `mcp_snippet` | The mail text an MCP tool answers with: the subjects and sender display names of a listing, the same plus the extracts of a search, and an answer with its citations |
 | `mcp_email_content` | The message `get_email_content` returns: both body representations, the subject, and every participant's display name |
+| `outgoing_mail` | The message a caller asks to send or to hold as a draft: its subject and both body representations, read back out of the MIME it would be transmitted as |
 
 **A value is guarded, never a composed document.** A snippet, a subject, and a question are each scanned on their own
 and the result is composed afterwards. Scanning the composed thing instead would let one detection cover the end of one
@@ -91,10 +93,77 @@ contracts already hold rather than something redaction would enforce. MailFathom
 deterministic in-process embedding generator is exempt for a different reason: nothing leaves the process, so there is
 nothing for a guard to sit in front of.
 
-A refusal at any of the four fails the operation it guards, as [failing closed](#failing-closed) describes — the
-question is not answered, the passages are not embedded, the listing is not served, the message is not returned. What
+**The fifth is the one a redaction never reaches**, because rewriting what an author wrote is not a disposition
+MailFathom may take: a placeholder in a message somebody signed would be sent in their name. It refuses the act instead,
+and [outgoing mail is screened rather than redacted](#outgoing-mail-is-screened-rather-than-redacted) is where that
+difference is stated in full.
+
+A refusal at any of the five fails the operation it guards, as [failing closed](#failing-closed) describes — the
+question is not answered, the passages are not embedded, the listing is not served, the message is not returned, the
+send is not queued. What
 each guarded call found, refused, and cost is published; [telemetry § what guarding an egress point
 publishes](../operations/telemetry.md#what-guarding-an-egress-point-publishes) names the instruments.
+
+## Outgoing mail is screened rather than redacted
+
+A message this deployment is about to send is the one guarded text MailFathom did not derive and does not own. Somebody
+wrote it, their name is on it, and a placeholder dropped into it would be transmitted in that name — so at
+`outgoing_mail` the finding cancels the act instead of rewriting it. Nothing is redacted, nothing is edited, and
+nothing partial is stored.
+
+**Every route into a send and every route into a draft is covered, because the screen sits where they converge.** There
+is one way a message enters the outbox and one way a draft is written, and the screen is inside each of them rather than
+at the tools in front of them. So the act is judged identically whether it was a `send_email` call, a send an operator
+asked for at a later moment, an occurrence of a recurring send, a `save_draft`, a revision through `update_draft`, or a
+held draft promoted by `send_draft` — including the promotion of a draft written before the deployment screened
+anything, which is judged when it is sent rather than grandfathered in.
+
+**What is screened is the composed message**, read back out of the MIME that would actually be transmitted: the subject,
+the plain-text body, and the HTML alternative exactly as it will leave, markup and all. Reading the composed message
+rather than the arguments a caller sent is what makes the routes above one contract — a promotion and a recurring
+occasion carry bytes and no authored fields at all.
+
+**Attachments are not screened.** A scan is over text, and an attachment is a byte stream a caller supplied whose type
+this deployment does not undertake to parse. An operator who needs an attachment examined needs a different control
+than this one, and reporting it as covered here would be worse than saying it is not.
+
+**Nothing is written down when the screen stops the act.** No outbox row, no draft, no revision, no content row. The
+draft being revised keeps the text it already had, and the message is refused before the transaction the act would have
+committed is opened.
+
+**A caller reads why.** The refusal carries `59001` naming the category that stopped it — never the rule, the position,
+the confidence, or one character of what was found — and `59002` when the text was longer than
+`SensitiveContent:MaximumAnalyzedCharacters`, which stops the act because nothing read the remainder and a message
+whose tail nobody analyzed is exactly the message that must not leave. Both belong to the MCP boundary's own category,
+so an MCP client is told what happened rather than that the tool failed; the same
+[error reporting](mcp-tools.md#error-reporting) rule governs every other code.
+
+### What it screens for, and why the default is secrets alone
+
+Screening reuses the deployment's scanners, its category lists, its suppressions, and its bounds. What it does not reuse
+is which findings matter, because a redaction and a refusal are not the same act at the same cost:
+`SensitiveContent:ScreenOutgoingMailFor` names the scanners whose findings stop a send.
+
+- **The default is `Secrets`.** A credential in an outgoing message is what this exists for, and no ordinary
+  correspondence carries one, so the default protects a deployment that switched a scanner on without reading this page
+  and refuses almost nothing it did not mean to.
+- **`Pii` is named or it is absent.** A mailbox is made of names, addresses, and signature blocks, so a deployment that
+  screened outgoing mail for personal data would refuse nearly every message somebody tried to send. That is a
+  defensible configuration for regulated correspondence and a broken one everywhere else, which is why it is written
+  down rather than inherited. The consequence to read twice: a deployment running **only** the personal-data scanner
+  screens no outgoing mail at all until it names `Pii` here, because the default names a scanner that deployment has
+  switched off.
+- **`[]` switches screening off** while the scanners keep redacting everywhere else, and is how an operator says that
+  what leaves through a model may be redacted but what a person sends is theirs.
+- **A scanner named here but switched off screens nothing**, because it detects nothing to screen with. Naming one is
+  not how it is switched on.
+
+With no scanner switched on, nothing is screened, no message is parsed, and no detector is constructed — the opt-in
+nobody took costs an enqueue and a draft save nothing at all.
+
+Each stopped act is counted, by egress point, scanner, and category, without the message or the finding;
+[telemetry § what guarding an egress point publishes](../operations/telemetry.md#what-guarding-an-egress-point-publishes)
+names the instrument.
 
 ## Reading a message is scanned in flight
 

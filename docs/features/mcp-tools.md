@@ -392,8 +392,10 @@ configured name for an account and carries nothing the caller did not already wr
 | `57001` | Answering would cost more than this deployment allows | `ask_mail` on a server whose current period has spent its allowance, or a run that reached what one question may spend; the message says which, and only the first becomes answerable by waiting |
 | `57002` | Sending would carry this period past a ceiling this deployment configured | Any of the three sending tools, or `send_draft`, on a deployment whose `MailDelivery:SendCeilings` for the account, for the installation, or for the calling client itself has no room for the message; the message names which of the six ceilings and never the number, and the period's roll-over is when asking again can succeed. The same code answers a period already counting as many distinct callers as this deployment holds counts for, and says so rather than naming a ceiling nobody configured |
 | `58001` | The call asked for a state the record has already passed | `cancel_outgoing_email` on a send that is being transmitted, has been transmitted, or was already given up on — three situations and one answer, because nothing was withdrawn in any of them and which it was reads from the state the record itself carries |
+| `59001` | The message carries material this deployment will not let leave | Any of the three sending tools, `save_draft`, `update_draft`, or `send_draft`, on a deployment whose [`SensitiveContent:ScreenOutgoingMailFor`](../operations/configuration-ai.md#sensitivecontent) covers what was found in the subject or either body. The answer names the category and never the rule, the position, or one character of the material; nothing is queued and no draft is written, so editing the message and asking again is the whole remedy |
+| `59002` | Part of the message is longer than this deployment scans, so nothing read the part that would have left | The same six tools where one screened value — the subject, the plain-text body, or the HTML alternative — is longer than `SensitiveContent:MaximumAnalyzedCharacters`. The ceiling is applied to each of the three on its own rather than to the message, so a message of three eight-thousand-character values is scanned whole under a ten-thousand-character ceiling. The act is stopped because the remainder of one value was never analyzed rather than because anything was found, and only an operator raising the ceiling — or a shorter subject or body — changes the answer |
 
-Codes `51001` through `53010`, `55001`, `56001` through `56003`, `57001`, `57002`, and `58001` are the use cases' own, allocated in the
+Codes `51001` through `53010`, `55001`, `56001` through `56003`, `57001`, `57002`, `58001`, `59001`, and `59002` are the use cases' own, allocated in the
 MCP-boundary category because that is
 where they surface, and every one of them is written for a caller to read. That is the whole rule the boundary applies: a
 failure whose code belongs to that category is published as it stands, and a failure from any other category — a schema
@@ -1694,7 +1696,8 @@ duplication nothing downstream can withdraw. That is what `idempotentHint` `true
 ### Every bound is asked now rather than when the draft was written
 
 Whether sending is on for the account, whether every recipient is somebody this deployment may write to, the ceilings,
-and the size bound are all asked at the promotion. So are the two bounds that are about the caller rather than the
+the size bound, and the [outgoing-mail screen](mail-delivery.md#what-must-not-leave-in-a-message) are all asked at the
+promotion, so a draft written before an operator switched screening on is judged by the screen as it stands today. So are the two bounds that are about the caller rather than the
 deployment: this caller's own ceiling for the period, and — where an operator set `MailDelivery:UnvouchedRecipients` to
 `Refuse` — the posture on a recipient nothing here vouches for, which answers `53009`. A draft records where each of its
 addresses came from, so promoting a drafted reply is judged as that reply would have been and promoting a message
@@ -1727,8 +1730,12 @@ configured bound is `51014` naming the number; an account this deployment does n
 `Delivery` block behind a promotion is `56002`; an email that cannot be answered is `53005` for
 [the four reasons a reply gives](#what-a-reply-and-a-forward-refuse); a promotion naming a recipient the caller wrote
 out itself that nothing here vouches for is `53009`, on a deployment whose `MailDelivery:UnvouchedRecipients` is
-`Refuse`; and a draft asked to be sent that names nobody is `53010` `MailDraftNotAddressed` — the one refusal that is
-about the draft rather than about the deployment, whose remedy is `update_draft` rather than a second save.
+`Refuse`; a draft asked to be sent that names nobody is `53010` `MailDraftNotAddressed` — the one refusal that is
+about the draft rather than about the deployment, whose remedy is `update_draft` rather than a second save; and a draft
+carrying material this deployment will not let leave is `59001` naming the category, or `59002` where one of its
+screened values was longer than the analyzed ceiling. Those last two answer `save_draft` and `update_draft` as much as
+`send_draft`, because the screen is asked where a draft is written as well as where one is promoted, and the remedy is
+editing the message rather than asking again.
 
 Every one of them names a field, a bound, or a count and never a value, so no refusal carries an address, a subject, or
 a line of what somebody wrote.

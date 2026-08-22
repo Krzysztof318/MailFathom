@@ -1,6 +1,6 @@
 # Mail delivery
 
-<!-- describes: backend/src/Application/Mail/Delivery/**, backend/src/Domain/Delivery/**, backend/src/Domain/Scheduling/**, backend/src/Infrastructure/Mail/MailKit/Delivery/**, backend/src/Infrastructure/Mail/Mime/Composition/**, backend/src/Infrastructure/Persistence/Delivery/**, backend/src/Infrastructure/Observability/LoggedAuthoredSendAuditor.cs, backend/src/Infrastructure/Mail/MailAccountDeliveryOptions.cs, backend/src/Infrastructure/Mail/SmtpAccountSettings.cs, backend/src/Host/Configuration/Mail/ConfiguredSmtpAccountSettingsProvider.cs, backend/src/Host/Configuration/Mail/ConfiguredOutgoingSendPermissionReader.cs, backend/src/Host/Configuration/Mail/MailDeliveryOptions.cs, backend/src/Host/Configuration/Mail/MailSynchronizationOptions.cs, backend/src/Host/Hosting/Workers/OutboxDeliveryWorker.cs -->
+<!-- describes: backend/src/Application/Mail/Delivery/**, backend/src/Domain/Delivery/**, backend/src/Domain/Scheduling/**, backend/src/Infrastructure/Mail/MailKit/Delivery/**, backend/src/Infrastructure/Mail/Mime/Composition/**, backend/src/Infrastructure/Mail/Mime/MimeKitOutgoingMailTextReader.cs, backend/src/Infrastructure/Persistence/Delivery/**, backend/src/Infrastructure/Observability/LoggedAuthoredSendAuditor.cs, backend/src/Infrastructure/Mail/MailAccountDeliveryOptions.cs, backend/src/Infrastructure/Mail/SmtpAccountSettings.cs, backend/src/Host/Configuration/Mail/ConfiguredSmtpAccountSettingsProvider.cs, backend/src/Host/Configuration/Mail/ConfiguredOutgoingSendPermissionReader.cs, backend/src/Host/Configuration/Mail/MailDeliveryOptions.cs, backend/src/Host/Configuration/Mail/MailSynchronizationOptions.cs, backend/src/Host/Hosting/Workers/OutboxDeliveryWorker.cs -->
 
 Reading a mailbox and submitting to one are two capabilities against two servers, and MailFathom holds them apart. The
 submission half is whole: an account declares where its mail is submitted, a **delivery session** is opened against that
@@ -553,6 +553,41 @@ A recipient a server temporarily rejected stays outstanding with the reply that 
 [The stored email schema](../architecture/stored-email-schema.md#the-outgoing-messages-waiting-to-be-sent) holds the
 columns, the stages, and which of them each terminal stage may follow.
 
+## What must not leave in a message
+
+A deployment that scans for sensitive content scans what it is about to send, and the answer at that point is not a
+redaction. A placeholder written into somebody's message would be transmitted under their name, so the finding
+**cancels the act**: nothing is queued, nothing is stored, and the caller is told which kind of material stopped it.
+
+**The question is asked inside `MailOutbox.EnqueueAsync` and inside the one way a draft is written**, which is what
+makes it hold for every route rather than for the tools that happen to exist today. A send asked for now, a send held
+until a later moment, an occasion of a repeated send, a draft, a revision of one, and a draft promoted to a send are
+all judged the same way — including the promotion of a draft written before the operator switched screening on, since
+what is judged is the message leaving rather than when it was composed.
+
+**What is read is the composed MIME**: the subject and both body representations, exactly as they would be transmitted.
+Attachments are not read, and neither are the addresses — an address is what the message is for rather than text to
+examine, on the same line every other guarded point here draws.
+
+**The refusal is asked after the grant, the recipient policy, and the ceilings above, and before the transaction that
+would have written anything.** So a screened message leaves no record, no stored payload, and no draft revision behind,
+and a draft being revised keeps the text it already had — but the caller's own ceiling has already been charged, because
+admitting a send is what charges it and nothing releases the charge when a later step refuses. A caller whose message
+the screen stops has spent one message and its recipients out of its period — and asking again under the key it first
+used costs nothing further, since the charge is keyed on the send's own idempotency identity and a second ask under
+that key is admitted without being charged again. Only a fresh key spends another message and its recipients. The account's and the deployment's ceilings are unaffected, since those are counted from the outgoing
+records and the refusal writes none.
+
+A caller reads `59001` naming the category, or `59002` where one screened value — the subject or either body — was
+longer than the deployment's analyzed ceiling and nothing read the remainder of it; the ceiling is applied to each value
+on its own rather than to the message as a whole. Neither carries the rule, the position, or one character of what was
+found.
+Which scanners stop a send is the operator's, defaults to secrets alone, and is
+[`SensitiveContent:ScreenOutgoingMailFor`](../operations/configuration-ai.md#sensitivecontent); [sensitive-content
+scanning § outgoing mail is screened rather than
+redacted](sensitive-content-scanning.md#outgoing-mail-is-screened-rather-than-redacted) holds the whole of it. With no
+scanner switched on nothing here runs, and an enqueue costs exactly what it did before.
+
 ## Asking for a message to be sent
 
 `AuthoredMailSubmission` is the one use case a boundary reaches to send a message that answers nothing, and it composes
@@ -1045,6 +1080,11 @@ the draft rather than a key whoever asked supplies: their two asks compose one i
 second with the record the first opened. It is the same mechanism [an occasion of a repeated
 send](#a-message-the-owner-asked-to-be-sent-again) is keyed by, and it is here for the same reason: a message put in
 somebody's mailbox twice is the one duplication nothing downstream can withdraw.
+
+**A draft is screened on the way in as well as on the way out.** What a deployment [must not
+send](#what-must-not-leave-in-a-message) it also does not write down, so a draft carrying screened material is refused
+when it is saved rather than held until somebody tries to promote it — and a draft written before screening was
+switched on is refused at the promotion, like every other bound tightened after a draft was stored.
 
 **A promotion that fails leaves the draft exactly as it was.** Nothing about the draft is written until the outgoing
 record exists, so a refusal is a message the owner still has. And the draft is given up on **delivery** rather than on

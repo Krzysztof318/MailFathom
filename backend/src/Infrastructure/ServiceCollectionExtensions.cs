@@ -44,6 +44,7 @@ using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Scheduling;
+using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Application.Mail.Delivery.Tracking;
 using MailFathom.Application.Mail.Maintenance;
@@ -654,6 +655,15 @@ public static class ServiceCollectionExtensions
             provider.GetService<SensitiveContentRedactor>(),
             provider.GetRequiredService<ISensitiveContentEgressTelemetry>(),
             provider.GetRequiredService<TimeProvider>()));
+        // Its refusing counterpart, registered on the same terms and inert in the same two ways: no redactor where both
+        // switches are off, and a policy that stops nothing where the deployment named no scanner to stop an act with.
+        // A consumer therefore calls it unconditionally and never asks whether screening exists.
+        services.AddSingleton(provider => new SensitiveContentEgressScreen(
+            provider.GetService<SensitiveContentRedactor>(),
+            provider.GetService<SensitiveContentScreeningPolicy>()
+                ?? SensitiveContentScreeningPolicy.ScreeningNothing(),
+            provider.GetRequiredService<ISensitiveContentEgressTelemetry>(),
+            provider.GetRequiredService<TimeProvider>()));
 
         // Its counterpart on the way in, registered on the same terms and for the same reasons. The stamp is composed
         // here rather than held by the redactor, because it is the derived store's question rather than the redaction's:
@@ -856,6 +866,12 @@ public static class ServiceCollectionExtensions
         // against one reload of the account list it was scheduled from.
         services.AddScoped<IOutgoingMailUsageReader, OutgoingMailUsageReader>();
         services.AddScoped<OutgoingMailGovernor>();
+        // What the message says, asked beside what the bounds allow and by the same two callers. Both are singletons
+        // because neither holds anything: the reader is handed bytes and parses them, and the screening composes it
+        // with the process-wide screen over the process-wide policy. A scope would resolve the same two objects it
+        // did last time, so scoping it would allocate per work unit and buy nothing.
+        services.AddSingleton<IOutgoingMailTextReader, MimeKitOutgoingMailTextReader>();
+        services.AddSingleton<OutgoingMailScreening>();
         services.AddScoped<MailOutbox>();
         // The operator's view of the same records, registered beside the outbox rather than with the administrative
         // endpoint that serves it today: the grant is asked in the use case, so a second entrypoint reaching it is

@@ -271,6 +271,7 @@ internal static class AnsweredMailSubmissions
             Substitute.For<IOutboxOperationStore>(),
             granted,
             OutgoingMailGovernors.Permitting(),
+            OutgoingMailScreenings.Inactive(),
             new FakeTimeProvider(RecordedAt));
     }
 

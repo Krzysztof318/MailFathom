@@ -12,14 +12,17 @@ using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Composition;
+using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
+using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
+using MailFathom.Mcp.Failures;
 using MailFathom.Mcp.Tools;
 using MailFathom.Mcp.Tools.Outgoing;
 using MailFathom.Mcp.UnitTests.TestDoubles;
@@ -48,6 +51,9 @@ public sealed class SendEmailToolTests
     private const string Account = "work";
 
     private static readonly DateTimeOffset Recorded = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
+
+    /// <summary>A value the shared scanning deployment detects, and one no real credential is.</summary>
+    private const string ScreenedMarker = "AKIAEXAMPLEKEY";
 
     private static readonly ReadOnlyMemory<byte> ComposedMime =
         Encoding.ASCII.GetBytes("Message-ID: <one@example.test>\r\n\r\nHello.").AsMemory();
@@ -377,6 +383,42 @@ public sealed class SendEmailToolTests
         Assert.DoesNotContain("Shall we meet?", refusal.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// The scan is over the composed message rather than over the arguments, which is what makes the screen cover every
+    /// route into the outbox. The marker is planted in the composed bytes alone and appears in none of the arguments, so
+    /// a screen reading the caller's fields would find nothing and this test would fail rather than pass for the wrong
+    /// reason. A caller reads the refusal because its code belongs to the boundary's own category; a code outside it
+    /// would reach the same caller as "the tool failed unexpectedly" and tell them nothing to act on.
+    /// </summary>
+    [Fact]
+    public async Task SendEmailAsync_AMessageCarryingScreenedMaterial_RefusesReadablyAndQueuesNothing()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, new FakeTimeProvider(Recorded));
+        var store = new InMemoryOutgoingEmailStore(timeProvider: new FakeTimeProvider(Recorded));
+        var tool = ToolOver(
+            out _,
+            screening: OutgoingMailScreenings.Through(egress.Screen),
+            store: store,
+            composed: Encoding.ASCII.GetBytes($"Subject: Keys\r\n\r\nThe key is {ScreenedMarker}.").AsMemory());
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
+            () => tool.SendEmailAsync(
+                Account,
+                ["anna@example.test"],
+                "Keys",
+                "The key is in the paragraph below.",
+                "send-1",
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.OutgoingMailContentRefused, refusal.ErrorCode);
+        Assert.True(McpToolFailure.CanDescribeToClient(refusal));
+        Assert.DoesNotContain(ScreenedMarker, refusal.Message, StringComparison.Ordinal);
+        Assert.Empty(store.OpenRequests);
+    }
+
     private static AuthoredEmail ComposedMessage(IAuthoredEmailComposer composer) => (AuthoredEmail)composer
         .ReceivedCalls()
         .Single(call => call.GetMethodInfo().Name == nameof(IAuthoredEmailComposer.Compose))
@@ -384,9 +426,12 @@ public sealed class SendEmailToolTests
 
     private static SendEmailTool ToolOver(
         out IAuthoredEmailComposer composer,
-        AccessAuthorization? authorization = null)
+        AccessAuthorization? authorization = null,
+        OutgoingMailScreening? screening = null,
+        InMemoryOutgoingEmailStore? store = null,
+        ReadOnlyMemory<byte>? composed = null)
     {
-        composer = ComposingAuthoredEmails.ThatComposes(ComposedMime);
+        composer = ComposingAuthoredEmails.ThatComposes(composed ?? ComposedMime);
         var granted = authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend);
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
@@ -403,7 +448,7 @@ public sealed class SendEmailToolTests
             new NamedRecipientResolver(Substitute.For<IContactDirectory>()),
             composer,
             new MailOutbox(
-                new InMemoryOutgoingEmailStore(timeProvider: new FakeTimeProvider(Recorded)),
+                store ?? new InMemoryOutgoingEmailStore(timeProvider: new FakeTimeProvider(Recorded)),
                 Substitute.For<IEmailContentStore>(),
                 new OptimisticConcurrencyRetryPolicy(
                     sessionFactory,
@@ -414,6 +459,7 @@ public sealed class SendEmailToolTests
                 Substitute.For<IOutboxOperationStore>(),
                 granted,
                 OutgoingMailGovernors.Permitting(),
+                screening ?? OutgoingMailScreenings.Inactive(),
                 new FakeTimeProvider(Recorded)),
             AuthoredSendGovernors.Permitting(granted),
             granted,

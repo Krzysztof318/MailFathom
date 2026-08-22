@@ -4,6 +4,7 @@
 
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Infrastructure.SensitiveContent.PersonalData;
 
 namespace MailFathom.Host.Configuration.SensitiveContent;
@@ -17,6 +18,16 @@ namespace MailFathom.Host.Configuration.SensitiveContent;
 /// </remarks>
 internal static class SensitiveContentPlanMapper
 {
+    /// <summary>The scanners that stop an outgoing message where a deployment named none, which is most deployments.</summary>
+    /// <remarks>
+    /// One rather than both, for the reason <see cref="SensitiveContentScannerKind" /> gives for keeping the two
+    /// switches apart at all: a credential identifies itself and was never meant to be in a message somebody is
+    /// sending, while personal data is what correspondence is made of. Screening for the second by default would
+    /// refuse most ordinary mail on a deployment that switched it on to protect its AI egress.
+    /// </remarks>
+    private static readonly SensitiveContentScannerKind[] DefaultScreeningScanners =
+        [SensitiveContentScannerKind.Secrets];
+
     /// <summary>Composes the plan a configuration describes.</summary>
     /// <param name="settings">The bound section, already judged by <see cref="SensitiveContentDeclarationRules" />.</param>
     /// <param name="catalogs">Every catalog the registered scanners declare.</param>
@@ -51,6 +62,36 @@ internal static class SensitiveContentPlanMapper
                 settings.ScanTimeout,
                 settings.MaximumConcurrentScans),
             scanners);
+    }
+
+    /// <summary>Composes what a deployment refuses to let leave in a message it is about to send or file.</summary>
+    /// <param name="settings">The bound section, already judged by <see cref="SensitiveContentOptions.Validate" />.</param>
+    /// <param name="plan">The plan the same settings composed, which decides which categories a named scanner covers.</param>
+    /// <returns>The policy every screened act is judged by, which screens nothing where nothing was named.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// An absent key takes the default and a written empty list takes nothing, which is the distinction the key is
+    /// typed as an array to preserve. An entry that names no scanner is unreachable here, because startup validation
+    /// refuses it before anything is composed; one reaching this anyway is dropped rather than guessed at.
+    /// </remarks>
+    public static SensitiveContentScreeningPolicy MapScreeningPolicy(
+        SensitiveContentOptions settings,
+        SensitiveContentPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(plan);
+
+        var named = settings.ScreenOutgoingMailFor is { } configured
+            ? configured
+                .Select(scanner => Enum.TryParse<SensitiveContentScannerKind>(scanner, ignoreCase: true, out var kind)
+                    ? kind
+                    : (SensitiveContentScannerKind?)null)
+                .Where(kind => kind is not null)
+                .Select(kind => kind!.Value)
+                .ToArray()
+            : DefaultScreeningScanners;
+
+        return SensitiveContentScreeningPolicy.Create(plan, named);
     }
 
     /// <summary>Composes the profile the personal-data analyzer is reached under.</summary>

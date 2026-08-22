@@ -23,6 +23,7 @@ public sealed class SensitiveContentEgressTelemetryTests
     private const string FindingsInstrumentName = "mailfathom.sensitive_content.findings";
     private const string OmittedInstrumentName = "mailfathom.sensitive_content.omitted";
     private const string RefusalsInstrumentName = "mailfathom.sensitive_content.refusals";
+    private const string StoppedInstrumentName = "mailfathom.sensitive_content.stopped";
     private const string DurationInstrumentName = "mailfathom.sensitive_content.scan.duration";
 
     private const string EgressPointTagName = "mailfathom.sensitive_content.egress_point";
@@ -149,6 +150,7 @@ public sealed class SensitiveContentEgressTelemetryTests
     [InlineData(nameof(SensitiveContentEgressPoint.HostedEmbeddingInput), "hosted_embedding_input")]
     [InlineData(nameof(SensitiveContentEgressPoint.McpSnippet), "mcp_snippet")]
     [InlineData(nameof(SensitiveContentEgressPoint.McpEmailContent), "mcp_email_content")]
+    [InlineData(nameof(SensitiveContentEgressPoint.OutgoingMail), "outgoing_mail")]
     public void RecordGuarded_EachEgressPoint_PublishesItsOwnTagValue(string egressPointName, string expectedTag)
     {
         // Arrange
@@ -164,6 +166,51 @@ public sealed class SensitiveContentEgressTelemetryTests
         // Assert
         Assert.Equal([1d], measurements.ValuesOf(GuardedInstrumentName));
         Assert.Equal([expectedTag], measurements.DimensionOf(GuardedInstrumentName, EgressPointTagName));
+    }
+
+    /// <summary>An act nobody was allowed to perform is the one thing this family does that a redaction never shows.</summary>
+    [Fact]
+    public void RecordStopped_AnActStoppedForWhatWasFound_CountsItAgainstTheScannerAndTheCategory()
+    {
+        // Arrange
+        using var measurements = new RecordedMailFathomMeasurements(StoppedInstrumentName);
+
+        // Act
+        this.telemetry.RecordStopped(
+            SensitiveContentEgressPoint.OutgoingMail,
+            SensitiveContentEgressRefusal.ContentFound(
+                SensitiveContentScannerKind.Secrets,
+                SensitiveContentCategory.Create("CloudKey")));
+
+        // Assert
+        var stopped = Assert.Single(measurements.Read(StoppedInstrumentName));
+
+        Assert.Equal(1, stopped.Value);
+        Assert.Equal("outgoing_mail", stopped.Tags[EgressPointTagName]);
+        Assert.Equal("secrets", stopped.Tags[ScannerTagName]);
+        Assert.Equal("CloudKey", stopped.Tags[CategoryTagName]);
+    }
+
+    /// <summary>
+    /// A length refusal names no scanner and no category, and both tags are written all the same: an operator summing
+    /// this counter by scanner would otherwise lose every act stopped because nothing read the whole text.
+    /// </summary>
+    [Fact]
+    public void RecordStopped_AnActStoppedBecauseNothingReadItAll_StillPublishesBothDimensions()
+    {
+        // Arrange
+        using var measurements = new RecordedMailFathomMeasurements(StoppedInstrumentName);
+
+        // Act
+        this.telemetry.RecordStopped(
+            SensitiveContentEgressPoint.OutgoingMail,
+            SensitiveContentEgressRefusal.NotFullyScanned());
+
+        // Assert
+        var stopped = Assert.Single(measurements.Read(StoppedInstrumentName));
+
+        Assert.Equal("not_scanned", stopped.Tags[ScannerTagName]);
+        Assert.Equal("not_scanned", stopped.Tags[CategoryTagName]);
     }
 
     private static SensitiveContentFinding FindingOf(string category, int start) =>
