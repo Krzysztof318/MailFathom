@@ -25,18 +25,6 @@ internal sealed class StubTransport : HttpMessageHandler
     /// <summary>Gets what was sent, in order, so a test can assert on the request as well as on the answer.</summary>
     internal List<RecordedRequest> Requests { get; } = [];
 
-    /// <summary>Answers every request with one JSON body.</summary>
-    /// <param name="json">The body.</param>
-    /// <param name="status">The status to answer with.</param>
-    /// <returns>The transport.</returns>
-    internal static StubTransport AnsweringJson(string json, HttpStatusCode status = HttpStatusCode.OK) =>
-        new(_ => JsonResponse(json, status));
-
-    /// <summary>Answers every request by failing the way the given exception describes.</summary>
-    /// <param name="failure">What the transport raises instead of answering.</param>
-    /// <returns>The transport.</returns>
-    internal static StubTransport Failing(Exception failure) => new(_ => throw failure);
-
     /// <summary>Builds a JSON answer.</summary>
     /// <param name="json">The body.</param>
     /// <param name="status">The status.</param>

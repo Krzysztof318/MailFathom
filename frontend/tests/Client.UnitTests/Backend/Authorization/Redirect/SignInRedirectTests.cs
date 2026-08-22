@@ -81,4 +81,30 @@ public sealed class SignInRedirectTests
         Assert.Equal("the-code", redirect.Code);
         Assert.Equal("ABCD1234", redirect.State);
     }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("?favicon=1")]
+    public void CarriesAnAnswer_ARequestThatWasNeverPartOfThisFlow_SaysSo(string? query)
+    {
+        // Arrange, Act
+        var redirect = SignInRedirect.FromQuery(query);
+
+        // Assert
+        Assert.False(redirect.CarriesAnAnswer);
+    }
+
+    [Theory]
+    [InlineData("?code=the-code&state=ABCD1234")]
+    [InlineData("?error=access_denied&state=ABCD1234")]
+    [InlineData("?state=ABCD1234")]
+    public void CarriesAnAnswer_ARedirectAddressedToThisFlow_SaysSoWhicheverWayItAnswered(string query)
+    {
+        // Arrange, Act
+        var redirect = SignInRedirect.FromQuery(query);
+
+        // Assert
+        Assert.True(redirect.CarriesAnAnswer);
+    }
 }

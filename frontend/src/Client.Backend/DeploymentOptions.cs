@@ -30,8 +30,8 @@ public sealed record DeploymentOptions
     /// <param name="address">The deployment's base address, which every route is resolved against.</param>
     /// <param name="clientId">The client identifier registered with the deployment's authorization server.</param>
     /// <param name="timeout">How long a single request may take, or <see langword="null" /> for <see cref="DefaultTimeout" />.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="address" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when the address is not an absolute web address, or the client identifier is blank.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="address" /> or <paramref name="clientId" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when the address is not an absolute web address or carries more than an origin, or the client identifier is blank.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the timeout is not positive.</exception>
     public DeploymentOptions(Uri address, string clientId, TimeSpan? timeout = null)
     {

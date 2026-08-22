@@ -142,7 +142,10 @@ public sealed class DeploymentSignIn
         }
 
         return new PendingSignIn(
-            new UriBuilder(authorization.AuthorizationEndpoint) { Query = Encode(query) }.Uri,
+            new UriBuilder(authorization.AuthorizationEndpoint)
+            {
+                Query = Merge(authorization.AuthorizationEndpoint.Query, Encode(query)),
+            }.Uri,
             state,
             proofKey);
     }
@@ -182,6 +185,20 @@ public sealed class DeploymentSignIn
     /// reading a <see cref="FormUrlEncodedContent" /> back as a string — would make building an address an asynchronous
     /// operation for no gain.
     /// </remarks>
+    /// <summary>Adds this request's parameters to whatever query the authorization endpoint already publishes.</summary>
+    /// <remarks>
+    /// RFC 6749 section 3.1: an authorization endpoint may carry a query component of its own — a tenant's policy
+    /// parameter is the one that appears in practice — and it must be retained when parameters are added to it.
+    /// Assigning <see cref="UriBuilder.Query" /> replaces the whole component, so the published one is read first and
+    /// the request's parameters appended to it.
+    /// </remarks>
+    private static string Merge(string publishedQuery, string parameters)
+    {
+        var published = publishedQuery.TrimStart('?');
+
+        return published.Length == 0 ? parameters : $"{published}&{parameters}";
+    }
+
     private static string Encode(IEnumerable<KeyValuePair<string, string>> parameters) =>
         string.Join(
             '&',

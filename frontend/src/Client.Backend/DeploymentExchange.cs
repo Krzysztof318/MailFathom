@@ -85,6 +85,17 @@ internal static class DeploymentExchange
                 failure);
         }
         catch (HttpRequestException failure)
+            when (failure.HttpRequestError == HttpRequestError.ConfigurationLimitExceeded)
+        {
+            // An answer that declared no length and then ran past MaxResponseContentBufferSize while it was being
+            // buffered. Nothing is wrong with the connection, so it is the same outcome ReadBodyAsync reports for the
+            // answer that declared its size up front: something answered, and what it answered is not usable.
+            throw new DeploymentFailure(
+                DeploymentFailureReason.Unusable,
+                "MailFathom answered with more than this client will read, so the answer was not used.",
+                failure);
+        }
+        catch (HttpRequestException failure)
         {
             throw new DeploymentFailure(
                 DeploymentFailureReason.Unreachable,

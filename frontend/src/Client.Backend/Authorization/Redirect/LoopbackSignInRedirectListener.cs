@@ -41,6 +41,24 @@ public sealed class LoopbackSignInRedirectListener : ISignInRedirectListener
         </html>
         """);
 
+    /// <summary>What the browser tab is left showing when the person refused the sign-in or the server did.</summary>
+    /// <remarks>
+    /// It says what happened and nothing about why. The refusal code arrived through the person's browser from a
+    /// machine this process does not own, and writing it back into this page would put an attacker's words on a page
+    /// MailFathom appears to have authored.
+    /// </remarks>
+    private static readonly byte[] RefusalPage = Encoding.UTF8.GetBytes(
+        """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head><meta charset="utf-8"><title>MailFathom</title></head>
+        <body style="font-family: system-ui, sans-serif; margin: 4rem auto; max-width: 32rem;">
+        <h1>Not signed in</h1>
+        <p>The sign-in was refused or dismissed. You can close this tab and try again from MailFathom.</p>
+        </body>
+        </html>
+        """);
+
     private readonly HttpListener listener;
 
     /// <summary>Binds a free loopback port and prepares to answer one redirect on it.</summary>
@@ -87,12 +105,18 @@ public sealed class LoopbackSignInRedirectListener : ISignInRedirectListener
 
         try
         {
-            var context = await this.listener.GetContextAsync().ConfigureAwait(false);
-            var redirect = SignInRedirect.FromQuery(context.Request.Url?.Query);
+            while (true)
+            {
+                var context = await this.listener.GetContextAsync().ConfigureAwait(false);
+                var redirect = SignInRedirect.FromQuery(context.Request.Url?.Query);
 
-            await AnswerBrowserAsync(context.Response, cancellationToken).ConfigureAwait(false);
+                await AnswerBrowserAsync(context.Response, redirect, cancellationToken).ConfigureAwait(false);
 
-            return redirect;
+                if (redirect.CarriesAnAnswer)
+                {
+                    return redirect;
+                }
+            }
         }
         catch (Exception failure)
             when (failure is HttpListenerException or ObjectDisposedException
@@ -153,13 +177,33 @@ public sealed class LoopbackSignInRedirectListener : ISignInRedirectListener
         }
     }
 
-    private static async Task AnswerBrowserAsync(HttpListenerResponse response, CancellationToken cancellationToken)
+    /// <summary>Tells the person in the browser what this process just read, rather than what it hoped to read.</summary>
+    /// <remarks>
+    /// The tab is the only surface the person is looking at while the application waits, so a refusal that answered
+    /// with the completion page would say the sign-in succeeded at the moment the caller is about to report that it did
+    /// not. A request carrying nothing was never part of this flow and is answered as the nothing it asked for.
+    /// </remarks>
+    private static async Task AnswerBrowserAsync(
+        HttpListenerResponse response,
+        SignInRedirect redirect,
+        CancellationToken cancellationToken)
     {
-        response.StatusCode = (int)HttpStatusCode.OK;
-        response.ContentType = "text/html; charset=utf-8";
-        response.ContentLength64 = CompletionPage.Length;
+        var page = redirect switch
+        {
+            { Error: not null } => RefusalPage,
+            { CarriesAnAnswer: true } => CompletionPage,
+            _ => null,
+        };
 
-        await response.OutputStream.WriteAsync(CompletionPage, cancellationToken).ConfigureAwait(false);
+        response.StatusCode = (int)(page is null ? HttpStatusCode.NotFound : HttpStatusCode.OK);
+        response.ContentLength64 = page?.Length ?? 0;
+
+        if (page is not null)
+        {
+            response.ContentType = "text/html; charset=utf-8";
+
+            await response.OutputStream.WriteAsync(page, cancellationToken).ConfigureAwait(false);
+        }
 
         response.Close();
     }

@@ -369,6 +369,34 @@ public sealed class DeploymentSignInTests
         Assert.True(harness.Listener.Disposed);
     }
 
+    [Fact]
+    public async Task SignInAsync_AnAuthorizationEndpointPublishingAQuery_KeepsItRatherThanReplacingIt()
+    {
+        // Arrange
+        // A tenant that routes to a named policy through the endpoint address itself, which is how the largest
+        // deployments of this grant publish it.
+        const string PublishedWithAPolicy =
+            $$"""
+            {"issuer":"{{Issuer}}","authorization_endpoint":"{{Issuer}}/authorize?p=b2c_1_signin","token_endpoint":"{{Issuer}}/token"}
+            """;
+
+        using var harness = new DeploymentHarness(
+            Publishing(PublishedMetadata),
+            request => request.Method == HttpMethod.Post
+                ? StubTransport.JsonResponse("""{"access_token":"the-token","expires_in":3600}""")
+                : StubTransport.JsonResponse(PublishedWithAPolicy),
+            StubSignInRedirectListener.Approved);
+
+        // Act
+        await harness.SignIn.SignInAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var query = harness.Listener.OpenedAuthorizationUrl!.Query;
+
+        Assert.Contains("p=b2c_1_signin", query, StringComparison.Ordinal);
+        Assert.Contains("response_type=code", query, StringComparison.Ordinal);
+    }
+
     private static Func<HttpRequestMessage, HttpResponseMessage> Publishing(string metadata) =>
         _ => StubTransport.JsonResponse(metadata);
 

@@ -17,6 +17,14 @@ namespace MailFathom.Client.Backend.Authorization.Redirect;
 /// </remarks>
 public sealed record SignInRedirect(string? Code, string? State, string? Error)
 {
+    /// <summary>Gets whether this carries an answer at all, rather than being a request that merely arrived.</summary>
+    /// <remarks>
+    /// A freshly bound redirect address answers whatever reaches it, and a browser prefetch, a port scan, or a stale
+    /// tab reaches it without carrying any of the three. This says only that something was addressed to this flow;
+    /// whether it belongs to <em>this</em> sign-in is the state comparison's answer and nothing else's.
+    /// </remarks>
+    internal bool CarriesAnAnswer => this.Code is not null || this.State is not null || this.Error is not null;
+
     /// <summary>Reads a redirect out of the query the browser came back with.</summary>
     /// <param name="query">The query part of the address the redirect landed on, with or without its leading question mark.</param>
     /// <returns>What the query carried, with every part absent where the query held nothing for it.</returns>

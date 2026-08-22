@@ -157,6 +157,25 @@ public sealed class DeploymentClientTests
     }
 
     [Fact]
+    public async Task ReadSessionAsync_AnAnswerRunningPastTheBufferWithoutDeclaringItsLength_IsUnusableRatherThanUnreachable()
+    {
+        // Arrange
+        // What the transport raises when MaxResponseContentBufferSize is passed while the body is buffered, which is
+        // the only signal an answer that declared no length ever gives.
+        using var harness = new DeploymentHarness(
+            _ => throw new HttpRequestException(
+                HttpRequestError.ConfigurationLimitExceeded,
+                "Cannot write more bytes to the buffer than the configured maximum buffer size."));
+
+        // Act
+        var failure = await Assert.ThrowsAsync<DeploymentFailure>(
+            () => harness.Client.ReadSessionAsync(TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(DeploymentFailureReason.Unusable, failure.Reason);
+    }
+
+    [Fact]
     public async Task ReadSessionAsync_NobodySignedIn_PresentsNoCredentialRatherThanRefusingToAsk()
     {
         // Arrange
