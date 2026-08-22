@@ -632,7 +632,7 @@ dotnet tool install --global csharp-ls --version 0.26.0
 
 `aspire` is only required for Aspire CLI workflows against the AppHost. `csharp-ls` is the C# language server that editors and agent tooling launch to resolve symbols before editing, instead of discovering a misspelled type at build time.
 
-`csharp-ls` is installed globally rather than pinned in `.config/dotnet-tools.json` because a manifest-local tool is only reachable as `dotnet tool run csharp-ls`; it never lands on `PATH`, so a client that launches the bare `csharp-ls` executable still fails with `ENOENT`. A global install puts it in `~/.dotnet/tools`, which is on `PATH`, and keeps the language server out of the `dotnet tool restore` that continuous integration runs. All versions are recorded in `THIRD_PARTY_LICENSES.md`; keep the register aligned when you move to a newer one.
+`csharp-ls` is installed globally rather than pinned in `.config/dotnet-tools.json` because a manifest-local tool is only reachable as `dotnet tool run csharp-ls`; it never lands on `PATH`, so a client that launches the bare `csharp-ls` executable still fails with `ENOENT`. A global install puts it in `~/.dotnet/tools`, which is on `PATH`, and keeps the language server out of the `dotnet tool restore` that continuous integration runs. `Aspire.Cli` is recorded in `THIRD_PARTY_LICENSES.md`, because continuous integration installs it at this version too; keep the register aligned when you move to a newer one. `csharp-ls` has no row there and nothing is missing: the register records what this repository pins, invokes, or ships, and a language server an editor launches on a contributor's machine is none of the three. The version above is still the reviewed one to install.
 
 ### EF Core design-time commands
 
@@ -718,7 +718,7 @@ On a machine that is already authenticated, add the scope to the stored credenti
 gh auth refresh -s project
 ```
 
-Confirm the result with `gh auth status`, which must list `project` among the token scopes. Its reviewed version is recorded in `THIRD_PARTY_LICENSES.md` alongside the other developer tooling.
+Confirm the result with `gh auth status`, which must list `project` among the token scopes. `THIRD_PARTY_LICENSES.md` reviews `gh` alongside the other developer tooling and pins no version for it: every copy this repository runs is the one a runner image or a distribution provided.
 
 ## Package sources and lock files
 
