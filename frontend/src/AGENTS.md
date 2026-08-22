@@ -161,6 +161,41 @@ frontend/
   step of `CI`'s `Frontend` job run the verifying pass over the whole solution. Never invoke `dotnet format` by hand,
   for the reason the repository never does: both halves already run where they belong.
 
+## `MediaPlayerElement` is available, and the desktop head pays for it at packaging time
+
+**`MediaPlayerElement` may be used.** It needs `MediaPlayerElement;` added to `UnoFeatures` in the project file, which
+is not there today, and nothing else in this stack changes for it. Reach for it when a screen genuinely plays media —
+a video or audio attachment is the obvious case — rather than as a general-purpose surface.
+
+What it costs is not paid in this repository and is not paid by the feature flag. On Linux the control is implemented
+over `LibVLCSharp`, which is LGPL-2.1-or-later and is the one copyleft component anywhere in either stack's graph. It
+is already in the `net10.0-desktop` graph whether or not the feature is on: `Uno.WinUI.Runtime.Skia.X11` declares it
+unconditionally, and a `net10.0-desktop` build copies `LibVLCSharp.dll` into the output today. The browser head's
+graph resolves none of it. `THIRD_PARTY_LICENSES.md` carries the verdict — it stays — and
+[ADR 0016](../../docs/decisions/0016-third-party-licence-obligations-per-artifact.md) the rule behind it, which is
+that a component carrying a licence condition stays separately replaceable in every artifact that ships it.
+
+So the bill falls on whoever first packages a desktop head for distribution, in the form of four build properties that
+are never set on a head whose graph carries that assembly, because each one takes replaceability away:
+
+- **No assembly merging.** Nothing folds `LibVLCSharp.dll` into another assembly — not ILMerge, not ILRepack, not a
+  packaging step that produces one assembly out of several.
+- **No trimming of it.** `PublishTrimmed` rewrites the assemblies it keeps, and a rewritten library is a modified one,
+  which is a different clause of the licence and a different review.
+- **No Native AOT for that head.** It compiles the graph into one image, which is the opposite of a separate unit a
+  recipient can swap.
+- **`PublishSingleFile` only with the assembly kept out of the bundle**, through `ExcludeFromSingleFile`, so it stays a
+  file beside the application rather than one a recipient cannot reach.
+
+And one thing that must be present rather than absent: the notices travelling with that artifact carry the LGPL-2.1
+text, the statement that the Library is used and is covered by it, and access to LibVLCSharp's corresponding source
+from the same place the artifact is downloaded from. `THIRD_PARTY_LICENSES.md` records which issue owns producing that
+bundle and what else it has to satisfy.
+
+Bundling the native VLC libraries — the `VideoLAN.LibVLC.*` packages, which nothing restores today — is a **separate
+licence review** and is not covered by the one above. VideoLAN publishes its software under GNU GPL v2 *or* LGPL
+rather than under one licence, so what a native bundle carries has to be read before it is added, not after.
+
 ## Running the client
 
 `dotnet run --project frontend/src/Client/Client.csproj --framework <head>` is how a head starts, and the framework has
