@@ -27,9 +27,11 @@ namespace MailFathom.Application.Mail.Delivery.Screening;
 /// is read back, so an opt-in nobody took costs a send no parse, no allocation, and no scan.
 /// </para>
 /// </remarks>
-/// <param name="text">Reads back what the composed message says.</param>
+/// <param name="textReader">Reads back what the composed message says.</param>
 /// <param name="screen">Judges those values against what this deployment refuses to let leave.</param>
-public sealed class OutgoingMailScreening(IOutgoingMailTextReader text, SensitiveContentEgressScreen screen)
+public sealed class OutgoingMailScreening(
+    IOutgoingMailTextReader textReader,
+    SensitiveContentEgressScreen screen)
 {
     /// <summary>Screens one composed message and reports what stops it, if anything does.</summary>
     /// <param name="rawMime">The RFC 822 bytes about to be stored and transmitted or filed.</param>
@@ -53,7 +55,7 @@ public sealed class OutgoingMailScreening(IOutgoingMailTextReader text, Sensitiv
             return null;
         }
 
-        var composed = await text.ReadAsync(rawMime, cancellationToken);
+        var composed = await textReader.ReadAsync(rawMime, cancellationToken);
 
         return await screen.ScreenAsync(
             SensitiveContentEgressPoint.OutgoingMail,

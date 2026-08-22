@@ -385,8 +385,10 @@ public sealed class SendEmailToolTests
 
     /// <summary>
     /// The scan is over the composed message rather than over the arguments, which is what makes the screen cover every
-    /// route into the outbox. A caller reads the refusal because its code belongs to the boundary's own category; a code
-    /// outside it would reach the same caller as "the tool failed unexpectedly" and tell them nothing to act on.
+    /// route into the outbox. The marker is planted in the composed bytes alone and appears in none of the arguments, so
+    /// a screen reading the caller's fields would find nothing and this test would fail rather than pass for the wrong
+    /// reason. A caller reads the refusal because its code belongs to the boundary's own category; a code outside it
+    /// would reach the same caller as "the tool failed unexpectedly" and tell them nothing to act on.
     /// </summary>
     [Fact]
     public async Task SendEmailAsync_AMessageCarryingScreenedMaterial_RefusesReadablyAndQueuesNothing()
@@ -406,7 +408,7 @@ public sealed class SendEmailToolTests
                 Account,
                 ["anna@example.test"],
                 "Keys",
-                $"The key is {ScreenedMarker}.",
+                "The key is in the paragraph below.",
                 "send-1",
                 cancellationToken: TestContext.Current.CancellationToken));
 

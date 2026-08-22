@@ -569,12 +569,18 @@ what is judged is the message leaving rather than when it was composed.
 Attachments are not read, and neither are the addresses — an address is what the message is for rather than text to
 examine, on the same line every other guarded point here draws.
 
-**The refusal is asked before the transaction that would have written anything.** It stands beside the grant, the
-recipient policy, and the ceilings above rather than after them, so a screened message leaves no record, no stored
-payload, and no draft revision behind, and a draft being revised keeps the text it already had.
+**The refusal is asked after the grant, the recipient policy, and the ceilings above, and before the transaction that
+would have written anything.** So a screened message leaves no record, no stored payload, and no draft revision behind,
+and a draft being revised keeps the text it already had — but the caller's own ceiling has already been charged, because
+admitting a send is what charges it and nothing releases the charge when a later step refuses. A caller whose message
+the screen stops has spent one message and its recipients out of its period, and asking again with the material removed
+is another. The account's and the deployment's ceilings are unaffected, since those are counted from the outgoing
+records and the refusal writes none.
 
-A caller reads `59001` naming the category, or `59002` where the message was longer than the deployment's analyzed
-ceiling and nothing read the remainder. Neither carries the rule, the position, or one character of what was found.
+A caller reads `59001` naming the category, or `59002` where one screened value — the subject or either body — was
+longer than the deployment's analyzed ceiling and nothing read the remainder of it; the ceiling is applied to each value
+on its own rather than to the message as a whole. Neither carries the rule, the position, or one character of what was
+found.
 Which scanners stop a send is the operator's, defaults to secrets alone, and is
 [`SensitiveContent:ScreenOutgoingMailFor`](../operations/configuration-ai.md#sensitivecontent); [sensitive-content
 scanning § outgoing mail is screened rather than
