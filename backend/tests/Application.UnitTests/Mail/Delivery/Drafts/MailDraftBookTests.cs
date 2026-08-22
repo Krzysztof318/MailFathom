@@ -8,6 +8,7 @@ using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -303,6 +304,43 @@ public sealed class MailDraftBookTests
         Assert.Equal(MailFathomErrorCode.OutgoingMailContentRefused, refusal.ErrorCode);
         Assert.Contains(MarkerSensitiveContentScanner.Category.Name, refusal.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(ScreenedMarker, refusal.Message, StringComparison.Ordinal);
+        Assert.Empty(harness.Drafts.Drafts);
+        Assert.Equal(0, harness.AppendCount);
+    }
+
+    /// <summary>
+    /// A draft the ceiling cut is refused for the length rather than for a category, and the caller reads a code whose
+    /// remedy is its own: write a shorter draft, or have the operator raise the ceiling. It is asserted through the
+    /// book because that is where the code reaches a caller.
+    /// </summary>
+    [Fact]
+    public async Task SaveAsync_DraftLongerThanOneScanAnalyzes_RefusesForTheLengthAndWritesNothing()
+    {
+        // Arrange
+        var harness = Harness();
+        harness.MapDraftsFolder(Account);
+
+        using var egress = ScanningSensitiveContentEgress.Finding(
+            ScreenedMarker,
+            new FakeTimeProvider(Moment),
+            bounds: SensitiveContentScanBounds.Create(
+                maximumAnalyzedCharacters: 16,
+                TimeSpan.FromSeconds(15),
+                maximumConcurrentScans: 4));
+
+        harness.ScreenWith(OutgoingMailScreenings.Through(egress.Screen));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
+            () => harness.Book.SaveAsync(
+                Account,
+                OutgoingEmailRequester.Command("mfctl-4f2a"),
+                Composed("a draft far longer than this deployment analyzes in one scan"),
+                revises: null,
+                CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.OutgoingMailNotFullyScanned, refusal.ErrorCode);
         Assert.Empty(harness.Drafts.Drafts);
         Assert.Equal(0, harness.AppendCount);
     }

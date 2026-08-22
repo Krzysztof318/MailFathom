@@ -930,7 +930,7 @@ beneath the read that asked for the payload, so one call's guarding is readable 
 
 | Instrument | What it answers |
 | --- | --- |
-| `mailfathom.sensitive_content.guarded` | How many texts were scanned before something was done with them — published at the four redacting points, or allowed to leave at `outgoing_mail` |
+| `mailfathom.sensitive_content.guarded` | How many texts were scanned, whatever followed. At `outgoing_mail` the text that stopped the act is counted here too, so this is not a count of what left |
 | `mailfathom.sensitive_content.findings` | How many detections were made, split by `mailfathom.sensitive_content.category`. What followed depends on the point: replaced at the four redacting ones, and at `outgoing_mail` either counted and let through or, where the deployment screens for that category, the reason the act was stopped |
 | `mailfathom.sensitive_content.omitted` | How many characters the analyzed ceiling dropped rather than trust unscanned — dropped from what was published at the four redacting points, and at `outgoing_mail` the reason the act was stopped |
 | `mailfathom.sensitive_content.refusals` | How many operations a scanner that could not answer refused, by `mailfathom.sensitive_content.scanner` |

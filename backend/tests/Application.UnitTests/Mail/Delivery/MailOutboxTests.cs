@@ -12,6 +12,7 @@ using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -422,6 +423,46 @@ public sealed class MailOutboxTests
             Arg.Any<OutgoingEmailId>(),
             Arg.Any<ReadOnlyMemory<byte>>(),
             Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A message the ceiling cut is refused for the length rather than for a category, because nothing established what
+    /// its remainder carried. The code is what a caller acts on and it is a different remedy from the one above — the
+    /// author shortens the message, or the operator raises the ceiling — so it is asserted through the outbox rather
+    /// than only where the screen produces it.
+    /// </summary>
+    [Fact]
+    public async Task EnqueueAsync_MessageLongerThanOneScanAnalyzes_RefusesForTheLengthAndWritesNothing()
+    {
+        // Arrange
+        var store = new InMemoryOutgoingEmailStore();
+        var signal = new MailOutboxSignal(capacity: 4);
+
+        using var egress = ScanningSensitiveContentEgress.Finding(
+            ScreenedMarker,
+            new FakeTimeProvider(Authored),
+            bounds: SensitiveContentScanBounds.Create(
+                maximumAnalyzedCharacters: 16,
+                TimeSpan.FromSeconds(15),
+                maximumConcurrentScans: 4));
+
+        var outbox = CreateOutbox(
+            store,
+            Substitute.For<IEmailContentStore>(),
+            signal: signal,
+            screening: OutgoingMailScreenings.Through(egress.Screen));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<OutgoingMailRefusedException>(
+            () => outbox.EnqueueAsync(
+                CreateRequest("mfctl-4f2a"),
+                Encoding.UTF8.GetBytes("a message far longer than this deployment analyzes in one scan"),
+                CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.OutgoingMailNotFullyScanned, refusal.ErrorCode);
+        Assert.Empty(store.OpenRequests);
+        Assert.Equal(0, signal.Depth);
     }
 
     /// <summary>A message carrying nothing the deployment screens for is queued exactly as an unscreened one is.</summary>
