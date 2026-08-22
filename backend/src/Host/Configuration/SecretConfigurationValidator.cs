@@ -266,7 +266,10 @@ internal sealed partial class SecretConfigurationValidator
             await this.FindSecretReferenceErrorsAsync(McpEndpointOptions.SectionName, candidate, cancellationToken));
 
         errors.AddRange(await this.FindClientCertificateTrustAnchorErrorsAsync(candidate, cancellationToken));
-        errors.AddRange(await this.FindUnreachableApiKeyErrorsAsync(candidate, cancellationToken));
+        errors.AddRange(await this.FindUnreachableApiKeyErrorsAsync(
+            McpEndpointOptions.SectionName,
+            candidate.Authentication,
+            cancellationToken));
         errors.AddRange(await this.FindClientPublicKeyErrorsAsync(
             McpEndpointOptions.SectionName,
             candidate.Authentication,
@@ -301,6 +304,42 @@ internal sealed partial class SecretConfigurationValidator
 
         errors.AddRange(await this.FindClientPublicKeyErrorsAsync(
             AdminEndpointOptions.SectionName,
+            candidate.Authentication,
+            cancellationToken));
+
+        return errors;
+    }
+
+    /// <summary>Finds everything an operator must fix before the client endpoint's secrets can be used.</summary>
+    /// <param name="candidate">The bound endpoint settings, which are read once during composition.</param>
+    /// <param name="cancellationToken">Cancels the resolution.</param>
+    /// <returns>One message per unusable setting, empty when the section's secrets are all usable.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="candidate" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// A disabled endpoint configures no credentials worth proving, and validating them anyway would fail a host over
+    /// one nothing was going to read. The structural rules of the section are its own and run during composition; this
+    /// covers the secrets it carries, on exactly the terms every other section's secrets are covered.
+    /// </remarks>
+    internal async Task<IReadOnlyList<string>> FindClientEndpointConfigurationErrorsAsync(
+        ClientEndpointOptions candidate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        if (!candidate.Enabled)
+        {
+            return [];
+        }
+
+        var errors = new List<string>(
+            await this.FindSecretReferenceErrorsAsync(ClientEndpointOptions.SectionName, candidate, cancellationToken));
+
+        errors.AddRange(await this.FindUnreachableApiKeyErrorsAsync(
+            ClientEndpointOptions.SectionName,
+            candidate.Authentication,
+            cancellationToken));
+        errors.AddRange(await this.FindClientPublicKeyErrorsAsync(
+            ClientEndpointOptions.SectionName,
             candidate.Authentication,
             cancellationToken));
 
@@ -413,12 +452,20 @@ internal sealed partial class SecretConfigurationValidator
     /// The key is named by its configuration position and by nothing else. Neither the material nor the issuer it names
     /// appears, because a key is a credential and the issuer was read out of one.
     /// </para>
+    /// <para>
+    /// It takes the section's name and its entries rather than one endpoint's settings, because the shape it reports is
+    /// a property of a list of credentials rather than of the surface serving them: every endpoint admitting both an
+    /// API key and an access token can be configured into it.
+    /// </para>
     /// </remarks>
     private async Task<IReadOnlyList<string>> FindUnreachableApiKeyErrorsAsync(
-        McpEndpointOptions candidate,
+        string sectionName,
+        IList<TransportAuthenticationOptions> methods,
         CancellationToken cancellationToken)
     {
-        if (!candidate.AllowsApiKey || !candidate.AllowsOAuth)
+        var oauthMethods = TransportAuthenticationConfiguration.OAuthMethodsIn(methods);
+
+        if (TransportAuthenticationConfiguration.ApiKeysIn(methods).Count == 0 || oauthMethods.Count == 0)
         {
             return [];
         }
@@ -426,7 +473,7 @@ internal sealed partial class SecretConfigurationValidator
         // Composed from the profiles that are well formed rather than from all of them, because this runs beside the
         // structural rules rather than after them: a malformed issuer is already being reported by its own check, and
         // asking it for a validated value here would raise instead of adding to that report.
-        var configuredIssuers = candidate.OAuthMethods()
+        var configuredIssuers = oauthMethods
             .SelectMany(oauthMethod => oauthMethod.AuthorizationServers)
             .Where(authorizationServer => OAuthIdentifierUri.IsWellFormed(authorizationServer.Issuer))
             .Select(authorizationServer => authorizationServer.ValidatedIssuer())
@@ -435,7 +482,7 @@ internal sealed partial class SecretConfigurationValidator
         var errors = new List<string>();
 
         // The loop stays because each step awaits a retrieval, and the position is part of the reported path.
-        foreach (var (entryIndex, configuredKey) in candidate.Authentication
+        foreach (var (entryIndex, configuredKey) in methods
             .Index()
             .Where(entry => entry.Item.ApiKey is not null)
             .Select(entry => (entry.Index, Key: entry.Item.ApiKey!)))
@@ -455,7 +502,7 @@ internal sealed partial class SecretConfigurationValidator
                 if (NamesAConfiguredIssuer(material, configuredIssuers))
                 {
                     errors.Add(
-                        $"{McpEndpointOptions.SectionName}:{TransportAuthenticationConfiguration.SettingName}:{entryIndex}:{nameof(TransportAuthenticationOptions.ApiKey)} — this key is a JSON Web Token naming one of the configured authorization servers, so every request presenting it is judged as an access token by that server and the key itself is never compared; issue an opaque key instead.");
+                        $"{sectionName}:{TransportAuthenticationConfiguration.SettingName}:{entryIndex}:{nameof(TransportAuthenticationOptions.ApiKey)} — this key is a JSON Web Token naming one of the configured authorization servers, so every request presenting it is judged as an access token by that server and the key itself is never compared; issue an opaque key instead.");
                 }
             }
         }

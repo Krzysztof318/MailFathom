@@ -25,4 +25,7 @@ internal enum ServedSurfaces
 
     /// <summary>The startup, readiness, and liveness probes.</summary>
     Probes = 4,
+
+    /// <summary>The client surface beneath its route prefix, and its protected resource metadata document.</summary>
+    Client = 8,
 }

@@ -82,6 +82,49 @@ public sealed class TransportRateLimitingStartupReportTests
     }
 
     [Fact]
+    public async Task StartAsync_EnabledClientEndpointWithoutRateLimits_WarnsThatNothingBoundsTheTraffic()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var report = ReportFor(
+            new McpEndpointOptions(),
+            new AdminEndpointOptions(),
+            logs,
+            EnabledClientEndpoint(new TransportRateLimitingOptions { Enabled = false }));
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.Single(logs.Records);
+        Assert.Equal(LogLevel.Warning, record.Level);
+        Assert.Equal("client", Assert.Contains("EndpointName", record.Properties));
+        Assert.Equal("/api/client", Assert.Contains("EndpointPath", record.Properties));
+        Assert.Equal("ClientEndpoint:RateLimiting", Assert.Contains("RateLimitingSection", record.Properties));
+    }
+
+    [Fact]
+    public async Task StartAsync_EnabledClientEndpointWithRateLimits_StatesTheLimitsInForce()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var report = ReportFor(
+            new McpEndpointOptions(),
+            new AdminEndpointOptions(),
+            logs,
+            EnabledClientEndpoint(new TransportRateLimitingOptions { MaxConcurrentRequests = 7 }));
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.Single(logs.Records);
+        Assert.Equal(LogLevel.Information, record.Level);
+        Assert.Equal("client", Assert.Contains("EndpointName", record.Properties));
+        Assert.Equal(7, Assert.Contains("MaxConcurrentRequests", record.Properties));
+    }
+
+    [Fact]
     public async Task StartAsync_EnabledEndpointWithRateLimits_StatesEveryLimitInForce()
     {
         // Arrange
@@ -224,16 +267,24 @@ public sealed class TransportRateLimitingStartupReportTests
         RateLimiting = rateLimitingSettings,
     };
 
+    private static ClientEndpointOptions EnabledClientEndpoint(TransportRateLimitingOptions rateLimitingSettings) => new()
+    {
+        Enabled = true,
+        RateLimiting = rateLimitingSettings,
+    };
+
     private static TransportRateLimitingStartupReport ReportFor(
         McpEndpointOptions mcpEndpointSettings,
         AdminEndpointOptions adminEndpointSettings,
-        RecordingLoggerProvider logs)
+        RecordingLoggerProvider logs,
+        ClientEndpointOptions? clientEndpointSettings = null)
     {
         using var loggerFactory = LoggerFactory.Create(logging => logging.AddProvider(logs));
 
         return new TransportRateLimitingStartupReport(
             Options.Create(mcpEndpointSettings),
             Options.Create(adminEndpointSettings),
+            Options.Create(clientEndpointSettings ?? new ClientEndpointOptions()),
             loggerFactory.CreateLogger<TransportRateLimitingStartupReport>());
     }
 }

@@ -6,6 +6,7 @@ using System.Text.Json;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Access;
+using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Transport;
 using Xunit;
 
@@ -19,7 +20,7 @@ namespace MailFathom.Host.UnitTests.Api;
 /// the endpoint refuses for a reason the client never sees. The names are asserted from the serialized form rather than
 /// from the record's properties, because the wire names are what the specification fixes and what a client matches on.
 /// </remarks>
-public sealed class AdminProtectedResourceMetadataEndpointTests
+public sealed class ProtectedResourceMetadataEndpointTests
 {
     private const string Resource = "https://mail.example.test:8443/api/admin";
 
@@ -30,7 +31,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
         var oauthSettings = Configured();
 
         // Act
-        var document = ProtectedResourceMetadataDocument.For([new TransportAuthenticationOptions { OAuth = oauthSettings }]);
+        var document = ProtectedResourceMetadataDocument.For([new TransportAuthenticationOptions { OAuth = oauthSettings }], AdminEndpointOptions.GrantedSurface);
 
         // Assert
         Assert.Equal(Resource, document.Resource);
@@ -62,7 +63,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
         });
 
         // Act
-        var document = ProtectedResourceMetadataDocument.For([Entry(), new TransportAuthenticationOptions { OAuth = partners }]);
+        var document = ProtectedResourceMetadataDocument.For([Entry(), new TransportAuthenticationOptions { OAuth = partners }], AdminEndpointOptions.GrantedSurface);
 
         // Assert
         Assert.Equal(Resource, document.Resource);
@@ -85,7 +86,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
         oauthSettings.AdvertisedScopes.Add("offline_access");
 
         // Act
-        var document = ProtectedResourceMetadataDocument.For([new TransportAuthenticationOptions { OAuth = oauthSettings }]);
+        var document = ProtectedResourceMetadataDocument.For([new TransportAuthenticationOptions { OAuth = oauthSettings }], AdminEndpointOptions.GrantedSurface);
 
         // Assert
         Assert.Equal(["mailfathom.admin", "mailfathom.read", "offline_access"], document.ScopesSupported);
@@ -96,7 +97,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
     public void For_AnySettings_OffersTheHeaderAsTheOnlyWayToPresentAToken()
     {
         // Act
-        var document = ProtectedResourceMetadataDocument.For([Entry()]);
+        var document = ProtectedResourceMetadataDocument.For([Entry()], AdminEndpointOptions.GrantedSurface);
 
         // Assert
         Assert.Equal(["header"], document.BearerMethodsSupported);
@@ -115,7 +116,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
         entry.GrantTheWholeSurface();
 
         // Act
-        var document = ProtectedResourceMetadataDocument.For([entry]);
+        var document = ProtectedResourceMetadataDocument.For([entry], AdminEndpointOptions.GrantedSurface);
 
         // Assert
         Assert.Equal(
@@ -128,7 +129,7 @@ public sealed class AdminProtectedResourceMetadataEndpointTests
     public void Serialized_TheDocument_CarriesTheNamesRfc9728Defines()
     {
         // Arrange
-        var document = ProtectedResourceMetadataDocument.For([Entry()]);
+        var document = ProtectedResourceMetadataDocument.For([Entry()], AdminEndpointOptions.GrantedSurface);
 
         // Act
         using var serialized = JsonDocument.Parse(JsonSerializer.Serialize(document));

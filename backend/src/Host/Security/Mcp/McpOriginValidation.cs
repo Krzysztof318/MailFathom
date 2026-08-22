@@ -30,7 +30,7 @@ internal static class McpOriginValidation
     {
         ArgumentNullException.ThrowIfNull(app);
 
-        var originPolicy = app.Services.GetRequiredService<McpOriginPolicy>();
+        var originPolicy = app.Services.GetRequiredService<BrowserOriginPolicy>();
 
         app.UseWhen(
             context => context.Request.Path.StartsWithSegments(McpEndpointRoute.Path),

@@ -62,25 +62,30 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
     private readonly IHttpContextAccessor httpContextAccessor;
     private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly AdminEndpointOptions adminEndpointSettings;
+    private readonly ClientEndpointOptions clientEndpointSettings;
 
     /// <summary>Initializes the adapter over the request being served, if there is one.</summary>
     /// <param name="httpContextAccessor">Reports the request this scope belongs to, or nothing outside one.</param>
     /// <param name="mcpEndpointSettings">The MCP endpoint settings startup was composed from.</param>
     /// <param name="adminEndpointSettings">The administrative endpoint settings startup was composed from.</param>
+    /// <param name="clientEndpointSettings">The client endpoint settings startup was composed from.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     /// <remarks>The settings are the startup snapshot the schemes were registered from, which is the same one the startup report states the resolved grant out of; reading a reloaded value here would answer for a posture no scheme was composed against.</remarks>
     public TransportAuthorizedPrincipalSource(
         IHttpContextAccessor httpContextAccessor,
         IOptions<McpEndpointOptions> mcpEndpointSettings,
-        IOptions<AdminEndpointOptions> adminEndpointSettings)
+        IOptions<AdminEndpointOptions> adminEndpointSettings,
+        IOptions<ClientEndpointOptions> clientEndpointSettings)
     {
         ArgumentNullException.ThrowIfNull(httpContextAccessor);
         ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
         ArgumentNullException.ThrowIfNull(adminEndpointSettings);
+        ArgumentNullException.ThrowIfNull(clientEndpointSettings);
 
         this.httpContextAccessor = httpContextAccessor;
         this.mcpEndpointSettings = mcpEndpointSettings.Value;
         this.adminEndpointSettings = adminEndpointSettings.Value;
+        this.clientEndpointSettings = clientEndpointSettings.Value;
     }
 
     /// <inheritdoc />
@@ -111,8 +116,8 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
 
     /// <summary>Describes the caller a surface admits where it configures no credential for one to be told apart by.</summary>
     /// <remarks>
-    /// There is no entry for a grant to hang on, so the grant is the surface's whole half. The administrative surface is
-    /// asked first because it is the narrower of the two paths, and a surface that does configure a credential answers
+    /// There is no entry for a grant to hang on, so the grant is the surface's whole half. The two prefixed surfaces are
+    /// asked first because theirs are the narrower paths, and a surface that does configure a credential answers
     /// nothing here: a request that reached it without authenticating was admitted by nothing.
     /// </remarks>
     private AuthorizedPrincipal? UnnarrowedCallerOn(PathString path)
@@ -125,6 +130,13 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
         if (TransportSurface.Admin.Serves(path))
         {
             return this.adminEndpointSettings.RequiresAuthentication ? null : WholeSurfaceCaller(TransportSurface.Admin);
+        }
+
+        if (TransportSurface.Client.Serves(path))
+        {
+            return this.clientEndpointSettings.RequiresAuthentication
+                ? null
+                : WholeSurfaceCaller(TransportSurface.Client);
         }
 
         if (TransportSurface.Mcp.Serves(path))

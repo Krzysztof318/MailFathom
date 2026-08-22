@@ -640,6 +640,82 @@ public sealed class SecretConfigurationStartupValidatorTests
         Assert.Contains("private key", failure, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The client endpoint carries the same credential list again, and the rule has to hold on the third surface for the
+    /// reason it has to hold on the second: nothing else validates that section's secrets, so a rule that lapsed here
+    /// would let an operator register a private key on the surface that serves a person their own mail.
+    /// </summary>
+    [Fact]
+    public async Task StartingAsync_AClientPublicKeySettingHoldingAPrivateKey_FailsStartupSayingSo()
+    {
+        // Arrange
+        using var signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var endpoint = new ClientEndpointOptions { Enabled = true };
+        endpoint.Authentication.Add(new TransportAuthenticationOptions
+        {
+            PublicKey = new ConfiguredSecret
+            {
+                Name = "desktop-client",
+                SecretReference = $"plaintext:{signingKey.ExportPkcs8PrivateKeyPem()}",
+            },
+        });
+
+        var harness = CreateHarness(
+            new MailSynchronizationOptions(),
+            new PersistenceOptions(),
+            clientEndpointOptions: endpoint);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("ClientEndpoint:Authentication:0:PublicKey", failure, StringComparison.Ordinal);
+        Assert.Contains("private key", failure, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The client endpoint admits both credential shapes exactly as the MCP endpoint does, so the same key can be
+    /// configured into the same trap: it resolves, the profile is valid, and every request presenting it is judged by
+    /// the authorization server instead of compared, which no running deployment would ever report.
+    /// </summary>
+    [Fact]
+    public async Task StartingAsync_AClientApiKeyShapedLikeATokenOfAConfiguredServer_FailsStartupNamingItsPosition()
+    {
+        // Arrange
+        var authorizationServer = new AuthorizationServerOptions { Name = "workforce", Issuer = WorkforceIssuer };
+        authorizationServer.AuthorizedSubjects.Add("9f2c");
+
+        var oauth = new OAuthValidationOptions { Resource = "https://mail.example.test/api/client" };
+        oauth.AuthorizationServers.Add(authorizationServer);
+
+        var endpoint = new ClientEndpointOptions { Enabled = true };
+        endpoint.Authentication.Add(new TransportAuthenticationOptions { OAuth = oauth });
+        endpoint.Authentication.Add(new TransportAuthenticationOptions
+        {
+            ApiKey = new ConfiguredSecret
+            {
+                Name = "desktop-client",
+                SecretReference = $"plaintext:{TokenShapedKeyIssuedBy(WorkforceIssuer)}",
+            },
+        });
+
+        var harness = CreateHarness(
+            new MailSynchronizationOptions(),
+            new PersistenceOptions(),
+            clientEndpointOptions: endpoint);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("ClientEndpoint:Authentication:1:ApiKey", failure, StringComparison.Ordinal);
+        Assert.DoesNotContain(WorkforceIssuer, failure, StringComparison.Ordinal);
+    }
+
     /// <summary>Material that resolves but is not a certificate would pass a reference check and then refuse every client the profile exists to serve.</summary>
     [Fact]
     public async Task StartingAsync_AClientCertificateTrustAnchorThatIsNotACertificate_FailsStartupNamingItsPosition()
@@ -823,6 +899,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         IDatabaseConnectionSettingsValidator? databaseConnectionSettings = null,
         McpEndpointOptions? mcpEndpointOptions = null,
         AdminEndpointOptions? adminEndpointOptions = null,
+        ClientEndpointOptions? clientEndpointOptions = null,
         DataEncryptionOptions? dataEncryptionOptions = null)
     {
         var resolver = new PlaintextOnlySecretReferenceResolver { Source = source };
@@ -837,6 +914,7 @@ public sealed class SecretConfigurationStartupValidatorTests
             new StubSettingsSnapshot<DataEncryptionOptions>(dataEncryptionOptions ?? new DataEncryptionOptions()),
             Options.Create(mcpEndpointOptions ?? new McpEndpointOptions()),
             Options.Create(adminEndpointOptions ?? new AdminEndpointOptions()),
+            Options.Create(clientEndpointOptions ?? new ClientEndpointOptions()),
             new SecretConfigurationValidator(
                 resolver,
                 new TrustAnchorLoader(resolver),

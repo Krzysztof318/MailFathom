@@ -45,6 +45,26 @@ data:
             }
           }
         ]
+      },
+      "ClientEndpoint": {
+        "Enabled": true,
+        "Cors": {
+          "AllowedOrigins": [ "https://mailfathom.example.test" ]
+        },
+        "Authentication": [
+          {
+            "OAuth": {
+              "Resource": "https://mailfathom.example.test/api/client",
+              "AuthorizationServers": [
+                {
+                  "Name": "workforce",
+                  "Issuer": "https://sso.example.test/realms/mailfathom",
+                  "AuthorizedSubjects": [ "11111111-2222-3333-4444-555555555555" ]
+                }
+              ]
+            }
+          }
+        ]
       }
     }
 ---
@@ -92,7 +112,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: 7873d865b17c278a9bbc1c4ff73886c9c97a7bdb206b531d7486d0199ffee7cc
+        checksum/config: 92ef0949a4e875ba27f88306b713dc73767002414178c4dccdd7b0cbad121d89
       labels:
         app.kubernetes.io/name: mailfathom
         app.kubernetes.io/instance: mailfathom
@@ -238,6 +258,13 @@ spec:
       http:
         paths:
           - path: /mcp
+            pathType: Prefix
+            backend:
+              service:
+                name: mailfathom
+                port:
+                  number: 8080
+          - path: /api/client
             pathType: Prefix
             backend:
               service:

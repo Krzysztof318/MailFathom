@@ -1582,12 +1582,13 @@ something. The limiter runs **behind the certificate check and behind authentica
 before it counts, and **ahead of authorization**, so a request about to be refused for its credential has still spent
 capacity rather than being the one kind of traffic served without limit.
 
-**Every partition is keyed by the surface it belongs to**, including the anonymous one. The two endpoints' key lists are
-configured separately and neither consults the other's, so one name spelled under both is two independent buckets rather
-than one shared between them — and the burst an agent spends reaching a mailbox is never the burst an operator needs to
-administer the service.
+**Every partition is keyed by the surface it belongs to**, including the anonymous one. Each endpoint's key list is
+configured separately and none consults another's, so one name spelled under two sections is two independent buckets
+rather than one shared between them — and the burst an agent spends reaching a mailbox is never the burst an operator
+needs to administer the service, nor the burst somebody's own mail client spends on the client endpoint.
 
-Readiness, liveness, and the root endpoint are outside all of this and keep answering while either endpoint is refusing.
+Readiness, liveness, and the root endpoint are outside all of this and keep answering while any endpoint is refusing,
+because the limits are attached to each surface's routes rather than applied as the process's default policy.
 
 ### What a refused request receives
 

@@ -92,9 +92,18 @@ namespace MailFathom.Host;
 /// </remarks>
 internal static class HostComposition
 {
-    /// <summary>Tells the container which of the two certificate stores belongs to the administrative endpoint.</summary>
-    /// <remarks>Keyed because two endpoints each own a store and each loads and disposes only its own endpoint's material; a shared socket consults both in turn rather than merging them.</remarks>
+    /// <summary>Tells the container which of the three certificate stores belongs to the administrative endpoint.</summary>
+    /// <remarks>Keyed because each endpoint owns a store and loads and disposes only its own endpoint's material; a shared socket consults them in turn rather than merging them.</remarks>
     internal const string AdminCertificateStoreKey = "mailfathom.admin";
+
+    /// <summary>Tells the container which of the three certificate stores belongs to the client endpoint.</summary>
+    /// <remarks>
+    /// Keyed for the reason the administrative one is, and beside it rather than sharing it: one endpoint's profiles
+    /// must never decide what another presents. It is named after the endpoint rather than after its certificates,
+    /// because a "client certificate" everywhere else in this project is the one a caller presents for mutual TLS,
+    /// and this store holds the server certificate the client surface presents to a caller.
+    /// </remarks>
+    internal const string ClientEndpointCertificateStoreKey = "mailfathom.client";
 
     /// <summary>Registers every service this process runs on.</summary>
     /// <param name="builder">The application builder being composed.</param>
@@ -1061,7 +1070,14 @@ internal static class HostComposition
         var adminEndpointSettings = AdminEndpointOptions.ReadFrom(builder.Configuration);
         builder.Services.AddSingleton(Options.Create(adminEndpointSettings));
 
-        // Read once, like the two sections above and for the same reason: it decides which sockets are opened and which
+        // Read once, like the two sections above and for the same reason. The client surface reads the same mailbox the
+        // MCP endpoint does and is separate all the way down anyway: its own listener, its own credentials, its own
+        // authorization servers, and browser origins of its own. Bound strictly, so a misspelled key cannot leave a
+        // deployment serving a mailbox to a client nobody meant to enable.
+        var clientEndpointSettings = ClientEndpointOptions.ReadFrom(builder.Configuration);
+        builder.Services.AddSingleton(Options.Create(clientEndpointSettings));
+
+        // Read once, like the three sections above and for the same reason: it decides which sockets are opened and which
         // routes exist, both of which are settled while the application is being built. Bound strictly, so a misspelled key
         // cannot leave a deployment serving a posture nobody selected.
         var healthEndpointSettings = HealthEndpointOptions.ReadFrom(builder.Configuration);
@@ -1084,14 +1100,18 @@ internal static class HostComposition
         // A process serving none of its surfaces opens no listener at all, and Kestrel answers that by binding its own
         // default address — and, where an ASP.NET Core development certificate happens to be installed, a TLS one beside it.
         // That is a socket no section describes, serving whatever a route happens to match, so it is refused here instead.
-        if (!mcpEndpointSettings.Enabled && !adminEndpointSettings.Enabled && !healthEndpointSettings.Enabled)
+        if (!mcpEndpointSettings.Enabled
+            && !adminEndpointSettings.Enabled
+            && !clientEndpointSettings.Enabled
+            && !healthEndpointSettings.Enabled)
         {
             throw new OptionsValidationException(
                 McpEndpointOptions.SectionName,
                 typeof(McpEndpointOptions),
                 [
                     $"No network surface is enabled: '{McpEndpointOptions.SectionName}:Enabled', "
-                    + $"'{AdminEndpointOptions.SectionName}:Enabled', and '{HealthEndpointOptions.SectionName}:Enabled' "
+                    + $"'{AdminEndpointOptions.SectionName}:Enabled', '{ClientEndpointOptions.SectionName}:Enabled', and "
+                    + $"'{HealthEndpointOptions.SectionName}:Enabled' "
                     + "are all off, so the process would serve nothing while still holding a socket. Enable the surface this "
                     + "deployment exists to serve.",
                 ]);
@@ -1122,6 +1142,16 @@ internal static class HostComposition
                 adminEndpointConfigurationErrors);
         }
 
+        var clientEndpointConfigurationErrors = clientEndpointSettings.FindConfigurationErrors();
+
+        if (clientEndpointConfigurationErrors.Count > 0)
+        {
+            throw new OptionsValidationException(
+                ClientEndpointOptions.SectionName,
+                typeof(ClientEndpointOptions),
+                clientEndpointConfigurationErrors);
+        }
+
         var healthEndpointConfigurationErrors = healthEndpointSettings.FindConfigurationErrors();
 
         if (healthEndpointConfigurationErrors.Count > 0)
@@ -1139,6 +1169,7 @@ internal static class HostComposition
         [
             .. mcpEndpointSettings.DeclareListeners(),
             .. adminEndpointSettings.DeclareListeners(),
+            .. clientEndpointSettings.DeclareListeners(),
             .. healthEndpointSettings.DeclareListeners(),
         ]);
 
@@ -1154,6 +1185,11 @@ internal static class HostComposition
         // anything to say — the same reason the MCP warnings above are registered unconditionally.
         builder.Services.AddHostedService<AdminTransportSecurityWarning>();
 
+        // Beside it, and separate rather than a third branch inside it, because the two warn about different
+        // consequences: an unauthenticated administrative endpoint hands over the service, an unauthenticated client
+        // endpoint hands over the mail.
+        builder.Services.AddHostedService<ClientTransportSecurityWarning>();
+
         // Registered here rather than beside the MCP warnings because it reads both surfaces, and unconditionally for the
         // same reason they are: the report is what decides whether either surface has a clear-text port to account for.
         builder.Services.AddHostedService<TransportClearTextRedirectReport>();
@@ -1168,6 +1204,10 @@ internal static class HostComposition
 
         var adminRateLimits = adminEndpointSettings is { Enabled: true, RateLimiting.Enabled: true }
             ? adminEndpointSettings.RateLimiting.ToRateLimits()
+            : null;
+
+        var clientRateLimits = clientEndpointSettings is { Enabled: true, RateLimiting.Enabled: true }
+            ? clientEndpointSettings.RateLimiting.ToRateLimits()
             : null;
 
         // Registered once with every bounded surface rather than once per endpoint. The process-wide limiter is a single
@@ -1186,6 +1226,11 @@ internal static class HostComposition
             boundedSurfaces.Add(new BoundedTransportSurface(TransportSurface.Admin, adminRateLimits));
         }
 
+        if (clientRateLimits is not null)
+        {
+            boundedSurfaces.Add(new BoundedTransportSurface(TransportSurface.Client, clientRateLimits));
+        }
+
         if (boundedSurfaces.Count > 0)
         {
             builder.Services.AddTransportRateLimiting(boundedSurfaces);
@@ -1202,10 +1247,14 @@ internal static class HostComposition
             ? adminEndpointSettings.RequestTimeout.Duration
             : (TimeSpan?)null;
 
+        var clientRequestTimeout = clientEndpointSettings is { Enabled: true, RequestTimeout.Enabled: true }
+            ? clientEndpointSettings.RequestTimeout.Duration
+            : (TimeSpan?)null;
+
         // Named policies rather than the framework's default policy, which would apply to every route in the process and
         // so to the probes as well: a readiness answer abandoned because a mailbox query was slow would take the instance
         // out of traffic for the one thing that was still working.
-        if (mcpRequestTimeout is not null || adminRequestTimeout is not null)
+        if (mcpRequestTimeout is not null || adminRequestTimeout is not null || clientRequestTimeout is not null)
         {
             builder.Services.AddRequestTimeouts(requestTimeoutOptions =>
             {
@@ -1217,6 +1266,11 @@ internal static class HostComposition
                 if (adminRequestTimeout is { } adminTimeout)
                 {
                     requestTimeoutOptions.AddPolicy(TransportSurface.Admin.RequestTimeoutPolicyName, adminTimeout);
+                }
+
+                if (clientRequestTimeout is { } clientTimeout)
+                {
+                    requestTimeoutOptions.AddPolicy(TransportSurface.Client.RequestTimeoutPolicyName, clientTimeout);
                 }
             });
         }
@@ -1240,6 +1294,13 @@ internal static class HostComposition
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<ILogger<TransportServerCertificateStore>>()));
 
+        builder.Services.AddKeyedSingleton(ClientEndpointCertificateStoreKey, (provider, _) => new TransportServerCertificateStore(
+            clientEndpointSettings.Https,
+            $"{ClientEndpointOptions.SectionName}:{nameof(ClientEndpointOptions.Https)}",
+            provider.GetRequiredService<TlsServerCertificateLoader>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<ILogger<TransportServerCertificateStore>>()));
+
         // Registered whether or not the transport terminates TLS, because the holder is what a certificate is loaded into
         // and disposed from, and a clear-text deployment simply loads none.
         builder.Services.AddSingleton<HealthEndpointCertificate>();
@@ -1257,6 +1318,11 @@ internal static class HostComposition
         if (adminEndpointSettings.Enabled)
         {
             builder.Services.AddAdminTransportSecurity(adminEndpointSettings);
+        }
+
+        if (clientEndpointSettings.Enabled)
+        {
+            builder.Services.AddClientTransportSecurity(clientEndpointSettings);
         }
 
         // A separate callback from the listener binding below, and outside its condition, because the two decide different
@@ -1283,6 +1349,9 @@ internal static class HostComposition
                         .Find(listener, serverName)
                     ?? kestrelOptions.ApplicationServices
                         .GetRequiredKeyedService<TransportServerCertificateStore>(AdminCertificateStoreKey)
+                        .Find(listener, serverName)
+                    ?? kestrelOptions.ApplicationServices
+                        .GetRequiredKeyedService<TransportServerCertificateStore>(ClientEndpointCertificateStoreKey)
                         .Find(listener, serverName),
                 kestrelOptions.ApplicationServices.GetRequiredService<HealthEndpointCertificate>));
         }
@@ -1294,7 +1363,8 @@ internal static class HostComposition
         // middleware is what stops minimal hosting inserting one of its own ahead of forwarded-header processing, and
         // that insertion follows from the authentication services existing rather than from which surface added them.
         if (mcpEndpointSettings is { Enabled: true, RequiresAuthentication: true }
-            || adminEndpointSettings is { Enabled: true, RequiresAuthentication: true })
+            || adminEndpointSettings is { Enabled: true, RequiresAuthentication: true }
+            || clientEndpointSettings is { Enabled: true, RequiresAuthentication: true })
         {
             builder.Services.AddDefaultTransportAuthentication();
         }
@@ -1302,12 +1372,15 @@ internal static class HostComposition
         return new ComposedHostSurfaces(
             mcpEndpointSettings,
             adminEndpointSettings,
+            clientEndpointSettings,
             healthEndpointSettings,
             composedListeners,
             mcpRateLimits,
             adminRateLimits,
+            clientRateLimits,
             boundedSurfaces.Count > 0,
             mcpRequestTimeout,
-            adminRequestTimeout);
+            adminRequestTimeout,
+            clientRequestTimeout);
     }
 }

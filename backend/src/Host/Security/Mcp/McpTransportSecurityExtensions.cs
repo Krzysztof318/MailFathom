@@ -193,7 +193,7 @@ internal static class McpTransportSecurityExtensions
     /// also a combination the CORS specification forbids outright.
     /// </para>
     /// </remarks>
-    private static void ConfigureCorsPolicy(CorsPolicyBuilder policy, McpOriginPolicy originPolicy)
+    private static void ConfigureCorsPolicy(CorsPolicyBuilder policy, BrowserOriginPolicy originPolicy)
     {
         if (originPolicy.AllowsAnyOrigin)
         {

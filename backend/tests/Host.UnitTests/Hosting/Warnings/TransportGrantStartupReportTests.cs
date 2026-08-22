@@ -259,7 +259,72 @@ public sealed class TransportGrantStartupReportTests
             StringComparison.Ordinal);
     }
 
-    /// <summary>The two surfaces draw from disjoint halves, so an operator has to be able to read back that they narrowed the one they meant.</summary>
+    /// <summary>The client surface configures its credentials in a section of its own, so its permissive posture is read there rather than inferred from the MCP endpoint's.</summary>
+    [Fact]
+    public async Task StartAsync_AnEnabledClientEndpointWithNoEntry_SaysEveryCallerHoldsTheWholeMailSurface()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var report = ReportFor(
+            new McpEndpointOptions(),
+            new AdminEndpointOptions(),
+            logs,
+            new ClientEndpointOptions { Enabled = true });
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.Single(logs.Records);
+        Assert.Equal(LogLevel.Information, record.Level);
+        Assert.Equal("client", Assert.Contains("EndpointName", record.Properties));
+        Assert.Equal("/api/client", Assert.Contains("EndpointPath", record.Properties));
+        Assert.Equal(
+            WholeMailSurface,
+            Assert.Contains("GrantedPermissions", record.Properties));
+        Assert.Equal("ClientEndpoint:Authentication", Assert.Contains("AuthenticationSettingPath", record.Properties));
+    }
+
+    /// <summary>Every enabled endpoint is reported separately, so a deployment serving all three reads three lines rather than one surface standing in for another.</summary>
+    [Fact]
+    public async Task StartAsync_AllThreeEndpointsEnabled_ReportsEachEntryAgainstItsOwnSurface()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var adminEndpoint = new AdminEndpointOptions { Enabled = true };
+        adminEndpoint.Authentication.Add(AnEntryThatStatedNoGrant());
+
+        var clientEndpoint = new ClientEndpointOptions { Enabled = true };
+        clientEndpoint.Authentication.Add(AnEntryThatStatedNoGrant());
+
+        var report = ReportFor(
+            McpEndpointWith(AnEntryThatStatedNoGrant()),
+            adminEndpoint,
+            logs,
+            clientEndpoint);
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            ["MCP", "administrative", "client"],
+            logs.Records.Select(record => Assert.Contains("EndpointName", record.Properties)));
+        Assert.Equal(
+            ["McpEndpoint:Authentication:0", "AdminEndpoint:Authentication:0", "ClientEndpoint:Authentication:0"],
+            logs.Records.Select(record => Assert.Contains("EntrySettingPath", record.Properties)));
+        Assert.Equal(
+            [
+                WholeMailSurface,
+                string.Join(
+                    ", ",
+                    MailFathomPermission.PublishedFor(ProtectedSurface.Administration).Select(permission => permission.Name)),
+                WholeMailSurface,
+            ],
+            logs.Records.Select(record => Assert.Contains("GrantedPermissions", record.Properties)));
+    }
+
+    /// <summary>The mail and administrative surfaces refuse differently, so an operator has to be able to read back that they narrowed the one they meant.</summary>
     [Fact]
     public async Task StartAsync_BothEndpointsEnabled_ReportsEachEntryAgainstItsOwnSurface()
     {
@@ -355,13 +420,15 @@ public sealed class TransportGrantStartupReportTests
     private static TransportGrantStartupReport ReportFor(
         McpEndpointOptions mcpEndpointSettings,
         AdminEndpointOptions adminEndpointSettings,
-        RecordingLoggerProvider logs)
+        RecordingLoggerProvider logs,
+        ClientEndpointOptions? clientEndpointSettings = null)
     {
         using var loggerFactory = LoggerFactory.Create(logging => logging.AddProvider(logs));
 
         return new TransportGrantStartupReport(
             Options.Create(mcpEndpointSettings),
             Options.Create(adminEndpointSettings),
+            Options.Create(clientEndpointSettings ?? new ClientEndpointOptions()),
             loggerFactory.CreateLogger<TransportGrantStartupReport>());
     }
 }

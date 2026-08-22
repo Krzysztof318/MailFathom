@@ -20,22 +20,24 @@ namespace MailFathom.Host.Hosting.Warnings;
 /// inferring it later from what a credential turned out to be able to do.
 /// </para>
 /// <para>
-/// Both endpoints are reported by one service and each entry separately, because the two surfaces draw from disjoint
-/// halves of the vocabulary and an operator who narrowed one credential has to be able to read back that they narrowed
-/// the one they meant. An entry is named by its configuration path, which is the position they would edit; nothing here
+/// Every configured endpoint is reported by one service and each entry separately, because an operator who narrowed one
+/// credential has to be able to read back that they narrowed the one they meant. Two of the three surfaces draw from
+/// the same half of the vocabulary, which is what makes the endpoint each line names the part that cannot be inferred.
+/// An entry is named by its configuration path, which is the position they would edit; nothing here
 /// names a key, a public key, a token, an authorization server, or a subject, because a grant is what the deployment
 /// wrote and never who presented something.
 /// </para>
 /// <para>
 /// It records rather than warns, including for the surface that configures no entry at all. That posture is already a
-/// warning — <see cref="McpTransportAuthenticationWarning" /> and <see cref="AdminTransportSecurityWarning" /> each say
+/// warning — <see cref="McpTransportAuthenticationWarning" />, <see cref="AdminTransportSecurityWarning" />, and
+/// <see cref="ClientTransportSecurityWarning" /> each say
 /// what it means that anything reaching the address is served — and what this adds is the half those cannot state,
 /// which is how much such a caller then holds. Saying it twice at warning level would make the second one noise and the
 /// first one easier to scroll past.
 /// </para>
 /// <para>
 /// It runs as a hosted service so it appears among the other startup diagnostics, and it is registered whether or not
-/// either endpoint is enabled, because it is the report that decides whether it has anything to say.
+/// any endpoint is enabled, because it is the report that decides whether it has anything to say.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]
@@ -45,27 +47,34 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
 
     private const string AdminEndpointName = "administrative";
 
+    private const string ClientEndpointName = "client";
+
     private const string NothingGranted = "nothing";
 
     private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly AdminEndpointOptions adminEndpointSettings;
+    private readonly ClientEndpointOptions clientEndpointSettings;
     private readonly ILogger<TransportGrantStartupReport> logger;
 
     /// <summary>Initializes a new startup report.</summary>
     /// <param name="mcpEndpointSettings">The MCP endpoint settings startup was composed from.</param>
     /// <param name="adminEndpointSettings">The administrative endpoint settings startup was composed from.</param>
+    /// <param name="clientEndpointSettings">The client endpoint settings startup was composed from.</param>
     /// <param name="logger">The startup logger.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="mcpEndpointSettings" /> or <paramref name="adminEndpointSettings" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when an endpoint settings argument is <see langword="null" />.</exception>
     public TransportGrantStartupReport(
         IOptions<McpEndpointOptions> mcpEndpointSettings,
         IOptions<AdminEndpointOptions> adminEndpointSettings,
+        IOptions<ClientEndpointOptions> clientEndpointSettings,
         ILogger<TransportGrantStartupReport> logger)
     {
         ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
         ArgumentNullException.ThrowIfNull(adminEndpointSettings);
+        ArgumentNullException.ThrowIfNull(clientEndpointSettings);
 
         this.mcpEndpointSettings = mcpEndpointSettings.Value;
         this.adminEndpointSettings = adminEndpointSettings.Value;
+        this.clientEndpointSettings = clientEndpointSettings.Value;
         this.logger = logger;
     }
 
@@ -90,6 +99,16 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
                 AdminEndpointOptions.SectionName,
                 AdminEndpointOptions.GrantedSurface,
                 [.. this.adminEndpointSettings.Authentication]);
+        }
+
+        if (this.clientEndpointSettings.Enabled)
+        {
+            this.Report(
+                ClientEndpointName,
+                ClientEndpointOptions.RoutePrefix,
+                ClientEndpointOptions.SectionName,
+                ClientEndpointOptions.GrantedSurface,
+                [.. this.clientEndpointSettings.Authentication]);
         }
 
         return Task.CompletedTask;

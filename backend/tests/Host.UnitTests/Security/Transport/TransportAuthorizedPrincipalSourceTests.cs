@@ -65,19 +65,25 @@ public sealed class TransportAuthorizedPrincipalSourceTests
 
     /// <summary>
     /// A request nothing authenticated, on a surface that configures a credential, is none of the three kinds: what
-    /// reached the surface without presenting what the surface asks for was admitted by nothing. Both surfaces are
-    /// stated, because each reads its own settings and one arm answering for the other would go unnoticed.
+    /// reached the surface without presenting what the surface asks for was admitted by nothing. Every surface is
+    /// stated, because each reads its own settings and one arm answering for another would go unnoticed.
     /// </summary>
     [Theory]
-    [InlineData(McpEndpointRoute.Path, true, false)]
-    [InlineData(AdminEndpointOptions.RoutePrefix + "/session", false, true)]
+    [InlineData(McpEndpointRoute.Path, true, false, false)]
+    [InlineData(AdminEndpointOptions.RoutePrefix + "/session", false, true, false)]
+    [InlineData(ClientEndpointOptions.RoutePrefix + "/session", false, false, true)]
     public void Current_ARequestThatAuthenticatedNothingWhereTheSurfaceConfiguresACredential_ReportsNoPrincipal(
         string path,
         bool mcpConfiguresACredential,
-        bool adminConfiguresACredential)
+        bool adminConfiguresACredential,
+        bool clientConfiguresACredential)
     {
         // Arrange
-        var source = SourceOver(RequestTo(path), mcpConfiguresACredential, adminConfiguresACredential);
+        var source = SourceOver(
+            RequestTo(path),
+            mcpConfiguresACredential,
+            adminConfiguresACredential,
+            clientConfiguresACredential);
 
         // Act & Assert
         Assert.Null(source.Current);
@@ -113,6 +119,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     [Theory]
     [InlineData(McpEndpointRoute.Path, ProtectedSurface.Mail)]
     [InlineData(AdminEndpointOptions.RoutePrefix + "/session", ProtectedSurface.Administration)]
+    [InlineData(ClientEndpointOptions.RoutePrefix + "/session", ProtectedSurface.Mail)]
     public void Current_ARequestOnASurfaceConfiguringNoCredential_ReportsACallerHoldingThatWholeSurface(
         string path,
         ProtectedSurface surface)
@@ -172,17 +179,19 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     }
 
     /// <summary>Composes the adapter over one request, and over endpoints that configure a credential or do not.</summary>
-    /// <remarks>Both endpoints default to configuring none, which is the posture whose grant the tests above are about; a test that needs the ordinary posture says so.</remarks>
+    /// <remarks>Every endpoint defaults to configuring none, which is the posture whose grant the tests above are about; a test that needs the ordinary posture says so.</remarks>
     private static TransportAuthorizedPrincipalSource SourceOver(
         HttpContext? context,
         bool mcpConfiguresACredential = false,
-        bool adminConfiguresACredential = false)
+        bool adminConfiguresACredential = false,
+        bool clientConfiguresACredential = false)
     {
         var httpContextAccessor = Substitute.For<IHttpContextAccessor>();
         httpContextAccessor.HttpContext.Returns(context);
 
         var mcpEndpoint = new McpEndpointOptions();
         var adminEndpoint = new AdminEndpointOptions();
+        var clientEndpoint = new ClientEndpointOptions();
         if (mcpConfiguresACredential)
         {
             mcpEndpoint.Authentication.Add(new TransportAuthenticationOptions());
@@ -193,10 +202,16 @@ public sealed class TransportAuthorizedPrincipalSourceTests
             adminEndpoint.Authentication.Add(new TransportAuthenticationOptions());
         }
 
+        if (clientConfiguresACredential)
+        {
+            clientEndpoint.Authentication.Add(new TransportAuthenticationOptions());
+        }
+
         return new TransportAuthorizedPrincipalSource(
             httpContextAccessor,
             Options.Create(mcpEndpoint),
-            Options.Create(adminEndpoint));
+            Options.Create(adminEndpoint),
+            Options.Create(clientEndpoint));
     }
 
     private static DefaultHttpContext RequestBy(ClaimsPrincipal caller) => new() { User = caller };

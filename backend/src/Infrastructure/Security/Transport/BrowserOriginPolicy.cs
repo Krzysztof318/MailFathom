@@ -4,13 +4,15 @@
 
 namespace MailFathom.Infrastructure.Security.Transport;
 
-/// <summary>Which browser origins the MCP endpoint answers.</summary>
+/// <summary>Which browser origins a transport surface answers.</summary>
 /// <remarks>
 /// <para>
-/// The MCP Streamable HTTP transport requires a server to validate the <c>Origin</c> header, because a page the user
-/// never visited can otherwise make a browser send authenticated requests to an address it resolved back to the
-/// operator's own host. That check is what this type owns, and it is deliberately separate from the CORS response
-/// headers: CORS tells a browser what it may read, whereas this decides whether the request is served at all.
+/// Two surfaces configure one of these and each uses it for as much of the question as it asks. Both compose the CORS
+/// response headers from it, which is what tells a browser it may read an answer. The MCP surface also validates the
+/// <c>Origin</c> header of the request itself, because the Streamable HTTP transport requires a server to: a page the
+/// user never visited can otherwise make a browser send authenticated requests to an address it resolved back to the
+/// operator's own host. The two uses are deliberately separate — CORS tells a browser what it may read, whereas
+/// validation decides whether the request is served at all.
 /// </para>
 /// <para>
 /// It is not authentication and must never be mistaken for it. A non-browser client sends no <c>Origin</c> at all and
@@ -19,18 +21,18 @@ namespace MailFathom.Infrastructure.Security.Transport;
 /// not let a page forge it.
 /// </para>
 /// </remarks>
-public sealed class McpOriginPolicy
+public sealed class BrowserOriginPolicy
 {
     private readonly HashSet<string> allowedOrigins;
 
-    private McpOriginPolicy(bool allowsAnyOrigin, IEnumerable<string> allowedOrigins)
+    private BrowserOriginPolicy(bool allowsAnyOrigin, IEnumerable<string> allowedOrigins)
     {
         this.AllowsAnyOrigin = allowsAnyOrigin;
         this.allowedOrigins = new HashSet<string>(allowedOrigins, StringComparer.Ordinal);
     }
 
     /// <summary>Gets the policy that serves every origin, which is what a deployment configuring none receives.</summary>
-    public static McpOriginPolicy AllowingAnyOrigin { get; } = new(allowsAnyOrigin: true, []);
+    public static BrowserOriginPolicy AllowingAnyOrigin { get; } = new(allowsAnyOrigin: true, []);
 
     /// <summary>Gets the policy that serves no browser at all, which a deployment states by configuring an empty origin list.</summary>
     /// <remarks>
@@ -38,7 +40,7 @@ public sealed class McpOriginPolicy
     /// browsers rather than clients. That is the accurate posture for a deployment whose only consumers are agents and
     /// command-line clients, and it is the one posture a list of origins cannot express.
     /// </remarks>
-    public static McpOriginPolicy ServingNoBrowserOrigin { get; } = new(allowsAnyOrigin: false, []);
+    public static BrowserOriginPolicy ServingNoBrowserOrigin { get; } = new(allowsAnyOrigin: false, []);
 
     /// <summary>Gets whether every origin is served.</summary>
     public bool AllowsAnyOrigin { get; }
@@ -51,14 +53,14 @@ public sealed class McpOriginPolicy
     /// <returns>The restricting policy.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="allowedOrigins" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="allowedOrigins" /> is empty; serving no browser at all is <see cref="ServingNoBrowserOrigin" />, which says so by its name rather than by a list that happens to be short.</exception>
-    public static McpOriginPolicy Restricting(IEnumerable<string> allowedOrigins)
+    public static BrowserOriginPolicy Restricting(IEnumerable<string> allowedOrigins)
     {
         ArgumentNullException.ThrowIfNull(allowedOrigins);
 
         var origins = allowedOrigins.ToArray();
 
         return origins.Length > 0
-            ? new McpOriginPolicy(allowsAnyOrigin: false, origins)
+            ? new BrowserOriginPolicy(allowsAnyOrigin: false, origins)
             : throw new ArgumentException(
                 "A restricting origin policy must name at least one origin.",
                 nameof(allowedOrigins));

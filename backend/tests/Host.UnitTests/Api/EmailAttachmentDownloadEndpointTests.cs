@@ -291,13 +291,14 @@ public sealed class EmailAttachmentDownloadEndpointTests
         var httpContextAccessor = Substitute.For<IHttpContextAccessor>();
         httpContextAccessor.HttpContext.Returns(context);
 
-        // Neither endpoint configures a credential, which is the posture whose whole-surface grant would otherwise reach
+        // No endpoint configures a credential, which is the posture whose whole-surface grant would otherwise reach
         // this route. Nothing about the transport hands it a caller even so, so what the use case is told is only what
         // the route states once the ticket has verified.
         return new TransportAuthorizedPrincipalSource(
             httpContextAccessor,
             Options.Create(new McpEndpointOptions()),
-            Options.Create(new AdminEndpointOptions()));
+            Options.Create(new AdminEndpointOptions()),
+            Options.Create(new ClientEndpointOptions()));
     }
 
     private static IAttachmentDownloadTicketReader TicketReaderRedeeming(AttachmentDownloadTicket? ticket)

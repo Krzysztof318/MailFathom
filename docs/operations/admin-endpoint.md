@@ -905,7 +905,7 @@ where a successful guess is worth the most.
 `AdminEndpoint:RateLimiting` is the same section `McpEndpoint:RateLimiting` is, with the same keys, the same product
 defaults, and the same validation. [Rate limiting](mcp-endpoint.md#rate-limiting) is where the settings, the ranges, the
 reasoning, and what a refused request receives are recorded in full;
-[endpoint configuration](configuration-endpoints.md#rate-limiting--mcpendpointratelimiting-and-adminendpointratelimiting)
+[endpoint configuration](configuration-endpoints.md#rate-limiting)
 is the key table.
 
 Two things differ here, and both follow from where the credential is judged:
@@ -916,11 +916,11 @@ Two things differ here, and both follow from where the credential is judged:
   wrong key has still spent capacity. There is therefore no identity to partition on when the limiter counts, and every
   administrative caller shares one bucket. Size `TokenCapacity` as what the whole endpoint may burst to rather than what
   one operator may.
-- **Neither endpoint's traffic reaches the other's limits.** The partitions are keyed per surface, so a key spelled the
-  same way under both sections is two independent buckets, and an agent that exhausted the MCP endpoint's capacity has
+- **No endpoint's traffic reaches another's limits.** The partitions are keyed per surface, so a key spelled the
+  same way under two sections is two independent buckets, and an agent that exhausted the MCP endpoint's capacity has
   taken nothing from the surface you would use to stop it.
 
-The two endpoints' concurrency limits are separate for the same reason: a runaway agent saturating `/mcp` must not lock
+Every endpoint's concurrency limit is separate for the same reason: a runaway agent saturating `/mcp` must not lock
 you out of `/api/admin`.
 
 Turning the limits off is an explicit value and costs one startup warning, as it does on the MCP endpoint.
@@ -975,12 +975,12 @@ arrived. `mfctl login --endpoint https://admin.example.com:8543` writes the corr
 That listener maps no route. No administrative operation, no session probe, and no protected-resource metadata document is
 reachable over it, and no credential check runs for a request that arrived on it — every path gets the same redirect, and a
 `Host` header naming no configured domain gets `400`. The port is checked against every other listener in the process, so a
-port the MCP surface or the probes also bind is shared rather than refused. What the two surfaces must then agree about is the socket itself — the scheme, the redirect, the client-certificate question — while their credentials, limits, and HTTPS ports stay their own; [which settings a shared socket couples](configuration-endpoints.md#which-settings-a-shared-socket-couples) is the table.
+port another surface or the probes also bind is shared rather than refused. What the surfaces sharing it must then agree about is the socket itself — the scheme, the redirect, the client-certificate question — while their credentials, limits, and HTTPS ports stay their own; [which settings a shared socket couples](configuration-endpoints.md#which-settings-a-shared-socket-couples) is the table.
 
 Turn it off with `AdminEndpoint:Https:Redirect:Enabled` set to `false`, which is what a deployment behind a proxy that
 already answers the clear-text port wants. The setting shape and every refusal are the MCP endpoint's, documented once in
 [redirecting a client still pointed at `http://`](mcp-endpoint.md#redirecting-a-client-still-pointed-at-http); only the
-default port differs, so enabling TLS on both surfaces opens two clear-text ports that do not collide.
+default port differs, so enabling TLS on this surface and the MCP one opens two clear-text ports that do not collide.
 
 ## Behind a TLS-terminating reverse proxy
 

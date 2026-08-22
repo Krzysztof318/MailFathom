@@ -18,12 +18,13 @@ namespace MailFathom.Host.Hosting.Warnings;
 /// <para>
 /// Information rather than a warning, because the posture is the safe one: the surface terminates TLS and the clear-text
 /// socket serves nothing but the address of that TLS. The warnings about a surface that terminates no TLS at all are
-/// separate and unchanged — <see cref="McpTransportEncryptionWarning" /> and
-/// <see cref="AdminTransportSecurityWarning" /> — and neither has anything to say about a deployment this one reports on.
+/// separate and unchanged — <see cref="McpTransportEncryptionWarning" />, <see cref="AdminTransportSecurityWarning" />,
+/// and <see cref="ClientTransportSecurityWarning" /> — and none has anything to say about a deployment this one reports
+/// on.
 /// </para>
 /// <para>
-/// One report for both surfaces rather than one per surface, so the sockets are listed together in the order they were
-/// composed. It is registered whether or not either surface redirects, because it is the report that decides whether it
+/// One report for every surface rather than one per surface, so the sockets are listed together in the order they were
+/// composed. It is registered whether or not any surface redirects, because it is the report that decides whether it
 /// has anything to say.
 /// </para>
 /// </remarks>
@@ -32,23 +33,28 @@ internal sealed partial class TransportClearTextRedirectReport : IHostedService
 {
     private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly AdminEndpointOptions adminEndpointSettings;
+    private readonly ClientEndpointOptions clientEndpointSettings;
     private readonly ILogger<TransportClearTextRedirectReport> logger;
 
     /// <summary>Initializes a new startup report.</summary>
     /// <param name="mcpEndpointSettings">The MCP endpoint settings startup was composed from.</param>
     /// <param name="adminEndpointSettings">The administrative endpoint settings startup was composed from.</param>
+    /// <param name="clientEndpointSettings">The client endpoint settings startup was composed from.</param>
     /// <param name="logger">The startup logger.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public TransportClearTextRedirectReport(
         IOptions<McpEndpointOptions> mcpEndpointSettings,
         IOptions<AdminEndpointOptions> adminEndpointSettings,
+        IOptions<ClientEndpointOptions> clientEndpointSettings,
         ILogger<TransportClearTextRedirectReport> logger)
     {
         ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
         ArgumentNullException.ThrowIfNull(adminEndpointSettings);
+        ArgumentNullException.ThrowIfNull(clientEndpointSettings);
 
         this.mcpEndpointSettings = mcpEndpointSettings.Value;
         this.adminEndpointSettings = adminEndpointSettings.Value;
+        this.clientEndpointSettings = clientEndpointSettings.Value;
         this.logger = logger;
     }
 
@@ -74,6 +80,15 @@ internal sealed partial class TransportClearTextRedirectReport : IHostedService
             this.LogAdminEndpointRedirectsClearText(
                 this.adminEndpointSettings.Port,
                 adminRedirectTargets);
+        }
+
+        if (this.clientEndpointSettings is { Enabled: true, RedirectsClearText: true })
+        {
+            var clientRedirectTargets = DescribeTargets(this.clientEndpointSettings.Https);
+
+            this.LogClientEndpointRedirectsClearText(
+                this.clientEndpointSettings.Port,
+                clientRedirectTargets);
         }
 
         return Task.CompletedTask;
@@ -108,4 +123,13 @@ internal sealed partial class TransportClearTextRedirectReport : IHostedService
             + "credential already sent in clear text is on the wire — so repoint mfctl rather than relying on it. Set "
             + "AdminEndpoint:Https:Redirect:Enabled to false to bind no clear-text port at all.")]
     private partial void LogAdminEndpointRedirectsClearText(int clearTextPort, string redirectTargets);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The client endpoint redirects clear-text requests on port {ClearTextPort} to {RedirectTargets}. That "
+            + "listener maps no route and answers every path with a 308, so nothing of the mailbox is reachable over it. "
+            + "A redirect protects the next request and not the one that arrived — a credential already sent in clear "
+            + "text is on the wire — so repoint your clients rather than relying on it. Set "
+            + "ClientEndpoint:Https:Redirect:Enabled to false to bind no clear-text port at all.")]
+    private partial void LogClientEndpointRedirectsClearText(int clearTextPort, string redirectTargets);
 }

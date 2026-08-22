@@ -84,6 +84,12 @@ credential — a second and weaker way into an attachment than the signature the
 one posture only. The adapter therefore answers no principal for a path that route serves before it asks either surface,
 and the route's own statement, made once the ticket verifies, is the only thing that authorizes it.
 
+**The client surface reaches the same adapter and asks it for nothing yet.** It is the third surface a request can
+arrive on, its grant is resolved exactly as the two above are — from the entry that admitted the caller, or from the
+whole of the mail half where it configures none — and today the one route it serves reports that grant rather than
+requiring anything of it. So nothing here is a third case: a mail-reading route added there reaches the use cases that
+already ask, under the permission they already name.
+
 ## What a refusal is, and what each boundary does with it
 
 A use case refuses by raising `PrincipalNotAuthorizedException`, which carries error code `14001` and, where the

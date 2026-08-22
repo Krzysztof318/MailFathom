@@ -276,6 +276,13 @@ ingress:
         - mailfathom.example.test
 ```
 
+**Each path belongs to a surface the application serves only if its own section enabled it**: `/mcp` to `McpEndpoint`,
+`/api/admin` to `AdminEndpoint`, and `/api/client` to `ClientEndpoint`. Publishing a path whose section is off routes to
+a listener that answers `404`, and enabling a section without publishing its path leaves it reachable inside the cluster
+alone — which is a legitimate posture for the administrative surface and never one for
+[the client surface](client-endpoint.md), whose caller is somebody's own machine. All three default to container port
+8080, so one Service and one backend carry however many of them a deployment enabled.
+
 An Ingress without a `tls` entry hands the API key and every message served to anything on the network path. The chart
 renders it, because there are networks where that is a real choice, and warns in its notes.
 
@@ -302,7 +309,8 @@ Every one of those is a MailFathom setting rather than a chart value, so turning
 | Reading the public scheme and host from the ingress alone | `ReverseProxy:TrustedProxies` | [Behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) |
 | TLS terminated by the pod itself | `McpEndpoint:Https:Endpoints` | [HTTPS and your own domain](mcp-endpoint.md#https-and-your-own-domain) |
 | Client certificates | `McpEndpoint:ClientCertificateProfiles` | [Client certificates](mcp-endpoint.md#client-certificates) |
-| Rate limits | `McpEndpoint:RateLimiting`, and `AdminEndpoint:RateLimiting` for the administrative endpoint | [Rate limiting](mcp-endpoint.md#rate-limiting) |
+| Rate limits | `McpEndpoint:RateLimiting`, and `AdminEndpoint:RateLimiting` or `ClientEndpoint:RateLimiting` for the other surfaces | [Rate limiting](mcp-endpoint.md#rate-limiting) |
+| The surface the MailFathom client reaches | `ClientEndpoint`, whose `Cors:AllowedOrigins` names the origin a browser-hosted client is served from | [The client endpoint](client-endpoint.md) |
 
 The ingress row is the one an OAuth deployment should not skip, and it narrows rather than enables. The controller
 terminates TLS and dials the pod over plain HTTP under the Service name, and MailFathom reads the forwarded scheme and
