@@ -441,14 +441,14 @@ registry_latest_digest() {
   case "$(registry_of "$repository")" in
     mcr)
       fetch -I -H "Accept: $accept" "https://mcr.microsoft.com/v2/${repository#mcr.microsoft.com/}/manifests/latest" \
-        | tr -d '\r' | sed -n 's/^[Dd]ocker-[Cc]ontent-[Dd]igest: //p'
+        | tr -d '\r' | sed -n 's/^docker-content-digest: //Ip'
       ;;
     ghcr)
       token="$(ghcr_pull_token "$repository")" || true
       [[ -n "${token:-}" ]] || return 0
       fetch -I -H "Authorization: Bearer $token" -H "Accept: $accept" \
         "https://ghcr.io/v2/${repository#ghcr.io/}/manifests/latest" \
-        | tr -d '\r' | sed -n 's/^[Dd]ocker-[Cc]ontent-[Dd]igest: //p'
+        | tr -d '\r' | sed -n 's/^docker-content-digest: //Ip'
       ;;
     *)
       fetch "https://hub.docker.com/v2/repositories/${repository#docker.io/}/tags/latest" | jq -r '.digest // empty'
