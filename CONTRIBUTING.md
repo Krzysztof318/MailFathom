@@ -39,6 +39,8 @@ MailFathom is developed and run on Linux.
 
 [`docs/operations/local-development.md`](docs/operations/local-development.md) is the full setup: tool versions and install commands, running the app model, development secrets, and the migration workflow. Read it once before your first change.
 
+**One thing to know before you restore the client.** The commands below restore the server's solution, which is Apache-2.0 and permissive throughout. A change under `frontend/` needs the client's solution instead, and restoring that one also brings four Uno Platform Studio packages — `Uno.Sdk.Extras`, `Uno.UI.HotDesign`, `Uno.UI.App.Mcp`, and `Uno.Settings.DevServer` — that the Uno SDK adds without any project file asking for them. **They are not open source.** The first carries an end-user licence agreement between Uno Platform and you, inside the package, and the other three declare no licence at all. They are design-time tooling — the visual designer, the App MCP server, and the settings channel between them — they reach no artifact, and nothing MailFathom builds or ships carries them; the agreement is between you and Uno Platform, because your own restore is what fetches them from nuget.org. This repository decided to keep them, and [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) holds that decision, what was verified, and what is still unanswered. You are told here so that you meet it before the restore rather than in a lock file afterwards.
+
 ## From a clone to a green run
 
 ```bash
