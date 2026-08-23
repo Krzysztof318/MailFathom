@@ -9,9 +9,11 @@ using MailFathom.Host.UnitTests.TestDoubles;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 using NSubstitute;
 using Xunit;
@@ -133,9 +135,14 @@ public sealed class ApiDocumentationTests
         Assert.Empty(services);
     }
 
-    /// <summary>The control for the test above, without which an assertion of emptiness would pass against a method that registered nothing anywhere.</summary>
+    /// <summary>
+    /// The control for the test above, and the only place the options callback is read back rather than assumed. What
+    /// it pins is the allow-list: dropping <c>ShouldInclude</c> leaves the generator registered and the collection
+    /// non-empty, while the anonymous development document quietly starts publishing the MCP route, the attachment
+    /// download, the probes, and the two RFC 9728 metadata documents.
+    /// </summary>
     [Fact]
-    public void AddApiDocumentation_InDevelopment_RegistersTheGenerator()
+    public void AddApiDocumentation_InDevelopment_ConfiguresTheGeneratorWithTheAllowList()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -144,7 +151,14 @@ public sealed class ApiDocumentationTests
         services.AddApiDocumentation(EnvironmentNamed(Environments.Development));
 
         // Assert
-        Assert.NotEmpty(services);
+        using var provider = services.BuildServiceProvider();
+        var options = provider
+            .GetRequiredService<IOptionsMonitor<OpenApiOptions>>()
+            .Get(ApiDocumentation.DocumentName);
+        var shouldInclude = Assert.IsType<Func<ApiDescription, bool>>(options.ShouldInclude);
+
+        Assert.True(shouldInclude(new ApiDescription { RelativePath = "api/admin/session" }));
+        Assert.False(shouldInclude(new ApiDescription { RelativePath = "mcp" }));
     }
 
     /// <summary>
@@ -168,10 +182,7 @@ public sealed class ApiDocumentationTests
         // Assert
         var info = Assert.IsType<OpenApiInfo>(document.Info);
         Assert.Equal(stampedVersion, info.Version);
-        Assert.DoesNotContain(
-            typeof(ApiDocumentation).Assembly.GetName().Name!,
-            info.Title ?? string.Empty,
-            StringComparison.Ordinal);
+        Assert.Equal("MailFathom HTTP API", info.Title);
     }
 
     /// <summary>

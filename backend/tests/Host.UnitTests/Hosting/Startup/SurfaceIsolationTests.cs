@@ -16,42 +16,56 @@ namespace MailFathom.Host.UnitTests.Hosting.Startup;
 /// </remarks>
 public sealed class SurfaceIsolationTests
 {
+    /// <summary>What every test below states unless it is about the documentation surface itself.</summary>
+    /// <remarks>A development process is the permissive setting, so a refusal asserted under it is refused under every process this host runs as.</remarks>
+    private const bool DocumentationIsPublished = true;
+
     [Fact]
     public void ListenerServesPath_AProbePathWhereTheProbesAreServed_IsServed() =>
-        Assert.True(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Probes, "/health"));
+        Assert.True(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Probes, "/health", DocumentationIsPublished));
 
     /// <summary>An unauthenticated dependency report must not answer on a port published for something else.</summary>
     [Fact]
     public void ListenerServesPath_AProbePathWhereTheProbesAreNotServed_IsRefused() =>
-        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Mcp | ServedSurfaces.Admin, "/health"));
+        Assert.False(SurfaceIsolation.ListenerServesPath(
+            ServedSurfaces.Mcp | ServedSurfaces.Admin,
+            "/health",
+            DocumentationIsPublished));
 
     [Fact]
     public void ListenerServesPath_AnAdministrativePathWhereTheSurfaceIsServed_IsServed() =>
-        Assert.True(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Admin, "/api/admin/accounts"));
+        Assert.True(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Admin, "/api/admin/accounts", DocumentationIsPublished));
 
     [Fact]
     public void ListenerServesPath_AnAdministrativePathWhereTheSurfaceIsNotServed_IsRefused() =>
-        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Mcp | ServedSurfaces.Probes, "/api/admin/accounts"));
+        Assert.False(SurfaceIsolation.ListenerServesPath(
+            ServedSurfaces.Mcp | ServedSurfaces.Probes,
+            "/api/admin/accounts",
+            DocumentationIsPublished));
 
     [Fact]
     public void ListenerServesPath_AClientPathWhereTheSurfaceIsServed_IsServed() =>
-        Assert.True(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Client, "/api/client/session"));
+        Assert.True(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Client, "/api/client/session", DocumentationIsPublished));
 
     /// <summary>A mailbox served to a client must not answer on a port published for an agent or an operator.</summary>
     [Fact]
     public void ListenerServesPath_AClientPathWhereTheSurfaceIsNotServed_IsRefused() =>
         Assert.False(SurfaceIsolation.ListenerServesPath(
             ServedSurfaces.Mcp | ServedSurfaces.Admin | ServedSurfaces.Probes,
-            "/api/client/session"));
+            "/api/client/session",
+            DocumentationIsPublished));
 
     /// <summary>The MCP surface owns whatever the other three do not claim, so a path added to it later needs no rule of its own.</summary>
     [Fact]
     public void ListenerServesPath_TheMcpRouteWhereTheEndpointIsServed_IsServed() =>
-        Assert.True(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Mcp, "/mcp"));
+        Assert.True(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Mcp, "/mcp", DocumentationIsPublished));
 
     [Fact]
     public void ListenerServesPath_TheMcpRouteWhereTheEndpointIsNotServed_IsRefused() =>
-        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Admin | ServedSurfaces.Probes, "/mcp"));
+        Assert.False(SurfaceIsolation.ListenerServesPath(
+            ServedSurfaces.Admin | ServedSurfaces.Probes,
+            "/mcp",
+            DocumentationIsPublished));
 
     /// <summary>A shared port answers every path its surfaces own, which is the whole point of sharing one.</summary>
     [Fact]
@@ -62,20 +76,26 @@ public sealed class SurfaceIsolationTests
             ServedSurfaces.Mcp | ServedSurfaces.Admin | ServedSurfaces.Client | ServedSurfaces.Probes;
 
         // Act, Assert
-        Assert.True(SurfaceIsolation.ListenerServesPath(everySurface, "/mcp"));
-        Assert.True(SurfaceIsolation.ListenerServesPath(everySurface, "/api/admin/accounts"));
-        Assert.True(SurfaceIsolation.ListenerServesPath(everySurface, "/api/client/session"));
-        Assert.True(SurfaceIsolation.ListenerServesPath(everySurface, "/health"));
+        Assert.True(SurfaceIsolation.ListenerServesPath(everySurface, "/mcp", DocumentationIsPublished));
+        Assert.True(SurfaceIsolation.ListenerServesPath(everySurface, "/api/admin/accounts", DocumentationIsPublished));
+        Assert.True(SurfaceIsolation.ListenerServesPath(everySurface, "/api/client/session", DocumentationIsPublished));
+        Assert.True(SurfaceIsolation.ListenerServesPath(everySurface, "/health", DocumentationIsPublished));
     }
 
     /// <summary>A port this process did not bind serves nothing rather than falling back to serving everything.</summary>
     [Fact]
     public void ListenerServesPath_APortNoSurfaceIsComposedOnto_RefusesEveryPath()
     {
-        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.None, "/mcp"));
-        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.None, "/api/admin/accounts"));
-        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.None, "/api/client/session"));
-        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.None, "/health"));
+        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.None, "/mcp", DocumentationIsPublished));
+        Assert.False(SurfaceIsolation.ListenerServesPath(
+            ServedSurfaces.None,
+            "/api/admin/accounts",
+            DocumentationIsPublished));
+        Assert.False(SurfaceIsolation.ListenerServesPath(
+            ServedSurfaces.None,
+            "/api/client/session",
+            DocumentationIsPublished));
+        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.None, "/health", DocumentationIsPublished));
     }
 
     /// <summary>RFC 9728 puts the document at the root, and its only reader arrives on the administrative listener without a credential yet.</summary>
@@ -86,8 +106,8 @@ public sealed class SurfaceIsolationTests
         const string metadataPath = "/.well-known/oauth-protected-resource/api/admin";
 
         // Act, Assert
-        Assert.True(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Admin, metadataPath));
-        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Mcp, metadataPath));
+        Assert.True(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Admin, metadataPath, DocumentationIsPublished));
+        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Mcp, metadataPath, DocumentationIsPublished));
     }
 
     /// <summary>The client's document sits at the root for the same reason, and its reader arrives on the client listener holding nothing.</summary>
@@ -98,8 +118,11 @@ public sealed class SurfaceIsolationTests
         const string metadataPath = "/.well-known/oauth-protected-resource/api/client";
 
         // Act, Assert
-        Assert.True(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Client, metadataPath));
-        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Mcp | ServedSurfaces.Admin, metadataPath));
+        Assert.True(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Client, metadataPath, DocumentationIsPublished));
+        Assert.False(SurfaceIsolation.ListenerServesPath(
+            ServedSurfaces.Mcp | ServedSurfaces.Admin,
+            metadataPath,
+            DocumentationIsPublished));
     }
 
     /// <summary>
@@ -115,16 +138,42 @@ public sealed class SurfaceIsolationTests
             [ServedSurfaces.Admin, ServedSurfaces.Client, ServedSurfaces.Mcp, ServedSurfaces.Probes];
 
         // Act, Assert
-        Assert.All(boundListeners, served => Assert.True(SurfaceIsolation.ListenerServesPath(served, "/openapi/v1.json")));
-        Assert.All(boundListeners, served => Assert.True(SurfaceIsolation.ListenerServesPath(served, "/scalar")));
+        Assert.All(
+            boundListeners,
+            served => Assert.True(SurfaceIsolation.ListenerServesPath(served, "/openapi/v1.json", DocumentationIsPublished)));
+        Assert.All(
+            boundListeners,
+            served => Assert.True(SurfaceIsolation.ListenerServesPath(served, "/scalar", DocumentationIsPublished)));
+    }
+
+    /// <summary>
+    /// The exemption lasts exactly as long as the routes do. A process that maps no documentation refuses these paths
+    /// here, where every other unserved path is refused, rather than letting them past CORS, authentication, the
+    /// client-certificate check, and the rate limiter to be answered <c>404</c> by routing — on a listener carrying
+    /// nothing but the credential-free probes among others.
+    /// </summary>
+    [Fact]
+    public void ListenerServesPath_ADocumentationPathWhereTheDocumentationIsNotPublished_IsRefused()
+    {
+        // Arrange
+        ServedSurfaces[] boundListeners =
+            [ServedSurfaces.Admin, ServedSurfaces.Client, ServedSurfaces.Mcp, ServedSurfaces.Probes];
+
+        // Act, Assert
+        Assert.All(
+            boundListeners,
+            served => Assert.False(SurfaceIsolation.ListenerServesPath(served, "/openapi/v1.json", documentationIsPublished: false)));
+        Assert.All(
+            boundListeners,
+            served => Assert.False(SurfaceIsolation.ListenerServesPath(served, "/scalar", documentationIsPublished: false)));
     }
 
     /// <summary>A port this process did not bind still serves nothing, documentation included.</summary>
     [Fact]
     public void ListenerServesPath_ADocumentationPathOnAPortNoSurfaceIsComposedOnto_IsRefused()
     {
-        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.None, "/openapi/v1.json"));
-        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.None, "/scalar"));
+        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.None, "/openapi/v1.json", DocumentationIsPublished));
+        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.None, "/scalar", DocumentationIsPublished));
     }
 
     /// <summary>Matched by segment, so a path that merely starts with the same letters is not mistaken for one of these.</summary>

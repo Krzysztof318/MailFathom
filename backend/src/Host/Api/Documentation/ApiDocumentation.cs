@@ -63,6 +63,23 @@ internal static class ApiDocumentation
     /// <summary>The first segment of every path the explorer serves, which includes the assets it loads.</summary>
     private static readonly PathString ExplorerPathPrefix = new(ExplorerRoute);
 
+    /// <summary>Reports whether this process publishes the documentation surface at all.</summary>
+    /// <param name="environment">The environment this process was started in.</param>
+    /// <returns><see langword="true" /> in <c>Development</c>, otherwise <see langword="false" />.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="environment" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The rule is stated once and read by everything that depends on it — the registration, the mapping, and the
+    /// listener isolation that has to decide whether these paths exist before it decides which listeners serve them.
+    /// Three separate environment checks would be three places to change it, and a documentation surface half of the
+    /// process believed in is exactly the disagreement this class exists to prevent.
+    /// </remarks>
+    internal static bool IsPublishedIn(IHostEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+
+        return environment.IsDevelopment();
+    }
+
     /// <summary>Registers OpenAPI generation for the HTTP API, in Development and nowhere else.</summary>
     /// <param name="services">The service collection being composed.</param>
     /// <param name="environment">The environment this process was started in.</param>
@@ -73,7 +90,7 @@ internal static class ApiDocumentation
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(environment);
 
-        if (!environment.IsDevelopment())
+        if (!IsPublishedIn(environment))
         {
             return services;
         }
@@ -175,7 +192,7 @@ internal static class ApiDocumentation
     }
 
     /// <summary>Names the surface a documented path is served by.</summary>
-    /// <remarks>Only the two prefixes reach the document at all, which <see cref="DescribesHttpApi" /> is what settles; anything else here would be a path that filter admitted by mistake, and filing it under the client surface would hide that rather than report it.</remarks>
+    /// <remarks>A two-way split rather than a lookup with a fallback, because <see cref="DescribesHttpApi" /> has already reduced the input to exactly two prefixes: a path that is not the administrative surface's is the client surface's, and there is no third case for a third branch to name.</remarks>
     private static string SurfaceTagOf(string path) =>
         new PathString(path).StartsWithSegments(AdminEndpointOptions.RoutePrefix, StringComparison.OrdinalIgnoreCase)
             ? AdministrativeSurfaceTag
@@ -197,7 +214,7 @@ internal static class ApiDocumentation
         ArgumentNullException.ThrowIfNull(endpoints);
         ArgumentNullException.ThrowIfNull(environment);
 
-        if (!environment.IsDevelopment())
+        if (!IsPublishedIn(environment))
         {
             return endpoints;
         }

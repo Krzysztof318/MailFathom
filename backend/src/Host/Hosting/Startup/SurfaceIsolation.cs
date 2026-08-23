@@ -46,19 +46,27 @@ internal static class SurfaceIsolation
     /// <summary>Reports whether a listener serving these surfaces answers this path.</summary>
     /// <param name="served">The surfaces served on the listener the request arrived at.</param>
     /// <param name="path">The request path.</param>
+    /// <param name="documentationIsPublished">Whether this process publishes the API documentation surface at all.</param>
     /// <returns><see langword="true" /> when the listener serves the path, otherwise <see langword="false" />.</returns>
     /// <remarks>
     /// The MCP surface owns everything the other three do not claim, which is what keeps a path added to it later from
     /// having to be listed here.
     /// <para>
-    /// The documentation paths are the one exception, and they are claimed by no surface on purpose. They exist only
-    /// in a development process, they describe two surfaces at once, and which listener a developer has open is
-    /// whichever one they enabled — so leaving them in the MCP surface's catch-all would make the explorer unreachable
-    /// on a deployment that runs the administrative endpoint alone, which is a supported and ordinary shape. Any
-    /// listener this process bound therefore serves them, and a port it did not bind still serves nothing.
+    /// The documentation paths are the one exception, and they are claimed by no surface on purpose. They describe two
+    /// surfaces at once, and which listener a developer has open is whichever one they enabled — so leaving them in the
+    /// MCP surface's catch-all would make the explorer unreachable on a deployment that runs the administrative
+    /// endpoint alone, which is a supported and ordinary shape. Any listener this process bound therefore serves them,
+    /// and a port it did not bind still serves nothing.
+    /// </para>
+    /// <para>
+    /// The exception exists only where the routes do, which is why the caller states it rather than this method
+    /// assuming it. A process that maps no documentation would otherwise let those two prefixes past every listener,
+    /// including one carrying nothing but the credential-free probes, to reach CORS, authentication, the
+    /// client-certificate check, and the rate limiter before routing answered <c>404</c> — which is exactly what the
+    /// paragraph above about a refused request says never happens.
     /// </para>
     /// </remarks>
-    internal static bool ListenerServesPath(ServedSurfaces served, PathString path)
+    internal static bool ListenerServesPath(ServedSurfaces served, PathString path, bool documentationIsPublished)
     {
         if (HealthProbe.IsProbePath(path))
         {
@@ -67,7 +75,7 @@ internal static class SurfaceIsolation
 
         if (ApiDocumentation.IsDocumentationPath(path))
         {
-            return served != ServedSurfaces.None;
+            return documentationIsPublished && served != ServedSurfaces.None;
         }
 
         if (IsAdminPath(path))
@@ -112,14 +120,20 @@ internal static class SurfaceIsolation
     /// <summary>Refuses every request whose listener does not serve its path.</summary>
     /// <param name="app">The application pipeline being composed.</param>
     /// <param name="servedSurfacesByPort">Which surfaces each bound port serves.</param>
+    /// <param name="environment">The environment this process was started in.</param>
     /// <returns>The same application instance for chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <remarks>Whether the documentation surface exists is read once here rather than per request, because it is decided by the process rather than by anything a request carries.</remarks>
     internal static IApplicationBuilder UseSurfaceIsolation(
         this IApplicationBuilder app,
-        IReadOnlyDictionary<int, ServedSurfaces> servedSurfacesByPort)
+        IReadOnlyDictionary<int, ServedSurfaces> servedSurfacesByPort,
+        IHostEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(app);
         ArgumentNullException.ThrowIfNull(servedSurfacesByPort);
+        ArgumentNullException.ThrowIfNull(environment);
+
+        var documentationIsPublished = ApiDocumentation.IsPublishedIn(environment);
 
         return app.Use(async (context, next) =>
         {
@@ -129,7 +143,7 @@ internal static class SurfaceIsolation
                 ? surfaces
                 : ServedSurfaces.None;
 
-            if (!ListenerServesPath(served, context.Request.Path))
+            if (!ListenerServesPath(served, context.Request.Path, documentationIsPublished))
             {
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
 

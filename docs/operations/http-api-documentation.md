@@ -24,9 +24,9 @@ host turns that off.
 
 ## Development, and nowhere else
 
-Outside `Development` neither the generator nor the routes are registered. Both addresses then answer `404` because no
-endpoint was mapped there — not `401`, which would still confirm that a catalogue exists and merely refuse to hand it
-over.
+Outside `Development` neither the generator nor the routes are registered, and the listener isolation described below
+refuses both prefixes before anything else in the pipeline sees them. Both addresses then answer `404` because nothing
+is served there — not `401`, which would still confirm that a catalogue exists and merely refuse to hand it over.
 
 The rule reads the environment name exactly, so it holds for `Production`, for `Staging`, and for any custom name a
 deployment invents. `ASPNETCORE_ENVIRONMENT` is what sets it, and a deployment that sets nothing is not in
@@ -76,10 +76,15 @@ endpoint, and the reverse.
 
 ## Which listener answers
 
-The documentation addresses belong to no surface, so every listener this process bound serves them — including one
-carrying only the administrative endpoint, which is an ordinary shape for a development instance. That is the one
-exception to the rule that a path is served only where the surface owning it is served; the
+The documentation addresses belong to no surface, so in a development process every listener it bound serves them —
+including one carrying only the administrative endpoint, which is an ordinary shape for a development instance. That is
+the one exception to the rule that a path is served only where the surface owning it is served; the
 [endpoint configuration](configuration-endpoints.md) page describes the rule itself.
+
+The exception lasts exactly as long as the routes do. A process that publishes no documentation refuses these two
+prefixes on every listener, where every other unserved path is refused — ahead of CORS, authentication, the
+client-certificate check, and the rate limiter — rather than letting them travel the pipeline to be answered `404` by
+routing. A port this process did not bind serves nothing either way.
 
 ## What the document does not carry
 

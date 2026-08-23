@@ -69,7 +69,7 @@ internal static class HostPipeline
         // before it reaches CORS, authentication, the client-certificate check, or the rate limiter — and a probe that
         // arrived where the probes are not served is refused before it can report dependency state to whoever can
         // reach it.
-        app.UseSurfaceIsolation(composition.Listeners.SurfacesByPort());
+        app.UseSurfaceIsolation(composition.Listeners.SurfacesByPort(), app.Environment);
 
         MapHealthProbes(app, composition);
 
