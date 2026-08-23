@@ -695,7 +695,7 @@ Potential AGT evaluation scenarios include governing a future `send_email` MCP t
 
 ### 21.2 MinIO object storage migration
 
-All raw-content operations use the application-owned `IEmailContentStore` port with streaming put, open-read, existence, and delete operations. The first implementation stores content in PostgreSQL; neither the application nor domain layer receives a PostgreSQL-specific locator or `bytea` type. This seam keeps a future MinIO or S3-compatible object-storage migration possible without changing mail use cases.
+All raw-content operations use the application-owned `IEmailContentStore` port, which takes and returns whole payloads as bytes rather than streams; ADR 0017 § 4 records why that stays so and what would reopen it. The first implementation stores content in PostgreSQL; neither the application nor domain layer receives a PostgreSQL-specific locator or `bytea` type. This seam keeps a future MinIO or S3-compatible object-storage migration possible without changing mail use cases.
 
 A later MinIO migration would be performed online in controlled stages:
 
