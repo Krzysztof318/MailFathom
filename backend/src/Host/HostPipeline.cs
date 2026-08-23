@@ -342,7 +342,7 @@ internal static class HostPipeline
     /// its credential has been judged. That is the stronger bound for the threat the limit exists against, which is
     /// unbounded key guessing, and it is why the burst is the endpoint's rather than one caller's.
     /// </remarks>
-    private static void ComposeAdminSurface(WebApplication app, ComposedHostSurfaces composition)
+    internal static void ComposeAdminSurface(IEndpointRouteBuilder app, ComposedHostSurfaces composition)
     {
         var adminApi = app.MapAdminApi();
 
@@ -383,7 +383,7 @@ internal static class HostPipeline
     /// ceiling are: the probes and the other surfaces answer on routes this policy must never decide anything about.
     /// </para>
     /// </remarks>
-    private static void ComposeClientSurface(WebApplication app, ComposedHostSurfaces composition)
+    internal static void ComposeClientSurface(IEndpointRouteBuilder app, ComposedHostSurfaces composition)
     {
         var clientApi = app
             .MapClientApi()

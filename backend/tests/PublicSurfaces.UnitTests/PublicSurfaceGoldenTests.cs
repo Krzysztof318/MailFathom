@@ -6,18 +6,21 @@ using Xunit;
 
 namespace MailFathom.PublicSurfaces.UnitTests;
 
-/// <summary>Holds the two public surfaces nothing else records against the files committed beside this suite.</summary>
+/// <summary>Holds the surfaces nothing else records against the files committed beside this suite.</summary>
 /// <remarks>
 /// <para>
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md">ADR 0004</see>
 /// permits a break on any of the four public surfaces below <c>1.0.0</c> and makes the record of the break the
 /// obligation instead. The database schema already has a test that proves what a release ships, and the deployment
 /// contract is read by the assets that render it; the tool contract and the configuration key set had nothing but the
-/// author's memory between a rename and a release note that never mentioned it.
+/// author's memory between a rename and a release note that never mentioned it. The HTTP API is here for the same
+/// reason and is not one of that ADR's four: an endpoint, a verb, a request shape, a status code, or a security
+/// declaration changes a client exactly as a renamed tool does, and until the document existed there was nothing to
+/// record it against.
 /// </para>
 /// <para>
 /// So the whole of each surface is rendered into one ordered file, and a change to it is a diff in the pull request
-/// rather than something a reviewer has to reconstruct from twenty tool classes. Neither test judges whether a change
+/// rather than something a reviewer has to reconstruct from twenty tool classes. No test here judges whether a change
 /// is right — a break is permitted here and the golden file is where it is written down.
 /// </para>
 /// </remarks>
@@ -39,21 +42,34 @@ public sealed class PublicSurfaceGoldenTests
             "published configuration key set",
             ConfigurationKeySurface.Render());
 
+    /// <summary>Every HTTP operation both API surfaces publish, as the host's own OpenAPI document describes it.</summary>
+    [Fact]
+    public async Task HttpApiContract_AsTheHostDocumentsIt_MatchesTheCommittedRecord() =>
+        PublicSurfaceGolden.AssertMatches(
+            "http-api-contract.json",
+            "published HTTP API contract",
+            await HttpApiContractSurface.RenderAsync(TestContext.Current.CancellationToken));
+
     /// <summary>Two renderings of one surface are the same text, which is what makes a diff mean a change.</summary>
     /// <remarks>
-    /// The control for both tests above. Reflection promises no ordering, a schema generator none either, and a
+    /// The control for the tests above. Reflection promises no ordering, a schema generator none either, and a
     /// rendering that varied between runs would fail on a tree nobody touched and pass on one somebody broke — the
     /// failure a golden file is least able to report about itself.
     /// </remarks>
     [Fact]
-    public void PublicSurfaces_RenderedTwice_ProduceTheSameText()
+    public async Task PublicSurfaces_RenderedTwice_ProduceTheSameText()
     {
         // Arrange, Act
         var tools = McpToolContractSurface.Render();
         var keys = ConfigurationKeySurface.Render();
+        var httpApi = await HttpApiContractSurface.RenderAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(tools, McpToolContractSurface.Render(), StringComparer.Ordinal);
         Assert.Equal(keys, ConfigurationKeySurface.Render(), StringComparer.Ordinal);
+        Assert.Equal(
+            httpApi,
+            await HttpApiContractSurface.RenderAsync(TestContext.Current.CancellationToken),
+            StringComparer.Ordinal);
     }
 }

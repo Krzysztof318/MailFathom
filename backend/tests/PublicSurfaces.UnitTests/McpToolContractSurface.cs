@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using MailFathom.Mcp;
@@ -23,9 +22,9 @@ namespace MailFathom.PublicSurfaces.UnitTests;
 /// <para>
 /// The whole descriptor is serialized rather than the three fields the acceptance names, so nothing published to a
 /// client can move without appearing here: a title, an annotation, an output schema, and the descriptor metadata are
-/// each part of what a client is told. What makes the result comparable is the canonical form below — object keys in
-/// ordinal order and the tools themselves in ordinal order by name — because neither reflection nor the schema
-/// generator promises a stable ordering of its own.
+/// each part of what a client is told. What makes the result comparable is <see cref="CanonicalJson" /> and the
+/// ordering by name applied here, because neither reflection nor the schema generator promises a stable ordering of
+/// its own.
 /// </para>
 /// </remarks>
 internal static class McpToolContractSurface
@@ -47,36 +46,9 @@ internal static class McpToolContractSurface
             .. provider.GetServices<McpServerTool>()
                 .Select(tool => tool.ProtocolTool)
                 .OrderBy(tool => tool.Name, StringComparer.Ordinal)
-                .Select(tool => Canonical(JsonSerializer.SerializeToNode(tool, McpJsonUtilities.DefaultOptions))),
+                .Select(tool => JsonSerializer.SerializeToNode(tool, McpJsonUtilities.DefaultOptions)),
         ]);
 
-        return descriptors.ToJsonString(RenderingOptions);
+        return CanonicalJson.Render(descriptors);
     }
-
-    /// <summary>How the record is written: indented so a diff is line by line, and unescaped so the prose stays readable.</summary>
-    /// <remarks>
-    /// The relaxed encoder is safe here for the reason it is unsafe on a response: this string is written to a file the
-    /// repository holds and is never served to a client or embedded in a document. Escaping every apostrophe would make
-    /// a description unreadable in the one place it exists to be read.
-    /// </remarks>
-    private static JsonSerializerOptions RenderingOptions { get; } = new()
-    {
-        WriteIndented = true,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
-
-    /// <summary>Rewrites a node with every object's keys in ordinal order, so two renderings differ only where the contract does.</summary>
-    /// <remarks>
-    /// Array order is left alone. A schema's <c>required</c> list and an enumeration's values are sequences the
-    /// generator produced from declaration order, which is stable, and sorting them would hide a reordering that a
-    /// client reading positionally would see.
-    /// </remarks>
-    private static JsonNode? Canonical(JsonNode? node) => node switch
-    {
-        JsonObject properties => new JsonObject(properties
-            .OrderBy(property => property.Key, StringComparer.Ordinal)
-            .Select(property => KeyValuePair.Create(property.Key, Canonical(property.Value?.DeepClone())))),
-        JsonArray items => new JsonArray([.. items.Select(item => Canonical(item?.DeepClone()))]),
-        _ => node?.DeepClone(),
-    };
 }
