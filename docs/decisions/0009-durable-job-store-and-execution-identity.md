@@ -15,7 +15,7 @@ informed:
 
 Issue 405 asks for durable background work: a job enqueued against committed local state, claimed by one worker, retried only where retrying is safe, bounded in what it may consume, and visible afterwards. Issue 468 is its gate, and it asks two questions that have to be answered before any of it is written. Whether the store is MailFathom's or a library's, because that decides which schema the job record lives in and under which licence. And what identifies one execution, because the store's uniqueness constraint is built on that identity and the schema here is append-only, so a later correction is a migration over data somebody is already running.
 
-The architecture draft's section 21.5 refuses a generic workflow engine, a message broker, and a separate scheduler process until PostgreSQL-backed jobs demonstrate a concrete limitation. A library that persists and leases jobs in the PostgreSQL database MailFathom already runs is none of those three, so the refusal does not reach it and the question is genuinely open.
+MailFathom refuses a generic workflow engine, a message broker, and a separate scheduler process until PostgreSQL-backed jobs demonstrate a concrete limitation. A library that persists and leases jobs in the PostgreSQL database MailFathom already runs is none of those three, so the refusal does not reach it and the question is genuinely open.
 
 ## Decision Drivers
 
@@ -155,13 +155,12 @@ A payload holds references. It names a message occurrence, an account, a folder,
 - Good, because v8 is Apache-2.0 and it is the most widely deployed .NET messaging library.
 - Bad, because v9, released under a commercial licence, is where the project now is. Taking v8 is taking a version whose successor is not available on the same terms, which is a dead end chosen knowingly.
 - Bad, because a per-organization subscription cannot be passed to the people who self-host an Apache-2.0 product. A revenue-based free tier does not fix it: MailFathom would still be requiring each operator to qualify for another vendor's programme in order to run it.
-- Bad, because it is a message-broker abstraction, which is one of the three things the architecture draft refuses outright until PostgreSQL-backed jobs demonstrate a concrete limitation.
+- Bad, because it is a message-broker abstraction, which is one of the three things MailFathom refuses outright until PostgreSQL-backed jobs demonstrate a concrete limitation.
 
 ## More Information
 
 - Issue 468 asks the question and carries the option table this record decides between; issue 405 is the feature, and issues 469 to 473 implement the store, the worker, the failure policy, the capacity bounds, and the operability against this contract.
 - Issues 251 and 76 are the two consumers, and each names the absence of this model as its first blocker. Neither adds a scheduler of its own afterwards.
-- Section 21.5 of the architecture draft describes the subsystem, derives the idempotency identity this record places in the enqueuer, and refuses the workflow engine, the broker, and the separate scheduler process.
 - [ADR 0001](0001-application-owned-repositories-for-persistence-ports.md) is why the store is reached through an application-owned port with EF Core behind it, and [ADR 0003](0003-first-party-exception-hierarchy-and-stable-error-codes.md) is where a job-store failure gets its code. `MailboxMutationEntity` is the working precedent for a durable, retried, converging record with a denormalized account and a stored failure code.
 - The `describes:` marker names nothing because none of this code exists yet. It gains its paths when issue 469 lands the record and its lease, which is one of the two edits an accepted ADR is permitted.
 - Revisit when a deployment-wide concurrency bound is actually asked for, when the volume makes a single claim query a measured bottleneck rather than a suspected one, or when what an operator needs to see outgrows what MailFathom is willing to build — a dashboard is the one thing a library here would have given away, and wanting it back is a legitimate reason to reopen this.

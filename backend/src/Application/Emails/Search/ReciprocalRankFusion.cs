@@ -9,7 +9,7 @@ namespace MailFathom.Application.Emails.Search;
 /// <summary>Combines two rankings of the same emails into one, reading only where each ranking placed them.</summary>
 /// <remarks>
 /// <para>
-/// Reciprocal Rank Fusion is the method the architecture draft names, and the reason it names it is that the two inputs
+/// Reciprocal Rank Fusion is the method, and the reason it is the method is that the two inputs
 /// are not on one scale and never will be. A full-text rank is a function of term frequency and document length; a
 /// vector distance is a function of a model's geometry. Adding, averaging, or min-max normalizing them would ask which
 /// number is worth more, and every answer to that would be a constant that a change of embedding model silently

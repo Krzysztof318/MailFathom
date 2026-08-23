@@ -21,7 +21,7 @@ namespace MailFathom.Application.Emails.Mailboxes;
 /// </remarks>
 public readonly record struct MailboxQueryPageSize
 {
-    /// <summary>The greatest page size a mailbox query serves, per the architecture draft.</summary>
+    /// <summary>The greatest page size a mailbox query serves.</summary>
     public const int MaximumValue = 100;
 
     /// <summary>The page size a request that names none receives.</summary>

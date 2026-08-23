@@ -40,7 +40,7 @@ This file is loaded into every agent session, so it holds what has to be true be
 - **Everything written here and around it is in English**: identifiers, comments, documentation, commit messages, branch names, pull requests, issues, and every comment on one. The repository is public and its conversation is part of it, so the language a task is *discussed* in — with the owner, in a chat session, in any tongue — never reaches an artifact. This is the one place the rule is stated, and it holds in every directory.
 - Never commit directly on `main` or `master`. Branch before committing; in the owner's checkout that branch is named `agent/<short-description>`.
 - Preserve unrelated user changes. Stage only files that belong to the current task.
-- Make architectural decisions before implementation. Keep changes small, reviewable, and aligned with the architecture draft in `specs/`.
+- Make architectural decisions before implementation. Keep changes small, reviewable, and aligned with the boundaries below and the decision records that refine them.
 - Treat ADRs under `docs/decisions/` as required architectural context for AI agents. Before changing architecture, boundaries, configuration, persistence, provider integration, governance, security-sensitive behavior, or cross-cutting infrastructure, read the relevant ADRs and keep the change consistent with their current status and rationale.
 - Treat MailFathom as an enterprise-grade system even during early scaffolding: preserve seams for governance, auditability, privacy controls, operational hardening, compliance evidence, and future Agent Governance Toolkit (AGT) adoption without prematurely adding runtime dependencies.
 

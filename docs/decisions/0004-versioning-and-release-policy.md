@@ -17,7 +17,7 @@ When this decision was opened, nothing in MailFathom set a version. `Directory.B
 
 The decision question has three parts that are usually conflated: what a version number *promises*, where the number *comes from*, and which event turns an ordinary commit on `main` into a *release*. The first part is not answered by "pick SemVer", because MailFathom's public surface is not a compiled API. Its consumers bind to an MCP tool contract, a configuration schema, a database schema, and a deployment contract, and a versioning policy that talks about assembly compatibility makes a promise about the one surface nobody uses.
 
-Recorded on issue 116. No numbered specification under `specs/` backs it. Issue 119 stamps the number this ADR defines, issue 156 publishes the artifacts, issue 187 joins the Helm chart to the same release run, issue 117 records the branching model this policy assumes, and issue 53 (specification 19) owns the migration baseline whose pre-release policy this decision ends.
+Recorded on issue 116. No numbered specification backs it. Issue 119 stamps the number this ADR defines, issue 156 publishes the artifacts, issue 187 joins the Helm chart to the same release run, issue 117 records the branching model this policy assumes, and issue 53 (specification 19) owns the migration baseline whose pre-release policy this decision ends.
 
 ## Decision Drivers
 

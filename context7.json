@@ -9,7 +9,6 @@
   ],
   "excludeFolders": [
     "docs/decisions/**",
-    "specs/**",
     ".agents/**",
     ".claude/**",
     ".github/**"

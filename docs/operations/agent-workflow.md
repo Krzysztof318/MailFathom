@@ -978,9 +978,8 @@ advises; nothing waits on it.
 The branch under review is never checked out and nothing from it is executed.
 The workspace holds the base commit, which is code that already merged, and it
 is there so the reviewer can read the repository's own contract: root
-`AGENTS.md`, the recurring findings in the `review-change` skill, the
-architecture draft, and the ADRs, as `main` states them rather than as the branch
-would rewrite them.
+`AGENTS.md`, the recurring findings in the `review-change` skill, and the ADRs,
+as `main` states them rather than as the branch would rewrite them.
 
 The change arrives as data. A collection step reads the pull request, its
 changed files with their patches, the resulting content of each changed file,
@@ -1372,9 +1371,9 @@ happens, so a stuck labelling run must not hold a review open or fail one.
 The prompt points the reviewer at this repository's own rules rather than at
 general review practice: root `AGENTS.md`, the nested `AGENTS.md` files under
 `backend/src/`, `backend/tests/`, and `docs/`, the recurring findings in the `review-change`
-skill, and the ADRs and architecture draft that govern the area the change touches. A
-finding names the rule it rests on in a field of its own, and one that applies
-generic advice where this repository has stated a different rule is itself wrong.
+skill, and the ADRs that govern the area the change touches. A finding names the
+rule it rests on in a field of its own, and one that applies generic advice
+where this repository has stated a different rule is itself wrong.
 
 Beyond that contract it works through six rubrics — the repository's rules,
 security and privacy, reliability, performance, clean code, and what the change
@@ -2071,10 +2070,6 @@ Each nested `CLAUDE.md` imports its sibling `AGENTS.md`.
 The repository is public, so everything below is read by people who did not write
 it. Each was classified deliberately rather than left in place by default:
 
-- **`specs/` — kept in place.** It holds the architecture draft, which root
-  `AGENTS.md` names as required context and which states what MailFathom is being
-  built into. A page under `docs/` is the statement of fact beside it, and the
-  roadmap board decomposes the gap between the two into issues.
 - **The five `AGENTS.md` files and their `CLAUDE.md` imports — kept in place.**
   They are the contract the agents execute, they are what makes a contribution
   produced by an agent satisfy the same rules, and `AGENTS.md` is a convention
@@ -2092,10 +2087,12 @@ it. Each was classified deliberately rather than left in place by default:
 - **This page — kept.** How the project is worked is part of what a contributor
   needs, not residue from it.
 
-Nothing here is retained for sentiment: a dated implementation plan or design
-note is the shape that was removed, because it records how a change was arrived
-at, is not allowed to be rewritten, and therefore can only drift from the code
-while sitting in a tree a reader takes as fact.
+Nothing here is retained for sentiment: a dated implementation plan, design
+note, or architecture draft is the shape that was removed, because it records
+how a change was arrived at or what was once intended, is not allowed to be
+rewritten, and therefore can only drift from the code while sitting in a tree a
+reader takes as fact. What replaces it is a decision record for the intent that
+is settled and an issue for the work that is not.
 
 ## Failure recovery
 

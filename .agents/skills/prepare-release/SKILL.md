@@ -455,8 +455,8 @@ Read every hit against the tree being tagged and settle it one of three ways:
 - **Still true, and about a *later* release.** A page saying a capability arrives with the next version is accurate and
   stays. Confirm the version it names is still the right one — a feature deferred out of this release has to name where
   it went.
-- **Not about the release at all.** The pattern is deliberately wide, so it matches the architecture draft's prose, an
-  ADR's reasoning, and an example. Leave it.
+- **Not about the release at all.** The pattern is deliberately wide, so it matches an ADR's reasoning and an example
+  as readily as a claim about a version. Leave it.
 
 The exclusions are deliberate. `CHANGELOG.md` is the one file whose historical entries *should* read as claims about
 past releases, and rewriting one would be falsifying a record. `docs/decisions/` is excluded because an accepted ADR is

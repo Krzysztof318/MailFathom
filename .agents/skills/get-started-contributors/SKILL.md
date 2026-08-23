@@ -116,9 +116,8 @@ offer to go deeper on any one of them instead of expanding all six.
 3. **Where things live.** `backend/` holds the .NET stack: `backend/src/` holds the clean-architecture boundaries —
    `Domain`, `Application`, `Infrastructure`, `AI`, `Mcp`, `Host`, `Cli` — and `backend/tests/` mirrors them.
    `frontend/` carries the same two directories for the Uno Platform client, which has a solution of its own.
-   `docs/` states what
-   the code *does* and `specs/` holds the architecture draft, which states what MailFathom is being built into;
-   `docs/decisions/` holds the ADRs a change is written to be consistent with. `deploy/`, `scripts/`, and `backend/tools/` are
+   `docs/` states what the code *does*, and `docs/decisions/` holds the ADRs a change is written to be
+   consistent with. `deploy/`, `scripts/`, and `backend/tools/` are
    the deployment assets, the gates, and the development utilities — `backend/tools/SyntheticMail` fills a mailbox to work
    against — and `.agents/skills/` is this workflow, which Claude Code finds through the `.claude/skills` symlink every
    clone carries. Each directory's own `AGENTS.md` governs it, and the table in the root one says which to read when.

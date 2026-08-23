@@ -119,7 +119,7 @@ This ADR also does not permit adding new third-party packages. Any future provid
 
 ### Amendment 1: referenced secrets are reloadable for new operations
 
-*Approved by the owner on 2026-07-27, for `specs/02b-certificate-material-and-secret-rotation.md`.*
+*Approved by the owner on 2026-07-27, for the certificate-material and secret-rotation work of specification 02b.*
 
 The original reload policy classified credentials and certificate trust anchors as restart-required without qualification. That guidance was written before a secret-reference indirection existed. With one, reload no longer means mutating a bound secret value in place; it means re-resolving a reference whose validity is proven before the snapshot carrying it is published. The two are different operations with different risks, and the original text could only describe the first.
 
@@ -151,7 +151,7 @@ A secret that is *not* reached through a reference — a password written into a
 - Microsoft Learn, "Options pattern in .NET," documents options validation, `IValidateOptions<TOptions>`, and `AddOptionsWithValidateOnStart<TOptions>` / `ValidateOnStart` startup validation: <https://learn.microsoft.com/en-us/dotnet/core/extensions/options>.
 - Microsoft Learn, "Detect changes with change tokens in ASP.NET Core," describes configuration reload change tokens and file-provider reload behavior: <https://learn.microsoft.com/en-us/aspnet/core/fundamentals/change-tokens?view=aspnetcore-10.0>.
 - Microsoft Learn, "Implement a custom configuration provider in .NET," documents custom providers backed by a database, which is background for a read-only source of that shape and is not adopted by this ADR; the writable half of what that page describes is refused above: <https://learn.microsoft.com/en-us/dotnet/core/extensions/custom-configuration-provider>.
-- This ADR refines the MailFathom architecture rule that `Host` owns configuration and dependency injection, while `Application` and `Domain` remain independent of infrastructure frameworks: `specs/2026-07-22-mail-fathom-architecture-draft.md`.
+- This ADR refines the architecture rule root `AGENTS.md` states, that `Host` owns configuration and dependency injection while `Application` and `Domain` remain independent of infrastructure frameworks.
 
 ## Decision Outcome
 

@@ -81,10 +81,10 @@ them if that access were ever removed.
    - Return `blocked` until every path is inventoried and the user explicitly approves its
      preservation plan, or the changes are moved to a separate worktree. Never assume existing
      changes are unrelated.
-5. Classify the task by what governs it: an ADR, the architecture draft, an existing issue, or
-   documentation-only work. Work nothing backs is an ordinary case and a feature can be one, so never
-   invent a governing document to supply the classification — say that nothing governs it and let the
-   issue body carry the scope instead.
+5. Classify the task by what governs it: an ADR, an existing issue, or documentation-only work. Work
+   nothing backs is an ordinary case and a feature can be one, so never invent a governing document
+   to supply the classification — say that nothing governs it and let the issue body carry the scope
+   instead.
 6. Read whatever step 5 named, plus affected implemented-behavior documentation and relevant ADRs.
 7. Check the task against the protected paths before planning the work, not after the check refuses
    it. `.github/`, `.config/`, `.agents/`, `.claude/`, and `docs/decisions/`, an `.editorconfig`,

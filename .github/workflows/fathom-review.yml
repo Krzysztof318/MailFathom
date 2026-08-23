@@ -657,9 +657,9 @@ jobs:
       issues: read
     steps:
       # The base commit, which is code that already merged, and never the branch under review. It
-      # supplies the repository's own instructions — `AGENTS.md`, the `review-change` skill, the
-      # ADRs and the architecture draft — so the reviewer measures the change against the contract as it
-      # stands on `main` rather than as the branch would rewrite it.
+      # supplies the repository's own instructions — `AGENTS.md`, the `review-change` skill, and the
+      # ADRs — so the reviewer measures the change against the contract as it stands on `main`
+      # rather than as the branch would rewrite it.
       - name: Check out the base commit
         uses: actions/checkout@v7
         with:
@@ -1539,9 +1539,9 @@ jobs:
           private-key: ${{ secrets.REVIEWER_APP_PRIVATE_KEY }}
 
       # The base commit, which is code that already merged, and never the branch under review. It
-      # supplies the repository's own instructions — `AGENTS.md`, the `review-change` skill, the
-      # ADRs and the architecture draft — so the reviewer measures the change against the contract
-      # as it stands on `main` rather than as the branch would rewrite it.
+      # supplies the repository's own instructions — `AGENTS.md`, the `review-change` skill, and the
+      # ADRs — so the reviewer measures the change against the contract as it stands on `main`
+      # rather than as the branch would rewrite it.
       - name: Check out the base commit
         uses: actions/checkout@v7
         with:

@@ -252,7 +252,6 @@ The files that carry the licensing decision itself are not merely off limits by 
 | [`docs/operations/issue-tracking.md`](docs/operations/issue-tracking.md) | Which work needs an issue, what its body carries, and how a maintainer triages one that arrives from outside the project |
 | [`docs/operations/agent-workflow.md`](docs/operations/agent-workflow.md) | The verification scripts and the skills at length, and how the automated review behaves |
 | [`docs/decisions/`](docs/decisions/) | Architectural decision records — required context before an architectural change |
-| [`specs/`](specs/) | The architecture draft: what MailFathom is being built into. The draft is intent; a page under `docs/` is fact |
 
 Those files are written for the autonomous agents that do most of the work here, so they are longer and more prescriptive than a contribution guide needs to be. They remain authoritative: where this guide and one of them disagree, they win, and please report the discrepancy.
 
