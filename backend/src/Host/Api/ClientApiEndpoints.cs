@@ -46,8 +46,10 @@ internal static class ClientApiEndpoints
 
         var api = endpoints.MapGroup(ClientEndpointOptions.RoutePrefix);
 
+        // TypedResults rather than Results, so the response type reaches the endpoint's metadata and the generated
+        // OpenAPI document describes what this answers with rather than an untyped 200.
         api.MapGet(SessionRoute, (IAuthorizedPrincipalSource principals) =>
-            Results.Ok(ClientSessionResponse.For(principals.Current)));
+            TypedResults.Ok(ClientSessionResponse.For(principals.Current)));
 
         return api;
     }

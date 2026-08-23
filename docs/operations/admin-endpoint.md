@@ -30,6 +30,8 @@ A deployment that configures nothing serves no administrative surface. Enabling 
 nowhere else, and nothing else answers on it — a request for `/mcp` that arrives on the administrative port is refused
 before it reaches the protocol surface, and a request for `/api/admin` that arrives on the MCP port is refused before it
 reaches any credential check. Both are answered `404`, because the honest answer is that nothing is served there.
+The one thing that also answers on this listener is [the HTTP API document and the explorer](http-api-documentation.md),
+which belong to no surface and exist only in a `Development` process.
 
 A port another listener in this process already binds fails startup naming the section, rather than failing later with
 an address-in-use error that names a socket.

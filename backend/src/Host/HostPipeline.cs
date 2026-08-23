@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Host.Api;
+using MailFathom.Host.Api.Documentation;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
@@ -83,9 +84,15 @@ internal static class HostPipeline
         // before it reaches CORS, authentication, the client-certificate check, or the rate limiter — and a probe that
         // arrived where the probes are not served is refused before it can report dependency state to whoever can
         // reach it.
-        app.UseSurfaceIsolation(composition.Listeners.SurfacesByPort());
+        app.UseSurfaceIsolation(composition.Listeners.SurfacesByPort(), app.Environment);
 
         MapHealthProbes(app, composition);
+
+        // Outside every surface branch below, because the document describes two of them and belongs to neither, and
+        // because it is mapped on whether this is a development process rather than on what an operator enabled. It
+        // maps nothing outside Development, so the routes then answer 404 for the honest reason that no endpoint
+        // exists — a documentation surface that refused a credential would still confirm the catalogue is there.
+        app.MapApiDocumentation(app.Environment);
 
         if (composition.Mcp.Enabled || composition.Client.Enabled)
         {
