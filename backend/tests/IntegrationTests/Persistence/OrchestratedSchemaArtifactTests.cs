@@ -71,6 +71,14 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
 
         Assert.Equal(definedMigrations, await ReadAppliedMigrationsAsync(connectionString, cancellationToken));
         Assert.Empty(await inspector.ReadPendingMigrationIdentifiersAsync(cancellationToken));
+
+        // The one row the chain writes rather than creates a table for: a deployment brought to this release by the
+        // artifact alone holds the owner every mailbox it goes on to synchronize is bound to.
+        Assert.Single(await scope.ServiceProvider
+            .GetRequiredService<MailFathomDbContext>()
+            .OwnerAccounts
+            .AsNoTracking()
+            .ToListAsync(cancellationToken));
         Assert.Equal(
             PostgresTextSearchConfiguration.Default.Value,
             await inspector.ReadSearchVectorTextSearchConfigurationAsync(cancellationToken));
@@ -222,7 +230,10 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         MailFathomDbContext context,
         CancellationToken cancellationToken)
     {
-        var account = new MailboxAccountEntity { Id = "artifact-upgrade" };
+        // The owner the artifact provisioned, rather than one written here: a mailbox belongs to somebody, and this
+        // database has held exactly one owner record since the script that created it ran.
+        var ownerId = await context.OwnerAccounts.Select(owner => owner.Id).SingleAsync(cancellationToken);
+        var account = new MailboxAccountEntity { Id = "artifact-upgrade", OwnerId = ownerId };
         var folder = new MailFolderEntity
         {
             MailboxAccountId = account.Id,

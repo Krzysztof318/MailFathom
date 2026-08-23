@@ -28,6 +28,11 @@ database that already carries some of them takes only what it is missing. You do
 given installation holds in order to know which file to apply — there is one file, and applying it twice is applying it
 once.
 
+It writes one row as well as creating tables. The chain provisions the **owner** every mailbox is bound to — one
+record, with the mail accounts this deployment already holds carried onto it — because a mailbox belongs to somebody
+from the moment its row exists. It is written on the apply that introduces it and left alone by every apply after that,
+so applying the file twice still provisions one owner.
+
 It is also **only forward**. The script carries no reverse migrations, so it cannot undo anything, and nothing in
 MailFathom can. [Rolling back](#rolling-back) is what that leaves.
 
