@@ -27,5 +27,17 @@ internal sealed class MailboxAccountConfiguration : IEntityTypeConfiguration<Mai
         // race to resolve rather than as a failure.
         entity.HasKey(account => account.Id).HasName(PersistenceConstraintNames.MailboxAccountPrimaryKeyConstraintName);
         entity.Property(account => account.Id).HasMaxLength(128);
+
+        // The owner is required, so a mailbox belongs to somebody from the moment its row exists rather than from the
+        // moment something remembers to say so. The cascade is what makes erasing an owner one statement: the mail
+        // graph hangs off this table, so the account rows take their folders, and the folders take everything derived
+        // from the mail beneath them.
+        //
+        // The index EF's convention builds over the column is the one read this column has: which mail accounts one
+        // owner owns, which the erasure asks before it takes the rows no cascade reaches.
+        entity.HasOne<OwnerAccountEntity>()
+            .WithMany()
+            .HasForeignKey(account => account.OwnerId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }
