@@ -43,7 +43,9 @@ while starting.
 answered with `404`, and `/mcp` asked on the probe port is answered with `404` as well. The decision is taken from the
 port the connection arrived at — a property of the socket the operating system accepted it on, not a header the caller
 wrote — so publishing the probe port to an orchestrator's network does not publish the mailbox to it, and publishing the
-application port to clients does not hand them an unauthenticated dependency report.
+application port to clients does not hand them an unauthenticated dependency report. The one exception in either
+direction is [the HTTP API document and the explorer](http-api-documentation.md), which belong to no surface and answer
+on every bound port — and which a deployment never has, because they exist only in a `Development` process.
 
 A probe port that collides with another surface fails startup with a message naming both, rather than failing
 to bind with an address-in-use error that names a socket.

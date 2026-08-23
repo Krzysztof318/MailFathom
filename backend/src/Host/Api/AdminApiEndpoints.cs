@@ -128,8 +128,10 @@ internal static class AdminApiEndpoints
         // was added, so nothing here depends on this line staying first.
         api.AddEndpointFilter(AdminRouteAuthorization.RefuseUnpermittedAsync);
 
+        // TypedResults rather than Results, so the response type reaches the endpoint's metadata and the generated
+        // OpenAPI document describes what this answers with rather than an untyped 200.
         api.MapGet(SessionRoute, (ClaimsPrincipal caller, IAuthorizedPrincipalSource principals) =>
-                Results.Ok(AdminSessionResponse.For(caller, principals.Current)))
+                TypedResults.Ok(AdminSessionResponse.For(caller, principals.Current)))
             .RequireNoPermission();
 
         api.MapMailboxRefreshToken();

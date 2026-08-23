@@ -41,6 +41,7 @@ using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Host.Api;
+using MailFathom.Host.Api.Documentation;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Answering;
 using MailFathom.Host.Configuration.Chat;
@@ -129,6 +130,11 @@ internal static class HostComposition
         var embedsMail = AddPersistenceAndProviders(builder);
 
         AddBackgroundWork(builder, declaredSensitiveContent, spamScannerIsConfigured, embedsMail);
+
+        // Ahead of the surfaces rather than inside one, because the document it generates describes two of them and
+        // belongs to neither. It registers nothing outside Development, which is the whole of the rule and is enforced
+        // by the registration itself so it cannot disagree with the mapping.
+        builder.Services.AddApiDocumentation(builder.Environment);
 
         return AddNetworkSurfaces(builder);
     }
