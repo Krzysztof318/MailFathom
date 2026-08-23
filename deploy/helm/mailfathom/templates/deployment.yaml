@@ -114,6 +114,22 @@ spec:
               value: {{ .Values.database.passwordSecretKey | quote }}
             - name: Persistence__Password__SecretReference
               value: {{ printf "file:%s/%s" (trimSuffix "/" .Values.secrets.mountPath) .Values.database.passwordSecretKey | quote }}
+            {{- if .Values.client.enabled }}
+            {{- /*
+              The switch that puts the page in front of the mailbox, and — separately — the statement that its hop is
+              protected. MailFathom refuses to serve the client over a clear-text socket unless a deployment says
+              something in front of it terminates TLS, and this pod never does: it speaks plain HTTP by design. So the
+              permission is written exactly when the chart can see the ingress terminating TLS, and withheld otherwise
+              — where TLS terminates somewhere this chart cannot read, the application refuses to start and names the
+              setting, which is the honest outcome for a posture no template can verify.
+            */}}
+            - name: ClientEndpoint__Application__Enabled
+              value: "true"
+            {{- if and .Values.ingress.enabled .Values.ingress.tls }}
+            - name: ClientEndpoint__Application__AllowClearText
+              value: "true"
+            {{- end }}
+            {{- end }}
             {{- if .Values.personalDataScanning.enabled }}
             {{- /*
               The switch and the analyzer's address are written together, from the one value that decided whether the

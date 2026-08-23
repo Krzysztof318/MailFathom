@@ -184,6 +184,10 @@ project here and neither build reads the other's files.
   the desktop head uses ships in `Client.Backend`; the browser head's lives under `src/Client/Platforms/WebAssembly/`,
   because it needs the JavaScript interop only that target framework compiles — and that interop is why the browser
   head is the one place the application project sets `AllowUnsafeBlocks`, which the `[JSImport]` generator requires.
+- `src/Client/Notices/` is what a published desktop head has to carry beside it: the LGPL-2.1 text and the notice
+  naming the one component in that head's graph whose licence obliges them. The project file attaches them to every
+  `net10.0-desktop` publish and fails the build when one is missing, so the obligation travels with the artifact rather
+  than with the workflow that happens to produce it.
 - `tests/Client.UnitTests` covers both, referencing the application through its plain target and `Client.Backend`
   directly, on the same xUnit.net v3 and Microsoft Testing Platform the service's suites use.
 - Almost no client package version is written in this repository. `UnoFeatures` in the project file names capabilities
@@ -197,5 +201,13 @@ project here and neither build reads the other's files.
 
 The client reaches MailFathom over the endpoints `Host` exposes and shares no type with it — its wire records and its
 OAuth code are its own, stated again at this end rather than referenced across the boundary. Which deployment it
-reaches is the composing host's to supply, and nothing supplies it yet. `frontend/src/AGENTS.md` states what governs a
-change there, and `frontend/tests/AGENTS.md` what governs one in its suite.
+reaches is the composing head's to supply, through `IDeploymentAddressSource`: an installed head reads the `Deployment`
+section out of an embedded `appsettings.json`, and the browser head reads the origin it was served from, because the
+container image serves the bundle from the same origin as the surface it calls. `frontend/src/AGENTS.md` states what
+governs a change there, and `frontend/tests/AGENTS.md` what governs one in its suite.
+
+That image is the one place the two stacks meet in a build, and it is a file copy rather than a reference. A stage of
+`deploy/docker/Dockerfile` publishes the browser head and copies its output into the runtime image's `wwwroot`; no
+project in either solution names one in the other, and `HostDependencyBoundaryTests` asserts the service assembly's
+reference list so that stays true. Serving those files is off unless a deployment turns it on —
+[the client endpoint](../operations/client-endpoint.md#serving-the-client-from-the-deployment) is the page.

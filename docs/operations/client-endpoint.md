@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -174,10 +174,55 @@ TLS-terminating reverse proxy and wrong anywhere else, so startup says so:
 - an enabled endpoint with no `Authentication` entry warns that anything reaching the address is served the mailbox, and
   names the section that fixes it;
 - an enabled endpoint terminating no TLS warns that any credential a client presents is readable on the path, and names
-  its clear-text port.
+  its clear-text port;
+- an endpoint serving [the page](#serving-the-client-from-the-deployment) over clear text an operator explicitly
+  permitted reports that separately, at every startup, naming the permission rather than assuming it is still true.
 
 Both are warnings rather than refusals, because a loopback bind, a private network, and a proxy that terminates TLS are
-each a deployment where one of them is the right answer, and only an operator knows which they have.
+each a deployment where one of them is the right answer, and only an operator knows which they have. Serving the page
+is the one part that is refused rather than warned about, for the reason the next section gives.
+
+## Serving the client from the deployment
+
+The MailFathom container image carries the client's browser head, and one setting serves it from this endpoint's own
+listeners:
+
+```jsonc
+{
+  "ClientEndpoint": {
+    "Enabled": true,
+    "Application": { "Enabled": true }
+  }
+}
+```
+
+It is off in every default — in the configuration, in the chart's `values.yaml`, in the Compose file, and in the Quadlet
+unit — so adopting a release publishes no page. Each deployment asset turns it on with one setting of its own;
+[Kubernetes](deployment-kubernetes.md), [Compose](deployment-compose.md), and [Quadlet](deployment-quadlet.md) each name
+theirs.
+
+**What it adds is static files and nothing else.** The bundle answers the root of the listeners this endpoint is served
+on, and the routes beneath `/api/client` are unchanged: same credentials, same grants, same limits. The page itself
+carries no credential and needs none — a browser has to load the application before it can obtain one — and what that
+application then calls is authorized exactly as any other caller is. Turning this on grants nobody anything; it puts
+the client in front of the sign-in the endpoint already required.
+
+Serving it from the same origin as the surface it calls is the point of serving it here at all: the page then needs no
+cross-origin permission and `Cors:AllowedOrigins` has nothing to say about it. A client downloaded and installed rather
+than served — the desktop head — reaches the same routes from its own origin and does need one.
+
+**Clear text is refused rather than warned about**, and that is the one difference from every other posture on this
+page. A page is what a person types their credential into, so a deployment that serves it over a socket this process
+opened in the clear fails at startup naming the two ways out: terminate TLS here, with `ClientEndpoint:Transport` set
+to `HttpsOnly` and a `ClientEndpoint:Https:Endpoints` profile; or state that something in front of this process already
+did, by writing `ClientEndpoint:Application:AllowClearText: true`. Nothing here can tell an ingress terminating TLS
+from a socket published to a network, which is why the second one is a declaration an operator makes rather than
+something MailFathom infers. A socket that only redirects to HTTPS serves nothing and needs no permission.
+
+Two more refusals belong to the same setting. Writing `Application:Enabled` while `ClientEndpoint:Enabled` is off fails
+at startup rather than being ignored, and so does enabling it on a host that carries no bundle — the files travel
+inside the container image, so a service run straight from the sources serves the API surfaces alone and says so
+instead of answering a page of 404s.
 
 There is no client-certificate profile here. The trust question a certificate answers is a second one this endpoint does
 not yet ask; where it is served is stated in exactly the settings the existing endpoints use, so the day it does ask,
@@ -192,3 +237,7 @@ the public URL a browser actually reaches. The chart's `ingress.hosts[].paths` i
 
 An ingress answers no preflight on the application's behalf, so `Cors:AllowedOrigins` still has to name the origin the
 page is served from even where the ingress and the page share a host.
+
+Serving the page needs one more path published: `/`, to the same backend, so the bundle and the routes it calls arrive
+on one origin. Publish that only where the page is actually enabled — a path routed to a deployment that serves no
+client is a `404` with an ingress in front of it.

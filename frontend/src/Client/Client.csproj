@@ -23,12 +23,14 @@
 
     <!-- UnoFeatures is how an Uno single project asks for a capability rather than for a package: the SDK resolves each
          one to the packages and versions its own pin decides. Material is the design system every brush and style here
-         resolves against, Toolkit adds the controls the shell is built from, Hosting and Logging are the generic-host
-         wiring the application starts through, MVUX is the state model, Navigation is the router, and SkiaRenderer is
-         what makes one rendering path serve every head.
+         resolves against, Configuration is what reads the deployment an installed head reaches out of an embedded
+         appsettings.json — the one source a browser head can read too — Toolkit adds the controls the shell is built
+         from, Hosting and Logging are the generic-host wiring the application starts through, MVUX is the state model,
+         Navigation is the router, and SkiaRenderer is what makes one rendering path serve every head.
          https://aka.platform.uno/singleproject-features -->
     <UnoFeatures>
       Material;
+      Configuration;
       Hosting;
       Toolkit;
       Logging;
@@ -63,4 +65,39 @@
          this way and only this way: Client.Backend knows nothing about a view, and the compiler is what says so. -->
     <ProjectReference Include="..\Client.Backend\Client.Backend.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Everything this project publishes is internal to it: nothing outside the application composes a head. The unit
+         suite is the one exception, on the same terms Client.Backend grants it. -->
+    <InternalsVisibleTo Include="MailFathom.Client.UnitTests" />
+  </ItemGroup>
+
+  <!-- What a distributed desktop head has to carry, attached to the publish rather than to the workflow that
+       publishes: the project's own Apache-2.0 grant and attribution, and the notices for the one component here whose
+       licence obliges them. A `net10.0-desktop` graph carries LibVLCSharp.dll, which is LGPL-2.1-or-later — see
+       THIRD_PARTY_LICENSES.md and the four build properties frontend/src/AGENTS.md leaves unset for it — and section 6
+       of that licence wants the statement, the licence text, and access to the corresponding source travelling with
+       the artifact. Written here so that every publish of this head satisfies it, including one a contributor runs.
+       The browser head resolves none of that graph and is served from the container image, whose own LICENSE and
+       NOTICE the service publishes beside its assemblies. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">
+    <None Include="$(RepositoryRoot)LICENSE" Link="LICENSE" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="$(RepositoryRoot)NOTICE" Link="NOTICE" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Notices/THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Notices/LGPL-2.1.txt" Link="LGPL-2.1.txt" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- A missing source file makes the items above resolve to nothing and the publish silently succeeds, which is the
+       one failure this has to rule out: an artifact that ships without the notices it owes is the defect, not a build
+       that stops. The same target `Host` carries, over four files rather than two. -->
+  <Target Name="VerifyPublishedDesktopNotices" AfterTargets="Publish" Condition="'$(TargetFramework)' == 'net10.0-desktop'">
+    <Error Condition="!Exists('$(PublishDir)LICENSE')"
+           Text="The published desktop head has no LICENSE. Restore the repository root LICENSE before publishing." />
+    <Error Condition="!Exists('$(PublishDir)NOTICE')"
+           Text="The published desktop head has no NOTICE. Restore the repository root NOTICE before publishing." />
+    <Error Condition="!Exists('$(PublishDir)THIRD-PARTY-NOTICES.md')"
+           Text="The published desktop head has no THIRD-PARTY-NOTICES.md, which is what states that LibVLCSharp is used under the LGPL and where its source is." />
+    <Error Condition="!Exists('$(PublishDir)LGPL-2.1.txt')"
+           Text="The published desktop head has no LGPL-2.1.txt, which section 6 of that licence requires the artifact to carry." />
+  </Target>
 </Project>

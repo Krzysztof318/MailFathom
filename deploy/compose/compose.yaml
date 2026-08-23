@@ -107,6 +107,18 @@ services:
       ConnectionStrings__mailfathom: "Host=postgres;Port=5432;Database=${MAILFATHOM_DATABASE:-mailfathom};Username=${MAILFATHOM_DATABASE_ROLE:-mailfathom}"
       Persistence__Password__Name: mailfathom-database-password
       Persistence__Password__SecretReference: file:/run/secrets/mailfathom-database-password
+      # MailFathom's own client, served by the application as a page at the same address its client surface answers on.
+      # The bundle is inside the image, so this pulls nothing and starts no second container; what it needs beside it is
+      # ClientEndpoint:Enabled in ./config, since the page is served on that surface's listeners and calls them.
+      #
+      # Both keys are one variable, and the second one is a statement about this deployment's shape rather than a
+      # convenience. MailFathom refuses to serve the client over a clear-text socket, because the page and every token
+      # it then presents cross a public hop — and this container speaks plain HTTP by design, publishing on loopback for
+      # a reverse proxy to terminate TLS in front of. Enabling the client here therefore says that proxy exists. Keep
+      # MAILFATHOM_HTTP_BIND on loopback until it does: with the port on a network and no TLS in front, this variable
+      # serves the client, and everything a browser sends back, in the clear.
+      ClientEndpoint__Application__Enabled: ${MAILFATHOM_CLIENT:-false}
+      ClientEndpoint__Application__AllowClearText: ${MAILFATHOM_CLIENT:-false}
       # Personal-data scanning, off by default like the product. Turning it on is two variables in `.env` — this one and
       # COMPOSE_PROFILES=personal-data-scanning — because Compose cannot make an environment entry conditional on a
       # profile: the profile decides whether the analyzer container exists and this decides whether MailFathom asks it,

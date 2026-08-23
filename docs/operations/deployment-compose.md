@@ -434,6 +434,28 @@ phrase above is the one to use rather than one that is checked. The Helm chart d
 template function can. Neither is a security control: what both buy is that nobody reaches a nightly image without
 reading a sentence saying it is not a release.
 
+## The client
+
+MailFathom's own client is inside the image the application service already runs, so serving it starts no second
+container and pulls nothing. It is off, like everything else here that costs anything, and turning it on is one
+variable in `.env`:
+
+```dotenv
+MAILFATHOM_CLIENT=true
+```
+
+That variable writes two settings, and the second is a statement about this deployment rather than a convenience.
+MailFathom refuses to serve a page over a clear-text socket unless a deployment has said that something in front of it
+terminates TLS — the page, and every token a browser then sends back, cross whatever hop is between it and the person —
+and this container speaks plain HTTP by design. So enabling the client here asserts that the reverse proxy the section
+on [the network boundary](#the-network-boundary) describes exists. Keep `MAILFATHOM_HTTP_BIND` on loopback until it
+does.
+
+Beside it, `ClientEndpoint:Enabled` has to be on in the configuration under `./config`: the page is served on that
+surface's listeners and calls its routes, and MailFathom refuses to start with one of the two on and the other off,
+naming both. What the page then has to present is unchanged by serving it here — [the client
+endpoint](client-endpoint.md#serving-the-client-from-the-deployment) is the page.
+
 ## Personal-data scanning
 
 The stack has a third service, and it is not started. `presidio-analyzer` sits behind a Compose profile, so

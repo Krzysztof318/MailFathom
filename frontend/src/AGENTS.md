@@ -187,8 +187,10 @@ graph resolves none of it. `THIRD_PARTY_LICENSES.md` carries the verdict — it 
 [ADR 0016](../../docs/decisions/0016-third-party-licence-obligations-per-artifact.md) the rule behind it, which is
 that a component carrying a licence condition stays separately replaceable in every artifact that ships it.
 
-So the bill falls on whoever first packages a desktop head for distribution, in the form of four build properties that
-are never set on a head whose graph carries that assembly, because each one takes replaceability away:
+**That bill is now paid, and it stays paid by not being undone.** A release publishes the Windows desktop heads —
+`.github/workflows/build-desktop-client.yml` builds them and `release.yml` attaches them — so the four properties below
+are conditions on every publish of this head rather than a warning to whoever gets there first, and each one is never
+set on a head whose graph carries that assembly, because each takes replaceability away:
 
 - **No assembly merging.** Nothing folds `LibVLCSharp.dll` into another assembly — not ILMerge, not ILRepack, not a
   packaging step that produces one assembly out of several.
@@ -201,8 +203,12 @@ are never set on a head whose graph carries that assembly, because each one take
 
 And one thing that must be present rather than absent: the notices travelling with that artifact carry the LGPL-2.1
 text, the statement that the Library is used and is covered by it, and access to LibVLCSharp's corresponding source
-from the same place the artifact is downloaded from. `THIRD_PARTY_LICENSES.md` records which issue owns producing that
-bundle and what else it has to satisfy.
+from the same place the artifact is downloaded from. Those travel with the *publish* rather than with the workflow that
+runs one — `Client.csproj` copies the repository's `LICENSE` and `NOTICE` and this project's `Notices/` beside the head
+on every `net10.0-desktop` publish, and a target that runs after it fails the build when any of the four is missing, so
+a contributor publishing the head by hand carries them too. The source offer is the release notes' half, because that
+is the page somebody downloads the archive from. `THIRD_PARTY_LICENSES.md` records the verdict and what else it has to
+satisfy.
 
 Bundling the native VLC libraries — the `VideoLAN.LibVLC.*` packages, which nothing restores today — is a **separate
 licence review** and is not covered by the one above. VideoLAN publishes its software under GNU GPL v2 *or* LGPL
@@ -217,13 +223,22 @@ an end-user licence agreement forbidding distribution to a third party, and the 
 The SDK adds them whatever this project file says, `THIRD_PARTY_LICENSES.md` carries the verdict — they stay — and that
 verdict rests on a build fact rather than on an intention: **no artifact may carry any of the four.**
 
-What keeps them out is already in the build rather than in a property anyone has to remember. Two of the four have no
-`lib` to reference — one is MSBuild targets, the other a tools directory — and the SDK drops the designer's and the App
-MCP's assets when `Optimize` is `true`, which is what a Release build sets. So the rule is the one that follows from
-that: a head is packaged for distribution from a Release build. A published Debug build of any head, or a head that
-turns `Optimize` off in Release, ships somebody else's proprietary assemblies. `UnoDisableHotDesign` and
-`UnoDisableMCPSupport` would keep two of the four out of the graph entirely; neither is set, because the tooling they
-would remove is the tooling this stack is worked with.
+What keeps them out is in the build rather than in a property anyone has to remember. Two of the four have no `lib` to
+reference — one is MSBuild targets, the other a tools directory — and the SDK drops the designer's and the App MCP's
+assets when `Optimize` is `true`, which is what a Release build sets. So the rule is the one that follows from that: a
+head is packaged for distribution from a Release build. A published Debug build of any head, or a head that turns
+`Optimize` off in Release, ships somebody else's proprietary assemblies.
+
+**The SDK decides that while restoring, not while publishing**, which is the part a build that produces an artifact has
+to say out loud. `Uno.Implicit.Packages.ProjectSystem.targets` reads `Optimize` when it composes the package graph, so
+a restore that was not told the configuration is a Debug restore whose graph a later Release publish then packages —
+which is exactly how the container image first shipped `Uno.UI.HotDesign.*` and `OpenAI.dll`. Every build that produces
+an artifact therefore states `-p:Configuration=Release` on the **restore** as well as on the publish, and states
+`-p:UnoDisableHotDesign=true -p:UnoDisableMCPSupport=true` beside it so the result does not rest on the SDK continuing
+to read that one property. `deploy/docker/Dockerfile`'s client stage and
+`.github/workflows/build-desktop-client.yml` are the two places that do, and both are the whole reason those two
+properties are absent from `Client.csproj`: the tooling they remove is the tooling this stack is worked with, so they
+belong to a publish rather than to the project file.
 
 ## Running the client
 
@@ -238,12 +253,19 @@ records what the client resource costs, what it needs installed, and how to run 
 the browser head needs the `wasm-tools` workload; the Uno SDK is pinned in the repository-root `global.json` and
 restored like any other.
 
-**The client does not yet learn the service's address from anywhere.** It has an HTTP client now, and that client is
-built around not deciding this: `AddMailFathomDeployment` takes the address as an argument, nothing in
-`Client.Backend` has a default, and nothing composes one from a literal. What is still missing is the host's half —
-where the composing head reads the address from — and a browser head reads no environment the app model could set, so
-nothing is wired rather than something being wired that could not be read. Do not invent a mechanism for it as a side
-effect of a screen.
+**Where the deployment is, is answered per head, through `IDeploymentAddressSource`.** `AddMailFathomDeployment` still
+takes the address as an argument and `Client.Backend` still has no default; what composition does is ask the head. A
+head that was *installed* reads what somebody wrote — `ConfiguredDeploymentAddress` binds the `Deployment` section out
+of the embedded `appsettings.json`, and an installation stating nothing fails while the host is being composed, naming
+the setting, rather than opening a window pointed at a guess. A head that was *served* already knows: the browser head
+hands `PageOriginDeploymentAddress`, which reads `globalThis.location.origin` through `[JSImport]`, because MailFathom
+serves the bundle from the same origin as the surface it calls and a browser head reads no environment anyway. A value
+written with no scheme is read as HTTPS, since the alternative would turn an omission into a token on the wire;
+whether a stated clear-text address is acceptable at all stays `Client.Backend`'s rule, which permits loopback and
+refuses everything else.
+
+Add a head, and what it owes is an implementation of that interface — not a branch on the running platform, and not a
+second mechanism invented in a screen.
 
 ## Reaching the backend
 

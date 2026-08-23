@@ -21,14 +21,16 @@ than anything in here. [Applying the database schema](database-schema.md) docume
 
 ## What is inside, and what is not
 
-The runtime image is built on `mcr.microsoft.com/dotnet/aspnet:10.0.11-noble-chiseled-extra` and is about 77 MB.
+The runtime image is built on `mcr.microsoft.com/dotnet/aspnet:10.0.11-noble-chiseled-extra` and is about 105 MB, of
+which about 19 MB is the client's browser bundle described below.
 Chiseled means there is no shell, no package manager, and no HTTP client: a process that reaches the container finds
 almost nothing to use. `-extra` carries ICU and tzdata, which the plain chiseled image does not — MailFathom decodes
 internationalized headers, folds case for search, and formats instants for several time zones, and the invariant
 globalization the smaller image forces would quietly change how mail from outside one alphabet is read.
 
-It contains the published application and nothing else — plus the two files that licensing requires travel with it,
-`/app/LICENSE` and `/app/NOTICE`. No SDK, no source tree, no repository history, no test
+It contains the published application, the client's browser bundle under `/app/wwwroot`, and nothing else — plus the
+two files that licensing requires travel with it, `/app/LICENSE` and `/app/NOTICE`. No SDK, no source tree, no
+repository history, no test
 artifacts, no build cache, no credential, and no certificate. The XML documentation files every project generates are
 dropped at publish, because none is read at run time and shipping them would put the repository's commentary about its
 own internal contracts into an artifact an operator can unpack. The portable symbol files stay, because they are what
@@ -42,6 +44,26 @@ prefers it, so the file bounding the context travels with the definition that us
 
 Every base image is pinned to an explicit patch version rather than to a floating `10.0`, so a rebuild months from now
 resolves what the change was reviewed against.
+
+## The client travels in it
+
+`/app/wwwroot` is the MailFathom client's browser head — the WebAssembly bundle, about 51 MB across 205 files, which
+compresses into about 19 MB of image. It is built by a stage of this same Dockerfile, so one `docker build` still
+produces the published image: the stage installs the `wasm-tools` workload, restores `frontend/MailFathom.Client.slnx`
+in locked mode, and publishes the browser head in Release. Release is not a preference here — the Uno SDK drops its
+proprietary designer and App MCP assets only when `Optimize` is on, and it decides that at restore time, so both the
+restore and the publish state it. The pre-compressed `.br` and `.gz` copies the WebAssembly SDK emits are deleted
+before the bundle is copied into the runtime image: the static-file middleware serving it negotiates no content
+encoding, so they would be a second copy of the whole bundle that no request can reach.
+
+**This couples the two stacks at build time and nowhere else.** No project under `backend/` references one under
+`frontend/`, neither solution names a project in the other, and the service assembly's reference list is asserted by a
+unit test. What the image carries is a directory of files copied in beside the application, and the composition root's
+whole knowledge of the client is whether that directory has an `index.html` in it.
+
+**Serving it is off**, in this image and in every deployment asset built on it. `ClientEndpoint:Application:Enabled`
+turns it on and [the client endpoint](client-endpoint.md#serving-the-client-from-the-deployment) is the page; an image
+whose bundle nobody serves costs its size and nothing else.
 
 ## How it runs
 

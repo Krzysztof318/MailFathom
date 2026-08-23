@@ -1,0 +1,142 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+name: Build the desktop client
+
+# The one place MailFathom's client is published as something somebody downloads and runs. A release calls it and
+# attaches the result; a nightly calls it and leaves it on the run. It gates nothing and publishes nothing itself, for
+# the reason `Build the CLI binaries` does not either: a release whose client failed is still a release whose image and
+# chart are correct, and the failure is visible on the run.
+#
+# Windows alone, deliberately. `net10.0-desktop` is one target framework for Windows, Linux, and macOS, so the heads
+# for the other two are a runtime identifier away — and publishing them is a separate decision about what this project
+# supports rather than a flag nobody set. What a Linux or macOS user has today is the browser head the container image
+# serves.
+#
+# Two properties of the publish are licence conditions rather than preferences, and both are the absence of something.
+# The `net10.0-desktop` graph carries `LibVLCSharp.dll`, which is LGPL-2.1-or-later: it stays its own file beside the
+# application, unmerged, untrimmed, and not compiled ahead of time, so a recipient can replace it. THIRD_PARTY_LICENSES.md
+# holds the verdict and frontend/src/AGENTS.md the four build properties this therefore never sets. The notices that
+# travel with the artifact are attached by the project file rather than by a step here, so a contributor's own publish
+# carries them too.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'The commit SHA to build. Resolved by the caller, so what is published is never re-resolved from a moving ref.'
+        required: true
+        type: string
+      version:
+        description: 'The full stamped version the archives are named after, for example `0.8.0`.'
+        required: true
+        type: string
+    outputs:
+      artifact:
+        description: 'The name of the uploaded artifact holding every archive and the checksum file.'
+        value: ${{ jobs.build.outputs.artifact }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    outputs:
+      artifact: ${{ steps.publish.outputs.artifact }}
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - name: Check out the commit being built
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Set up the .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # One Linux runner builds every Windows head. Skia reaches the desktop target as an ordinary NuGet package and
+      # the publish is IL with a runtime identifier, so nothing here needs a Windows runner or a cross-compiler — the
+      # same reason the command binaries are built this way.
+      #
+      # The workload is installed for the restore rather than for the publish. This project declares three target
+      # frameworks and a restore evaluates all of them, the browser head included, which is what needs the Emscripten
+      # workload present; the desktop head itself compiles without it.
+      - name: Install the WebAssembly workload
+        run: dotnet workload install wasm-tools
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-client-${{ runner.os }}-${{ hashFiles('frontend/Directory.Packages.props', 'global.json', 'NuGet.config', 'frontend/**/packages.lock.json') }}
+
+      # Locked, like every other gated restore here, and what it fixes is `Client.Backend`'s closure: the application
+      # project carries no lock file, because a WebAssembly target's restore graph is partly the SDK's own. The publish
+      # below restores again for its runtime identifier, which the lock file does not describe — a runtime-specific
+      # graph is a different graph, and this pass is what asserts the one the repository pinned.
+      #
+      # The configuration and the two Uno properties are stated on the restore as well as on the publish below, and
+      # they are load-bearing rather than tidy. The Uno SDK decides whether Uno Platform Studio's tooling — the
+      # designer and the App MCP, neither of which is open source and one of which forbids distribution outright —
+      # enters the graph by reading `Optimize` **while restoring**, and a restore that was not told the configuration
+      # is a Debug restore whose graph a later Release publish then packages. The two properties say the same thing
+      # directly, so this does not rest on the SDK continuing to read that one property.
+      - name: Restore
+        run: |
+          dotnet restore frontend/src/Client/Client.csproj \
+            --locked-mode \
+            -p:Configuration=Release \
+            -p:UnoDisableHotDesign=true \
+            -p:UnoDisableMCPSupport=true
+
+      # Release, which is also what keeps Uno Platform Studio's tooling out of the artifact: the SDK drops the
+      # designer's and the App MCP's assets when `Optimize` is true, and those four packages may not be distributed.
+      # The XML documentation files are dropped for the reason the container image drops them — nothing reads them at
+      # run time, and they carry this repository's commentary about its own internal contracts.
+      - name: Publish every Windows head
+        id: publish
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p artifacts/desktop
+
+          for rid in win-x64 win-arm64; do
+            dotnet publish frontend/src/Client/Client.csproj \
+              --framework net10.0-desktop \
+              --configuration Release \
+              --runtime "$rid" \
+              --self-contained true \
+              --output "publish/$rid" \
+              -p:PublishDocumentationFile=false \
+              -p:PublishDocumentationFiles=false \
+              -p:PublishReferencesDocumentationFiles=false \
+              -p:UnoDisableHotDesign=true \
+              -p:UnoDisableMCPSupport=true
+
+            ( cd "publish/$rid" && zip --quiet --recurse-paths \
+                "../../artifacts/desktop/mailfathom-client-${VERSION}-${rid}.zip" . )
+          done
+
+          # One checksum file covering every archive, so somebody verifies whichever they downloaded with one command
+          # from the directory they downloaded into. Nothing rewrites an archive between here and the release page, so
+          # these are the checksums of the file somebody downloads and they are the only thing that verifies it: no
+          # artifact published here carries a code signature.
+          ( cd artifacts/desktop && sha256sum ./* > "mailfathom-client-${VERSION}.sha256" )
+
+          echo "artifact=desktop-client" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the archives
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-client
+          path: artifacts/desktop
+          if-no-files-found: error

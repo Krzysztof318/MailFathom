@@ -15,13 +15,22 @@ name: Build and test the frontend
 # workflow takes a switch per job because it holds three jobs a change can affect independently; this one holds a
 # single job, and a job-level condition in the caller says the same thing with nothing to keep in step.
 #
-# The one switch it does take is not about the changed files at all. Formatting is the one verdict here that a pull
+# What it does take beside that is a commit. A release and a nightly build the revision they resolved once rather than
+# whatever a ref points at by the time this job starts, which is the same reason the server's workflow takes one; a
+# pull request passes nothing and gets its own event's checkout.
+#
+# The one switch it takes is not about the changed files either. Formatting is the one verdict here that a pull
 # request settles for good — it is a property of the files a change wrote, and two changes that merged without seeing
 # each other cannot break it — so the server asks it on a pull request and never on a push to `main`, and the client
 # is held to the same rule from the same caller rather than to whichever one somebody remembered.
 on:
   workflow_call:
     inputs:
+      ref:
+        description: 'Branch, tag, or SHA to check. Empty checks out whatever the caller''s event points at, which is what a pull request wants.'
+        required: false
+        type: string
+        default: ''
       run-format:
         description: 'Whether to verify the client solution''s formatting.'
         required: false
@@ -43,6 +52,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Set up .NET SDK

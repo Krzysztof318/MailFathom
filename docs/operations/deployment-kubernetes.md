@@ -311,6 +311,7 @@ Every one of those is a MailFathom setting rather than a chart value, so turning
 | Client certificates | `McpEndpoint:ClientCertificateProfiles` | [Client certificates](mcp-endpoint.md#client-certificates) |
 | Rate limits | `McpEndpoint:RateLimiting`, and `AdminEndpoint:RateLimiting` or `ClientEndpoint:RateLimiting` for the other surfaces | [Rate limiting](mcp-endpoint.md#rate-limiting) |
 | The surface the MailFathom client reaches | `ClientEndpoint`, whose `Cors:AllowedOrigins` names the origin a browser-hosted client is served from | [The client endpoint](client-endpoint.md) |
+| The client itself, served as a page | `client.enabled`, which is a chart value rather than a ConfigMap entry — see [serving the client](#serving-the-client) | [Serving the client from the deployment](client-endpoint.md#serving-the-client-from-the-deployment) |
 
 The ingress row is the one an OAuth deployment should not skip, and it narrows rather than enables. The controller
 terminates TLS and dials the pod over plain HTTP under the Service name, and MailFathom reads the forwarded scheme and
@@ -326,6 +327,37 @@ usually what an operator already has.
 The credentials any of them reads stay `file:` references into the mounted Secret. Keep them out of `config.files` and
 out of `config.extraEnvironment`; the values schema rejects an environment name that reads like a credential, because
 an environment block is visible to anything that can read `/proc` and cannot be erased from process memory.
+
+## Serving the client
+
+MailFathom's own client is inside the image the chart already runs, so serving it renders no second workload, publishes
+no second host, and pulls nothing. It is off, and one value turns it on:
+
+```yaml
+client:
+  enabled: true
+```
+
+This is the only chart value in this section rather than a ConfigMap entry, because the chart has to write more than
+one setting for it and one of those depends on what the chart can see. `client.enabled` writes
+`ClientEndpoint__Application__Enabled`, and — only where `ingress.enabled` and `ingress.tls` are both set — it also
+writes `ClientEndpoint__Application__AllowClearText`. That second key is a declaration that something in front of this
+pod terminates TLS, which the application requires before it will serve a page over a clear-text socket: the page, and
+every token a browser then sends back, cross whatever hop is between it and the person, and nothing inside the pod can
+tell an ingress from a network. Where TLS terminates somewhere the chart cannot see — a service mesh, a gateway, an
+external load balancer — MailFathom refuses to start and names the setting; add it to `config.extraEnvironment`
+yourself once you have confirmed the hop a browser actually makes is HTTPS.
+
+Two more things belong to the same decision:
+
+- `ClientEndpoint:Enabled` in `config.files`, because the page is served on that surface's listeners and calls its
+  routes. MailFathom refuses to start with one of the two on and the other off, naming both.
+- A `/` path in `ingress.hosts[].paths`, beside the `/api/client` the page calls, if the ingress is what people reach
+  it at.
+
+**Authorization is unchanged.** A browser is an untrusted client wherever it was served from, so whatever
+`ClientEndpoint:Authentication` requires is still required of it. Serving the page grants nobody anything; what it
+exposes is the application's own code, which is published under Apache-2.0 in this repository.
 
 ## Security defaults
 

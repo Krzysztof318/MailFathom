@@ -161,6 +161,10 @@ spec:
               value: "mailfathom-database-password"
             - name: Persistence__Password__SecretReference
               value: "file:/etc/mailfathom/secrets/mailfathom-database-password"
+            - name: ClientEndpoint__Application__Enabled
+              value: "true"
+            - name: ClientEndpoint__Application__AllowClearText
+              value: "true"
             - name: SensitiveContent__Pii__Enabled
               value: "true"
             - name: SensitiveContent__PersonalDataAnalyzer__Endpoint
@@ -265,6 +269,13 @@ spec:
                 port:
                   number: 8080
           - path: /api/client
+            pathType: Prefix
+            backend:
+              service:
+                name: mailfathom
+                port:
+                  number: 8080
+          - path: /
             pathType: Prefix
             backend:
               service:

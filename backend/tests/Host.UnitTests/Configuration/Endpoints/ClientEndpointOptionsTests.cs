@@ -189,6 +189,89 @@ public sealed class ClientEndpointOptionsTests
             error => error.Contains(nameof(ClientEndpointOptions.BindAddress), StringComparison.Ordinal));
     }
 
+    /// <summary>A deployment that configures nothing serves no page either, so an upgrade puts none in front of a mailbox.</summary>
+    [Fact]
+    public void ReadFrom_ADeploymentThatConfiguresNothing_ServesNoClient()
+    {
+        // Act
+        var settings = ClientEndpointOptions.ReadFrom(new ConfigurationBuilder().Build());
+
+        // Assert
+        Assert.False(settings.Application.Enabled);
+        Assert.False(settings.Application.AllowClearText);
+    }
+
+    /// <summary>The page is served on this surface's listeners, so serving it without the surface is a client that reaches nothing.</summary>
+    [Fact]
+    public void FindConfigurationErrors_TheClientServedWhileTheEndpointIsOff_IsRefusedNamingBoth()
+    {
+        // Arrange
+        ClientEndpointOptions settings = new();
+        settings.Application.Enabled = true;
+
+        // Act, Assert
+        Assert.Contains(
+            settings.FindConfigurationErrors(),
+            error => error.Contains("ClientEndpoint:Application:Enabled", StringComparison.Ordinal)
+                && error.Contains("ClientEndpoint:Enabled", StringComparison.Ordinal));
+    }
+
+    /// <summary>The page and every token a browser presents from it cross a public hop, so a clear-text socket is refused rather than warned about.</summary>
+    [Fact]
+    public void FindConfigurationErrors_TheClientServedOverClearText_IsRefusedAndNamesBothWaysOut()
+    {
+        // Arrange
+        var settings = EnabledEndpoint();
+        settings.Application.Enabled = true;
+
+        // Act
+        var errors = settings.FindConfigurationErrors();
+
+        // Assert
+        Assert.Contains(
+            errors,
+            error => error.Contains(nameof(EndpointTransport.HttpsOnly), StringComparison.Ordinal)
+                && error.Contains("ClientEndpoint:Application:AllowClearText", StringComparison.Ordinal));
+    }
+
+    /// <summary>An operator who knows what stands in front of this process is the only one who can answer, and this is them answering.</summary>
+    [Fact]
+    public void FindConfigurationErrors_TheClientServedOverPermittedClearText_IsAccepted()
+    {
+        // Arrange
+        var settings = EnabledEndpoint();
+        settings.Application.Enabled = true;
+        settings.Application.AllowClearText = true;
+
+        // Act, Assert
+        Assert.Empty(settings.FindConfigurationErrors());
+    }
+
+    /// <summary>Terminating TLS here answers the same question, so a deployment that did needs no permission to state.</summary>
+    [Fact]
+    public void FindConfigurationErrors_TheClientServedOverTls_NeedsNoPermission()
+    {
+        // Arrange
+        var settings = TlsTerminatingEndpoint(EndpointTransport.HttpsOnly);
+        settings.Application.Enabled = true;
+
+        // Act, Assert
+        Assert.Empty(settings.FindConfigurationErrors());
+    }
+
+    /// <summary>A clear-text socket that answers every request with the address of the TLS one carries no page, so it is not one of these.</summary>
+    [Fact]
+    public void FindConfigurationErrors_TheClientServedBesideARedirectingClearTextSocket_NeedsNoPermission()
+    {
+        // Arrange
+        var settings = TlsTerminatingEndpoint();
+        settings.Application.Enabled = true;
+
+        // Act, Assert
+        Assert.False(settings.ServesClearText);
+        Assert.Empty(settings.FindConfigurationErrors());
+    }
+
     /// <summary>The routes are the surface's own address, and a client appends the rest to what it was configured with.</summary>
     [Fact]
     public void RoutePrefix_IsTheAddressAClientAppendsTo() =>

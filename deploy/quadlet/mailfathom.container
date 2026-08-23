@@ -105,6 +105,21 @@ Environment=ConnectionStrings__mailfathom=Host=mailfathom-postgres;Port=5432;Dat
 Environment=Persistence__Password__Name=mailfathom-database-password
 Environment=Persistence__Password__SecretReference=systemd-credential:mailfathom-database-password
 
+# MailFathom's own client, off because these two lines are commented out. The bundle travels inside the image, so
+# uncommenting them pulls nothing and installs no second unit; what they need beside them is ClientEndpoint:Enabled in
+# the configuration directory, since the page is served on that surface's listeners and calls them, and MailFathom
+# refuses to start with one of the two on and the other off.
+#
+# The second line is a statement about this deployment rather than a second switch. MailFathom refuses to serve the
+# client over a clear-text socket — the page, and every token a browser then sends back, would cross the network
+# unprotected — and this container speaks plain HTTP by design, published on loopback for a reverse proxy to terminate
+# TLS in front of. Uncommenting it says that proxy exists. Do not, while PublishPort above still names an address other
+# than loopback with nothing listening in front of it.
+#
+# docs/operations/client-endpoint.md states what the page is served at and what a browser still has to present.
+#Environment=ClientEndpoint__Application__Enabled=true
+#Environment=ClientEndpoint__Application__AllowClearText=true
+
 # Personal-data scanning, off because these lines are commented out — which is the product's default and what makes it
 # cost nothing. Uncomment the four below that are not marked optional, together with the two ordering lines at the top of
 # this file, and install mailfathom-presidio.container beside it; enabling the switch with no address at all fails
