@@ -168,7 +168,7 @@ for two instances to disagree about what "most relevant" means while both report
 - **The structured filters apply before either ranking**, so a message outside the caller's scope never takes part in
   the fusion and never influences the order of a message that is inside it.
 - **Nothing is re-ranked, rewritten, or expanded.** No chat model is reachable from this path at all: the query is
-  embedded and compared, never interpreted. Draft section 13.3 is explicit about that and it stays true here.
+  embedded and compared, never interpreted.
 - **A search says which mode answered it, on every call.** An instance configured for hybrid retrieval answers
   `Lexical` when its embedding provider is unreachable, when it has activated no profile, or when the configured
   generator disagrees with the active profile's identity. None of those is an error: a provider outage costs a search

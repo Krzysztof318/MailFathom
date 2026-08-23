@@ -143,7 +143,7 @@ Below the port the same separation is fixed rather than repeated. How a connecti
 
 **Root `AGENTS.md` is unchanged, deliberately.** Its sentence — *synchronization and content retrieval must never set the remote `\Seen` flag* — already scopes the guarantee to retrieval, and it is exactly as true after this decision as before it. Saying so here is part of the deliverable, so a later reader does not correct a sentence that is still right.
 
-**Draft section 11.1 changes**, because its bullets state the invariant unscoped. *No code path calls `AddFlags`, `SetFlags`, or equivalent methods* stops being true of the write session. *Stored `\Seen` is a snapshot of remote state only* stays true and becomes load-bearing: an authored `\Seen` change is a request MailFathom makes of the server, and the stored value still has exactly one writer, which is synchronization observing what the server reports back.
+**What changes is the invariant as it was stated unscoped.** *No code path calls `AddFlags`, `SetFlags`, or equivalent methods* stops being true of the write session. *Stored `\Seen` is a snapshot of remote state only* stays true and becomes load-bearing: an authored `\Seen` change is a request MailFathom makes of the server, and the stored value still has exactly one writer, which is synchronization observing what the server reports back.
 
 ### One operation, one name
 
@@ -432,5 +432,4 @@ A reopened tier owes an authorization review against the driver that refused it,
 - [ADR 0003](0003-first-party-exception-hierarchy-and-stable-error-codes.md) governs `MailboxMutationUnsupported` (25001), which is category 2 subcategory 5 — a subcategory of its own because it says the opposite of an unavailable mailbox about repeating the work.
 - RFC 9051 § 2.3.2 defines the flags and keywords a message carries, § 6.4.6 defines what `STORE FLAGS` replaces, and § 7.1 defines the `PERMANENTFLAGS` response and the `\*` that says arbitrary keywords persist.
 - RFC 4315 defines `UIDPLUS`, the `APPENDUID` response that names where an append landed, and the `UID EXPUNGE` the mirror is withdrawn with. RFC 6154 defines the special-use attributes a server may advertise, and carries no outbox among them.
-- Draft section 11.1 carries the amended invariant, and draft section 21.5 carries the action tiers this narrows.
 - Revisit when a request arrives for one of the tiers that remain refused — sending, `\Answered`, `\Draft` on a message the mailbox already holds, or renaming, deleting, or unsubscribing a folder. Each reopens this record with its own authorization review, as folder creation did on issue 713, the flag tier on issue 917, and filing an outgoing message on issue 739, rather than being read out of a gap. A request to let a caller author one of the mutations axis I did not reach — a relocation, a copy, a delete — reopens it the same way, because axis I decided who may ask for the flag tier and nothing wider.

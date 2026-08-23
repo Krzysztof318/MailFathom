@@ -62,7 +62,7 @@ What this buys is at-least-once execution and nothing stronger. A handler is the
 
 A job carries an idempotency key: bounded text, unique together with the job type across the whole table, opaque to the store, and derivable from the trigger alone without reading the table first. Enqueue inserts on that key and reports whether it created the job or found it, so a caller that retries its own enqueue is answered rather than refused.
 
-The draft derives an execution's identity from the message occurrence, the rule version, the trigger generation, and the action. That composition is right and it stays exactly where the draft put it — in the rule engine, which is the only thing that knows what a rule version is. It does not become four columns of the shared table. Classification has no rule and no action, so a table shaped around automation's identity would hand the second consumer three null columns and a unique index that no longer means anything, and the third consumer would arrive with a fourth shape. One opaque key composed by whoever knows the work is the only form that is equally true of all of them.
+An execution's identity is composed from the message occurrence, the rule version, the trigger generation, and the action. That composition is right and it stays where it belongs — in the rule engine, which is the only thing that knows what a rule version is. It does not become four columns of the shared table. Classification has no rule and no action, so a table shaped around automation's identity would hand the second consumer three null columns and a unique index that no longer means anything, and the third consumer would arrive with a fourth shape. One opaque key composed by whoever knows the work is the only form that is equally true of all of them.
 
 Two consequences of the key follow from where it is stored rather than from what it holds.
 
@@ -124,7 +124,7 @@ A payload holds references. It names a message occurrence, an account, a folder,
 ### Quartz.NET
 
 - Good, because it is Apache-2.0, mature, and maintained, so nothing about its licence reaches an operator.
-- Good, because clustering, misfire handling, and calendar scheduling are solved, and a scheduled scan over a bounded local query — one of the draft's four triggers — is exactly what it is for.
+- Good, because clustering, misfire handling, and calendar scheduling are solved, and a scheduled scan over a bounded local query — one of the four triggers automation carries — is exactly what it is for.
 - Neutral, because its persistent store is well understood; it is simply a different store from this one.
 - Bad, because `AdoJobStore` is installed from DDL scripts distributed with the project and applied outside EF Core. That is a second schema with a second lifecycle, a second upgrade step in the release procedure, and a second thing the schema artifact does not cover.
 - Bad, because it is a scheduler before it is a queue. Durable one-shot work with a domain idempotency identity is expressed as a one-shot trigger whose deduplication key is a scheduler name and group, which is not the identity this decision exists to fix.
@@ -148,7 +148,7 @@ A payload holds references. It names a message occurrence, an account, a folder,
 - Neutral, because it would be a reasonable choice for a system that wanted a message bus; MailFathom wants one queue.
 - Bad, because it is a messaging and mediator framework, and taking it for a job queue means adopting its handler discovery and its conventions across the application rather than behind an adapter.
 - Bad, because it manages its own PostgreSQL schema and applies it on start, which is the same conflict Hangfire's storage provider has with the rule about startup.
-- Bad, because it is by far the largest surface of the five for a table with one query, and the draft's refusal of a generic workflow engine and a broker is aimed at exactly this kind of adoption.
+- Bad, because it is by far the largest surface of the five for a table with one query, and the refusal of a generic workflow engine and a broker stated above is aimed at exactly this kind of adoption.
 
 ### MassTransit
 
