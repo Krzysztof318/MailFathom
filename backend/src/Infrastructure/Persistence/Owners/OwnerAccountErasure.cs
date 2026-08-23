@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace MailFathom.Infrastructure.Persistence.Owners;
 
-/// <summary>Removes one owner and everything this deployment holds about them.</summary>
+/// <summary>Removes one owner, their mail accounts, and everything recorded about either.</summary>
 /// <remarks>
 /// <para>
 /// Most of the work is the schema's. The mail graph hangs off <c>mailbox_accounts</c>, which cascades from the owner,
@@ -24,6 +24,12 @@ namespace MailFathom.Infrastructure.Persistence.Owners;
 /// onto one. Those are the seam's own work, and they are enumerated from the model rather than from a list somebody
 /// maintains: a table added later that names an account without keying onto one is discharged by the same walk on the
 /// day it appears, instead of being remembered about after an erasure request has already been answered.
+/// </para>
+/// <para>
+/// <b>The contact book is deliberately not reached.</b> <c>contacts</c> and <c>contact_addresses</c> record no mail
+/// account and key onto none, so neither the cascade nor the walk finds them, and what they hold is an assembled
+/// record about third parties rather than mail an account brought in. Erasing it is a decision of its own, with an
+/// erasure of its own, so this seam reports what it took rather than implying it took that as well.
 /// </para>
 /// </remarks>
 internal static class OwnerAccountErasure
@@ -46,6 +52,15 @@ internal static class OwnerAccountErasure
 
         var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
         var accountEntityType = MailboxAccountEntityTypeOf(writeContext.Model);
+
+        // The owner row is held for the rest of the transaction, so two erasures of one owner are serialized and a run
+        // that resolves this owner while the statements below run waits instead of being handed an answer that is
+        // about to stop being true. It settles what reads the owner and nothing else: a writer that never does — an
+        // enqueue keyed to a mail account it already held — is outside any lock this statement could take, and
+        // bounding that belongs with the operation that gives this seam a caller.
+        await writeContext.Database
+            .SqlQueryRaw<Guid>(OwnerRowLockStatement(writeContext.Model), ownerId)
+            .ToListAsync(cancellationToken);
 
         var rowsErasedBesideTheCascade = 0;
         foreach (var entityType in TablesTheCascadeDoesNotReach(writeContext.Model))
@@ -132,6 +147,22 @@ internal static class OwnerAccountErasure
         }
 
         return reached;
+    }
+
+    /// <summary>The statement that holds one owner's row for the rest of the transaction.</summary>
+    private static string OwnerRowLockStatement(IModel model)
+    {
+        var ownerEntityType = model.FindEntityType(typeof(OwnerAccountEntity))
+            ?? throw new InvalidOperationException(
+                $"The model holds no {nameof(OwnerAccountEntity)}, so there is no owner record to erase.");
+
+        var ownerKeyColumn = QuotedColumn(ownerEntityType, nameof(OwnerAccountEntity.Id));
+
+        return $$"""
+            SELECT {{ownerKeyColumn}} AS "Value" FROM {{QuotedTable(ownerEntityType)}}
+            WHERE {{ownerKeyColumn}} = {0}
+            FOR UPDATE
+            """;
     }
 
     private static IEntityType MailboxAccountEntityTypeOf(IModel model) =>

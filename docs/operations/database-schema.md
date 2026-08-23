@@ -242,6 +242,12 @@ carrying *more* migrations than a build defines has no pending migration for tha
 version keeps serving. What it does not do is use the new columns, which is why the window is a rollout rather than a
 resting state.
 
+**One migration narrows that window rather than closing it.** `AddOwnerAccounts` makes the owner of a mail account a
+required column, and a build older than the release carrying it does not know the column exists — so against this
+schema such a build serves the mail already stored and still fails the moment it has to bind a folder for an account it
+has never synchronized, because the row it writes states no owner. Keep the middle of the rollout short on this
+release, and do not treat a previous image as something that can be left running against it.
+
 ## When the host refuses to start
 
 Three failures are about the schema, and each names a different problem. They are distinguishable from an ordinary
@@ -273,7 +279,10 @@ That leaves two answers, and which one applies is decided before the upgrade rat
 - **Fix forward.** The previous version's build starts against a schema ahead of it, as [ordering a
   deployment](#ordering-a-deployment) describes, so a defect in the new version can be answered by rolling the image
   back while leaving the schema where it is, and shipping the correction in the next release. This is the cheaper
-  answer whenever the migration itself was not the problem.
+  answer whenever the migration itself was not the problem. **It is not an answer for the release that carries
+  `AddOwnerAccounts`**: a build older than that release cannot bind a folder for an account this deployment has never
+  synchronized against a schema whose mail accounts require an owner, so rolling the image back leaves a deployment
+  that serves the mail it holds and takes on no new mailbox. Restoring from the backup is the way back there.
 
 ## What a release records
 
