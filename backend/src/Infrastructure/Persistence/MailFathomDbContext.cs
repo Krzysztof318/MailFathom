@@ -14,6 +14,7 @@ using MailFathom.Infrastructure.Persistence.Embeddings.Configurations;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Jobs.Configurations;
 using MailFathom.Infrastructure.Persistence.Mutations.Configurations;
+using MailFathom.Infrastructure.Persistence.Owners.Configurations;
 using MailFathom.Infrastructure.Persistence.Rules.Configurations;
 using MailFathom.Infrastructure.Persistence.Spam.Configurations;
 using MailFathom.Infrastructure.Persistence.Synchronization.Configurations;
@@ -52,6 +53,8 @@ internal sealed class MailFathomDbContext : DbContext
 
         this.textSearchConfiguration = textSearchConfiguration;
     }
+
+    internal DbSet<OwnerAccountEntity> OwnerAccounts => this.Set<OwnerAccountEntity>();
 
     internal DbSet<MailboxAccountEntity> MailboxAccounts => this.Set<MailboxAccountEntity>();
 
@@ -155,6 +158,7 @@ internal sealed class MailFathomDbContext : DbContext
         // and costs an empty database one catalogue entry.
         modelBuilder.HasPostgresExtension("vector");
 
+        modelBuilder.ApplyConfiguration(new OwnerAccountConfiguration());
         modelBuilder.ApplyConfiguration(new MailboxAccountConfiguration());
         modelBuilder.ApplyConfiguration(new MailFolderConfiguration());
         modelBuilder.ApplyConfiguration(new StoredEmailConfiguration());

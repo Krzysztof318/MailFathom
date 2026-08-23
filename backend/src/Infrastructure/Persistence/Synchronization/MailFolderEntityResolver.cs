@@ -6,6 +6,7 @@ using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Entities;
+using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.Infrastructure.Persistence.Sessions;
 
 namespace MailFathom.Infrastructure.Persistence.Synchronization;
@@ -58,7 +59,12 @@ internal static class MailFolderEntityResolver
         var account = await dbContext.MailboxAccounts.FindAsync([accountId.Value], cancellationToken);
         if (account is null)
         {
-            account = new MailboxAccountEntity { Id = accountId.Value };
+            // The owner is read rather than minted. A run that invented one would be deciding whose mail this is while
+            // storing it, and the record it invented would be the boundary every later read of that mail is judged
+            // against; the read is paid for only on the run that first binds one of an account's folders.
+            var ownerId = await OwnerAccountResolver.ResolveConfiguredOwnerAsync(dbContext, cancellationToken);
+
+            account = new MailboxAccountEntity { Id = accountId.Value, OwnerId = ownerId };
 
             dbContext.MailboxAccounts.Add(account);
         }

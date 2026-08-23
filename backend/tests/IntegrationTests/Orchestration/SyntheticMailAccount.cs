@@ -88,6 +88,7 @@ internal sealed class SyntheticMailAccount(
         nameof(MailFolderSpecialUse.Inbox),
         "inbox",
         "a-folder-nobody-bound",
+        "account-ownership-inbox",
         "answering-audit-inbox",
         "ask-mail",
         "ask-mail-elsewhere",
