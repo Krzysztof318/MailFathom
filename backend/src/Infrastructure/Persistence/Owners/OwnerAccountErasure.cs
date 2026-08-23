@@ -23,7 +23,10 @@ namespace MailFathom.Infrastructure.Persistence.Owners;
 /// What the schema does not reach is the tables that record a mail account as a plain identifier with no foreign key
 /// onto one. Those are the seam's own work, and they are enumerated from the model rather than from a list somebody
 /// maintains: a table added later that names an account without keying onto one is discharged by the same walk on the
-/// day it appears, instead of being remembered about after an erasure request has already been answered.
+/// day it appears, instead of being remembered about after an erasure request has already been answered. Those
+/// statements name the owner's accounts by subquery, so what they reach is bounded by the account rows the database
+/// holds: a row recorded against an account that was authorized and has never synchronized — a sealed refresh token is
+/// the one that occurs — has no account row to be found through and stays behind.
 /// </para>
 /// <para>
 /// <b>The contact book is deliberately not reached.</b> <c>contacts</c> and <c>contact_addresses</c> record no mail
@@ -53,11 +56,15 @@ internal static class OwnerAccountErasure
         var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
         var accountEntityType = MailboxAccountEntityTypeOf(writeContext.Model);
 
-        // The owner row is held for the rest of the transaction, so two erasures of one owner are serialized and a run
-        // that resolves this owner while the statements below run waits instead of being handed an answer that is
-        // about to stop being true. It settles what reads the owner and nothing else: a writer that never does — an
-        // enqueue keyed to a mail account it already held — is outside any lock this statement could take, and
-        // bounding that belongs with the operation that gives this seam a caller.
+        // The owner row is held for the rest of the transaction, so two erasures of one owner are serialized, and a
+        // write that keys onto that row — the account insert a first folder binding makes — waits on the foreign-key
+        // check until this transaction ends and is then refused against a row that is gone.
+        //
+        // What it does not hold is a plain read. Under MVCC a row lock blocks no `SELECT`, so a run resolving this
+        // owner while the statements below run is handed the identifier at once; what stops that run is its own insert
+        // rather than its resolution. And a writer that never touches the owner row at all — an enqueue keyed to a mail
+        // account it already held — is outside any lock this statement could take. Bounding that belongs with the
+        // operation that gives this seam a caller.
         await writeContext.Database
             .SqlQueryRaw<Guid>(OwnerRowLockStatement(writeContext.Model), ownerId)
             .ToListAsync(cancellationToken);
