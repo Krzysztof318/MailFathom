@@ -61,7 +61,6 @@ internal static class ApiDocumentSecurity
             {
                 Type = SecuritySchemeType.Http,
                 Scheme = HttpScheme,
-                In = ParameterLocation.Header,
                 Description =
                     "An API key, an access token from a configured authorization server, or a client assertion. "
                     + "Credentials do not cross surfaces: one provisioned for the administrative endpoint "

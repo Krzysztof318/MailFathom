@@ -41,7 +41,6 @@ public sealed class ApiDocumentSecurityTests
 
         Assert.Equal(SecuritySchemeType.Http, scheme.Type);
         Assert.Equal("bearer", scheme.Scheme);
-        Assert.Equal(ParameterLocation.Header, scheme.In);
     }
 
     /// <summary>An operation the authorization middleware would demand a credential for is described as demanding one.</summary>

@@ -8,7 +8,7 @@ using MailFathom.Host.Security.Transport;
 
 namespace MailFathom.Host.Hosting.Startup;
 
-/// <summary>Serves each path only on the listeners of the surface that owns it.</summary>
+/// <summary>Serves each path only on the listeners of the surface that owns it, the documentation paths excepted.</summary>
 /// <remarks>
 /// <para>
 /// Routing matches a path, not a socket, so a route mapped for one surface would otherwise answer on every listener the
@@ -26,6 +26,12 @@ namespace MailFathom.Host.Hosting.Startup;
 /// The middleware runs ahead of everything the surfaces add, so a request for a surface this listener does not serve is
 /// refused before it reaches CORS, authentication, the client-certificate check, or the rate limiter — none of which
 /// may be configured on that listener, and none of which should be reached from it.
+/// </para>
+/// <para>
+/// The API documentation paths are the one genuine exception, because they are owned by no surface: they describe two
+/// of them, and a development process serves them on every listener it bound. The exception lasts exactly as long as
+/// those routes do, which is a process that publishes them at all;
+/// <see cref="ListenerServesPath(ServedSurfaces, PathString, bool)" /> holds the rule and the reasoning.
 /// </para>
 /// <para>
 /// A refused request is answered <c>404</c> rather than <c>403</c>, because the honest answer is that nothing is served
