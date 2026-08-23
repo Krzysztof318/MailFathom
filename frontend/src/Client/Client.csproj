@@ -21,12 +21,21 @@
     <ApplicationPublisher>Krzysztof Kasprowicz</ApplicationPublisher>
     <Description>The MailFathom client: a mail application with the model in the middle of it.</Description>
 
+    <!-- The two grounds the Uno resizetizer paints behind the assets under Assets/, both the navy the product mark
+         sits on. They are properties rather than anything drawn in an SVG because the resizetizer composes the icon's
+         background layer and the splash's ground itself, and a colour painted in the file would be cropped or scaled
+         with the drawing instead of filling what is behind it. The splash therefore looks the same whichever theme
+         the application starts in: it is decided before a theme is applied and unchanged by a later one. -->
+    <UnoIconBackgroundColor>#010D33</UnoIconBackgroundColor>
+    <UnoSplashScreenColor>#010D33</UnoSplashScreenColor>
+
     <!-- UnoFeatures is how an Uno single project asks for a capability rather than for a package: the SDK resolves each
          one to the packages and versions its own pin decides. Material is the design system every brush and style here
          resolves against, Configuration is what reads the deployment an installed head reaches out of an embedded
          appsettings.json — the one source a browser head can read too — Toolkit adds the controls the shell is built
          from, Hosting and Logging are the generic-host wiring the application starts through, MVUX is the state model,
-         Navigation is the router, and SkiaRenderer is what makes one rendering path serve every head.
+         Navigation is the router, ThemeService is what puts the application into light or dark and remembers which,
+         and SkiaRenderer is what makes one rendering path serve every head.
          https://aka.platform.uno/singleproject-features -->
     <UnoFeatures>
       Material;
@@ -36,6 +45,7 @@
       Logging;
       MVUX;
       Navigation;
+      ThemeService;
       SkiaRenderer;
     </UnoFeatures>
   </PropertyGroup>

@@ -25,8 +25,35 @@ What is inside the two projects:
 | `Client.Backend/Authorization/` | Signing in: discovery, the proof key, the exchange, and the token held in memory for the run |
 
 The application is empty of features. It shows what it is — the product name and the version this build was stamped
-with, read from the assembly rather than written here, so the client and the service report one number.
+with, read from the assembly rather than written here, so the client and the service report one number — and which
+theme it is being shown in.
 
 It reaches MailFathom over the endpoints `backend/src/Host/` exposes and shares nothing else with it: no build file, no
 package manifest, no configuration file, and no type. Which deployment it reaches is the composing host's to state, and
 nothing states it yet. `AGENTS.md` beside this file states why, and states the conventions anything added here follows.
+
+## How it looks
+
+The client wears MailFathom's own colours rather than the Uno template's. Four are sampled from the product mark in
+[`assets/icon-900.png`](../../assets/icon-900.png) — the navy ground, the blue that carries the envelope and the
+circuit traces, the envelope's pale blue, and the star's gold — and each becomes a Material Design 3 tonal palette in
+`Client/Styles/ColorPaletteOverride.xaml`, sampled at the tone every semantic role is defined at. So the file is
+generated from four decisions rather than chosen one key at a time, and every key Uno's palette declares carries a
+value in both the light and the dark dictionary. The gold is the one role that is reserved rather than general: it is
+the tertiary role and it marks what the model contributed, which is why nothing else takes it.
+
+Every pair a reader or a control depends on is measured rather than asserted. The unit suite reads that file and fails
+below WCAG AA — 4.5:1 for text and 3:1 for an outline or a control state — so a value edited to look better and a role
+repointed at another tone both arrive as a failing test naming the pair.
+
+The application offers **light**, **dark**, and **follow the system**, through `Uno.Extensions.Toolkit.IThemeService`
+and its `AppTheme`, which the `ThemeService` feature brings in and `UseThemeSwitching()` registers. Following the
+operating system is a value of that enum rather than a mechanism beside it, so a reader who never chooses is already in
+it, a choice is written to the platform's own settings store and survives a restart on both heads, and `System` tracks
+the operating system flipping while the application is running.
+
+The application icon and the splash screen carry that mark rather than the template's, drawn in the sampled colours
+rather than in palette keys — an icon is not themed, and the palette was derived from those colours rather than the
+other way round. Both grounds are the navy, named by `UnoIconBackgroundColor` and `UnoSplashScreenColor` in
+`Client/Client.csproj` rather than painted in an SVG, because the Uno resizetizer composes the ground itself. The
+splash therefore reads the same whichever theme the application starts in.
