@@ -365,6 +365,30 @@ rm -r ~/.config/mailfathom ~/.config/credstore.encrypted
 loginctl disable-linger "$USER"                # only if nothing else of yours runs as a user service
 ```
 
+## The client
+
+MailFathom's own client travels inside the image this unit already runs, so serving it installs no second unit and
+pulls nothing. It is off, because the two lines that turn it on are commented out in
+`~/.config/containers/systemd/mailfathom.container`:
+
+```ini
+Environment=ClientEndpoint__Application__Enabled=true
+Environment=ClientEndpoint__Application__AllowClearText=true
+```
+
+The second is a statement about this deployment rather than a second switch. MailFathom refuses to serve a page over a
+clear-text socket unless something in front of it terminates TLS — the page, and every token a browser then sends back,
+cross whatever hop is between it and the person — and this container speaks plain HTTP by design, published on loopback
+for a reverse proxy. Uncommenting it says that proxy exists; do not, while `PublishPort` names an address other than
+loopback with nothing listening in front of it.
+
+`ClientEndpoint:Enabled` has to be on in the configuration directory beside them, because the page is served on that
+surface's listeners and calls its routes. The page turned on while the endpoint is off is refused at startup,
+naming both; the reverse is an ordinary deployment and starts.
+Then `systemctl --user daemon-reload` and `systemctl --user restart mailfathom`, as with any other edit here.
+[Serving the client from the deployment](client-endpoint.md#serving-the-client-from-the-deployment) states what the
+page is and what a browser still has to present.
+
 ## Personal-data scanning
 
 Quadlet has no equivalent of Compose's profiles, so how this feature is switched off is that its unit is not installed —

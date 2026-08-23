@@ -172,8 +172,11 @@ dispatch only, like the integration suite, and it publishes nothing.
 What does publish is `Release`, on an annotated version tag, and `Nightly`, on its schedule. Neither is something to
 start as part of a task, and neither has a local equivalent: they run `Build, test, format, and migrations` — the same
 workflow `CI` calls for a pull request — then, for a release, the integration suite, and build nothing at all until
-both have passed. That covers everything a channel produces rather than the image alone: the schema script and the
-`mfctl` binaries wait behind the same gate. [The container image](container-image.md#published-images) records
+both have passed. Each also runs `Build and test the client` against the same revision, for the same reason and with
+the same standing: the image now carries the client's browser bundle, so a channel that published it without the
+client's own build having passed would ship a page nobody compiled. That covers everything a channel produces rather
+than the image alone: the schema script, the `mfctl` binaries, and the desktop client archives wait behind the same
+gate. [The container image](container-image.md#published-images) records
 what they produce and how a published image is verified.
 
 `Nightly` carries one job that publishes nothing and gates nothing: `Hot-path benchmarks` times chunking, ranking, and
@@ -287,11 +290,15 @@ The `IntegrationTesting=true` switch that selects the ephemeral topology leaves 
 it decides every other resource there: a suite that tests the service would otherwise build a WebAssembly bundle on
 every run that no test reads.
 
-**What the client is not yet given is the service's address.** The app model can hand a value to the process it starts,
-and the browser head does not run in that process — it runs in a browser, which reads none of its environment. The
-client has no HTTP client to configure yet either, so nothing is wired today rather than something being wired that
-could not be read; [issue #1097](https://github.com/Krzysztof318/MailFathom/issues/1097) owns delivering the address
-into the head, and the cross-origin permission that comes with it.
+**What this resource still does not give the client is the service's address.** The browser head resolves its
+deployment as the origin it was served from, which is exactly right where a deployment serves the bundle itself and
+wrong here: under `aspire run` the head is served by its own dev server on a socket of its own, so the origin it
+resolves is that socket rather than the host beside it. The app model cannot close that by handing over a value
+either — the head runs in a browser, which reads none of the process environment.
+[Issue #1097](https://github.com/Krzysztof318/MailFathom/issues/1097) owns delivering the address into a locally
+started head, and the cross-origin permission that comes with it. A **desktop** head started by hand has no such gap:
+it reads `Deployment:Address` out of `frontend/src/Client/appsettings.development.json`, which only a Debug build
+reads.
 
 ### Pinning a port
 

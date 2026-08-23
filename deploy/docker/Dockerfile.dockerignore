@@ -16,6 +16,13 @@
 !/NuGet.config
 !/global.json
 
+# The client stack, for the stage that publishes the browser head into the image. Its build contract is its own and
+# sits under frontend/ beside its sources, exactly as the service's sits under backend/ — neither stack's reaches the
+# other, and a context carrying one without the other would fail evaluation before its restore.
+!/frontend/src
+!/frontend/Directory.Build.props
+!/frontend/Directory.Packages.props
+
 # The version both stacks report. `backend/Directory.Build.props` imports it from the repository root, so a context
 # that carried the build contract without this file would fail evaluation before the restore.
 !/Version.props
@@ -41,3 +48,5 @@
 # into the context would let a local build decide what the image contains.
 /backend/src/**/bin
 /backend/src/**/obj
+/frontend/src/**/bin
+/frontend/src/**/obj

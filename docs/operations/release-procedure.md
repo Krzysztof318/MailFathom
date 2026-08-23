@@ -250,7 +250,8 @@ rather than automated. Nothing here pushes a tag on the owner's behalf.
 
 ## What a release publishes, and what it needs to
 
-Four artifacts leave one run, and a failure in the first three leaves the release incomplete rather than half-published:
+Five artifacts leave one run, and a failure in the first three leaves the release incomplete rather than
+half-published:
 
 | Artifact | Where | Depends on |
 | --- | --- | --- |
@@ -258,11 +259,13 @@ Four artifacts leave one run, and a failure in the first three leaves the releas
 | The Helm chart | `ghcr.io/krzysztof318/charts/mailfathom` | the image's digest |
 | `mailfathom-schema-<version>.sql` | the GitHub release's assets | nothing else the release produces |
 | `mfctl-<version>-<rid>` for `linux-x64`, `linux-arm64`, `win-x64`, and `win-arm64`, plus one `.sha256` covering all of them | the GitHub release's assets | nothing else the release produces |
+| `mailfathom-client-<version>-<rid>.zip` for `win-x64` and `win-arm64`, plus one `.sha256` covering both | the GitHub release's assets | nothing else the release produces |
 
-The column names what each artifact needs from the other three. What all four need is the same and comes before any of
-them: the tag assertion, then the build, unit-test, formatting, and migration checks, then the integration suite. **No
+The column names what each artifact needs from the other four. What all five need is the same and comes before any of
+them: the tag assertion, then the build, unit-test, formatting, and migration checks, then the integration suite, and
+for the two artifacts built out of the client stack the client's own build beside them. **No
 artifact is built until every one of those has passed**, so a commit a unit test rejects costs the gate that rejected
-it rather than four `dotnet publish` invocations and a schema generation beside a red build.
+it rather than six `dotnet publish` invocations and a schema generation beside a red build.
 [The container image](container-image.md#verification) records the whole gate order, including the two gates that
 belong to the image alone.
 
@@ -276,6 +279,18 @@ Nothing between the build and the release page rewrites a binary. No command bin
 provenance attestation, so the checksum file the build takes over exactly the published bytes is what an operator
 verifies a download against, and it is the whole of what the release offers for that.
 [The administrative endpoint](admin-endpoint.md#getting-the-command) is where an operator is told so and how to check.
+
+The desktop client gates nothing either, for the same reason and one more: it is the artifact somebody installs on
+their own machine rather than the one a deployment runs, and the browser head that a deployment *does* serve is inside
+the image instead. Two runtime identifiers are published — Windows on x64 and on arm64 — because those are the ones a
+hosted Windows runner produces self-contained without a second machine; the Linux and macOS desktop heads build from
+the same target framework and are not published yet, and no mobile head exists. Each zip carries the head, the
+project's `LICENSE` and `NOTICE`, and the notices for the one component in its graph whose licence obliges them:
+`LibVLCSharp.dll` is LGPL-2.1-or-later, so the artifact ships the licence text beside a statement that the library is
+used unmodified and separately replaceable, and the release notes name where its corresponding source is. The head is
+published unmerged, untrimmed, and without Native AOT for exactly that reason —
+[ADR 0016](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0016-third-party-licence-obligations-per-artifact.md)
+is the decision and `frontend/src/AGENTS.md` holds the four build properties it forbids.
 
 The chart is published **after** the image and **against the digest it produced**, because a chart names the image it
 deploys: before pushing, the run renders the packaged chart against that digest and refuses to publish one that would

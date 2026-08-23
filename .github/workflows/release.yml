@@ -123,6 +123,21 @@ jobs:
     with:
       ref: ${{ needs.assert.outputs.revision }}
 
+  # The client stack's half of the same gate, against the same commit and with every switch at its default. It is a
+  # second job rather than a switch on the one above because the two stacks share no solution, no build contract, and
+  # no package pins — and it blocks the image for a reason the two artifacts it produces make plain: the browser head
+  # published into that image is built from this commit, so a client that does not compile is a release whose image
+  # would carry the previous run's answer or none at all.
+  verify-client:
+    name: Build and test the client
+    needs:
+      - assert
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-test-frontend.yml
+    with:
+      ref: ${{ needs.assert.outputs.revision }}
+
   # The suite that starts PostgreSQL, applies the baseline migration, and asserts against the result. A release is the
   # one channel that runs it, and it runs *after* the gate above rather than beside it, so minutes of container time are
   # never spent on a commit a unit test would have rejected in seconds.
@@ -165,6 +180,26 @@ jobs:
       ref: ${{ needs.assert.outputs.revision }}
       version: ${{ needs.assert.outputs.version }}
 
+  # The client as something somebody downloads and runs on their own machine, built from the same commit. It blocks
+  # nothing, on the same terms as the command binaries above and for the same reason.
+  desktop-client:
+    name: Desktop client
+    needs:
+      - assert
+      # Both gates, for the reason the command binaries wait for them: a commit the service's tests or
+      # the integration suite reject is not one to spend two self-contained publishes on. Its own
+      # stack's gate is here as well, because a client that does not compile is answered faster by the
+      # job that says so than by two publishes failing the same way.
+      - verify
+      - integration-tests
+      - verify-client
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-desktop-client.yml
+    with:
+      ref: ${{ needs.assert.outputs.revision }}
+      version: ${{ needs.assert.outputs.version }}
+
   publish:
     name: Publish
     needs:
@@ -175,6 +210,10 @@ jobs:
       # Reached through `schema-artifact` already, and named anyway: what gates a publication is the sort of thing that
       # has to be readable off the job that publishes rather than followed through another job's dependencies.
       - integration-tests
+      # The image carries the client's browser head, built from these sources by the image build itself, so a client
+      # that does not compile fails the publication anyway — twenty minutes into a multi-platform build rather than
+      # where the answer already is.
+      - verify-client
     permissions:
       contents: read
       packages: write
@@ -221,9 +260,10 @@ jobs:
       - publish
       - publish-chart
       - cli-binaries
-    # cli-binaries is a need so that needs.cli-binaries.result exists to be read below — the context carries only a
-    # job's declared dependencies, so a conditional step referring to a job that is not one is a condition that is
-    # always false. It is also the job producing what the release attaches. The four gates that must pass are named
+      - desktop-client
+    # cli-binaries and desktop-client are needs so that their `result` exists to be read below — the context carries
+    # only a job's declared dependencies, so a conditional step referring to a job that is not one is a condition that
+    # is always false. They are also the jobs producing what the release attaches. The four gates that must pass are named
     # here instead of left to the default, because a job with an `if` is still skipped when a need fails unless the
     # condition tolerates it:
     # !cancelled() is what admits a failed or skipped command build, and the four equality checks are what keep
@@ -262,6 +302,17 @@ jobs:
         with:
           name: ${{ needs.cli-binaries.outputs.artifact }}
           path: artifacts/cli
+
+      # Conditional for the same reason, and carrying its own notices: each archive holds the application, the licence
+      # and attribution beside it, and the statement that LibVLCSharp travels inside it under the LGPL. The section in
+      # the notes below is where the corresponding source is offered from the same place the archive is downloaded
+      # from, which is the other half of what that licence asks of a distribution.
+      - name: Download the desktop client
+        if: needs.desktop-client.result == 'success'
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.desktop-client.outputs.artifact }}
+          path: artifacts/desktop
 
       # The notes are the changelog section, not a list of pull-request titles: no arrangement of titles can state that
       # a release cannot be deployed over the previous release's data, which is the most important sentence a MailFathom
@@ -340,6 +391,22 @@ jobs:
             printf 'whatever is newest. Read it before you run it: it is one file and it is short.\n\n'
             printf 'None of the binaries carries a code signature, so Windows warns about an unknown publisher and '
             printf '`mfctl-%s.sha256` is what verifies a download — on every platform.\n' "$VERSION"
+
+            printf '\n## The client\n\n'
+            printf 'There are two ways to have it, and the deployment decides which. The **browser head** travels '
+            printf 'inside the image above and is served by the deployment itself, from the same address its client '
+            printf 'surface answers on — one setting turns it on, and '
+            printf '[the client endpoint](https://github.com/%s/blob/%s/docs/operations/client-endpoint.md) ' \
+              "$REPOSITORY" "$RELEASE_TAG"
+            printf 'is the page. The **desktop head** is attached to this release for Windows, as '
+            printf '`mailfathom-client-%s-win-x64.zip` and `mailfathom-client-%s-win-arm64.zip`; unpack one and run ' \
+              "$VERSION" "$VERSION"
+            printf '`MailFathom.Client.exe`. Verify a download against `mailfathom-client-%s.sha256`, which is the ' "$VERSION"
+            printf 'only thing that verifies it: no artifact here is code-signed either.\n\n'
+            printf 'Each archive carries `THIRD-PARTY-NOTICES.md` and `LGPL-2.1.txt` beside the application. '
+            printf '`LibVLCSharp.dll` inside it is licensed under the GNU Lesser General Public License, version 2.1 '
+            printf 'or later, and is unmodified and replaceable as its own file; its corresponding source is offered '
+            printf 'from this release page at <https://github.com/videolan/libvlcsharp>.\n'
           } > "$notes_file"
 
           # Idempotent, because a re-run of a release must not fail on the release it already created.
@@ -360,6 +427,12 @@ jobs:
           # than assumed, because this job runs whether or not the command built.
           if [ -d artifacts/cli ]; then
             gh release upload "$RELEASE_TAG" artifacts/cli/* --clobber
+          fi
+
+          # Every published head of the client, plus its own checksum file. Guarded like the command above, because
+          # this job runs whether or not the client built.
+          if [ -d artifacts/desktop ]; then
+            gh release upload "$RELEASE_TAG" artifacts/desktop/* --clobber
           fi
 
   # The Windows Package Manager channel, offered from the assets the job above has just attached. It is paused, and the

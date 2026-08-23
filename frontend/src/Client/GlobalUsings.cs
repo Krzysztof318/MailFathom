@@ -5,6 +5,7 @@
 // Uno.Sdk already declares the WinUI, Uno.Extensions, and hosting namespaces globally, so only what it leaves out
 // belongs here.
 global using MailFathom.Client.Presentation;
+global using Microsoft.Extensions.Configuration;
 global using Microsoft.Extensions.Hosting;
 global using Microsoft.Extensions.Logging;
 

@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Client.Backend;
+using MailFathom.Client.Deployment;
 
 namespace MailFathom.Client;
 
@@ -13,9 +15,24 @@ namespace MailFathom.Client;
 /// </summary>
 public partial class App : Application
 {
-    /// <summary>Initializes the singleton application object.</summary>
+    private readonly IDeploymentAddressSource deploymentAddress;
+
+    /// <summary>Initializes the singleton application object for a head that is installed rather than served.</summary>
+    /// <remarks>The address comes from what the installation states, which is what a desktop head reads. A head served by the deployment it talks to passes its own source instead, exactly as it registers its own sign-in redirect listener.</remarks>
     public App()
+        : this(new ConfiguredDeploymentAddress())
     {
+    }
+
+    /// <summary>Initializes the singleton application object for a head that answers the address question itself.</summary>
+    /// <param name="deploymentAddress">How this head learns where its deployment is.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="deploymentAddress" /> is <see langword="null" />.</exception>
+    internal App(IDeploymentAddressSource deploymentAddress)
+    {
+        ArgumentNullException.ThrowIfNull(deploymentAddress);
+
+        this.deploymentAddress = deploymentAddress;
+
         this.InitializeComponent();
     }
 
@@ -39,6 +56,13 @@ public partial class App : Application
 #if DEBUG
                 .UseEnvironment(Environments.Development)
 #endif
+                // Embedded rather than a file beside the application, which is the one source every head can read: a
+                // browser head has no file system to reach and no process environment to inherit, so anything it is to
+                // know at startup has to travel inside the bundle. A desktop installation that has to state something
+                // of its own writes appsettings.json beside the executable, which the same reader layers on top.
+                .UseConfiguration(configure: configuration => configuration.EmbeddedSource<App>())
+                .ConfigureServices((context, services) => services.AddMailFathomDeployment(
+                    this.ComposeDeployment(context.Configuration)))
                 .UseLogging(configure: (context, logBuilder) =>
                     logBuilder
                         .SetMinimumLevel(
@@ -57,6 +81,35 @@ public partial class App : Application
         this.MainWindow.SetWindowIcon();
 
         this.Host = await builder.NavigateAsync<Shell>();
+    }
+
+    /// <summary>Reads which deployment this head reaches, and as which registered client.</summary>
+    /// <remarks>
+    /// <para>
+    /// The composition root's whole part in it. Where the deployment is, is the head's answer and what to present is
+    /// the installation's, and neither is decided in <c>Client.Backend</c>: that assembly has no default address and
+    /// composes none from a literal, so a client that reached the wrong deployment would have been sent there by
+    /// something readable rather than by a constant nobody saw. A head that cannot answer says so here, while the host
+    /// is being built, rather than opening a window that fails at its first request.
+    /// </para>
+    /// <para>
+    /// The two values are read by name rather than bound onto the record. Binding is reflection over properties, and
+    /// the browser head is trimmed — the same reason this stack source-generates every serializer it uses — so a bound
+    /// section is one the trimmer can quietly empty. Two keys are not worth a source-generated binder either, and
+    /// reading them is the shape that cannot be trimmed away.
+    /// </para>
+    /// </remarks>
+    private DeploymentOptions ComposeDeployment(IConfiguration configuration)
+    {
+        var stated = configuration.GetSection(DeploymentSettings.SectionName);
+
+        var settings = new DeploymentSettings
+        {
+            Address = stated[nameof(DeploymentSettings.Address)] ?? string.Empty,
+            ClientId = stated[nameof(DeploymentSettings.ClientId)] ?? string.Empty,
+        };
+
+        return new DeploymentOptions(this.deploymentAddress.Resolve(settings), settings.ClientId);
     }
 
     private static void RegisterRoutes(IViewRegistry views, IRouteRegistry routes)

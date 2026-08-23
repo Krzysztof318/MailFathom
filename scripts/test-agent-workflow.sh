@@ -6699,10 +6699,14 @@ no_channel_builds_an_artifact_before_the_commit_has_verified() {
   release_consumers=" $(extract_workflow_jobs_consuming_the_commit "$workflow_directory/release.yml" | tr '\n' ' ')"
   nightly_consumers=" $(extract_workflow_jobs_consuming_the_commit "$workflow_directory/nightly.yml" | tr '\n' ' ')"
 
-  # The gate is what the rest waits for, so it is what the rest is measured against rather than
-  # something to measure. Everything else that reads the commit is checked below whatever it is named.
+  # A gate is what the rest waits for, so it is what the rest is measured against rather than
+  # something to measure. There are three, one per stack plus the suite that starts a container, and
+  # `verify-client` is a gate rather than an artifact for a reason worth stating: making it wait for
+  # the server's would leave a commit that breaks both reporting only the server's, and would put a
+  # two-minute client build behind an integration suite it shares nothing with. Everything else that
+  # reads the commit is checked below whatever it is named.
   for job in $release_consumers; do
-    [[ "$job" == 'verify' || "$job" == 'integration-tests' ]] && continue
+    [[ "$job" == 'verify' || "$job" == 'verify-client' || "$job" == 'integration-tests' ]] && continue
 
     workflow_job_waits_for "$release_dependencies" "$job" verify ||
       failures+="release.yml: ${job} does not wait for verify. "
@@ -6711,7 +6715,7 @@ no_channel_builds_an_artifact_before_the_commit_has_verified() {
   done
 
   for job in $nightly_consumers; do
-    [[ "$job" == 'verify' ]] && continue
+    [[ "$job" == 'verify' || "$job" == 'verify-client' ]] && continue
 
     workflow_job_waits_for "$nightly_dependencies" "$job" verify ||
       failures+="nightly.yml: ${job} does not wait for verify. "
@@ -6720,7 +6724,7 @@ no_channel_builds_an_artifact_before_the_commit_has_verified() {
   # A derived list that derives nothing asserts nothing, and it would do so silently: the loops above
   # are vacuous the moment the `ref:` expression they read is spelled some other way. These three are
   # the floor rather than the coverage.
-  for job in schema-artifact cli-binaries publish; do
+  for job in schema-artifact cli-binaries desktop-client publish; do
     [[ "$release_consumers" == *" $job "* ]] ||
       failures+="release.yml: ${job} was not recognized as building from the released commit. "
     [[ "$nightly_consumers" == *" $job "* ]] ||
@@ -6733,6 +6737,14 @@ no_channel_builds_an_artifact_before_the_commit_has_verified() {
     failures+='release.yml: integration-tests does not call integration-tests.yml. '
   [[ "$(extract_workflow_job_uses "$workflow_directory/nightly.yml" verify)" == './.github/workflows/build-test-format-and-migrations.yml' ]] ||
     failures+='nightly.yml: verify does not call build-test-format-and-migrations.yml. '
+
+  # The client's gate is exempted above by name, so what that name means is asserted here rather than
+  # trusted: a `verify-client` job that stopped calling the client's build would be a gate skipped by
+  # the loop and gating nothing, which is the one way the exemption could go wrong quietly.
+  [[ "$(extract_workflow_job_uses "$workflow_directory/release.yml" verify-client)" == './.github/workflows/build-test-frontend.yml' ]] ||
+    failures+='release.yml: verify-client does not call build-test-frontend.yml. '
+  [[ "$(extract_workflow_job_uses "$workflow_directory/nightly.yml" verify-client)" == './.github/workflows/build-test-frontend.yml' ]] ||
+    failures+='nightly.yml: verify-client does not call build-test-frontend.yml. '
 
   # The gate has one home. A copy of it back inside the publishing workflow would run the whole thing
   # twice per publication while gating one artifact of the three.

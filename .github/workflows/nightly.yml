@@ -168,6 +168,21 @@ jobs:
     with:
       ref: ${{ needs.decide.outputs.revision }}
 
+  # The client stack's half of the same gate, against the same revision. It is a second job rather than a switch on the
+  # one above because the two stacks share no solution, no build contract, and no package pins — and it gates the push
+  # below for the reason it gates a release's: the image carries the browser head, built from this revision by the
+  # image build itself.
+  verify-client:
+    name: Build and test the client
+    needs:
+      - decide
+    if: needs.decide.outputs.publish == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-test-frontend.yml
+    with:
+      ref: ${{ needs.decide.outputs.revision }}
+
   # A nightly needs its schema script more than a release does, not less: its schema can be ahead of every published
   # migration, so no release's artifact covers it and there is nothing else to reach for. It is left on the run rather
   # than attached to anything, because a nightly is not a release and has nothing to attach to.
@@ -306,11 +321,34 @@ jobs:
     with:
       ref: ${{ needs.decide.outputs.revision }}
 
+  # The client as something somebody downloads and runs, built from the same revision and left on the run: a nightly is
+  # not a release and has nothing to attach to, so whoever tries a nightly image takes the client from the run that
+  # produced it. It gates nothing, on the same terms as the command binaries above.
+  desktop-client:
+    name: Desktop client
+    needs:
+      - decide
+      # The channel's gate and its own stack's, on the same terms the command binaries wait for the
+      # first of them: a commit either one rejects is not worth two self-contained publishes.
+      - verify
+      - verify-client
+    if: needs.decide.outputs.publish == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-desktop-client.yml
+    with:
+      ref: ${{ needs.decide.outputs.revision }}
+      version: ${{ needs.decide.outputs.version }}
+
   publish:
     name: Publish
     needs:
       - decide
       - verify
+      # The image carries the client's browser head, built from these sources by the image build itself, so a client
+      # that does not compile fails the publication anyway — twenty minutes into a multi-platform build rather than
+      # where the answer already is.
+      - verify-client
     if: needs.decide.outputs.publish == 'true'
     permissions:
       contents: read

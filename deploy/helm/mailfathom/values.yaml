@@ -173,6 +173,35 @@ config:
   # that a restart is how configuration changes.
   pollForChanges: true
 
+### The client
+#
+# MailFathom's own client, served by the application as a page from the same address its client surface answers on. The
+# bundle travels inside the container image, so turning this on pulls nothing, renders no second workload, and publishes
+# no second host — it is one setting, and what it exposes is the application's own code rather than any mail.
+#
+# Off, so an upgrade never puts a page in front of a mailbox that nobody asked for, and an install that wants only the
+# server pays the bundle's size in the image and nothing else.
+#
+# Three things have to be true before it is useful, and the chart can see one of them:
+#
+#   * `ClientEndpoint:Enabled` in `config.files`, because the page is served on that surface's listeners and calls it.
+#     This on and that off is refused at startup, naming both. The reverse is not: an endpoint serving its routes
+#     with no page in front of them is the ordinary deployment.
+#   * A path published for the page, if the ingress below is what people reach it at: `/` for the application itself,
+#     beside the `/api/client` the page calls.
+#   * Transport encryption. The page and every token it then presents cross a public hop, so MailFathom refuses to
+#     serve the client over plain HTTP unless a deployment has said that something in front of it terminates TLS. This
+#     pod never does — it speaks plain HTTP by design — so the chart states that permission on your behalf exactly when
+#     it can see the ingress below terminating TLS. Where TLS terminates somewhere the chart cannot see — a service
+#     mesh, a gateway, a load balancer — the application refuses to start and names the setting; add
+#     `ClientEndpoint__Application__AllowClearText: "true"` to `config.extraEnvironment` once you have confirmed that
+#     the hop a browser actually makes is HTTPS.
+#
+# Authorization is unchanged by any of this. A browser is an untrusted client wherever it was served from, so whatever
+# `ClientEndpoint:Authentication` requires is still required of the page.
+client:
+  enabled: false
+
 ### Personal-data scanning
 #
 # MailFathom can hide personal data before mail is copied into a derived store or handed out, and doing that beyond the
@@ -387,7 +416,10 @@ service:
 # without publishing its path leaves it reachable only inside the cluster — which is a legitimate posture for the
 # administrative surface and never one for the client, whose caller is somebody's own machine. A browser-hosted client
 # also needs `ClientEndpoint:Cors:AllowedOrigins` to name the origin the page is served from, since the ingress answers
-# no preflight on the application's behalf.
+# no preflight on the application's behalf — unless the page is the one this deployment serves itself, which is same
+# origin and therefore no preflight at all.
+#
+# With `client.enabled` on, publish `/` as well: that is where the page is, on the same host it calls.
 ingress:
   enabled: false
   className: ""

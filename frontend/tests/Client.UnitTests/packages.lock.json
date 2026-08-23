@@ -1010,6 +1010,7 @@
           "Microsoft.Extensions.Logging.Console": "[10.0.10, )",
           "SkiaSharp.Skottie": "[3.119.2, )",
           "SkiaSharp.Views.Uno.WinUI": "[3.119.2, )",
+          "Uno.Extensions.Configuration": "[7.2.3, )",
           "Uno.Extensions.Hosting.WinUI": "[7.2.3, )",
           "Uno.Extensions.Logging.WinUI": "[7.2.3, )",
           "Uno.Extensions.Navigation.Toolkit.WinUI": "[7.2.3, )",

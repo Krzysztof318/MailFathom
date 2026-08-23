@@ -65,6 +65,21 @@ internal static class HostPipeline
 
         AddClearTextRedirect(app, composition);
 
+        if (composition.Client is { Enabled: true, Application.Enabled: true })
+        {
+            // Ahead of the isolation below rather than behind it, and that ordering is the whole design. The bundle's
+            // own paths are named by the client's build, so the isolation rule cannot list them and would have to admit
+            // the unclaimed remainder on a client listener — which is the remainder the MCP surface owns, so a
+            // deployment serving the two on separate sockets would find /mcp answering on the client's. Serving the
+            // files first leaves that rule untouched: a request the bundle answers never reaches it, and one it does
+            // not is judged exactly as before.
+            //
+            // It is behind the clear-text redirect above, so a socket that only redirects serves no page, and ahead of
+            // authentication, which is what the page needs: a browser holds no credential until it has loaded the
+            // application that obtains one.
+            AddClientApplication(app, composition);
+        }
+
         // Ahead of everything any surface adds, so a request for a surface this listener does not serve is refused
         // before it reaches CORS, authentication, the client-certificate check, or the rate limiter — and a probe that
         // arrived where the probes are not served is refused before it can report dependency state to whoever can
@@ -178,6 +193,29 @@ internal static class HostPipeline
         // with a 404 — a listener refusing a path it does not serve — and the client would read the endpoint as gone
         // rather than as moved.
         app.UseClearTextRedirectToHttps(new ClearTextRedirectTargets(clearTextRedirectListeners));
+    }
+
+    /// <summary>Serves the client's browser head, having proved this deployment carries one.</summary>
+    /// <remarks>
+    /// The assertion is the same shape as the probe one below and exists for the same reason: an enabled setting whose
+    /// subject is absent is a deployment somebody configured and nobody can use. The bundle is copied into the image at
+    /// build time rather than published by anything here, so a process started from a build that never carried one — a
+    /// service run straight from the sources, an image built before the client existed — is exactly the case an
+    /// operator has to be told about at startup rather than through a page of 404s.
+    /// </remarks>
+    private static void AddClientApplication(WebApplication app, ComposedHostSurfaces composition)
+    {
+        if (!ClientApplicationFiles.BundleIsPresent(app.Environment))
+        {
+            throw new OptionsValidationException(
+                ClientEndpointOptions.SectionName,
+                typeof(ClientEndpointOptions),
+                [
+                    $"{ClientEndpointOptions.SectionName}:{nameof(ClientEndpointOptions.Application)}:{nameof(ClientApplicationOptions.Enabled)} is set, but this deployment carries no client to serve: '{ClientApplicationOptions.EntryDocument}' is absent from '{app.Environment.WebRootPath}'. The bundle travels inside the MailFathom container image; a host started from anything else serves the API surfaces alone.",
+                ]);
+        }
+
+        app.UseClientApplication(composition.Client.ListenerPorts);
     }
 
     /// <summary>Maps the liveness and readiness routes, having proved each configured probe is answered by something.</summary>

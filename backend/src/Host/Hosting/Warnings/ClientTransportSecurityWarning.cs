@@ -65,6 +65,11 @@ internal sealed partial class ClientTransportSecurityWarning : IHostedService
             this.LogEndpointServedWithoutTransportEncryption(this.endpointSettings.Port);
         }
 
+        if (this.endpointSettings.Application.Enabled && this.endpointSettings.ServesClearText)
+        {
+            this.LogClientServedInClearText(this.endpointSettings.Port);
+        }
+
         return Task.CompletedTask;
     }
 
@@ -79,6 +84,15 @@ internal sealed partial class ClientTransportSecurityWarning : IHostedService
             + "combination of them, unless the address is reachable only from this machine or from a network you "
             + "control.")]
     private partial void LogEndpointServedWithoutAuthentication(string clientRoutePrefix);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The client is served in clear text on port {ClientPort}, which this deployment permitted with "
+            + "ClientEndpoint:Application:AllowClearText. The page a browser downloads from this address, and every "
+            + "request it then makes, crosses the network unprotected — so this is the right posture only where "
+            + "something in front of this process terminates TLS, or where the address is reachable only from the "
+            + "machine the browser runs on. It is reported at every startup rather than assumed to still be true.")]
+    private partial void LogClientServedInClearText(int clientPort);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

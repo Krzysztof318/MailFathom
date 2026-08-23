@@ -106,6 +106,45 @@ public sealed class ClientTransportSecurityWarningTests
         Assert.Empty(logs.Records);
     }
 
+    /// <summary>A permission an operator gave once is still a page crossing the network in the clear, so it is reported at every startup rather than assumed to still be true.</summary>
+    [Fact]
+    public async Task StartAsync_TheClientServedOverPermittedClearText_ReportsThePageSeparatelyFromTheCredential()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var settings = Authenticated();
+        settings.Application.Enabled = true;
+        settings.Application.AllowClearText = true;
+        var warning = WarningFor(settings, logs);
+
+        // Act
+        await warning.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(2, logs.Records.Count);
+        Assert.Contains(
+            logs.Records,
+            record => record.Message.Contains("ClientEndpoint:Application:AllowClearText", StringComparison.Ordinal));
+    }
+
+    /// <summary>Serving the page over TLS is the posture the report exists to ask for, so it has nothing to say about one.</summary>
+    [Fact]
+    public async Task StartAsync_TheClientServedOverTls_SaysNothingAboutThePage()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var settings = TlsTerminating();
+        settings.Authentication.Add(ConfiguredAuthentication.ApiKey("desktop-client"));
+        settings.Application.Enabled = true;
+        var warning = WarningFor(settings, logs);
+
+        // Act
+        await warning.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(logs.Records);
+    }
+
     [Fact]
     public async Task StopAsync_AnyPosture_CompletesWithoutSayingAnythingFurther()
     {

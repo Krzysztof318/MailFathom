@@ -71,6 +71,15 @@ between the deployed database and one you operate, before the install command.
 
 The native process is the shape that brings no database at all.
 
+**MailFathom's own client travels inside the container image**, so the three container shapes can serve it as a page
+without installing anything else. It is off in each of them, and turning it on is one decision: `client.enabled` in the
+Helm chart, which derives the clear-text permission from the ingress it can see; `MAILFATHOM_CLIENT=true` in Compose,
+where one variable writes both settings; and, in Quadlet, uncommenting the two adjacent `Environment=` lines the unit
+carries, because a `.container` file has no variable to write two keys through.
+[Serving the client from the deployment](../operations/client-endpoint.md#serving-the-client-from-the-deployment) is
+the page. The native shape carries no bundle, because nothing outside the image builds one; a person running that shape
+downloads the desktop client from the release instead.
+
 ## What every shape needs
 
 - **Linux.** It is the only platform this project officially supports, and everything below assumes it: the image is

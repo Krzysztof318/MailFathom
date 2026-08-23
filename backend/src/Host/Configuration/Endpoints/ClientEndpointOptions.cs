@@ -100,6 +100,10 @@ internal sealed class ClientEndpointOptions
     /// </remarks>
     public IList<TransportAuthenticationOptions> Authentication { get; } = [];
 
+    /// <summary>Gets or sets whether this deployment also serves the client's browser head from this endpoint's listeners.</summary>
+    /// <remarks>The one setting here that is about a page rather than about an API. It belongs to this section because the page is served on this surface's listeners and nowhere else: same origin is what lets the head carry no address at all, and it is what a deployment gives up by publishing the two apart.</remarks>
+    public ClientApplicationOptions Application { get; set; } = new();
+
     /// <summary>Gets or sets which browser origins the endpoint answers.</summary>
     /// <remarks>The setting the administrative endpoint has no use for. A WebAssembly head calls this surface from a page origin, so a preflight this endpoint cannot answer is a client that never starts; the same section the MCP endpoint carries, configured separately.</remarks>
     public TransportCorsOptions Cors { get; set; } = new();
@@ -144,6 +148,11 @@ internal sealed class ClientEndpointOptions
     /// <summary>Gets whether the clear-text listener answers every request with the address of the TLS one.</summary>
     public bool RedirectsClearText =>
         TransportListenerConfiguration.RedirectsClearText(this.Transport, this.Https.Redirect);
+
+    /// <summary>Gets whether this surface answers its routes on a socket nothing encrypts.</summary>
+    /// <remarks>Narrower than the negation of <see cref="TerminatesTls" />: a clear-text socket that answers every request with the address of the TLS one carries no route and therefore no page, so the mode that binds both and redirects is not one of these.</remarks>
+    public bool ServesClearText =>
+        TransportListenerConfiguration.OpensClearTextListener(this.Transport) && !this.RedirectsClearText;
 
     /// <summary>Gets the ports this endpoint's listeners bind, which no other listener in the process may claim.</summary>
     /// <remarks>Empty when the endpoint is not served at all. The clear-text port is one of them under every mode that opens that socket, whether it serves the routes or redirects away from them, so a deployment cannot give it to the probes or to another surface and discover the conflict as an address-in-use error naming a socket rather than a section.</remarks>
@@ -229,7 +238,12 @@ internal sealed class ClientEndpointOptions
     {
         if (!this.Enabled)
         {
-            return [];
+            // The one setting in this section that is read while the endpoint is off, because it is the one that says
+            // something is wrong rather than absent: a deployment that turned the page on and the surface it calls off
+            // configured a client that cannot read a message, and nothing else here would say so.
+            return this.Application.Enabled
+                ? [$"{SectionName}:{nameof(this.Application)}:{nameof(ClientApplicationOptions.Enabled)} is set while {SectionName}:{nameof(this.Enabled)} is not. The client is served on this endpoint's own listeners, so enable the endpoint or turn the client off."]
+                : [];
         }
 
         var authenticationErrors = TransportAuthenticationConfiguration.FindConfigurationErrors(
@@ -243,6 +257,8 @@ internal sealed class ClientEndpointOptions
         {
             errors.AddRange(this.FindResourcePrefixErrors());
         }
+
+        errors.AddRange(this.FindApplicationErrors());
 
         errors.AddRange(this.Cors.FindConfigurationErrors()
             .Select(error => $"{SectionName}:{nameof(this.Cors)}:{error}"));
@@ -264,6 +280,24 @@ internal sealed class ClientEndpointOptions
             QuicListener.IsSupported));
 
         return errors;
+    }
+
+    /// <summary>Reports what an operator must decide before the client may be served over a socket nothing encrypts.</summary>
+    /// <remarks>
+    /// A refusal rather than a warning, which is what separates this hop from the ones the startup warnings report. Those
+    /// are about a credential a caller chose to present; this one is about a page a browser downloads and then attaches
+    /// that credential from, so the deployment publishes the application itself to whatever is on the path. The two ways
+    /// out are named because both are real: terminating TLS here, and declaring that something in front of this process
+    /// already does.
+    /// </remarks>
+    private IEnumerable<string> FindApplicationErrors()
+    {
+        if (!this.Application.Enabled || !this.ServesClearText || this.Application.AllowClearText)
+        {
+            yield break;
+        }
+
+        yield return $"{SectionName}:{nameof(this.Application)}:{nameof(ClientApplicationOptions.Enabled)} is set while this endpoint answers on a clear-text socket, which would publish the client and every credential a page presents from it to anything on the network path. Terminate TLS here by setting {SectionName}:{nameof(this.Transport)} to '{nameof(EndpointTransport.HttpsOnly)}' with {SectionName}:{nameof(this.Https)}:{nameof(TransportHttpsOptions.Endpoints)} configured, or — where a reverse proxy in front of this process terminates it, or where the address is reachable only from this machine — set {SectionName}:{nameof(this.Application)}:{nameof(ClientApplicationOptions.AllowClearText)} to true.";
     }
 
     /// <summary>Reports the OAuth entries whose resource does not name the path these routes answer at.</summary>

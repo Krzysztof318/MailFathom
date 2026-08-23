@@ -83,6 +83,12 @@ spamScanning:
     deploy: false
     host: spamassassin.mailfathom.svc.cluster.local
 
+# The client served as a page, which is the half of the choice the other two values documents do not render: with the
+# ingress below terminating TLS, the chart writes the switch and the clear-text permission together. Between this file
+# and the two beside it, both branches of `client.enabled` are rendered by the repository's own verification.
+client:
+  enabled: true
+
 ingress:
   enabled: true
   className: nginx
@@ -95,6 +101,11 @@ ingress:
         # The client surface is published beside the MCP one, because the shape it is enabled in above is the one whose
         # caller is a browser on somebody's own machine rather than a workload inside the cluster.
         - path: /api/client
+          pathType: Prefix
+
+        # The page itself, at the root of the same host it calls. Same origin is what lets the bundle carry no address
+        # at all, so publishing it anywhere else would be publishing a client that reaches nothing.
+        - path: /
           pathType: Prefix
   tls:
     - secretName: mailfathom-tls
