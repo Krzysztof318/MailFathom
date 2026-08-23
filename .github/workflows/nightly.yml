@@ -183,6 +183,26 @@ jobs:
     with:
       ref: ${{ needs.decide.outputs.revision }}
 
+  # The half of the repository neither stack's build can see, against the same revision: the contract suite, and the
+  # chart linted and rendered against the manifests committed beside it. A nightly is installable long before any tag,
+  # so its tree is one somebody deploys from — the chart an operator renders is the chart in that tree, and a rendering
+  # that stopped matching those manifests is a deployment defect rather than a repository one. Both switches are at
+  # their default, because a publication skips nothing.
+  #
+  # It gates nothing, which is this channel's rule rather than an oversight: neither half of it is in the image, and a
+  # working artifact withheld over a contract it does not carry is a nightly nobody can try. What a failure here costs
+  # is a red run beside a published image, which is legible, and the release channel is where the same answer blocks.
+  verify-contracts:
+    name: Repository contracts
+    needs:
+      - decide
+    if: needs.decide.outputs.publish == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/repository-contracts.yml
+    with:
+      ref: ${{ needs.decide.outputs.revision }}
+
   # A nightly needs its schema script more than a release does, not less: its schema can be ahead of every published
   # migration, so no release's artifact covers it and there is nothing else to reach for. It is left on the run rather
   # than attached to anything, because a nightly is not a release and has nothing to attach to.

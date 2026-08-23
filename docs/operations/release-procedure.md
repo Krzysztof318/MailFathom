@@ -205,9 +205,11 @@ unavailable:
    rather than a run that fails. **Read a pushed tag that produced no run as a malformed tag**, and check its spelling
    before looking anywhere else. Before publishing anything the workflow asserts the tag against the tagged commit's
    `VersionPrefix`, against the highest existing tag on the same `major.minor` line, and against the changelog section
-   for that version — `scripts/assert-release-tag.sh` is that check. It then runs the same build, unit-test,
-   formatting, and migration checks a pull request runs, followed by the integration suite, and builds nothing at all
-   until both have passed. Only then does it build and gate the image, push it to
+   for that version — `scripts/assert-release-tag.sh` is that check. It then runs the same checks a pull request runs and
+   runs all of them: the server's build, unit tests, formatting, and migration check, the client's build and unit
+   suite beside them, and the repository contracts with the chart rendering, followed by the integration suite. It
+   builds nothing at all until the first two and the suite have passed. Only then does it build and gate the image,
+   with the contract gate named on that step as well, push it to
    both registries under `<x.y.z>`, move `latest` onto the same digest, attest it, publish the Helm chart against
    that digest, and open the GitHub release with that changelog section as its notes. Under the section it links
    `CHANGELOG.md` at the tag, so a reader of an older release reaches the file as that release shipped it rather than a
@@ -266,6 +268,12 @@ them: the tag assertion, then the build, unit-test, formatting, and migration ch
 for the two artifacts built out of the client stack the client's own build beside them. **No
 artifact is built until every one of those has passed**, so a commit a unit test rejects costs the gate that rejected
 it rather than six `dotnet publish` invocations and a schema generation beside a red build.
+
+The repository contracts run beside those gates and hold back the image alone rather than the artifacts. What they
+assert — the licensing headers, the page contracts, and the chart rendered against the manifests committed beside it —
+says nothing about whether a command binary or a schema script builds, and holding those back over it would answer a
+question nobody asked. What it does decide is whether this tree is one to put a digest behind: the chart the release
+goes on to package is the chart that job renders, and an image is the harder half of the pair to withdraw.
 [The container image](container-image.md#verification) records the whole gate order, including the two gates that
 belong to the image alone.
 

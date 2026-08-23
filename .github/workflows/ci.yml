@@ -10,12 +10,13 @@ name: CI
 # and keep the names they had.
 #
 # What this workflow owns is the change: which work it can affect, whether the pull request carrying it
-# is a draft, and the one required check. The work itself lives in one called workflow per stack —
-# `build-test-format-and-migrations.yml` for the server, which the publishing pipeline calls too, so a release and a
-# nightly are gated on the same build, unit-test, coverage, and formatting checks a pull request is, from one
-# definition rather than from a copy; and `build-test-frontend.yml` for the client. The two stacks share this gate and
-# nothing else: separate solutions, separate build contracts, separate package pins, and a change to either that
-# cannot reach the other costs nothing in it.
+# is a draft, and the one required check. The work itself lives in three called workflows —
+# `build-test-format-and-migrations.yml` for the server, `build-test-frontend.yml` for the client, and
+# `repository-contracts.yml` for what neither stack's build can see — and the publishing pipeline calls all three, so a
+# release and a nightly are gated on the same build, unit-test, coverage, formatting, and contract checks a pull
+# request is, from one definition rather than from a copy. The two stacks share this gate and nothing else: separate
+# solutions, separate build contracts, separate package pins, and a change to either that cannot reach the other costs
+# nothing in it.
 on:
   pull_request:
     types:
@@ -35,15 +36,15 @@ on:
   # otherwise not a fact that exists anywhere, only one inferred from the last pull request that closed.
   # `CodeQL` watches the branch this way for its own reasons already.
   #
-  # No path filter here either, and for a different reason than the pull-request one stated below. That
-  # one protects a required check, and nothing waits on a push conclusion, so it does not reach this
-  # trigger. What does reach it is `Workflow contracts`, which reads the whole tree and therefore has no
-  # path filter to inherit one from: `docs/`, `scripts/`, `.agents/`, `deploy/`, and the root Markdown
-  # files are its subject matter rather than paths it can be told to ignore, so a filter naming them
-  # would suppress precisely the run most likely to have something to report. Which part of a merge is
-  # worth verifying is decided inside the run instead, by the same `Detect changes` job that decides it
-  # for a pull request — so a merge moving nothing the build reads costs the contract job's twenty
-  # seconds rather than a full build.
+  # No path filter here, and no changed-path narrowing inside the run either. The pull-request reason
+  # stated below — a filtered-out workflow reports neither success nor failure, so a required check
+  # never arrives — protects a required check, and nothing waits on a push conclusion, so it does not
+  # reach this trigger. What replaces it is a stronger reason of its own: what a push is asked is *is
+  # `main` green*, and a run that verified the part of the tree this merge happened to touch has not
+  # answered that. Two changes that never saw each other are what a merge produces and are what neither
+  # of their pull requests could have caught, and the paths one of them moved say nothing about which
+  # half of the tree the pair broke. So every job below runs unconditionally on a push, at the cost of a
+  # full build per merge, and `Detect changes` answers only the event that has a reason to ask.
   push:
     branches:
       - main
@@ -72,44 +73,28 @@ jobs:
   detect-changes:
     name: Detect changes
     runs-on: ubuntu-latest
-    # The changed-file query reads a pull request through the REST API and a push through git, so the
-    # two events need different privileges and the job holds both. Neither exceeds read.
+    # The changed-file query reads a pull request through the REST API, which needs the read below and
+    # nothing else: no working copy is checked out here, because the one event this job answers is the
+    # one the action can answer without one.
     permissions:
       contents: read
       pull-requests: read
+    # Skipping work a change cannot affect is a pull request's economy and only a pull request's. On a
+    # push to `main` and on a manual dispatch the filter is skipped and every output falls back to
+    # `true`: `main` is asked whether the whole tree is green, and an explicitly started run always does
+    # the work. The job itself still runs on all three, because the jobs below read its outputs.
     outputs:
-      build: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.build == 'true' }}
-      format: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.format == 'true' }}
-      model: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.model == 'true' }}
-      frontend: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.frontend == 'true' }}
-      helm: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.helm == 'true' }}
+      build: ${{ github.event_name != 'pull_request' || steps.filter.outputs.build == 'true' }}
+      format: ${{ github.event_name != 'pull_request' || steps.filter.outputs.format == 'true' }}
+      model: ${{ github.event_name != 'pull_request' || steps.filter.outputs.model == 'true' }}
+      frontend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.frontend == 'true' }}
+      helm: ${{ github.event_name != 'pull_request' || steps.filter.outputs.helm == 'true' }}
     steps:
-      # Only a push needs a working copy. A pull request is compared through the REST API, which reads
-      # none; a push is compared with `git diff` between the commit the branch carried before it and the
-      # one it carries now. `fetch-depth: 0` is what puts the first of those in the clone: without it the
-      # action fetches that commit by SHA from an origin the next line has just stripped the credentials
-      # for, which works only for as long as this repository is public and GitHub keeps serving a bare
-      # SHA to an anonymous client. The history is small and the fetch is the same one either way.
-      - name: Check out repository
-        if: github.event_name == 'push'
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      # A manual dispatch reaches this job but has neither a pull request to compare against nor a
-      # commit the branch carried before it, so the filter is skipped and every output falls back
-      # to `true` above: an explicitly started run always does the work.
       - name: Detect changed paths
         id: filter
-        if: github.event_name != 'workflow_dispatch'
+        if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@v4
         with:
-          # Empty on a pull request, where the action reads the base from the event and warns that a
-          # `base` it will not use was supplied. On a push, naming the branch that was pushed is what
-          # selects the comparison this job wants: against the commit `main` carried before the merge,
-          # rather than against a merge base with itself.
-          base: ${{ github.event_name == 'push' && github.ref || '' }}
           filters: |
             build:
               - 'backend/src/**'
@@ -223,9 +208,8 @@ jobs:
   #
   # The draft exemption is the expensive-job rule rather than a copy of the server's: the browser head compiles native
   # WebAssembly assets through Emscripten, which is minutes of runner time on a cold cache, so a draft pays for it at
-  # the moment it is marked ready like every other build here. `Workflow contracts` and `Helm chart` are the two jobs
-  # that do run for a draft, and their argument — seconds of runner time, nothing installed — is the one this job
-  # cannot make.
+  # the moment it is marked ready like every other build here. `Repository contracts` is what does run for a draft, and
+  # its argument — seconds of runner time, nothing installed — is the one this job cannot make.
   frontend:
     name: Frontend
     needs:
@@ -240,85 +224,36 @@ jobs:
       # question the `frontend` filter answers, and whether it is worth asking again on a merge is this one.
       run-format: ${{ github.event_name != 'push' }}
 
-  # The one job here that reads the half of the repository the build, formatting, and model jobs cannot
-  # see, and the only one that reports on a draft besides the two that cost seconds. `Detect changes`
-  # routes `.github/**`, `docs/**`, `scripts/**`, and `.agents/**` to nothing, because none of them can
-  # move a build, a formatting verdict, or the EF Core model. Without this job a pull request touching
-  # only those would clear `Required CI` having verified nothing about them, and the contract suite would
-  # run only where somebody remembered `scripts/verify-full.sh`.
+  # The two checks that read the half of the repository the build, formatting, and model jobs cannot see, in
+  # `repository-contracts.yml` for the reason the two build workflows are called workflows: a nightly and a release
+  # assert them against the tree they publish, from one definition rather than from a copy of these steps.
   #
-  # No path filter, and that is the point rather than an omission: the suite asserts the licensing header
-  # in every `.yml`, `.sh`, Helm template, and `SKILL.md`, the `describes:` marker on every page under
-  # `docs/`, and a table-of-contents entry behind every published page and a page behind every entry,
-  # over the whole tree at once. Narrowing it to the changed files would report green on contracts it
-  # never evaluated, which is worse than not running it.
+  # `Workflow contracts` runs on every event and under every condition. `Detect changes` routes `.github/**`,
+  # `docs/**`, `scripts/**`, and `.agents/**` to nothing, because none of them can move a build, a formatting verdict,
+  # or the EF Core model, so without this a pull request touching only those would clear `Required CI` having verified
+  # nothing about them. It takes no path filter, and that is the point rather than an omission: the suite asserts the
+  # licensing header in every `.yml`, `.sh`, Helm template, and `SKILL.md`, the `describes:` marker on every page under
+  # `docs/`, and a table-of-contents entry behind every published page and a page behind every entry, over the whole
+  # tree at once. Narrowing it to the changed files would report green on contracts it never evaluated, which is worse
+  # than not running it.
   #
-  # No draft condition either, unlike `verify` above. A draft-exempt contract check would not run over the
-  # interval during which the change is actually being written — which is the whole interval in which a
-  # broken contract is cheap to fix. The job costs about twenty seconds, so there is nothing to save by
-  # deferring it.
+  # `Helm chart` is the one of the two a change can fail to reach, so it is the one `run-helm` switches. What it
+  # renders against is committed under `deploy/helm/mailfathom/ci/golden/`, which is why it can be narrowed where the
+  # suite above cannot: a chart no file in the change touches renders to the manifests it already rendered to.
   #
-  # And no event condition, so a push to `main` runs it too. Every invariant above spans files that
-  # different changes own, which makes the tree a merge produces the one tree no pull-request run was
-  # ever shown: one pull request deletes a page while another adds the entry naming it, and both are
-  # green while `main` is not. That is the argument keeping the model check on a push, applied to the
-  # half of the repository the build cannot see.
-  workflow-contracts:
-    name: Workflow contracts
-    runs-on: ubuntu-latest
-    steps:
-      # The default shallow fetch is enough. Every contract that reads this repository rather than a
-      # fixture reads its index through `git ls-files` or the file mode git recorded, never its history;
-      # the suite builds the repositories whose history it tests under a temporary directory of its own.
-      - name: Check out repository
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      # Fifteen seconds on a GitHub-hosted runner, and nothing else is provisioned for it: the suite fakes
-      # `dotnet` with a symlink to itself, so no SDK, no restore, and no NuGet cache, and it reaches no
-      # network. `jq` is the one tool it needs beyond git and bash, and the runner image carries it. The
-      # suite takes rather longer than this on a developer machine, where it is one step of the full gate
-      # and competes with everything else running there; the figure above is what the job costs a run,
-      # which is the only cost this file is about.
-      - name: Run the workflow contracts
-        run: bash scripts/test-agent-workflow.sh
-
-  # The deployment contract, which is one of the four public surfaces ADR 0004 names and the one no other job here can
-  # see. Until this existed `helm lint` and `helm template` ran for the first time inside `Publish Helm chart` — after
-  # the image had been published and with re-tagging a release meaning a registry deletion first — so a chart that
-  # stopped rendering was found at the worst moment there is. The release run keeps its own lint and render: a release
-  # gate that trusts an earlier run is not a gate.
-  #
-  # It runs when the change can reach a rendering and skips otherwise, through `Detect changes` rather than a `paths`
-  # filter on the trigger, for the reason stated at the top of this file: a filtered-out workflow reports neither
-  # success nor failure and the required check never arrives.
-  #
-  # No draft condition, like `Workflow contracts` and unlike `Verify`. The job installs nothing, restores nothing, and
-  # costs seconds rather than the minutes an SDK, a restore, and a build cost, so there is nothing to save by deferring
-  # it past the interval in which the chart is actually being written. Helm is the runner image's preinstalled copy,
-  # which is what the release run uses as well;
-  # the rendering the golden files are compared against is normalized so that the Helm version deciding the whitespace
-  # between documents cannot decide the verdict.
-  helm-chart:
-    name: Helm chart
+  # No draft condition on either, unlike `verify` above. A draft-exempt contract check would not run over the interval
+  # during which the change is actually being written — which is the whole interval in which a broken contract is cheap
+  # to fix — and neither job installs anything or costs more than seconds, so there is nothing to save by deferring
+  # them.
+  contracts:
+    name: Repository contracts
     needs:
       - detect-changes
-    if: needs.detect-changes.outputs.helm == 'true'
-    runs-on: ubuntu-latest
     permissions:
       contents: read
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Record the Helm version this run used
-        run: helm version --template '{{ printf "Helm %s\n" .Version }}'
-
-      - name: Lint the chart and render it against the committed manifests
-        run: bash scripts/render-helm-manifests.sh
+    uses: ./.github/workflows/repository-contracts.yml
+    with:
+      run-helm: ${{ needs.detect-changes.outputs.helm == 'true' }}
 
   required-ci:
     name: Required CI
@@ -326,17 +261,16 @@ jobs:
       - detect-changes
       - verify
       - frontend
-      - workflow-contracts
-      - helm-chart
+      - contracts
     # `always()` rather than `success() || failure()`, because this job has to report on a run that was
     # cancelled as well as on one whose dependencies were skipped. Anything weaker leaves the required
     # check itself skipped, which is the state this whole arrangement exists to avoid.
     #
     # The push exclusion does not weaken that. This job exists to be the `main` ruleset's one required
     # check, and a ruleset evaluates a pull request; on a push there is nothing waiting for a conclusion.
-    # The four results it reads all arrive on their own there — each of those jobs runs, and a failed
-    # one fails the run, which is what the badge and the Actions list report — so a fifth job restating
-    # that verdict under a fifth name would add a check rather than an answer. On every event the
+    # The results it reads all arrive on their own there — each of those jobs runs, and a failed one
+    # fails the run, which is what the badge and the Actions list report — so a further job restating
+    # that verdict under a further name would add a check rather than an answer. On every event the
     # ruleset does read, this job runs under exactly this name — which is the invariant the comment
     # below is about.
     if: always() && github.event_name != 'push'
@@ -350,8 +284,7 @@ jobs:
           DETECT_CHANGES_RESULT: ${{ needs.detect-changes.result }}
           VERIFY_RESULT: ${{ needs.verify.result }}
           FRONTEND_RESULT: ${{ needs.frontend.result }}
-          WORKFLOW_CONTRACTS_RESULT: ${{ needs.workflow-contracts.result }}
-          HELM_CHART_RESULT: ${{ needs.helm-chart.result }}
+          CONTRACTS_RESULT: ${{ needs.contracts.result }}
         run: |
           set -euo pipefail
 
@@ -387,12 +320,11 @@ jobs:
           # A change that reaches nothing the client build reads skips this one, exactly as a change that reaches no
           # server code skips the job above it.
           require_success_or_skipped 'Frontend' "$FRONTEND_RESULT"
-          # A change that reaches no chart file skips this one, which is the same complete answer `Verify` gives a
-          # documentation-only change.
-          require_success_or_skipped 'Helm chart' "$HELM_CHART_RESULT"
-          # Not `require_success_or_skipped`: the contract job has no `if` and no path filter, so it has
-          # no way to skip that is not a job that failed to start.
-          require_success 'Workflow contracts' "$WORKFLOW_CONTRACTS_RESULT"
+          # Not `require_success_or_skipped`: the called workflow holds the contract suite, which has no `if` and no
+          # path filter and therefore no way to skip that is not a job which failed to start. Its chart job does skip
+          # on a change reaching no chart file, and a called workflow whose remaining job succeeded reports `success`,
+          # so that complete answer arrives here as one.
+          require_success 'Repository contracts' "$CONTRACTS_RESULT"
 
           if [[ "$verdict" -eq 0 ]]; then
             echo "All pull-request checks completed or were not applicable to this change."

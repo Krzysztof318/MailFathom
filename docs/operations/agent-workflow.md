@@ -346,15 +346,16 @@ remembered to add to it. Detection reads to the first NUL rather than asking git
 whose own binary heuristic looks at the first 8000 bytes alone and reads a file
 carrying the byte further in as ordinary text.
 
-The suite runs in two places and the second one is not a convenience. `CI`'s
-`Workflow contracts` job runs it on every pull request, including a draft, and on
-every push to `main` after a merge, which is what makes these contracts a property
-of the repository rather than of whoever remembered the gate: the change detection
-in that workflow routes `.github/`, `docs/`, `scripts/`, and `.agents/` to no other
-job — bar the one script that renders the Helm chart, which the `Helm chart` job
-reads — because none of them can move a build, a formatting verdict, or the EF Core
-model, and the merge is the moment the tree they describe changes without any pull
-request having been wrong. A fork's pull request has no local gate behind it at
+The suite runs in two places and the second one is not a convenience. The
+`Workflow contracts` job of `repository-contracts.yml` runs it on every pull
+request, including a draft, on every push to `main` after a merge, and on the
+revision every nightly and every release publishes, which is what makes these
+contracts a property of the repository rather than of whoever remembered the gate:
+the change detection in `ci.yml` routes `.github/`, `docs/`, `scripts/`, and
+`.agents/` to no other job — bar the one script that renders the Helm chart, which
+the `Helm chart` job beside it reads — because none of them can move a build, a
+formatting verdict, or the EF Core model, and the merge is the moment the tree they
+describe changes without any pull request having been wrong. A fork's pull request has no local gate behind it at
 all, and it is a fork's contributor who is most likely to change a workflow or a
 script without knowing what asserts it. What the full gate
 above keeps is the earlier verdict — a contract broken here is answered before the

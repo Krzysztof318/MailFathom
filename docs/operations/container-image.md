@@ -316,10 +316,18 @@ Publication runs the gates instead, in an order that spends the cheap ones first
    The migration check is the one worth naming here rather than leaving to `CI`: an image whose committed model
    snapshot describes a schema no migration produces would refuse to start against any database an operator can
    actually have, and a nightly is installable long before a tag exists to catch it.
-2. **The integration suite**, for a release only, and only after CI has passed. It starts PostgreSQL, applies the
+2. **The client stack's build and unit suite, and the repository contracts**, both against the same commit and both
+   beside the gate above rather than behind it: the two solutions share no project, and the contract suite installs
+   nothing and answers in twenty seconds, so putting either in sequence would delay a verdict without sharpening one.
+   The client's gate blocks the push on both channels, because the image carries the browser head published out of
+   that stack. The contract gate — the licensing headers, the page contracts, and the chart rendered against the
+   manifests committed beside it — blocks a release and reports on a nightly, which is the same difference the
+   vulnerability scan draws and for the same reason: a release is one claim about one commit, and a nightly exists to
+   be tried.
+3. **The integration suite**, for a release only, and only after CI has passed. It starts PostgreSQL, applies the
    baseline migration, and asserts against the result, which is minutes of container time no commit a unit test would
    have rejected is worth. A nightly does not run it.
-3. **The image gates.** The image is built for one architecture, started, and required to report the version and
+4. **The image gates.** The image is built for one architecture, started, and required to report the version and
    revision its labels claim, to run as the unprivileged `1654` account, to expose both listeners, and to carry none of
    the three listener-shaped variables the host refuses; then Trivy scans it, which refuses to publish a release
    carrying a fixable `HIGH` or `CRITICAL` finding and only reports one on a nightly.
@@ -331,13 +339,15 @@ Publication runs the gates instead, in an order that spends the cheap ones first
    reports it can still fail on the next line. What this does not cover is a pull request: the gate runs where the image
    is built, so a change that put a variable back is caught by the next nightly rather than by the branch that made it.
 
-**Nothing is built from the commit until the first two have passed** — not the image, not the schema script, and not
-the command binaries. They are jobs in `Release` and `Nightly` themselves rather than steps inside the workflow that
-pushes the image, because the image is one of three things a channel builds and a gate inside it would gate only that
-one. Everything above is therefore the order of a whole publication rather than of the image alone: what a red run
+**Nothing is built from the commit until the verification gates have passed** — not the image, not the schema script,
+not the command binaries, and not the desktop client. They are jobs in `Release` and `Nightly` themselves rather than
+steps inside the workflow that pushes the image, because the image is one of several things a channel builds and a gate
+inside it would gate only that one. The contract gate is the one that holds back less than the rest, and deliberately:
+it blocks the image and leaves the other artifacts alone, since what it asserts says nothing about whether a schema
+script or a command binary builds. Everything above is therefore the order of a whole publication rather than of the image alone: what a red run
 costs is the gate that refused it, not four `dotnet publish` invocations and a schema generation beside a failing
 build. `scripts/test-agent-workflow.sh` reads both workflows' job graphs and fails one whose publishing job does not
-wait for the gate, so a fifth artifact is gated by being added rather than by being reviewed.
+wait for the gates, so a further artifact is gated by being added rather than by being reviewed.
 
 Both channels also build the schema artifact, from one shared definition, and differ only in what they do with it. A
 release **waits** on it and refuses to push when it cannot be produced: an operator handed an image and no way to reach
