@@ -351,7 +351,8 @@ yourself once you have confirmed the hop a browser actually makes is HTTPS.
 Two more things belong to the same decision:
 
 - `ClientEndpoint:Enabled` in `config.files`, because the page is served on that surface's listeners and calls its
-  routes. MailFathom refuses to start with one of the two on and the other off, naming both.
+  routes. The page turned on while the endpoint is off is refused at startup, naming both; the reverse — the
+  endpoint serving its routes with no page in front of them — is an ordinary deployment and starts.
 - A `/` path in `ingress.hosts[].paths`, beside the `/api/client` the page calls, if the ingress is what people reach
   it at.
 

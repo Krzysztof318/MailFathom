@@ -26,7 +26,9 @@ internal sealed record DeploymentSettings
     /// <summary>Gets the deployment's address, as written, or empty when the installation states none.</summary>
     /// <remarks>
     /// An origin — scheme, host, and port — and nothing beneath it: MailFathom serves its client surface at a prefix
-    /// this application already knows, so a path written here would be dropped when a route resolved against it.
+    /// this application already knows, so there is no sub-path deployment to state one for. A path written here is
+    /// refused rather than dropped — <c>DeploymentOptions</c> throws while the host is being composed, naming the
+    /// address — which is the loud half of the same rule that refuses an address stating nothing at all.
     /// A value with no scheme is read as HTTPS, which is the only scheme a deployment reached across a network may use;
     /// clear text is refused for anything but this machine, and refused by <c>Client.Backend</c> rather than here, so
     /// one rule judges every head.

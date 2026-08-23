@@ -261,10 +261,11 @@ half-published:
 | `mfctl-<version>-<rid>` for `linux-x64`, `linux-arm64`, `win-x64`, and `win-arm64`, plus one `.sha256` covering all of them | the GitHub release's assets | nothing else the release produces |
 | `mailfathom-client-<version>-<rid>.zip` for `win-x64` and `win-arm64`, plus one `.sha256` covering both | the GitHub release's assets | nothing else the release produces |
 
-The column names what each artifact needs from the other three. What all four need is the same and comes before any of
-them: the tag assertion, then the build, unit-test, formatting, and migration checks, then the integration suite. **No
+The column names what each artifact needs from the other four. What all five need is the same and comes before any of
+them: the tag assertion, then the build, unit-test, formatting, and migration checks, then the integration suite, and
+for the two artifacts built out of the client stack the client's own build beside them. **No
 artifact is built until every one of those has passed**, so a commit a unit test rejects costs the gate that rejected
-it rather than four `dotnet publish` invocations and a schema generation beside a red build.
+it rather than six `dotnet publish` invocations and a schema generation beside a red build.
 [The container image](container-image.md#verification) records the whole gate order, including the two gates that
 belong to the image alone.
 
@@ -288,8 +289,8 @@ project's `LICENSE` and `NOTICE`, and the notices for the one component in its g
 `LibVLCSharp.dll` is LGPL-2.1-or-later, so the artifact ships the licence text beside a statement that the library is
 used unmodified and separately replaceable, and the release notes name where its corresponding source is. The head is
 published unmerged, untrimmed, and without Native AOT for exactly that reason —
-[ADR 0016](../decisions/0016-third-party-licence-obligations-per-artifact.md) is the decision and `frontend/src/AGENTS.md`
-holds the four build properties it forbids.
+[ADR 0016](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0016-third-party-licence-obligations-per-artifact.md)
+is the decision and `frontend/src/AGENTS.md` holds the four build properties it forbids.
 
 The chart is published **after** the image and **against the digest it produced**, because a chart names the image it
 deploys: before pushing, the run renders the packaged chart against that digest and refuses to publish one that would

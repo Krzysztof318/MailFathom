@@ -452,8 +452,9 @@ on [the network boundary](#the-network-boundary) describes exists. Keep `MAILFAT
 does.
 
 Beside it, `ClientEndpoint:Enabled` has to be on in the configuration under `./config`: the page is served on that
-surface's listeners and calls its routes, and MailFathom refuses to start with one of the two on and the other off,
-naming both. What the page then has to present is unchanged by serving it here — [the client
+surface's listeners and calls its routes. The page turned on while the endpoint is off is refused at startup,
+naming both; the reverse — the endpoint serving its routes with no page in front of them — is an ordinary
+deployment and starts. What the page then has to present is unchanged by serving it here — [the client
 endpoint](client-endpoint.md#serving-the-client-from-the-deployment) is the page.
 
 ## Personal-data scanning

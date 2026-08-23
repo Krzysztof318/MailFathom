@@ -255,9 +255,11 @@ restored like any other.
 
 **Where the deployment is, is answered per head, through `IDeploymentAddressSource`.** `AddMailFathomDeployment` still
 takes the address as an argument and `Client.Backend` still has no default; what composition does is ask the head. A
-head that was *installed* reads what somebody wrote — `ConfiguredDeploymentAddress` binds the `Deployment` section out
-of the embedded `appsettings.json`, and an installation stating nothing fails while the host is being composed, naming
-the setting, rather than opening a window pointed at a guess. A head that was *served* already knows: the browser head
+head that was *installed* reads what somebody wrote: `App.ComposeDeployment` reads the two `Deployment` keys **by name**
+out of the embedded `appsettings.json` and hands them to `ConfiguredDeploymentAddress`, which resolves the address and
+refuses an installation that states none — while the host is being composed, naming the setting, rather than opening a
+window pointed at a guess. By name rather than bound onto the record, because binding is reflection over properties and
+the browser head is trimmed, which is the reason this stack source-generates every serializer it uses. A head that was *served* already knows: the browser head
 hands `PageOriginDeploymentAddress`, which reads `globalThis.location.origin` through `[JSImport]`, because MailFathom
 serves the bundle from the same origin as the surface it calls and a browser head reads no environment anyway. A value
 written with no scheme is read as HTTPS, since the alternative would turn an omission into a token on the wire;

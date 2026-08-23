@@ -185,7 +185,8 @@ config:
 # Three things have to be true before it is useful, and the chart can see one of them:
 #
 #   * `ClientEndpoint:Enabled` in `config.files`, because the page is served on that surface's listeners and calls it.
-#     The application refuses to start with this on and that off, naming both.
+#     This on and that off is refused at startup, naming both. The reverse is not: an endpoint serving its routes
+#     with no page in front of them is the ordinary deployment.
 #   * A path published for the page, if the ingress below is what people reach it at: `/` for the application itself,
 #     beside the `/api/client` the page calls.
 #   * Transport encryption. The page and every token it then presents cross a public hop, so MailFathom refuses to

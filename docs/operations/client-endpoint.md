@@ -197,9 +197,11 @@ listeners:
 ```
 
 It is off in every default — in the configuration, in the chart's `values.yaml`, in the Compose file, and in the Quadlet
-unit — so adopting a release publishes no page. Each deployment asset turns it on with one setting of its own;
-[Kubernetes](deployment-kubernetes.md), [Compose](deployment-compose.md), and [Quadlet](deployment-quadlet.md) each name
-theirs.
+unit — so adopting a release publishes no page. Each deployment asset turns it on with one decision of its own:
+`client.enabled` in the chart and `MAILFATHOM_CLIENT` in Compose each write both keys below, while the Quadlet unit
+carries them as two adjacent commented `Environment=` lines, because a `.container` file has no variable to write two
+keys through. [Kubernetes](deployment-kubernetes.md), [Compose](deployment-compose.md), and
+[Quadlet](deployment-quadlet.md) each state theirs.
 
 **What it adds is static files and nothing else.** The bundle answers the root of the listeners this endpoint is served
 on, and the routes beneath `/api/client` are unchanged: same credentials, same grants, same limits. The page itself

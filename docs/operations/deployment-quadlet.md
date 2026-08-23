@@ -383,7 +383,8 @@ for a reverse proxy. Uncommenting it says that proxy exists; do not, while `Publ
 loopback with nothing listening in front of it.
 
 `ClientEndpoint:Enabled` has to be on in the configuration directory beside them, because the page is served on that
-surface's listeners and calls its routes, and MailFathom refuses to start with one of the two on and the other off.
+surface's listeners and calls its routes. The page turned on while the endpoint is off is refused at startup,
+naming both; the reverse is an ordinary deployment and starts.
 Then `systemctl --user daemon-reload` and `systemctl --user restart mailfathom`, as with any other edit here.
 [Serving the client from the deployment](client-endpoint.md#serving-the-client-from-the-deployment) states what the
 page is and what a browser still has to present.
