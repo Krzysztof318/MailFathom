@@ -49,8 +49,9 @@ resolves what the change was reviewed against.
 
 `/app/wwwroot` is the MailFathom client's browser head — the WebAssembly bundle, about 51 MB across 205 files, which
 compresses into about 19 MB of image. It is built by a stage of this same Dockerfile, so one `docker build` still
-produces the published image: the stage installs the `wasm-tools` workload, restores `frontend/MailFathom.Client.slnx`
-in locked mode, and publishes the browser head in Release. Release is not a preference here — the Uno SDK drops its
+produces the published image: the stage installs the `wasm-tools` workload, restores
+`frontend/src/Client/Client.csproj` in locked mode — the application project rather than the solution, because the
+image needs one head and not the test suite beside it — and publishes the browser head in Release. Release is not a preference here — the Uno SDK drops its
 proprietary designer and App MCP assets only when `Optimize` is on, and it decides that at restore time, so both the
 restore and the publish state it. The pre-compressed `.br` and `.gz` copies the WebAssembly SDK emits are deleted
 before the bundle is copied into the runtime image: the static-file middleware serving it negotiates no content
