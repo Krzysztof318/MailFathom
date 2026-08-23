@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Host.Api.Documentation;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Transport;
 
@@ -46,12 +47,27 @@ internal static class SurfaceIsolation
     /// <param name="served">The surfaces served on the listener the request arrived at.</param>
     /// <param name="path">The request path.</param>
     /// <returns><see langword="true" /> when the listener serves the path, otherwise <see langword="false" />.</returns>
-    /// <remarks>The MCP surface owns everything the other three do not claim, which is what keeps a path added to it later from having to be listed here.</remarks>
+    /// <remarks>
+    /// The MCP surface owns everything the other three do not claim, which is what keeps a path added to it later from
+    /// having to be listed here.
+    /// <para>
+    /// The documentation paths are the one exception, and they are claimed by no surface on purpose. They exist only
+    /// in a development process, they describe two surfaces at once, and which listener a developer has open is
+    /// whichever one they enabled — so leaving them in the MCP surface's catch-all would make the explorer unreachable
+    /// on a deployment that runs the administrative endpoint alone, which is a supported and ordinary shape. Any
+    /// listener this process bound therefore serves them, and a port it did not bind still serves nothing.
+    /// </para>
+    /// </remarks>
     internal static bool ListenerServesPath(ServedSurfaces served, PathString path)
     {
         if (HealthProbe.IsProbePath(path))
         {
             return served.HasFlag(ServedSurfaces.Probes);
+        }
+
+        if (ApiDocumentation.IsDocumentationPath(path))
+        {
+            return served != ServedSurfaces.None;
         }
 
         if (IsAdminPath(path))

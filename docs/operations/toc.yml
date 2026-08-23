@@ -101,6 +101,9 @@
     - name: Local development
       href: local-development.md
       description: The SDK, the database, the package sources and lock files, and the commands a change is built, tested, and verified with.
+    - name: The HTTP API document
+      href: http-api-documentation.md
+      description: Where a development instance publishes the OpenAPI document and the API explorer, what the document contains, and why neither exists anywhere else.
     - name: The agent workflow
       href: agent-workflow.md
       description: The scripts and skills a repository change passes through, what each one asserts, and how a review runs on a pull request.

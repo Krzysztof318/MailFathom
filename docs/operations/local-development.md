@@ -221,6 +221,10 @@ to complete before starting, which is why the schema gate that fails a fresh dep
 local run — the explicit schema step the deployments require is performed here by the orchestration, before the host
 looks. The fourth is `mailfathom-client`, which serves the browser head and waits for none of them, since a static file
 server has nothing to wait for; it is [described below](#the-client-resource).
+Because the host runs in `Development`, it also publishes [the HTTP API document and the explorer](http-api-documentation.md)
+at `/openapi/v1.json` and `/scalar` on every port it bound, including the administrative one. Neither exists in any
+other environment. The orchestration enables the MCP and administrative surfaces, so the document carries the
+administrative operations; the client surface appears in it wherever a deployment turns that endpoint on.
 The host runs in the `Development` environment on two sockets, the MCP endpoint's on `localhost` and the probes'
 on `127.0.0.1`, each on a free port the run takes unless this checkout [pinned one](#pinning-a-port); the
 dashboard reports the numbers it took. There is no local TLS listener: MailFathom

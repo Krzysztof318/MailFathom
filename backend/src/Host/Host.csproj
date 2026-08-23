@@ -18,13 +18,16 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+    <PackageReference Include="Microsoft.OpenApi" />
     <PackageReference Include="Microsoft.Extensions.ServiceDiscovery" />
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
     <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
     <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" />
+    <PackageReference Include="Scalar.AspNetCore" />
   </ItemGroup>
 
   <ItemGroup>
@@ -49,6 +52,24 @@
          configuration key set has to name those classes to walk them. -->
     <InternalsVisibleTo Include="MailFathom.PublicSurfaces.UnitTests" />
   </ItemGroup>
+
+  <!-- The OpenAPI package ships a source generator that folds this project's XML documentation comments into the
+       generated document, and it cannot run here. It builds one dictionary keyed by documentation ID across this
+       compilation and every referenced assembly's XML file, and `MailFathom.Versioning.StampedAssemblyVersion` is
+       compiled into both this project and `Mcp` from `backend/src/shared/` — so the cache is built with a duplicate key
+       and every request for the document fails with an ArgumentException at runtime rather than at build time. It is
+       the unresolved half of https://github.com/dotnet/aspnetcore/issues/67192, reported as
+       https://github.com/dotnet/aspnetcore/issues/64378, and removing the generator is the workaround the OpenAPI
+       documentation itself gives. What it costs is descriptions on operations and schemas; what it buys is a document
+       that generates at all, and one that does not change whenever a comment is reworded.
+       Removed in a target rather than in a plain item group, because NuGet contributes the analyzer during
+       ResolvePackageAssets, which runs after this project's own items have been evaluated. -->
+  <Target Name="RemoveOpenApiXmlCommentGenerator" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <Analyzer Remove="@(Analyzer)"
+                Condition="'%(Filename)' == 'Microsoft.AspNetCore.OpenApi.SourceGenerators'" />
+    </ItemGroup>
+  </Target>
 
   <!-- The native artifact is this project's publish output, and so is the container image, which copies that output
        and nothing else. The Apache-2.0 grant and the original-author attribution therefore travel with both, rather

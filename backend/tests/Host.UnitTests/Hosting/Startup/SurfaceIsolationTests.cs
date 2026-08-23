@@ -102,6 +102,31 @@ public sealed class SurfaceIsolationTests
         Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.Mcp | ServedSurfaces.Admin, metadataPath));
     }
 
+    /// <summary>
+    /// The documentation surface belongs to no surface, because it describes two of them and exists only in a
+    /// development process. The listener a developer has open is whichever one they enabled, so every bound one
+    /// answers it — including the administrative listener, where the MCP catch-all would have refused it.
+    /// </summary>
+    [Fact]
+    public void ListenerServesPath_ADocumentationPathOnABoundListener_IsServed()
+    {
+        // Arrange
+        ServedSurfaces[] boundListeners =
+            [ServedSurfaces.Admin, ServedSurfaces.Client, ServedSurfaces.Mcp, ServedSurfaces.Probes];
+
+        // Act, Assert
+        Assert.All(boundListeners, served => Assert.True(SurfaceIsolation.ListenerServesPath(served, "/openapi/v1.json")));
+        Assert.All(boundListeners, served => Assert.True(SurfaceIsolation.ListenerServesPath(served, "/scalar")));
+    }
+
+    /// <summary>A port this process did not bind still serves nothing, documentation included.</summary>
+    [Fact]
+    public void ListenerServesPath_ADocumentationPathOnAPortNoSurfaceIsComposedOnto_IsRefused()
+    {
+        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.None, "/openapi/v1.json"));
+        Assert.False(SurfaceIsolation.ListenerServesPath(ServedSurfaces.None, "/scalar"));
+    }
+
     /// <summary>Matched by segment, so a path that merely starts with the same letters is not mistaken for one of these.</summary>
     [Fact]
     public void IsAdminPath_APathSharingThePrefixesLetters_IsNotAdministrative() =>

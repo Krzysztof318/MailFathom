@@ -56,6 +56,18 @@
     <PackageVersion Include="MimeKit" Version="4.17.0" />
     <PackageVersion Include="Microsoft.Agents.AI" Version="1.15.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
+    <!-- The OpenAPI document generator, which ships outside the shared framework. It builds the HTTP contract from the
+         routes the host already mapped rather than from a second description somebody keeps in step. Referenced by Host
+         alone, where the document is registered only when the environment is Development.
+         It is one patch ahead of the 10.0.10 the rest of this line sits at, and deliberately: 10.0.10 depends on
+         Microsoft.OpenApi 2.0.0 exactly, which carries CVE-2026-49451 (GHSA-v5pm-xwqc-g5wc, high) — a stack overflow
+         parsing circular schema references — and NU1903 fails the restore over it. 10.0.11 is the release that widens
+         the dependency to the patched 2.7.5. -->
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+    <!-- The OpenAPI object model, brought in transitively by the generator above and pinned directly for the reason
+         BouncyCastle.Cryptography is: the document and operation transformers name its types, so the version this
+         repository compiles against is decided here rather than inherited from another package's dependency range. -->
+    <PackageVersion Include="Microsoft.OpenApi" Version="2.7.5" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.302" />
     <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.14.15" />
@@ -104,6 +116,11 @@
     <PackageVersion Include="Polly.Core" Version="8.7.0" />
     <PackageVersion Include="Polly.Extensions" Version="8.7.0" />
     <PackageVersion Include="Polly.RateLimiting" Version="8.7.0" />
+    <!-- The API explorer the generated document is read in. It carries no package dependency of its own and serves its
+         own script bundle out of the assembly, so a running instance fetches nothing from a content delivery network.
+         Referenced by Host alone, and mapped only when the environment is Development — the assembly is redistributed
+         with the image either way, which is why THIRD_PARTY_LICENSES.md records it among the shipped components. -->
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.17.1" />
     <!-- The boundary rules that read compiled intermediate language rather than assembly metadata, referenced by
          Boundaries.UnitTests alone. The pin is the xUnit v3 integration, which carries the analyzer itself and with it
          Mono.Cecil, the reader that makes a method body visible at all, plus Newtonsoft.Json, JetBrains.Annotations,

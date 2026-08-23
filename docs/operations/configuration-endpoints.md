@@ -56,6 +56,8 @@ Two surfaces, or all four, may name one port. That is the posture a single-node 
 one socket to publish and one backend to route — and it is why all three request-serving surfaces default to `8080` for
 clear text and `8443` for a profile. The port is bound once and serves each surface's own paths; which paths a request may ask
 for is decided from the port it arrived on, so a surface that is not on that port is still refused there with a `404`.
+The one exception is the [HTTP API document and the explorer](http-api-documentation.md), which belong to no surface and
+answer on every bound port — and which exist only in a `Development` process.
 
 **What sharing costs is exposure.** The probes answer without a credential and the administrative surface is a different
 authority from the mailbox, so putting either on the endpoint's port publishes it wherever that port is published. Keep
