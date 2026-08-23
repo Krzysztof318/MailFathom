@@ -25,7 +25,7 @@ internal sealed class EmailChunkStore : IEmailChunkStore
         StoredEmailId emailId,
         CancellationToken cancellationToken)
     {
-        var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         // Deleted as one statement rather than through tracked entities: the rows carry nothing this decision reads,
         // and a message that a provider has embedded across many passages would otherwise be loaded whole to be thrown

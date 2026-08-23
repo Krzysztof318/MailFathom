@@ -119,7 +119,7 @@ internal sealed class MailRuleEvaluationStore(
         }
 
         var identities = storedEmailIds.Select(storedEmailId => storedEmailId.Value).ToArray();
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         await sessionContext.StoredEmails
             .Where(email => identities.Contains(email.Id))

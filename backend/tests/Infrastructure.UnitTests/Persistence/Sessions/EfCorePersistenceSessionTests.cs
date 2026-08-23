@@ -88,6 +88,80 @@ public sealed class EfCorePersistenceSessionTests
         Assert.Equal(0, resources.RollbackCount);
     }
 
+    /// <summary>
+    /// EF Core hands the provider's failure over wrapped, so the only part of it that knows whether the database may
+    /// answer differently next time is the cause. Classifying the wrapper alone would report every dropped connection
+    /// as a defect and leave the unit of work unreplayed.
+    /// </summary>
+    [Fact]
+    public async Task CommitAsync_SaveFailedForACauseThatCanClear_RaisesATransientFailureOverThatCause()
+    {
+        // Arrange
+        var droppedConnection = new IOException("the connection was reset");
+        var saveFailure = new DbUpdateException("an error occurred while saving", droppedConnection);
+        var (resources, persistenceSession) = CreateSession(
+            saveFailure,
+            transientProviderFailure: droppedConnection);
+        await using var session = persistenceSession;
+
+        // Act
+        var thrown = await Assert.ThrowsAsync<PersistenceTransientFailureException>(
+            () => session.CommitAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Same(saveFailure, thrown.InnerException);
+        Assert.Equal(0, resources.CommitCount);
+        Assert.Equal(0, resources.RollbackCount);
+    }
+
+    /// <summary>
+    /// A caller that cancelled is not a database that failed, and a cancellation carrying a transport failure beneath
+    /// it looks exactly like one to a reader of causes. Replaying it would run the caller's write again after the
+    /// caller asked for it to stop.
+    /// </summary>
+    [Fact]
+    public async Task CommitAsync_CancelledOverACauseThatCouldClear_PropagatesTheCancellationRatherThanReplaying()
+    {
+        // Arrange
+        var droppedConnection = new IOException("the connection was reset");
+        var (resources, persistenceSession) = CreateSession(
+            new OperationCanceledException("the caller cancelled", droppedConnection),
+            transientProviderFailure: droppedConnection);
+        await using var session = persistenceSession;
+
+        // Act
+        await Assert.ThrowsAsync<OperationCanceledException>(() => session.CommitAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Equal(0, resources.CommitCount);
+    }
+
+    /// <summary>
+    /// The connection that carried the transaction is gone, so the server discarded the transaction with it. Asking it
+    /// to roll back would raise a second failure over the first one and tell the caller about the wrong thing.
+    /// </summary>
+    [Fact]
+    public async Task DisposeAsync_SessionEndedByATransientFailure_DisposesWithoutReportingItsOwnCleanupFailure()
+    {
+        // Arrange
+        var droppedConnection = new IOException("the connection was reset");
+        var (resources, session) = CreateSession(
+            droppedConnection,
+            transientProviderFailure: droppedConnection,
+            disposeException: new InvalidOperationException("the transaction is no longer usable"));
+
+        await Assert.ThrowsAsync<PersistenceTransientFailureException>(
+            () => session.CommitAsync(CancellationToken.None));
+
+        // Act
+        await session.DisposeAsync();
+
+        // Assert
+        Assert.Equal(0, resources.RollbackCount);
+        Assert.Equal(1, resources.DisposeCount);
+        Assert.Equal(1, resources.ClearTrackedStateCount);
+    }
+
     [Fact]
     public async Task DisposeAsync_UncommittedSession_RollsBackDisposesResourcesAndClearsTrackedState()
     {
@@ -105,14 +179,17 @@ public sealed class EfCorePersistenceSessionTests
 
     /// <summary>
     /// A conflict rate is only real if the session that observed one says so, and a conflict resolved by a retry leaves
-    /// no other trace at all — so this is the wiring that decides whether the counter measures anything.
+    /// no other trace at all — so this is the wiring that decides whether the counter measures anything. The same holds
+    /// for the failures a replay resolves.
     /// </summary>
     [Fact]
-    public async Task CommitAsync_EitherEnding_CountsItUnderTheOutcomeThatHappened()
+    public async Task CommitAsync_EveryEnding_CountsItUnderTheOutcomeThatHappened()
     {
         // Arrange
+        var droppedConnection = new IOException("the connection was reset");
         var (_, committingSession) = CreateSession();
         var (_, conflictingSession) = CreateSession(new DbUpdateConcurrencyException());
+        var (_, droppedSession) = CreateSession(droppedConnection, transientProviderFailure: droppedConnection);
         using var measurements = new RecordedMailFathomMeasurements(CommitsInstrumentName);
 
         // Act
@@ -126,11 +203,18 @@ public sealed class EfCorePersistenceSessionTests
             _ = await conflictingSession.CommitAsync(CancellationToken.None);
         }
 
+        await using (droppedSession)
+        {
+            await Assert.ThrowsAsync<PersistenceTransientFailureException>(
+                () => droppedSession.CommitAsync(CancellationToken.None));
+        }
+
         // Assert
         var outcomes = measurements.DimensionOf(CommitsInstrumentName, OutcomeTagName);
 
         Assert.Contains("committed", outcomes);
         Assert.Contains("concurrency_conflict", outcomes);
+        Assert.Contains("transient_failure", outcomes);
     }
 
     /// <summary>
@@ -193,13 +277,17 @@ public sealed class EfCorePersistenceSessionTests
         TestPersistenceSessionResources Resources,
         EfCorePersistenceSession Session) CreateSession(
         Exception? saveChangesException = null,
-        bool classifiesSaveChangesExceptionAsConcurrencyConflict = false)
+        bool classifiesSaveChangesExceptionAsConcurrencyConflict = false,
+        Exception? transientProviderFailure = null,
+        Exception? disposeException = null)
     {
         var resources = new TestPersistenceSessionResources
         {
             SaveChangesException = saveChangesException,
             ClassifiesSaveChangesExceptionAsConcurrencyConflict =
                 classifiesSaveChangesExceptionAsConcurrencyConflict,
+            TransientProviderFailure = transientProviderFailure,
+            DisposeException = disposeException,
         };
 
         return (resources, new EfCorePersistenceSession(resources, new PersistenceCommitTelemetry()));
@@ -207,11 +295,13 @@ public sealed class EfCorePersistenceSessionTests
 
     private sealed class TestPersistenceSessionResources : IEfCorePersistenceSessionResources
     {
-        public MailFathomDbContext DbContext => throw new NotSupportedException();
-
         public Exception? SaveChangesException { get; init; }
 
         public bool ClassifiesSaveChangesExceptionAsConcurrencyConflict { get; init; }
+
+        public Exception? TransientProviderFailure { get; init; }
+
+        public Exception? DisposeException { get; init; }
 
         public int SaveChangesCount { get; private set; }
 
@@ -222,6 +312,9 @@ public sealed class EfCorePersistenceSessionTests
         public int DisposeCount { get; private set; }
 
         public int ClearTrackedStateCount { get; private set; }
+
+        public ValueTask<MailFathomDbContext> JoinAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
 
         public Task SaveChangesAsync(CancellationToken cancellationToken)
         {
@@ -249,6 +342,9 @@ public sealed class EfCorePersistenceSessionTests
         public bool IsConcurrencyConflict(DbUpdateException exception) =>
             this.ClassifiesSaveChangesExceptionAsConcurrencyConflict;
 
+        public bool IsTransientFailure(Exception exception) =>
+            this.TransientProviderFailure is not null && ReferenceEquals(exception, this.TransientProviderFailure);
+
         public void ClearTrackedState()
         {
             this.ClearTrackedStateCount++;
@@ -258,7 +354,9 @@ public sealed class EfCorePersistenceSessionTests
         {
             this.DisposeCount++;
 
-            return ValueTask.CompletedTask;
+            return this.DisposeException is null
+                ? ValueTask.CompletedTask
+                : ValueTask.FromException(this.DisposeException);
         }
     }
 

@@ -315,11 +315,13 @@ public static class ServiceCollectionExtensions
 
             return dataSourceBuilder.Build();
         });
-        // EnableRetryOnFailure is deliberately not configured. A retrying execution strategy refuses the
-        // user-initiated transaction PersistenceSessionFactory opens for every session, so turning it on would fail
-        // every write at session start rather than merely leave it un-retried. Adopting it instead means handing each
-        // unit of work to Database.CreateExecutionStrategy().ExecuteAsync so the strategy can replay it whole, and
-        // dropping OutboundDependency.DatabaseCommandExecution from those paths so the two never stack.
+        // EnableRetryOnFailure is deliberately not configured, and the reason is what a retry can reach rather than
+        // what a setting collides with. A dropped connection takes its transaction with it, so replaying a statement
+        // meets a transaction the server has already discarded: the only repeatable unit is the whole unit of work,
+        // and OptimisticConcurrencyRetryPolicy already replays that one from a fresh read. Turning the setting on
+        // would also refuse the transaction a session opens when a write joins it — a transaction several writes
+        // depend on, since a session issues set-based statements and a FOR UPDATE lock beside the changes it stages.
+        // That is the single layer: nothing wraps a database command, so no call is covered twice.
         // EF Core reports every executed command at Information, which is one record per round trip and therefore most
         // of what a deployment writes: a synchronization run, a backfill sweep, and every MCP read reach the database
         // repeatedly, so the records an operator is reading for are buried among the SQL that served them. Lowering the

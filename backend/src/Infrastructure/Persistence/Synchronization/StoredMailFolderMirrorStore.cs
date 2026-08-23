@@ -31,7 +31,7 @@ internal sealed class StoredMailFolderMirrorStore : IStoredMailFolderMirrorStore
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxEmails);
 
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var aliasValue = folderAlias.Value;
         var accountIdValue = accountId.Value;
 

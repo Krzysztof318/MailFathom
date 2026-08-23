@@ -79,12 +79,12 @@ internal sealed class StoredEmailChunkingStore(
     }
 
     /// <inheritdoc />
-    public Task DeriveChunksAsync(
+    public async Task DeriveChunksAsync(
         IPersistenceSession session,
         StoredEmailId storedEmailId,
         CancellationToken cancellationToken) =>
-        chunkWriter.SaveFromStoredExtractionAsync(
-            EfCorePersistenceSessionAccessor.DbContextOf(session),
+        await chunkWriter.SaveFromStoredExtractionAsync(
+            await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken),
             storedEmailId,
             cancellationToken);
 

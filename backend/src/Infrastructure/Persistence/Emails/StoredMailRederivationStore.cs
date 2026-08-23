@@ -98,7 +98,7 @@ internal sealed class StoredMailRederivationStore(
     {
         ArgumentNullException.ThrowIfNull(metadata);
 
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var storedEmail = await sessionContext.StoredEmails.FindAsync([storedEmailId.Value], cancellationToken)
             ?? throw new InvalidOperationException(
                 "Re-derived metadata cannot be applied to a stored email that no longer exists.");
@@ -123,7 +123,7 @@ internal sealed class StoredMailRederivationStore(
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var account = scope.Account.Value;
         var folder = KeyedFolderOf(scope);
 
@@ -159,7 +159,7 @@ internal sealed class StoredMailRederivationStore(
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var recorded = await sessionContext.MailRederivationPositions.FindAsync(
             [scope.Account.Value, KeyedFolderOf(scope)],
             cancellationToken);

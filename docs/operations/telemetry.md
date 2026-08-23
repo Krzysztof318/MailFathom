@@ -333,15 +333,16 @@ series that never goes away. Nothing else about a call reaches either instrument
 not a mailbox, not a result.
 
 One counter belongs to no feature at all. `mailfathom.persistence.commits` counts every local write transaction this
-process completed, tagged with `mailfathom.persistence.commit.outcome` as `committed` or `concurrency_conflict`. An
-optimistic concurrency conflict is an expected branch rather than a failure — the retry policy commits again from a
-fresh read — so a conflict it resolves leaves no other trace, and the only one that surfaces today is the conflict
-nobody resolved, which arrives as a single exception after every allowed attempt was spent. The rate is what separates a
-deployment where two writers race constantly from one where they never meet, and it is the reading that says a bound
-wants raising before anybody sees that exception. Both outcomes are counted because a rate needs the writes it is a rate
-of, and the denominator is MailFathom's own sessions rather than EF Core's count of every `SaveChanges` this process
-issues. What was written is nowhere on it: a session covers whatever a use case staged, so any dimension naming it would
-eventually name mail.
+process completed, tagged with `mailfathom.persistence.commit.outcome` as `committed`, `concurrency_conflict`, or
+`transient_failure`. Neither of the last two is a failure in itself — the retry policy replays the whole unit of work
+from a fresh read, after a lost race and after a database failure that can clear on its own alike — so an ending it
+resolves leaves no other trace, and the only ones that surface today are the ones nobody resolved, which arrive as a
+single exception after every allowed attempt was spent. The rates are what separate a deployment where two writers race
+constantly from one where they never meet, and a deployment that is losing connections from one that is not; they are
+the reading that says a bound wants raising, or that the database is unwell, before anybody sees that exception. Every
+outcome is counted because a rate needs the writes it is a rate of, and the denominator is MailFathom's own sessions
+rather than EF Core's count of every `SaveChanges` this process issues. What was written is nowhere on it: a session
+covers whatever a use case staged, so any dimension naming it would eventually name mail.
 
 ### What an authorization refusal records
 

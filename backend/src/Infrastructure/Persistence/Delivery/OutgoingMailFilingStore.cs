@@ -49,7 +49,7 @@ internal sealed class OutgoingMailFilingStore(MailFathomDbContext readContext) :
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(destination);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         var record = await writeContext.OutgoingEmails.FindAsync([outgoingEmailId.Value], cancellationToken)
             ?? throw new InvalidOperationException(
@@ -214,7 +214,7 @@ internal sealed class OutgoingMailFilingStore(MailFathomDbContext readContext) :
     {
         ArgumentNullException.ThrowIfNull(session);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         return await FindAsync(writeContext, outgoingEmailId, filing, cancellationToken)
             ?? throw new InvalidOperationException(

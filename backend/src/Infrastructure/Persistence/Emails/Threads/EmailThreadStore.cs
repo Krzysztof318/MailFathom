@@ -41,7 +41,7 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
     {
         ArgumentNullException.ThrowIfNull(identifiers);
 
-        var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var account = accountId.Value;
         var digestedIdentifiers = identifiers
             .Distinct(StringComparer.Ordinal)
@@ -81,12 +81,12 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
     }
 
     /// <inheritdoc />
-    public Task<EmailThreadId> StartThreadAsync(
+    public async Task<EmailThreadId> StartThreadAsync(
         IPersistenceSession session,
         MailAccountId accountId,
         CancellationToken cancellationToken)
     {
-        var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var assembledAt = timeProvider.GetUtcNow();
         var thread = new EmailThreadEntity
         {
@@ -97,12 +97,12 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
 
         dbContext.EmailThreads.Add(thread);
 
-        return Task.FromResult(EmailThreadId.Create(thread.Id));
+        return EmailThreadId.Create(thread.Id);
     }
 
     /// <inheritdoc />
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="identifiers" /> is <see langword="null" />.</exception>
-    public Task BindIdentifiersAsync(
+    public async Task BindIdentifiersAsync(
         IPersistenceSession session,
         MailAccountId accountId,
         IReadOnlyList<string> identifiers,
@@ -111,7 +111,7 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
     {
         ArgumentNullException.ThrowIfNull(identifiers);
 
-        var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         foreach (var identifier in identifiers)
         {
@@ -122,8 +122,6 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
                 EmailThreadId = threadId.Value,
             });
         }
-
-        return Task.CompletedTask;
     }
 
     /// <inheritdoc />
@@ -142,7 +140,7 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
     {
         ArgumentNullException.ThrowIfNull(mergedThreadIds);
 
-        var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var merged = mergedThreadIds.Select(threadId => threadId.Value).ToArray();
         var surviving = survivingThreadId.Value;
 
@@ -184,7 +182,7 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
         string internetMessageId,
         CancellationToken cancellationToken)
     {
-        var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var thread = threadId.Value;
 
         var persisted = await dbContext.StoredEmails
@@ -204,7 +202,7 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
         string answeredIdentifier,
         CancellationToken cancellationToken)
     {
-        var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var thread = threadId.Value;
 
         var persisted = await dbContext.StoredEmails
@@ -227,7 +225,7 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
         StoredEmailId storedEmailId,
         CancellationToken cancellationToken)
     {
-        var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var email = await dbContext.StoredEmails.FindAsync([storedEmailId.Value], cancellationToken);
 
         return email is null ? null : ThreadedEmails.Of(email);
@@ -267,7 +265,7 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
         StoredEmailId storedEmailId,
         CancellationToken cancellationToken)
     {
-        var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         return await dbContext.StoredEmails.FindAsync([storedEmailId.Value], cancellationToken)
             ?? throw new InvalidOperationException(

@@ -39,7 +39,7 @@ internal sealed class MailRuleExecutionStore(
     /// pass composes one per rule per email per commit attempt, so there is no earlier row for this append to find: a
     /// commit that lost an optimistic race rolled its executions back with everything else it staged.
     /// </remarks>
-    public Task AppendAsync(
+    public async Task AppendAsync(
         IPersistenceSession session,
         IReadOnlyList<MailRuleExecution> executions,
         CancellationToken cancellationToken)
@@ -49,14 +49,12 @@ internal sealed class MailRuleExecutionStore(
 
         if (executions.Count == 0)
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         writeContext.MailRuleExecutions.AddRange(executions.Select(MailRuleExecutionMapping.ToEntity));
-
-        return Task.CompletedTask;
     }
 
     /// <inheritdoc />

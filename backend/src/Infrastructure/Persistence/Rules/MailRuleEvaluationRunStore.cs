@@ -60,7 +60,7 @@ internal sealed class MailRuleEvaluationRunStore(MailFathomDbContext dbContext) 
     {
         ArgumentNullException.ThrowIfNull(run);
 
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var stored = await sessionContext.MailRuleEvaluationRuns.FindAsync(
             [run.AccountId.Value],
             cancellationToken);
@@ -89,7 +89,7 @@ internal sealed class MailRuleEvaluationRunStore(MailFathomDbContext dbContext) 
     {
         ArgumentNullException.ThrowIfNull(run);
 
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var stored = await sessionContext.MailRuleEvaluationRuns.FindAsync(
             [run.AccountId.Value],
             cancellationToken);

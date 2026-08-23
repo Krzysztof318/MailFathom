@@ -16,7 +16,7 @@ them:
 | `MailboxSessionEstablishment` | Connecting, negotiating TLS with, and authenticating an IMAP session |
 | `MailboxDataRetrieval` | Listing, fetching, and streaming mailbox data over an established session |
 | `EmailDelivery` | Opening a submission session against the SMTP server |
-| `DatabaseCommandExecution` | Commands and queries against the local PostgreSQL database |
+| `DatabaseCommandExecution` | Commands and queries against the local PostgreSQL database — the one class that is a classification rather than a pipeline; see the EF Core entry under the single-layer rule |
 | `AiProviderInvocation` | Chat and embedding provider calls |
 | `MailAuthorizationServerInvocation` | Exchanging a configured OAuth grant for a mailbox access token |
 
@@ -101,7 +101,9 @@ without depending on Polly. `Infrastructure` implements it per protocol family:
   failure, indistinguishable from one that happened before submission, so repeating it risks a second copy in the
   recipient's mailbox. Everything that is not a temporary rejection is therefore terminal and left to the outbox.
 - **Database** — the provider answers through `DbException.IsTransient`, so MailFathom keeps no second SQLSTATE table.
-  A `PersistenceConcurrencyConflictException` is terminal here on purpose; see the single-layer rule below.
+  The reader of this verdict is the persistence session rather than a pipeline, and it asks about the cause as well as
+  the failure, because EF Core hands the provider's exception over wrapped. A
+  `PersistenceConcurrencyConflictException` is terminal here on purpose; see the single-layer rule below.
 - **Provider** — the adapter has already classified the answer and this defers to its verdict, because the provider
   client libraries surface a refusal as their own result type rather than as an HTTP failure, and re-deriving the
   question from a status this side never sees would produce a second opinion for the pipeline to disagree with. The
@@ -217,23 +219,42 @@ is the layer rather than something MailFathom re-implements:
   by selector and signing domain, honouring the record's own time-to-live, so a domain's key is resolved once for every
   message it signs. [Sender authentication](../features/sender-authentication.md#where-no-server-said-anything-the-signature-still-does)
   states what a failed lookup leaves behind.
-- **EF Core.** `EnableRetryOnFailure` is deliberately not configured. The obstacle is not the unit of work: with a
-  retrying execution strategy each query and each `SaveChangesAsync` is already replayed as its own retriable unit. It
-  is the *user-initiated* transaction. `PersistenceSessionFactory` opens one with `BeginTransactionAsync` for every
-  session, and EF Core refuses that under a retrying strategy with `InvalidOperationException: The configured
-  execution strategy 'NpgsqlRetryingExecutionStrategy' does not support user-initiated transactions`. Turning the
-  setting on today would therefore fail every write at the moment its session starts, rather than merely leave it
-  un-retried.
+- **EF Core.** `EnableRetryOnFailure` is deliberately not configured, and no database call runs under an
+  `OutboundDependency` pipeline either. What retries a local write is `OptimisticConcurrencyRetryPolicy`, one layer up,
+  and it is the only one — which is what makes the single-layer rule below checkable here rather than aspirational.
 
-  The supported alternative works and stays open: hand the whole transactional unit to
-  `Database.CreateExecutionStrategy().ExecuteAsync(...)`, which replays the delegate — begin, work, `SaveChanges`,
-  commit — as one retriable unit. Adopting it means reshaping `IPersistenceSessionFactory` from the imperative
-  `BeginSessionAsync` scope into a delegate the strategy can re-invoke, ensuring everything inside is safe to replay,
-  and dropping the pipeline from those paths so the two never stack.
+  The reason is what a retry can reach. A transient database failure is a connection that went away, and it takes its
+  transaction with it: the server has discarded everything the attempt had issued, so repeating the statement meets
+  nothing to repeat it against. The only unit that can be repeated is the whole unit of work — read again, stage again,
+  commit again — and that is exactly the body the retry policy already holds and already replays after a lost race.
+  So the policy replays it after a transient failure too, on the same attempt bound and the same jittered backoff, and
+  the failure of the last allowed attempt leaves it as `PersistenceTransientFailureException`. The session classifies
+  it, because the provider's exception is where the answer is; the policy acts on it, because the staging body is
+  where the repeat is. A commit counts its ending either way, so a deployment that is losing connections is readable
+  as a rate rather than as a run that stopped.
 
-  Until then the boundary is: the `DatabaseCommandExecution` pipeline covers command paths that own no transaction,
-  and a transient failure *inside* a transactional write is surfaced rather than retried. The commit either succeeds
-  or the session rolls back and the caller decides.
+  EF Core's own retrying execution strategy would be the alternative shape of that, and it is refused for two reasons
+  rather than one. It replays a `SaveChangesAsync` and a query but not the reads that produced the tracked state, so
+  it is a narrower unit than the one that has to be repeated; and it refuses a *user-initiated* transaction outright —
+  `InvalidOperationException: The configured execution strategy 'NpgsqlRetryingExecutionStrategy' does not support
+  user-initiated transactions` — which a persistence session opens whenever a write joins it.
+
+  That transaction is not vestigial, which is the finding that settled the question. A session issues statements as
+  well as staging changes: the content store overwrites a `bytea` payload with a set-based `UPDATE` rather than
+  reading it into memory, the contact and audit erasures delete in ordered batches, the chunk store discards a
+  message's passages, and the embedding generation switch and the owner erasure each take a `SELECT … FOR UPDATE` row
+  lock before the statements whose outcome depends on holding it. Each of those has already reached the server when `SaveChangesAsync` runs,
+  and the transaction is the only thing that makes them one fact with the changes staged beside them — the row lock in
+  particular exists for the length of a transaction and for nothing else. Dropping the transaction would not have
+  removed machinery nothing depended on; it would have removed the atomicity of five write paths and the mutual
+  exclusion of a sixth.
+
+  What did change is *when* it opens. `BeginSessionAsync` opens no transaction; the first write to join the session
+  opens it, through `EfCorePersistenceSessionAccessor.JoinAsync`. A session's transaction therefore covers the writes
+  that joined it and nothing before them, so work a caller has to finish outside a transaction — handing an object to
+  a content endpoint and computing its digest, which [ADR
+  0017](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md)
+  requires to happen with none open — runs before the first join rather than needing the transaction removed.
 - **An outgoing message being transmitted.** The submission is reached under no pipeline at all, and that is the
   point rather than an omission. A retry there would offer a body a server may already have taken, which is the one
   failure this system cannot withdraw, so the layer sits where it can be made idempotent instead: the outbox, which
@@ -250,9 +271,10 @@ is the layer rather than something MailFathom re-implements:
   by one outage returning together. A caller that already has a wait of its own states it as the floor of the draw,
   which is how a synchronization run is never returned to its server sooner than a healthy account would be.
 
-- **Optimistic concurrency.** `OptimisticConcurrencyRetryPolicy` in `Application` already retries a commit that lost a
-  race. That is why the classifier reports a concurrency conflict as terminal: the pipeline must not become a second
-  layer around the same rows.
+- **Optimistic concurrency, and every other reason a local write is repeated.** `OptimisticConcurrencyRetryPolicy` in
+  `Application` replays the unit of work after a lost race and after a transient database failure alike. That is why
+  the classifier reports a concurrency conflict as terminal and why no database call runs under a pipeline at all: the
+  policy is the one layer, and a second around the same rows would multiply the attempts against them.
 - **A durable job that failed.** The queue attempts a job again on its own jittered, bounded schedule, and that is not
   a second layer around the call a handler made. It is a layer around the *job*, minutes later and in a process that
   need not be the one that failed, and by the time a handler raises, whatever pipeline it reached has already spent its

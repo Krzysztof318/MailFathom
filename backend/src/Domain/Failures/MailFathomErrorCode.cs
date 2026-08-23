@@ -308,6 +308,9 @@ public readonly record struct MailFathomErrorCode
     /// <summary>Gets subcategory 1, concurrent writes: a local write did not commit because another writer changed the same durable state.</summary>
     public static MailFathomErrorCode PersistenceConcurrencyConflict { get; } = new(31001);
 
+    /// <summary>Gets subcategory 1, concurrent writes: a local write did not commit because the database failed in a way that can clear on its own.</summary>
+    public static MailFathomErrorCode PersistenceTransientFailure { get; } = new(31002);
+
     /// <summary>Gets subcategory 2, schema state: the database does not carry every migration the running build was compiled against.</summary>
     public static MailFathomErrorCode DatabaseSchemaOutOfDate { get; } = new(32001);
 
@@ -810,6 +813,7 @@ public readonly record struct MailFathomErrorCode
         OutgoingEmailFilingOutcomeUnknown,
         OutgoingEmailFilingFailedUnexpectedly,
         PersistenceConcurrencyConflict,
+        PersistenceTransientFailure,
         DatabaseSchemaOutOfDate,
         DatabaseSchemaStateUnreadable,
         DatabaseSchemaTextSearchConfigurationMismatch,

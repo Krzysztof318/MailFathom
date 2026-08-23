@@ -12,26 +12,28 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Sessions;
 public sealed class EfCorePersistenceSessionAccessorTests
 {
     [Fact]
-    public void DbContextOf_SessionBackedByAnotherPersistenceProvider_Throws()
+    public async Task JoinAsync_SessionBackedByAnotherPersistenceProvider_Throws()
     {
         // Arrange
         var foreignSession = Substitute.For<IPersistenceSession>();
 
         // Act
-        var thrown = Assert.Throws<ArgumentException>(() => EfCorePersistenceSessionAccessor.DbContextOf(foreignSession));
+        var thrown = await Assert.ThrowsAsync<ArgumentException>(
+            async () => await EfCorePersistenceSessionAccessor.JoinAsync(foreignSession, CancellationToken.None));
 
         // Assert
         Assert.Equal("session", thrown.ParamName);
     }
 
     [Fact]
-    public void DbContextOf_NullSession_ThrowsArgumentNullException()
+    public async Task JoinAsync_NullSession_ThrowsArgumentNullException()
     {
         // Arrange
         IPersistenceSession? session = null;
 
         // Act
-        var thrown = Assert.Throws<ArgumentNullException>(() => EfCorePersistenceSessionAccessor.DbContextOf(session!));
+        var thrown = await Assert.ThrowsAsync<ArgumentNullException>(
+            async () => await EfCorePersistenceSessionAccessor.JoinAsync(session!, CancellationToken.None));
 
         // Assert
         Assert.Equal("session", thrown.ParamName);

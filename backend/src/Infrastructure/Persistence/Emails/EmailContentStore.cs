@@ -84,7 +84,7 @@ internal sealed class EmailContentStore(
         using var write = telemetry.BeginWrite();
         writingSession.MeasureOnEnding(write);
 
-        var dbContext = writingSession.DbContext;
+        var dbContext = await writingSession.JoinAsync(cancellationToken);
 
         // The metadata row is added earlier in this same uncommitted session, so it is usually still pending. FindAsync
         // resolves it from the change tracker without a query in that case and falls back to the database otherwise.
@@ -183,7 +183,7 @@ internal sealed class EmailContentStore(
                 nameof(rawMime));
         }
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         // The record is added earlier in this same uncommitted session on the enqueue path, so FindAsync resolves it
         // from the change tracker without a query there and falls back to the database otherwise.
@@ -259,7 +259,7 @@ internal sealed class EmailContentStore(
                 nameof(draftMime));
         }
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         // The declaration is added earlier in this same uncommitted session, so FindAsync resolves it from the change
         // tracker without a query there and falls back to the database otherwise.
@@ -336,7 +336,7 @@ internal sealed class EmailContentStore(
             throw new ArgumentException("A draft is stored with the MIME it is held as.", nameof(rawMime));
         }
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         // The draft is added earlier in this same uncommitted session on the save path, so FindAsync resolves it from
         // the change tracker without a query there and falls back to the database otherwise.

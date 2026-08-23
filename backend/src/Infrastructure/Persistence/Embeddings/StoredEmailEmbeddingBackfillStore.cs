@@ -99,12 +99,12 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
     /// existed when it arrived. A message whose extraction produced no text is left as it is, and the walk steps past
     /// it.
     /// </remarks>
-    public Task DeriveChunksAsync(
+    public async Task DeriveChunksAsync(
         IPersistenceSession session,
         StoredEmailId storedEmailId,
         CancellationToken cancellationToken) =>
-        chunkWriter.SaveFromStoredExtractionAsync(
-            EfCorePersistenceSessionAccessor.DbContextOf(session),
+        await chunkWriter.SaveFromStoredExtractionAsync(
+            await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken),
             storedEmailId,
             cancellationToken);
 
@@ -114,7 +114,7 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
         StoredEmailId? position,
         CancellationToken cancellationToken)
     {
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         // FindAsync resolves a row this session already staged from the change tracker, so a run that commits several
         // positions through one session updates one row rather than inserting a second under the same key.

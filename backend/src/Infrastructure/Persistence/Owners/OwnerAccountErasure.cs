@@ -53,7 +53,7 @@ internal static class OwnerAccountErasure
     {
         ArgumentNullException.ThrowIfNull(session);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var accountEntityType = MailboxAccountEntityTypeOf(writeContext.Model);
 
         // The owner row is held for the rest of the transaction, so two erasures of one owner are serialized, and a

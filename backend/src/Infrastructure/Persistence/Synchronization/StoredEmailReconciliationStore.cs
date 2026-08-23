@@ -100,7 +100,7 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
     {
         ArgumentNullException.ThrowIfNull(outcome);
 
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var rowsById = await LoadWindowRowsAsync(sessionContext, outcome, cancellationToken);
 
         foreach (var observed in outcome.StillPresent)

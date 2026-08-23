@@ -47,9 +47,55 @@ public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationF
     /// <summary>The alias the retried race binds, which no other test writes and no other attempt may find bound.</summary>
     private const string RetriedFolderAlias = "persistence-session-retry";
 
+    /// <summary>The alias the lazily opened transaction is observed over, which no other test writes.</summary>
+    private const string UnjoinedFolderAlias = "persistence-session-unjoined";
+
     private const uint RolledBackUid = 21;
 
     private const uint ConflictingUid = 22;
+
+    /// <summary>Proves the session holds no transaction until a write joins it, and holds one from that moment.</summary>
+    /// <remarks>
+    /// The transaction belongs to the writes that need it rather than to the session's lifetime, which is what lets a
+    /// caller finish work that must not run inside one — handing an object to a content endpoint, above all — before
+    /// the first write joins. Only a real provider opens a transaction, so only a real one can be asked whether it has
+    /// one. Nothing is committed, so the staged binding leaves no row behind.
+    /// </remarks>
+    [Fact]
+    public async Task BeginSessionAsync_BeforeAnyWriteJoinsTheSession_OpensNoTransactionUntilOneDoes()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var binding = MailFolderResolution.FirstBindingOf(
+            MailFolderAlias.Create(UnjoinedFolderAlias),
+            RemoteFolderPath.Create(UnjoinedFolderAlias, hierarchyDelimiter: '.'));
+
+        // Act
+        var (openBeforeJoining, openAfterJoining) = await services.InScopeAsync(
+            async (scope, token) =>
+            {
+                var dbContext = scope.GetRequiredService<MailFathomDbContext>();
+                await using var session = await scope
+                    .GetRequiredService<IPersistenceSessionFactory>()
+                    .BeginSessionAsync(token);
+
+                var beforeJoining = dbContext.Database.CurrentTransaction is not null;
+
+                await scope.GetRequiredService<IMailFolderResolutionStore>().SaveResolutionAsync(
+                    session,
+                    SyntheticMailAccount.AccountId,
+                    binding,
+                    token);
+
+                return (beforeJoining, dbContext.Database.CurrentTransaction is not null);
+            },
+            cancellationToken);
+
+        // Assert
+        Assert.False(openBeforeJoining, "The session opened a transaction before any write joined it.");
+        Assert.True(openAfterJoining, "The write that joined the session did not open its transaction.");
+    }
 
     /// <summary>Proves the transaction covers SQL the provider had already executed, not only staged changes.</summary>
     /// <remarks>

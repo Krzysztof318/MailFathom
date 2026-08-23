@@ -198,6 +198,82 @@ public sealed class OptimisticConcurrencyRetryPolicyTests
         await sessionFactory.Received(1).BeginSessionAsync(CancellationToken.None);
     }
 
+    /// <summary>
+    /// A dropped connection takes its transaction with it, so nothing below this can repeat the statement and the
+    /// whole unit of work is what a retry consists of. This is the layer that owns that, and this test is what says
+    /// the failure reaches it as a replay rather than as an exception the caller has to understand.
+    /// </summary>
+    [Fact]
+    public async Task CommitAsync_TransientFailureThenCommitted_StagesTheUnitOfWorkAgainInAFreshSession()
+    {
+        // Arrange
+        var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
+        var firstSession = Substitute.For<IPersistenceSession>();
+        var secondSession = Substitute.For<IPersistenceSession>();
+        sessionFactory.BeginSessionAsync(CancellationToken.None).Returns(firstSession, secondSession);
+        firstSession.CommitAsync(CancellationToken.None).Returns<PersistenceCommitResult>(
+            _ => throw new PersistenceTransientFailureException(
+                "the database failed in a way that can clear on its own",
+                new IOException("the connection was reset")));
+        secondSession.CommitAsync(CancellationToken.None).Returns(PersistenceCommitResult.Committed);
+        var stagedSessions = new List<IPersistenceSession>();
+        var policy = CreatePolicy(sessionFactory);
+
+        // Act
+        await policy.CommitAsync(
+            (session, _) =>
+            {
+                stagedSessions.Add(session);
+                return Task.CompletedTask;
+            },
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal([firstSession, secondSession], stagedSessions);
+        await firstSession.Received(1).DisposeAsync();
+        await secondSession.Received(1).DisposeAsync();
+    }
+
+    /// <summary>
+    /// A caller that is not told the write did not happen goes on as though it had, so the last attempt's failure
+    /// leaves the policy exactly as the database stated it rather than as a conflict that never occurred.
+    /// </summary>
+    [Fact]
+    public async Task CommitAsync_EveryAttemptFailedTransiently_RaisesTheLastFailureRatherThanAConflict()
+    {
+        // Arrange
+        var droppedConnection = new IOException("the connection was reset");
+        var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
+        var sessions = Enumerable.Range(0, 3)
+            .Select(_ => Substitute.For<IPersistenceSession>())
+            .ToArray();
+        sessionFactory.BeginSessionAsync(CancellationToken.None).Returns(sessions[0], sessions[1], sessions[2]);
+        foreach (var session in sessions)
+        {
+            session.CommitAsync(CancellationToken.None).Returns<PersistenceCommitResult>(
+                _ => throw new PersistenceTransientFailureException(
+                    "the database failed in a way that can clear on its own",
+                    droppedConnection));
+        }
+
+        var stagedAttemptCount = 0;
+        var policy = CreatePolicy(sessionFactory, maximumCommitAttempts: 3);
+
+        // Act
+        var thrown = await Assert.ThrowsAsync<PersistenceTransientFailureException>(() => policy.CommitAsync(
+            (_, _) =>
+            {
+                stagedAttemptCount++;
+                return Task.CompletedTask;
+            },
+            CancellationToken.None));
+
+        // Assert
+        Assert.Same(droppedConnection, thrown.InnerException);
+        Assert.Equal(3, stagedAttemptCount);
+        await sessionFactory.Received(3).BeginSessionAsync(CancellationToken.None);
+    }
+
     [Fact]
     public void Constructor_NonPositiveMaximumAttempts_Throws()
     {

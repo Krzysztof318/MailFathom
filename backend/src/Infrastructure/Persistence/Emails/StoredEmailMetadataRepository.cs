@@ -37,7 +37,7 @@ internal sealed class StoredEmailMetadataRepository(
     {
         ArgumentNullException.ThrowIfNull(metadata);
 
-        var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var occurrenceId = metadata.OccurrenceId;
         var entity = await FindByOccurrenceAsync(dbContext, occurrenceId, cancellationToken);
 
@@ -116,7 +116,7 @@ internal sealed class StoredEmailMetadataRepository(
     {
         ArgumentNullException.ThrowIfNull(occurrenceId);
 
-        var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var occupant = await FindByOccurrenceAsync(dbContext, occurrenceId, cancellationToken);
 
         // A row already sitting on the occurrence is either this same email, which a previous attempt of this commit
@@ -158,7 +158,7 @@ internal sealed class StoredEmailMetadataRepository(
         OutgoingEmailId outgoingEmailId,
         CancellationToken cancellationToken)
     {
-        var dbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         // The email was inserted by this same session and may not be committed yet, which is exactly what FindAsync
         // resolves from the change tracker.

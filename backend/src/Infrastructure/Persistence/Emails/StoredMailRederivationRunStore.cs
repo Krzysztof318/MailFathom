@@ -50,7 +50,7 @@ internal sealed class StoredMailRederivationRunStore(MailFathomDbContext dbConte
     {
         ArgumentNullException.ThrowIfNull(run);
 
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var account = run.Scope.Account.Value;
         var folder = KeyedFolderOf(run.Scope);
 

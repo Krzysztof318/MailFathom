@@ -74,7 +74,7 @@ internal sealed class EmbeddingGenerationStore(MailFathomDbContext dbContext, Ti
     {
         ArgumentNullException.ThrowIfNull(identity);
 
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var fingerprint = EmbeddingProfileFingerprint.Compute(identity).Value;
 
         var registered = await TrackedEntityLookup.SinglePendingOrPersistedAsync(
@@ -118,7 +118,7 @@ internal sealed class EmbeddingGenerationStore(MailFathomDbContext dbContext, Ti
         EmbeddingProfileId built,
         CancellationToken cancellationToken)
     {
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var builtId = built.Value;
 
         if (!await LockWhileBuildingAsync(sessionContext, builtId, cancellationToken))
@@ -163,7 +163,7 @@ internal sealed class EmbeddingGenerationStore(MailFathomDbContext dbContext, Ti
         EmbeddingProfileId building,
         CancellationToken cancellationToken)
     {
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var buildingId = building.Value;
         var abandonedAt = timeProvider.GetUtcNow();
 
@@ -234,7 +234,7 @@ internal sealed class EmbeddingGenerationStore(MailFathomDbContext dbContext, Ti
     /// PostgreSQL evaluates it once for the statement rather than per row.
     /// </para>
     /// </remarks>
-    public Task<int> RemoveVectorsAsync(
+    public async Task<int> RemoveVectorsAsync(
         IPersistenceSession session,
         EmbeddingProfileId profileId,
         int batchSize,
@@ -242,11 +242,11 @@ internal sealed class EmbeddingGenerationStore(MailFathomDbContext dbContext, Ti
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
 
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var supersededProfileId = profileId.Value;
         var supersededState = nameof(EmbeddingProfileLifecycleState.Superseded);
 
-        return sessionContext.Database.ExecuteSqlAsync(
+        return await sessionContext.Database.ExecuteSqlAsync(
             $"""
              DELETE FROM email_embeddings
              WHERE ctid IN (

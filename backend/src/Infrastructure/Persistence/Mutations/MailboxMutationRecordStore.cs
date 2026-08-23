@@ -47,7 +47,7 @@ internal sealed class MailboxMutationRecordStore(
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(request);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var folder = await MailFolderEntityResolver.GetRequiredAsync(
             writeContext,
             request.Occurrence.AccountId,
@@ -338,7 +338,7 @@ internal sealed class MailboxMutationRecordStore(
     {
         ArgumentNullException.ThrowIfNull(session);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         // A primary-key lookup, so FindAsync already resolves an insert this session may still be holding.
         return await writeContext.MailboxMutations.FindAsync([recordId.Value], cancellationToken)
