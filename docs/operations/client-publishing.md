@@ -102,8 +102,8 @@ reflection, which fails at run time rather than in the build.
 once it is taken.
 
 **Native AOT is declined for a second reason, which survives all of that: it could not be built where the desktop head
-is built.** A Native AOT publish runs the native toolchain of the
-platform it targets, so it does not cross-compile. `build-desktop-client.yml` publishes both Windows heads from
+is built.** A Native AOT publish runs the native toolchain of the platform it targets, so it does not cross-compile.
+`build-desktop-client.yml` publishes both Windows heads from
 `ubuntu-latest`, which works precisely because those publishes are IL with a runtime identifier — verified by
 publishing both from Linux, where the apphost, `coreclr.dll`, and `libSkiaSharp.dll` come out as PE32+ images for
 x86-64 and ARM64 respectively. Enabling `PublishAot` would cost a `windows-latest` runner for `win-x64`, and would
