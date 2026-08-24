@@ -12,7 +12,7 @@ using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Mail.Delivery.Governance;
 
-/// <summary>Answers how many of the addresses a caller wrote down nothing this deployment holds can vouch for.</summary>
+/// <summary>Answers how many of the addresses a caller wrote down neither the book nor the caller's owner's mailboxes vouch for.</summary>
 /// <remarks>
 /// <para>
 /// Two things vouch for an address, and both are the owner's rather than any caller's. The contact book holds the
@@ -46,10 +46,10 @@ public sealed class RecipientVouching(
     ICallerMailAccountCatalog accounts,
     IOutgoingSenderIdentityReader senderIdentities)
 {
-    /// <summary>Counts the recipients a caller named itself that nothing this deployment holds vouches for.</summary>
+    /// <summary>Counts the recipients a caller named itself that neither the book nor their owner's mailboxes vouch for.</summary>
     /// <param name="recipients">Everybody the message is addressed to, whoever put them there.</param>
     /// <param name="cancellationToken">Cancels the reads of the book.</param>
-    /// <returns>How many of the addresses the caller supplied are ones this deployment has no trace of.</returns>
+    /// <returns>How many of the addresses the caller supplied are ones neither the book nor the caller's owner's mailboxes hold.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="recipients" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no owner, since what vouches for an address is an owner's own.</exception>
     /// <remarks>

@@ -134,11 +134,19 @@ public sealed class EmailAttachmentDownloadReaderTests
     }
 
     /// <summary>
-    /// A capability carries the owner it was minted for, so one redeemed for another owner reaches nothing: holding the
-    /// link is not holding the mail, and the refusal is the one a deleted message gets.
+    /// The use case answers for whichever owner the redeeming principal names, so an account that owner does not own
+    /// reaches nothing, and the refusal is the one a deleted message gets.
     /// </summary>
+    /// <remarks>
+    /// Which owner a redemption names is the route's decision rather than the ticket's, and today it is the
+    /// deployment's own: <c>AttachmentDownloadTicket</c> records no owner, and
+    /// <c>EmailAttachmentDownloadEndpoint</c> states the one owner a deployment declaring its accounts in
+    /// configuration holds. ADR 0014's ticket-borne ownership is what replaces that once an account can belong to a
+    /// second owner. So this holds the use case to the owner it is handed rather than asserting that a redemption can
+    /// hand it somebody else's.
+    /// </remarks>
     [Fact]
-    public async Task OpenAsync_EmailOfAnAccountTheTicketsOwnerDoesNotOwn_Refuses()
+    public async Task OpenAsync_EmailOfAnAccountTheRedeemingPrincipalsOwnerDoesNotOwn_Refuses()
     {
         // Arrange
         var summary = SyntheticEmailSummaries.Create();
