@@ -18,15 +18,15 @@ namespace MailFathom.Host.Hosting;
 internal static class HealthProbeEndpoints
 {
     /// <summary>Maps one endpoint per probe onto the routes the health-endpoint listener answers.</summary>
-    /// <param name="app">The application being composed.</param>
-    /// <returns>The same application instance for chaining.</returns>
+    /// <param name="app">The route builder being composed.</param>
+    /// <returns>The same route builder for chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="app" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// Each endpoint states its own predicate, so a check with no tag reaches no probe. The default predicate would
     /// include every registered check in every probe, which is how a dependency check ends up able to restart the
     /// process.
     /// </remarks>
-    internal static WebApplication MapHealthProbes(this WebApplication app)
+    internal static IEndpointRouteBuilder MapHealthProbes(this IEndpointRouteBuilder app)
     {
         ArgumentNullException.ThrowIfNull(app);
 

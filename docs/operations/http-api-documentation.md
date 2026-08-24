@@ -1,6 +1,6 @@
 # The HTTP API document and the explorer
 
-<!-- describes: backend/src/Host/Api/Documentation/**, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs -->
+<!-- describes: backend/src/Host/Api/Documentation/**, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/tests/PublicSurfaces.UnitTests/HttpApiContractSurface.cs, backend/tests/PublicSurfaces.UnitTests/http-api-contract.json -->
 
 A development instance publishes one OpenAPI document describing every operation MailFathom serves over HTTP, and an
 API explorer to read it in. Both exist only while the process is running in the `Development` environment.
@@ -85,6 +85,30 @@ The exception lasts exactly as long as the routes do. A process that publishes n
 prefixes on every listener, where every other unserved path is refused — ahead of CORS, authentication, the
 client-certificate check, and the rate limiter — rather than letting them travel the pipeline to be answered `404` by
 routing. A port this process did not bind serves nothing either way.
+
+## The document is a recorded contract
+
+The generated document is also what the repository holds the HTTP API against.
+`backend/tests/PublicSurfaces.UnitTests` composes a deployment serving every surface, maps every route the host maps,
+reads the document back, and compares it byte for byte with `http-api-contract.json` committed beside its sources — the
+same arrangement that records the MCP tool contract and the configuration key set.
+
+So a change to a path, a verb, a parameter, a request body, a status code, a content type, a schema, or a security
+requirement arrives in a pull request as a diff in that one file rather than as something a reviewer reconstructs from
+endpoint registrations. Nothing there judges whether the change is right: below `1.0.0` a break is permitted, and what
+the record removes is the possibility of taking one without noticing. An intended change is taken into the record with
+
+```bash
+MAILFATHOM_UPDATE_PUBLIC_SURFACES=1 dotnet test --project backend/tests/PublicSurfaces.UnitTests
+```
+
+and committed in the change that moved the contract, together with the release-note entry naming what a client has to
+do about it.
+
+Two values are deliberately not recorded. `info.version` is the running release, which every build stamps and which a
+pipeline build extends further, so the record carries a placeholder rather than a number that would move under an
+unchanged contract; and `servers` is absent, because it describes the address a process answered on rather than what it
+serves.
 
 ## What the document does not carry
 

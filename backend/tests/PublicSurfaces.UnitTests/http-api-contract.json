@@ -1,0 +1,3932 @@
+{
+  "components": {
+    "schemas": {
+      "AdminSessionResponse": {
+        "properties": {
+          "credential": {
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "service": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "service",
+          "version",
+          "credential",
+          "permissions"
+        ],
+        "type": "object"
+      },
+      "ClientSessionResponse": {
+        "properties": {
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "service": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "service",
+          "version",
+          "permissions"
+        ],
+        "type": "object"
+      },
+      "CollectedContactErasureResponse": {
+        "properties": {
+          "addressesErased": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "contactsErased": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "contactsErased",
+          "addressesErased"
+        ],
+        "type": "object"
+      },
+      "ContactErasureResponse": {
+        "properties": {
+          "addressesErased": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "contact": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "wasHeld": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "contact",
+          "wasHeld",
+          "addressesErased"
+        ],
+        "type": "object"
+      },
+      "ContactExportResponse": {
+        "properties": {
+          "contact": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ContactResponse"
+              }
+            ]
+          },
+          "producedAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "contact",
+          "producedAt"
+        ],
+        "type": "object"
+      },
+      "ContactLookupResponse": {
+        "properties": {
+          "contact": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ContactResponse"
+              }
+            ]
+          }
+        },
+        "required": [
+          "contact"
+        ],
+        "type": "object"
+      },
+      "ContactPageResponse": {
+        "properties": {
+          "contacts": {
+            "items": {
+              "$ref": "#/components/schemas/ContactResponse"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "contacts",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "ContactRecordRequest": {
+        "properties": {
+          "addresses": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "preferredAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "displayName",
+          "addresses",
+          "preferredAddress",
+          "note"
+        ],
+        "type": "object"
+      },
+      "ContactResponse": {
+        "properties": {
+          "addresses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "amendedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "origin": {
+            "type": "string"
+          },
+          "preferredAddress": {
+            "type": "string"
+          },
+          "recordedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "addresses",
+          "preferredAddress",
+          "note",
+          "origin",
+          "recordedAt",
+          "amendedAt"
+        ],
+        "type": "object"
+      },
+      "ContactWriteResponse": {
+        "properties": {
+          "addressHolder": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "contact": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ContactResponse"
+              }
+            ]
+          },
+          "outcome": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "contact",
+          "addressHolder"
+        ],
+        "type": "object"
+      },
+      "DeadLetteredJobPageResponse": {
+        "properties": {
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/DeadLetteredJobResponse"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "jobs",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "DeadLetteredJobResponse": {
+        "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "attemptCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "deadLetteredAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "enqueuedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "failureClassification": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "failureReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "job": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job",
+          "type",
+          "key",
+          "account",
+          "attemptCount",
+          "failureClassification",
+          "failureReason",
+          "enqueuedAt",
+          "deadLetteredAt"
+        ],
+        "type": "object"
+      },
+      "EmbeddingActivationAssessmentResponse": {
+        "properties": {
+          "declared": {
+            "$ref": "#/components/schemas/EmbeddingGeometryResponse"
+          },
+          "estimate": {
+            "$ref": "#/components/schemas/EmbeddingWorkloadResponse"
+          },
+          "exceedsSpendCeiling": {
+            "type": "boolean"
+          },
+          "forecast": {
+            "type": "string"
+          },
+          "spend": {
+            "$ref": "#/components/schemas/EmbeddingSpendResponse"
+          }
+        },
+        "required": [
+          "declared",
+          "forecast",
+          "estimate",
+          "spend",
+          "exceedsSpendCeiling"
+        ],
+        "type": "object"
+      },
+      "EmbeddingActivationResponse": {
+        "properties": {
+          "estimate": {
+            "$ref": "#/components/schemas/EmbeddingWorkloadResponse"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "profileId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "profileId",
+          "estimate"
+        ],
+        "type": "object"
+      },
+      "EmbeddingGenerationResponse": {
+        "properties": {
+          "geometry": {
+            "$ref": "#/components/schemas/EmbeddingGeometryResponse"
+          },
+          "profileId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/EmbeddingWorkloadResponse"
+          }
+        },
+        "required": [
+          "profileId",
+          "geometry",
+          "progress"
+        ],
+        "type": "object"
+      },
+      "EmbeddingGeometryResponse": {
+        "properties": {
+          "dimension": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "distanceMetric": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "modelVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fingerprint",
+          "provider",
+          "model",
+          "modelVersion",
+          "dimension",
+          "distanceMetric"
+        ],
+        "type": "object"
+      },
+      "EmbeddingProviderHealthResponse": {
+        "properties": {
+          "observedAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "observedAt"
+        ],
+        "type": "object"
+      },
+      "EmbeddingReindexCancellationResponse": {
+        "properties": {
+          "outcome": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "EmbeddingSpendResponse": {
+        "properties": {
+          "ceilingInputCharacterCount": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "consumedInputCharacterCount": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "periodEndsAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "periodStartsAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "remainingInputCharacterCount": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "periodStartsAt",
+          "periodEndsAt",
+          "consumedInputCharacterCount",
+          "ceilingInputCharacterCount",
+          "remainingInputCharacterCount"
+        ],
+        "type": "object"
+      },
+      "EmbeddingStatusResponse": {
+        "properties": {
+          "activationOutstanding": {
+            "type": "boolean"
+          },
+          "building": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EmbeddingGenerationResponse"
+              }
+            ]
+          },
+          "declared": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EmbeddingGeometryResponse"
+              }
+            ]
+          },
+          "nextBackfillPassDueAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "provider": {
+            "$ref": "#/components/schemas/EmbeddingProviderHealthResponse"
+          },
+          "serving": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EmbeddingGenerationResponse"
+              }
+            ]
+          },
+          "spend": {
+            "$ref": "#/components/schemas/EmbeddingSpendResponse"
+          }
+        },
+        "required": [
+          "declared",
+          "activationOutstanding",
+          "serving",
+          "building",
+          "provider",
+          "spend",
+          "nextBackfillPassDueAt"
+        ],
+        "type": "object"
+      },
+      "EmbeddingWorkloadResponse": {
+        "properties": {
+          "approximateTokenCount": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "embeddedEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "outstandingCharacterCount": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "outstandingEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "outstandingPassageCount": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "searchableEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "searchableEmailCount",
+          "embeddedEmailCount",
+          "outstandingEmailCount",
+          "outstandingPassageCount",
+          "outstandingCharacterCount",
+          "approximateTokenCount"
+        ],
+        "type": "object"
+      },
+      "JobRecoveryRequest": {
+        "properties": {
+          "job": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "job"
+        ],
+        "type": "object"
+      },
+      "JobRecoveryResponse": {
+        "properties": {
+          "job": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "MailAccountRunResponse": {
+        "properties": {
+          "endedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "failed": {
+            "type": "boolean"
+          },
+          "failedFolderCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "mutationConvergenceFailed": {
+            "type": "boolean"
+          },
+          "scheduledFolderCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "endedAt",
+          "failed",
+          "scheduledFolderCount",
+          "failedFolderCount",
+          "mutationConvergenceFailed"
+        ],
+        "type": "object"
+      },
+      "MailAccountSynchronizationResponse": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "consecutiveFailureCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "folders": {
+            "items": {
+              "$ref": "#/components/schemas/MailFolderSynchronizationResponse"
+            },
+            "type": "array"
+          },
+          "lastRun": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MailAccountRunResponse"
+              }
+            ]
+          },
+          "nextRunDueAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "phase": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "account",
+          "phase",
+          "nextRunDueAt",
+          "consecutiveFailureCount",
+          "lastRun",
+          "folders"
+        ],
+        "type": "object"
+      },
+      "MailAnsweringAuditEntryResponse": {
+        "properties": {
+          "chatEndpointAlias": {
+            "type": "string"
+          },
+          "completedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "degradation": {
+            "type": "string"
+          },
+          "emails": {
+            "items": {
+              "$ref": "#/components/schemas/MailAnsweringAuditedEmailResponse"
+            },
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "instructionsVersion": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "runId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "runId",
+          "chatEndpointAlias",
+          "instructionsVersion",
+          "startedAt",
+          "completedAt",
+          "outcome",
+          "degradation",
+          "emails"
+        ],
+        "type": "object"
+      },
+      "MailAnsweringAuditPageResponse": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/MailAnsweringAuditEntryResponse"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "entries",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "MailAnsweringAuditedEmailResponse": {
+        "properties": {
+          "email": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "position": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "wasCited": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "email",
+          "position",
+          "wasCited"
+        ],
+        "type": "object"
+      },
+      "MailFolderErasureRequest": {
+        "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "folder": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "account",
+          "folder"
+        ],
+        "type": "object"
+      },
+      "MailFolderErasureResponse": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "emailsRemain": {
+            "type": "boolean"
+          },
+          "erasedEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "folder": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "account",
+          "folder",
+          "erasedEmailCount",
+          "emailsRemain"
+        ],
+        "type": "object"
+      },
+      "MailFolderRunResponse": {
+        "properties": {
+          "endedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "hasMoreEmails": {
+            "type": "boolean"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "skippedOversizedEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "storedEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "unreadableMimeEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "outcome",
+          "endedAt",
+          "storedEmailCount",
+          "skippedOversizedEmailCount",
+          "unreadableMimeEmailCount",
+          "hasMoreEmails"
+        ],
+        "type": "object"
+      },
+      "MailFolderSynchronizationResponse": {
+        "properties": {
+          "alias": {
+            "type": "string"
+          },
+          "lastRun": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MailFolderRunResponse"
+              }
+            ]
+          },
+          "lastSeenUid": {
+            "format": "uint32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "mirrored": {
+            "type": "boolean"
+          },
+          "progressAdvancedAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "uidValidity": {
+            "format": "uint32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "alias",
+          "mirrored",
+          "uidValidity",
+          "lastSeenUid",
+          "progressAdvancedAt",
+          "lastRun"
+        ],
+        "type": "object"
+      },
+      "MailRuleActionResponse": {
+        "properties": {
+          "desiredSeenState": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "destination": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "mutation": {
+            "type": "string"
+          },
+          "position": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "position",
+          "mutation",
+          "destination",
+          "desiredSeenState"
+        ],
+        "type": "object"
+      },
+      "MailRuleExecutedActionResponse": {
+        "properties": {
+          "destination": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "failureReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "mutation": {
+            "type": "string"
+          },
+          "mutationRecord": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "position": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "position",
+          "mutation",
+          "outcome",
+          "destination",
+          "failureReason",
+          "mutationRecord"
+        ],
+        "type": "object"
+      },
+      "MailRuleExecutionResponse": {
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/MailRuleExecutedActionResponse"
+            },
+            "type": "array"
+          },
+          "conditionFailure": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "duration": {
+            "pattern": "^-?(\\d+\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
+            "type": "string"
+          },
+          "email": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "evaluatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "readFacts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "rule": {
+            "type": "string"
+          },
+          "trigger": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "rule",
+          "revision",
+          "trigger",
+          "outcome",
+          "conditionFailure",
+          "readFacts",
+          "actions",
+          "evaluatedAt",
+          "duration"
+        ],
+        "type": "object"
+      },
+      "MailRuleHistoryPageResponse": {
+        "properties": {
+          "executions": {
+            "items": {
+              "$ref": "#/components/schemas/MailRuleExecutionResponse"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "executions",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "MailRuleResponse": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/MailRuleActionResponse"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "readableFacts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "schedule": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "stopWhenMatched": {
+            "type": "boolean"
+          },
+          "triggers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "accounts",
+          "readableFacts",
+          "actions",
+          "stopWhenMatched",
+          "triggers",
+          "schedule"
+        ],
+        "type": "object"
+      },
+      "MailRuleRunRequest": {
+        "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "account"
+        ],
+        "type": "object"
+      },
+      "MailRuleRunResponse": {
+        "properties": {
+          "endedAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "ending": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "evaluatedEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "matchedEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "requestedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "revision": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "skippedEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "trigger": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "requestedAt",
+          "trigger",
+          "revision",
+          "evaluatedEmailCount",
+          "matchedEmailCount",
+          "skippedEmailCount",
+          "endedAt",
+          "ending"
+        ],
+        "type": "object"
+      },
+      "MailRuleRunStartResponse": {
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/MailRuleRunResponse"
+          },
+          "started": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "started",
+          "run"
+        ],
+        "type": "object"
+      },
+      "MailRuleRunStateResponse": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "run": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MailRuleRunResponse"
+              }
+            ]
+          }
+        },
+        "required": [
+          "account",
+          "run"
+        ],
+        "type": "object"
+      },
+      "MailRuleSetResponse": {
+        "properties": {
+          "configurationAccepted": {
+            "type": "boolean"
+          },
+          "refusedSettingCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "revision": {
+            "type": "string"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/MailRuleResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "revision",
+          "configurationAccepted",
+          "refusedSettingCount",
+          "rules"
+        ],
+        "type": "object"
+      },
+      "MailSynchronizationStatusResponse": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/MailAccountSynchronizationResponse"
+            },
+            "type": "array"
+          },
+          "synchronizationEnabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "synchronizationEnabled",
+          "accounts"
+        ],
+        "type": "object"
+      },
+      "MailboxMaintenanceRequest": {
+        "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "folder": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "account",
+          "folder"
+        ],
+        "type": "object"
+      },
+      "MailboxMutationAuditEntryResponse": {
+        "properties": {
+          "completedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "desiredSeenState": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "destinationFolder": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "email": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "failureCode": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "mutation": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "placementUid": {
+            "format": "uint32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "placementUidValidity": {
+            "format": "uint32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "requestedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "requester": {
+            "type": "string"
+          },
+          "requesterOrigin": {
+            "type": "string"
+          },
+          "sourceFolder": {
+            "type": "string"
+          },
+          "sourceUid": {
+            "format": "uint32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "sourceUidValidity": {
+            "format": "uint32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "mutation",
+          "email",
+          "sourceFolder",
+          "sourceUidValidity",
+          "sourceUid",
+          "destinationFolder",
+          "placementUidValidity",
+          "placementUid",
+          "desiredSeenState",
+          "requesterOrigin",
+          "requester",
+          "requestedAt",
+          "completedAt",
+          "outcome",
+          "failureCode"
+        ],
+        "type": "object"
+      },
+      "MailboxMutationAuditPageResponse": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/MailboxMutationAuditEntryResponse"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "entries",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "MailboxRederivationRunResponse": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "endedAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "folder": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isOutstanding": {
+            "type": "boolean"
+          },
+          "missingContentEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "rederivedEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "requestedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "unreadableEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "account",
+          "folder",
+          "requestedAt",
+          "isOutstanding",
+          "rederivedEmailCount",
+          "unreadableEmailCount",
+          "missingContentEmailCount",
+          "endedAt"
+        ],
+        "type": "object"
+      },
+      "MailboxRederivationStartResponse": {
+        "properties": {
+          "carriage": {
+            "type": "string"
+          },
+          "run": {
+            "$ref": "#/components/schemas/MailboxRederivationRunResponse"
+          },
+          "started": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "started",
+          "carriage",
+          "run"
+        ],
+        "type": "object"
+      },
+      "MailboxRederivationStateResponse": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "folder": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "run": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MailboxRederivationRunResponse"
+              }
+            ]
+          }
+        },
+        "required": [
+          "account",
+          "folder",
+          "run"
+        ],
+        "type": "object"
+      },
+      "MailboxRefreshTokenRequest": {
+        "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "refreshToken": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "account",
+          "refreshToken"
+        ],
+        "type": "object"
+      },
+      "MailboxRewindAssessmentResponse": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "folder": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "storedEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "account",
+          "folder",
+          "storedEmailCount"
+        ],
+        "type": "object"
+      },
+      "MailboxRewindResponse": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "folder": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "folders": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "account",
+          "folder",
+          "folders"
+        ],
+        "type": "object"
+      },
+      "OutboxCancellationRequest": {
+        "properties": {
+          "outgoingEmail": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "outgoingEmail"
+        ],
+        "type": "object"
+      },
+      "OutboxDecisionResponse": {
+        "properties": {
+          "outcome": {
+            "type": "string"
+          },
+          "outgoingEmail": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outgoingEmail",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "OutboxEntryResponse": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "attemptCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "availableAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "lastFailureCode": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "lastReplyCode": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "mimeByteLength": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "origin": {
+            "type": "string"
+          },
+          "outgoingEmail": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "recordedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "stageChangedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outgoingEmail",
+          "account",
+          "stage",
+          "origin",
+          "attemptCount",
+          "mimeByteLength",
+          "recordedAt",
+          "stageChangedAt",
+          "availableAt",
+          "lastFailureCode",
+          "lastReplyCode"
+        ],
+        "type": "object"
+      },
+      "OutboxPageResponse": {
+        "properties": {
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sends": {
+            "items": {
+              "$ref": "#/components/schemas/OutboxEntryResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sends",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "OutboxRecipientResponse": {
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "answeredAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastReplyCode": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "role": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "address",
+          "role",
+          "status",
+          "lastReplyCode",
+          "answeredAt"
+        ],
+        "type": "object"
+      },
+      "OutboxRequeueRequest": {
+        "properties": {
+          "outgoingEmail": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "refusalRestated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "outgoingEmail",
+          "refusalRestated"
+        ],
+        "type": "object"
+      },
+      "OutboxSendResponse": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "attemptCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "availableAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "lastFailureCode": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "lastReplyCode": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "mimeByteLength": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "origin": {
+            "type": "string"
+          },
+          "outgoingEmail": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "recipients": {
+            "items": {
+              "$ref": "#/components/schemas/OutboxRecipientResponse"
+            },
+            "type": "array"
+          },
+          "recordedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "requester": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "stageChangedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outgoingEmail",
+          "account",
+          "stage",
+          "origin",
+          "requester",
+          "attemptCount",
+          "mimeByteLength",
+          "recordedAt",
+          "stageChangedAt",
+          "availableAt",
+          "lastFailureCode",
+          "lastReplyCode",
+          "recipients"
+        ],
+        "type": "object"
+      },
+      "OutboxStageCountResponse": {
+        "properties": {
+          "count": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "stage": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "count"
+        ],
+        "type": "object"
+      },
+      "OutboxSummaryResponse": {
+        "properties": {
+          "outstandingCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/OutboxStageCountResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "stages",
+          "outstandingCount"
+        ],
+        "type": "object"
+      },
+      "SpamClassificationPageResponse": {
+        "properties": {
+          "classifications": {
+            "items": {
+              "$ref": "#/components/schemas/SpamClassificationResponse"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "classifications",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "SpamClassificationResponse": {
+        "properties": {
+          "corpusRevision": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "decidedBy": {
+            "type": "string"
+          },
+          "email": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "evaluatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "profile": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "requestedMutations": {
+            "items": {
+              "$ref": "#/components/schemas/SpamRequestedMutationResponse"
+            },
+            "type": "array"
+          },
+          "score": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ]
+          },
+          "signals": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "threshold": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ]
+          },
+          "verdict": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "folder",
+          "verdict",
+          "decidedBy",
+          "score",
+          "threshold",
+          "corpusRevision",
+          "profile",
+          "signals",
+          "evaluatedAt",
+          "requestedMutations"
+        ],
+        "type": "object"
+      },
+      "SpamClassificationRunRequestBody": {
+        "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "apply": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "folders": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "rescore": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        },
+        "required": [
+          "account",
+          "folders",
+          "apply",
+          "rescore"
+        ],
+        "type": "object"
+      },
+      "SpamClassificationRunResponse": {
+        "properties": {
+          "actedEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "classifiedEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "endedAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "ending": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "folders": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "posture": {
+            "type": "string"
+          },
+          "profile": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "requestedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "rescores": {
+            "type": "boolean"
+          },
+          "skippedEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "spamEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "unclassifiableEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "undeterminedEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "requestedAt",
+          "folders",
+          "posture",
+          "rescores",
+          "profile",
+          "classifiedEmailCount",
+          "spamEmailCount",
+          "undeterminedEmailCount",
+          "skippedEmailCount",
+          "unclassifiableEmailCount",
+          "actedEmailCount",
+          "endedAt",
+          "ending"
+        ],
+        "type": "object"
+      },
+      "SpamClassificationRunStartResponse": {
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/SpamClassificationRunResponse"
+          },
+          "started": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "started",
+          "run"
+        ],
+        "type": "object"
+      },
+      "SpamClassificationRunStateResponse": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "run": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SpamClassificationRunResponse"
+              }
+            ]
+          }
+        },
+        "required": [
+          "account",
+          "run"
+        ],
+        "type": "object"
+      },
+      "SpamRequestedMutationResponse": {
+        "properties": {
+          "mutation": {
+            "type": "string"
+          },
+          "record": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record",
+          "mutation"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "description": "An API key, an access token from a configured authorization server, or a client assertion. Credentials do not cross surfaces: one provisioned for the administrative endpoint authenticates nothing on the client endpoint, and the reverse.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Every operation MailFathom serves over HTTP, across both of its API surfaces. The administrative surface is what the mfctl command reaches; the client surface is what the MailFathom client reaches. Each answers on a listener of its own under credentials of its own, and a deployment serves only the surfaces its operator enabled — so an operation described here answers only where the surface it belongs to is published.",
+    "title": "MailFathom HTTP API",
+    "version": "<the running release>"
+  },
+  "openapi": "3.1.1",
+  "paths": {
+    "/api/admin/answering/audit": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailAnsweringAuditPageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/contacts": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "origin",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactPageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ContactRecordRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactWriteResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/contacts/by-address": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "address",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactLookupResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/contacts/collected": {
+      "delete": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectedContactErasureResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/contacts/{contactId}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contactId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactErasureResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contactId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactLookupResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contactId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ContactRecordRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactWriteResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/contacts/{contactId}/export": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contactId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactExportResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/contacts/{contactId}/promotion": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contactId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactWriteResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/embeddings": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingStatusResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/embeddings/activation": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingActivationAssessmentResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "post": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingActivationResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/embeddings/reindex/cancellation": {
+      "post": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingReindexCancellationResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/folders/erasure": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MailFolderErasureRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailFolderErasureResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/jobs/dead-letters": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "account",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeadLetteredJobPageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/jobs/dead-letters/drop": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/JobRecoveryRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRecoveryResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/jobs/dead-letters/retry": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/JobRecoveryRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRecoveryResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/mailbox/mutations/audit": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mutation",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailboxMutationAuditPageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/mailbox/rederivation": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "folder",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailboxRederivationStateResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MailboxMaintenanceRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailboxRederivationStartResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/mailbox/refresh-token": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MailboxRefreshTokenRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/mailbox/rewind": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "folder",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailboxRewindAssessmentResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MailboxMaintenanceRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailboxRewindResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/mailbox/synchronization": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailSynchronizationStatusResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/outbox": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stage",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutboxPageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/outbox/cancellation": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/OutboxCancellationRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutboxDecisionResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/outbox/requeue": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/OutboxRequeueRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutboxDecisionResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/outbox/summary": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutboxSummaryResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/outbox/{outgoingEmailId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "outgoingEmailId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutboxSendResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/rules": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailRuleSetResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/rules/history": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "rule",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "email",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailRuleHistoryPageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/rules/runs": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailRuleRunStateResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MailRuleRunRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailRuleRunStartResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/session": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSessionResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/spam/classifications": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "email",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "verdict",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpamClassificationPageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/spam/runs": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpamClassificationRunStateResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SpamClassificationRunRequestBody"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpamClassificationRunStartResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/client/session": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientSessionResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Administrative"
+    },
+    {
+      "name": "Client"
+    }
+  ]
+}
