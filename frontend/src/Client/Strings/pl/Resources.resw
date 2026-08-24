@@ -213,6 +213,10 @@
     <value>Ciemny</value>
     <comment>One of the three theme offers.</comment>
   </data>
+  <data name="Workspace.Rail.Discover.Content" xml:space="preserve">
+    <value>Odkrywanie</value>
+    <comment>Names the first of the three spaces, on the navigation rail a wide window shows.</comment>
+  </data>
   <data name="Workspace.Rail.Mail.Content" xml:space="preserve">
     <value>Poczta</value>
     <comment>Names the second of the three spaces, on the navigation rail a wide window shows.</comment>

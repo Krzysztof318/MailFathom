@@ -123,8 +123,14 @@ another. Both are neutral cultures rather than regional variants; a variant arri
 between regions.
 
 A visible string reaches a screen through `x:Uid` rather than being written in a page, which is why no page here
-carries user-visible text. The exception is a string that is per item rather than per control — the three theme
-offers — and that one is resolved in the model through `IStringLocalizer` against the same tables.
+carries user-visible text. What is per item rather than per control is the exception — the three theme offers, and what
+the scope indicator says — and each of those is resolved in the model through `IStringLocalizer` against the same
+tables.
+
+**A `x:Uid` nothing answers is a control with no words on it**, which the application compiles without complaint and a
+head shows without saying why. So the suite reads the authored pages the way it reads the tables, and fails when a name
+a view states is answered by no entry — the failure that holding the tables against each other cannot see, because a
+name missing from both is a name they agree about.
 
 **A chosen language arrives on the next launch, and the screen says so.** Uno applies a culture while a head is
 starting, so the visual tree already built keeps the words it was built with; the choice is written to a settings file

@@ -107,6 +107,30 @@ public sealed class ResourceTableTests
     }
 
     /// <summary>
+    /// Every name a view states is a name a table has to answer. A <c>x:Uid</c> names a control and the entry behind it
+    /// names the property, so what is asserted is that something in the table is written for that control: a uid
+    /// nothing answers reaches somebody as a control with no words on it, which no build reports and which holding the
+    /// tables against each other cannot see, because a name missing from both is a name they agree about.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Languages))]
+    public void Tables_EveryNameTheViewsState_IsAnsweredInEveryLanguage(string culture)
+    {
+        // Arrange
+        var named = AuthoredViews.NamedUids();
+        var table = DeclaredLanguages.TableOf(culture);
+        Assert.NotEmpty(named);
+
+        // Act
+        var unanswered = named
+            .Where(uid => !table.Keys.Any(key => key.StartsWith($"{uid}.", StringComparison.Ordinal)))
+            .Order(StringComparer.Ordinal);
+
+        // Assert
+        Assert.Empty(unanswered);
+    }
+
+    /// <summary>
     /// The scope indicator is composed from words rather than named by a <c>x:Uid</c>, so the keys the frame's model
     /// asks for are the ones this asserts the tables hold — the other place a typo would reach a reader as the key.
     /// </summary>
