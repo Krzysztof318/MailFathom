@@ -42,7 +42,7 @@ internal sealed class MailAnsweringAuditEntryStore(
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(entry);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var runId = entry.RunId.Value;
         var accountId = entry.AccountId.Value;
 

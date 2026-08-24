@@ -54,7 +54,7 @@ internal sealed class SynchronizationCheckpointStore(MailFathomDbContext readCon
     {
         ArgumentNullException.ThrowIfNull(checkpoint);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var folder = await MailFolderEntityResolver.GetRequiredAsync(
             writeContext,
             accountId,
@@ -102,7 +102,7 @@ internal sealed class SynchronizationCheckpointStore(MailFathomDbContext readCon
         MailFolderAlias? folderAlias,
         CancellationToken cancellationToken)
     {
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var account = accountId.Value;
         var alias = folderAlias?.Value;
 

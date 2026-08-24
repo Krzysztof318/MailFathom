@@ -47,7 +47,7 @@ internal sealed class EmbeddingSpendLedger(MailFathomDbContext dbContext) : IEmb
             .SingleOrDefaultAsync(cancellationToken);
 
     /// <inheritdoc />
-    public Task RecordSpendAsync(
+    public async Task RecordSpendAsync(
         IPersistenceSession session,
         DateTimeOffset periodStart,
         long inputCharacterCount,
@@ -58,14 +58,14 @@ internal sealed class EmbeddingSpendLedger(MailFathomDbContext dbContext) : IEmb
 
         if (inputCharacterCount == 0)
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        var sessionDbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionDbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         // Both values are parameters rather than composed text; only the identifiers, which come from the entity's own
         // constants, are part of the statement.
-        return sessionDbContext.Database.ExecuteSqlRawAsync(
+        await sessionDbContext.Database.ExecuteSqlRawAsync(
             RecordSpendStatement,
             [periodStart, inputCharacterCount],
             cancellationToken);

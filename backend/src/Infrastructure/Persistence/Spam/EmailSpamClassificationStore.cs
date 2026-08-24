@@ -44,7 +44,7 @@ internal sealed class EmailSpamClassificationStore(MailFathomDbContext dbContext
     {
         ArgumentNullException.ThrowIfNull(classification);
 
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var storedEmailId = classification.EmailId.Value;
 
         // A primary-key lookup, so FindAsync already resolves a row this session staged itself — which is what stops a

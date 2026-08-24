@@ -42,7 +42,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
     private const int FirstRevision = 1;
 
     /// <inheritdoc />
-    public Task<MailDraftRecord> OpenAsync(
+    public async Task<MailDraftRecord> OpenAsync(
         IPersistenceSession session,
         MailAccountId accountId,
         OutgoingEmailRequester author,
@@ -56,7 +56,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
         ArgumentNullException.ThrowIfNull(recipients);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(mimeByteLength);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         var entity = new MailDraftEntity
         {
@@ -74,7 +74,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
 
         writeContext.MailDrafts.Add(entity);
 
-        return Task.FromResult(MailDraftRecordMapping.ToRecord(entity));
+        return MailDraftRecordMapping.ToRecord(entity);
     }
 
     /// <inheritdoc />
@@ -107,7 +107,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
 
         // Replaced outright rather than amended, so the list is the composed message's own rather than an accumulation
         // of everybody the draft was ever addressed to.
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         writeContext.MailDraftRecipients.RemoveRange(entity.Recipients);
         entity.Recipients.Clear();
         AddRecipients(entity, recipients);
@@ -297,7 +297,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
     {
         ArgumentNullException.ThrowIfNull(session);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         if (await writeContext.MailDrafts.FindAsync([draftId.Value], cancellationToken) is not { } entity)
         {
@@ -386,7 +386,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
         MailDraftId draftId,
         CancellationToken cancellationToken)
     {
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         var entity = await writeContext.MailDrafts.FindAsync([draftId.Value], cancellationToken)
             ?? throw new InvalidOperationException(

@@ -153,7 +153,7 @@ public sealed class OrchestratedAccountOwnershipTests(MailFathomOrchestrationFix
                 await using var session = await scope.GetRequiredService<IPersistenceSessionFactory>()
                     .BeginSessionAsync(token);
 
-                await arrangeOwners(EfCorePersistenceSessionAccessor.DbContextOf(session), token);
+                await arrangeOwners(await EfCorePersistenceSessionAccessor.JoinAsync(session, token), token);
 
                 var binding = MailFolderResolution.FirstBindingOf(
                     MailFolderAlias.Create("account-ownership-inbox"),

@@ -30,16 +30,14 @@ namespace MailFathom.Infrastructure.Persistence.Contacts;
 internal sealed class ContactStore : IContactStore
 {
     /// <inheritdoc />
-    public Task AddAsync(IPersistenceSession session, Contact contact, CancellationToken cancellationToken)
+    public async Task AddAsync(IPersistenceSession session, Contact contact, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(contact);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         writeContext.Contacts.Add(ContactMapping.ToEntity(contact));
-
-        return Task.CompletedTask;
     }
 
     /// <inheritdoc />
@@ -51,7 +49,7 @@ internal sealed class ContactStore : IContactStore
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(contact);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         // Tracked rather than projected, so the amendment is applied to the row as it stands now and the concurrency
         // token travels with it: a contact erased between this read and the commit makes the write affect no row, which
@@ -89,7 +87,7 @@ internal sealed class ContactStore : IContactStore
     {
         ArgumentNullException.ThrowIfNull(session);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var contactValue = contactId.Value;
 
         // Deleted rather than counted and then cascaded, so the number reported is the number of rows this statement
@@ -114,7 +112,7 @@ internal sealed class ContactStore : IContactStore
     {
         ArgumentNullException.ThrowIfNull(session);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         // The addresses go first, and by their contact's origin rather than by a list of identifiers this method read:
         // a set-based delete keeps a book of collected people out of memory, and taking the rows in the same order and

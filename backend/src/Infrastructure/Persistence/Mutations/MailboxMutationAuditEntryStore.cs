@@ -41,7 +41,7 @@ internal sealed class MailboxMutationAuditEntryStore(
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(entry);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var mutationRecordId = entry.MutationRecordId.Value;
 
         // Looked up by the mutation rather than by the key, because a retried append generates a fresh key and the

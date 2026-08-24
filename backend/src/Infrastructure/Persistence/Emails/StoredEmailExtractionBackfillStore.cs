@@ -118,7 +118,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
     {
         ArgumentNullException.ThrowIfNull(metadata);
 
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var storedEmail = await sessionContext.StoredEmails.FindAsync([storedEmailId.Value], cancellationToken)
             ?? throw new InvalidOperationException("Extraction cannot be applied to a stored email that no longer exists.");
 
@@ -150,7 +150,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
         StoredEmailId position,
         CancellationToken cancellationToken)
     {
-        var sessionContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var recordedAt = timeProvider.GetUtcNow();
 
         // FindAsync resolves a row this session already staged from the change tracker, so a run that commits several

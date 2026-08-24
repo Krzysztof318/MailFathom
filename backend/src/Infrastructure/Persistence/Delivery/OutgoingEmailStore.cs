@@ -62,7 +62,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         ArgumentNullException.ThrowIfNull(principal);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(mimeByteLength);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         var existing = await FindByIdentityAsync(writeContext, request, cancellationToken);
         if (existing is not null)
@@ -416,7 +416,9 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         // column of the record modified puts its `xmin` into the update the same way every other write here does; the
         // value written is the one just read, and the loser meets the ordinary conflict instead of settling a recipient
         // on a send that has finished.
-        EfCorePersistenceSessionAccessor.DbContextOf(session)
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
+
+        writeContext
             .Entry(entity)
             .Property(outgoingEmail => outgoingEmail.StageChangedAt)
             .IsModified = true;
@@ -522,7 +524,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         OutgoingEmailEntity entity,
         CancellationToken cancellationToken)
     {
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var entry = writeContext.Entry(entity);
 
         if (entry.State == EntityState.Added)
@@ -549,7 +551,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         OutgoingEmailEntity entity,
         CancellationToken cancellationToken)
     {
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var entry = writeContext.Entry(entity);
 
         if (entry.State == EntityState.Added)
@@ -619,7 +621,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
     {
         ArgumentNullException.ThrowIfNull(session);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         // A primary-key lookup, so FindAsync already resolves an insert this session may still be holding.
         return await writeContext.OutgoingEmails.FindAsync([outgoingEmailId.Value], cancellationToken)

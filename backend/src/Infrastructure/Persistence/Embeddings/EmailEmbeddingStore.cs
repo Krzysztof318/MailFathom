@@ -69,7 +69,7 @@ internal sealed class EmailEmbeddingStore(MailFathomDbContext dbContext, TimePro
             return;
         }
 
-        var sessionDbContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var sessionDbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var profileId = profile.Id.Value;
         Guid[] chunkIds = [.. embeddings.Select(embedding => embedding.ChunkId.Value)];
 

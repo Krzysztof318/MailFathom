@@ -342,6 +342,25 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode JobPayloadTooLarge { get; } = new(34001);
 
+    /// <summary>Gets subcategory 5, connection loss: a local write did not commit because the database failed in a way that can clear on its own.</summary>
+    /// <remarks>
+    /// It is a subcategory of its own rather than one more concurrent-write failure, because nothing raced. A write
+    /// that loses its connection lost the transaction with it, so the state it meant to change is exactly as it was
+    /// and the code says the attempt is repeatable rather than that another writer won. An operator correlating
+    /// <c>3</c> codes acts on the two differently: a rate of concurrent-write failures is contention to design out,
+    /// and a rate of these is a database or a network to look at.
+    /// </remarks>
+    public static MailFathomErrorCode PersistenceTransientFailure { get; } = new(35001);
+
+    /// <summary>Gets subcategory 5, connection loss: a local write lost its connection while committing, so whether it became durable is unknown.</summary>
+    /// <remarks>
+    /// It shares the subcategory with the code above because both are the same event — the connection went away — and
+    /// it is a code of its own because the answer differs. Above, the write provably did not happen and the unit of
+    /// work may be staged again; here the server may already have committed, so repeating it would apply the write a
+    /// second time. An operator meeting this one is being told the outcome is unknown rather than that a retry failed.
+    /// </remarks>
+    public static MailFathomErrorCode PersistenceCommitOutcomeUnknown { get; } = new(35002);
+
     #endregion
 
     #region Category 4 — Outbound resilience
@@ -815,6 +834,8 @@ public readonly record struct MailFathomErrorCode
         DatabaseSchemaTextSearchConfigurationMismatch,
         EmbeddingVectorIndexUnavailable,
         JobPayloadTooLarge,
+        PersistenceTransientFailure,
+        PersistenceCommitOutcomeUnknown,
         OutboundDependencyUnavailable,
         MailboxQueryPageSizeOutOfRange,
         MailboxQueryFilterInvalid,

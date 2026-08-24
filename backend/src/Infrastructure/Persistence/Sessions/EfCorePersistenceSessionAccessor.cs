@@ -16,8 +16,10 @@ namespace MailFathom.Infrastructure.Persistence.Sessions;
 /// </remarks>
 internal interface IEfCorePersistenceSession
 {
-    /// <summary>Gets the context enlisted in this session's transaction.</summary>
-    MailFathomDbContext DbContext { get; }
+    /// <summary>Joins this session, opening its transaction if this is the first write to reach it.</summary>
+    /// <param name="cancellationToken">Cancels opening the transaction.</param>
+    /// <returns>The context enlisted in this session's transaction.</returns>
+    Task<MailFathomDbContext> JoinAsync(CancellationToken cancellationToken);
 
     /// <summary>Holds a measurement of work staged here until this session's ending is known.</summary>
     /// <param name="measurement">The measurement to publish once the session has committed or rolled back.</param>
@@ -27,8 +29,9 @@ internal interface IEfCorePersistenceSession
 /// <summary>Resolves the EF Core context enlisted in an application persistence session.</summary>
 internal static class EfCorePersistenceSessionAccessor
 {
-    /// <summary>Gets the context enlisted in <paramref name="session" />'s transaction.</summary>
+    /// <summary>Joins <paramref name="session" /> and answers with the context enlisted in its transaction.</summary>
     /// <param name="session">The session the calling write operation must join.</param>
+    /// <param name="cancellationToken">Cancels opening the session's transaction.</param>
     /// <returns>The context whose pending changes commit with the session.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">
@@ -37,7 +40,14 @@ internal static class EfCorePersistenceSessionAccessor
     /// valid: writing through its context is exactly the intended behavior, because that is the transaction its
     /// caller opened.
     /// </exception>
-    public static MailFathomDbContext DbContextOf(IPersistenceSession session) => SessionOf(session).DbContext;
+    /// <remarks>
+    /// This is asynchronous because joining is what opens the transaction. A session holds none until a write reaches
+    /// it, so a caller that has other work to finish first — handing bytes to a content endpoint, computing a digest
+    /// over them — does that work outside the transaction by doing it before this call.
+    /// </remarks>
+    public static Task<MailFathomDbContext> JoinAsync(
+        IPersistenceSession session,
+        CancellationToken cancellationToken) => SessionOf(session).JoinAsync(cancellationToken);
 
     /// <summary>Gets the EF Core session <paramref name="session" /> is.</summary>
     /// <param name="session">The session the calling write operation must join.</param>
@@ -45,7 +55,7 @@ internal static class EfCorePersistenceSessionAccessor
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="session" /> is backed by a different persistence provider, exactly as
-    /// <see cref="DbContextOf" /> describes.
+    /// <see cref="JoinAsync" /> describes.
     /// </exception>
     public static IEfCorePersistenceSession SessionOf(IPersistenceSession session)
     {

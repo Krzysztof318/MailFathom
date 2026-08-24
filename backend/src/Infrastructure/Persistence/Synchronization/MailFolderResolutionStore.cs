@@ -48,7 +48,7 @@ internal sealed class MailFolderResolutionStore(MailFathomDbContext readContext)
     {
         ArgumentNullException.ThrowIfNull(resolution);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var existingBinding = await MailFolderEntityResolver.FindAsync(
             writeContext,
             accountId,

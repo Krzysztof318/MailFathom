@@ -166,7 +166,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         Guid ownerId,
         CancellationToken cancellationToken)
     {
-        var context = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var now = DateTimeOffset.UnixEpoch;
 
         context.OwnerAccounts.Add(new OwnerAccountEntity
@@ -387,7 +387,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         Guid ownerId,
         CancellationToken cancellationToken)
     {
-        var context = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var now = DateTimeOffset.UnixEpoch;
 
         var account = new MailboxAccountEntity { Id = SurvivingAccount, OwnerId = ownerId };

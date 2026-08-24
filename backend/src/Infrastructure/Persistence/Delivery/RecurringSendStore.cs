@@ -42,7 +42,7 @@ internal sealed class RecurringSendStore(MailFathomDbContext readContext, TimePr
         ArgumentNullException.ThrowIfNull(request);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(draftByteLength);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         var existing = await FindByIdentityAsync(writeContext, request, cancellationToken);
         if (existing is not null)
@@ -140,7 +140,7 @@ internal sealed class RecurringSendStore(MailFathomDbContext readContext, TimePr
     {
         ArgumentNullException.ThrowIfNull(session);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var entity = await writeContext.RecurringSends.FindAsync([recurringSendId.Value], cancellationToken);
 
         if (entity is null)
@@ -168,7 +168,7 @@ internal sealed class RecurringSendStore(MailFathomDbContext readContext, TimePr
     {
         ArgumentNullException.ThrowIfNull(session);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var entity = await writeContext.RecurringSends.FindAsync([recurringSendId.Value], cancellationToken)
             ?? throw new InvalidOperationException(
                 $"Recurring send {recurringSendId} carries no declaration to record an occasion against.");

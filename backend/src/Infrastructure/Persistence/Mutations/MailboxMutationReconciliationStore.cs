@@ -246,7 +246,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
     {
         ArgumentNullException.ThrowIfNull(session);
 
-        var writeContext = EfCorePersistenceSessionAccessor.DbContextOf(session);
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
         // A primary-key lookup, so FindAsync already resolves a row this session may have loaded or inserted itself.
         return await writeContext.MailboxMutations.FindAsync([recordId.Value], cancellationToken)
