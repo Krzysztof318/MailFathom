@@ -22,16 +22,18 @@ public sealed class OptimisticConcurrencyRetryPolicyTests
         firstSession.CommitAsync(CancellationToken.None).Returns(PersistenceCommitResult.ConcurrencyConflict);
         secondSession.CommitAsync(CancellationToken.None).Returns(PersistenceCommitResult.Committed);
         var stagedSessions = new List<IPersistenceSession>();
-        var policy = CreatePolicy(sessionFactory);
+        var clock = new FakeTimeProvider();
+        var policy = CreatePolicy(sessionFactory, timeProvider: clock);
 
         // Act
-        await policy.CommitAsync(
+        var commitTask = policy.CommitAsync(
             (session, _) =>
             {
                 stagedSessions.Add(session);
                 return Task.CompletedTask;
             },
             CancellationToken.None);
+        await AdvanceUntilCompletedAsync(clock, commitTask);
 
         // Assert
         Assert.Equal([firstSession, secondSession], stagedSessions);
@@ -257,21 +259,61 @@ public sealed class OptimisticConcurrencyRetryPolicyTests
         }
 
         var stagedAttemptCount = 0;
-        var policy = CreatePolicy(sessionFactory, maximumCommitAttempts: 3);
+        var clock = new FakeTimeProvider();
+        var policy = CreatePolicy(sessionFactory, maximumCommitAttempts: 3, timeProvider: clock);
 
         // Act
-        var thrown = await Assert.ThrowsAsync<PersistenceTransientFailureException>(() => policy.CommitAsync(
+        var commitTask = policy.CommitAsync(
             (_, _) =>
             {
                 stagedAttemptCount++;
                 return Task.CompletedTask;
             },
-            CancellationToken.None));
+            CancellationToken.None);
+        var thrown = await Assert.ThrowsAsync<PersistenceTransientFailureException>(
+            () => AdvanceUntilCompletedAsync(clock, commitTask));
 
         // Assert
         Assert.Same(droppedConnection, thrown.InnerException);
         Assert.Equal(3, stagedAttemptCount);
         await sessionFactory.Received(3).BeginSessionAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Several of the writes a session carries issue their statement rather than staging it, so the connection can be
+    /// lost before anything is committed. The attempt that met it is the same attempt, and the replay is the same one.
+    /// </summary>
+    [Fact]
+    public async Task CommitAsync_StagingFailedTransiently_StagesTheUnitOfWorkAgainInAFreshSession()
+    {
+        // Arrange
+        var droppedConnection = new IOException("the connection was reset");
+        var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
+        var firstSession = Substitute.For<IPersistenceSession>();
+        var secondSession = Substitute.For<IPersistenceSession>();
+        sessionFactory.BeginSessionAsync(CancellationToken.None).Returns(firstSession, secondSession);
+        firstSession.TryEndOnTransientFailure(droppedConnection).Returns(true);
+        secondSession.CommitAsync(CancellationToken.None).Returns(PersistenceCommitResult.Committed);
+        var stagedSessions = new List<IPersistenceSession>();
+        var clock = new FakeTimeProvider();
+        var policy = CreatePolicy(sessionFactory, timeProvider: clock);
+
+        // Act
+        var commitTask = policy.CommitAsync(
+            (session, _) =>
+            {
+                stagedSessions.Add(session);
+
+                return ReferenceEquals(session, firstSession)
+                    ? Task.FromException(droppedConnection)
+                    : Task.CompletedTask;
+            },
+            CancellationToken.None);
+        await AdvanceUntilCompletedAsync(clock, commitTask);
+
+        // Assert
+        Assert.Equal([firstSession, secondSession], stagedSessions);
+        await firstSession.DidNotReceive().CommitAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -286,6 +328,28 @@ public sealed class OptimisticConcurrencyRetryPolicyTests
 
         // Assert
         Assert.Equal("options", thrown.ParamName);
+    }
+
+    /// <summary>Advances the fake clock in steps until the policy's own waiting is over, and reports what it ended as.</summary>
+    /// <remarks>
+    /// The wait before an attempt is registered only once the attempt before it has failed, so the advancing may not
+    /// stop on a count: a loop that had spent its steps would leave the next wait pending for a clock that never moves
+    /// again. A step past the policy's own ceiling therefore ends each wait whatever the jitter drew, and the loop
+    /// keeps stepping until the whole commit has ended. The guard is what ends it on real time in both outcomes, so a
+    /// policy that stopped making progress fails the test rather than spinning a clock nothing is waiting on.
+    /// </remarks>
+    private static async Task AdvanceUntilCompletedAsync(FakeTimeProvider clock, Task commitTask)
+    {
+        var guardedCommit = commitTask.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+
+        while (!guardedCommit.IsCompleted)
+        {
+            clock.Advance(TimeSpan.FromSeconds(2));
+
+            await Task.Yield();
+        }
+
+        await guardedCommit;
     }
 
     private static OptimisticConcurrencyRetryPolicy CreatePolicy(

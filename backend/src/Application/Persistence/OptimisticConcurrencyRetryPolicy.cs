@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Resilience;
 
 namespace MailFathom.Application.Persistence;
@@ -15,9 +16,10 @@ namespace MailFathom.Application.Persistence;
 /// intermediate use-case code has to restate it.
 /// </para>
 /// <para>
-/// A database failure that can clear on its own is replayed by the same loop, because the unit of work is the only
-/// thing that can be repeated: a dropped connection takes its transaction with it, so nothing below this can retry a
-/// statement and nothing above this holds the staging body. It is the same attempt bound and the same backoff, for
+/// A database failure that can clear on its own is replayed by the same loop, wherever in the attempt it was raised —
+/// by a statement a write issued, by the save, or by the commit round trip. The unit of work is the only thing that
+/// can be repeated: a dropped connection takes its transaction with it, so nothing below this can retry a statement
+/// and nothing above this holds the staging body. It is the same attempt bound and the same backoff, for
 /// the same reason a caller already accepted — that this body may run more than once. The failure of the last allowed
 /// attempt leaves the policy as <see cref="PersistenceTransientFailureException" />.
 /// </para>
@@ -113,7 +115,7 @@ public sealed class OptimisticConcurrencyRetryPolicy
             try
             {
                 await using var session = await this.sessionFactory.BeginSessionAsync(cancellationToken);
-                var result = await stageChangesAsync(session, cancellationToken);
+                var result = await StageAsync(session, stageChangesAsync, cancellationToken);
 
                 if (await session.CommitAsync(cancellationToken) == PersistenceCommitResult.Committed)
                 {
@@ -143,5 +145,39 @@ public sealed class OptimisticConcurrencyRetryPolicy
 
         throw new PersistenceConcurrencyConflictException(
             $"A local write did not commit within the configured {this.maximumAttempts} optimistic concurrency attempts.");
+    }
+
+    /// <summary>Stages one attempt, raising a failure the database may not raise again as the replayable one it is.</summary>
+    /// <remarks>
+    /// Staging is not only bookkeeping against a change tracker. A write that erases a contact, stamps a batch of
+    /// messages as evaluated, or upserts a spend total issues its statement immediately, so the connection can be lost
+    /// here rather than at the commit — and the loop below would otherwise replay one of those two failures and let
+    /// the other end the write. The session is what classifies it, because the provider's exception is there; this
+    /// method is where the classification is asked for, because the body that would be run again is here.
+    /// </remarks>
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "Only a failure the session classifies as one that can clear on its own is converted; every other failure is rethrown unchanged.")]
+    private static async Task<TResult> StageAsync<TResult>(
+        IPersistenceSession session,
+        Func<IPersistenceSession, CancellationToken, Task<TResult>> stageChangesAsync,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await stageChangesAsync(session, cancellationToken);
+        }
+        catch (Exception failure)
+        {
+            if (!session.TryEndOnTransientFailure(failure))
+            {
+                throw;
+            }
+
+            throw new PersistenceTransientFailureException(
+                "A local write did not complete because the database failed in a way that can clear on its own.",
+                failure);
+        }
     }
 }

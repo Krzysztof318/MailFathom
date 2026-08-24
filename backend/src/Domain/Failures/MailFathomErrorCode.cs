@@ -308,9 +308,6 @@ public readonly record struct MailFathomErrorCode
     /// <summary>Gets subcategory 1, concurrent writes: a local write did not commit because another writer changed the same durable state.</summary>
     public static MailFathomErrorCode PersistenceConcurrencyConflict { get; } = new(31001);
 
-    /// <summary>Gets subcategory 1, concurrent writes: a local write did not commit because the database failed in a way that can clear on its own.</summary>
-    public static MailFathomErrorCode PersistenceTransientFailure { get; } = new(31002);
-
     /// <summary>Gets subcategory 2, schema state: the database does not carry every migration the running build was compiled against.</summary>
     public static MailFathomErrorCode DatabaseSchemaOutOfDate { get; } = new(32001);
 
@@ -344,6 +341,16 @@ public readonly record struct MailFathomErrorCode
     /// enqueuer and the one thing the payload contract exists to keep out of the queue.
     /// </remarks>
     public static MailFathomErrorCode JobPayloadTooLarge { get; } = new(34001);
+
+    /// <summary>Gets subcategory 5, connection loss: a local write did not commit because the database failed in a way that can clear on its own.</summary>
+    /// <remarks>
+    /// It is a subcategory of its own rather than one more concurrent-write failure, because nothing raced. A write
+    /// that loses its connection lost the transaction with it, so the state it meant to change is exactly as it was
+    /// and the code says the attempt is repeatable rather than that another writer won. An operator correlating
+    /// <c>3</c> codes acts on the two differently: a rate of concurrent-write failures is contention to design out,
+    /// and a rate of these is a database or a network to look at.
+    /// </remarks>
+    public static MailFathomErrorCode PersistenceTransientFailure { get; } = new(35001);
 
     #endregion
 
@@ -813,12 +820,12 @@ public readonly record struct MailFathomErrorCode
         OutgoingEmailFilingOutcomeUnknown,
         OutgoingEmailFilingFailedUnexpectedly,
         PersistenceConcurrencyConflict,
-        PersistenceTransientFailure,
         DatabaseSchemaOutOfDate,
         DatabaseSchemaStateUnreadable,
         DatabaseSchemaTextSearchConfigurationMismatch,
         EmbeddingVectorIndexUnavailable,
         JobPayloadTooLarge,
+        PersistenceTransientFailure,
         OutboundDependencyUnavailable,
         MailboxQueryPageSizeOutOfRange,
         MailboxQueryFilterInvalid,

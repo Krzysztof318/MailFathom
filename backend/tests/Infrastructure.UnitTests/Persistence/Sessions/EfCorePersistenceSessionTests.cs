@@ -115,6 +115,68 @@ public sealed class EfCorePersistenceSessionTests
     }
 
     /// <summary>
+    /// The commit is a round trip of its own and the last one a write makes, so it is where a blip is most likely to
+    /// land. Classifying only the save before it would leave that one failure raised as a defect and unreplayed.
+    /// </summary>
+    [Fact]
+    public async Task CommitAsync_CommitRoundTripFailedForACauseThatCanClear_RaisesATransientFailure()
+    {
+        // Arrange
+        var droppedConnection = new IOException("the connection was reset");
+        var (resources, persistenceSession) = CreateSession(
+            transientProviderFailure: droppedConnection,
+            commitTransactionException: droppedConnection);
+        await using var session = persistenceSession;
+
+        // Act
+        var thrown = await Assert.ThrowsAsync<PersistenceTransientFailureException>(
+            () => session.CommitAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Same(droppedConnection, thrown.InnerException);
+        Assert.Equal(1, resources.SaveChangesCount);
+        Assert.Equal(0, resources.RollbackCount);
+    }
+
+    /// <summary>
+    /// A write that erases a contact or upserts a spend total issues its statement immediately, so its failure never
+    /// reaches the commit. Ending the session on it is what lets the caller replay the whole unit of work.
+    /// </summary>
+    [Fact]
+    public async Task TryEndOnTransientFailure_AFailureThatCanClear_EndsTheSessionAndReportsItAsReplayable()
+    {
+        // Arrange
+        var droppedConnection = new IOException("the connection was reset");
+        var (resources, session) = CreateSession(transientProviderFailure: droppedConnection);
+
+        // Act
+        var ended = session.TryEndOnTransientFailure(
+            new InvalidOperationException("an error occurred while executing the statement", droppedConnection));
+        await session.DisposeAsync();
+
+        // Assert
+        Assert.True(ended);
+        Assert.Equal(0, resources.RollbackCount);
+        Assert.Equal(1, resources.DisposeCount);
+    }
+
+    /// <summary>A failure the database will raise again is a defect, and a defect is not something to stage twice.</summary>
+    [Fact]
+    public async Task TryEndOnTransientFailure_AFailureThatWillNotClear_LeavesTheSessionToItsOrdinaryRollback()
+    {
+        // Arrange
+        var (resources, session) = CreateSession();
+
+        // Act
+        var ended = session.TryEndOnTransientFailure(new InvalidOperationException("the statement is malformed"));
+        await session.DisposeAsync();
+
+        // Assert
+        Assert.False(ended);
+        Assert.Equal(1, resources.RollbackCount);
+    }
+
+    /// <summary>
     /// A caller that cancelled is not a database that failed, and a cancellation carrying a transport failure beneath
     /// it looks exactly like one to a reader of causes. Replaying it would run the caller's write again after the
     /// caller asked for it to stop.
@@ -279,7 +341,8 @@ public sealed class EfCorePersistenceSessionTests
         Exception? saveChangesException = null,
         bool classifiesSaveChangesExceptionAsConcurrencyConflict = false,
         Exception? transientProviderFailure = null,
-        Exception? disposeException = null)
+        Exception? disposeException = null,
+        Exception? commitTransactionException = null)
     {
         var resources = new TestPersistenceSessionResources
         {
@@ -288,6 +351,7 @@ public sealed class EfCorePersistenceSessionTests
                 classifiesSaveChangesExceptionAsConcurrencyConflict,
             TransientProviderFailure = transientProviderFailure,
             DisposeException = disposeException,
+            CommitTransactionException = commitTransactionException,
         };
 
         return (resources, new EfCorePersistenceSession(resources, new PersistenceCommitTelemetry()));
@@ -296,6 +360,8 @@ public sealed class EfCorePersistenceSessionTests
     private sealed class TestPersistenceSessionResources : IEfCorePersistenceSessionResources
     {
         public Exception? SaveChangesException { get; init; }
+
+        public Exception? CommitTransactionException { get; init; }
 
         public bool ClassifiesSaveChangesExceptionAsConcurrencyConflict { get; init; }
 
@@ -329,7 +395,9 @@ public sealed class EfCorePersistenceSessionTests
         {
             this.CommitCount++;
 
-            return Task.CompletedTask;
+            return this.CommitTransactionException is null
+                ? Task.CompletedTask
+                : Task.FromException(this.CommitTransactionException);
         }
 
         public Task RollbackTransactionAsync(CancellationToken cancellationToken)

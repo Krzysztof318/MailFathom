@@ -87,6 +87,12 @@ internal sealed class EfCorePersistenceSession(
         try
         {
             await resources.SaveChangesAsync(cancellationToken);
+
+            // Committed inside the same classification as the save before it. The COMMIT is a round trip of its own
+            // and the last one the write makes, so a connection lost during it is at least as likely as one lost
+            // during the save — and an unclassified failure there would leave the caller with a write it cannot tell
+            // apart from a defect.
+            await resources.CommitTransactionAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -109,13 +115,26 @@ internal sealed class EfCorePersistenceSession(
                 exception);
         }
 
-        await resources.CommitTransactionAsync(cancellationToken);
-
         this.completed = true;
         telemetry.RecordCommitted();
         this.PublishHeldMeasurements(sessionCommitted: true);
 
         return PersistenceCommitResult.Committed;
+    }
+
+    /// <inheritdoc />
+    public bool TryEndOnTransientFailure(Exception failure)
+    {
+        ArgumentNullException.ThrowIfNull(failure);
+
+        if (this.completed || !this.IsTransientCommitFailure(failure))
+        {
+            return false;
+        }
+
+        this.EndOnTransientFailure();
+
+        return true;
     }
 
     /// <inheritdoc />
@@ -187,7 +206,7 @@ internal sealed class EfCorePersistenceSession(
         this.PublishHeldMeasurements(sessionCommitted: false);
     }
 
-    /// <summary>Reports whether a commit met a failure the database may not produce again.</summary>
+    /// <summary>Reports whether a write met a failure the database may not produce again.</summary>
     /// <remarks>
     /// The cause is classified beside the failure itself, because EF Core wraps what the provider raised: a dropped
     /// connection reaches a save as a <see cref="DbUpdateException" /> whose inner exception is the only part that

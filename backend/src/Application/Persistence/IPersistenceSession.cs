@@ -19,4 +19,23 @@ public interface IPersistenceSession : IAsyncDisposable
     /// <param name="cancellationToken">Cancels the commit or concurrency-conflict rollback.</param>
     /// <returns>The commit outcome. The session is invalid after any returned outcome.</returns>
     Task<PersistenceCommitResult> CommitAsync(CancellationToken cancellationToken);
+
+    /// <summary>Ends this session on a failure a write raised before the commit, where the database may not raise it again.</summary>
+    /// <param name="failure">The failure a write joined to this session raised.</param>
+    /// <returns><see langword="true" /> when the failure can clear on its own, in which case the session has ended on it.</returns>
+    /// <remarks>
+    /// <para>
+    /// A write joined to a session does not only stage changes: it issues statements of its own, and a set-based
+    /// update or a row lock has already reached the server long before anything is committed. The failure of one of
+    /// those never passes through the commit, so this is where it is classified instead — by the session, which is the
+    /// only side of this contract that knows what the provider raised, and for the caller above it, which is the only
+    /// side that holds the body a replay would run again. The session is invalid afterwards either way.
+    /// </para>
+    /// <para>
+    /// The default answers <see langword="false" />, because a session with no database beneath it has no provider
+    /// failure to recognize and nothing to end: what such a session raised is the caller's to report rather than a
+    /// race with a connection to replay.
+    /// </para>
+    /// </remarks>
+    bool TryEndOnTransientFailure(Exception failure) => false;
 }

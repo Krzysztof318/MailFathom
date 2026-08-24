@@ -1,6 +1,6 @@
 # Outbound resilience
 
-<!-- describes: backend/src/Application/Resilience/**, backend/src/Infrastructure/Resilience/**, backend/src/Domain/Transport/**, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Infrastructure/ServiceCollectionExtensions.cs, backend/src/AI/AiServiceCollectionExtensions.cs -->
+<!-- describes: backend/src/Application/Resilience/**, backend/src/Application/Persistence/**, backend/src/Infrastructure/Resilience/**, backend/src/Infrastructure/Persistence/Sessions/**, backend/src/Domain/Transport/**, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Infrastructure/ServiceCollectionExtensions.cs, backend/src/AI/AiServiceCollectionExtensions.cs -->
 
 MailFathom calls dependencies it does not control: IMAP servers, SMTP servers, PostgreSQL, and chat and embedding
 providers. Each of them fails in ways that clear on their own and in ways that never will, and the difference decides
@@ -230,8 +230,10 @@ is the layer rather than something MailFathom re-implements:
   So the policy replays it after a transient failure too, on the same attempt bound and the same jittered backoff, and
   the failure of the last allowed attempt leaves it as `PersistenceTransientFailureException`. The session classifies
   it, because the provider's exception is where the answer is; the policy acts on it, because the staging body is
-  where the repeat is. A commit counts its ending either way, so a deployment that is losing connections is readable
-  as a rate rather than as a run that stopped.
+  where the repeat is. That holds wherever in the attempt the connection was lost. A statement a write issues while
+  staging never reaches the commit at all, so the session is asked about it through `TryEndOnTransientFailure`
+  instead, and the save and the `COMMIT` round trip after it are classified as one. A commit counts its ending either
+  way, so a deployment that is losing connections is readable as a rate rather than as a run that stopped.
 
   EF Core's own retrying execution strategy would be the alternative shape of that, and it is refused for two reasons
   rather than one. It replays a `SaveChangesAsync` and a query but not the reads that produced the tracked state, so
@@ -240,14 +242,17 @@ is the layer rather than something MailFathom re-implements:
   user-initiated transactions` — which a persistence session opens whenever a write joins it.
 
   That transaction is not vestigial, which is the finding that settled the question. A session issues statements as
-  well as staging changes: the content store overwrites a `bytea` payload with a set-based `UPDATE` rather than
-  reading it into memory, the contact and audit erasures delete in ordered batches, the chunk store discards a
-  message's passages, and the embedding generation switch and the owner erasure each take a `SELECT … FOR UPDATE` row
-  lock before the statements whose outcome depends on holding it. Each of those has already reached the server when `SaveChangesAsync` runs,
-  and the transaction is the only thing that makes them one fact with the changes staged beside them — the row lock in
-  particular exists for the length of a transaction and for nothing else. Dropping the transaction would not have
-  removed machinery nothing depended on; it would have removed the atomicity of five write paths and the mutual
-  exclusion of a sixth.
+  well as staging changes: the content store overwrites a draft's `bytea` payload with a set-based `UPDATE` rather
+  than reading it into memory, the contact erasures delete a contact and its collected addresses in ordered batches,
+  the chunk store discards a message's passages, the rule evaluation store stamps a batch of messages as evaluated,
+  the spend ledger upserts a period's total, and the embedding generation switch and the owner erasure each take a
+  `SELECT … FOR UPDATE` row lock before the statements whose outcome depends on holding it. Each of those has already
+  reached the server when `SaveChangesAsync` runs, and the transaction is the only thing that makes them one fact with
+  the changes staged beside them — the row lock in particular exists for the length of a transaction and for nothing
+  else. Dropping the transaction would not have removed machinery nothing depended on; it would have removed the
+  atomicity of five write paths and the mutual exclusion two more are written around. What a session never covers is a
+  statement issued without one: the audit erasures a retention pass runs take no session at all and delete on their
+  own context, so they are outside this list rather than a gap in it.
 
   What did change is *when* it opens. `BeginSessionAsync` opens no transaction; the first write to join the session
   opens it, through `EfCorePersistenceSessionAccessor.JoinAsync`. A session's transaction therefore covers the writes
