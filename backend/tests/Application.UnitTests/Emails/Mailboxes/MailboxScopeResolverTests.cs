@@ -175,20 +175,20 @@ public sealed class MailboxScopeResolverTests
     {
         // Arrange
         var resolver = ResolverFor(SyntheticMailOwner.Another, Work);
-        var anothersAccount = MailAccountSelector.Create(Work.Id.Value);
+        var accountOfAnotherOwner = MailAccountSelector.Create(Work.Id.Value);
 
         // Act
-        var refusedForAnothersAccount = Assert.Throws<MailAccountNotAccessibleException>(
-            () => resolver.ReadableScope([anothersAccount], [], JunkMailInclusion.Excluded));
+        var refusedForAnotherOwnersAccount = Assert.Throws<MailAccountNotAccessibleException>(
+            () => resolver.ReadableScope([accountOfAnotherOwner], [], JunkMailInclusion.Excluded));
         var refusedForNoSuchAccount = Assert.Throws<MailAccountNotAccessibleException>(
             () => ResolverFor(SyntheticMailOwner.Deployment, Work)
                 .ReadableScope([MailAccountSelector.Create("no-such-account")], [], JunkMailInclusion.Excluded));
 
         // Assert
-        Assert.Equal(anothersAccount, refusedForAnothersAccount.RequestedAccount);
+        Assert.Equal(accountOfAnotherOwner, refusedForAnotherOwnersAccount.RequestedAccount);
         Assert.Equal(
             refusedForNoSuchAccount.Message.Replace("no-such-account", Work.Id.Value, StringComparison.Ordinal),
-            refusedForAnothersAccount.Message);
+            refusedForAnotherOwnersAccount.Message);
     }
 
     /// <summary>The identity question a tool asks about one folder answers on the same owner scope as the listing does.</summary>
