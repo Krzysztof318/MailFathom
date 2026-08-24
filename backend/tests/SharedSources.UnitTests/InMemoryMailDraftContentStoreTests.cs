@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
@@ -37,7 +38,7 @@ public sealed class InMemoryMailDraftContentStoreTests
         await store.SaveMailDraftContentAsync(
             Session,
             draftId,
-            message,
+            PlacedEmailContent.InDatabase(message),
             TestContext.Current.CancellationToken);
 
         // Act
@@ -60,7 +61,7 @@ public sealed class InMemoryMailDraftContentStoreTests
         await store.SaveMailDraftContentAsync(
             Session,
             draftId,
-            "Shall we?"u8.ToArray(),
+            PlacedEmailContent.InDatabase("Shall we?"u8.ToArray()),
             TestContext.Current.CancellationToken);
 
         // Act
@@ -81,14 +82,14 @@ public sealed class InMemoryMailDraftContentStoreTests
         await store.SaveMailDraftContentAsync(
             Session,
             draftId,
-            "Shall we?"u8.ToArray(),
+            PlacedEmailContent.InDatabase("Shall we?"u8.ToArray()),
             TestContext.Current.CancellationToken);
 
         // Act
         await store.SaveMailDraftContentAsync(
             Session,
             draftId,
-            "Shall we make it Friday?"u8.ToArray(),
+            PlacedEmailContent.InDatabase("Shall we make it Friday?"u8.ToArray()),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -106,7 +107,11 @@ public sealed class InMemoryMailDraftContentStoreTests
         var draftId = NewDraftId();
         var buffer = "Shall we?"u8.ToArray();
 
-        await store.SaveMailDraftContentAsync(Session, draftId, buffer, TestContext.Current.CancellationToken);
+        await store.SaveMailDraftContentAsync(
+            Session,
+            draftId,
+            PlacedEmailContent.InDatabase(buffer),
+            TestContext.Current.CancellationToken);
 
         // Act
         buffer[0] = (byte)'s';
@@ -130,6 +135,78 @@ public sealed class InMemoryMailDraftContentStoreTests
         Assert.Equal(0, store.WriteCount);
     }
 
+    /// <summary>
+    /// The placement answers what the database backend answers, because that is the store this double stands in for.
+    /// A suite reading anything else out of it would be proving the object backend's shape against a double that never
+    /// reaches one.
+    /// </summary>
+    [Fact]
+    public async Task PlaceContentAsync_APayload_AnswersADatabasePlacementDescribingIt()
+    {
+        // Arrange
+        var store = new InMemoryMailDraftContentStore();
+        var message = "Shall we?"u8.ToArray();
+
+        // Act
+        var placed = await store.PlaceContentAsync(
+            EmailContentKind.MailDraft,
+            message,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(ContentStorageBackend.Database, placed.Backend);
+        Assert.Null(placed.ObjectLocator);
+        Assert.Equal(message, placed.RawMime.ToArray());
+        Assert.Equal(1, store.PlacementCount);
+    }
+
+    /// <summary>
+    /// The count is what a suite reads to prove a replayed unit of work placed nothing again, so it counts placements
+    /// rather than writes: the two differ by exactly the number of attempts a commit took.
+    /// </summary>
+    [Fact]
+    public async Task PlacementCount_ARevisionStoredTwiceFromOnePlacement_CountsThePlacementRatherThanTheWrites()
+    {
+        // Arrange
+        var store = new InMemoryMailDraftContentStore();
+        var draftId = NewDraftId();
+
+        var placed = await store.PlaceContentAsync(
+            EmailContentKind.MailDraft,
+            "Shall we?"u8.ToArray(),
+            TestContext.Current.CancellationToken);
+
+        // Act
+        await store.SaveMailDraftContentAsync(Session, draftId, placed, TestContext.Current.CancellationToken);
+        await store.SaveMailDraftContentAsync(Session, draftId, placed, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, store.PlacementCount);
+        Assert.Equal(2, store.WriteCount);
+    }
+
+    /// <summary>
+    /// The moment a placement happens is the claim a suite about write ordering makes, and a count taken afterwards
+    /// cannot tell a placement made before a unit of work from one made inside it.
+    /// </summary>
+    [Fact]
+    public async Task Placing_APayloadBeingPlaced_RunsAtTheMomentOfThePlacement()
+    {
+        // Arrange
+        var store = new InMemoryMailDraftContentStore();
+        var countWhenObserved = -1;
+        store.Placing = () => countWhenObserved = store.PlacementCount;
+
+        // Act
+        await store.PlaceContentAsync(
+            EmailContentKind.MailDraft,
+            "Shall we?"u8.ToArray(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, countWhenObserved);
+    }
+
     /// <summary>Every member outside the draft half is a refusal, so a suite reaching one fails where it reached it.</summary>
     [Fact]
     public async Task EveryMemberOutsideTheDraftHalf_IsRefusedRatherThanAnsweredForSilently()
@@ -142,16 +219,18 @@ public sealed class InMemoryMailDraftContentStoreTests
         var cancellationToken = TestContext.Current.CancellationToken;
 
         // Act, Assert
+        var unusedPlacement = PlacedEmailContent.InDatabase("unreachable"u8.ToArray());
+
         await Assert.ThrowsAsync<NotSupportedException>(
-            () => store.SaveContentAsync(Session, storedEmailId, null!, cancellationToken));
+            () => store.SaveContentAsync(Session, storedEmailId, null!, unusedPlacement, cancellationToken));
         await Assert.ThrowsAsync<NotSupportedException>(
             () => store.FindStoredContentAsync(storedEmailId, cancellationToken));
         await Assert.ThrowsAsync<NotSupportedException>(
-            () => store.SaveOutgoingContentAsync(Session, outgoingEmailId, default, cancellationToken));
+            () => store.SaveOutgoingContentAsync(Session, outgoingEmailId, unusedPlacement, cancellationToken));
         await Assert.ThrowsAsync<NotSupportedException>(
             () => store.FindOutgoingContentAsync(outgoingEmailId, cancellationToken));
         await Assert.ThrowsAsync<NotSupportedException>(
-            () => store.SaveRecurringSendDraftAsync(Session, recurringSendId, default, cancellationToken));
+            () => store.SaveRecurringSendDraftAsync(Session, recurringSendId, unusedPlacement, cancellationToken));
         await Assert.ThrowsAsync<NotSupportedException>(
             () => store.FindRecurringSendDraftAsync(recurringSendId, cancellationToken));
     }

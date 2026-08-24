@@ -899,6 +899,14 @@ public sealed class MailboxSynchronizer
 
         var storedEmailId = default(StoredEmailId);
 
+        // Before the unit of work rather than inside it. Under the object backend this reaches the endpoint, and the
+        // metadata upsert below opens a transaction the moment it runs — it writes the search document with a set-based
+        // update, which is atomic with the rest only inside one.
+        var placedContent = await this.contentStore.PlaceContentAsync(
+            EmailContentKind.IncomingMessage,
+            content.RawMime,
+            cancellationToken);
+
         await this.concurrencyRetryPolicy.CommitAsync(
             async (persistenceSession, attemptCancellationToken) =>
             {
@@ -911,7 +919,8 @@ public sealed class MailboxSynchronizer
                 await this.contentStore.SaveContentAsync(
                     persistenceSession,
                     storedEmailId,
-                    content,
+                    content.OccurrenceId,
+                    placedContent,
                     attemptCancellationToken);
 
                 await this.ObservePlacementAsync(persistenceSession, placement, attemptCancellationToken);

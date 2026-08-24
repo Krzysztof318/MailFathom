@@ -4,6 +4,9 @@
 
 using System.Net.Sockets;
 using System.Text;
+using Amazon.Runtime;
+using Amazon.S3;
+using Amazon.S3.Model;
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
@@ -70,6 +73,9 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
     /// <summary>Gets or sets the spam daemon's address once the orchestration published it.</summary>
     private Uri? PublishedSpamScannerAddress { get; set; }
 
+    /// <summary>Gets or sets the object endpoint's address once the orchestration published it.</summary>
+    private Uri? PublishedObjectStorageAddress { get; set; }
+
     /// <summary>Gets the connection string the orchestration issued for the migrated MailFathom database.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the orchestration has not started yet.</exception>
     public string DatabaseConnectionString => this.IssuedDatabaseConnectionString
@@ -93,6 +99,12 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
     public Uri SpamScanner => this.PublishedSpamScannerAddress
         ?? throw new InvalidOperationException(
             "The orchestrated spam daemon address is requested before the suite started the application.");
+
+    /// <summary>Gets the address the orchestrated S3-compatible endpoint answers on, with its bucket already created.</summary>
+    /// <exception cref="InvalidOperationException">Thrown when the orchestration has not started yet.</exception>
+    public Uri ObjectStorage => this.PublishedObjectStorageAddress
+        ?? throw new InvalidOperationException(
+            "The orchestrated object-storage address is requested before the suite started the application.");
 
     /// <inheritdoc />
     public async ValueTask InitializeAsync()
@@ -178,6 +190,51 @@ public sealed class MailFathomOrchestrationFixture : IAsyncLifetime
             cancellationToken);
 
         await WaitForSpamScannerAsync(this.PublishedSpamScannerAddress, cancellationToken);
+
+        // Healthy rather than running, and for the analyzer's reason rather than the mail server's: the endpoint is a
+        // Java process that binds its port after its framework has started, so the gap between a container that is up
+        // and a server that answers is seconds rather than milliseconds. The bucket creation below is the first thing
+        // through it, and a test that raced it would read the refusal as an endpoint that cannot hold mail.
+        await this.application.ResourceNotifications.WaitForResourceHealthyAsync(
+            OrchestrationContract.ObjectStorageResourceName,
+            cancellationToken);
+
+        this.PublishedObjectStorageAddress = this.application.GetEndpoint(
+            OrchestrationContract.ObjectStorageResourceName,
+            OrchestrationContract.ObjectStorageEndpointName);
+
+        await CreateObjectStorageBucketAsync(this.PublishedObjectStorageAddress, cancellationToken);
+    }
+
+    /// <summary>Creates the bucket the suite writes message content into, because the image ships none.</summary>
+    /// <remarks>
+    /// Done here rather than by the app model, which has no way to issue an S3 request, and through the protocol rather
+    /// than through a second tool in a second container. A bucket that is already there is the ordinary case on a rerun
+    /// against a container this run did not replace, so the endpoint's own word for that is an answer here.
+    /// </remarks>
+    private static async Task CreateObjectStorageBucketAsync(Uri published, CancellationToken cancellationToken)
+    {
+        using var client = new AmazonS3Client(
+            new BasicAWSCredentials(
+                OrchestrationContract.ObjectStorageAccessKey,
+                OrchestrationContract.ObjectStorageSecretKey),
+            new AmazonS3Config
+            {
+                ServiceURL = published.ToString(),
+                ForcePathStyle = true,
+                AuthenticationRegion = OrchestrationContract.ObjectStorageRegion,
+            });
+
+        try
+        {
+            await client.PutBucketAsync(
+                new PutBucketRequest { BucketName = OrchestrationContract.ObjectStorageBucket },
+                cancellationToken);
+        }
+        catch (AmazonS3Exception alreadyThere)
+            when (alreadyThere.ErrorCode is "BucketAlreadyOwnedByYou" or "BucketAlreadyExists")
+        {
+        }
     }
 
     /// <summary>Starts the composed MailFathom host and reports the address it serves on.</summary>

@@ -103,7 +103,8 @@ public sealed class OrchestratedEmailContentStoreTests(MailFathomOrchestrationFi
             (scope, session, token) => scope.GetRequiredService<IEmailContentStore>().SaveContentAsync(
                 session,
                 storedEmailId,
-                new RemoteEmailContent(occurrenceId, secondRawMime),
+                occurrenceId,
+                PlacedEmailContent.InDatabase(secondRawMime),
                 token),
             cancellationToken);
 
@@ -147,7 +148,8 @@ public sealed class OrchestratedEmailContentStoreTests(MailFathomOrchestrationFi
                 await scope.GetRequiredService<IEmailContentStore>().SaveContentAsync(
                     session,
                     storedEmailId.Value,
-                    new RemoteEmailContent(occurrenceId, rawMime),
+                    occurrenceId,
+                    PlacedEmailContent.InDatabase(rawMime),
                     token);
             },
             cancellationToken);

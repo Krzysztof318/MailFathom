@@ -14,6 +14,7 @@ using MailFathom.Application.Mail.Delivery.Screening;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
@@ -48,7 +49,7 @@ public sealed class MailOutboxTests
     public async Task EnqueueAsync_NewRequest_RecordsTheSendAndItsMessageInOneSession()
     {
         // Arrange
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var stagedSessions = new List<IPersistenceSession>();
         var outbox = CreateOutbox(new InMemoryOutgoingEmailStore(), contentStore, stagedSessions);
         var request = CreateRequest("mfctl-4f2a");
@@ -63,7 +64,7 @@ public sealed class MailOutboxTests
         await contentStore.Received(1).SaveOutgoingContentAsync(
             stagedSessions.Single(),
             record.Id,
-            RawMime,
+            Arg.Is<PlacedEmailContent>(placed => placed!.RawMime.ToArray().SequenceEqual(RawMime.ToArray())),
             Arg.Any<CancellationToken>());
     }
 
@@ -72,7 +73,7 @@ public sealed class MailOutboxTests
     public async Task EnqueueAsync_SameIdentityTwice_AnswersWithOneRecord()
     {
         // Arrange
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var store = new InMemoryOutgoingEmailStore();
         var outbox = CreateOutbox(store, contentStore);
         var first = await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None);
@@ -95,7 +96,7 @@ public sealed class MailOutboxTests
     {
         // Arrange
         var store = new InMemoryOutgoingEmailStore();
-        var outbox = CreateOutbox(store, Substitute.For<IEmailContentStore>());
+        var outbox = CreateOutbox(store, ContentStores.Substituted());
         var first = (await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None)).Record;
 
         // Act
@@ -113,7 +114,7 @@ public sealed class MailOutboxTests
     {
         // Arrange
         var store = new InMemoryOutgoingEmailStore();
-        var outbox = CreateOutbox(store, Substitute.For<IEmailContentStore>());
+        var outbox = CreateOutbox(store, ContentStores.Substituted());
 
         // Act
         var thrown = await Assert.ThrowsAsync<ArgumentException>(
@@ -135,7 +136,7 @@ public sealed class MailOutboxTests
         var losing = Substitute.For<IPersistenceSession>();
         var retrying = Substitute.For<IPersistenceSession>();
         var store = new InMemoryOutgoingEmailStore(session => session != losing);
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(losing, retrying);
         OutgoingEmailRecord? winnersRecord = null;
@@ -177,7 +178,7 @@ public sealed class MailOutboxTests
     {
         // Arrange
         var signal = new MailOutboxSignal(capacity: 4);
-        var outbox = CreateOutbox(new InMemoryOutgoingEmailStore(), Substitute.For<IEmailContentStore>(), signal: signal);
+        var outbox = CreateOutbox(new InMemoryOutgoingEmailStore(), ContentStores.Substituted(), signal: signal);
 
         // Act
         await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None);
@@ -192,7 +193,7 @@ public sealed class MailOutboxTests
     {
         // Arrange
         var signal = new MailOutboxSignal(capacity: 4);
-        var outbox = CreateOutbox(new InMemoryOutgoingEmailStore(), Substitute.For<IEmailContentStore>(), signal: signal);
+        var outbox = CreateOutbox(new InMemoryOutgoingEmailStore(), ContentStores.Substituted(), signal: signal);
 
         // Act
         await Assert.ThrowsAsync<ArgumentException>(
@@ -213,7 +214,7 @@ public sealed class MailOutboxTests
         // Arrange
         var outbox = CreateOutbox(
             new InMemoryOutgoingEmailStore(),
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             authorization: AccessAuthorizations.ForPrincipal(
                 AuthorizedPrincipal.Caller("agent-key", [MailFathomPermission.MailSend])));
 
@@ -231,7 +232,7 @@ public sealed class MailOutboxTests
         // Arrange
         var outbox = CreateOutbox(
             new InMemoryOutgoingEmailStore(),
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             authorization: AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
 
         Assert.True(EmailAddress.TryCreate(displayName: null, "anna@example.test", out var address));
@@ -258,7 +259,7 @@ public sealed class MailOutboxTests
     public async Task EnqueueAsync_CallerWithoutTheSendGrant_RefusesAndRecordsNothing()
     {
         // Arrange
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var signal = new MailOutboxSignal(capacity: 4);
         var outbox = CreateOutbox(
             new InMemoryOutgoingEmailStore(),
@@ -276,7 +277,7 @@ public sealed class MailOutboxTests
         await contentStore.DidNotReceive().SaveOutgoingContentAsync(
             Arg.Any<IPersistenceSession>(),
             Arg.Any<OutgoingEmailId>(),
-            Arg.Any<ReadOnlyMemory<byte>>(),
+            Arg.Any<PlacedEmailContent>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -293,7 +294,7 @@ public sealed class MailOutboxTests
         Assert.True(MailFathomPermission.TryParse(grantedPermissionName, out var granted));
         var outbox = CreateOutbox(
             new InMemoryOutgoingEmailStore(),
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             authorization: AccessAuthorizations.ForCallerGranted(granted));
 
         // Act
@@ -311,7 +312,7 @@ public sealed class MailOutboxTests
         // Arrange
         var outbox = CreateOutbox(
             new InMemoryOutgoingEmailStore(),
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             authorization: AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
 
         // Act
@@ -334,7 +335,7 @@ public sealed class MailOutboxTests
         // Arrange
         var outbox = CreateOutbox(
             new InMemoryOutgoingEmailStore(),
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             authorization: askedAsARule
                 ? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend)
                 : AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
@@ -362,7 +363,7 @@ public sealed class MailOutboxTests
     {
         // Arrange
         var store = new InMemoryOutgoingEmailStore();
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var signal = new MailOutboxSignal(capacity: 4);
         var outbox = CreateOutbox(
             store,
@@ -381,7 +382,7 @@ public sealed class MailOutboxTests
         await contentStore.DidNotReceive().SaveOutgoingContentAsync(
             Arg.Any<IPersistenceSession>(),
             Arg.Any<OutgoingEmailId>(),
-            Arg.Any<ReadOnlyMemory<byte>>(),
+            Arg.Any<PlacedEmailContent>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -394,7 +395,7 @@ public sealed class MailOutboxTests
     {
         // Arrange
         var store = new InMemoryOutgoingEmailStore();
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var signal = new MailOutboxSignal(capacity: 4);
 
         using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, new FakeTimeProvider(Authored));
@@ -421,7 +422,7 @@ public sealed class MailOutboxTests
         await contentStore.DidNotReceive().SaveOutgoingContentAsync(
             Arg.Any<IPersistenceSession>(),
             Arg.Any<OutgoingEmailId>(),
-            Arg.Any<ReadOnlyMemory<byte>>(),
+            Arg.Any<PlacedEmailContent>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -448,7 +449,7 @@ public sealed class MailOutboxTests
 
         var outbox = CreateOutbox(
             store,
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             signal: signal,
             screening: OutgoingMailScreenings.Through(egress.Screen));
 
@@ -476,7 +477,7 @@ public sealed class MailOutboxTests
 
         var outbox = CreateOutbox(
             store,
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             screening: OutgoingMailScreenings.Through(egress.Screen));
 
         // Act
@@ -504,7 +505,7 @@ public sealed class MailOutboxTests
 
         var outbox = CreateOutbox(
             store,
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             screening: OutgoingMailScreenings.Through(egress.Screen));
 
         // Act
@@ -524,7 +525,7 @@ public sealed class MailOutboxTests
         Assert.True(OutgoingRecipientRule.TryCreateForDomain("rival.test", out var denied));
         var outbox = CreateOutbox(
             store,
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             governor: OutgoingMailGovernors.Governing(
                 recipientPolicy: OutgoingRecipientPolicy.Create([], [denied])));
 
@@ -548,7 +549,7 @@ public sealed class MailOutboxTests
         var store = new InMemoryOutgoingEmailStore();
         var outbox = CreateOutbox(
             store,
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             governor: OutgoingMailGovernors.Governing(
                 ceilings: OutgoingMailCeilings.Create(
                     TimeSpan.FromDays(1),
@@ -579,7 +580,7 @@ public sealed class MailOutboxTests
         var store = new InMemoryOutgoingEmailStore();
         var outbox = CreateOutbox(
             store,
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             authorization: AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process),
             governor: OutgoingMailGovernors.Governing(
                 refusal: OutgoingSendRefusalReason.DeploymentIsReadOnly));
@@ -605,7 +606,7 @@ public sealed class MailOutboxTests
         var signal = new MailOutboxSignal(capacity: 4);
         var outbox = CreateOutbox(
             new InMemoryOutgoingEmailStore(),
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             signal: signal,
             jobs: jobs,
             timeProvider: new FakeTimeProvider(Authored));
@@ -635,7 +636,7 @@ public sealed class MailOutboxTests
         var signal = new MailOutboxSignal(capacity: 4);
         var outbox = CreateOutbox(
             new InMemoryOutgoingEmailStore(),
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             signal: signal,
             jobs: jobs,
             timeProvider: new FakeTimeProvider(DueAt));
@@ -662,7 +663,7 @@ public sealed class MailOutboxTests
         var store = new InMemoryOutgoingEmailStore();
         var outbox = CreateOutbox(
             store,
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             outboxOperations: operations,
             timeProvider: new FakeTimeProvider(Authored));
         var record = (await outbox.EnqueueAsync(HeldRequest("mfctl-4f2a", DueAt), RawMime, CancellationToken.None)).Record;
@@ -689,7 +690,7 @@ public sealed class MailOutboxTests
         operations.CancelAsync(Arg.Any<OutgoingEmailId>(), Arg.Any<CancellationToken>()).Returns(refusal);
         var outbox = CreateOutbox(
             new InMemoryOutgoingEmailStore(),
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             outboxOperations: operations);
 
         // Act
@@ -709,7 +710,7 @@ public sealed class MailOutboxTests
         var operations = Substitute.For<IOutboxOperationStore>();
         var outbox = CreateOutbox(
             new InMemoryOutgoingEmailStore(),
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             authorization: AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead),
             outboxOperations: operations);
 
@@ -729,7 +730,7 @@ public sealed class MailOutboxTests
         // Arrange
         var outbox = CreateOutbox(
             new InMemoryOutgoingEmailStore(),
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             authorization: AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process),
             timeProvider: new FakeTimeProvider(Authored));
 
@@ -783,6 +784,72 @@ public sealed class MailOutboxTests
             recipients);
     }
 
+    /// <summary>
+    /// The message is handed over before anything opens a unit of work, which is the whole of what makes the object
+    /// backend legal here: joining a session is what opens its transaction, so a placement made while no session exists
+    /// is a placement made with no transaction open across it.
+    /// </summary>
+    [Fact]
+    public async Task EnqueueAsync_NewRequest_PlacesTheMessageBeforeAnyPersistenceSessionExists()
+    {
+        // Arrange
+        var stagedSessions = new List<IPersistenceSession>();
+        var sessionsOpenWhenPlaced = -1;
+        var contentStore = ContentStores.Substituted();
+        contentStore
+            .PlaceContentAsync(
+                Arg.Any<EmailContentKind>(),
+                Arg.Any<ReadOnlyMemory<byte>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                sessionsOpenWhenPlaced = stagedSessions.Count;
+
+                return Task.FromResult(PlacedEmailContent.InDatabase(call.ArgAt<ReadOnlyMemory<byte>>(1)));
+            });
+
+        var outbox = CreateOutbox(new InMemoryOutgoingEmailStore(), contentStore, stagedSessions);
+
+        // Act
+        await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, sessionsOpenWhenPlaced);
+        Assert.Single(stagedSessions);
+    }
+
+    /// <summary>
+    /// A conflicted attempt replays the whole unit of work, and the placement is not part of it. Every attempt stages
+    /// the same locator over the same object, so the endpoint sees one write however many times the commit is repeated.
+    /// </summary>
+    [Fact]
+    public async Task EnqueueAsync_APersistenceConflictThenACommit_PlacesTheMessageOnceAcrossBothAttempts()
+    {
+        // Arrange
+        var contentStore = ContentStores.Substituted();
+        var stagedSessions = new List<IPersistenceSession>();
+        var outbox = CreateOutbox(
+            new InMemoryOutgoingEmailStore(),
+            contentStore,
+            stagedSessions,
+            conflictingAttempts: 1);
+
+        // Act
+        var record = (await outbox.EnqueueAsync(CreateRequest("mfctl-4f2a"), RawMime, CancellationToken.None)).Record;
+
+        // Assert
+        Assert.Equal(2, stagedSessions.Count);
+        await contentStore.Received(1).PlaceContentAsync(
+            EmailContentKind.OutgoingMessage,
+            Arg.Any<ReadOnlyMemory<byte>>(),
+            Arg.Any<CancellationToken>());
+        await contentStore.Received(2).SaveOutgoingContentAsync(
+            Arg.Any<IPersistenceSession>(),
+            record.Id,
+            Arg.Any<PlacedEmailContent>(),
+            Arg.Any<CancellationToken>());
+    }
+
     private static MailOutbox CreateOutbox(
         IOutgoingEmailStore store,
         IEmailContentStore contentStore,
@@ -793,13 +860,16 @@ public sealed class MailOutboxTests
         IJobStore? jobs = null,
         IOutboxOperationStore? outboxOperations = null,
         OutgoingMailScreening? screening = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        int conflictingAttempts = 0)
     {
+        var conflictsLeft = conflictingAttempts;
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ =>
         {
             var session = Substitute.For<IPersistenceSession>();
-            session.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
+            session.CommitAsync(Arg.Any<CancellationToken>()).Returns(
+                conflictsLeft-- > 0 ? PersistenceCommitResult.ConcurrencyConflict : PersistenceCommitResult.Committed);
             stagedSessions?.Add(session);
 
             return session;

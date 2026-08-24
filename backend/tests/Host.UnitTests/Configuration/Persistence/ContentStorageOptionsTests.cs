@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.ComponentModel.DataAnnotations;
+using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using Xunit;

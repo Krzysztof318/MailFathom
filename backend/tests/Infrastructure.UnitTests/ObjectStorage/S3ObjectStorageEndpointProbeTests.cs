@@ -316,15 +316,19 @@ public sealed class S3ObjectStorageEndpointProbeTests
         var telemetry = new ObjectStorageTelemetry(new FakeTimeProvider());
         var lifetime = Substitute.For<IHostApplicationLifetime>();
 
+        var operationRunner = new ObjectStorageOperationRunner(host.Executor, telemetry, lifetime);
+
         // Act, Assert
         Assert.Throws<ArgumentNullException>(
-            () => new S3ObjectStorageEndpointProbe(null!, host.Executor, telemetry, lifetime));
+            () => new S3ObjectStorageEndpointProbe(null!, operationRunner));
         Assert.Throws<ArgumentNullException>(
-            () => new S3ObjectStorageEndpointProbe(clientFactory, null!, telemetry, lifetime));
+            () => new S3ObjectStorageEndpointProbe(clientFactory, null!));
         Assert.Throws<ArgumentNullException>(
-            () => new S3ObjectStorageEndpointProbe(clientFactory, host.Executor, null!, lifetime));
+            () => new ObjectStorageOperationRunner(null!, telemetry, lifetime));
         Assert.Throws<ArgumentNullException>(
-            () => new S3ObjectStorageEndpointProbe(clientFactory, host.Executor, telemetry, null!));
+            () => new ObjectStorageOperationRunner(host.Executor, null!, lifetime));
+        Assert.Throws<ArgumentNullException>(
+            () => new ObjectStorageOperationRunner(host.Executor, telemetry, null!));
     }
 
     private static IAmazonS3 BucketAnswering()
@@ -356,9 +360,10 @@ public sealed class S3ObjectStorageEndpointProbeTests
 
         return new S3ObjectStorageEndpointProbe(
             clientFactory,
-            host.Executor,
-            telemetry ?? new ObjectStorageTelemetry(new FakeTimeProvider()),
-            lifetime);
+            new ObjectStorageOperationRunner(
+                host.Executor,
+                telemetry ?? new ObjectStorageTelemetry(new FakeTimeProvider()),
+                lifetime));
     }
 
     private static AmazonServiceException Answered(HttpStatusCode status, string errorCode) => new(

@@ -7,9 +7,9 @@ consulted:
 informed:
 ---
 
-# Select the content backend once per deployment, write the object before the row that points at it, and name an object after the row that owns it
+# Select the content backend once per deployment, write the object before the unit of work that points at it, and name an object by the write that produced it
 
-<!-- describes: backend/src/Application/EmailContent/Storage/**, backend/src/Infrastructure/Persistence/Emails/** -->
+<!-- describes: backend/src/Application/EmailContent/Storage/**, backend/src/Infrastructure/Persistence/Emails/**, backend/src/Infrastructure/ObjectStorage/** -->
 
 ## Context and Problem Statement
 
@@ -37,7 +37,7 @@ The eight axes are independent, and an option on one does not constrain an optio
 
 1. **What selects the backend:** one setting per deployment; one setting per mail account or owner.
 2. **What replaces the shared transaction:** write the object first and reclaim an orphan; write the row first and repair a missing object.
-3. **How an object is named:** content-addressed by the recorded SHA-256; addressed by the identity of the row that owns it.
+3. **How an object is named:** content-addressed by the recorded SHA-256; addressed by the identity of the row that owns it; minted by the write that produces it.
 4. **Whether the port stays byte-based:** keep `ReadOnlyMemory<byte>`; change the port to streaming put and open-read.
 5. **Whether the payload is encrypted before it leaves the process:** client-side under the [ADR 0005](0005-data-encryption-key-ring-and-provisioning.md) key ring; server-side by the bucket; neither.
 6. **Whether both stores may be authoritative at once:** one authoritative store per deployment; one authoritative store per payload.
@@ -60,9 +60,9 @@ The one thing an operator may not do is take the endpoint configuration away whi
 
 A content write puts the object, and only then commits the row that points at it:
 
-1. The caller stages its unit of work through `IPersistenceSession` as it does today, calling the port's write method with the payload.
-2. The adapter computes the byte length and the SHA-256 and hands the object to the endpoint, with that digest sent as the request's own checksum so the endpoint rejects a corrupted upload rather than storing one. **This happens with no database transaction open across it.**
-3. The row — the discriminator, the locator, the length, the digest — is staged and committed with the rest of the caller's unit of work.
+1. The caller hands the payload to the port **before it opens its unit of work**, and receives back what was stored: the backend, the locator, the byte length, and the SHA-256.
+2. The adapter computes the byte length and the SHA-256 and hands the object to the endpoint, with that digest sent as the request's own checksum so the endpoint rejects a corrupted upload rather than storing one. **This happens with no database transaction open across it**, which step 1 is what guarantees rather than hopes for.
+3. The caller stages its unit of work through `IPersistenceSession` as it does today and passes what step 1 returned to the port's write method. The row — the discriminator, the locator, the length, the digest — is staged and committed with the rest of that unit of work.
 
 Crash outcomes, which are the same for every payload kind:
 
@@ -74,25 +74,35 @@ Crash outcomes, which are the same for every payload kind:
 
 **There is no window in which a committed row points at an absent object**, which is the invariant, and it is the direction the ordering is chosen for. The reverse ordering trades a recoverable failure for an unrecoverable one: a row committed before its object leaves a period during which a crash produces mail that cannot be read, and for an outgoing message or a draft nothing else in the system holds those bytes.
 
-The constraint in step 2 is the sharp one, because a session opens its transaction at `BeginSessionAsync` today. Two shapes satisfy it and [#1126](https://github.com/Krzysztof318/MailFathom/issues/1126) picks one: resolve [#84](https://github.com/Krzysztof318/MailFathom/issues/84) so the explicit session transaction is dropped or scoped to `SaveChanges`, or open the session's transaction lazily so the staged object writes run before it. **#84 is therefore promoted from related work to a prerequisite of #1126**, and the argument #84 already makes — that `SaveChangesAsync` is called once and EF Core wraps it anyway — is what makes the first shape cheap. One caution belongs with it: `SaveContentAsync`'s `ExecuteUpdateAsync` on the database backend is only atomic with the rest because of that explicit transaction, and it exists to avoid reading an existing `bytea` payload into memory. The object backend has no such payload to avoid — its row carries a locator, a length, and a digest, all small — so the set-based update is a database-backend concern and its transaction is #84's to answer.
+The constraint in step 2 is the sharp one, and the split in step 1 is what this record had to add to satisfy it. [#84](https://github.com/Krzysztof318/MailFathom/issues/84) settled the first half: a session now opens no transaction at `BeginSessionAsync`, and the first write to join it opens one instead, so a caller with work to finish outside the database does that work before the first join. **#84 remains a prerequisite of #1126** for that reason.
 
-Per payload kind, the ordering is the same and two kinds add a rule:
+What it cannot deliver on its own is the ordering *within* a unit of work, and the reason is that every one of the four callers has the same shape: the repository that owns the payload runs first because it is what mints the identity, and the port is called afterwards with the identity in hand. `MailboxSynchronizer` calls `UpsertMetadataAsync` before `SaveContentAsync`, `MailOutbox` calls `OpenAsync` before `SaveOutgoingContentAsync`, `RecurringMailSubmission` calls `DeclareAsync` before `SaveRecurringSendDraftAsync`, and `MailDraftBook` calls `OpenAsync` or `ReviseAsync` before `SaveMailDraftContentAsync`. Each of those joins the session, so a transaction is open by the time the port is reached — and for the incoming path it is open for a reason nothing here may take away, because `UpsertMetadataAsync` writes the search document with a set-based update that exists precisely to keep an existing body out of memory, and that update is atomic with the rest only inside the caller's transaction. Scoping the session's transaction to `SaveChanges` would therefore fix three paths and break the one that carries the most mail.
 
-- **Incoming (`SaveContentAsync`)** — idempotent. Re-synchronizing an occurrence puts the same key again. No extra rule.
-- **Outgoing (`SaveOutgoingContentAsync`) and the recurring send's draft (`SaveRecurringSendDraftAsync`)** — write-once, and the port says why: a retry must transmit the bytes an earlier attempt may already have begun transmitting. The put is **conditional on the object not existing**, so the store itself refuses a second write rather than the adapter checking first and racing. An orphan from this kind is doubly safe: the record it was composed for never committed, so nothing will ever ask for that key again.
+So the port is split rather than the transaction: a preparation the caller performs **before** it opens its unit of work, and a write that stages a row from what the preparation returned. That is the shape step 1 describes, and it is the reason §3 no longer names an object after the row that owns it — at preparation time no row exists yet. The same split answers the caution this paragraph used to carry: `SaveContentAsync`'s `ExecuteUpdateAsync` on the database backend stays exactly as it is, inside the caller's transaction, because the database backend's preparation touches no store at all and its write is the only half that runs.
 
-  A refused conditional put is **success rather than a failure**, and this is the one place that reads backwards until the reason is stated. `OptimisticConcurrencyRetryPolicy` replays the caller's whole unit of work from the beginning, so a losing attempt may already have written this record's object under this record's key; a second attempt that treated the refusal as an error would fail a write that had in fact succeeded. Leaving the existing object exactly as it is *is* the port's stated contract for these two kinds, so the refusal delivers it rather than obstructing it. The same replay is why the incoming kind's put must stay idempotent and why a draft revision must not reuse a key.
-- **The mail draft (`SaveMailDraftContentAsync`)** — the one payload that overwrites, and the one place the ordering needs a different key rather than a different order. Putting revision *n+1* over revision *n*'s key and then failing to commit would leave the row saying revision *n* and the bytes being revision *n+1* — the port's own stated defect, inverted, and the read would serve a revision the row never accepted. **So a draft revision is written to a key of its own and the row is repointed**, which makes the write-then-commit ordering correct again: a failed commit leaves the row pointing at the previous revision's object, which is intact. The superseded object becomes an orphan by design at the moment the repointing commits, and #1127 reclaims it on exactly the path it reclaims a crashed write. This is the reason a draft's key cannot be its row identity alone.
+The four payload kinds keep the write semantics the port already states, and the split is what makes each of them fall out rather than each of them need a rule.
 
-### 3. An object is named after the row that owns it, never after its content
+**One preparation writes one object under one key that nothing else will ever be written to.** The key is minted at preparation time and is unique to that preparation, so no two payloads and no two attempts ever contend for it. The put is still **conditional on the object not existing**, but as a bound on the design rather than as its mechanism: it is the assertion that a key was in fact fresh, and an endpoint that refuses one is telling this system something it believes to be impossible. That refusal is a failure and is reported as one.
 
-The key is `<configured prefix>/<payload kind>/<owning identifier>`, with the mail draft's revision appended as §2 requires. It is not the SHA-256.
+`OptimisticConcurrencyRetryPolicy` replays the caller's whole unit of work, and the split is what takes that replay off the object path entirely: the preparation ran before the policy was entered, so every attempt stages the same locator over the same object and no attempt writes to the endpoint at all. This is the property the earlier shape had to buy by treating a refused put as success, and it is now had by construction — nothing repeats, so nothing has to be forgiven for repeating.
+
+- **Incoming (`SaveContentAsync`)** — idempotent, and stays so: re-synchronizing an occurrence prepares a fresh object and repoints the row at it. The superseded object becomes an orphan, which is the same outcome #1127 already sweeps.
+- **Outgoing (`SaveOutgoingContentAsync`) and the recurring send's draft (`SaveRecurringSendDraftAsync`)** — write-once, and the port says why: a retry must transmit the bytes an earlier attempt may already have begun transmitting. The write leaves an existing row exactly as it is, so a repeated request that resolves to a record already carrying a message keeps that message and abandons the object its own preparation wrote. That abandoned object is an orphan by design, and it is doubly safe: nothing ever pointed at it, so nothing can ever read it.
+- **The mail draft (`SaveMailDraftContentAsync`)** — the one payload that overwrites, and it needs no special rule any more. Every revision is prepared under a key of its own because every preparation is, so a failed commit leaves the row pointing at the previous revision's object, which is intact, and a committed one leaves the superseded object an orphan. This is what the earlier shape had to state as an exception for the draft alone, and it is now the behaviour of all four kinds.
+
+The cost of the split is stated rather than argued away: **an abandoned preparation is an orphan on a path that used to produce none.** The earlier shape produced an orphan only when a crash fell between the put and the commit; this one also produces one whenever a unit of work is abandoned or resolves to an existing payload. Every one of them is invisible to every reader, bounded by the same age floor, and removed by the same sweep, so what changes is #1127's expected volume rather than its correctness.
+
+### 3. An object is named by the write that produced it, never by its content and never by the row that ends up pointing at it
+
+The key is `<configured prefix>/<payload kind>/<identifier minted for this write>`, and the identifier is a version 7 UUID. It is not the SHA-256, and it is not the identity of the owning row.
+
+Naming an object after its row is the shape this record originally took, and §2 is why it could not survive: the identity of the row is minted by the repository that owns it, the repository runs inside the caller's unit of work, and by the time it has run a transaction is open — which is exactly what the object write may not happen inside. A key that needs the row's identity forces the put after the row exists; a key minted by the write itself is free of it, which is what lets the put move in front of the whole unit of work. The property that made row-addressing attractive is kept regardless, because it never came from the *shape* of the key: erasure deletes the object the row names, and reclamation is still a set difference over a prefix, both of which read the locator rather than derive it.
 
 Content addressing would make two identical payloads share one object, and that is what rules it out: erasure could then no longer delete an object when it deletes a row. It would first have to prove that no other row points at the same content, which is a durable reference count that must stay correct across two stores and across every crash the previous section enumerates. That converts the most privacy-critical operation in the system into the most fragile one, and it makes #1127's sweep undecidable from a listing — "an object no row points at" becomes "an object no row points at and none ever will". What content addressing buys in exchange is deduplication that is worth very little here: [ADR 0008](0008-copied-message-local-identity.md) already makes the same message in two folders two rows, and ADR 0014's single tenancy means near-duplicate mail across accounts is uncommon.
 
 Two properties follow and are part of the decision:
 
-- **The row stores the locator the adapter produced; the adapter never recomputes a key from the identifier when reading.** The scheme above is an adapter detail, so changing it later costs nothing for content already stored — old rows keep working because they carry their own key.
+- **The row stores the locator the adapter produced, and the adapter has no way to recompute one.** Under row-addressing this was a discipline worth keeping; here it is arithmetic, because nothing about the row determines the key. The scheme above is therefore an adapter detail in the strongest sense — changing it costs nothing for content already stored, since every existing row carries its own key and no reader ever derives one.
 - **The key prefix is the reclaimer's whole authority.** #1127 lists and deletes within the configured prefix and never outside it. Two deployments may therefore share one bucket only under disjoint prefixes, and MailFathom cannot verify that they do: a shared prefix means one deployment's reclamation deletes the other's mail. This is an operator obligation that #1130 and #1132 state plainly rather than a configuration MailFathom validates.
 
 ### 4. The port stays byte-based
@@ -148,9 +158,11 @@ The version is pinned centrally by #1125 with the lock files regenerated in the 
 ### Consequences
 
 - Good, because the one unrecoverable failure — a committed row pointing at mail that is not there — is designed out rather than made unlikely, and every remaining failure is an orphan a bounded job removes.
-- Good, because the port, its four payload kinds, and its result type are unchanged, so no use case, tool, or domain type learns which store answered and no caller is touched by the second backend.
+- Good, because the port's four payload kinds, their write semantics, and its result type are unchanged, so no use case, tool, or domain type learns which store answered.
+- Neutral, because the port gains a preparation step and its four callers each gain one line, which is the price of keeping the object write out of a transaction; what a caller learns from it is that a payload was stored, never where.
 - Good, because the recorded length and SHA-256 keep describing the stored object under both backends, which is what #1126's verification, #1128's refusal to repoint, and #1129's post-release checkability all rest on.
-- Good, because a row-addressed key makes erasure a delete and reclamation a set difference over a prefix, rather than a reference count that has to survive every crash.
+- Good, because a key nothing derives makes erasure a delete of the locator the row carries and reclamation a set difference over a prefix, rather than a reference count that has to survive every crash.
+- Bad, because an abandoned unit of work now leaves an orphan where the earlier shape left none, so #1127 sweeps more objects than it would have — the same sweep, on the same terms, over a larger set.
 - Neutral, because a deployment may hold both backends for as long as it likes; convergence is an operator's decision, not a deadline this design imposes.
 - Neutral, because deduplication is given up, and near-duplicate mail is uncommon under ADR 0014's single tenancy.
 - Bad, because erasure of the bytes becomes bounded rather than immediate, which weakens what #131 and #170 promise from "with the transaction" to "within one reclamation interval", and makes that interval a privacy setting.
@@ -192,6 +204,14 @@ The version is pinned centrally by #1125 with the lock files regenerated in the 
 - Good, because deleting a row tells you exactly which object to delete, and reclamation is a set difference over a prefix.
 - Neutral, because the locator is stored rather than recomputed, so the scheme can change later without touching existing rows.
 - Bad, because identical mail is stored twice, and because the mail draft needs its revision in the key to keep the write-then-commit ordering correct.
+- Bad, and decisively, because the row's identity does not exist until the repository that mints it has run, and that repository has opened a transaction by the time it returns — so a key derived from it can only be written inside the transaction §2 forbids writing inside.
+
+### Keys minted by the write itself
+
+- Good, because the key is known before any unit of work is open, which is what lets the put run in front of one and is the whole reason this option wins.
+- Good, because no attempt of a replayed unit of work writes to the endpoint, so the write-once kinds need no forgiveness for a repeated put and the draft needs no rule of its own.
+- Neutral, because it keeps everything row-addressing was chosen for: erasure deletes the locator the row carries, and reclamation stays a set difference over a prefix.
+- Bad, because an abandoned unit of work leaves an orphan where row-addressing left none, which raises what #1127 sweeps without changing how it sweeps.
 
 ### `AWSSDK.S3`
 

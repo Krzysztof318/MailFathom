@@ -6,6 +6,24 @@
 
 This page describes the table as the EF Core model declares it and as the reviewed baseline migration creates it. PostgreSQL has had its say about that migration, so the types, constraints, and indexes below are the ones a schema dump reports rather than the ones a model was hoped to produce. How the schema reaches a database is at the end of this page.
 
+## Where a raw-MIME row keeps its payload
+
+Four tables hold raw MIME — `email_message_contents` here, and `outgoing_email_contents`, `recurring_send_drafts`, and `mail_draft_contents` further down — and all four carry the same three columns beside whatever else they record, because a payload is in one of two places and the row is what says which.
+
+| Column | Type | What it holds |
+| --- | --- | --- |
+| `Backend` | `character varying(64)` | `Database` or `ObjectStorage`. Text rather than an integer for the reason `content_availability` is, and `NOT NULL` with a stored default of `Database` — which is what makes every row written before the column existed read as the thing it is, and what keeps an ordinary database-backed insert from stating anything |
+| `ObjectLocator` | `character varying(1024)` | The whole key an object was written under, and null for a database-backed row. Stored verbatim and never recomputed: the key is minted before the row that points at it exists, which is what lets the object be written outside the transaction that writes the row |
+| the payload column | `bytea`, nullable | `RawMime`, or `DraftMime` on the recurring-send draft. It holds the bytes for a database-backed row and nothing for an object-backed one — never both, because a second copy would be mail nobody agreed to keep |
+
+A `CHECK` constraint per table pairs all three, named `ck_<table>_backend_payload`: a `Database` row carries a payload and no locator, and an `ObjectStorage` row carries a locator and no payload. It is what makes the exclusivity a property of the schema rather than of whichever writer got there — a backfill, a hand-written migration, or a new caller that left a stale payload beside a locator is refused rather than stored as two copies of one message.
+
+Each table also carries `ix_<table>_object_backed`, a partial index on `Backend` filtered to `ObjectStorage`. Its only reader is the readiness census that asks whether this deployment holds mail in an endpoint it can still reach, and partial is what makes that census cheap: the stored default names the database, so on a deployment that configured no endpoint all four indexes are empty and the census reads four empty indexes instead of sequentially scanning four tables of mail on every scrape. No other query reads the column — a payload is reached through the row that owns it, never through its backend.
+
+The byte length and the SHA-256 digest stay on the row under both backends, so the integrity check a read performs is one check rather than two. Under the object backend the digest is also what the endpoint was asked to verify the upload against.
+
+**Nothing here is a per-account or per-owner decision.** Which backend a deployment writes to next is one process-wide setting, and this column is the same fact asked about a payload already stored. [ADR 0017](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md) is the decision, and [email content](../features/email-content.md#where-a-payload-is-kept) is what a reader of the behaviour reads.
+
 ## What a row records
 
 The columns fall into groups, each answering a different question.

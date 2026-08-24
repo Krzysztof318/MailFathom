@@ -58,7 +58,7 @@ internal sealed class SpamClassificationHarness
     internal InMemoryMailFolderResolutionStore Bindings { get; } = new();
 
     /// <summary>Gets the content store the classifier reads a message through, which a suite arranges for itself.</summary>
-    internal IEmailContentStore ContentStore { get; } = Substitute.For<IEmailContentStore>();
+    internal IEmailContentStore ContentStore { get; } = ContentStores.Substituted();
 
     /// <summary>Gets the clock every stamp is read from, which stands still unless a test advances it.</summary>
     internal FakeTimeProvider Clock { get; }

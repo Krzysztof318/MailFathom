@@ -215,7 +215,7 @@ public sealed class StoredMailRederivationTests
     {
         // Arrange
         var store = new FakeRederivationStore(StoredMail(2));
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         contentStore
             .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<StoredEmailContent?>(null));
@@ -445,7 +445,7 @@ public sealed class StoredMailRederivationTests
     /// <summary>Answers every read with one payload, which is what lets a large one be arranged without allocating it per email.</summary>
     private static IEmailContentStore ContentStoreWithMimeOf(byte[] rawMime)
     {
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         contentStore
             .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<StoredEmailContent?>(StoredContent(rawMime)));

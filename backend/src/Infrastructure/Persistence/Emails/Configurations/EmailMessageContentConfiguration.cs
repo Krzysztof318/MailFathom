@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -14,14 +15,33 @@ internal sealed class EmailMessageContentConfiguration : IEntityTypeConfiguratio
     /// <inheritdoc />
     public void Configure(EntityTypeBuilder<EmailMessageContentEntity> entity)
     {
-        entity.ToTable("email_message_contents");
+        entity.ToTable(
+            "email_message_contents",
+            table => table.HasCheckConstraint(
+                "ck_email_message_contents_backend_payload",
+                """
+                ("Backend" = 'Database' AND "RawMime" IS NOT NULL AND "ObjectLocator" IS NULL)
+                OR ("Backend" = 'ObjectStorage' AND "ObjectLocator" IS NOT NULL AND "RawMime" IS NULL)
+                """));
         entity.HasKey(content => content.StoredEmailId);
         entity.Property(content => content.StoredEmailId).ValueGeneratedNever();
-        entity.Property(content => content.RawMime).HasColumnType("bytea").IsRequired();
+        entity.Property(content => content.RawMime).HasColumnType("bytea");
+        entity.Property(content => content.Backend)
+            .HasConversion<string>()
+            .HasMaxLength(64)
+            .IsRequired()
+            .HasDefaultValue(ContentStorageBackend.Database);
+        entity.Property(content => content.ObjectLocator).HasMaxLength(1024);
         entity.Property(content => content.Sha256Hash).HasColumnType("bytea").IsRequired();
         entity.HasOne(content => content.StoredEmail)
             .WithOne(email => email.Content)
             .HasForeignKey<EmailMessageContentEntity>(content => content.StoredEmailId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // The census the readiness check runs, and the only reader of this column. Filtered to the object backend so a
+        // deployment that configured no endpoint answers it from an empty index rather than by scanning the table.
+        entity.HasIndex(content => content.Backend)
+            .HasDatabaseName(PersistenceConstraintNames.EmailMessageContentObjectBackedIndexName)
+            .HasFilter($"\"Backend\" = '{nameof(ContentStorageBackend.ObjectStorage)}'");
     }
 }

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.TestSupport;
 using Xunit;
@@ -42,12 +43,17 @@ public sealed class StoredContentReadAllocationBudgetTests
         var stored = LargeSyntheticMessage.AsStored();
         var rawMime = stored.RawMime.ToArray();
         var recordedHash = stored.RecordedSha256Hash.ToArray();
-        var row = new StoredEmailContentRow(rawMime, rawMime.LongLength, recordedHash);
+        var row = new StoredEmailContentRow(
+            rawMime,
+            rawMime.LongLength,
+            recordedHash,
+            ContentStorageBackend.Database,
+            ObjectLocator: null);
 
         // Establishing that the run really verifies the payload is a step of its own, so the measured run can assert
         // nothing: an intact copy is what a read of ordinary mail meets, and a defect here would make the measurement
         // about a refusal rather than about a read.
-        Assert.Null(row.ToStoredContent().FindIntegrityDefect());
+        Assert.Null(row.ToStoredContent(rawMime).FindIntegrityDefect());
 
         // Act, Assert
         await AllocationBudget.AssertWithinAsync(
@@ -55,7 +61,7 @@ public sealed class StoredContentReadAllocationBudgetTests
             MaximumAllocatedBytes,
             () =>
             {
-                _ = row.ToStoredContent().FindIntegrityDefect();
+                _ = row.ToStoredContent(rawMime).FindIntegrityDefect();
 
                 return Task.CompletedTask;
             });

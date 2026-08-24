@@ -270,8 +270,100 @@ public sealed class MailDraftBookTests
         Assert.Empty(harness.Drafts.Drafts);
     }
 
-    private static MailDraftHarness Harness(params IEnumerable<MailFathomPermission> permissions) => new(
-        new FakeTimeProvider(Moment),
+    /// <summary>
+    /// The message is handed over before anything opens a unit of work, which is what makes the object backend legal
+    /// here: joining a session is what opens its transaction, so a placement made while no session exists is one made
+    /// with no transaction open across it.
+    /// </summary>
+    [Fact]
+    public async Task SaveAsync_NewDraft_PlacesTheMessageBeforeAnyPersistenceSessionExists()
+    {
+        // Arrange
+        var harness = Harness();
+        harness.MapDraftsFolder(Account);
+        var sessionsOpenWhenPlaced = -1;
+        harness.Contents.Placing = () => sessionsOpenWhenPlaced = harness.PersistenceSessionsOpened;
+
+        // Act
+        await harness.Book.SaveAsync(
+            Account,
+            OutgoingEmailRequester.Command("mfctl-4f2a"),
+            Composed("first version"),
+            revises: null,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, sessionsOpenWhenPlaced);
+        Assert.True(harness.PersistenceSessionsOpened > 0, "the save opened no session at all, so the ordering claim proves nothing");
+    }
+
+    /// <summary>
+    /// A conflicted attempt replays the whole unit of work, and the placement is not part of it. Every attempt stages
+    /// the same locator over the same object, so the endpoint sees one write however many times the commit is repeated.
+    /// </summary>
+    [Fact]
+    public async Task SaveAsync_APersistenceConflictThenACommit_PlacesTheMessageOnceAcrossBothAttempts()
+    {
+        // Arrange
+        var clock = new FakeTimeProvider(Moment);
+        var harness = HarnessOn(clock);
+        harness.MapDraftsFolder(Account);
+        harness.ConflictOnTheNextCommits(1);
+
+        // Act
+        var saving = harness.Book.SaveAsync(
+            Account,
+            OutgoingEmailRequester.Command("mfctl-4f2a"),
+            Composed("first version"),
+            revises: null,
+            CancellationToken.None);
+        await harness.ConflictObserved;
+        clock.Advance(TimeSpan.FromSeconds(1));
+        var draft = await saving;
+
+        // Assert
+        Assert.Equal(1, harness.Contents.PlacementCount);
+        Assert.Equal(2, harness.Contents.WriteCount);
+        Assert.Equal("first version", Encoding.ASCII.GetString(harness.Contents.Peek(draft.Id).Span)[^13..]);
+    }
+
+    /// <summary>
+    /// A revision is placed under a key of its own rather than over the previous one, which is what lets a commit that
+    /// never happens leave the row pointing at the previous revision's intact object.
+    /// </summary>
+    [Fact]
+    public async Task SaveAsync_ARevision_PlacesItsOwnMessageRatherThanReusingTheOnesBefore()
+    {
+        // Arrange
+        var harness = Harness();
+        harness.MapDraftsFolder(Account);
+        var first = await harness.Book.SaveAsync(
+            Account,
+            OutgoingEmailRequester.Command("mfctl-4f2a"),
+            Composed("first version"),
+            revises: null,
+            CancellationToken.None);
+
+        // Act
+        await harness.Book.SaveAsync(
+            Account,
+            OutgoingEmailRequester.Command("mfctl-4f2b"),
+            Composed("second version"),
+            first.Id,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, harness.Contents.PlacementCount);
+    }
+
+    private static MailDraftHarness Harness(params IEnumerable<MailFathomPermission> permissions) =>
+        HarnessOn(new FakeTimeProvider(Moment), permissions);
+
+    /// <summary>Builds the harness over a clock the test keeps, which is what a test that has to advance one needs.</summary>
+    private static MailDraftHarness HarnessOn(
+        TimeProvider clock,
+        params IEnumerable<MailFathomPermission> permissions) => new(
+        clock,
         new InMemoryOutgoingEmailStore(),
         Settings(),
         permissions);

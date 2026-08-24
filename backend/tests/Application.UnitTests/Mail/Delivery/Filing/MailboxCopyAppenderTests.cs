@@ -58,7 +58,7 @@ public sealed class MailboxCopyAppenderTests
     private readonly FakeTimeProvider clock = new(Moment);
     private readonly StubMailFolderMappings mappings = StubMailFolderMappings.Nothing;
     private readonly InMemoryMailFolderResolutionStore folderResolutions = new();
-    private readonly IEmailContentStore contentStore = Substitute.For<IEmailContentStore>();
+    private readonly IEmailContentStore contentStore = ContentStores.Substituted();
     private readonly IMailboxWriteSession writeSession = Substitute.For<IMailboxWriteSession>();
     private readonly IMailboxWriteSessionFactory writeSessions = Substitute.For<IMailboxWriteSessionFactory>();
 

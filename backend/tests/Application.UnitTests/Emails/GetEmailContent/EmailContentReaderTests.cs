@@ -598,7 +598,7 @@ public sealed class EmailContentReaderTests
             ContentAvailability = StoredEmailContentAvailability.ExceededSizeLimit,
         };
         var repairRequests = new RecordingEmailContentRepairRequestStore();
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var reader = ReaderOver(summary, RendererReturning(RenderingOf()), repairRequests, contentStore);
 
         // Act
@@ -643,7 +643,7 @@ public sealed class EmailContentReaderTests
             ContentAvailability = StoredEmailContentAvailability.AwaitingStorageHeadroom,
         };
         var repairRequests = new RecordingEmailContentRepairRequestStore();
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var reader = ReaderOver(summary, RendererReturning(RenderingOf()), repairRequests, contentStore);
 
         // Act
@@ -1231,6 +1231,7 @@ public sealed class EmailContentReaderTests
             default!,
             default!,
             default!,
+            default!,
             CancellationToken.None);
         Assert.Empty(repairRequestStore.Recorded);
     }
@@ -1659,7 +1660,7 @@ public sealed class EmailContentReaderTests
 
     private static IEmailContentStore ContentStoreReturning(StoredEmailContent? storedContent)
     {
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         contentStore
             .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(storedContent));
@@ -1669,7 +1670,7 @@ public sealed class EmailContentReaderTests
 
     private static IEmailContentStore ContentStoreOver(Dictionary<StoredEmailId, StoredEmailContent?> storedContent)
     {
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         contentStore
             .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(

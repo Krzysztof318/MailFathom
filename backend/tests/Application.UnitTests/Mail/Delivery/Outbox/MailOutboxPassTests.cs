@@ -407,7 +407,7 @@ public sealed class MailOutboxPassTests
             this.Session = new ScriptedMailDeliverySession(
                 (request, envelope, token) => this.Transmit(request, envelope, token));
 
-            var contentStore = Substitute.For<IEmailContentStore>();
+            var contentStore = ContentStores.Substituted();
             contentStore
                 .FindOutgoingContentAsync(Arg.Any<OutgoingEmailId>(), Arg.Any<CancellationToken>())
                 .Returns(new StoredEmailContent(RawMime, RawMime.Length, SHA256.HashData(RawMime.Span)));

@@ -227,11 +227,21 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("StoredEmailId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Backend")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("Database");
+
                     b.Property<long>("MimeByteLength")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("ObjectLocator")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
                     b.Property<byte[]>("RawMime")
-                        .IsRequired()
                         .HasColumnType("bytea");
 
                     b.Property<byte[]>("Sha256Hash")
@@ -243,7 +253,14 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("StoredEmailId");
 
-                    b.ToTable("email_message_contents", (string)null);
+                    b.HasIndex("Backend")
+                        .HasDatabaseName("ix_email_message_contents_object_backed")
+                        .HasFilter("\"Backend\" = 'ObjectStorage'");
+
+                    b.ToTable("email_message_contents", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_email_message_contents_backend_payload", "(\"Backend\" = 'Database' AND \"RawMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL AND \"RawMime\" IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailSearchDocumentEntity", b =>
@@ -715,11 +732,21 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("MailDraftId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Backend")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("Database");
+
                     b.Property<long>("MimeByteLength")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("ObjectLocator")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
                     b.Property<byte[]>("RawMime")
-                        .IsRequired()
                         .HasColumnType("bytea");
 
                     b.Property<byte[]>("Sha256Hash")
@@ -732,7 +759,14 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("MailDraftId");
 
-                    b.ToTable("mail_draft_contents", (string)null);
+                    b.HasIndex("Backend")
+                        .HasDatabaseName("ix_mail_draft_contents_object_backed")
+                        .HasFilter("\"Backend\" = 'ObjectStorage'");
+
+                    b.ToTable("mail_draft_contents", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_mail_draft_contents_backend_payload", "(\"Backend\" = 'Database' AND \"RawMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL AND \"RawMime\" IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailDraftCopyEntity", b =>
@@ -1398,11 +1432,21 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("OutgoingEmailId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Backend")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("Database");
+
                     b.Property<long>("MimeByteLength")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("ObjectLocator")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
                     b.Property<byte[]>("RawMime")
-                        .IsRequired()
                         .HasColumnType("bytea");
 
                     b.Property<byte[]>("Sha256Hash")
@@ -1415,7 +1459,14 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("OutgoingEmailId");
 
-                    b.ToTable("outgoing_email_contents", (string)null);
+                    b.HasIndex("Backend")
+                        .HasDatabaseName("ix_outgoing_email_contents_object_backed")
+                        .HasFilter("\"Backend\" = 'ObjectStorage'");
+
+                    b.ToTable("outgoing_email_contents", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_outgoing_email_contents_backend_payload", "(\"Backend\" = 'Database' AND \"RawMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL AND \"RawMime\" IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OutgoingEmailEntity", b =>
@@ -1650,12 +1701,22 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("RecurringSendId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Backend")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("Database");
+
                     b.Property<long>("DraftByteLength")
                         .HasColumnType("bigint");
 
                     b.Property<byte[]>("DraftMime")
-                        .IsRequired()
                         .HasColumnType("bytea");
+
+                    b.Property<string>("ObjectLocator")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
 
                     b.Property<byte[]>("Sha256Hash")
                         .IsRequired()
@@ -1667,7 +1728,14 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("RecurringSendId");
 
-                    b.ToTable("recurring_send_drafts", (string)null);
+                    b.HasIndex("Backend")
+                        .HasDatabaseName("ix_recurring_send_drafts_object_backed")
+                        .HasFilter("\"Backend\" = 'ObjectStorage'");
+
+                    b.ToTable("recurring_send_drafts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_recurring_send_drafts_backend_payload", "(\"Backend\" = 'Database' AND \"DraftMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL AND \"DraftMime\" IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.RecurringSendEntity", b =>

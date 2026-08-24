@@ -146,7 +146,8 @@ public sealed class OrchestratedStoredEmailContentInventoryTests(MailFathomOrche
                 await scope.GetRequiredService<IEmailContentStore>().SaveContentAsync(
                     session,
                     storedEmailId,
-                    new RemoteEmailContent(occurrenceId, rawMime),
+                    occurrenceId,
+                    PlacedEmailContent.InDatabase(rawMime),
                     token);
             },
             cancellationToken);

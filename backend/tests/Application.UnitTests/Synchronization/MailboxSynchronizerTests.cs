@@ -75,7 +75,7 @@ public sealed class MailboxSynchronizerTests
         var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
         var persistenceSession = Substitute.For<IPersistenceSession>();
         sessionScopeFactory.BeginSessionAsync(CancellationToken.None).Returns(persistenceSession);
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var sessionFactory = Substitute.For<IMailboxSessionFactory>();
         var session = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -95,7 +95,7 @@ public sealed class MailboxSynchronizerTests
             metadataStored = true;
             return storedEmailId;
         });
-        contentStore.SaveContentAsync(persistenceSession, storedEmailId, content, CancellationToken.None).Returns(_ =>
+        contentStore.SaveContentAsync(persistenceSession, storedEmailId, content.OccurrenceId, Arg.Is<PlacedEmailContent>(placed => placed!.RawMime.ToArray().SequenceEqual(content.RawMime.ToArray())), CancellationToken.None).Returns(_ =>
         {
             Assert.True(metadataStored);
             return Task.CompletedTask;
@@ -110,7 +110,7 @@ public sealed class MailboxSynchronizerTests
         await session.Received(1).GetEmailBatchAfterAsync(null, 25, MailSynchronizationWindow.Unbounded, CancellationToken.None);
         await session.Received(1).FetchEmailContentWithoutSettingSeenAsync(occurrence, 1024, CancellationToken.None);
         await metadataRepository.Received(1).UpsertMetadataAsync(persistenceSession, metadata, Arg.Any<ExtractedEmailMetadata?>(), StoredEmailContentAvailability.Available, CancellationToken.None);
-        await contentStore.Received(1).SaveContentAsync(persistenceSession, storedEmailId, content, CancellationToken.None);
+        await contentStore.Received(1).SaveContentAsync(persistenceSession, storedEmailId, content.OccurrenceId, Arg.Is<PlacedEmailContent>(placed => placed!.RawMime.ToArray().SequenceEqual(content.RawMime.ToArray())), CancellationToken.None);
         await checkpointStore.Received(1).SaveCheckpointAsync(persistenceSession, accountId, folder.Id, Arg.Any<SynchronizationCheckpoint?>(), Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == uid), CancellationToken.None);
     }
 
@@ -143,7 +143,7 @@ public sealed class MailboxSynchronizerTests
             checkpointStore,
             sessionScopeFactory,
             metadataRepository,
-            contentStore: Substitute.For<IEmailContentStore>(),
+            contentStore: ContentStores.Substituted(),
             clock,
             options,
             classificationSettings: ClassifyingTheInbox(),
@@ -195,7 +195,7 @@ public sealed class MailboxSynchronizerTests
             checkpointStore,
             sessionScopeFactory,
             metadataRepository,
-            contentStore: Substitute.For<IEmailContentStore>(),
+            contentStore: ContentStores.Substituted(),
             clock,
             options,
             classificationSettings: ClassifyingTheInbox(),
@@ -246,7 +246,7 @@ public sealed class MailboxSynchronizerTests
             checkpointStore,
             sessionScopeFactory,
             metadataRepository,
-            contentStore: Substitute.For<IEmailContentStore>(),
+            contentStore: ContentStores.Substituted(),
             clock,
             options,
             classificationSettings: ClassifyingTheInbox(),
@@ -299,7 +299,7 @@ public sealed class MailboxSynchronizerTests
             CreateCheckpointStoreAt(accountId, uidValidity),
             sessionScopeFactory,
             metadataRepository,
-            contentStore: Substitute.For<IEmailContentStore>(),
+            contentStore: ContentStores.Substituted(),
             clock,
             new MailboxSynchronizationOptions(),
             mutationStore: mutationStore);
@@ -385,7 +385,7 @@ public sealed class MailboxSynchronizerTests
             CreateCheckpointStoreAt(accountId, uidValidity),
             sessionScopeFactory,
             metadataRepository,
-            contentStore: Substitute.For<IEmailContentStore>(),
+            contentStore: ContentStores.Substituted(),
             clock,
             new MailboxSynchronizationOptions(),
             mutationStore: mutationStore);
@@ -466,7 +466,7 @@ public sealed class MailboxSynchronizerTests
             CreateCheckpointStoreAt(accountId, uidValidity),
             sessionScopeFactory,
             metadataRepository,
-            contentStore: Substitute.For<IEmailContentStore>(),
+            contentStore: ContentStores.Substituted(),
             clock,
             new MailboxSynchronizationOptions(),
             mutationStore: mutationStore);
@@ -513,7 +513,7 @@ public sealed class MailboxSynchronizerTests
             CreateCheckpointStoreAt(accountId, uidValidity),
             sessionScopeFactory,
             metadataRepository: Substitute.For<IEmailMetadataRepository>(),
-            contentStore: Substitute.For<IEmailContentStore>(),
+            contentStore: ContentStores.Substituted(),
             new FakeTimeProvider(new DateTimeOffset(2026, 8, 7, 12, 0, 0, TimeSpan.Zero)),
             new MailboxSynchronizationOptions(),
             mutationStore: new InMemoryMailboxMutationReconciliationStore());
@@ -563,7 +563,7 @@ public sealed class MailboxSynchronizerTests
             CreateCheckpointStoreAt(accountId, uidValidity),
             sessionScopeFactory,
             metadataRepository,
-            contentStore: Substitute.For<IEmailContentStore>(),
+            contentStore: ContentStores.Substituted(),
             clock,
             new MailboxSynchronizationOptions(),
             mutationStore: mutationStore);
@@ -623,7 +623,7 @@ public sealed class MailboxSynchronizerTests
             CreateCheckpointStoreAt(accountId, uidValidity),
             sessionScopeFactory,
             metadataRepository,
-            contentStore: Substitute.For<IEmailContentStore>(),
+            contentStore: ContentStores.Substituted(),
             clock,
             new MailboxSynchronizationOptions(),
             mutationStore: mutationStore);
@@ -662,7 +662,7 @@ public sealed class MailboxSynchronizerTests
         var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
         var persistenceSession = Substitute.For<IPersistenceSession>();
         sessionScopeFactory.BeginSessionAsync(CancellationToken.None).Returns(persistenceSession);
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var sessionFactory = Substitute.For<IMailboxSessionFactory>();
         var session = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -681,7 +681,7 @@ public sealed class MailboxSynchronizerTests
         Assert.Equal(0, result.StoredEmailCount);
         Assert.Equal(1, result.SkippedOversizedEmailCount);
         await session.DidNotReceive().FetchEmailContentWithoutSettingSeenAsync(Arg.Any<EmailOccurrenceId>(), Arg.Any<long>(), CancellationToken.None);
-        await contentStore.DidNotReceive().SaveContentAsync(Arg.Any<IPersistenceSession>(), Arg.Any<StoredEmailId>(), Arg.Any<RemoteEmailContent>(), CancellationToken.None);
+        await contentStore.DidNotReceive().SaveContentAsync(Arg.Any<IPersistenceSession>(), Arg.Any<StoredEmailId>(), Arg.Any<EmailOccurrenceId>(), Arg.Any<PlacedEmailContent>(), CancellationToken.None);
         await metadataRepository.Received(1).UpsertMetadataAsync(persistenceSession, metadata, null, StoredEmailContentAvailability.ExceededSizeLimit, CancellationToken.None);
         await persistenceSession.Received(2).CommitAsync(CancellationToken.None);
         await checkpointStore.Received(1).SaveCheckpointAsync(persistenceSession, accountId, folder.Id, Arg.Any<SynchronizationCheckpoint?>(), Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == uid), CancellationToken.None);
@@ -699,7 +699,7 @@ public sealed class MailboxSynchronizerTests
         var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
         var persistenceSession = Substitute.For<IPersistenceSession>();
         sessionScopeFactory.BeginSessionAsync(CancellationToken.None).Returns(persistenceSession);
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var sessionFactory = Substitute.For<IMailboxSessionFactory>();
         var session = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -738,7 +738,7 @@ public sealed class MailboxSynchronizerTests
         var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
         var persistenceSession = Substitute.For<IPersistenceSession>();
         sessionScopeFactory.BeginSessionAsync(CancellationToken.None).Returns(persistenceSession);
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var sessionFactory = Substitute.For<IMailboxSessionFactory>();
         var session = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -784,7 +784,7 @@ public sealed class MailboxSynchronizerTests
         var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
         var persistenceSession = Substitute.For<IPersistenceSession>();
         sessionScopeFactory.BeginSessionAsync(CancellationToken.None).Returns(persistenceSession);
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var sessionFactory = Substitute.For<IMailboxSessionFactory>();
         var session = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -833,7 +833,7 @@ public sealed class MailboxSynchronizerTests
         var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
         var persistenceSession = Substitute.For<IPersistenceSession>();
         sessionScopeFactory.BeginSessionAsync(CancellationToken.None).Returns(persistenceSession);
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var sessionFactory = Substitute.For<IMailboxSessionFactory>();
         var session = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -882,7 +882,7 @@ public sealed class MailboxSynchronizerTests
         var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
         var persistenceSession = Substitute.For<IPersistenceSession>();
         sessionScopeFactory.BeginSessionAsync(CancellationToken.None).Returns(persistenceSession);
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var sessionFactory = Substitute.For<IMailboxSessionFactory>();
         var session = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -901,7 +901,7 @@ public sealed class MailboxSynchronizerTests
         // Assert
         Assert.Equal(0, result.StoredEmailCount);
         Assert.Equal(1, result.SkippedOversizedEmailCount);
-        await contentStore.DidNotReceive().SaveContentAsync(Arg.Any<IPersistenceSession>(), Arg.Any<StoredEmailId>(), Arg.Any<RemoteEmailContent>(), CancellationToken.None);
+        await contentStore.DidNotReceive().SaveContentAsync(Arg.Any<IPersistenceSession>(), Arg.Any<StoredEmailId>(), Arg.Any<EmailOccurrenceId>(), Arg.Any<PlacedEmailContent>(), CancellationToken.None);
         await metadataRepository.Received(1).UpsertMetadataAsync(persistenceSession, metadata, null, StoredEmailContentAvailability.ExceededSizeLimit, CancellationToken.None);
         await checkpointStore.Received(1).SaveCheckpointAsync(persistenceSession, accountId, folder.Id, Arg.Any<SynchronizationCheckpoint?>(), Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == uid), CancellationToken.None);
     }
@@ -918,7 +918,7 @@ public sealed class MailboxSynchronizerTests
         var metadataRepository = Substitute.For<IEmailMetadataRepository>();
         var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
         var persistenceSession = Substitute.For<IPersistenceSession>();
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var sessionFactory = Substitute.For<IMailboxSessionFactory>();
         var session = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -954,7 +954,7 @@ public sealed class MailboxSynchronizerTests
 
         // Assert
         await sessionScopeFactory.Received(2).BeginSessionAsync(CancellationToken.None);
-        await contentStore.Received(1).SaveContentAsync(persistenceSession, Arg.Any<StoredEmailId>(), content, CancellationToken.None);
+        await contentStore.Received(1).SaveContentAsync(persistenceSession, Arg.Any<StoredEmailId>(), content.OccurrenceId, Arg.Is<PlacedEmailContent>(placed => placed!.RawMime.ToArray().SequenceEqual(content.RawMime.ToArray())), CancellationToken.None);
     }
 
     [Fact]
@@ -971,7 +971,7 @@ public sealed class MailboxSynchronizerTests
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
         var metadataRepository = Substitute.For<IEmailMetadataRepository>();
         var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var sessionFactory = Substitute.For<IMailboxSessionFactory>();
         var mailboxSession = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -1047,6 +1047,87 @@ public sealed class MailboxSynchronizerTests
         await sessionScopeFactory.Received(3).BeginSessionAsync(CancellationToken.None);
     }
 
+    /// <summary>
+    /// A conflicted attempt replays the whole unit of work, and the placement is not part of it. Every attempt stages
+    /// the same locator over the same object, so the endpoint sees one write however many times the commit is repeated.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_PersistenceConflictThenCommitted_PlacesTheContentOnceAcrossBothAttempts()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var occurrence = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(10));
+        var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
+        var metadataRepository = Substitute.For<IEmailMetadataRepository>();
+        var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
+        var firstAttemptSession = Substitute.For<IPersistenceSession>();
+        var secondAttemptSession = Substitute.For<IPersistenceSession>();
+        var checkpointSession = Substitute.For<IPersistenceSession>();
+        var firstConflictObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        sessionScopeFactory.BeginSessionAsync(CancellationToken.None)
+            .Returns(firstAttemptSession, secondAttemptSession, checkpointSession);
+        firstAttemptSession.CommitAsync(CancellationToken.None).Returns(_ =>
+        {
+            firstConflictObserved.SetResult();
+
+            return PersistenceCommitResult.ConcurrencyConflict;
+        });
+        secondAttemptSession.CommitAsync(CancellationToken.None).Returns(PersistenceCommitResult.Committed);
+        checkpointSession.CommitAsync(CancellationToken.None).Returns(PersistenceCommitResult.Committed);
+
+        var contentStore = ContentStores.Substituted();
+        var mailboxSessionFactory = Substitute.For<IMailboxSessionFactory>();
+        var mailboxSession = Substitute.For<IMailboxSession>();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var synchronizer = CreateSynchronizer(
+            mailboxSessionFactory,
+            checkpointStore,
+            sessionScopeFactory,
+            metadataRepository,
+            contentStore,
+            clock,
+            options);
+        var metadata = MetadataOf(occurrence, 600);
+        var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
+        checkpointStore.GetCheckpointAsync(accountId, InboxFolder.Id, CancellationToken.None)
+            .Returns(SynchronizationCheckpoint.None(uidValidity));
+        mailboxSessionFactory
+            .OpenReadOnlyAsync(accountId, InboxFolder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None)
+            .Returns(mailboxSession);
+        mailboxSession.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
+        mailboxSession.GetEmailBatchAfterAsync(null, 25, MailSynchronizationWindow.Unbounded, CancellationToken.None)
+            .Returns(new RemoteEmailMetadataBatch([metadata], occurrence.Uid, HasMore: false));
+        StubRetrievedContent(mailboxSession, options, occurrence, 600);
+        metadataRepository.UpsertMetadataAsync(
+                Arg.Any<IPersistenceSession>(),
+                metadata,
+                Arg.Any<ExtractedEmailMetadata?>(),
+                StoredEmailContentAvailability.Available,
+                CancellationToken.None)
+            .Returns(storedEmailId);
+
+        // Act
+        var synchronization = synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+        await firstConflictObserved.Task;
+        clock.Advance(TimeSpan.FromSeconds(1));
+        var result = await synchronization;
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        await contentStore.Received(1).PlaceContentAsync(
+            EmailContentKind.IncomingMessage,
+            Arg.Any<ReadOnlyMemory<byte>>(),
+            Arg.Any<CancellationToken>());
+        await contentStore.Received(2).SaveContentAsync(
+            Arg.Any<IPersistenceSession>(),
+            storedEmailId,
+            occurrence,
+            Arg.Any<PlacedEmailContent>(),
+            CancellationToken.None);
+    }
+
     [Fact]
     public async Task SynchronizeAsync_PersistenceConflictThenCommitted_RetriesLocalWriteWithoutRefetchingContent()
     {
@@ -1072,7 +1153,7 @@ public sealed class MailboxSynchronizerTests
         });
         secondAttemptSession.CommitAsync(CancellationToken.None).Returns(PersistenceCommitResult.Committed);
         checkpointSession.CommitAsync(CancellationToken.None).Returns(PersistenceCommitResult.Committed);
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var mailboxSessionFactory = Substitute.For<IMailboxSessionFactory>();
         var mailboxSession = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -1135,9 +1216,9 @@ public sealed class MailboxSynchronizerTests
             StoredEmailContentAvailability.Available,
             CancellationToken.None);
         await contentStore.Received(1)
-            .SaveContentAsync(firstAttemptSession, storedEmailId, content, CancellationToken.None);
+            .SaveContentAsync(firstAttemptSession, storedEmailId, content.OccurrenceId, Arg.Is<PlacedEmailContent>(placed => placed!.RawMime.ToArray().SequenceEqual(content.RawMime.ToArray())), CancellationToken.None);
         await contentStore.Received(1)
-            .SaveContentAsync(secondAttemptSession, storedEmailId, content, CancellationToken.None);
+            .SaveContentAsync(secondAttemptSession, storedEmailId, content.OccurrenceId, Arg.Is<PlacedEmailContent>(placed => placed!.RawMime.ToArray().SequenceEqual(content.RawMime.ToArray())), CancellationToken.None);
         await sessionScopeFactory.Received(3).BeginSessionAsync(CancellationToken.None);
     }
 
@@ -1167,7 +1248,7 @@ public sealed class MailboxSynchronizerTests
         attemptSessions[1].CommitAsync(CancellationToken.None)
             .Returns(PersistenceCommitResult.ConcurrencyConflict);
 
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var mailboxSessionFactory = Substitute.For<IMailboxSessionFactory>();
         var mailboxSession = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -1229,7 +1310,7 @@ public sealed class MailboxSynchronizerTests
         foreach (var attemptSession in attemptSessions)
         {
             await contentStore.Received(1)
-                .SaveContentAsync(attemptSession, storedEmailId, content, CancellationToken.None);
+                .SaveContentAsync(attemptSession, storedEmailId, content.OccurrenceId, Arg.Is<PlacedEmailContent>(placed => placed!.RawMime.ToArray().SequenceEqual(content.RawMime.ToArray())), CancellationToken.None);
         }
     }
 
@@ -1249,7 +1330,7 @@ public sealed class MailboxSynchronizerTests
         sessionScopeFactory.BeginSessionAsync(CancellationToken.None).Returns(persistenceSession);
         persistenceSession.CommitAsync(CancellationToken.None)
             .Returns(PersistenceCommitResult.ConcurrencyConflict);
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var mailboxSessionFactory = Substitute.For<IMailboxSessionFactory>();
         var mailboxSession = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -1309,7 +1390,7 @@ public sealed class MailboxSynchronizerTests
         var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
         var persistenceSession = Substitute.For<IPersistenceSession>();
         sessionScopeFactory.BeginSessionAsync(CancellationToken.None).Returns(persistenceSession);
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var mailboxSessionFactory = Substitute.For<IMailboxSessionFactory>();
         var mailboxSession = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -1368,7 +1449,7 @@ public sealed class MailboxSynchronizerTests
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
         var metadataRepository = Substitute.For<IEmailMetadataRepository>();
         var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var sessionFactory = Substitute.For<IMailboxSessionFactory>();
         var session = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -1413,7 +1494,7 @@ public sealed class MailboxSynchronizerTests
         var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
         var persistenceSession = Substitute.For<IPersistenceSession>();
         sessionScopeFactory.BeginSessionAsync(CancellationToken.None).Returns(persistenceSession);
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var sessionFactory = Substitute.For<IMailboxSessionFactory>();
         var session = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -1459,7 +1540,7 @@ public sealed class MailboxSynchronizerTests
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
         var metadataRepository = Substitute.For<IEmailMetadataRepository>();
         var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var sessionFactory = Substitute.For<IMailboxSessionFactory>();
         var session = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -1506,7 +1587,7 @@ public sealed class MailboxSynchronizerTests
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
         var metadataRepository = Substitute.For<IEmailMetadataRepository>();
         var sessionScopeFactory = Substitute.For<IPersistenceSessionFactory>();
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var sessionFactory = Substitute.For<IMailboxSessionFactory>();
         var session = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
@@ -1558,7 +1639,7 @@ public sealed class MailboxSynchronizerTests
             Substitute.For<ISynchronizationCheckpointStore>(),
             persistenceSessionFactory,
             Substitute.For<IEmailMetadataRepository>(),
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             clock,
             new MailboxSynchronizationOptions(),
             folderResolver: CreateFolderResolverOverAdvertisedInboxes(
@@ -1598,7 +1679,7 @@ public sealed class MailboxSynchronizerTests
             checkpointStore,
             persistenceSessionFactory,
             Substitute.For<IEmailMetadataRepository>(),
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             clock,
             options,
             mimeReader: mimeReader);
@@ -1650,7 +1731,7 @@ public sealed class MailboxSynchronizerTests
             checkpointStore,
             persistenceSessionFactory,
             metadataRepository,
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             clock,
             options,
             mimeReader: mimeReader);
@@ -1702,7 +1783,7 @@ public sealed class MailboxSynchronizerTests
             checkpointStore,
             persistenceSessionFactory,
             metadataRepository,
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             clock,
             options,
             mimeReader: mimeReader);
@@ -1744,7 +1825,7 @@ public sealed class MailboxSynchronizerTests
         var persistenceSessionFactory = Substitute.For<IPersistenceSessionFactory>();
         var persistenceSession = Substitute.For<IPersistenceSession>();
         persistenceSessionFactory.BeginSessionAsync(CancellationToken.None).Returns(persistenceSession);
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var sessionFactory = Substitute.For<IMailboxSessionFactory>();
         var session = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 28, 12, 0, 0, TimeSpan.Zero));
@@ -1783,7 +1864,7 @@ public sealed class MailboxSynchronizerTests
         // Assert
         Assert.Equal(2, result.StoredEmailCount);
         Assert.Equal(1, result.UnreadableMimeEmailCount);
-        await contentStore.Received(2).SaveContentAsync(persistenceSession, Arg.Any<StoredEmailId>(), Arg.Any<RemoteEmailContent>(), CancellationToken.None);
+        await contentStore.Received(2).SaveContentAsync(persistenceSession, Arg.Any<StoredEmailId>(), Arg.Any<EmailOccurrenceId>(), Arg.Any<PlacedEmailContent>(), CancellationToken.None);
         await checkpointStore.Received(1).SaveCheckpointAsync(
             persistenceSession,
             accountId,
@@ -1816,7 +1897,7 @@ public sealed class MailboxSynchronizerTests
             checkpointStore,
             persistenceSessionFactory,
             Substitute.For<IEmailMetadataRepository>(),
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             clock,
             options,
             mimeReader: mimeReader);
@@ -2062,7 +2143,7 @@ public sealed class MailboxSynchronizerTests
             checkpointStore,
             sessionScopeFactory,
             metadataRepository: Substitute.For<IEmailMetadataRepository>(),
-            contentStore: Substitute.For<IEmailContentStore>(),
+            contentStore: ContentStores.Substituted(),
             clock,
             new MailboxSynchronizationOptions(),
             reconciliationStore: reconciliationStore);
@@ -2223,7 +2304,7 @@ public sealed class MailboxSynchronizerTests
             checkpointStore,
             persistenceSessionFactory,
             metadataRepository: Substitute.For<IEmailMetadataRepository>(),
-            contentStore: Substitute.For<IEmailContentStore>(),
+            contentStore: ContentStores.Substituted(),
             new FakeTimeProvider(new DateTimeOffset(2026, 7, 31, 12, 0, 0, TimeSpan.Zero)),
             new MailboxSynchronizationOptions(),
             reconciliationStore: reconciliationStore);
@@ -2376,7 +2457,7 @@ public sealed class MailboxSynchronizerTests
             CreateCheckpointStoreAt(accountId, uidValidity),
             sessionScopeFactory,
             Substitute.For<IEmailMetadataRepository>(),
-            contentStore: Substitute.For<IEmailContentStore>(),
+            contentStore: ContentStores.Substituted(),
             clock,
             new MailboxSynchronizationOptions(),
             phaseTelemetry: phaseTelemetry);
@@ -2414,7 +2495,7 @@ public sealed class MailboxSynchronizerTests
             Substitute.For<ISynchronizationCheckpointStore>(),
             Substitute.For<IPersistenceSessionFactory>(),
             Substitute.For<IEmailMetadataRepository>(),
-            contentStore: Substitute.For<IEmailContentStore>(),
+            contentStore: ContentStores.Substituted(),
             clock,
             new MailboxSynchronizationOptions(),
             folderResolver: CreateFolderResolverThatResolvesNothing(),
@@ -2455,7 +2536,7 @@ public sealed class MailboxSynchronizerTests
             CreateCheckpointStoreAt(accountId, ImapUidValidity.Create(9)),
             Substitute.For<IPersistenceSessionFactory>(),
             Substitute.For<IEmailMetadataRepository>(),
-            contentStore: Substitute.For<IEmailContentStore>(),
+            contentStore: ContentStores.Substituted(),
             clock,
             new MailboxSynchronizationOptions(),
             phaseTelemetry: phaseTelemetry);
@@ -2496,7 +2577,7 @@ public sealed class MailboxSynchronizerTests
             CreateCheckpointStoreAt(accountId, ImapUidValidity.Create(9)),
             Substitute.For<IPersistenceSessionFactory>(),
             Substitute.For<IEmailMetadataRepository>(),
-            contentStore: Substitute.For<IEmailContentStore>(),
+            contentStore: ContentStores.Substituted(),
             clock,
             new MailboxSynchronizationOptions(),
             phaseTelemetry: phaseTelemetry);
@@ -2933,7 +3014,8 @@ public sealed class MailboxSynchronizerTests
         await arrangement.ContentStore.Received(1).SaveContentAsync(
             Arg.Any<IPersistenceSession>(),
             Arg.Any<StoredEmailId>(),
-            Arg.Is<RemoteEmailContent>(content => content!.OccurrenceId == deferred),
+            Arg.Is<EmailOccurrenceId>(occurrenceId => occurrenceId == deferred),
+            Arg.Any<PlacedEmailContent>(),
             CancellationToken.None);
         await arrangement.CheckpointStore.DidNotReceive().SaveCheckpointAsync(
             Arg.Any<IPersistenceSession>(),
@@ -3102,6 +3184,51 @@ public sealed class MailboxSynchronizerTests
                 new RemoteEmailContent(occurrenceId, new ReadOnlyMemory<byte>(new byte[payloadLength]))));
 
     /// <summary>Composes a run over one batch, which is the shape every byte-budget assertion is about.</summary>
+    /// <summary>
+    /// The message is handed over before anything opens a unit of work, which is what makes the object backend legal
+    /// here: joining a session is what opens its transaction, so a placement made while no session exists is one made
+    /// with no transaction open across it.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_NewMessage_PlacesTheContentBeforeAnyPersistenceSessionExists()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var arriving = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(10));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [MetadataOf(arriving, 600)],
+            inspectedThroughUid: arriving.Uid);
+        StubRetrievedContent(arrangement.Session, options, arriving, 600);
+
+        var sessionsOpenWhenPlaced = -1;
+        arrangement.ContentStore
+            .PlaceContentAsync(
+                Arg.Any<EmailContentKind>(),
+                Arg.Any<ReadOnlyMemory<byte>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                sessionsOpenWhenPlaced = arrangement.StagedSessions.Count;
+
+                return Task.FromResult(PlacedEmailContent.InDatabase(call.ArgAt<ReadOnlyMemory<byte>>(1)));
+            });
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(
+            accountId,
+            InboxMapping,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        Assert.Equal(0, sessionsOpenWhenPlaced);
+        Assert.NotEmpty(arrangement.StagedSessions);
+    }
+
     private static ContentRunArrangement ArrangeContentRun(
         MailboxSynchronizationOptions options,
         ImapUidValidity uidValidity,
@@ -3116,13 +3243,21 @@ public sealed class MailboxSynchronizerTests
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
         var metadataRepository = Substitute.For<IEmailMetadataRepository>();
         var persistenceSessionFactory = Substitute.For<IPersistenceSessionFactory>();
-        var persistenceSession = Substitute.For<IPersistenceSession>();
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var stagedSessions = new List<IPersistenceSession>();
+        var contentStore = ContentStores.Substituted();
         var sessionFactory = Substitute.For<IMailboxSessionFactory>();
         var session = Substitute.For<IMailboxSession>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
 
-        persistenceSessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(persistenceSession);
+        // One session per call rather than one for the run, so a test can read how many units of work were opened and
+        // when relative to anything else the run did.
+        persistenceSessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            var persistenceSession = Substitute.For<IPersistenceSession>();
+            stagedSessions.Add(persistenceSession);
+
+            return persistenceSession;
+        });
         checkpointStore
             .GetCheckpointAsync(Arg.Any<MailAccountId>(), InboxFolder.Id, Arg.Any<CancellationToken>())
             .Returns(storedCheckpoint ?? SynchronizationCheckpoint.None(uidValidity));
@@ -3163,7 +3298,8 @@ public sealed class MailboxSynchronizerTests
             metadataRepository,
             contentStore,
             contentInventory,
-            jobStore);
+            jobStore,
+            stagedSessions);
     }
 
     /// <summary>The parts of a byte-budget run its assertions read back.</summary>
@@ -3174,7 +3310,8 @@ public sealed class MailboxSynchronizerTests
         IEmailMetadataRepository MetadataRepository,
         IEmailContentStore ContentStore,
         InMemoryStoredEmailContentInventory ContentInventory,
-        IJobStore JobStore);
+        IJobStore JobStore,
+        List<IPersistenceSession> StagedSessions);
 
     private sealed class TrackingSession : IPersistenceSession
     {
@@ -3274,7 +3411,7 @@ public sealed class MailboxSynchronizerTests
                 checkpointStore,
                 sessionScopeFactory,
                 this.metadataRepository,
-                Substitute.For<IEmailContentStore>(),
+                ContentStores.Substituted(),
                 this.clock,
                 new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 },
                 mimeReader: CreateMimeReaderThatExtractsOneSender(),

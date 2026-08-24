@@ -37,7 +37,7 @@ public sealed class EmailSpamClassifierTests
 
     private readonly InMemoryEmailSpamClassificationStore store = new();
 
-    private readonly IEmailContentStore contentStore = Substitute.For<IEmailContentStore>();
+    private readonly IEmailContentStore contentStore = ContentStores.Substituted();
 
     private readonly IEmailChunkStore chunkStore = Substitute.For<IEmailChunkStore>();
 

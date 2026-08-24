@@ -24,15 +24,39 @@ internal sealed class InMemoryMailDraftContentStore : IEmailContentStore
     /// <summary>Gets how many revisions were stored, which is what proves an edit replaced rather than added.</summary>
     internal int WriteCount { get; private set; }
 
+    /// <summary>Gets how many payloads were placed, which is what proves a replayed unit of work placed none of them again.</summary>
+    internal int PlacementCount { get; private set; }
+
+    /// <summary>Gets or sets what runs at the moment a payload is placed, which is how a test reads what was open then.</summary>
+    /// <remarks>
+    /// A placement happens before the caller opens its unit of work, and the count afterwards cannot tell that from a
+    /// placement made inside one. Observing the moment is the only way to state the ordering the object backend needs.
+    /// </remarks>
+    internal Action Placing { get; set; } = () => { };
+
     /// <summary>Reads what is stored for one draft, without going through the port.</summary>
     internal ReadOnlyMemory<byte> Peek(MailDraftId draftId) =>
         this.messages.TryGetValue(draftId, out var stored) ? stored : ReadOnlyMemory<byte>.Empty;
 
     /// <inheritdoc />
+    /// <remarks>The database placement, because this double is standing in for the store a deployment writing to its own tables has.</remarks>
+    public Task<PlacedEmailContent> PlaceContentAsync(
+        EmailContentKind kind,
+        ReadOnlyMemory<byte> rawMime,
+        CancellationToken cancellationToken)
+    {
+        this.PlacementCount++;
+        this.Placing();
+
+        return Task.FromResult(PlacedEmailContent.InDatabase(rawMime));
+    }
+
+    /// <inheritdoc />
     public Task SaveContentAsync(
         IPersistenceSession session,
         StoredEmailId storedEmailId,
-        RemoteEmailContent content,
+        EmailOccurrenceId occurrenceId,
+        PlacedEmailContent placedContent,
         CancellationToken cancellationToken) =>
         throw new NotSupportedException("A draft never stores arriving mail.");
 
@@ -46,7 +70,7 @@ internal sealed class InMemoryMailDraftContentStore : IEmailContentStore
     public Task SaveOutgoingContentAsync(
         IPersistenceSession session,
         OutgoingEmailId outgoingEmailId,
-        ReadOnlyMemory<byte> rawMime,
+        PlacedEmailContent placedContent,
         CancellationToken cancellationToken) =>
         throw new NotSupportedException("A draft never stores a send's payload.");
 
@@ -60,7 +84,7 @@ internal sealed class InMemoryMailDraftContentStore : IEmailContentStore
     public Task SaveRecurringSendDraftAsync(
         IPersistenceSession session,
         RecurringSendId recurringSendId,
-        ReadOnlyMemory<byte> draftMime,
+        PlacedEmailContent placedContent,
         CancellationToken cancellationToken) =>
         throw new NotSupportedException("A draft never declares a repeated send.");
 
@@ -74,10 +98,10 @@ internal sealed class InMemoryMailDraftContentStore : IEmailContentStore
     public Task SaveMailDraftContentAsync(
         IPersistenceSession session,
         MailDraftId draftId,
-        ReadOnlyMemory<byte> rawMime,
+        PlacedEmailContent placedContent,
         CancellationToken cancellationToken)
     {
-        this.messages[draftId] = rawMime.ToArray();
+        this.messages[draftId] = placedContent.RawMime.ToArray();
         this.WriteCount++;
 
         return Task.CompletedTask;

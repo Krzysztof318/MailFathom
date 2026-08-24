@@ -144,6 +144,13 @@ public sealed class MailOutbox(
             throw OutgoingMailRefusedException.ContentRefused(screened);
         }
 
+        // Before the unit of work rather than inside it. Under the object backend this reaches the endpoint, and no
+        // database transaction may be held open across that — the record below opens one the moment it is written.
+        var placedContent = await contentStore.PlaceContentAsync(
+            EmailContentKind.OutgoingMessage,
+            rawMime,
+            cancellationToken);
+
         var committed = await retryPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
@@ -157,7 +164,7 @@ public sealed class MailOutbox(
                 await contentStore.SaveOutgoingContentAsync(
                     session,
                     opened.Record.Id,
-                    rawMime,
+                    placedContent,
                     attemptCancellationToken);
 
                 return opened;

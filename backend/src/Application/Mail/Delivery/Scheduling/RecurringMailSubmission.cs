@@ -150,6 +150,13 @@ public sealed class RecurringMailSubmission
             draft.Request.Recipients,
             request.Schedule);
 
+        // Before the unit of work rather than inside it, for the reason every content write here observes: under the
+        // object backend this reaches the endpoint, and the declaration below opens a transaction the moment it runs.
+        var placedDraft = await this.contentStore.PlaceContentAsync(
+            EmailContentKind.RecurringSendDraft,
+            draft.RawMime,
+            cancellationToken);
+
         return await this.retryPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
@@ -162,7 +169,7 @@ public sealed class RecurringMailSubmission
                 await this.contentStore.SaveRecurringSendDraftAsync(
                     session,
                     declared.Id,
-                    draft.RawMime,
+                    placedDraft,
                     attemptCancellationToken);
 
                 return declared;

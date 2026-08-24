@@ -174,7 +174,8 @@ public sealed class ComposedMailResponseToolContractTests(MailFathomOrchestratio
                 await scope.GetRequiredService<IEmailContentStore>().SaveContentAsync(
                     session,
                     storedEmailId.Value,
-                    new RemoteEmailContent(occurrenceId, rawMime),
+                    occurrenceId,
+                    PlacedEmailContent.InDatabase(rawMime),
                     token);
             },
             cancellationToken);

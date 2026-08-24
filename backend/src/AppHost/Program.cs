@@ -178,6 +178,36 @@ if (runsIntegrationTests)
     // daemon speaks its own line protocol on a TCP port, so there is no route to probe and no command Aspire could
     // compose. The suite waits for the daemon's own readiness command instead, which it can issue because it speaks
     // that protocol.
+    // An S3-compatible endpoint, for the reason the two above are real servers: what the suite exists to prove about
+    // the object backend is that a payload written under a minted key comes back byte for byte over the protocol, and
+    // a substituted client proves only that MailFathom composed the request it meant to. An ordinary container
+    // resource under the ephemeral prefix rather than a fixture of its own.
+    //
+    // What it is not is a production object store, and the difference is worth stating rather than glossing: this
+    // image serves the S3 API and stores what it is given, and it is what the whole ecosystem tests against. It is
+    // permissively licensed, which every store that would have been the more faithful choice here is not — and a
+    // storage engine's durability is not a claim MailFathom's own suite could establish anyway. What it settles is the
+    // exchange: the signed request, the conditional write, the digest the endpoint agrees it received, and the bytes.
+    //
+    // No volume, unlike PostgreSQL: nothing here outlives a run, and an endpoint that kept objects between runs would
+    // let a test read one an earlier run wrote. The bucket is created by the fixture, because the image ships none and
+    // creating one is a request the S3 API already answers.
+    builder
+        .AddContainer(
+            OrchestrationContract.ObjectStorageResourceName,
+            "docker.io/adobe/s3mock",
+            "5.2.0")
+        .WithContainerName($"{ephemeralResourceNamePrefix}-object-storage")
+        .WithHttpEndpoint(
+            targetPort: OrchestrationContract.ObjectStorageContainerPort,
+            name: OrchestrationContract.ObjectStorageEndpointName)
+        // The route the image's own documentation names as its readiness probe. It has no health endpoint of its own
+        // under the default profile, and every S3 route is a request about a bucket — so what answers before any
+        // bucket exists is this one, and a 200 from it means the server is listening rather than starting.
+        .WithHttpHealthCheck(
+            "/favicon.ico",
+            endpointName: OrchestrationContract.ObjectStorageEndpointName);
+
     builder
         .AddContainer(
             OrchestrationContract.SpamScannerResourceName,

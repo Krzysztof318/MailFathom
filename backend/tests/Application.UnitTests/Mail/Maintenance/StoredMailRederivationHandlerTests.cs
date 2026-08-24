@@ -328,7 +328,7 @@ public sealed class StoredMailRederivationHandlerTests
             new PersistenceConcurrencyOptions(),
             this.timeProvider);
 
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         byte[] rawMime = [1, 2, 3];
         contentStore
             .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())

@@ -93,6 +93,7 @@ using MailFathom.Infrastructure.Mail.MailKit.Writes;
 using MailFathom.Infrastructure.Mail.Mime;
 using MailFathom.Infrastructure.Mail.Mime.Composition;
 using MailFathom.Infrastructure.Mail.OAuth;
+using MailFathom.Infrastructure.ObjectStorage;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Accounts;
@@ -424,8 +425,15 @@ public static class ServiceCollectionExtensions
         // is why nothing scoped to a request depends on it and why it is registered beside the schema inspector the same
         // startup step already resolves.
         services.AddScoped<IMailOwnerDirectory, PersistedMailOwnerDirectory>();
-        services.AddScoped<IEmailContentStore, EmailContentStore>();
+        // Composed by hand for one parameter: the object store is registered only when the deployment selected the
+        // object backend, so it is asked for rather than required, and its absence is what selects the database.
+        services.AddScoped<IEmailContentStore>(provider => new EmailContentStore(
+            provider.GetRequiredService<MailFathomDbContext>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<StoredEmailContentTelemetry>(),
+            provider.GetService<IEmailContentObjectStore>()));
         services.AddScoped<IStoredEmailContentInventory, StoredEmailContentInventory>();
+        services.AddScoped<IObjectBackedContentInventory, ObjectBackedContentInventory>();
         services.AddScoped<IStoredEmailExtractionBackfillStore, StoredEmailExtractionBackfillStore>();
         // What the two maintenance commands read and write. Both are ordinary scoped stores over stored mail: the
         // counter is what puts a figure in front of an operator before a rewind is agreed to, and the walk is the pass

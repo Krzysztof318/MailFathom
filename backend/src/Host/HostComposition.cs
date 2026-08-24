@@ -1000,6 +1000,14 @@ internal static class HostComposition
 
         if (declaredContentStorage?.IsObjectStorageSelected is not true)
         {
+            // A deployment that names no endpoint can still hold rows pointing into one, and every message behind such
+            // a row is unreadable until the configuration comes back. Nothing above notices, so this is the check that
+            // says so — asked of stored mail on every readiness scrape rather than once while the host composes, which
+            // is what keeps a database no migration has reached out of the startup path.
+            builder.Services.AddSingleton<ObjectBackedContentHealthCheck>();
+            builder.Services.AddHealthChecks()
+                .Add(ObjectBackedContentHealthCheck.Registration());
+
             return;
         }
 

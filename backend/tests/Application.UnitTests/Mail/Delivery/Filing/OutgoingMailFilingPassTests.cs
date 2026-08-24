@@ -420,7 +420,7 @@ public sealed class OutgoingMailFilingPassTests
         {
             this.Store = new InMemoryOutgoingEmailStore(timeProvider: this.clock);
 
-            this.Content = Substitute.For<IEmailContentStore>();
+            this.Content = ContentStores.Substituted();
             this.Content
                 .FindOutgoingContentAsync(Arg.Any<OutgoingEmailId>(), Arg.Any<CancellationToken>())
                 .Returns(new StoredEmailContent(RawMime, RawMime.Length, SHA256.HashData(RawMime.Span)));

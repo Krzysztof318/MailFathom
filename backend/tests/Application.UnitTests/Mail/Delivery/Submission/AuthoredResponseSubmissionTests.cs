@@ -694,7 +694,7 @@ public sealed class AuthoredResponseSubmissionTests
 
         return new MailOutbox(
             new InMemoryOutgoingEmailStore(timeProvider: new FakeTimeProvider(Recorded)),
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
@@ -778,7 +778,7 @@ public sealed class AuthoredResponseSubmissionTests
 
     private static IEmailContentStore ContentStoreReturning(StoredEmailContent? storedContent)
     {
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         contentStore
             .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(storedContent));

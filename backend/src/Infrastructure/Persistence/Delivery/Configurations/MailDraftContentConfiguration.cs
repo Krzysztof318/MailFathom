@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -31,10 +32,22 @@ internal sealed class MailDraftContentConfiguration : IEntityTypeConfiguration<M
     /// <inheritdoc />
     public void Configure(EntityTypeBuilder<MailDraftContentEntity> entity)
     {
-        entity.ToTable("mail_draft_contents");
+        entity.ToTable(
+            "mail_draft_contents",
+            table => table.HasCheckConstraint(
+                "ck_mail_draft_contents_backend_payload",
+                """
+                ("Backend" = 'Database' AND "RawMime" IS NOT NULL AND "ObjectLocator" IS NULL)
+                OR ("Backend" = 'ObjectStorage' AND "ObjectLocator" IS NOT NULL AND "RawMime" IS NULL)
+                """));
         entity.HasKey(content => content.MailDraftId);
         entity.Property(content => content.MailDraftId).ValueGeneratedNever();
-        entity.Property(content => content.RawMime).IsRequired();
+        entity.Property(content => content.Backend)
+            .HasConversion<string>()
+            .HasMaxLength(64)
+            .IsRequired()
+            .HasDefaultValue(ContentStorageBackend.Database);
+        entity.Property(content => content.ObjectLocator).HasMaxLength(1024);
         entity.Property(content => content.Sha256Hash).HasMaxLength(32).IsRequired();
 
         entity.HasOne(content => content.MailDraft)
@@ -42,5 +55,11 @@ internal sealed class MailDraftContentConfiguration : IEntityTypeConfiguration<M
             .HasForeignKey<MailDraftContentEntity>(content => content.MailDraftId)
             .HasConstraintName(PersistenceConstraintNames.MailDraftContentForeignKeyName)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // The census the readiness check runs, and the only reader of this column. Filtered to the object backend so a
+        // deployment that configured no endpoint answers it from an empty index rather than by scanning the table.
+        entity.HasIndex(content => content.Backend)
+            .HasDatabaseName(PersistenceConstraintNames.MailDraftContentObjectBackedIndexName)
+            .HasFilter($"\"Backend\" = '{nameof(ContentStorageBackend.ObjectStorage)}'");
     }
 }

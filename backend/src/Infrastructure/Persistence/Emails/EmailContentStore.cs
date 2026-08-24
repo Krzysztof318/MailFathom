@@ -4,7 +4,6 @@
 
 using System.Linq.Expressions;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
@@ -12,6 +11,7 @@ using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
+using MailFathom.Infrastructure.ObjectStorage;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
@@ -19,18 +19,52 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Emails;
 
-/// <summary>EF Core raw MIME content store.</summary>
+/// <summary>Raw MIME content store over the database, the object endpoint, or a deployment's mixture of the two.</summary>
+/// <remarks>
+/// <para>
+/// A write is two steps that happen at different moments. The payload is placed first, before the caller opens its unit
+/// of work, because under the object backend that reaches the network and no database transaction may be held open
+/// across it. The row is staged afterwards, inside the caller's transaction, from what the placement answered.
+/// </para>
+/// <para>
+/// A read resolves the backend from the row rather than from configuration, which is what lets a deployment hold both
+/// kinds of row indefinitely: the configured backend says where the next write goes and never what an existing row
+/// means.
+/// </para>
+/// </remarks>
 [RequiresIntegrationCoverage]
 internal sealed class EmailContentStore(
     MailFathomDbContext dbContext,
     TimeProvider timeProvider,
-    StoredEmailContentTelemetry telemetry) : IEmailContentStore
+    StoredEmailContentTelemetry telemetry,
+    IEmailContentObjectStore? objectStore = null) : IEmailContentStore
 {
     /// <inheritdoc />
     /// <remarks>
-    /// Projected to the three columns rather than materialized as an entity, so the payload is neither tracked nor
-    /// kept alive by the change tracker after the caller is done with it. The recorded length and digest are read in
-    /// the same round trip as the payload they describe, because a second query could read them from a row a
+    /// The presence of an object store is what selects the backend, because it is registered only when the deployment
+    /// selected one. That keeps the choice a composition decision rather than a branch this type re-derives from
+    /// configuration it would otherwise have to be given.
+    /// </remarks>
+    public Task<PlacedEmailContent> PlaceContentAsync(
+        EmailContentKind kind,
+        ReadOnlyMemory<byte> rawMime,
+        CancellationToken cancellationToken)
+    {
+        if (rawMime.IsEmpty)
+        {
+            throw new ArgumentException("Raw MIME content to place cannot be empty.", nameof(rawMime));
+        }
+
+        return objectStore is null
+            ? Task.FromResult(PlacedEmailContent.InDatabase(rawMime))
+            : objectStore.PlaceAsync(kind, rawMime, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Projected to the columns rather than materialized as an entity, so a database-backed payload is neither tracked
+    /// nor kept alive by the change tracker after the caller is done with it. The recorded length and digest are read in
+    /// the same round trip as the row that describes them, because a second query could read them from a row a
     /// re-synchronization had rewritten in between and report a mismatch nothing is wrong with.
     /// <para>
     /// The read is spanned because this is where a request meets a whole message: the command's own span reports how
@@ -46,7 +80,12 @@ internal sealed class EmailContentStore(
         var storedContent = await dbContext.EmailMessageContents
             .AsNoTracking()
             .Where(content => content.StoredEmailId == storedEmailId.Value)
-            .Select(content => new StoredEmailContentRow(content.RawMime, content.MimeByteLength, content.Sha256Hash))
+            .Select(content => new StoredEmailContentRow(
+                content.RawMime,
+                content.MimeByteLength,
+                content.Sha256Hash,
+                content.Backend,
+                content.ObjectLocator))
             .SingleOrDefaultAsync(cancellationToken);
 
         if (storedContent is null)
@@ -56,9 +95,17 @@ internal sealed class EmailContentStore(
             return null;
         }
 
-        read.Found(storedContent.RawMime.LongLength);
+        var resolved = await this.ResolveAsync(storedContent, cancellationToken);
+        if (resolved is null)
+        {
+            read.Absent();
 
-        return storedContent.ToStoredContent();
+            return null;
+        }
+
+        read.Found(resolved.RawMime.Length);
+
+        return resolved;
     }
 
     /// <inheritdoc />
@@ -72,10 +119,11 @@ internal sealed class EmailContentStore(
     public async Task SaveContentAsync(
         IPersistenceSession session,
         StoredEmailId storedEmailId,
-        RemoteEmailContent content,
+        EmailOccurrenceId occurrenceId,
+        PlacedEmailContent placedContent,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(content);
+        ArgumentNullException.ThrowIfNull(placedContent);
 
         var writingSession = EfCorePersistenceSessionAccessor.SessionOf(session);
 
@@ -98,14 +146,12 @@ internal sealed class EmailContentStore(
             await dbContext.Entry(storedEmail).Reference(email => email.MailFolder).LoadAsync(cancellationToken);
         }
 
-        EnsureOccurrenceMatches(storedEmail, content);
+        EnsureOccurrenceMatches(storedEmail, occurrenceId);
 
-        var bytes = GetCompleteArray(content.RawMime);
-        var byteLength = bytes.LongLength;
-        var hash = SHA256.HashData(content.RawMime.Span);
+        var bytes = PayloadOf(placedContent);
         var storedAt = timeProvider.GetUtcNow();
 
-        // Deliberately not FindAsync: that would materialize the existing bytea payload into memory and into the change
+        // Deliberately not FindAsync: that would materialize an existing bytea payload into memory and into the change
         // tracker. Only the change-tracker pass is taken here, and a miss falls through to the set-based update below.
         Expression<Func<EmailMessageContentEntity, bool>> matchesStoredEmail =
             candidate => candidate.StoredEmailId == storedEmailId.Value;
@@ -113,11 +159,13 @@ internal sealed class EmailContentStore(
         if (trackedEntity is not null)
         {
             trackedEntity.RawMime = bytes;
-            trackedEntity.MimeByteLength = byteLength;
-            trackedEntity.Sha256Hash = hash;
+            trackedEntity.MimeByteLength = placedContent.ByteLength;
+            trackedEntity.Sha256Hash = placedContent.Sha256Hash.ToArray();
+            trackedEntity.Backend = placedContent.Backend;
+            trackedEntity.ObjectLocator = placedContent.ObjectLocator;
             trackedEntity.StoredAt = storedAt;
 
-            write.Stored(byteLength);
+            write.Stored(placedContent.ByteLength);
 
             return;
         }
@@ -129,8 +177,10 @@ internal sealed class EmailContentStore(
             .ExecuteUpdateAsync(
                 setters => setters
                     .SetProperty(candidate => candidate.RawMime, bytes)
-                    .SetProperty(candidate => candidate.MimeByteLength, byteLength)
-                    .SetProperty(candidate => candidate.Sha256Hash, hash)
+                    .SetProperty(candidate => candidate.MimeByteLength, placedContent.ByteLength)
+                    .SetProperty(candidate => candidate.Sha256Hash, placedContent.Sha256Hash.ToArray())
+                    .SetProperty(candidate => candidate.Backend, placedContent.Backend)
+                    .SetProperty(candidate => candidate.ObjectLocator, placedContent.ObjectLocator)
                     .SetProperty(candidate => candidate.StoredAt, storedAt),
                 cancellationToken);
 
@@ -141,13 +191,15 @@ internal sealed class EmailContentStore(
                 StoredEmailId = storedEmailId.Value,
                 StoredEmail = storedEmail,
                 RawMime = bytes,
-                MimeByteLength = byteLength,
-                Sha256Hash = hash,
+                MimeByteLength = placedContent.ByteLength,
+                Sha256Hash = placedContent.Sha256Hash.ToArray(),
+                Backend = placedContent.Backend,
+                ObjectLocator = placedContent.ObjectLocator,
                 StoredAt = storedAt,
             });
         }
 
-        write.Stored(byteLength);
+        write.Stored(placedContent.ByteLength);
     }
 
     /// <inheritdoc />
@@ -162,6 +214,11 @@ internal sealed class EmailContentStore(
     /// skipped for one — the change-tracker pass is the whole answer there.
     /// </para>
     /// <para>
+    /// Leaving an existing payload alone abandons the object this attempt's own placement wrote, which becomes an
+    /// orphan nothing ever pointed at. That is the designed cost of placing before the record is known, and reclamation
+    /// removes it on the same path it removes a crashed write.
+    /// </para>
+    /// <para>
     /// Unlike the incoming write, this publishes no measurement.
     /// <see cref="StoredEmailContentTelemetry" /> reports what synchronization stored for a mailbox, and counting a
     /// message this deployment is about to send into that would make the mailbox's content volume read as larger than
@@ -171,17 +228,11 @@ internal sealed class EmailContentStore(
     public async Task SaveOutgoingContentAsync(
         IPersistenceSession session,
         OutgoingEmailId outgoingEmailId,
-        ReadOnlyMemory<byte> rawMime,
+        PlacedEmailContent placedContent,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
-
-        if (rawMime.IsEmpty)
-        {
-            throw new ArgumentException(
-                "An outgoing email is stored with the MIME it will be transmitted as.",
-                nameof(rawMime));
-        }
+        ArgumentNullException.ThrowIfNull(placedContent);
 
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
@@ -206,24 +257,24 @@ internal sealed class EmailContentStore(
             return;
         }
 
-        var bytes = GetCompleteArray(rawMime);
-
         writeContext.OutgoingEmailContents.Add(new OutgoingEmailContentEntity
         {
             OutgoingEmailId = outgoingEmail.Id,
             OutgoingEmail = outgoingEmail,
-            RawMime = bytes,
-            MimeByteLength = bytes.LongLength,
-            Sha256Hash = SHA256.HashData(rawMime.Span),
+            RawMime = PayloadOf(placedContent),
+            MimeByteLength = placedContent.ByteLength,
+            Sha256Hash = placedContent.Sha256Hash.ToArray(),
+            Backend = placedContent.Backend,
+            ObjectLocator = placedContent.ObjectLocator,
             StoredAt = timeProvider.GetUtcNow(),
         });
     }
 
     /// <inheritdoc />
     /// <remarks>
-    /// Projected to the three columns for the reason the incoming read is, and spanned for none: an outgoing email is
-    /// read once per delivery attempt rather than once per request meeting a whole mailbox, and what an operator asks
-    /// about a send is which stage it is at rather than how long its bytes took to leave the database.
+    /// Projected for the reason the incoming read is, and spanned for none: an outgoing email is read once per delivery
+    /// attempt rather than once per request meeting a whole mailbox, and what an operator asks about a send is which
+    /// stage it is at rather than how long its bytes took to arrive.
     /// </remarks>
     public async Task<StoredEmailContent?> FindOutgoingContentAsync(
         OutgoingEmailId outgoingEmailId,
@@ -232,10 +283,15 @@ internal sealed class EmailContentStore(
         var storedContent = await dbContext.OutgoingEmailContents
             .AsNoTracking()
             .Where(content => content.OutgoingEmailId == outgoingEmailId.Value)
-            .Select(content => new StoredEmailContentRow(content.RawMime, content.MimeByteLength, content.Sha256Hash))
+            .Select(content => new StoredEmailContentRow(
+                content.RawMime,
+                content.MimeByteLength,
+                content.Sha256Hash,
+                content.Backend,
+                content.ObjectLocator))
             .SingleOrDefaultAsync(cancellationToken);
 
-        return storedContent?.ToStoredContent();
+        return await this.ResolveAsync(storedContent, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -247,17 +303,11 @@ internal sealed class EmailContentStore(
     public async Task SaveRecurringSendDraftAsync(
         IPersistenceSession session,
         RecurringSendId recurringSendId,
-        ReadOnlyMemory<byte> draftMime,
+        PlacedEmailContent placedContent,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
-
-        if (draftMime.IsEmpty)
-        {
-            throw new ArgumentException(
-                "A recurring send is declared with the draft its occurrences are composed from.",
-                nameof(draftMime));
-        }
+        ArgumentNullException.ThrowIfNull(placedContent);
 
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
@@ -282,15 +332,15 @@ internal sealed class EmailContentStore(
             return;
         }
 
-        var bytes = GetCompleteArray(draftMime);
-
         writeContext.RecurringSendDrafts.Add(new RecurringSendDraftEntity
         {
             RecurringSendId = declaration.Id,
             RecurringSend = declaration,
-            DraftMime = bytes,
-            DraftByteLength = bytes.LongLength,
-            Sha256Hash = SHA256.HashData(draftMime.Span),
+            DraftMime = PayloadOf(placedContent),
+            DraftByteLength = placedContent.ByteLength,
+            Sha256Hash = placedContent.Sha256Hash.ToArray(),
+            Backend = placedContent.Backend,
+            ObjectLocator = placedContent.ObjectLocator,
             StoredAt = timeProvider.GetUtcNow(),
         });
     }
@@ -304,10 +354,15 @@ internal sealed class EmailContentStore(
         var storedDraft = await dbContext.RecurringSendDrafts
             .AsNoTracking()
             .Where(draft => draft.RecurringSendId == recurringSendId.Value)
-            .Select(draft => new StoredEmailContentRow(draft.DraftMime, draft.DraftByteLength, draft.Sha256Hash))
+            .Select(draft => new StoredEmailContentRow(
+                draft.DraftMime,
+                draft.DraftByteLength,
+                draft.Sha256Hash,
+                draft.Backend,
+                draft.ObjectLocator))
             .SingleOrDefaultAsync(cancellationToken);
 
-        return storedDraft?.ToStoredContent();
+        return await this.ResolveAsync(storedDraft, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -319,6 +374,11 @@ internal sealed class EmailContentStore(
     /// beside them carries from disagreeing.
     /// </para>
     /// <para>
+    /// Under the object backend the row is repointed rather than the object rewritten, because every placement mints a
+    /// key of its own. A commit that never happens therefore leaves the row pointing at the previous revision's object,
+    /// which is intact, and a commit that does happen leaves the superseded object an orphan.
+    /// </para>
+    /// <para>
     /// Unlike the incoming write, this publishes no measurement, for the reason the outgoing write publishes none: what
     /// synchronization stored for a mailbox is a different quantity from what this deployment composed.
     /// </para>
@@ -326,15 +386,11 @@ internal sealed class EmailContentStore(
     public async Task SaveMailDraftContentAsync(
         IPersistenceSession session,
         MailDraftId draftId,
-        ReadOnlyMemory<byte> rawMime,
+        PlacedEmailContent placedContent,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
-
-        if (rawMime.IsEmpty)
-        {
-            throw new ArgumentException("A draft is stored with the MIME it is held as.", nameof(rawMime));
-        }
+        ArgumentNullException.ThrowIfNull(placedContent);
 
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
@@ -344,9 +400,8 @@ internal sealed class EmailContentStore(
             ?? throw new InvalidOperationException(
                 "Raw MIME cannot be stored without the draft record it is a revision of.");
 
-        var bytes = GetCompleteArray(rawMime);
-        var byteLength = bytes.LongLength;
-        var hash = SHA256.HashData(rawMime.Span);
+        var bytes = PayloadOf(placedContent);
+        var digest = placedContent.Sha256Hash.ToArray();
         var storedAt = timeProvider.GetUtcNow();
 
         // A draft still being inserted can carry no persisted message, so the database pass is skipped for one — the
@@ -360,8 +415,10 @@ internal sealed class EmailContentStore(
         if (trackedContent is not null)
         {
             trackedContent.RawMime = bytes;
-            trackedContent.MimeByteLength = byteLength;
-            trackedContent.Sha256Hash = hash;
+            trackedContent.MimeByteLength = placedContent.ByteLength;
+            trackedContent.Sha256Hash = digest;
+            trackedContent.Backend = placedContent.Backend;
+            trackedContent.ObjectLocator = placedContent.ObjectLocator;
             trackedContent.StoredAt = storedAt;
 
             return;
@@ -378,8 +435,10 @@ internal sealed class EmailContentStore(
                 .ExecuteUpdateAsync(
                     setters => setters
                         .SetProperty(candidate => candidate.RawMime, bytes)
-                        .SetProperty(candidate => candidate.MimeByteLength, byteLength)
-                        .SetProperty(candidate => candidate.Sha256Hash, hash)
+                        .SetProperty(candidate => candidate.MimeByteLength, placedContent.ByteLength)
+                        .SetProperty(candidate => candidate.Sha256Hash, digest)
+                        .SetProperty(candidate => candidate.Backend, placedContent.Backend)
+                        .SetProperty(candidate => candidate.ObjectLocator, placedContent.ObjectLocator)
                         .SetProperty(candidate => candidate.StoredAt, storedAt),
                     cancellationToken);
 
@@ -393,16 +452,18 @@ internal sealed class EmailContentStore(
             MailDraftId = draft.Id,
             MailDraft = draft,
             RawMime = bytes,
-            MimeByteLength = byteLength,
-            Sha256Hash = hash,
+            MimeByteLength = placedContent.ByteLength,
+            Sha256Hash = digest,
+            Backend = placedContent.Backend,
+            ObjectLocator = placedContent.ObjectLocator,
             StoredAt = storedAt,
         });
     }
 
     /// <inheritdoc />
     /// <remarks>
-    /// Projected to the three columns for the reason the other two reads are, and spanned for none: a draft's message
-    /// is read when it is appended or promoted rather than once per request meeting a whole mailbox.
+    /// Projected for the reason the other two reads are, and spanned for none: a draft's message is read when it is
+    /// appended or promoted rather than once per request meeting a whole mailbox.
     /// </remarks>
     public async Task<StoredEmailContent?> FindMailDraftContentAsync(
         MailDraftId draftId,
@@ -411,17 +472,55 @@ internal sealed class EmailContentStore(
         var storedContent = await dbContext.MailDraftContents
             .AsNoTracking()
             .Where(content => content.MailDraftId == draftId.Value)
-            .Select(content => new StoredEmailContentRow(content.RawMime, content.MimeByteLength, content.Sha256Hash))
+            .Select(content => new StoredEmailContentRow(
+                content.RawMime,
+                content.MimeByteLength,
+                content.Sha256Hash,
+                content.Backend,
+                content.ObjectLocator))
             .SingleOrDefaultAsync(cancellationToken);
 
-        return storedContent?.ToStoredContent();
+        return await this.ResolveAsync(storedContent, cancellationToken);
     }
 
-    private static void EnsureOccurrenceMatches(
-        StoredEmailEntity storedEmail,
-        RemoteEmailContent content)
+    /// <summary>Answers one row with the payload it points at, wherever that is.</summary>
+    /// <returns>The content, or <see langword="null" /> when the row names an object the endpoint no longer holds.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the row is object-backed and this deployment configured no endpoint.</exception>
+    /// <remarks>
+    /// An object the endpoint no longer holds is answered as absent rather than raised, so the caller grades it exactly
+    /// as it grades a missing database payload: an ordinary answer for incoming mail, a defect for a send or a draft,
+    /// and a repair request either way.
+    /// </remarks>
+    private async Task<StoredEmailContent?> ResolveAsync(
+        StoredEmailContentRow? row,
+        CancellationToken cancellationToken)
     {
-        var occurrenceId = content.OccurrenceId;
+        if (row is null)
+        {
+            return null;
+        }
+
+        if (row.Backend is ContentStorageBackend.Database)
+        {
+            return row.ToStoredContent(row.RawMime ?? []);
+        }
+
+        if (objectStore is null)
+        {
+            // Not a failure a reader can act on and not one this type can repair: the deployment is holding mail in a
+            // place it no longer describes. The readiness check is what reports it, and it reports it whether or not
+            // anybody has tried to read one of these rows yet.
+            throw new InvalidOperationException(
+                "This payload is held in object storage and no object-storage endpoint is configured for this deployment.");
+        }
+
+        var payload = await objectStore.FindAsync(row.ObjectLocator!, cancellationToken);
+
+        return payload is null ? null : row.ToStoredContent(payload.Value);
+    }
+
+    private static void EnsureOccurrenceMatches(StoredEmailEntity storedEmail, EmailOccurrenceId occurrenceId)
+    {
         if (storedEmail.MailFolder.MailboxAccountId != occurrenceId.AccountId.Value
             || storedEmail.MailFolder.Alias != occurrenceId.FolderResolutionId.Alias.Value
             || storedEmail.MailFolder.ResolutionGeneration != occurrenceId.FolderResolutionId.Generation.Value
@@ -431,6 +530,12 @@ internal sealed class EmailContentStore(
             throw new InvalidOperationException("Raw MIME occurrence identity does not match the corresponding stored email metadata.");
         }
     }
+
+    /// <summary>Gets the bytes the row itself carries, which is nothing at all when the object backend holds them.</summary>
+    private static byte[]? PayloadOf(PlacedEmailContent placedContent) =>
+        placedContent.Backend is ContentStorageBackend.Database
+            ? GetCompleteArray(placedContent.RawMime)
+            : null;
 
     private static byte[] GetCompleteArray(ReadOnlyMemory<byte> rawMime)
     {

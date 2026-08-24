@@ -94,7 +94,7 @@ public sealed class EmailAttachmentDownloadReaderTests
     public async Task OpenAsync_EmailThisMailboxCopyNoLongerHolds_RefusesWithoutReadingAnyContent()
     {
         // Arrange
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var reader = ReaderOver(summary: null, contentStore: contentStore);
 
         // Act
@@ -355,7 +355,7 @@ public sealed class EmailAttachmentDownloadReaderTests
 
     private static IEmailContentStore ContentStoreReturning(StoredEmailContent? storedContent)
     {
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         contentStore
             .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(storedContent));

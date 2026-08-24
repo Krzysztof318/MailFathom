@@ -442,6 +442,60 @@ public static class OrchestrationContract
     /// <remarks>Declared with the <c>tcp</c> scheme because that is what it is: the daemon speaks neither HTTP nor anything Aspire can probe with a route.</remarks>
     public const string SpamScannerEndpointName = "spamd";
 
+    /// <summary>The S3-compatible endpoint the integration-test topology stores message content in.</summary>
+    /// <remarks>
+    /// <para>
+    /// Present only under <see cref="IntegrationTestingArgument" />, for the reason the analyzer and the spam daemon
+    /// are: a developer's orchestration deploys one only where the deployment they are running selected the object
+    /// backend, which is off by default, and starting one beside every local run would cost a container for a backend
+    /// that run does not use.
+    /// </para>
+    /// <para>
+    /// The suite starts it because it is the one part of the object backend no substitute settles. What a substituted
+    /// client proves is that MailFathom composes the request it meant to; what an endpoint proves is that a payload
+    /// written under a minted key comes back byte for byte, that the digest the row carries is the one the endpoint
+    /// agreed it received, and that a second write under a second key leaves the first object where it was.
+    /// </para>
+    /// </remarks>
+    public const string ObjectStorageResourceName = "object-storage";
+
+    /// <summary>The endpoint's own S3 port, which its image publishes and its entrypoint binds.</summary>
+    public const int ObjectStorageContainerPort = 9090;
+
+    /// <summary>The endpoint the S3 API is answered on.</summary>
+    public const string ObjectStorageEndpointName = "s3";
+
+    /// <summary>The bucket the suite writes message content into, which the fixture creates because the image ships none.</summary>
+    public const string ObjectStorageBucket = "mailfathom-integration";
+
+    /// <summary>The region the endpoint's requests are signed for.</summary>
+    /// <remarks>
+    /// Any value both sides agree on. An S3-compatible endpoint that is not AWS still signs by region, so a client and
+    /// a server that disagreed here would report a signature failure rather than a wrong region.
+    /// </remarks>
+    public const string ObjectStorageRegion = "eu-central-1";
+
+    /// <summary>The key prefix every object the suite writes is composed under.</summary>
+    /// <remarks>
+    /// Non-empty on purpose. A prefix is what lets a bucket hold MailFathom's objects beside anything else, and one
+    /// left empty would leave the composition that joins it to a key untested against the deployment that states one.
+    /// </remarks>
+    public const string ObjectStorageKeyPrefix = "mailfathom";
+
+    /// <summary>The access key the suite signs its requests to the endpoint with.</summary>
+    /// <remarks>
+    /// Stated rather than generated, for the reason <see cref="PostgresPassword" /> is: it reaches no deployment, and a
+    /// run that generated it would have to persist it somewhere to reach the same server twice. It is not a credential
+    /// to anything, and here it is less than one — the endpoint admits any well-formed signature rather than checking
+    /// this value, so what the constant buys is a client that composes and signs a real request rather than one handed
+    /// an empty credential. The server it reaches is a container this run started, on a port this run published.
+    /// </remarks>
+    public const string ObjectStorageAccessKey = "mailfathom";
+
+    /// <summary>The secret key the suite reaches the endpoint with.</summary>
+    /// <remarks>Stated rather than generated, for the reason <see cref="ObjectStorageAccessKey" /> is.</remarks>
+    public const string ObjectStorageSecretKey = "mailfathom-integration-secret";
+
     /// <summary>The MailFathom account identifier every occurrence the integration-test topology stores belongs to.</summary>
     /// <remarks>
     /// Declared here because two sides have to agree on it: the suite writes its mail under this identifier, and the

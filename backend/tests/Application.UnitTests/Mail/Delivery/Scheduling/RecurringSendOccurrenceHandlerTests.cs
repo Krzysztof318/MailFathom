@@ -211,7 +211,7 @@ public sealed class RecurringSendOccurrenceHandlerTests
     private sealed class OccurrenceWorld
     {
         private readonly FakeTimeProvider clock = new(Dispatched);
-        private readonly IEmailContentStore contentStore = Substitute.For<IEmailContentStore>();
+        private readonly IEmailContentStore contentStore = ContentStores.Substituted();
 
         internal OccurrenceWorld(bool storeDraft = true)
         {

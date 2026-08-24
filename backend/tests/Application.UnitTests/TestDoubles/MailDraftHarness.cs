@@ -68,6 +68,9 @@ internal sealed class MailDraftHarness
 
     private StubMailFolderMappings mappings = StubMailFolderMappings.Nothing;
     private OutgoingMailScreening screening = OutgoingMailScreenings.Inactive();
+    private readonly TaskCompletionSource conflictObserved = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private int conflictingAttempts;
 
     internal MailDraftHarness(
         TimeProvider clock,
@@ -127,14 +130,34 @@ internal sealed class MailDraftHarness
 
         this.transportSecurityPolicies.GetPolicy(Arg.Any<MailAccountId>()).Returns(RequiredTlsPolicy);
 
-        var persistenceSession = Substitute.For<IPersistenceSession>();
-        persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
-        this.persistenceSessions.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(persistenceSession);
+        // One session per call rather than one for the harness, because a replayed unit of work gets a fresh one and a
+        // test about a replay reads how many were opened.
+        this.persistenceSessions.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            var persistenceSession = Substitute.For<IPersistenceSession>();
+            persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+            {
+                if (this.conflictingAttempts-- <= 0)
+                {
+                    return PersistenceCommitResult.Committed;
+                }
+
+                // Signalled from inside the commit, because the backoff that follows it is a delay against the
+                // harness's clock and nothing else advances that clock. A test waits for this and then advances,
+                // which is what lets the replay happen without a real wait.
+                this.conflictObserved.TrySetResult();
+
+                return PersistenceCommitResult.ConcurrencyConflict;
+            });
+            this.PersistenceSessionsOpened++;
+
+            return persistenceSession;
+        });
 
         this.commitPolicy = new OptimisticConcurrencyRetryPolicy(
             this.persistenceSessions,
             new PersistenceConcurrencyOptions(),
-            clock);
+            this.clock);
 
         this.BeginNewScope();
     }
@@ -160,6 +183,9 @@ internal sealed class MailDraftHarness
     /// <summary>Gets how many appends the server has been asked for.</summary>
     internal int AppendCount { get; private set; }
 
+    /// <summary>Gets how many persistence sessions have been opened, which is what a replay costs and a placement does not.</summary>
+    internal int PersistenceSessionsOpened { get; private set; }
+
     /// <summary>Gets every occurrence the server was asked to take back out, in the order it was asked.</summary>
     internal List<(ImapUidValidity UidValidity, ImapUid Uid)> Withdrawn { get; } = [];
 
@@ -175,6 +201,17 @@ internal sealed class MailDraftHarness
 
     /// <summary>Gets or sets what the server does when asked to take a copy back out, which defaults to doing it.</summary>
     internal Func<ImapUidValidity, ImapUid, Task> Withdraw { get; set; } = (_, _) => Task.CompletedTask;
+
+    /// <summary>Makes the next commits report a conflict, which is how a race with another run reaches this code.</summary>
+    /// <param name="attempts">How many attempts conflict before one commits.</param>
+    internal void ConflictOnTheNextCommits(int attempts) => this.conflictingAttempts = attempts;
+
+    /// <summary>Completes once a commit has reported a conflict, which is the moment the retry backoff begins.</summary>
+    /// <remarks>
+    /// A test awaits this before advancing the clock it handed this harness. The backoff is a delay against that clock,
+    /// so advancing it earlier would elapse nothing and advancing it never would leave the replay waiting forever.
+    /// </remarks>
+    internal Task ConflictObserved => this.conflictObserved.Task;
 
     /// <summary>Puts a screening in front of the book, and rebuilds it so the next save meets that screening.</summary>
     /// <param name="outgoingMailScreening">What the book asks before it writes anything down.</param>

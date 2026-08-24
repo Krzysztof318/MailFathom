@@ -50,6 +50,9 @@ internal sealed class ObjectStorageTelemetry
     /// <summary>Names writing one object.</summary>
     internal const string PutOperationName = "put";
 
+    /// <summary>Names reading one object back.</summary>
+    internal const string GetOperationName = "get";
+
     /// <summary>Names removing one object.</summary>
     internal const string DeleteOperationName = "delete";
 

@@ -4,6 +4,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.EmailContent.Storage;
 
 namespace MailFathom.Host.Configuration.Persistence;
 

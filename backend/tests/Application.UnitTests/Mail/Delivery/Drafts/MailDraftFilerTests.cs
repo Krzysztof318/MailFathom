@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
+using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Persistence;
@@ -273,7 +274,11 @@ public sealed class MailDraftFilerTests
             Moment,
             CancellationToken.None);
 
-        await harness.Contents.SaveMailDraftContentAsync(session, draft.Id, mime, CancellationToken.None);
+        await harness.Contents.SaveMailDraftContentAsync(
+            session,
+            draft.Id,
+            PlacedEmailContent.InDatabase(mime),
+            CancellationToken.None);
 
         return draft;
     }
@@ -294,7 +299,11 @@ public sealed class MailDraftFilerTests
             Moment.AddMinutes(1),
             CancellationToken.None);
 
-        await harness.Contents.SaveMailDraftContentAsync(session, draftId, mime, CancellationToken.None);
+        await harness.Contents.SaveMailDraftContentAsync(
+            session,
+            draftId,
+            PlacedEmailContent.InDatabase(mime),
+            CancellationToken.None);
 
         return revised;
     }
