@@ -123,6 +123,29 @@ public sealed class JobClaimStatementTests
         Assert.DoesNotContain(nameof(JobState.DeadLettered), arguments);
     }
 
+    /// <summary>
+    /// The order is the turn each job holds, which is the whole of what makes the claim fair across owners: the enqueue
+    /// spread each owner's backlog over the clock, so draining in turn order interleaves owners. Ordering by the
+    /// available instant again — the FIFO this replaced — would silently give one owner's backlog the whole queue for
+    /// as long as it lasted, and every other assertion here would go on passing.
+    /// </summary>
+    [Fact]
+    public void Compose_AClaim_OrdersByTheTurnEachJobHoldsRatherThanByWhenItBecameAvailable()
+    {
+        // Act
+        var statement = JobClaimStatement.Compose(Request, ClaimedAt);
+
+        // Assert
+        Assert.Contains(
+            $"ORDER BY candidate.\"{nameof(JobEntity.TurnAt)}\", candidate.\"{nameof(JobEntity.Id)}\"",
+            statement.Format,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            $"ORDER BY candidate.\"{nameof(JobEntity.AvailableAt)}\"",
+            statement.Format,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>The claim counts the attempt, because a process that dies mid-execution never reaches a line that would.</summary>
     [Fact]
     public void Compose_AClaim_CountsTheAttemptAndStampsTheLease()

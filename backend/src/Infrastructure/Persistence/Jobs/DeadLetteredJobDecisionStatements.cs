@@ -30,9 +30,17 @@ internal static class DeadLetteredJobDecisionStatements
     /// <param name="retriedAt">The instant the decision is taken and stamped at.</param>
     /// <returns>The statement, whose row count is one when the decision took effect.</returns>
     /// <remarks>
+    /// <para>
     /// The attempt count goes back to nothing and the available instant to now, so the job is claimable by the next pass
     /// rather than after whatever backoff the failed attempt had written. The failure columns are left where they are:
     /// the row goes on saying why it stopped until an attempt replaces the answer.
+    /// </para>
+    /// <para>
+    /// The turn moves to now with it, because the one the row is carrying belongs to a queue that no longer exists. A
+    /// job that stopped last week holds a turn from last week, and a decision to run it again would otherwise put it —
+    /// and every other dead letter an operator returned in the same sitting — in front of every owner's due work. It
+    /// keeps a later turn where it somehow has one, which is the same rule a scheduled retry follows.
+    /// </para>
     /// </remarks>
     internal static FormattableString ComposeRetry(Guid jobId, DateTimeOffset retriedAt)
     {
@@ -43,6 +51,7 @@ internal static class DeadLetteredJobDecisionStatements
                 UPDATE jobs
                 SET "State" = {pending},
                     "AvailableAt" = {retriedAt},
+                    "TurnAt" = GREATEST("TurnAt", {retriedAt}),
                     "AttemptCount" = 0,
                     "StateChangedAt" = {retriedAt}
                 WHERE "Id" = {jobId}

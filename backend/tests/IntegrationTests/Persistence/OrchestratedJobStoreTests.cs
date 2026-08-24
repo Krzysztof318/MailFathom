@@ -4,8 +4,14 @@
 
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Payloads;
+using MailFathom.Application.Persistence;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence;
+using MailFathom.Infrastructure.Persistence.Entities;
+using MailFathom.Infrastructure.Persistence.Owners;
+using MailFathom.Infrastructure.Persistence.Sessions;
 using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,6 +41,9 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
 {
     /// <summary>The alias this class binds, so the account row its jobs point at exists without disturbing another test's folder.</summary>
     private const string FolderAlias = "job-store";
+
+    /// <summary>The mailbox of the second owner the fairness of the claim is judged against.</summary>
+    private const string SecondOwnerAccount = "job-store-second-owner";
 
     /// <summary>A lease long enough that nothing in a test expires underneath it.</summary>
     private static readonly TimeSpan HeldLease = TimeSpan.FromMinutes(10);
@@ -529,6 +538,110 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         var afterDraining = await EnqueueOnceAsync(services, firstUid + (uint)attemptedCount, cancellationToken);
 
         Assert.Equal(JobEnqueueOutcome.Created, afterDraining.Outcome);
+    }
+
+    /// <summary>
+    /// One owner with a backlog and another with a single due job, and a claim bounded to two hands back one of each.
+    /// Under the ordering this replaced — the instant a job became available, which is the order the backlog was queued
+    /// in — the same claim would have returned two of the backlog and the second owner would have waited for the whole
+    /// of it. Only a real database settles it: the fairness is entirely in what one statement selects and in what an
+    /// insert stamped, and a substitute would prove that the code meant to interleave rather than that PostgreSQL does.
+    /// </summary>
+    /// <remarks>
+    /// The second owner is provisioned here and erased in the finally, because a deployment holding two owner records
+    /// cannot attribute a configured mail account — so every folder binding this class arranges is committed before the
+    /// second owner exists, and the deployment is left with the one record the classes after this one resolve against.
+    /// </remarks>
+    [Fact]
+    public async Task ClaimAsync_ABacklogOfOneOwnerBesideAnotherOwnersDueJob_HandsBackOneOfEachWithinABoundedClaim()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        await DrainAsync(services, cancellationToken);
+
+        var backlog = new List<JobId>();
+        for (uint uid = 1201; uid < 1205; uid++)
+        {
+            backlog.Add(await EnqueueAsync(services, uid, cancellationToken));
+        }
+
+        var secondOwnerId = Guid.CreateVersion7();
+
+        try
+        {
+            Assert.Equal(
+                PersistenceCommitResult.Committed,
+                await SeedSecondOwnerAsync(services, secondOwnerId, cancellationToken));
+
+            var otherOwnersJob = await services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<IJobStore>().EnqueueAsync(
+                    SecondOwnerRequest(),
+                    token),
+                cancellationToken);
+
+            Assert.Equal(JobEnqueueOutcome.Created, otherOwnersJob.Outcome);
+
+            // Act
+            var claimed = await services.InScopeAsync(
+                (scope, token) => ClaimAsync(scope, batchSize: 2, HeldLease, token),
+                cancellationToken);
+
+            // Assert
+            Assert.Equal(
+                [SecondOwnerAccount, SyntheticMailAccount.AccountId.Value],
+                claimed.Select(job => job.AccountId?.Value).Order());
+
+            // The backlog kept its own order: what fairness changed is whose turn comes between them, not whether an
+            // owner's work is handed out in the order it was queued.
+            Assert.Equal(backlog[0], Assert.Single(claimed, job => job.AccountId?.Value == SyntheticMailAccount.AccountId.Value).JobId);
+        }
+        finally
+        {
+            await services.CommitProducingAsync(
+                (_, session, token) => OwnerAccountErasure.EraseAsync(session, secondOwnerId, token),
+                CancellationToken.None);
+        }
+    }
+
+    /// <summary>Writes a second owner and one mailbox of theirs, which is the least a claim can be judged fair over.</summary>
+    /// <remarks>
+    /// Written straight into the model rather than through folder resolution, because resolution attributes an account
+    /// to the deployment's single owner — which is the very thing a second owner has to be arranged around.
+    /// </remarks>
+    private static Task<PersistenceCommitResult> SeedSecondOwnerAsync(
+        OrchestratedMailFathomServices services,
+        Guid ownerId,
+        CancellationToken cancellationToken) => services.CommitAsync(
+        async (_, session, token) =>
+        {
+            var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
+
+            context.OwnerAccounts.Add(new OwnerAccountEntity
+            {
+                Id = ownerId,
+                Document = "{}",
+                Version = 1,
+                CreatedAt = DateTimeOffset.UnixEpoch,
+                UpdatedAt = DateTimeOffset.UnixEpoch,
+            });
+            context.MailboxAccounts.Add(new MailboxAccountEntity { Id = SecondOwnerAccount, OwnerId = ownerId });
+        },
+        cancellationToken);
+
+    /// <summary>Composes the second owner's one execution, against their own account rather than this class's.</summary>
+    private static JobEnqueueRequest SecondOwnerRequest()
+    {
+        var accountId = MailAccountId.Create(SecondOwnerAccount);
+
+        return JobEnqueueRequest.Create(
+            JobIdempotencyKey.Create($"{SecondOwnerAccount}/1"),
+            ClassifyEmailSpamJobPayload.For(EmailOccurrenceId.Create(
+                accountId,
+                new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
+                ImapUidValidity.Create(90_002),
+                ImapUid.Create(1))),
+            accountId);
     }
 
     /// <summary>Enqueues one job about a synthetic occurrence this class owns, and answers with whatever the queue did.</summary>

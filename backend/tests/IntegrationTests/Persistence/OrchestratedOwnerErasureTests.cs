@@ -285,6 +285,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
             Payload = "{}",
             MailboxAccountId = account.Id,
             AvailableAt = now,
+            TurnAt = now,
             EnqueuedAt = now,
             StateChangedAt = now,
         });

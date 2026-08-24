@@ -55,6 +55,23 @@ internal sealed class JobEntity
     /// <summary>Gets or sets the instant before which no claim may take the job.</summary>
     public DateTimeOffset AvailableAt { get; set; }
 
+    /// <summary>Gets or sets the instant this job's turn comes once its owner's queue is shared with everybody else's.</summary>
+    /// <remarks>
+    /// <para>
+    /// The order a claim takes due work in, and the whole of what makes that order fair. It is a virtual instant rather
+    /// than a real one: the enqueue stamps it one spacing past the latest turn the same owner's waiting work already
+    /// holds, and never earlier than the job becomes available. An owner with nothing waiting therefore lands on the
+    /// instant its work is due, and an owner working through a backlog lands further and further ahead of the clock,
+    /// which is what lets somebody else's due job overtake it instead of queueing behind the whole backlog.
+    /// </para>
+    /// <para>
+    /// Never null, so the ordering never falls back to a second column, and never earlier than <see cref="AvailableAt" />
+    /// so a job scheduled for later does not hold a turn it cannot take. A retry moves it forward with the instant the
+    /// backoff names; a release does not, because the attempt gave the work back rather than failing at it.
+    /// </para>
+    /// </remarks>
+    public DateTimeOffset TurnAt { get; set; }
+
     public DateTimeOffset EnqueuedAt { get; set; }
 
     public DateTimeOffset StateChangedAt { get; set; }

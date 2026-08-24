@@ -121,7 +121,7 @@ internal sealed class JobStore(
         var claimedJobs = await dbContext.Jobs
             .AsNoTracking()
             .Where(job => claimedIds.Contains(job.Id))
-            .OrderBy(job => job.AvailableAt)
+            .OrderBy(job => job.TurnAt)
             .ThenBy(job => job.Id)
             .ToArrayAsync(cancellationToken);
 
@@ -208,9 +208,17 @@ internal sealed class JobStore(
 
     /// <inheritdoc />
     /// <remarks>
+    /// <para>
     /// The same conditional update the others are, and the job returns to the queue rather than staying held: what
     /// keeps it from being taken again at once is the available instant, which is the whole of the backoff as far as
     /// the queue is concerned. The attempt count is left where the claim put it, because the attempt was spent.
+    /// </para>
+    /// <para>
+    /// The turn moves with it, but only forward: a job cannot hold a turn earlier than the instant it becomes claimable
+    /// again, or the backoff would end with it in front of everything that waited through it. It keeps a later turn
+    /// where it has one, because the place the enqueue gave it among its owner's work is not something a transient
+    /// failure should improve on.
+    /// </para>
     /// </remarks>
     public async Task<bool> ScheduleRetryAsync(
         JobId jobId,
@@ -237,6 +245,7 @@ internal sealed class JobStore(
                  "LeaseOwner" = NULL,
                  "LeaseExpiresAt" = NULL,
                  "AvailableAt" = {availableAt},
+                 "TurnAt" = GREATEST("TurnAt", {availableAt}),
                  "LastFailureClassification" = {classification},
                  "LastFailureReason" = {reason},
                  "StateChangedAt" = {stateChangedAt}

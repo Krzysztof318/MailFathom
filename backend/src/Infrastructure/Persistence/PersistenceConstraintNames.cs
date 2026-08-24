@@ -324,6 +324,15 @@ internal static class PersistenceConstraintNames
     /// <summary>The index an account's jobs are erased and aged through.</summary>
     internal const string JobAccountIndexName = "ix_jobs_account";
 
+    /// <summary>The index an enqueue reads one owner's latest turn from, filtered to the work that still holds one.</summary>
+    /// <remarks>
+    /// Beside the account index rather than folded into it, because the two are read for opposite reasons and are
+    /// proportional to different things. That one answers what belongs to an account across everything the queue has
+    /// ever done; this one answers where an owner's waiting work has reached, which is a backlog rather than a history,
+    /// and it is read on every enqueue.
+    /// </remarks>
+    internal const string JobAccountTurnIndexName = "ix_jobs_account_turn";
+
     /// <summary>The index an operator reads what has stopped through, filtered to the one state that waits for them.</summary>
     internal const string JobDeadLetterIndexName = "ix_jobs_dead_lettered";
 

@@ -54,6 +54,25 @@ public sealed class DeadLetteredJobDecisionStatementsTests
         Assert.Contains(nameof(JobState.Pending), statement.GetArguments().OfType<string>());
     }
 
+    /// <summary>
+    /// The turn comes forward with the available instant, because the one the row is carrying was decided against a
+    /// queue that has since drained. Left where it was, a job dead-lettered last week would be claimed before every
+    /// owner's due work the moment an operator offered it again — and a sitting spent returning a dozen of them would
+    /// put the whole dozen there.
+    /// </summary>
+    [Fact]
+    public void ComposeRetry_ADecision_BringsTheTurnForwardWithoutEverMovingItBack()
+    {
+        // Act
+        var statement = DeadLetteredJobDecisionStatements.ComposeRetry(JobIdentity, DecidedAt);
+
+        // Assert
+        Assert.Contains(
+            $"""    "{nameof(JobEntity.TurnAt)}" = GREATEST("{nameof(JobEntity.TurnAt)}", """,
+            statement.Format,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>The failure columns say why the job stopped, and a decision about that account must not erase it.</summary>
     [Fact]
     public void ComposeRetry_ADecision_LeavesTheFailureColumnsWhereTheyAre()

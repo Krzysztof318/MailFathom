@@ -9,6 +9,7 @@ using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
+using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Jobs;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -66,6 +67,10 @@ public sealed class JobEnqueueStatementTests
     }
 
     /// <summary>A job with no available instant of its own is claimable as soon as it is written.</summary>
+    /// <remarks>
+    /// Four rather than three, because the available instant is passed twice: once as the column and once as the floor
+    /// the turn is taken no earlier than.
+    /// </remarks>
     [Fact]
     public void Compose_AnEnqueueThatNamesNoAvailableInstant_UsesTheInstantItIsWrittenAt()
     {
@@ -73,7 +78,71 @@ public sealed class JobEnqueueStatementTests
         var statement = JobEnqueueStatement.Compose(Guid.CreateVersion7(), Request, "{}", EnqueuedAt, enqueuedTrace: null);
 
         // Assert
-        Assert.Equal(3, statement.GetArguments().Count(argument => Equals(argument, EnqueuedAt)));
+        Assert.Equal(4, statement.GetArguments().Count(argument => Equals(argument, EnqueuedAt)));
+    }
+
+    /// <summary>
+    /// The turn is one spacing past the latest one the same owner's waiting work already holds, which is the whole of
+    /// what makes the claim fair: it is what spreads a backlog over the clock instead of leaving every job of it at the
+    /// instant it was queued. The peers are found through the account's owner rather than through the account, so a
+    /// person with several mailboxes gets one share rather than one per mailbox.
+    /// </summary>
+    [Fact]
+    public void Compose_AnEnqueue_PlacesTheTurnOneSpacingPastTheOwnersLatestWaitingTurn()
+    {
+        // Act
+        var statement = JobEnqueueStatement.Compose(Guid.CreateVersion7(), Request, "{}", EnqueuedAt, enqueuedTrace: null);
+
+        // Assert
+        Assert.Contains(
+            $"SELECT MAX(mailbox.\"{nameof(JobEntity.TurnAt)}\")",
+            statement.Format,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"owned.\"{nameof(MailboxAccountEntity.OwnerId)}\" = owning.\"{nameof(MailboxAccountEntity.OwnerId)}\"",
+            statement.Format,
+            StringComparison.Ordinal);
+        Assert.Contains(statement.GetArguments(), argument => Equals(argument, JobEnqueueStatement.TurnSpacing));
+    }
+
+    /// <summary>
+    /// A turn is never earlier than the instant the job becomes claimable. Without the floor a job scheduled for
+    /// tomorrow would take a turn from today, and would then be in front of everything that waited through the delay
+    /// the enqueuer asked for.
+    /// </summary>
+    [Fact]
+    public void Compose_AnEnqueue_TakesTheTurnNoEarlierThanTheJobBecomesAvailable()
+    {
+        // Act
+        var statement = JobEnqueueStatement.Compose(Guid.CreateVersion7(), Request, "{}", EnqueuedAt, enqueuedTrace: null);
+
+        // Assert
+        Assert.Contains("GREATEST(", statement.Format, StringComparison.Ordinal);
+        Assert.True(
+            statement.Format.IndexOf("GREATEST(", StringComparison.Ordinal)
+                < statement.Format.IndexOf("SELECT MAX(mailbox.", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Where the owner's work has reached is measured over the states a claim can still take, so a turn is a position
+    /// in a backlog rather than in a history: an owner whose queue has drained starts again at the instant its next job
+    /// is due, which is what stops a burst last week costing it its place today.
+    /// </summary>
+    [Fact]
+    public void Compose_AnEnqueue_MeasuresTheOwnersWaitingWorkByTheClaimableStatesAlone()
+    {
+        // Act
+        var statement = JobEnqueueStatement.Compose(Guid.CreateVersion7(), Request, "{}", EnqueuedAt, enqueuedTrace: null);
+
+        // Assert
+        Assert.Contains(
+            $"waiting.\"{nameof(JobEntity.State)}\" = ANY(",
+            statement.Format,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            statement.GetArguments(),
+            argument => argument is string[] states
+                && states.SequenceEqual([nameof(JobState.Pending), nameof(JobState.Claimed)]));
     }
 
     [Fact]
