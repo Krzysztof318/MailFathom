@@ -122,35 +122,35 @@
     <comment>The product name. It is the same in every language: a name is not translated.</comment>
   </data>
   <data name="MainPage.TextBlock.Language.Text" xml:space="preserve">
-    <value>Language</value>
+    <value>Język</value>
     <comment>Labels the control that chooses which language the application is read in, for a reader and for a screen reader.</comment>
   </data>
   <data name="MainPage.Button.ApplyLanguage.Content" xml:space="preserve">
-    <value>Use this language</value>
+    <value>Użyj tego języka</value>
     <comment>Takes the language selected beside it. Phrased as the act rather than as "OK", because nothing is undone by leaving the screen.</comment>
   </data>
   <data name="MainPage.InfoBar.LanguageRestart.Title" xml:space="preserve">
-    <value>Language saved</value>
+    <value>Język zapisany</value>
     <comment>Shown once a language has been taken. Saved rather than changed, because the words on screen have not changed yet.</comment>
   </data>
   <data name="MainPage.InfoBar.LanguageRestart.Message" xml:space="preserve">
-    <value>MailFathom reads in the language you chose the next time it starts.</value>
+    <value>MailFathom będzie w wybranym języku przy następnym uruchomieniu.</value>
     <comment>Says plainly that the choice takes effect on the next launch, which is when Uno applies a culture.</comment>
   </data>
   <data name="MainPage.TextBlock.Theme.Text" xml:space="preserve">
-    <value>Theme</value>
+    <value>Motyw</value>
     <comment>Labels the control that chooses whether the application is shown light, dark, or the way the system is set.</comment>
   </data>
   <data name="AppTheme.System" xml:space="preserve">
-    <value>Follow the system</value>
+    <value>Zgodnie z systemem</value>
     <comment>One of the three theme offers. Phrased as what it does rather than as "System", which reads as a place.</comment>
   </data>
   <data name="AppTheme.Light" xml:space="preserve">
-    <value>Light</value>
+    <value>Jasny</value>
     <comment>One of the three theme offers.</comment>
   </data>
   <data name="AppTheme.Dark" xml:space="preserve">
-    <value>Dark</value>
+    <value>Ciemny</value>
     <comment>One of the three theme offers.</comment>
   </data>
 </root>

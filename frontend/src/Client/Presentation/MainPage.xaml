@@ -18,38 +18,83 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />
         <RowDefinition />
-        <RowDefinition Height="Auto" />
       </Grid.RowDefinitions>
 
-      <utu:NavigationBar Content="MailFathom" />
+      <!-- Every visible string on this page is reached by x:Uid rather than written here, including this one: the
+           product name is the same in both tables, and a name a page states for itself is a name the next page states
+           again slightly differently. -->
+      <utu:NavigationBar x:Uid="MainPage.NavigationBar.Title" />
 
-      <!-- A FeedView renders the three axes of a feed — data, error, progress — rather than only the value, so a
-           screen states what it is doing while it loads and what went wrong when it fails. -->
-      <mvux:FeedView Grid.Row="1"
-                     Source="{Binding Build}">
-        <DataTemplate>
-          <StackPanel HorizontalAlignment="Center"
-                      VerticalAlignment="Center"
-                      Spacing="8">
-            <TextBlock Text="{Binding Data.Product}"
-                       HorizontalAlignment="Center"
-                       Style="{StaticResource TitleLargeTextBlockStyle}" />
-            <TextBlock Text="{Binding Data.Version}"
-                       HorizontalAlignment="Center"
-                       Style="{StaticResource BodyTextBlockStyle}" />
-          </StackPanel>
-        </DataTemplate>
-      </mvux:FeedView>
+      <!-- One column, capped rather than fixed, so the block reads the same in a phone-width window and stops growing
+           into a line nobody can follow on a wide desktop one. -->
+      <StackPanel Grid.Row="1"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  MaxWidth="360"
+                  Padding="24"
+                  Spacing="32">
 
-      <!-- Theme selection sits outside the FeedView deliberately: it is the application's own state rather than
-           anything the build feed carries, so it stays reachable while that feed is loading or has failed. -->
-      <ComboBox Grid.Row="2"
-                Margin="16"
-                HorizontalAlignment="Center"
-                Header="Theme"
-                AutomationProperties.Name="Theme"
-                ItemsSource="{Binding ThemeOptions}"
-                SelectedItem="{Binding Theme, Mode=TwoWay}" />
+        <!-- A FeedView renders the three axes of a feed — data, error, progress — rather than only the value, so a
+             screen states what it is doing while it loads and what went wrong when it fails. -->
+        <mvux:FeedView Source="{Binding Build}">
+          <DataTemplate>
+            <StackPanel HorizontalAlignment="Center"
+                        Spacing="8">
+              <TextBlock Text="{Binding Data.Product}"
+                         HorizontalAlignment="Center"
+                         Style="{StaticResource TitleLargeTextBlockStyle}" />
+              <TextBlock Text="{Binding Data.Version}"
+                         HorizontalAlignment="Center"
+                         Style="{StaticResource BodyTextBlockStyle}" />
+            </StackPanel>
+          </DataTemplate>
+        </mvux:FeedView>
+
+        <!-- Both pickers sit outside the FeedView deliberately: they are the application's own state rather than
+             anything the build feed carries, so they stay reachable while that feed is loading or has failed. -->
+        <StackPanel Spacing="12">
+          <TextBlock x:Name="LanguageLabel"
+                     x:Uid="MainPage.TextBlock.Language"
+                     Style="{StaticResource BodyTextBlockStyle}" />
+
+          <!-- Each language is named in its own words rather than in the one currently on screen, which is what
+               somebody who cannot read the current one is looking for. The label above names the control to a screen
+               reader as well as to a reader, which is why it is bound rather than repeated.
+
+               No SelectedItem binding: the list itself carries the selection, which is how MVUX's Selection operator
+               reaches a Selector, and binding a state to SelectedItem instead would silently drop what somebody
+               picked. -->
+          <ComboBox ItemsSource="{Binding Languages}"
+                    DisplayMemberPath="Name"
+                    AutomationProperties.LabeledBy="{Binding ElementName=LanguageLabel}"
+                    HorizontalAlignment="Stretch" />
+
+          <Button x:Uid="MainPage.Button.ApplyLanguage"
+                  Command="{Binding ApplyLanguage}"
+                  Style="{StaticResource FilledButtonStyle}"
+                  HorizontalAlignment="Stretch" />
+
+          <!-- Uno applies a culture while a head starts, so the words already on screen keep the language they were
+               built in. This is where the application says that, rather than leaving somebody pressing the button
+               again because nothing appeared to happen. -->
+          <InfoBar x:Uid="MainPage.InfoBar.LanguageRestart"
+                   IsOpen="{Binding LanguageAwaitsRestart, Mode=TwoWay}"
+                   Severity="Informational" />
+        </StackPanel>
+
+        <StackPanel Spacing="12">
+          <TextBlock x:Name="ThemeLabel"
+                     x:Uid="MainPage.TextBlock.Theme"
+                     Style="{StaticResource BodyTextBlockStyle}" />
+
+          <!-- Named in the model rather than here, because the words are per item and a x:Uid names a control. A
+               theme takes effect where it is picked, so there is no button and no restart notice beside this one. -->
+          <ComboBox ItemsSource="{Binding ThemeOptions}"
+                    DisplayMemberPath="Name"
+                    AutomationProperties.LabeledBy="{Binding ElementName=ThemeLabel}"
+                    HorizontalAlignment="Stretch" />
+        </StackPanel>
+      </StackPanel>
     </Grid>
   </ScrollViewer>
 </Page>

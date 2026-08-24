@@ -47,9 +47,14 @@
     <IsPackable>false</IsPackable>
     <!-- NU1507 is the multi-source warning central package management raises, and the repository's NuGet.config
          declares exactly one source, so it never applies here. NETSDK1201 says a runtime identifier does not imply a
-         self-contained publish, which is what an Uno head wants. PRI257 reports that `en` is not among the packaged
-         resource languages, which is true of a scaffold whose only string table is the neutral one. -->
-    <NoWarn>$(NoWarn);NU1507;NETSDK1201;PRI257</NoWarn>
+         self-contained publish, which is what an Uno head wants.
+
+         PRI257 used to be here beside them, reporting that the `DefaultLanguage` the application declares is not among
+         the languages it packages resources for. It is gone because the thing it reported is: the client carries a
+         string table per language it offers, `Client.csproj` declares `en` as the default, and `en` is one of them. A
+         language added with no table beside it has to fail rather than be silenced, since the failure it describes is
+         a screen with no words on it. -->
+    <NoWarn>$(NoWarn);NU1507;NETSDK1201</NoWarn>
   </PropertyGroup>
 
   <!-- The browser head publishes trimmed, and the trimmer reports on every assembly in the graph rather than on the

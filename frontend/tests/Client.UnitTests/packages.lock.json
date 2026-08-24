@@ -592,6 +592,29 @@
           "Uno.WinUI": "6.0.465"
         }
       },
+      "Uno.Extensions.Localization": {
+        "type": "Transitive",
+        "resolved": "7.2.3",
+        "contentHash": "2vNwN9nt6izWCQE+J1SOncJavqsTu3eqb8jn3Z35Ur1whBT1fLi8SejxcG7xNy1lRadOhz3tQaQVjpUcZGF+LQ=="
+      },
+      "Uno.Extensions.Localization.WinUI": {
+        "type": "Transitive",
+        "resolved": "7.2.3",
+        "contentHash": "MbFfgRf3DI4xgv1GjryblGl/V1wM84rUKP0V2nUXu1qLp3Iph3nsUSuyw/q2g0x4wYp5ub+MxCxPEzQji0AxnQ==",
+        "dependencies": {
+          "Microsoft.Bcl.AsyncInterfaces": "8.0.0",
+          "Microsoft.Extensions.Configuration.Abstractions": "9.0.14",
+          "Microsoft.Extensions.DependencyInjection": "9.0.14",
+          "Microsoft.Extensions.Hosting": "9.0.14",
+          "Microsoft.Extensions.Hosting.Abstractions": "9.0.14",
+          "Microsoft.Extensions.Localization.Abstractions": "9.0.14",
+          "Microsoft.Extensions.Logging": "9.0.14",
+          "Microsoft.Extensions.Logging.Abstractions": "9.0.14",
+          "Uno.Extensions.Configuration": "7.2.3",
+          "Uno.Extensions.Localization": "7.2.3",
+          "Uno.WinUI": "6.0.465"
+        }
+      },
       "Uno.Extensions.Logging.WebAssembly.Console": {
         "type": "Transitive",
         "resolved": "1.7.0",
@@ -1013,6 +1036,7 @@
           "Uno.Extensions.Configuration": "[7.2.3, )",
           "Uno.Extensions.Core.WinUI": "[7.2.3, )",
           "Uno.Extensions.Hosting.WinUI": "[7.2.3, )",
+          "Uno.Extensions.Localization.WinUI": "[7.2.3, )",
           "Uno.Extensions.Logging.WinUI": "[7.2.3, )",
           "Uno.Extensions.Navigation.Toolkit.WinUI": "[7.2.3, )",
           "Uno.Extensions.Navigation.WinUI": "[7.2.3, )",
