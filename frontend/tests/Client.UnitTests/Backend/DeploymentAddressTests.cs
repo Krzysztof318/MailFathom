@@ -107,6 +107,29 @@ public sealed class DeploymentAddressTests
         Assert.False(pointed.IsPointed);
     }
 
+    /// <summary>The judgement comes before anything is written, so a refused address moves nobody and signs nobody out.</summary>
+    /// <remarks>
+    /// The ordering is what this asserts rather than the refusal, which the theory above already covers. A client
+    /// already reaching a deployment with somebody signed in against it is the state where getting the order wrong
+    /// costs something: mutating first and judging afterwards would leave the client pointed at an address it just
+    /// refused, and forgetting first would end a session over a value that never took effect.
+    /// </remarks>
+    [Fact]
+    public void PointAt_ARefusedAddressWhileAlreadyPointed_LeavesBothTheAddressAndTheSessionAlone()
+    {
+        // Arrange
+        var tokens = new AccessTokenStore();
+        var address = new DeploymentAddress(tokens);
+
+        address.PointAt(new Uri("https://mail.example/"));
+        tokens.Accept("issued-by-that-deployment");
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>("address", () => address.PointAt(new Uri("http://other.example/")));
+        Assert.Equal(new Uri("https://mail.example/"), address.Current);
+        Assert.True(tokens.IsSignedIn);
+    }
+
     [Fact]
     public void Construct_NoCredentialStore_IsRefused()
     {
