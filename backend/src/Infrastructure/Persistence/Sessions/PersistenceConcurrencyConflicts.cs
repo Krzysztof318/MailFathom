@@ -124,6 +124,13 @@ internal static class PersistenceConcurrencyConflicts
     /// right.
     /// </para>
     /// <para>
+    /// The next is the one move of stored content a deployment has, which is the whole-mailbox run's case for a
+    /// deployment rather than for an account: two operators asking to carry the content across, or one request
+    /// retried, both read that no move exists and both insert the singleton row. The retry reads back the move the
+    /// winner asked for, which is what makes asking twice asking once — and leaving it unrecognized would answer the
+    /// second operator with a provider failure while the move they asked for is in fact under way.
+    /// </para>
+    /// <para>
     /// The last is one message identifier bound to a thread by two arrivals. Two runs storing two messages of one
     /// conversation read that nothing binds the identifier yet, and each assembles a thread and binds it; the loser
     /// violates the key. The retry is what converges them: it re-reads, finds the winner's thread bound to the
@@ -154,6 +161,7 @@ internal static class PersistenceConcurrencyConflicts
                 or PersistenceConstraintNames.RecurringSendIdentityUniqueIndexName
                 or PersistenceConstraintNames.OutgoingEmailFilingPrimaryKeyConstraintName
                 or PersistenceConstraintNames.MailDraftCopyPrimaryKeyConstraintName
+                or PersistenceConstraintNames.ContentMoveRunPrimaryKeyConstraintName
                 or PersistenceConstraintNames.EmailThreadIdentifierPrimaryKeyConstraintName,
         };
 }

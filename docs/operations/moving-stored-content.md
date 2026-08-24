@@ -32,8 +32,10 @@ No database transaction is open across any of that: the endpoint is reached befo
 [ADR 0001](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md)'s
 rule and the same shape an ordinary object-backed write already has.
 
-**A payload that cannot be carried is left in the database, counted, and stepped past.** The position advances whatever
-the outcome, so one message the move cannot vouch for never stands in front of every message behind it.
+**A payload that cannot be carried is left in the database, counted, and stepped past.** The position advances past
+every payload the pass reached a verdict on, so one message the move cannot vouch for never stands in front of every
+message behind it. A payload a restart interrupted mid-copy is the one exception: the position stays on the one before
+it, so the next pass carries it from the beginning rather than stepping past a message nobody decided about.
 
 ## Running it
 
@@ -54,8 +56,8 @@ endpoint is refused outright rather than given a move that would carry nothing.
 Asking twice is asking once: a move already running or paused is answered with itself rather than started over, so a
 second operator's request never discards the position the first one stopped at.
 
-**Pausing cancels nothing.** The pass that is running finishes the one payload it holds and the next one finds the move
-stopped, which is why stopping is immediate and costs nothing. Resuming continues from the committed position rather
+**Pausing cancels nothing.** The pass that is running reads the decision between payloads, so it finishes the one
+payload it holds and ends there, which is why stopping is immediate and costs nothing. Resuming continues from the committed position rather
 than from the beginning.
 
 **Progress survives a restart**, because it is a row rather than a process's state: the payload kind the walk is on and

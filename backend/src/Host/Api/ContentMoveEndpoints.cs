@@ -125,8 +125,8 @@ internal static class ContentMoveEndpoints
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the move, or <c>404</c> when this deployment has never been asked for one.</returns>
     /// <remarks>
-    /// Nothing is cancelled: a pass that is running finishes the one payload it holds, and the next one finds the move
-    /// stopped. A move that has already finished is answered as it stands, because there is nothing to pause and saying
+    /// Nothing is cancelled: a pass that is running reads this decision between payloads, so it finishes the one payload
+    /// it holds and ends there. A move that has already finished is answered as it stands, because there is nothing to pause and saying
     /// so is the answer.
     /// </remarks>
     internal static async Task<Results<Ok<ContentMoveRunResponse>, NotFound>> PauseAsync(

@@ -103,8 +103,8 @@ public sealed class StoredContentMoveControl
     /// <returns>The move as it now stands, or <see langword="null" /> when this deployment has never been asked for one.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminOperate" />.</exception>
     /// <remarks>
-    /// Nothing is cancelled. A pass that is running finishes the payload it holds — which is one message, already put
-    /// and verified — and the next one finds the move stopped. A move that has finished is left as it is rather than
+    /// Nothing is cancelled. A pass that is running reads this decision between payloads, so it finishes the message it
+    /// holds — already put and verified — and ends there rather than carrying the rest of what its ceilings allowed. A move that has finished is left as it is rather than
     /// reported as an error: there is nothing to pause, and saying so is the answer.
     /// </remarks>
     public Task<StoredContentMoveRun?> PauseAsync(CancellationToken cancellationToken)

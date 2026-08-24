@@ -31,6 +31,10 @@ internal sealed class InMemoryEmailContentObjectBackend : IEmailContentObjectBac
     /// <summary>Gets or sets whether the endpoint refuses to answer at all.</summary>
     internal bool IsUnavailable { get; set; }
 
+    /// <summary>Gets or sets what happens the moment an object is written, given which placement this is, counted from one.</summary>
+    /// <remarks>The seam a test interrupts a payload mid-carry through, which is the one point where the pass is holding a message and has not yet repointed its row.</remarks>
+    internal Action<int>? WhenPlacing { get; set; }
+
     /// <inheritdoc />
     public Task<PlacedEmailContent> PlaceAsync(
         EmailContentKind kind,
@@ -43,6 +47,7 @@ internal sealed class InMemoryEmailContentObjectBackend : IEmailContentObjectBac
         }
 
         this.PlacementCount++;
+        this.WhenPlacing?.Invoke(this.PlacementCount);
 
         var objectLocator = $"mail/{kind}/{this.PlacementCount:D4}";
 

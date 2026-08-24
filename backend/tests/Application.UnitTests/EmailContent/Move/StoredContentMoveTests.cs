@@ -289,6 +289,52 @@ public sealed class StoredContentMoveTests
         Assert.Equal(1L, this.runs.Current?.CopiedPayloadCount);
     }
 
+    /// <summary>A pause reaches the pass that is running, which ends after the payload in flight rather than at its own ceilings.</summary>
+    [Fact]
+    public async Task RunAsync_PausedMidPass_EndsAfterThePayloadInFlightRatherThanAtTheCeiling()
+    {
+        // Arrange
+        this.ArrangeRunningMove();
+        this.ArrangePayloads(EmailContentKind.IncomingMessage, count: 5);
+        this.runs.ArrangeDecisionOnRead(2, run => run with { State = StoredContentMoveState.Paused });
+
+        // Act
+        var pass = await this.MoveOver(payloadsPerPass: 20).RunAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1L, pass.CopiedPayloadCount);
+        Assert.True(pass.PayloadsRemain);
+        Assert.Equal(1, this.objects.PlacementCount);
+        Assert.Equal(PayloadId(1), this.runs.Current?.ResumeAfter);
+    }
+
+    /// <summary>A shutdown that interrupts one payload keeps everything the pass had already carried.</summary>
+    [Fact]
+    public async Task RunAsync_CancelledWhileCarryingAPayload_StillRecordsWhatItAlreadyMoved()
+    {
+        // Arrange
+        this.ArrangeRunningMove();
+        this.ArrangePayloads(EmailContentKind.IncomingMessage, count: 3);
+
+        using CancellationTokenSource shutdown = new();
+        this.objects.WhenPlacing = placement =>
+        {
+            if (placement == 2)
+            {
+                shutdown.Cancel();
+            }
+        };
+
+        // Act
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            this.MoveOver().RunAsync(shutdown.Token));
+
+        // Assert
+        Assert.Equal(1L, this.runs.Current?.CopiedPayloadCount);
+        Assert.Equal(PayloadId(1), this.runs.Current?.ResumeAfter);
+        Assert.Single(this.content.Repoints);
+    }
+
     /// <summary>A move that ended under the pass is left exactly as it ended rather than reopened by the pass's counts.</summary>
     [Fact]
     public async Task RunAsync_MoveCompletedWhileThePassRan_RecordsNothingOverIt()

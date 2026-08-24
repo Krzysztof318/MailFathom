@@ -104,14 +104,15 @@ public sealed class StoredContentMove
     /// <see cref="StoredContentMoveControl" />.
     /// </para>
     /// <para>
-    /// A move that is paused, finished, or was never asked for reports an idle pass and touches nothing. That is what
-    /// makes pausing immediate without cancelling anything: the pass already running finishes the payload it holds, and
-    /// this is where the next one stops.
+    /// A move that is paused, finished, or was never asked for reports an idle pass and touches nothing, and the state
+    /// is read again between payloads. That is what makes pausing immediate without cancelling anything: the pass
+    /// finishes the payload it holds and ends there, rather than carrying the rest of what its ceilings would have
+    /// allowed after somebody asked it to stop.
     /// </para>
     /// <para>
-    /// Cancellation between payloads ends the pass rather than raising, so a shutdown keeps what the pass has already
-    /// repointed together with the position it reached. Everything a pass commits is durable on its own, so the worst a
-    /// stopped pass costs is the one payload it was carrying — which the next pass carries from the beginning.
+    /// Cancellation between payloads ends the pass rather than raising, and cancellation <em>during</em> one still
+    /// commits what the pass reached before the exception leaves: what a pass repointed is durable on its own, so the
+    /// worst a stopped pass costs is the one payload it was carrying — which the next pass carries from the beginning.
     /// </para>
     /// </remarks>
     public async Task<StoredContentMovePass> RunAsync(CancellationToken cancellationToken)
@@ -128,44 +129,58 @@ public sealed class StoredContentMove
         var walk = new WalkState(run.Kind, run.ResumeAfter);
         var pending = new Queue<DatabaseBackedPayload>();
 
-        while (walk.CarriedPayloadCount < this.options.PayloadsPerPass
-            && walk.ReadByteCount < this.options.MaxBytesPerPass
-            && !cancellationToken.IsCancellationRequested)
+        try
         {
-            if (pending.Count == 0)
+            while (walk.CarriedPayloadCount < this.options.PayloadsPerPass
+                && walk.ReadByteCount < this.options.MaxBytesPerPass
+                && !cancellationToken.IsCancellationRequested)
             {
-                var batch = await this.contentStore.GetPayloadsToMoveAsync(
-                    walk.Kind,
-                    walk.ResumeAfter,
-                    this.options.PayloadsPerPass - walk.CarriedPayloadCount,
-                    cancellationToken);
-
-                if (batch.Count == 0)
+                if (pending.Count == 0)
                 {
-                    if (NextKindAfter(walk.Kind) is not { } nextKind)
-                    {
-                        walk.ReachedEnd = true;
-                        pass.ReachedEndOfContent();
+                    var batch = await this.contentStore.GetPayloadsToMoveAsync(
+                        walk.Kind,
+                        walk.ResumeAfter,
+                        this.options.PayloadsPerPass - walk.CarriedPayloadCount,
+                        cancellationToken);
 
-                        break;
+                    if (batch.Count == 0)
+                    {
+                        if (NextKindAfter(walk.Kind) is not { } nextKind)
+                        {
+                            walk.ReachedEnd = true;
+                            pass.ReachedEndOfContent();
+
+                            break;
+                        }
+
+                        walk.Kind = nextKind;
+                        walk.ResumeAfter = null;
+
+                        continue;
                     }
 
-                    walk.Kind = nextKind;
-                    walk.ResumeAfter = null;
-
-                    continue;
+                    foreach (var payload in batch)
+                    {
+                        pending.Enqueue(payload);
+                    }
                 }
 
-                foreach (var payload in batch)
+                var carried = pending.Dequeue();
+
+                await this.CarryAsync(carried, walk, pass, cancellationToken);
+
+                walk.ResumeAfter = carried.PayloadId;
+
+                if (await this.StoppedByOperatorAsync(run, cancellationToken))
                 {
-                    pending.Enqueue(payload);
+                    break;
                 }
             }
-
-            await this.CarryAsync(pending.Dequeue(), walk, pass, cancellationToken);
         }
-
-        await this.RecordAsync(run, walk);
+        finally
+        {
+            await this.RecordAsync(run, walk);
+        }
 
         return new StoredContentMovePass(
             walk.CopiedPayloadCount,
@@ -186,11 +201,30 @@ public sealed class StoredContentMove
     private static bool Matches(DatabaseBackedPayload payload, long byteLength, ReadOnlyMemory<byte> digest) =>
         payload.ByteLength == byteLength && payload.Sha256Hash.Span.SequenceEqual(digest.Span);
 
+    /// <summary>Reports whether the operator has stopped the move since this pass read it, which ends the pass here.</summary>
+    /// <remarks>
+    /// One primary-key read of a single-row table between payloads, which is what makes pausing cost the message in
+    /// flight rather than the rest of the pass — a ceiling of twenty payloads and sixty-four mebibytes is a long time to
+    /// go on rewriting where somebody's mail is held after they asked for it to stop. It is deliberately not a read the
+    /// walk trusts for anything else: a move replaced under the pass, or ended, is left for
+    /// <see cref="RecordAsync" /> to recognize on the same terms it always did.
+    /// </remarks>
+    private async Task<bool> StoppedByOperatorAsync(StoredContentMoveRun began, CancellationToken cancellationToken)
+    {
+        var current = await this.runStore.FindAsync(cancellationToken);
+
+        return current is not { State: StoredContentMoveState.Running }
+            || current.RequestedAt != began.RequestedAt;
+    }
+
     /// <summary>Copies one payload into the bucket, verifies it, and points its row at the object.</summary>
     /// <remarks>
-    /// The position advances whatever the outcome, which is what keeps a payload the move cannot carry from standing in
-    /// front of every payload behind it. A payload that stopped being the database's between the batch and the read is
-    /// neither copied nor failed: nothing is wrong and there is nothing to do, so the walk simply steps past it.
+    /// Every path through this returns, which is what advances the walk past the payload however it turned out: a payload
+    /// the move cannot carry must not stand in front of every payload behind it. A payload that stopped being the
+    /// database's between the batch and the read is neither copied nor failed: nothing is wrong and there is nothing to
+    /// do, so the walk simply steps past it. An exception is the one thing that does not advance it — a shutdown that
+    /// interrupted a payload leaves the position on the one before, so the next pass carries it from the beginning
+    /// rather than skipping a message nobody decided about.
     /// </remarks>
     private async Task CarryAsync(
         DatabaseBackedPayload payload,
@@ -198,7 +232,6 @@ public sealed class StoredContentMove
         IStoredContentMovePassScope pass,
         CancellationToken cancellationToken)
     {
-        walk.ResumeAfter = payload.PayloadId;
         walk.CarriedPayloadCount++;
         walk.ReadByteCount += payload.ByteLength;
 
