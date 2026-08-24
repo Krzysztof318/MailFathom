@@ -13,12 +13,12 @@ public sealed class DeploymentClientTests
 {
     private const string AnAnsweringDeployment =
         """
-        {"service":"MailFathom","version":"0.8.0","credential":"the-client","permissions":["mail.read","mail.send"]}
+        {"service":"MailFathom","version":"0.8.0","permissions":["mailfathom.mail.read","mailfathom.mail.send"]}
         """;
 
     private const string ACallerGrantedNothing =
         """
-        {"service":"MailFathom","version":"0.8.0","credential":"anonymous","permissions":[]}
+        {"service":"MailFathom","version":"0.8.0","permissions":[]}
         """;
 
     [Fact]
@@ -33,8 +33,7 @@ public sealed class DeploymentClientTests
         // Assert
         Assert.Equal("MailFathom", session.Service);
         Assert.Equal("0.8.0", session.Version);
-        Assert.Equal("the-client", session.Credential);
-        Assert.Equal(["mail.read", "mail.send"], session.Permissions);
+        Assert.Equal(["mailfathom.mail.read", "mailfathom.mail.send"], session.Permissions);
     }
 
     [Fact]

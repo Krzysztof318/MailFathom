@@ -4,7 +4,9 @@
 
 using System.Collections.Immutable;
 using System.Reflection;
+using MailFathom.Client.Backend;
 using MailFathom.Client.Presentation.Workspace;
+using MailFathom.Client.Session;
 using MailFathom.Client.UnitTests.TestDoubles;
 
 namespace MailFathom.Client.UnitTests.Presentation.Workspace;
@@ -13,8 +15,15 @@ namespace MailFathom.Client.UnitTests.Presentation.Workspace;
 /// The frame's own model: the field a question is composed in, and the indicator saying what it would be asked
 /// against.
 /// </summary>
-public sealed class WorkspaceModelTests
+public sealed class WorkspaceModelTests : IDisposable
 {
+    /// <summary>A session offering everything, for the tests whose subject is not what the deployment allows.</summary>
+    private readonly StubClientSession offeringEverything =
+        SessionOffering("mailfathom.mail.ask", "mailfathom.mail.read");
+
+    /// <inheritdoc />
+    public void Dispose() => this.offeringEverything.Dispose();
+
     /// <summary>
     /// The field holds the workspace's question rather than one of its own, which is what makes the question survive
     /// a move between spaces instead of ending with the screen it was typed on.
@@ -24,7 +33,7 @@ public sealed class WorkspaceModelTests
     {
         // Arrange
         var workspace = new SharedWorkspace();
-        var model = ModelOver(workspace);
+        await using var model = this.ModelOver(workspace);
 
         // Act
         await model.Intent.SetAsync("which invoices are still unpaid", TestContext.Current.CancellationToken);
@@ -39,7 +48,7 @@ public sealed class WorkspaceModelTests
     public async Task ScopeDescription_AWorkspaceNothingHasNarrowed_SaysEverything()
     {
         // Arrange
-        var model = ModelOver(new SharedWorkspace());
+        await using var model = this.ModelOver(new SharedWorkspace());
 
         // Act
         var description = await model.ScopeDescription;
@@ -54,7 +63,7 @@ public sealed class WorkspaceModelTests
     {
         // Arrange
         var workspace = new SharedWorkspace();
-        var model = ModelOver(workspace);
+        await using var model = this.ModelOver(workspace);
 
         // Act
         await workspace.Scope.UpdateAsync(
@@ -71,7 +80,7 @@ public sealed class WorkspaceModelTests
     {
         // Arrange
         var workspace = new SharedWorkspace();
-        var model = ModelOver(workspace);
+        await using var model = this.ModelOver(workspace);
 
         // Act
         await workspace.Scope.UpdateAsync(
@@ -91,7 +100,7 @@ public sealed class WorkspaceModelTests
     {
         // Arrange
         var workspace = new SharedWorkspace();
-        var model = ModelOver(workspace);
+        await using var model = this.ModelOver(workspace);
 
         // Act
         await workspace.Scope.UpdateAsync(
@@ -108,7 +117,7 @@ public sealed class WorkspaceModelTests
     {
         // Arrange
         var workspace = new SharedWorkspace();
-        var model = ModelOver(workspace);
+        await using var model = this.ModelOver(workspace);
 
         // Act
         await workspace.Scope.UpdateAsync(
@@ -133,13 +142,13 @@ public sealed class WorkspaceModelTests
     {
         // Arrange
         var workspace = new SharedWorkspace();
-        var narrowing = ModelOver(workspace);
+        await using var narrowing = this.ModelOver(workspace);
         await workspace.Scope.UpdateAsync(
             _ => new WorkspaceScope { Account = "work@example.test", Folder = "Archive" },
             TestContext.Current.CancellationToken);
 
         // Act
-        var rebuilt = ModelOver(workspace);
+        await using var rebuilt = this.ModelOver(workspace);
 
         // Assert
         Assert.Equal(await narrowing.ScopeDescription, await rebuilt.ScopeDescription);
@@ -151,10 +160,10 @@ public sealed class WorkspaceModelTests
     /// read would leave the view and anything the model asked subscribed to two descriptions of one scope.
     /// </summary>
     [Fact]
-    public void ScopeDescription_ReadTwice_IsOneFeed()
+    public async Task ScopeDescription_ReadTwice_IsOneFeed()
     {
         // Arrange
-        var model = ModelOver(new SharedWorkspace());
+        await using var model = this.ModelOver(new SharedWorkspace());
 
         // Act
         var (first, second) = (model.ScopeDescription, model.ScopeDescription);
@@ -163,17 +172,97 @@ public sealed class WorkspaceModelTests
         Assert.Same(first, second);
     }
 
+    /// <summary>What the credential carries is what the frame puts in front of somebody, and nothing beside it.</summary>
+    [Fact]
+    public async Task OffersDiscover_AGrantCarryingAsking_OffersTheSpaceAndTheFieldWithIt()
+    {
+        // Arrange
+        using var session = SessionOffering("mailfathom.mail.ask");
+        await using var model = this.ModelOver(session: session);
+
+        // Act, Assert
+        Assert.True(await model.OffersDiscover);
+        Assert.False(await model.OffersMail);
+    }
+
+    /// <summary>A space the credential does not permit is absent rather than present and refused when it is pressed.</summary>
+    [Fact]
+    public async Task OffersMail_AGrantNotCarryingReading_WithholdsTheSpace()
+    {
+        // Arrange
+        using var session = SessionOffering("mailfathom.mail.ask");
+        await using var model = this.ModelOver(session: session);
+
+        // Act, Assert
+        Assert.False(await model.OffersMail);
+        Assert.False(await model.OffersCases);
+    }
+
+    /// <summary>
+    /// The two reasons a thing is withheld reach the frame separately, because a credential is widened by whoever
+    /// runs the deployment and a deployment that does not have something is widened by no credential at all.
+    /// </summary>
+    [Fact]
+    public async Task AnythingUngranted_ASessionWithholdingForBothReasons_KeepsTheTwoReasonsApart()
+    {
+        // Arrange
+        using var withheldByTheGrant = SessionOffering("mailfathom.mail.read");
+        await using var granted = this.ModelOver(session: withheldByTheGrant);
+
+        using var withheldByTheDeployment = new StubClientSession(
+            SessionStanding.Of(
+                new DeploymentSession("MailFathom", "0.8.0", ["mailfathom.mail.ask", "mailfathom.mail.read"]),
+                SessionStanding.EveryCapability.Remove(ClientCapability.Discover)));
+        await using var deployed = this.ModelOver(session: withheldByTheDeployment);
+
+        // Act, Assert
+        Assert.True(await granted.AnythingUngranted);
+        Assert.False(await granted.AnythingUnavailable);
+
+        Assert.True(await deployed.AnythingUnavailable);
+        Assert.False(await deployed.AnythingUngranted);
+    }
+
+    /// <summary>A session that leaves the shell with nothing to open on says so once rather than showing three withheld spaces.</summary>
+    [Fact]
+    public async Task OffersNothing_ACallerGrantedNothing_IsSaidOnce()
+    {
+        // Arrange
+        using var session = SessionOffering();
+        await using var model = this.ModelOver(session: session);
+
+        // Act, Assert
+        Assert.True(await model.OffersNothing);
+    }
+
+    /// <summary>Asking the deployment again is the session's act, so the frame hands it on rather than fetching for itself.</summary>
+    [Fact]
+    public async Task RetrySession_PressedOnAFailedSession_AsksTheSessionAgain()
+    {
+        // Arrange
+        using var session = SessionOffering("mailfathom.mail.read");
+        await using var model = this.ModelOver(session: session);
+
+        // Act
+        model.RetrySession();
+
+        // Assert
+        Assert.Equal(1, session.Refreshes);
+    }
+
     /// <summary>A frame that could be built without the workspace would be a frame whose spaces shared nothing.</summary>
     [Fact]
     public void Constructor_AMissingService_IsRefused()
     {
         // Arrange
         var workspace = new SharedWorkspace();
+        using var session = SessionOffering();
         var words = ScopeWords();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new WorkspaceModel(null!, words));
-        Assert.Throws<ArgumentNullException>(() => new WorkspaceModel(workspace, null!));
+        Assert.Throws<ArgumentNullException>(() => new WorkspaceModel(null!, session, words));
+        Assert.Throws<ArgumentNullException>(() => new WorkspaceModel(workspace, null!, words));
+        Assert.Throws<ArgumentNullException>(() => new WorkspaceModel(workspace, session, null!));
     }
 
     /// <summary>
@@ -208,7 +297,16 @@ public sealed class WorkspaceModelTests
             type.GetGenericArguments().SelectMany(Unwrap).Append(type);
     }
 
-    private static WorkspaceModel ModelOver(IWorkspace workspace) => new(workspace, ScopeWords());
+    private WorkspaceModel ModelOver(
+        IWorkspace? workspace = null,
+        StubClientSession? session = null) =>
+        new(
+            workspace ?? new SharedWorkspace(),
+            session ?? this.offeringEverything,
+            ScopeWords());
+
+    private static StubClientSession SessionOffering(params string[] permissions) =>
+        new(SessionStanding.Of(new DeploymentSession("MailFathom", "0.8.0", permissions)));
 
     private static StubStringLocalizer ScopeWords() => new(new Dictionary<string, string>(StringComparer.Ordinal)
     {

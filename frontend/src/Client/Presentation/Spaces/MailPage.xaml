@@ -10,14 +10,23 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       xmlns:workspace="using:MailFathom.Client.Presentation.Workspace"
       NavigationCacheMode="Required">
 
-  <!-- The list beside what is open on a wide window, and the list alone on a narrow one, where opening something is
-       a screen rather than a second column. What either column holds is #1159's to decide. -->
-  <workspace:WorkspaceColumns>
-    <workspace:WorkspaceColumns.Primary>
-      <local:SpacePlaceholder x:Uid="MailPage.Messages" />
-    </workspace:WorkspaceColumns.Primary>
-    <workspace:WorkspaceColumns.Companion>
-      <local:SpacePlaceholder x:Uid="MailPage.Reading" />
-    </workspace:WorkspaceColumns.Companion>
-  </workspace:WorkspaceColumns>
+  <Grid>
+    <!-- The list beside what is open on a wide window, and the list alone on a narrow one, where opening something is
+         a screen rather than a second column. What either column holds is #1159's to decide. -->
+    <workspace:WorkspaceColumns>
+      <workspace:WorkspaceColumns.Primary>
+        <local:SpacePlaceholder x:Uid="MailPage.Messages" />
+      </workspace:WorkspaceColumns.Primary>
+      <workspace:WorkspaceColumns.Companion>
+        <local:SpacePlaceholder x:Uid="MailPage.Reading" />
+      </workspace:WorkspaceColumns.Companion>
+    </workspace:WorkspaceColumns>
+
+    <!-- What this space is instead where the session does not offer it; DiscoverPage carries why it is stated over
+         the space rather than instead of it. -->
+    <Grid Background="{ThemeResource BackgroundBrush}"
+          Visibility="{Binding OffersMail, Converter={StaticResource WithheldVisibility}}">
+      <local:SpacePlaceholder x:Uid="Workspace.Space.Withheld" />
+    </Grid>
+  </Grid>
 </Page>

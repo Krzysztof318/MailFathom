@@ -393,3 +393,33 @@ what keeps that from being a rule somebody has to enforce by reading.
   `BrowserSignInRedirectListener` already does for a port of the same shape. A head whose store is absent or refuses
   falls back to memory and says so, never to a file beside the binary and never to
   `ApplicationData.Current.LocalSettings`, which holds the deployment address and no secret.
+
+## What the session decides, and where that decision is taken
+
+The route above answers what this caller may do, and every screen follows it rather than asking for itself.
+`src/Client/Session/` is where that answer becomes something a screen reads, and it is one place on purpose.
+
+- **`IClientSession` is the application's session**, registered as a singleton and held as an `IState`, so the whole
+  client costs one `GET /api/client/session` however many screens read it. It is asked again when the answer stops
+  describing this run — the signed-in identity changing, and the client being pointed at another deployment — through
+  events `Client.Backend` raises, so no screen has to remember to refresh. `Refresh()` is the same fetch, for the
+  button on the failed state.
+- **`SessionStanding` is the one place that answers *may this be offered*.** A screen never reads a permission name:
+  it asks about a `ClientCapability`, and gets back a `CapabilityStanding` of `Offered`, `Ungranted`, or `Unavailable`.
+  Which permission a capability needs is stated there once, and `docs/operations/permissions.md` is the vocabulary it
+  draws on.
+- **Three values rather than two, because the two absences lead to different acts.** A capability the caller's
+  credential does not carry is widened by whoever runs their MailFathom; a capability the deployment does not have is
+  widened by no credential at all, and saying *you may not* there sends somebody after a permission nobody can give
+  them. The interface has to keep them apart in words a person can act on.
+- **Withheld means absent, not present and refused.** The service is what enforces; the client's part is to decline to
+  offer. A destination the session does not carry is not in the navigation, and an action it does not carry is not on
+  the screen.
+- **An answer that has not arrived is not a refusal.** A feed carrying no value yet reaches a binding as nothing at
+  all, so `OfferedVisibilityConverter` shows a capability only on an outright yes and its withheld twin only on an
+  outright no — never opening a space before anything said it may be opened, and never reporting a fetch still under
+  way as something taken away. A session that failed is rendered by the shell, with what it means and what to try,
+  rather than left as an empty frame.
+- **Every grant is a statement about the signed-in owner's scope.** Nothing the client shows may read as a view across
+  the deployment, and nothing that identifies a credential is modelled, logged, stored, or put in telemetry — which is
+  why `DeploymentSession` carries the service, the version, and the permissions, and carries nothing else.

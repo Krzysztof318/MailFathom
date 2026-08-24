@@ -43,6 +43,18 @@ public sealed class DeploymentAddress
         this.tokens = tokens;
     }
 
+    /// <summary>Raised when the client stops reaching one deployment and starts reaching another.</summary>
+    /// <remarks>
+    /// Everything the client holds about a deployment describes the one it was reached from, so a move invalidates it
+    /// whether or not anybody was signed in. The credential is dropped here already; this is the same fact stated for
+    /// readers that hold an answer rather than a token — announced from the one place the change happens, rather than
+    /// left to every caller that points the client somewhere to remember. A move made while somebody was signed in
+    /// therefore raises both this and <see cref="AccessTokenStore.SignedInChanged" />, which is
+    /// deliberate: the two say different things, and a reader that acted on either alone would go on holding an answer
+    /// in the case the other one covers.
+    /// </remarks>
+    public event EventHandler? Moved;
+
     /// <summary>Gets the deployment this client is pointed at, or <see langword="null" /> where nothing has pointed it yet.</summary>
     /// <remarks>Null is a state a first run is genuinely in rather than a failure: nobody has said where their MailFathom is, and the client's answer to that is to ask.</remarks>
     public Uri? Current
@@ -89,6 +101,7 @@ public sealed class DeploymentAddress
         if (moved)
         {
             this.tokens.Forget();
+            this.Moved?.Invoke(this, EventArgs.Empty);
         }
     }
 }

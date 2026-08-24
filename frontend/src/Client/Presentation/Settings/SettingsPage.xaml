@@ -82,6 +82,42 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                      TextWrapping="Wrap"
                      IsTextSelectionEnabled="True" />
 
+          <!-- The version that deployment is running, beside the client's own above. They move separately — a client
+               is installed and a deployment is upgraded — so somebody reporting a problem needs both, and the first
+               thing they would otherwise have to do is find out which of the two they were reading. It is shown
+               through a FeedView because it is fetched: it can be under way, and it can fail. -->
+          <TextBlock x:Uid="SettingsPage.TextBlock.DeploymentVersion"
+                     Style="{StaticResource BodyTextBlockStyle}" />
+
+          <mvux:FeedView Source="{Binding Session}">
+            <mvux:FeedView.ValueTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding Data.DeploymentVersion}"
+                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                           TextWrapping="Wrap"
+                           IsTextSelectionEnabled="True" />
+              </DataTemplate>
+            </mvux:FeedView.ValueTemplate>
+
+            <mvux:FeedView.ProgressTemplate>
+              <DataTemplate>
+                <ProgressBar IsIndeterminate="True"
+                             HorizontalAlignment="Stretch" />
+              </DataTemplate>
+            </mvux:FeedView.ProgressTemplate>
+
+            <!-- A version nobody could ask for is stated as that rather than left blank, which would read as a
+                 deployment reporting no version at all. -->
+            <mvux:FeedView.ErrorTemplate>
+              <DataTemplate>
+                <TextBlock x:Uid="SettingsPage.TextBlock.DeploymentVersionUnavailable"
+                           Style="{StaticResource BodyTextBlockStyle}"
+                           TextWrapping="Wrap"
+                           Foreground="{ThemeResource OnSurfaceVariantBrush}" />
+              </DataTemplate>
+            </mvux:FeedView.ErrorTemplate>
+          </mvux:FeedView>
+
           <!-- Declarative navigation rather than a handler: the route is what a reader of this page looks for, and a
                screen reached this way is one the system back gesture moves back through. -->
           <Button x:Uid="SettingsPage.Button.ChangeDeployment"

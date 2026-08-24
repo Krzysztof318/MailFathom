@@ -317,4 +317,56 @@
     <value>Ustawienia</value>
     <comment>Names the screen the frame reaches beside its three spaces.</comment>
   </data>
+  <data name="Workspace.InfoBar.NothingOffered.Title" xml:space="preserve">
+    <value>Nie ma jeszcze czego pokazać</value>
+    <comment>Heads the notice shown when the session leaves the shell with no space at all to open on.</comment>
+  </data>
+  <data name="Workspace.InfoBar.NothingOffered.Message" xml:space="preserve">
+    <value>To wdrożenie nie pozwala Ci na nic, co klient potrafi pokazać. Zapytaj osobę, która prowadzi Twój MailFathom, na co pozwala Twoje logowanie.</value>
+    <comment>What a person does about a session that offers no space at all: it is an answer rather than a failure, so it names who can change it.</comment>
+  </data>
+  <data name="Workspace.InfoBar.Ungranted.Title" xml:space="preserve">
+    <value>Część klienta nie jest dla Ciebie</value>
+    <comment>Heads the notice shown when a space is withheld by the caller's own grant.</comment>
+  </data>
+  <data name="Workspace.InfoBar.Ungranted.Message" xml:space="preserve">
+    <value>Twoje logowanie nie pozwala na wszystko, co klient potrafi pokazać, więc to, na co nie pozwala, nie jest oferowane. Poproś o rozszerzenie osobę, która prowadzi Twój MailFathom.</value>
+    <comment>The grant half of the distinction: this one is acted on by asking the operator, which is why it names them.</comment>
+  </data>
+  <data name="Workspace.InfoBar.Unavailable.Title" xml:space="preserve">
+    <value>Części klienta nie ma na tym wdrożeniu</value>
+    <comment>Heads the notice shown when a space is withheld by the deployment rather than by the caller's grant.</comment>
+  </data>
+  <data name="Workspace.InfoBar.Unavailable.Message" xml:space="preserve">
+    <value>To wdrożenie nie udostępnia wszystkiego, co klient potrafi pokazać. Żadne uprawnienie tego nie zmieni, więc nie ma o co prosić.</value>
+    <comment>The deployment half of the distinction: it exists to stop somebody going after a permission nobody can give them.</comment>
+  </data>
+  <data name="Workspace.InfoBar.SessionUnavailable.Title" xml:space="preserve">
+    <value>Klient nie mógł zapytać, na co Ci wolno</value>
+    <comment>Heads the notice shown when the session could not be fetched at all.</comment>
+  </data>
+  <data name="Workspace.InfoBar.SessionUnavailable.Message" xml:space="preserve">
+    <value>Dopóki Twoje wdrożenie nie odpowie, nic nie jest oferowane. Sprawdź, czy nadal masz z nim połączenie, i spróbuj ponownie.</value>
+    <comment>What it means and what to try. It names neither which failure it was nor anything the deployment answered with, because that text comes from a machine this application does not own.</comment>
+  </data>
+  <data name="Workspace.Space.Withheld.Heading" xml:space="preserve">
+    <value>Ta przestrzeń nie jest udostępniona</value>
+    <comment>Heads what a space is instead where the session withholds it. One text for all three, because which space it is, is on the screen already.</comment>
+  </data>
+  <data name="Workspace.Space.Withheld.Detail" xml:space="preserve">
+    <value>Klient nie udostępnia tej przestrzeni w tej sesji, więc nic tutaj by nie zadziałało. Powód podaje komunikat nad obszarem pracy.</value>
+    <comment>Says the space is withheld rather than empty, and sends the reader to the frame's notice, which is where the grant and the deployment are told apart.</comment>
+  </data>
+  <data name="Workspace.Button.RetrySession.Content" xml:space="preserve">
+    <value>Spróbuj ponownie</value>
+    <comment>Asks the deployment once more for what this caller may do.</comment>
+  </data>
+  <data name="SettingsPage.TextBlock.DeploymentVersion.Text" xml:space="preserve">
+    <value>Wersja wdrożenia</value>
+    <comment>Names the version the deployment reported, beside the client's own build above it.</comment>
+  </data>
+  <data name="SettingsPage.TextBlock.DeploymentVersionUnavailable.Text" xml:space="preserve">
+    <value>Nie podano — nie udało się zapytać wdrożenia.</value>
+    <comment>Stated rather than left blank, which would read as a deployment reporting no version at all.</comment>
+  </data>
 </root>

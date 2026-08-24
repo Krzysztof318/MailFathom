@@ -4,14 +4,15 @@
 
 using System.Collections.Immutable;
 using MailFathom.Client.Backend;
+using MailFathom.Client.Session;
 using Microsoft.Extensions.Localization;
 
 namespace MailFathom.Client.Presentation.Settings;
 
 /// <summary>
 /// The model behind <see cref="SettingsPage"/>: the two things a reader can decide about the application itself —
-/// which language it is read in, and which theme it is shown in — beside the build it is running and the deployment it
-/// is pointed at, which are what somebody reporting a problem is asked for.
+/// which language it is read in, and which theme it is shown in — beside the build it is running, the deployment it is
+/// pointed at, and the version that deployment is running, which are what somebody reporting a problem is asked for.
 /// </summary>
 public partial record SettingsModel
 {
@@ -25,28 +26,41 @@ public partial record SettingsModel
     /// <param name="localization">Which languages the application is readable in, and which one it is being read in.</param>
     /// <param name="themes">The theme service, which holds the choice and persists it across restarts.</param>
     /// <param name="address">Which deployment this client is pointed at, which is what the screen names.</param>
+    /// <param name="session">What that deployment reported about itself, which is where its own version comes from.</param>
     /// <param name="localizer">Where a string resolved here rather than by a <c>x:Uid</c> in the view comes from.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public SettingsModel(
         ILocalizationService localization,
         IThemeService themes,
         DeploymentAddress address,
+        IClientSession session,
         IStringLocalizer localizer)
     {
         ArgumentNullException.ThrowIfNull(localization);
         ArgumentNullException.ThrowIfNull(themes);
         ArgumentNullException.ThrowIfNull(address);
+        ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(localizer);
 
         this.localization = localization;
         this.themes = themes;
         this.address = address;
+        this.Session = session.Standing;
         this.languages = [.. localization.SupportedCultures.Select(AppLanguage.FromCulture)];
         this.themeOptions = [.. AppThemeOption.Offered.Select(theme => AppThemeOption.Named(theme, localizer))];
     }
 
     /// <summary>What this build of the client reports about itself.</summary>
     public IFeed<ClientBuild> Build => Feed.Async(_ => ValueTask.FromResult(ClientBuild.Current));
+
+    /// <summary>What the deployment reported about itself, which is where the version beside this build comes from.</summary>
+    /// <remarks>
+    /// Two versions rather than one, because they are two things that move separately: a client is installed and a
+    /// deployment is upgraded, and the first question anybody debugging asks is which of the pair is which. The
+    /// application's own state rather than a second fetch — it is the same session the shell decides from, so the
+    /// screen names the version that answered rather than one asked for again here.
+    /// </remarks>
+    public IFeed<SessionStanding> Session { get; }
 
     /// <summary>The deployment this client is pointed at, as it would be typed.</summary>
     /// <remarks>
