@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -32,6 +33,17 @@ public sealed class OrchestratedEmbeddingSpendLedgerTests(MailFathomOrchestratio
 
     /// <summary>A period this class never charges, which is what makes the "reads as zero" claim decidable.</summary>
     private static readonly DateTimeOffset UnchargedPeriodStart = new(2026, 4, 1, 0, 0, 0, TimeSpan.Zero);
+
+    /// <summary>The period the two owners below share, kept apart from the one the concurrent charges write.</summary>
+    private static readonly DateTimeOffset SharedPeriodStart = new(2026, 5, 1, 0, 0, 0, TimeSpan.Zero);
+
+    /// <summary>The owner this class charges, stated so nothing else in the suite writes the rows it reads.</summary>
+    private static readonly MailOwnerId ChargedOwner =
+        MailOwnerId.Create(new Guid("3f0d5a5e-6f2a-4a29-9a05-2d0f1c7a8b31"));
+
+    /// <summary>A second owner on the same deployment, which is what makes the per-owner column decidable.</summary>
+    private static readonly MailOwnerId OtherOwner =
+        MailOwnerId.Create(new Guid("6c1b7f42-5d8e-49b3-8f11-7a2e4c9d0e55"));
 
     private const long FirstSpend = 1_100;
 
@@ -62,8 +74,8 @@ public sealed class OrchestratedEmbeddingSpendLedgerTests(MailFathomOrchestratio
         // Act
         var commits = await services.InTwoScopesAsync(
             (firstScope, secondScope, token) => Task.WhenAll(
-                ChargeAsync(firstScope, FirstSpend, token),
-                ChargeAsync(secondScope, SecondSpend, token)),
+                ChargeAsync(firstScope, ChargedPeriodStart, ChargedOwner, FirstSpend, token),
+                ChargeAsync(secondScope, ChargedPeriodStart, ChargedOwner, SecondSpend, token)),
             cancellationToken);
 
         // Assert
@@ -75,9 +87,45 @@ public sealed class OrchestratedEmbeddingSpendLedgerTests(MailFathomOrchestratio
         Assert.Equal(0, await ConsumedAsync(services, UnchargedPeriodStart, cancellationToken));
     }
 
+    /// <summary>
+    /// Two owners spending in one window keep a row each, so what one of them is charged is what their own mail cost
+    /// and the deployment's figure is both of them together.
+    /// </summary>
+    /// <remarks>
+    /// The key is the period and the owner together, and nothing below a real server establishes that: the upsert's
+    /// conflict target is part of the statement text, so a target that had kept naming the period alone would make the
+    /// second owner's charge overwrite the first's and every per-owner ceiling would then bound the deployment twice.
+    /// </remarks>
+    [Fact]
+    public async Task ReadConsumedInputCharactersAsync_TwoOwnersSpendingInOneWindow_AttributesEachChargeToItsOwner()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+
+        // Act
+        await services.InScopeAsync(
+            (scope, token) => ChargeAsync(scope, SharedPeriodStart, ChargedOwner, FirstSpend, token),
+            cancellationToken);
+        await services.InScopeAsync(
+            (scope, token) => ChargeAsync(scope, SharedPeriodStart, OtherOwner, SecondSpend, token),
+            cancellationToken);
+
+        // Assert
+        var charged = await TotalsAsync(services, SharedPeriodStart, ChargedOwner, cancellationToken);
+        var other = await TotalsAsync(services, SharedPeriodStart, OtherOwner, cancellationToken);
+
+        Assert.Equal(FirstSpend, charged.OwnerConsumedInputCharacterCount);
+        Assert.Equal(SecondSpend, other.OwnerConsumedInputCharacterCount);
+        Assert.Equal(FirstSpend + SecondSpend, charged.DeploymentConsumedInputCharacterCount);
+        Assert.Equal(FirstSpend + SecondSpend, other.DeploymentConsumedInputCharacterCount);
+    }
+
     /// <summary>Charges one period from one scope, in a session of its own, the way a worker that just embedded does.</summary>
     private static async Task<PersistenceCommitResult> ChargeAsync(
         IServiceProvider scope,
+        DateTimeOffset periodStart,
+        MailOwnerId owner,
         long inputCharacterCount,
         CancellationToken cancellationToken)
     {
@@ -86,7 +134,8 @@ public sealed class OrchestratedEmbeddingSpendLedgerTests(MailFathomOrchestratio
 
         await scope.GetRequiredService<IEmbeddingSpendLedger>().RecordSpendAsync(
             session,
-            ChargedPeriodStart,
+            periodStart,
+            owner,
             inputCharacterCount,
             cancellationToken);
 
@@ -98,6 +147,15 @@ public sealed class OrchestratedEmbeddingSpendLedgerTests(MailFathomOrchestratio
         DateTimeOffset periodStart,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IEmbeddingSpendLedger>()
-                .ReadConsumedInputCharactersAsync(periodStart, token),
+                .ReadDeploymentConsumedInputCharactersAsync(periodStart, token),
+            cancellationToken);
+
+    private static Task<EmbeddingSpendTotals> TotalsAsync(
+        OrchestratedMailFathomServices services,
+        DateTimeOffset periodStart,
+        MailOwnerId owner,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IEmbeddingSpendLedger>()
+                .ReadConsumedInputCharactersAsync(periodStart, owner, token),
             cancellationToken);
 }

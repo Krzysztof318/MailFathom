@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
@@ -16,6 +17,7 @@ using MailFathom.Application.Spam.Gating;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Emails;
@@ -38,6 +40,8 @@ public sealed class MailboxSynchronizer
     private readonly IEmailMetadataRepository metadataRepository;
     private readonly IEmailContentStore contentStore;
     private readonly IStoredEmailContentInventory contentInventory;
+    private readonly IOwnerStoredContentLedger ownerContentLedger;
+    private readonly IMailOwnership ownership;
     private readonly StoredContentCeiling storedContentCeiling;
     private readonly RawMimeMemoryBudget rawMimeMemoryBudget;
     private readonly IEmailMimeReader mimeReader;
@@ -64,6 +68,8 @@ public sealed class MailboxSynchronizer
         IEmailMetadataRepository metadataRepository,
         IEmailContentStore contentStore,
         IStoredEmailContentInventory contentInventory,
+        IOwnerStoredContentLedger ownerContentLedger,
+        IMailOwnership ownership,
         StoredContentCeiling storedContentCeiling,
         RawMimeMemoryBudget rawMimeMemoryBudget,
         IEmailMimeReader mimeReader,
@@ -88,6 +94,8 @@ public sealed class MailboxSynchronizer
         this.metadataRepository = metadataRepository;
         this.contentStore = contentStore;
         this.contentInventory = contentInventory;
+        this.ownerContentLedger = ownerContentLedger;
+        this.ownership = ownership;
         this.storedContentCeiling = storedContentCeiling;
         this.rawMimeMemoryBudget = rawMimeMemoryBudget;
         this.mimeReader = mimeReader;
@@ -198,12 +206,20 @@ public sealed class MailboxSynchronizer
             ? persistedCheckpoint
             : SynchronizationCheckpoint.None(uidValidity);
 
-        // The mark is captured before the measurement, so bytes another run claims while this query is in flight are
-        // carried onto the reading rather than being overwritten by it.
-        var claimMark = this.storedContentCeiling.ClaimMark;
+        // Whose mail this run is bringing in. A worker acts for nobody, so the owner is read from the account rather
+        // than carried on a principal, and it is read once for the run: it cannot change while one is in flight.
+        var owner = await this.ownership.ReadAccountOwnerAsync(accountId, cancellationToken);
+
+        // The mark is captured before the measurements, so bytes another run claims while these queries are in flight
+        // are carried onto the readings rather than being overwritten by them. Both levels are measured here because
+        // both bound this run, and neither figure answers for the other: the deployment's is what the disk fills with
+        // and the owner's is what their payloads hold.
+        var measurementMark = this.storedContentCeiling.MarkBefore(owner);
         this.storedContentCeiling.Observe(
+            owner,
             await this.contentInventory.GetStoredContentBytesAsync(cancellationToken),
-            claimMark);
+            await this.ownerContentLedger.ReadStoredContentBytesAsync(owner, cancellationToken),
+            measurementMark);
 
         var budget = new SynchronizationContentBudget(this.options.MaxContentBytesPerRun);
 
@@ -214,6 +230,7 @@ public sealed class MailboxSynchronizer
         var storedCount = 0;
         var skippedOversizedCount = 0;
         var deferredForStorageCount = 0;
+        var deferredForOwnerStorageCount = 0;
         var unreadableMimeCount = 0;
         var relocatedCount = 0;
         var hasMore = true;
@@ -298,6 +315,7 @@ public sealed class MailboxSynchronizer
                         copy,
                         filing,
                         isFiledCopy: filing is not null,
+                        owner,
                         budget,
                         collection,
                         cancellationToken);
@@ -314,6 +332,14 @@ public sealed class MailboxSynchronizer
                     {
                         case StoredEmailContentAvailability.Available:
                             storedCount++;
+
+                            break;
+
+                        // Counted apart by which ceiling deferred it, because the two ask an operator for different
+                        // things: one for more room on the instance, the other for a larger share for one person.
+                        case StoredEmailContentAvailability.AwaitingStorageHeadroom
+                            when occurrence.ReachedStorageBound is StoredContentBound.Owner:
+                            deferredForOwnerStorageCount++;
 
                             break;
 
@@ -408,6 +434,7 @@ public sealed class MailboxSynchronizer
                 accountId,
                 folder,
                 uidValidity,
+                owner,
                 budget,
                 collection,
                 cancellationToken);
@@ -430,6 +457,7 @@ public sealed class MailboxSynchronizer
                 budget.StoredBytes,
                 this.storedContentCeiling.OccupiedBytes,
                 deferredForStorageCount,
+                deferredForOwnerStorageCount,
                 refill.RefilledEmailCount,
                 stoppedForContentBudget || refill.StoppedForContentBudget));
     }
@@ -567,6 +595,7 @@ public sealed class MailboxSynchronizer
         MailAccountId accountId,
         MailFolderResolution folder,
         ImapUidValidity uidValidity,
+        MailOwnerId owner,
         SynchronizationContentBudget budget,
         ContactCollectionRun collection,
         CancellationToken cancellationToken)
@@ -597,12 +626,14 @@ public sealed class MailboxSynchronizer
                 placement: null,
                 filing: null,
                 isFiledCopy,
+                owner,
                 budget,
                 collection,
                 cancellationToken);
 
-            // The ceiling filled up again while this pass ran, which is true of the whole queue rather than of this
-            // occurrence, so the pass ends instead of asking about each of the rest in turn.
+            // A ceiling filled up again while this pass ran, which is true of the whole queue rather than of this
+            // occurrence — the queue is one folder's and a folder belongs to one owner, so either ceiling refusing here
+            // will refuse the rest too. The pass ends instead of asking about each of them in turn.
             if (occurrence.Availability == StoredEmailContentAvailability.AwaitingStorageHeadroom)
             {
                 break;
@@ -818,6 +849,7 @@ public sealed class MailboxSynchronizer
         MailboxMutationRecord? placement,
         OutgoingMailFilingRecord? filing,
         bool isFiledCopy,
+        MailOwnerId owner,
         SynchronizationContentBudget budget,
         ContactCollectionRun collection,
         CancellationToken cancellationToken)
@@ -829,6 +861,7 @@ public sealed class MailboxSynchronizer
                 placement,
                 filing,
                 StoredEmailContentAvailability.ExceededSizeLimit,
+                StoredContentBound.None,
                 cancellationToken);
         }
 
@@ -837,7 +870,8 @@ public sealed class MailboxSynchronizer
         // concurrent run made against the same reading would let each of them believe it had the room the others were
         // taking. The occurrence is still recorded, so the gap is queryable and a later run with room fetches exactly
         // what this one left.
-        using var storageClaim = this.storedContentCeiling.TryClaim(this.AssumedContentCostOf(metadata));
+        var storageAttempt = this.storedContentCeiling.TryClaim(owner, this.AssumedContentCostOf(metadata));
+        using var storageClaim = storageAttempt.Claim;
 
         if (storageClaim is null)
         {
@@ -846,6 +880,7 @@ public sealed class MailboxSynchronizer
                 placement,
                 filing,
                 StoredEmailContentAvailability.AwaitingStorageHeadroom,
+                storageAttempt.ReachedBound,
                 cancellationToken);
         }
 
@@ -876,6 +911,7 @@ public sealed class MailboxSynchronizer
                 placement,
                 filing,
                 StoredEmailContentAvailability.ExceededSizeLimit,
+                StoredContentBound.None,
                 cancellationToken);
         }
 
@@ -971,6 +1007,7 @@ public sealed class MailboxSynchronizer
         MailboxMutationRecord? placement,
         OutgoingMailFilingRecord? filing,
         StoredEmailContentAvailability availability,
+        StoredContentBound reachedStorageBound,
         CancellationToken cancellationToken)
     {
         var storedEmailId = default(StoredEmailId);
@@ -992,7 +1029,11 @@ public sealed class MailboxSynchronizer
 
         // An occurrence whose content was never retrieved has no MIME to read, so it is neither enriched nor counted as
         // unreadable.
-        return new OccurrenceSynchronizationOutcome(storedEmailId, availability, MimeCouldNotBeRead: false);
+        return new OccurrenceSynchronizationOutcome(
+            storedEmailId,
+            availability,
+            MimeCouldNotBeRead: false,
+            reachedStorageBound);
     }
 
     /// <summary>Writes down that the occurrence a copy created has been met, where this discovery was one.</summary>
@@ -1078,10 +1119,16 @@ public sealed class MailboxSynchronizer
     /// folder had stopped holding the occurrence, which is the one case where nothing was written at all.
     /// </param>
     /// <param name="MimeCouldNotBeRead">Whether enrichment refused the payload that was stored.</param>
+    /// <param name="ReachedStorageBound">
+    /// Which stored-content ceiling left the payload unstored, and <see cref="StoredContentBound.None" /> otherwise. It
+    /// is beside the availability rather than folded into it, because the queue a deferred occurrence joins is the same
+    /// one whichever ceiling deferred it and only an operator's action differs.
+    /// </param>
     private readonly record struct OccurrenceSynchronizationOutcome(
         StoredEmailId? StoredEmailId,
         StoredEmailContentAvailability? Availability,
-        bool MimeCouldNotBeRead)
+        bool MimeCouldNotBeRead,
+        StoredContentBound ReachedStorageBound = StoredContentBound.None)
     {
         /// <summary>Reports an occurrence the folder no longer held when its payload was asked for.</summary>
         public static OccurrenceSynchronizationOutcome NoLongerHeld { get; } =

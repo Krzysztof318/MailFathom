@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Embeddings.Limits;
+
 namespace MailFathom.Application.Emails.Embeddings.Backfill;
 
 /// <summary>What one run of the embedding backfill did, and why it ended.</summary>
@@ -10,9 +12,11 @@ namespace MailFathom.Application.Emails.Embeddings.Backfill;
 /// <param name="EmbeddedEmailCount">How many messages this run brought up to date, or spent a provider call on.</param>
 /// <param name="EmbeddedChunkCount">How many passages this run committed vectors for.</param>
 /// <param name="CallBudgetExhaustedEmailCount">How many messages this run left part-way through because one turn spent every provider call a turn is allowed.</param>
+/// <param name="OwnerSpendCeilingEmailCount">How many messages this run stepped past because the owner they belong to had spent what one period admits for them.</param>
 /// <param name="OutstandingEmailCountAtSweepStart">How many messages awaited embedding when this sweep began, or <see langword="null" /> when the run resumed a sweep somebody else measured.</param>
 /// <param name="Failure">Why a provider call produced nothing, present exactly when <paramref name="Outcome" /> is <see cref="StoredEmailEmbeddingBackfillOutcome.ProviderFailed" />.</param>
 /// <param name="SpendPeriodEndsAt">When the budget period rolls over, present exactly when <paramref name="Outcome" /> is <see cref="StoredEmailEmbeddingBackfillOutcome.SpendCeilingReached" />.</param>
+/// <param name="ReachedSpendBound">Which of the two spend ceilings ended the run, <see cref="EmbeddingSpendBound.None" /> unless one did.</param>
 /// <remarks>
 /// <para>
 /// Counts and classifications only. Every message this run touched, every passage it cut, and every vector it stored is
@@ -31,9 +35,11 @@ public sealed record StoredEmailEmbeddingBackfillResult(
     int EmbeddedEmailCount,
     int EmbeddedChunkCount,
     int CallBudgetExhaustedEmailCount,
+    int OwnerSpendCeilingEmailCount,
     int? OutstandingEmailCountAtSweepStart,
     EmbeddingGenerationFailure? Failure,
-    DateTimeOffset? SpendPeriodEndsAt)
+    DateTimeOffset? SpendPeriodEndsAt,
+    EmbeddingSpendBound ReachedSpendBound = EmbeddingSpendBound.None)
 {
     /// <summary>The pass an instance that has registered no generation performs, which reaches nothing and spends nothing.</summary>
     /// <remarks>
@@ -47,6 +53,7 @@ public sealed record StoredEmailEmbeddingBackfillResult(
         EmbeddedEmailCount: 0,
         EmbeddedChunkCount: 0,
         CallBudgetExhaustedEmailCount: 0,
+        OwnerSpendCeilingEmailCount: 0,
         OutstandingEmailCountAtSweepStart: null,
         Failure: null,
         SpendPeriodEndsAt: null);

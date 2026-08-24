@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Collections.Concurrent;
+using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
@@ -11,6 +12,7 @@ using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam.Gating;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Host.Hosting.Workers;
@@ -280,7 +282,7 @@ public sealed class MailEmbeddingBackfillWorkerTests
         // Arrange
         using var world = CreateWorld(
             new EmbeddingBackfillOptions { BatchSize = 1, MaxBatchesPerRun = 1 },
-            EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 100, TimeSpan.FromDays(1)),
+            EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 100, 0, TimeSpan.FromDays(1)),
             consumedInputCharacterCount: 100);
         var message = StoredEmailId.Create(Guid.CreateVersion7());
 
@@ -337,8 +339,11 @@ public sealed class MailEmbeddingBackfillWorkerTests
     private static IEmbeddingSpendLedger CreateLedgerReporting(long consumedInputCharacterCount)
     {
         var ledger = Substitute.For<IEmbeddingSpendLedger>();
-        ledger.ReadConsumedInputCharactersAsync(Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
-            .Returns(consumedInputCharacterCount);
+        ledger.ReadConsumedInputCharactersAsync(
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<MailOwnerId>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new EmbeddingSpendTotals(consumedInputCharacterCount, consumedInputCharacterCount));
 
         return ledger;
     }
@@ -400,6 +405,7 @@ public sealed class MailEmbeddingBackfillWorkerTests
         services.AddSingleton<IDerivedWorkGateTelemetry>(new RecordingDerivedWorkGateTelemetry());
         services.AddScoped<EmbeddingSpendGate>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
+        services.AddSingleton<IMailOwnership>(new StubMailOwnership());
         services.AddScoped<StoredEmailEmbeddingGenerator>();
         services.AddScoped<StoredEmailEmbeddingBackfill>();
         services.AddScoped<EmbeddingGenerationUpkeep>();

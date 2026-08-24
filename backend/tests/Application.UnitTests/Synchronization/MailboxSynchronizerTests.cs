@@ -2693,6 +2693,8 @@ public sealed class MailboxSynchronizerTests
         IStoredEmailReconciliationStore? reconciliationStore = null,
         InMemoryMailboxMutationReconciliationStore? mutationStore = null,
         IStoredEmailContentInventory? contentInventory = null,
+        IOwnerStoredContentLedger? ownerContentLedger = null,
+        IMailOwnership? ownership = null,
         RawMimeMemoryBudget? rawMimeMemoryBudget = null,
         StoredContentCeiling? storedContentCeiling = null,
         SpamClassificationSettings? classificationSettings = null,
@@ -2719,6 +2721,8 @@ public sealed class MailboxSynchronizerTests
             metadataRepository,
             contentStore,
             contentInventory ?? new InMemoryStoredEmailContentInventory(),
+            ownerContentLedger ?? new InMemoryOwnerStoredContentLedger(),
+            ownership ?? new StubMailOwnership(),
             storedContentCeiling ?? new StoredContentCeiling(ceilingBytes: null),
             rawMimeMemoryBudget ?? new RawMimeMemoryBudget(long.MaxValue),
             mimeReader ?? CreateMimeReaderThatExtractsEverything(),
@@ -2930,6 +2934,62 @@ public sealed class MailboxSynchronizerTests
             Arg.Any<SynchronizationCheckpoint?>(),
             Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == occurrence.Uid),
             CancellationToken.None);
+    }
+
+    /// <summary>
+    /// An owner at their share defers their own mail's content and leaves the instance's room untouched, so another
+    /// owner's run stores content normally through the same ceiling.
+    /// </summary>
+    /// <remarks>
+    /// This is what bounding storage per owner is for. Without it a deployment serving several people has one figure,
+    /// and the person who filled it stops everybody's content from being kept; the deferral counted apart is what tells
+    /// an operator which of the two happened, because one asks for more disk and the other for a larger share.
+    /// </remarks>
+    [Fact]
+    public async Task SynchronizeAsync_TheOwnersStorageShareIsReached_DefersTheirMailAndLeavesRoomForAnotherOwner()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var occurrence = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(10));
+        var metadata = MetadataOf(occurrence, 600);
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var ceiling = new StoredContentCeiling(100_000, 1000);
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [metadata],
+            occurrence.Uid,
+            inventory: new InMemoryStoredEmailContentInventory { StoredContentBytes = 900 },
+            storedContentCeiling: ceiling,
+            ownerContentLedger: new InMemoryOwnerStoredContentLedger().Holding(SyntheticMailOwner.Deployment, 900),
+            ownership: new StubMailOwnership().Owns(accountId, SyntheticMailOwner.Deployment));
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(accountId, InboxMapping, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, result.StoredEmailCount);
+        Assert.Equal(1, result.ContentVolume.DeferredForOwnerStorageEmailCount);
+        Assert.Equal(0, result.ContentVolume.DeferredForStorageEmailCount);
+        Assert.Equal(0, result.ContentVolume.FetchedBytes);
+        await arrangement.Session.DidNotReceive().FetchEmailContentWithoutSettingSeenAsync(
+            Arg.Any<EmailOccurrenceId>(),
+            Arg.Any<long>(),
+            Arg.Any<CancellationToken>());
+        await arrangement.MetadataRepository.Received(1).UpsertMetadataAsync(
+            Arg.Any<IPersistenceSession>(),
+            metadata,
+            null,
+            StoredEmailContentAvailability.AwaitingStorageHeadroom,
+            CancellationToken.None);
+
+        // The refusal gave the deployment's claim straight back, so somebody else's run finds the instance's room where
+        // it was — which is what makes the bound one person's share rather than a slower way to fill the deployment.
+        var elsewhere = ceiling.TryClaim(SyntheticMailOwner.Another, 600);
+        using var claim = elsewhere.Claim;
+        Assert.NotNull(claim);
+        Assert.Equal(StoredContentBound.None, elsewhere.ReachedBound);
     }
 
     /// <summary>A copy this deployment filed is not offered for scoring when a later run completes it either.</summary>
@@ -3238,6 +3298,8 @@ public sealed class MailboxSynchronizerTests
         InMemoryStoredEmailContentInventory? inventory = null,
         RawMimeMemoryBudget? rawMimeMemoryBudget = null,
         StoredContentCeiling? storedContentCeiling = null,
+        IOwnerStoredContentLedger? ownerContentLedger = null,
+        IMailOwnership? ownership = null,
         SpamClassificationSettings? classificationSettings = null)
     {
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
@@ -3286,6 +3348,8 @@ public sealed class MailboxSynchronizerTests
             clock,
             options,
             contentInventory: contentInventory,
+            ownerContentLedger: ownerContentLedger,
+            ownership: ownership,
             rawMimeMemoryBudget: rawMimeMemoryBudget,
             storedContentCeiling: storedContentCeiling,
             classificationSettings: classificationSettings,

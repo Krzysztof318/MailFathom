@@ -48,6 +48,10 @@
     <Compile Include="..\shared\SensitiveContentEgressGuards.cs" Link="SensitiveContentEgressGuards.cs" />
     <Compile Include="..\shared\ScanningSensitiveContentEgress.cs" Link="ScanningSensitiveContentEgress.cs" />
     <Compile Include="..\shared\OutgoingMailScreenings.cs" Link="OutgoingMailScreenings.cs" />
+    <!-- Whose mail an account or a message is, and what one owner's payloads hold, are read by the synchronizer and by
+         the embedding run alike, so the two doubles that answer them are linked wherever either is arranged. -->
+    <Compile Include="..\shared\StubMailOwnership.cs" Link="StubMailOwnership.cs" />
+    <Compile Include="..\shared\InMemoryOwnerStoredContentLedger.cs" Link="InMemoryOwnerStoredContentLedger.cs" />
   </ItemGroup>
 
   <ItemGroup>

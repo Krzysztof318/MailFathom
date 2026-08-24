@@ -420,6 +420,10 @@ public static class ServiceCollectionExtensions
         // is why nothing scoped to a request depends on it and why it is registered beside the schema inspector the same
         // startup step already resolves.
         services.AddScoped<IMailOwnerDirectory, PersistedMailOwnerDirectory>();
+        // Whose mail a background unit of work is acting on. A worker acts for nobody, so the ceilings it is bounded by
+        // reach an owner through this rather than through a principal, and it is scoped because both reads are ordinary
+        // queries on the caller's context.
+        services.AddScoped<IMailOwnership, PersistedMailOwnership>();
         // Composed by hand for one parameter: the object store is registered only when the deployment selected the
         // object backend, so it is asked for rather than required, and its absence is what selects the database.
         services.AddScoped<IEmailContentStore>(provider => new EmailContentStore(
@@ -429,6 +433,10 @@ public static class ServiceCollectionExtensions
             provider.GetService<IEmailContentObjectStore>()));
         services.AddScoped<IStoredEmailContentInventory, StoredEmailContentInventory>();
         services.AddScoped<IObjectBackedContentInventory, ObjectBackedContentInventory>();
+        // What one owner's stored content holds. Beside the inventory rather than part of it, because the inventory is
+        // read-only over the mail graph while this keeps a figure of its own, moved by whichever adapter owns the
+        // payloads.
+        services.AddScoped<IOwnerStoredContentLedger, OwnerStoredContentLedger>();
         services.AddScoped<IStoredEmailExtractionBackfillStore, StoredEmailExtractionBackfillStore>();
         // What the two maintenance commands read and write. Both are ordinary scoped stores over stored mail: the
         // counter is what puts a figure in front of an operator before a rewind is agreed to, and the walk is the pass

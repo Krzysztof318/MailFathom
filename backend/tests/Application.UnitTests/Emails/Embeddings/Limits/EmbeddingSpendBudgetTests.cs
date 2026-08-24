@@ -14,7 +14,7 @@ public sealed class EmbeddingSpendBudgetTests
     public void Create_ACeilingOfZero_BoundsNothing()
     {
         // Act
-        var budget = EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 0, TimeSpan.FromHours(1));
+        var budget = EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 0, 0, TimeSpan.FromHours(1));
 
         // Assert
         Assert.True(budget.IsUnbounded);
@@ -24,7 +24,7 @@ public sealed class EmbeddingSpendBudgetTests
     public void Create_APositiveCeiling_Bounds()
     {
         // Act
-        var budget = EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 1_000, TimeSpan.FromHours(6));
+        var budget = EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 1_000, 0, TimeSpan.FromHours(6));
 
         // Assert
         Assert.False(budget.IsUnbounded);
@@ -40,7 +40,7 @@ public sealed class EmbeddingSpendBudgetTests
     {
         // Act, Assert
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => EmbeddingSpendBudget.Create(ceiling, TimeSpan.FromSeconds(periodSeconds)));
+            () => EmbeddingSpendBudget.Create(ceiling, 0, TimeSpan.FromSeconds(periodSeconds)));
     }
 
     /// <summary>
@@ -51,7 +51,7 @@ public sealed class EmbeddingSpendBudgetTests
     public void PeriodStartAt_TwoInstantsInsideOneWindow_PlaceOnTheSameStart()
     {
         // Arrange
-        var budget = EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 1_000, TimeSpan.FromDays(1));
+        var budget = EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 1_000, 0, TimeSpan.FromDays(1));
         var morning = new DateTimeOffset(2026, 8, 8, 6, 30, 0, TimeSpan.Zero);
         var evening = new DateTimeOffset(2026, 8, 8, 23, 59, 59, TimeSpan.Zero);
 
@@ -65,7 +65,7 @@ public sealed class EmbeddingSpendBudgetTests
     public void PeriodStartAt_AnInstantWrittenInAnotherOffset_PlacesOnTheSameStart()
     {
         // Arrange
-        var budget = EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 1_000, TimeSpan.FromDays(1));
+        var budget = EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 1_000, 0, TimeSpan.FromDays(1));
         var utc = new DateTimeOffset(2026, 8, 8, 6, 30, 0, TimeSpan.Zero);
         var elsewhere = utc.ToOffset(TimeSpan.FromHours(5));
 
@@ -77,7 +77,7 @@ public sealed class EmbeddingSpendBudgetTests
     public void PeriodEndAt_AnInstantInsideAWindow_IsWhenTheNextPeriodBegins()
     {
         // Arrange
-        var budget = EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 1_000, TimeSpan.FromHours(6));
+        var budget = EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 1_000, 0, TimeSpan.FromHours(6));
         var instant = new DateTimeOffset(2026, 8, 8, 7, 15, 0, TimeSpan.Zero);
 
         // Act, Assert

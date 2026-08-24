@@ -214,11 +214,17 @@ stored content occupies, as the most recent run measured it. It carries no accou
 because content storage is one store every account writes into and a per-account copy of the same number would invite a
 dashboard to sum it.
 
-`mailfathom.mail.content.limits_reached` counts the folder runs that ended against one of the two byte limits, tagged
-with which: `run_budget` for a run that spent what it may fetch, and `storage_ceiling` for one that had to record
-messages without their content. Both are counted rather than only logged because both are conditions that persist — a
-run that stopped for its budget will stop again next interval, and a deployment at its ceiling stays there until
-somebody acts — so a rising count says it has been running that way rather than that it did once.
+`mailfathom.mail.content.limits_reached` counts the folder runs that ended against one of the byte limits, tagged with
+which: `run_budget` for a run that spent what it may fetch, `storage_ceiling` for one that had to record messages
+without their content, and `owner_storage_ceiling` for one whose owner was at their own share while the deployment
+still had room. The last two are separate values rather than one because they ask an operator for different things —
+more disk or a higher instance ceiling against the first, a larger share for one person or a wait against the second —
+and a run that left messages for both reasons reports both, one measurement each. One message is deferred by one of
+them rather than by both, because the instance's room is claimed first and an owner is never charged for a payload the
+instance had no room for. All are counted rather than only logged
+because each is a condition that persists — a run that stopped for its budget will stop again next interval, and a
+deployment or an owner at a ceiling stays there until somebody acts — so a rising count says it has been running that
+way rather than that it did once.
 [Bounding how much mail a run brings in](../features/imap-synchronization.md#bounding-how-much-mail-a-run-brings-in)
 states what each limit does when it is reached and how the gap a ceiling leaves is closed.
 

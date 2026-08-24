@@ -292,7 +292,7 @@ appears — so a payload cannot be added beside it and quietly inherit none of t
 | `Readable` | The body was read; an empty one means the message displayed nothing |
 | `EncryptedNotReadableLocally` | The body arrived inside a cryptographic envelope and nothing here can read it |
 | `NotStoredExceededSizeLimit` | The raw MIME exceeded `MailSynchronization:MaxRawMimeBytes`, so it was never stored |
-| `NotStoredAwaitingStorageHeadroom` | Local content storage was at `MailSynchronization:MaxStoredContentBytes` when the message arrived, so its content is not stored yet |
+| `NotStoredAwaitingStorageHeadroom` | Local content storage was at `MailSynchronization:MaxStoredContentBytes`, or the message's owner was at `MailSynchronization:MaxStoredContentBytesPerOwner`, when it arrived, so its content is not stored yet |
 
 An encrypted body is a state rather than an empty string, because merging the two would make mail this deployment holds
 and cannot decrypt indistinguishable from mail that genuinely said nothing. Decrypting it is out of scope and is tracked

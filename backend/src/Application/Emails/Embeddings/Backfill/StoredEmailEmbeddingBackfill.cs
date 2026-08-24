@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam.Gating;
@@ -28,6 +29,18 @@ namespace MailFathom.Application.Emails.Embeddings.Backfill;
 /// before chunking existed has extracted text and no passages, and nothing can be embedded until those passages are
 /// cut. Cutting them costs a database write and no provider call, and it reads text an earlier extraction already
 /// stored, so this reaches no mail server and cannot touch a remote <c>\Seen</c> flag however long it runs.
+/// </para>
+/// <para>
+/// The walk is one walk over the deployment's mail and its resume position is one cursor, deliberately, on a system
+/// that bounds embedding spend per owner. A cursor per owner would be the shape to reach for if a sweep served one
+/// owner at a time; it serves all of them at once, in identifier order, so a per-owner cursor would record the same
+/// walk several times over and the run would still have to visit every message to decide which cursor to move. What an
+/// owner's ceiling costs is that owner's messages being stepped over for the rest of the period, which the walk above
+/// already does without remembering anything. The embedding profile is deployment-wide for the same kind of reason and
+/// a different one:
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md">ADR 0006</see>
+/// makes a profile the meaning of a stored vector, and two owners' vectors sharing an index have to mean the same
+/// thing. Neither is an omission left for a later change to fill in.
 /// </para>
 /// <para>
 /// The walk repeats rather than finishing once. A message whose turn a provider refused keeps passages without vectors
@@ -130,16 +143,29 @@ public sealed class StoredEmailEmbeddingBackfill
                         outstandingAtSweepStart);
                 }
 
-                // The ceiling stops the run before the position steps past this message, because unlike a refused
-                // provider call it says nothing about the message and the passages it did not reach are the ones the
-                // rolled-over period should pay for first.
-                if (turn.Outcome is StoredEmailEmbeddingOutcome.SpendCeilingReached)
+                // The deployment's ceiling stops the run before the position steps past this message, because unlike a
+                // refused provider call it says nothing about the message and the passages it did not reach are the
+                // ones the rolled-over period should pay for first.
+                if (turn.ReachedSpendBound is EmbeddingSpendBound.Deployment)
                 {
                     return Ended(
                         StoredEmailEmbeddingBackfillOutcome.SpendCeilingReached,
                         progress,
                         outstandingAtSweepStart,
-                        spendPeriodEndsAt: turn.SpendPeriodEndsAt);
+                        spendPeriodEndsAt: turn.SpendPeriodEndsAt,
+                        reachedSpendBound: turn.ReachedSpendBound);
+                }
+
+                // One owner's ceiling stops that owner and nobody else, so the walk steps past the message rather than
+                // ending: the identifier order interleaves owners, so ending here would leave every other owner's mail
+                // unembedded until the period rolled over — which is the harm a per-owner ceiling exists to prevent.
+                // The message keeps its outstanding passages, which is what the next sweep selects on.
+                if (turn.ReachedSpendBound is EmbeddingSpendBound.Owner)
+                {
+                    position = email.StoredEmailId;
+                    await this.CommitPositionAsync(position, cancellationToken);
+
+                    continue;
                 }
 
                 position = email.StoredEmailId;
@@ -213,34 +239,40 @@ public sealed class StoredEmailEmbeddingBackfill
         RunProgress progress,
         int? outstandingAtSweepStart = null,
         EmbeddingGenerationFailure? failure = null,
-        DateTimeOffset? spendPeriodEndsAt = null) =>
+        DateTimeOffset? spendPeriodEndsAt = null,
+        EmbeddingSpendBound reachedSpendBound = EmbeddingSpendBound.None) =>
         new(
             outcome,
             progress.ChunkedEmailCount,
             progress.EmbeddedEmailCount,
             progress.EmbeddedChunkCount,
             progress.CallBudgetExhaustedEmailCount,
+            progress.OwnerSpendCeilingEmailCount,
             outstandingAtSweepStart,
             failure,
-            spendPeriodEndsAt);
+            spendPeriodEndsAt,
+            reachedSpendBound);
 
     /// <summary>What a run has produced so far, in counts alone.</summary>
     /// <remarks>
     /// A message counts as embedded only when its turn reported the message whole. One that spent every call a turn is
     /// allowed keeps the passages it did get — which the passage count carries — and is deliberately not counted as a
-    /// message brought up to date, because a later sweep still has to reach it.
+    /// message brought up to date, because a later sweep still has to reach it. The same holds for one the walk stepped
+    /// past because its owner had spent their period: it is counted where an operator can see it and nowhere else.
     /// </remarks>
     private sealed record RunProgress(
         int ChunkedEmailCount,
         int EmbeddedEmailCount,
         int EmbeddedChunkCount,
-        int CallBudgetExhaustedEmailCount)
+        int CallBudgetExhaustedEmailCount,
+        int OwnerSpendCeilingEmailCount)
     {
         public static RunProgress Empty { get; } = new(
             ChunkedEmailCount: 0,
             EmbeddedEmailCount: 0,
             EmbeddedChunkCount: 0,
-            CallBudgetExhaustedEmailCount: 0);
+            CallBudgetExhaustedEmailCount: 0,
+            OwnerSpendCeilingEmailCount: 0);
 
         public RunProgress Add(StoredEmailAwaitingEmbedding email, StoredEmailEmbeddingRun turn) => this with
         {
@@ -250,6 +282,8 @@ public sealed class StoredEmailEmbeddingBackfill
             EmbeddedChunkCount = this.EmbeddedChunkCount + turn.EmbeddedChunkCount,
             CallBudgetExhaustedEmailCount = this.CallBudgetExhaustedEmailCount
                 + (turn.Outcome == StoredEmailEmbeddingOutcome.CallBudgetExhausted ? 1 : 0),
+            OwnerSpendCeilingEmailCount = this.OwnerSpendCeilingEmailCount
+                + (turn.ReachedSpendBound == EmbeddingSpendBound.Owner ? 1 : 0),
         };
     }
 }

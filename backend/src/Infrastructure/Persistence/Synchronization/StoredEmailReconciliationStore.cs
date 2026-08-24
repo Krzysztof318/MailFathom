@@ -8,6 +8,7 @@ using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using Microsoft.EntityFrameworkCore;
@@ -165,6 +166,13 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
 
         if (erasedByAuthoredDelete.Count > 0)
         {
+            // What these messages hold leaves storage with them, so their owner's figure gives it back inside the same
+            // transaction. It is issued before the removal because what it subtracts is read from the payloads.
+            await OwnerStoredContentLedger.RemoveAsync(
+                sessionContext,
+                [.. erasedByAuthoredDelete.Select(email => email.Id)],
+                cancellationToken);
+
             sessionContext.StoredEmails.RemoveRange(erasedByAuthoredDelete);
         }
 
@@ -176,6 +184,14 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
 
         if (outcome.Disposition is RemotelyDeletedEmailDisposition.EraseLocalCopy)
         {
+            // The cascade takes the raw MIME with the row, so the owner's stored-content figure gives those bytes back
+            // first: nothing below the content store observes that cascade, and a figure left standing would go on
+            // bounding an owner against payloads that are gone.
+            await OwnerStoredContentLedger.RemoveAsync(
+                sessionContext,
+                [.. disappeared.Select(email => email.Id)],
+                cancellationToken);
+
             // One RemoveRange rather than a remove per row: the raw MIME, the search document, the chunks and their
             // vectors, and any outstanding repair request are declared with OnDelete(Cascade) from this row, so
             // PostgreSQL removes them too.

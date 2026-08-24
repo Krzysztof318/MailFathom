@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Emails.Embeddings.Limits;
+
 namespace MailFathom.Application.Emails.Embeddings.Vectorization;
 
 /// <summary>What one message's turn at being embedded produced.</summary>
@@ -14,12 +16,14 @@ namespace MailFathom.Application.Emails.Embeddings.Vectorization;
 /// <param name="InputCharacterCount">How many characters this turn sent to a provider, which is what its spend was counted in.</param>
 /// <param name="Failure">Why a provider call produced nothing, present exactly when <paramref name="Outcome" /> is <see cref="StoredEmailEmbeddingOutcome.ProviderFailed" />.</param>
 /// <param name="SpendPeriodEndsAt">When the budget period rolls over, present exactly when <paramref name="Outcome" /> is <see cref="StoredEmailEmbeddingOutcome.SpendCeilingReached" />.</param>
+/// <param name="ReachedSpendBound">Which of the two spend ceilings stopped the turn, <see cref="EmbeddingSpendBound.None" /> unless one did.</param>
 public sealed record StoredEmailEmbeddingRun(
     StoredEmailEmbeddingOutcome Outcome,
     int EmbeddedChunkCount,
     int InputCharacterCount,
     EmbeddingGenerationFailure? Failure,
-    DateTimeOffset? SpendPeriodEndsAt)
+    DateTimeOffset? SpendPeriodEndsAt,
+    EmbeddingSpendBound ReachedSpendBound = EmbeddingSpendBound.None)
 {
     /// <summary>Reports a message every passage of which now carries a vector.</summary>
     /// <param name="embeddedChunkCount">How many passages this turn produced a vector for.</param>
@@ -61,22 +65,33 @@ public sealed record StoredEmailEmbeddingRun(
     /// <param name="embeddedChunkCount">How many passages the turn committed a vector for before the ceiling bound.</param>
     /// <param name="inputCharacterCount">How many characters the turn sent before it stopped.</param>
     /// <param name="spendPeriodEndsAt">When the period rolls over, which is when work resumes without anyone acting.</param>
+    /// <param name="reachedSpendBound">Which of the two ceilings stopped it, which is what decides whose ceiling an operator would raise.</param>
     /// <returns>The result.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when a count is negative.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when a count is negative, or no bound is named.</exception>
     public static StoredEmailEmbeddingRun SpendCeilingReached(
         int embeddedChunkCount,
         int inputCharacterCount,
-        DateTimeOffset spendPeriodEndsAt)
+        DateTimeOffset spendPeriodEndsAt,
+        EmbeddingSpendBound reachedSpendBound)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(embeddedChunkCount);
         ArgumentOutOfRangeException.ThrowIfNegative(inputCharacterCount);
+
+        if (reachedSpendBound is EmbeddingSpendBound.None || !Enum.IsDefined(reachedSpendBound))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(reachedSpendBound),
+                reachedSpendBound,
+                "A turn stopped by a spend ceiling names which of the two ceilings it reached.");
+        }
 
         return new StoredEmailEmbeddingRun(
             StoredEmailEmbeddingOutcome.SpendCeilingReached,
             embeddedChunkCount,
             inputCharacterCount,
             Failure: null,
-            spendPeriodEndsAt);
+            spendPeriodEndsAt,
+            reachedSpendBound);
     }
 
     /// <summary>Reports an instance that has activated no profile.</summary>

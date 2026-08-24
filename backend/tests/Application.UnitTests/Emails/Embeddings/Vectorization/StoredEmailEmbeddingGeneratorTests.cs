@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Limits;
@@ -9,6 +10,7 @@ using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Emails;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -258,12 +260,12 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         var store = new InMemoryEmailEmbeddingStore();
         store.AddPassages(Message, CreatePassages(3));
         var ledger = new InMemoryEmbeddingSpendLedger();
-        ledger.Seed(PeriodStart, inputCharacterCount: 500);
+        ledger.Seed(PeriodStart, SyntheticMailOwner.Deployment, inputCharacterCount: 500);
         var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8);
         var generator = CreateGenerator(
             store,
             textEmbeddingGenerator,
-            CreateSpendGate(ledger, EmbeddingSpendBudget.Create(500, TimeSpan.FromDays(1))));
+            CreateSpendGate(ledger, EmbeddingSpendBudget.Create(500, 0, TimeSpan.FromDays(1))));
 
         // Act
         var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
@@ -292,7 +294,7 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         var generator = CreateGenerator(
             store,
             textEmbeddingGenerator,
-            CreateSpendGate(ledger, EmbeddingSpendBudget.Create(1, TimeSpan.FromDays(1))));
+            CreateSpendGate(ledger, EmbeddingSpendBudget.Create(1, 0, TimeSpan.FromDays(1))));
 
         // Act
         var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
@@ -356,6 +358,84 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         Assert.Empty(ledger.ConsumedByPeriod);
     }
 
+    /// <summary>A refusal names which ceiling it met, because the two need different actions from an operator.</summary>
+    [Fact]
+    public async Task EmbedAsync_ThisOwnerHasSpentTheirShare_SaysTheOwnerReachedTheirCeilingRatherThanTheDeployment()
+    {
+        // Arrange
+        var store = new InMemoryEmailEmbeddingStore();
+        store.AddPassages(Message, CreatePassages(3));
+        var ledger = new InMemoryEmbeddingSpendLedger();
+        ledger.Seed(PeriodStart, SyntheticMailOwner.Another, inputCharacterCount: 500);
+        var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8);
+        var generator = CreateGenerator(
+            store,
+            textEmbeddingGenerator,
+            CreateSpendGate(ledger, EmbeddingSpendBudget.Create(10_000, 500, TimeSpan.FromDays(1))),
+            new StubMailOwnership().Owns(Message, SyntheticMailOwner.Another));
+
+        // Act
+        var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(StoredEmailEmbeddingOutcome.SpendCeilingReached, run.Outcome);
+        Assert.Equal(EmbeddingSpendBound.Owner, run.ReachedSpendBound);
+        Assert.Empty(textEmbeddingGenerator.RequestedBatches);
+    }
+
+    /// <summary>An owner at their share stops that owner's mail, and somebody else's message is embedded whole.</summary>
+    /// <remarks>
+    /// The two runs share one ledger and one budget, which is what makes the claim about the ceiling rather than about
+    /// two generators that happened to be configured differently.
+    /// </remarks>
+    [Fact]
+    public async Task EmbedAsync_OneOwnerIsAtTheirShare_StillEmbedsAnotherOwnersMessage()
+    {
+        // Arrange
+        var store = new InMemoryEmailEmbeddingStore();
+        var otherMessage = StoredEmailId.Create(Guid.CreateVersion7());
+        store.AddPassages(Message, CreatePassages(2));
+        store.AddPassages(otherMessage, CreatePassages(2));
+        var ledger = new InMemoryEmbeddingSpendLedger();
+        ledger.Seed(PeriodStart, SyntheticMailOwner.Another, inputCharacterCount: 500);
+        var generator = CreateGenerator(
+            store,
+            new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8),
+            CreateSpendGate(ledger, EmbeddingSpendBudget.Create(10_000, 500, TimeSpan.FromDays(1))),
+            new StubMailOwnership().Owns(Message, SyntheticMailOwner.Another));
+
+        // Act
+        var refused = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
+        var embedded = await generator.EmbedAsync(otherMessage, CreateProfile(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(StoredEmailEmbeddingOutcome.SpendCeilingReached, refused.Outcome);
+        Assert.Equal(StoredEmailEmbeddingOutcome.Embedded, embedded.Outcome);
+        Assert.Equal(2, embedded.EmbeddedChunkCount);
+    }
+
+    /// <summary>What a turn spent is charged to whoever the message belongs to, not to whoever ran the worker.</summary>
+    [Fact]
+    public async Task EmbedAsync_AMessageOfAnotherOwner_ChargesThatOwnersRowRatherThanTheDefault()
+    {
+        // Arrange
+        var store = new InMemoryEmailEmbeddingStore();
+        store.AddPassages(Message, CreatePassages(3));
+        var ledger = new InMemoryEmbeddingSpendLedger();
+        var generator = CreateGenerator(
+            store,
+            new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8),
+            CreateSpendGate(ledger, EmbeddingSpendBudget.Unbounded),
+            new StubMailOwnership().Owns(Message, SyntheticMailOwner.Another));
+
+        // Act
+        var run = await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(run.InputCharacterCount, ledger.ConsumedByPeriodAndOwner[(PeriodStart, SyntheticMailOwner.Another)]);
+        Assert.False(ledger.ConsumedByPeriodAndOwner.ContainsKey((PeriodStart, SyntheticMailOwner.Deployment)));
+    }
+
     private static IReadOnlyList<EmailChunkAwaitingEmbedding> CreatePassages(int count) =>
         [.. Enumerable.Range(0, count).Select(ordinal => new EmailChunkAwaitingEmbedding(
             EmailChunkId.Create(Guid.CreateVersion7()),
@@ -380,7 +460,8 @@ public sealed class StoredEmailEmbeddingGeneratorTests
     private static StoredEmailEmbeddingGenerator CreateGenerator(
         IEmailEmbeddingStore store,
         ITextEmbeddingGenerator textEmbeddingGenerator,
-        EmbeddingSpendGate? spendGate = null)
+        EmbeddingSpendGate? spendGate = null,
+        IMailOwnership? ownership = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>())
@@ -394,7 +475,8 @@ public sealed class StoredEmailEmbeddingGeneratorTests
                 new PersistenceConcurrencyOptions(),
                 new FakeTimeProvider()),
             spendGate ?? CreateSpendGate(new InMemoryEmbeddingSpendLedger(), EmbeddingSpendBudget.Unbounded),
-            EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider()));
+            EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider()),
+            ownership ?? new StubMailOwnership());
     }
 
     private static EmbeddingSpendGate CreateSpendGate(

@@ -4,20 +4,27 @@
 
 namespace MailFathom.Application.EmailContent.Storage;
 
-/// <summary>Holds room under <see cref="StoredContentCeiling" /> while one payload is being fetched and stored.</summary>
+/// <summary>Holds room under both <see cref="StoredContentCeiling" /> levels while one payload is fetched and stored.</summary>
 /// <remarks>
 /// A claim is taken against what a message is expected to occupy, before it is fetched, and settled against what was
 /// actually written. Disposing it gives back whatever was never settled, so a fetch that was abandoned and a commit
-/// that was rolled back both leave the ceiling where they found it rather than consuming room nothing occupies.
+/// that was rolled back both leave the ceilings where they found them rather than consuming room nothing occupies. It
+/// holds the deployment's level and its owner's together, because a payload occupies both and giving one back without
+/// the other would leave a level describing storage that is not there.
 /// </remarks>
 public sealed class StoredContentClaim : IDisposable
 {
-    private readonly StoredContentCeiling ceiling;
+    private readonly StoredContentCeiling.ContentLevel deployment;
+    private readonly StoredContentCeiling.ContentLevel owner;
     private long heldBytes;
 
-    internal StoredContentClaim(StoredContentCeiling ceiling, long bytes)
+    internal StoredContentClaim(
+        StoredContentCeiling.ContentLevel deployment,
+        StoredContentCeiling.ContentLevel owner,
+        long bytes)
     {
-        this.ceiling = ceiling;
+        this.deployment = deployment;
+        this.owner = owner;
         this.ClaimedBytes = bytes;
         this.heldBytes = bytes;
     }
@@ -39,7 +46,7 @@ public sealed class StoredContentClaim : IDisposable
 
         var released = Interlocked.Exchange(ref this.heldBytes, 0);
 
-        this.ceiling.Release(released - Math.Min(released, storedBytes));
+        this.ReleaseBoth(released - Math.Min(released, storedBytes));
     }
 
     /// <summary>Gives back whatever the claim still holds.</summary>
@@ -47,6 +54,12 @@ public sealed class StoredContentClaim : IDisposable
     {
         var released = Interlocked.Exchange(ref this.heldBytes, 0);
 
-        this.ceiling.Release(released);
+        this.ReleaseBoth(released);
+    }
+
+    private void ReleaseBoth(long bytes)
+    {
+        this.deployment.Release(bytes);
+        this.owner.Release(bytes);
     }
 }

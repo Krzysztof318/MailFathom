@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
@@ -205,16 +206,20 @@ public sealed class EmailEmbeddingBackfillTelemetryTests
         int embeddedEmailCount = 0,
         int embeddedChunkCount = 0,
         int callBudgetExhaustedEmailCount = 0,
+        int ownerSpendCeilingEmailCount = 0,
         int? outstandingEmailCountAtSweepStart = null,
         EmbeddingGenerationFailure? failure = null,
-        DateTimeOffset? spendPeriodEndsAt = null) =>
+        DateTimeOffset? spendPeriodEndsAt = null,
+        EmbeddingSpendBound reachedSpendBound = EmbeddingSpendBound.None) =>
         new(
             outcome,
             chunkedEmailCount,
             embeddedEmailCount,
             embeddedChunkCount,
             callBudgetExhaustedEmailCount,
+            ownerSpendCeilingEmailCount,
             outstandingEmailCountAtSweepStart,
             failure,
-            spendPeriodEndsAt);
+            spendPeriodEndsAt,
+            reachedSpendBound);
 }

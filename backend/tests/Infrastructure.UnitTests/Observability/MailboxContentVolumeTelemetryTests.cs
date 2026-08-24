@@ -189,6 +189,7 @@ public sealed class MailboxContentVolumeTelemetryTests : IDisposable
         storedBytes,
         StoredContentBytes: 1_000_000,
         DeferredForStorageEmailCount: 0,
+        DeferredForOwnerStorageEmailCount: 0,
         RefilledEmailCount: 0,
         StoppedForContentBudget: false);
 

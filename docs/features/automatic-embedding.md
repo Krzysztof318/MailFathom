@@ -99,8 +99,19 @@ selects on; the messages behind it stay in the backlog until its bound turns one
 covers those too. The pause is logged as a warning naming how long it will last and which key raises the ceiling, and
 it is counted like any other outcome.
 
-[Embedding generation](embedding-generation.md#what-an-instance-is-willing-to-spend) states the three ceilings, what
-each is counted in, and why a batch that crosses one is paid for whole.
+**A per-owner ceiling does not pause the worker**, and that difference is the whole reason the two are separate
+ceilings. Where the turn reports that the message's *owner* has spent their share while the deployment still has room,
+the worker takes the next message rather than waiting: the backlog holds every owner's mail, so pausing would stop
+everybody for one person's spending. That message keeps its outstanding passages exactly as above, and the refusal is
+logged as its own warning — naming that it was an owner's share rather than the deployment's, and which key raises it —
+so an operator can tell one person at their share from the deployment at its ceiling. It is written **once per budget
+period** rather than once per message: an owner with mail waiting meets their share on every one of those messages and
+the line would say the same thing each time, so the first is logged and the rest are the counter's to report. The
+counter records both ceilings as `spend_ceiling_reached`, because what the outcome names is what happened to the message
+and that is the same in either case.
+
+[Embedding generation](embedding-generation.md#what-an-instance-is-willing-to-spend) states the ceilings, what each is
+counted in, why a batch that crosses one is paid for whole, and which of them a refusal names when both are reached.
 
 ## An edited declaration that nobody activated
 

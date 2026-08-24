@@ -56,6 +56,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<OwnerAccountEntity> OwnerAccounts => this.Set<OwnerAccountEntity>();
 
+    internal DbSet<OwnerStoredContentEntity> OwnerStoredContent => this.Set<OwnerStoredContentEntity>();
+
     internal DbSet<MailboxAccountEntity> MailboxAccounts => this.Set<MailboxAccountEntity>();
 
     internal DbSet<MailFolderEntity> MailFolders => this.Set<MailFolderEntity>();
@@ -159,6 +161,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.HasPostgresExtension("vector");
 
         modelBuilder.ApplyConfiguration(new OwnerAccountConfiguration());
+        modelBuilder.ApplyConfiguration(new OwnerStoredContentConfiguration());
         modelBuilder.ApplyConfiguration(new MailboxAccountConfiguration());
         modelBuilder.ApplyConfiguration(new MailFolderConfiguration());
         modelBuilder.ApplyConfiguration(new StoredEmailConfiguration());
