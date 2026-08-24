@@ -276,7 +276,9 @@ ceiling bounds.
 
 The backfill over mail stored before a profile existed publishes its own family beside that one, under
 `mailfathom.embedding.backfill.*`: how many messages awaited embedding when the current sweep began, how each bounded
-run ended, and how many messages it cut into passages, brought up to date, and gave vectors to. The instruments are
+run ended, how many messages it cut into passages, brought up to date, and gave vectors to, and how many it stepped
+past because the owner they belong to had spent their share. That last one has an instrument rather than a tag because
+an owner's ceiling ends nothing: the run carries on, so there is no ending for a tag to describe. The instruments are
 separate and the tag keys are shared, because a rate an instance settles at and a finite amount of work an operator
 started are different questions about one provider bill.
 [Embedding backfill](../features/embedding-backfill.md#what-an-operator-can-see) names each of them, and says why the

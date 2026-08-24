@@ -235,13 +235,6 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
             """;
     }
 
-    /// <summary>The statement that gives one owner a row to be recomputed into, and locks it either way.</summary>
-    /// <remarks>
-    /// The conflicting branch writes the value already there, which changes nothing and is not what it is for: what it
-    /// is for is the row lock, which every movement of this figure also takes and which therefore serializes them
-    /// against the recomputation that follows. A total is written back rather than a constant because PostgreSQL
-    /// re-reads the row after waiting for whoever held it, so this cannot lose what that writer had just added.
-    /// </remarks>
     /// <summary>Resolves the identifier one owner's counter is keyed by, refusing an owner naming nobody.</summary>
     /// <remarks>
     /// This port carries no gate above it — <c>MailboxSynchronizer</c> calls it directly, unlike the spend ledger,
@@ -262,6 +255,13 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
         return owner.Value;
     }
 
+    /// <summary>The statement that gives one owner a row to be recomputed into, and locks it either way.</summary>
+    /// <remarks>
+    /// The conflicting branch writes the value already there, which changes nothing and is not what it is for: what it
+    /// is for is the row lock, which every movement of this figure also takes and which therefore serializes them
+    /// against the recomputation that follows. A total is written back rather than a constant because PostgreSQL
+    /// re-reads the row after waiting for whoever held it, so this cannot lose what that writer had just added.
+    /// </remarks>
     private static string ClaimStatement(IModel model)
     {
         var names = StoredContentTableNames.Of(model);

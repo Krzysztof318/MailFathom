@@ -283,9 +283,14 @@ against what remains would stall a deployment whose ceiling is smaller than one 
 the bill; `MaxInputCharactersPerPeriodPerOwner` bounds any one person's share of it, over the same window and the same
 unit. Reaching the deployment's pauses the worker and ends the backfill sweep, because nothing more can be spent for
 anybody. Reaching one owner's stops that owner's mail alone: the worker carries on with the next message and the
-backfill steps past theirs, so everybody else keeps being embedded and their own passages wait for the roll-over. A
-refusal names which of the two it met, and the log line and the `limit` dimension on the counter say so, because raising
-an owner's share answers nothing while the deployment itself has stopped spending.
+backfill steps past theirs, so everybody else keeps being embedded and their own passages wait for the roll-over.
+
+Which of the two a refusal met is read from the log line, which names the key to raise — and raising an owner's share
+answers nothing while the deployment itself has stopped spending, so the distinction is the whole point of reporting it.
+The backfill's counters separate them as well, because the deployment's ceiling ends the sweep and is reported as its
+outcome while an owner's is counted on `mailfathom.embedding.backfill.owner_ceiling`. The counter the worker embedding
+arriving mail keeps does not: both bounds reach it as one `spend_ceiling_reached` outcome, so on that path the log is
+what tells them apart.
 
 Leaving `MaxInputCharactersPerPeriodPerOwner` unset is the default and is right for a deployment serving one owner,
 whose spending the aggregate ceiling already bounds. What it exposes on a deployment serving several is one owner's
