@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Xml.Linq;
 using MailFathom.Client.Deployment;
 using MailFathom.Client.UnitTests.TestDoubles;
 
@@ -99,6 +100,31 @@ public sealed class BuildStatedDeploymentAddressTests
     {
         // Act, Assert
         Assert.Throws<ArgumentNullException>(() => new BuildStatedDeploymentAddress(null!, "https://mail.example.test/"));
+    }
+
+    /// <summary>The name this type reads is the name the build writes, which is one decision recorded in two files.</summary>
+    /// <remarks>
+    /// The project file is parsed rather than trusted, exactly as <c>ColorPaletteOverrideTests</c> parses the palette
+    /// it depends on, because nothing else can say the two ends still agree. A rename reaching only one of them
+    /// compiles, publishes, and starts: <c>AppContext.GetData</c> answers <see langword="null" />, the head falls back
+    /// to its own answer, and a locally orchestrated client calls its own development server with no failure anywhere
+    /// saying why.
+    /// </remarks>
+    [Fact]
+    public void ConfigurationKey_IsTheNameTheClientProjectWritesIntoTheRuntimeHostConfiguration()
+    {
+        // Arrange
+        var project = XDocument.Load(Path.Combine(AppContext.BaseDirectory, "Build", "Client.csproj"));
+
+        // Act
+        var written = project
+            .Descendants("RuntimeHostConfigurationOption")
+            .Select(option => option.Attribute("Include")?.Value)
+            .ToArray();
+
+        // Assert
+        Assert.NotEmpty(written);
+        Assert.Contains(BuildStatedDeploymentAddress.ConfigurationKey, written, StringComparer.Ordinal);
     }
 
     /// <summary>The constructor a head actually composes reads the key the build writes, which is the whole of the channel.</summary>

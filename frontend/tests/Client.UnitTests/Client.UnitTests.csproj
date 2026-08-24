@@ -20,6 +20,15 @@
           Link="Styles/ColorPaletteOverride.xaml"
           TargetPath="Styles/ColorPaletteOverride.xaml"
           CopyToOutputDirectory="PreserveNewest" />
+
+    <!-- The application's project file, on the same terms and for the same reason: one of the two ends of a name that
+         crosses from the build into the code is written here, and only reading the file can say the two still agree.
+         A rename that reached one of them alone would leave AppContext.GetData answering null and the head quietly
+         falling back to its own wrong address, which no build failure and no other test would report. -->
+    <None Include="..\..\src\Client\Client.csproj"
+          Link="Build/Client.csproj"
+          TargetPath="Build/Client.csproj"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
