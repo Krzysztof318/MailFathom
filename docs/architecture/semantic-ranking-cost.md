@@ -30,7 +30,15 @@ deployment's observed 1.6, so the corpus is heavier per message than the mailbox
 
 **Buffer counts are the figure to read, not the timings.** The machine was under heavy concurrent load throughout, so
 every duration here is an upper band; two independent rounds agreed on buffers to within half a percent while their
-timings differed by up to a factor of two. A buffer is 8 KB, so 2 000 000 of them is 16 GB of pages moved.
+timings differed by up to a factor of two.
+
+A buffer count is a page *pin* rather than a distinct page, which is worth reading correctly before the tables below.
+A 6152-byte vector is four TOAST chunks, each fetched through its own descent of the TOAST index, so one vector costs
+several pins of which nearly all find their page already in the 128 MB pool — the four chunks share one page, and the
+index above them is small enough to stay resident. What crossed that boundary in the full-mailbox search is the `read`
+half of its 2 152 957 pins: **275 986 pages, or 2.2 GB** — the owner's share of the 3081 MB of out-of-line vectors,
+fetched once. That 2.2 GB is served by the operating system's page cache on this host rather than by the device, which
+is what the concurrency section below turns on.
 
 ## What the exact ranking costs
 
@@ -161,11 +169,19 @@ and only one of them holds 100 000 messages: a run is a mixture of eight-second 
 sample of one number.
 
 What the table says is that concurrency is not where this breaks. Four searches at once completed four times as many
-searches in the same wall clock at the same latency each. The scan is bound by reading three gigabytes of out-of-line
-vectors, that fits in this host's page cache, and reading the same pages in four processes costs four times the CPU and
-no more I/O. So the figure to carry forward is the per-query one — **an unfiltered semantic search is seconds, and four
-at once are still seconds each** — and the boundary worth re-measuring at is an embedding table larger than the
-deployment's page cache, not a number of callers.
+searches in the same wall clock at the same latency each. The 2.2 GB the scan actually reads fits in this host's page
+cache, so four processes reading the same pages cost four times the CPU and no more device I/O. So the figure to carry
+forward is the per-query one — **an unfiltered semantic search is seconds, and four at once are still seconds each**.
+
+**That last sentence holds only while the vectors fit in memory, and it is the one boundary worth re-measuring at** —
+not a number of callers. Where it lies follows from the measured size rather than from a second measurement: 3081 MB of
+TOAST over 389 396 vectors is about 8 KB of table per vector, so a deployment's embedding table is roughly its vector
+count times that, and everything else on the host competes for the same cache. Past that point each search reads from
+the device instead of from memory, the reads are chunk-at-a-time through the TOAST index rather than one sequential
+stream, and concurrent searches begin contending for one queue — so latency stops being flat in the number of callers,
+which is the property this section measured on the near side of the line. The levers there are fewer bytes per vector
+before anything else: `halfvec` halves the width and a narrower model quarters it, and both go straight at the only
+cost an exact ranking has.
 
 ## The decision
 

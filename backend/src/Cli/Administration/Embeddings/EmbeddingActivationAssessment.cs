@@ -86,7 +86,7 @@ internal sealed record EmbeddingActivation(
         "ReindexStarted" =>
             $"Registered generation {this.ProfileId} and started a reindex. Searches keep being answered from whatever was serving until it completes.",
         "AlreadyBuilding" =>
-            $"Generation {this.ProfileId} was already being built, so the reindex was left running and the next backfill pass brought forward.",
+            $"Generation {this.ProfileId} was already being built, so the reindex was left running and the next backfill pass was brought forward.",
         "AlreadyServing" =>
             $"Generation {this.ProfileId} is already the one searches are answered from. Nothing was started and nothing was spent.",
         _ => $"The deployment reported '{this.Outcome}' for generation {this.ProfileId}.",
