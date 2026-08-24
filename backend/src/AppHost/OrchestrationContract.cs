@@ -271,6 +271,16 @@ public static class OrchestrationContract
     /// <summary>The one permission the entry above grants, which is what its key holds and the whole of what it reaches.</summary>
     public const string AdminNarrowedPermission = "mailfathom.admin.read";
 
+    /// <summary>The endpoint the MailFathom host serves its client surface on.</summary>
+    /// <remarks>
+    /// A socket of its own rather than the MCP endpoint's, and the difference is the bind address rather than the
+    /// number. This one is on <see cref="DeveloperLoopbackAddress" />, because the only thing that calls it is a
+    /// browser head served on the same machine, and a wildcard beside a specific address on one port is two sockets
+    /// the operating system grants only one of — so sharing would have meant publishing the client surface wherever
+    /// the MCP endpoint is published, or moving that endpoint to loopback as a side effect.
+    /// </remarks>
+    public const string HostClientEndpointName = "client";
+
     /// <summary>The EF Core migration tool resource.</summary>
     public const string MigrationsResourceName = "mailfathom-migrations";
 
@@ -605,6 +615,15 @@ public static class OrchestrationContract
     /// <summary>The configuration key a developer states the client's development server port under to pin it.</summary>
     /// <remarks>Read the way <see cref="PinnedMcpEndpointPortKey" /> is. Pinning it is what a bookmarked browser tab wants; leaving it unset is what lets a second checkout serve a head of its own.</remarks>
     public const string PinnedClientPortKey = "Ports:Client";
+
+    /// <summary>The configuration key a developer states the client surface's port under to pin it.</summary>
+    /// <remarks>
+    /// Read the way <see cref="PinnedMcpEndpointPortKey" /> is. Pinning it is what a request written once against
+    /// <c>/api/client</c> wants; leaving it unset is what lets a second checkout serve the surface of its own. Nothing
+    /// about the browser head depends on it — that head is told the address by the build that produced it — so this
+    /// exists for whoever calls the surface by hand.
+    /// </remarks>
+    public const string PinnedClientEndpointPortKey = "Ports:ClientEndpoint";
 
     /// <summary>The configuration key a developer states <see langword="false" /> under to run the orchestration without the client.</summary>
     /// <remarks>

@@ -197,7 +197,7 @@ public sealed class OrchestrationContractTests
 
     /// <summary>Each socket is pinned under a key of its own, which is what lets one be pinned while the others stay allocated.</summary>
     [Fact]
-    public void PinnedPortKeys_TheFourSocketsTheOrdinaryTopologyPublishes_AreStatedSeparately()
+    public void PinnedPortKeys_TheSocketsTheOrdinaryTopologyPublishes_AreStatedSeparately()
     {
         // Act
         string[] keys =
@@ -205,6 +205,7 @@ public sealed class OrchestrationContractTests
             OrchestrationContract.PinnedMcpEndpointPortKey,
             OrchestrationContract.PinnedHealthEndpointsPortKey,
             OrchestrationContract.PinnedPostgresPortKey,
+            OrchestrationContract.PinnedClientEndpointPortKey,
             OrchestrationContract.PinnedClientPortKey,
         ];
 

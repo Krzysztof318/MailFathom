@@ -417,14 +417,15 @@ else
     // port for the proxy it would put in front of a resource and refuses an endpoint that declares none while asking
     // for no proxy — and no proxy is what keeps the socket a client reaches the socket Kestrel opened.
     //
-    // All three are found in one call whether or not any is pinned, because that is what makes them different from each
-    // other; a pinned value then replaces the one it was found for and the others stay where they were put. The third
-    // belongs to the client below, and is found here rather than beside it for that reason: a second call would release
-    // these before choosing, and two sockets handed one number is a run that fails on whichever binds second.
-    var foundPorts = OrchestrationContract.FindFreePorts(3);
+    // All four are found in one call whether or not any is pinned, because that is what makes them different from each
+    // other; a pinned value then replaces the one it was found for and the others stay where they were put. The last
+    // one belongs to the client below, and is found here rather than beside it for that reason: a second call would
+    // release these before choosing, and two sockets handed one number is a run that fails on whichever binds second.
+    var foundPorts = OrchestrationContract.FindFreePorts(4);
     var mcpEndpointPort = PinnedPort(OrchestrationContract.PinnedMcpEndpointPortKey) ?? foundPorts[0];
     var healthEndpointsPort = PinnedPort(OrchestrationContract.PinnedHealthEndpointsPortKey) ?? foundPorts[1];
-    var clientPort = PinnedPort(OrchestrationContract.PinnedClientPortKey) ?? foundPorts[2];
+    var clientEndpointPort = PinnedPort(OrchestrationContract.PinnedClientEndpointPortKey) ?? foundPorts[2];
+    var clientPort = PinnedPort(OrchestrationContract.PinnedClientPortKey) ?? foundPorts[3];
 
     mailFathomHost
         // The MCP endpoint's own socket, stated to the app model and injected into the host's own configuration key, so
@@ -473,7 +474,26 @@ else
             port: healthEndpointsPort,
             targetPort: healthEndpointsPort,
             isProxied: false,
-            env: "HealthEndpoints__Port");
+            env: "HealthEndpoints__Port")
+        // The client surface's socket, declared exactly as the MCP endpoint's is and bound exactly as little: both
+        // sections ship disabled, so this run publishes a number and the host binds nothing under it until this
+        // checkout says otherwise. Enabling a surface that reads the mailbox stays a developer's own act here, the way
+        // McpEndpoint:Enabled is — and it is stated in the host's user secrets rather than by this app model, so the
+        // credential that guards it is decided in the same place and at the same time.
+        //
+        // A socket of its own rather than the MCP endpoint's, though every surface's default port would have shared
+        // one. What cannot be shared is the bind address: a wildcard beside a specific address on one port is two
+        // sockets the operating system grants only one of, so sharing would either publish the client surface wherever
+        // the MCP endpoint is published or move that endpoint to loopback as a side effect. On loopback because the
+        // only thing that calls this is a browser head served on this machine.
+        .WithEnvironment("ClientEndpoint__BindAddress", OrchestrationContract.DeveloperLoopbackAddress)
+        .WithEndpoint(
+            name: OrchestrationContract.HostClientEndpointName,
+            scheme: "tcp",
+            port: clientEndpointPort,
+            targetPort: clientEndpointPort,
+            isProxied: false,
+            env: "ClientEndpoint__Port");
 
     // The client, in the one topology it belongs to. What the app model reaches into the other stack with is a
     // directory and a command: no project under frontend/ enters backend/MailFathom.slnx, no backend project references
@@ -494,12 +514,11 @@ else
     {
         // The two origins this pair is wired from, each composed once because both sides read the same one. The
         // client's is what its development server binds and what the service is told to answer as a browser origin;
-        // the service's is what the head is built to call, and it is the socket the MCP endpoint already binds because
-        // the client surface joins that one rather than opening a fourth.
+        // the service's is the client surface's own socket, declared above, which is what the head is built to call.
         var clientOrigin =
             $"http://{OrchestrationContract.DeveloperLoopbackAddress}:{clientPort.ToString(CultureInfo.InvariantCulture)}";
         var serviceAddress =
-            $"http://{OrchestrationContract.DeveloperLoopbackAddress}:{mcpEndpointPort.ToString(CultureInfo.InvariantCulture)}/";
+            $"http://{OrchestrationContract.DeveloperLoopbackAddress}:{clientEndpointPort.ToString(CultureInfo.InvariantCulture)}/";
 
         builder
             .AddExecutable(
@@ -528,24 +547,15 @@ else
                 targetPort: clientPort,
                 isProxied: false);
 
-        // The service's half of the same wiring, stated only where a head exists to call it: a run without the client
-        // opens no surface for one.
+        // The service's half of the same wiring, and the whole of it: the head's own origin as the one browser origin
+        // the client surface answers, rather than the every-origin posture an unstated list means. A local run is the
+        // one place the exact origin is known, so narrowing it costs nothing and answers in advance the preflight a
+        // deployment will also have to answer — which is what leaves turning the surface on a single key rather than a
+        // key and a puzzle about why the first call was refused.
         //
-        // The client surface answers on the MCP endpoint's own socket, which is what every surface's default port
-        // already means — one socket serving each surface at its own prefix, with the port a request arrived on
-        // deciding which prefixes may be asked for there. That keeps the address a developer reads out of the
-        // dashboard the address the head calls, and it is why the head is pointed at that port rather than at a
-        // fourth one this run would have to find and publish.
-        //
-        // The head's own origin is the one browser origin the endpoint answers, rather than the every-origin posture
-        // an unstated list means: a local run is the one place the exact origin is known, so narrowing it costs
-        // nothing and proves the preflight a deployment will also have to answer. Authentication stays unstated, as it
-        // is on the MCP endpoint here — what a person presents to their own client is a decision of its own, and this
-        // wiring decides only where the client points.
-        mailFathomHost
-            .WithEnvironment("ClientEndpoint__Enabled", "true")
-            .WithEnvironment("ClientEndpoint__Port", mcpEndpointPort.ToString(CultureInfo.InvariantCulture))
-            .WithEnvironment("ClientEndpoint__Cors__AllowedOrigins__0", clientOrigin);
+        // Written only where a head exists to make the request. Turning the surface on is not written here at all, for
+        // the reason stated where its socket is declared.
+        mailFathomHost.WithEnvironment("ClientEndpoint__Cors__AllowedOrigins__0", clientOrigin);
     }
 }
 

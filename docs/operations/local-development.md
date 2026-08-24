@@ -302,14 +302,25 @@ into the boot document the page fetches, and the client reads it back through `A
 answer for itself. Nothing else states that property, so a bundle built anywhere else carries no such option and a head
 served from a deployment's own container image still resolves the origin it was fetched from.
 
-The origin it is pointed at is the **MCP endpoint's own socket**, because that is where the client surface answers
-here. Starting the client also enables `ClientEndpoint` on the host, on the port the MCP endpoint already binds — which
-is what every surface's default port means, one socket serving each surface at its own prefix — so the address a
-developer reads out of the dashboard is the address the head calls. The head's own origin is written into
-`ClientEndpoint:Cors:AllowedOrigins` as the one browser origin that endpoint answers, which is what makes the first
-cross-origin call a served request rather than a refused preflight. Neither surface is given a credential here, which
-is the posture the MCP endpoint has always had locally; what a person presents to their own client is a decision of its
-own. A run started with `Client:Enabled` false opens no client surface either — there is no head to call it.
+The origin it is pointed at is the **client surface's own socket**, which this topology publishes beside the MCP
+endpoint's and the probes'. It is on `127.0.0.1`, because the only thing that calls it is a head served on this
+machine, and that is also why it is a socket rather than a share of the MCP endpoint's: a wildcard bind beside a
+specific one on a single port is two sockets the operating system grants only one of, so sharing would have published
+the client surface wherever the MCP endpoint is published.
+
+**The surface itself is off until you turn it on**, exactly as `McpEndpoint` is, and for the same reason: enabling a
+listener that reads the mailbox is a developer's own act rather than something starting a head does for them. What the
+orchestration configures is everything else — the port, the loopback bind, and the head's own origin as the one browser
+origin `ClientEndpoint:Cors:AllowedOrigins` answers — so turning it on is one key beside whichever credential you want
+guarding it, and the first cross-origin call is served rather than refused on a preflight:
+
+```bash
+dotnet user-secrets --project backend/src/Host/Host.csproj set "ClientEndpoint:Enabled" "true"
+```
+
+Leave it off and the head still starts, still knows where the service is, and is refused by a socket nothing is
+listening on — which is the same answer a locally started MCP client gets before `McpEndpoint:Enabled` is set. A run
+started with `Client:Enabled` false configures no origin either, because no head exists to make the request.
 
 A **desktop** head takes the same property and reads the same key, so an orchestration could point one the same way.
 Started by hand it is given none, and reads `Deployment:Address` out of
@@ -329,13 +340,16 @@ where a decision about one machine belongs, out of every checkout:
 dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:McpEndpoint" "8080"
 dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:HealthEndpoints" "8081"
 dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:Postgres" "5432"
+dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:ClientEndpoint" "8082"
 dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:Client" "5000"
 ```
 
 `8080` and `8081` are the ports [the container image](container-image.md) publishes and `5432` is PostgreSQL's own, so
-those three values are what makes a local run answer where a deployment does; `Ports:Client` answers a different want,
-which is a browser tab that survives a restart of the orchestration. Each key is read on its own, so pinning the MCP
-endpoint leaves the probes, the database, and the client on whatever the run takes. A value that is not a port number
+those three values are what makes a local run answer where a deployment does; the last two answer a different want.
+`Ports:Client` is a browser tab that survives a restart of the orchestration, and `Ports:ClientEndpoint` is a request
+written once against `/api/client` — the browser head needs neither, since it is told where the service is by the build
+that produced it. Each key is read on its own, so pinning the MCP endpoint leaves the probes, the database, the client
+surface, and the head on whatever the run takes. A value that is not a port number
 between `1` and `65535` fails the app host at startup naming the key, rather than being ignored and leaving the address
 to move anyway.
 
@@ -370,10 +384,10 @@ because Aspire injects `OTEL_EXPORTER_OTLP_ENDPOINT` into the resources it start
 only place telemetry export is configured at all — a deployment exports nothing until an operator sets the variable
 themselves. [Telemetry](telemetry.md) records what the host emits and where it goes.
 
-A freshly started host synchronizes nothing and serves no MCP endpoint, because both defaults are the shipped ones.
-Configure a development mailbox through user secrets as [development secrets](#development-secrets) below shows, and
-enable the endpoint the same way when a tool call is what is being tested — in Development the `ReferenceOrInline`
-interpretation keeps the credential a one-liner:
+A freshly started host synchronizes nothing and serves neither the MCP endpoint nor the client surface, because every
+one of those defaults is the shipped one. Configure a development mailbox through user secrets as
+[development secrets](#development-secrets) below shows, and enable the endpoint the same way when a tool call is what
+is being tested — in Development the `ReferenceOrInline` interpretation keeps the credential a one-liner:
 
 ```bash
 dotnet user-secrets --project backend/src/Host/Host.csproj set "McpEndpoint:Enabled" "true"
