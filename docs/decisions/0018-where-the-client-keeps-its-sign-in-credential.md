@@ -9,7 +9,7 @@ informed:
 
 # Keep the client's sign-in credential only where the operating system holds a secret for one user, persist nothing on the browser head, and store the owner's password rather than anything derived from it
 
-<!-- describes: frontend/src/Client.Backend/**, frontend/src/Client/Platforms/** -->
+<!-- describes: none -->
 
 ## Context and Problem Statement
 
@@ -60,7 +60,9 @@ Nothing else of the session goes into the store or beside it: not the session do
 
 ### Where each head keeps it
 
-**The desktop head reaches its operating system directly, behind one port.** `net10.0-desktop` is one target framework running on Windows, Linux, and macOS, and Uno's own credential store does not reach it: `Windows.Security.Credentials.PasswordVault` is marked unsupported on the Skia targets, so a head that renders through Skia on every operating system cannot rest on it. There is no cross-platform store to take, and the port has three implementations:
+**The port is declared in `Client.Backend` and implemented per head.** `Client.Backend` targets plain `net10.0` and references no Uno package and no WinUI assembly, so nothing that needs one can sit in it; a head's implementation lives under `frontend/src/Client/Platforms/`, reaches that platform's own store, and exposes the value to nothing but the port. `BrowserSignInRedirectListener` is already that arrangement for a port of the same shape.
+
+**The desktop head reaches its operating system directly.** `net10.0-desktop` is one target framework running on Windows, Linux, and macOS, and Uno's own credential store does not reach it: `Windows.Security.Credentials.PasswordVault` is marked unsupported on the Skia targets, so a head that renders through Skia on every operating system cannot rest on it. There is no cross-platform store to take, and the port has three implementations:
 
 - **Windows** — the Credential Manager, holding an item under the logged-on user's profile. The Data Protection API at `DataProtectionScope.CurrentUser` protects to the same user account and is an acceptable alternative where the interop is not worth it; what this decision requires is the user-account boundary rather than one particular way of reaching it.
 - **macOS** — Keychain Services, as a generic password item in the login keychain, scoped to this application and not synchronized to iCloud.
@@ -115,7 +117,7 @@ Only material that fails that test reopens the question. Something bound to the 
 
 ## Validation
 
-- `Client.Backend` declares the port and nothing outside it reads or writes the store. That is the same boundary that already keeps the credential unreadable from a screen, and it is checked the same way — by review of what the assembly makes public, which offers no credential.
+- `Client.Backend` declares the port and is the only thing that reads the credential back out of it. A head's implementation under `frontend/src/Client/Platforms/` reaches that platform's store and hands the value to nothing else, which is the arrangement `BrowserSignInRedirectListener` already has for a port of the same shape. Both halves are checked the same way — by review of what each side makes public, neither of which offers a credential to a screen.
 - The browser head implements the port by reporting that it has no store, rather than by registering nothing. A head with no implementation is a missing registration somewhere; a head with an implementation that answers "none" is a behaviour a test can assert.
 - `frontend/tests/Client.UnitTests` covers the paths this record creates: a store that is unavailable leaving the credential in memory, a deployment refusal clearing the stored item, sign-out clearing it, and the address key keeping one deployment's credential away from another.
 - Review is what checks the per-head mechanism, because no analyzer distinguishes a Secret Service call from a file write. `frontend/src/AGENTS.md` states the outcome, so a change that puts the credential somewhere else contradicts an instruction file every session working in that stack loads.
@@ -170,4 +172,5 @@ Exchange the password once for a long-lived value the client holds instead, so t
 - [ADR 0012](0012-authorization-model-named-permissions-and-where-they-are-enforced.md) governs what the presented credential is then allowed to do, which is unchanged by where it was kept.
 - [ADR 0016](0016-third-party-licence-obligations-per-artifact.md) governs any component taken to reach a platform store.
 - [#1148](https://github.com/Krzysztof318/MailFathom/issues/1148) implements this and carries the acceptance items that follow from it; [#1146](https://github.com/Krzysztof318/MailFathom/issues/1146) is the parent that cannot close until it lands.
+- The `describes:` marker names nothing because none of this code exists yet. It gains its paths when [#1148](https://github.com/Krzysztof318/MailFathom/issues/1148) lands the port and its per-head implementations, which is one of the two edits an accepted ADR is permitted.
 - Three things would reopen this: a sign-in method whose long-lived material is not password-equivalent, which supersedes the record for the head it changes; Uno implementing a credential store for the Skia desktop targets, which would replace three implementations with one while changing nothing decided here; and a browser capability that scopes a secret to something narrower than the origin, which is the only development that would make the browser head's answer worth reconsidering.
