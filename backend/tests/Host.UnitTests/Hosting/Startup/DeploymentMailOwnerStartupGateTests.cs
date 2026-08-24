@@ -52,9 +52,17 @@ public sealed class DeploymentMailOwnerStartupGateTests
     /// while its accounts are still declared in a file that cannot say whose they are. Serving either would mean
     /// attributing every configured account to whichever owner a query returned first.
     /// </summary>
+    /// <remarks>
+    /// The message is asserted beside the code, because the two cases share the code and the message is the whole of
+    /// what separates them. Each names a different action — apply the schema, or leave one owner — so a gate that
+    /// raised the wrong one would pass a test reading the code alone and tell an operator to apply a schema they have
+    /// already applied.
+    /// </remarks>
     [Theory]
-    [MemberData(nameof(OwnerRecordsThatCannotBeServed))]
-    public async Task StartAsync_OtherThanExactlyOneOwnerRecord_FailsStartup(MailOwnerId[] owners)
+    [MemberData(nameof(OwnerRecordsAndTheRemedyEachOneNames))]
+    public async Task StartAsync_OtherThanExactlyOneOwnerRecord_FailsStartupNamingWhatToDoAboutIt(
+        MailOwnerId[] owners,
+        string remedyNamed)
     {
         // Act
         var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
@@ -62,6 +70,7 @@ public sealed class DeploymentMailOwnerStartupGateTests
 
         // Assert
         Assert.Equal(MailFathomErrorCode.DeploymentMailOwnerUnresolved, refusal.ErrorCode);
+        Assert.Contains(remedyNamed, refusal.Message, StringComparison.Ordinal);
     }
 
     /// <summary>A gate that failed took the host down with it, so nothing may report the host as having come up.</summary>
@@ -119,6 +128,18 @@ public sealed class DeploymentMailOwnerStartupGateTests
     {
         Array.Empty<MailOwnerId>(),
         new[] { SyntheticMailOwner.Deployment, SyntheticMailOwner.Another },
+    };
+
+    /// <summary>The same two counts, each beside the phrase its own refusal has to carry.</summary>
+    /// <returns>Every owner count this deployment cannot serve, and the action its refusal names.</returns>
+    /// <remarks>A phrase rather than the whole message, so rewording a refusal for an operator does not fail a test about which refusal it is.</remarks>
+    public static TheoryData<MailOwnerId[], string> OwnerRecordsAndTheRemedyEachOneNames() => new()
+    {
+        { Array.Empty<MailOwnerId>(), "Apply the schema of this release" },
+        {
+            new[] { SyntheticMailOwner.Deployment, SyntheticMailOwner.Another },
+            "Serve one owner per deployment"
+        },
     };
 
     private static DeploymentMailOwnerStartupGate CreateGate(

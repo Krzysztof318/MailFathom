@@ -69,4 +69,48 @@ public sealed class AccessAuthorizationsTests
         Assert.Throws<PrincipalNotAuthorizedException>(
             () => authorization.RequirePermission(MailFathomPermission.MailRead));
     }
+
+    /// <summary>
+    /// An ordinary caller acts for the deployment's owner, and asserting it here is what the owner-scoped suites are
+    /// entitled to assume. A helper that stopped stating an owner would turn every "a caller reads their own accounts"
+    /// test into a refusal that still passed for the wrong reason.
+    /// </summary>
+    [Fact]
+    public void ForCallerGranted_ActsForTheDeploymentsOwner()
+    {
+        // Act
+        var authorization = AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead);
+
+        // Assert
+        Assert.Equal(SyntheticMailOwner.Deployment, authorization.RequireOwner());
+    }
+
+    /// <summary>The owner a test names is the owner the use case is told about, which is what an isolation test asserts against.</summary>
+    [Fact]
+    public void ForOwnerGranted_TheOwnerNamed_IsTheOwnerTheWorkActsFor()
+    {
+        // Act
+        var authorization = AccessAuthorizations.ForOwnerGranted(
+            SyntheticMailOwner.Another,
+            MailFathomPermission.MailRead);
+
+        // Assert
+        Assert.Equal(SyntheticMailOwner.Another, authorization.RequireOwner());
+    }
+
+    /// <summary>
+    /// The deployment administrator acts for nobody however broad the grant, and that is the whole of what separates it
+    /// from a caller here. A helper routed through the owner-carrying factory would make every "the administrative
+    /// surface cannot read a mailbox" test pass by reading one.
+    /// </summary>
+    [Fact]
+    public void ForAdministratorGranted_HoldsTheGrantAndActsForNoOwner()
+    {
+        // Act
+        var authorization = AccessAuthorizations.ForAdministratorGranted(MailFathomPermission.AdminCredentialsWrite);
+
+        // Assert
+        Assert.True(authorization.Permits(MailFathomPermission.AdminCredentialsWrite));
+        Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireOwner());
+    }
 }

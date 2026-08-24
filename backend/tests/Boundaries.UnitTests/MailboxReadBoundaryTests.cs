@@ -66,26 +66,33 @@ public sealed class MailboxReadBoundaryTests
     }
 
     /// <summary>
-    /// The two account catalogs are told apart by the members they publish rather than by a flag, and this is what
-    /// makes that separation hold: a tool reaching the deployment-wide catalog would answer for every account the
-    /// deployment serves whoever asked, which is precisely the read the caller-scoped catalog exists to narrow. It is
-    /// stated over the whole protocol assembly rather than over the tools, because a helper the tools compose would be
-    /// the same defect one indirection further out.
+    /// The two account catalogs are told apart by the members they publish rather than by a flag, and this holds one
+    /// half of that separation: nothing in the protocol assembly names the deployment-wide catalog itself, so a tool
+    /// cannot read every account the deployment serves without going through a use case that already decided to.
     /// </summary>
+    /// <remarks>
+    /// It is a rule about the protocol assembly's own dependencies and not about what the use cases it composes reach.
+    /// A use case behind a tool may still hold the deployment-wide catalog, and one does today —
+    /// <c>AuthoredMailSubmission</c>, whose account resolution ADR 0014 moves in its next delivery step — so this rule
+    /// being green is not the statement that no MCP call can reach the deployment's whole account set. Widening it to
+    /// the composed use cases is what would say that, and it is the step that becomes true rather than merely
+    /// assertable once the send resolves through the caller-scoped port.
+    /// </remarks>
     [Fact]
-    public void DeploymentWideAccountCatalog_AtTheProtocolBoundary_IsUnreachable()
+    public void DeploymentWideAccountCatalog_InTheProtocolAssemblysOwnDependencies_IsAbsent()
     {
         // Arrange
-        IArchRule theProtocolBoundaryReadsOnlyTheCallersOwnAccounts = Types()
+        IArchRule theProtocolBoundaryNamesOnlyTheCallerScopedCatalog = Types()
             .That()
             .HaveFullNameMatching(ProtocolBoundaryPattern)
             .Should()
             .NotDependOnAny(typeof(IDeploymentMailAccountCatalog))
             .Because(
-                "every MCP tool answers one caller acting for one owner, so a tool that could name the accounts the "
-                    + "deployment serves would publish one person's mailbox to another's request");
+                "every MCP tool answers one caller acting for one owner, so a tool that named the accounts the "
+                    + "deployment serves would publish one person's mailbox to another's request; this holds the "
+                    + "protocol assembly's own dependencies rather than what the use cases it composes reach");
 
         // Act & Assert
-        theProtocolBoundaryReadsOnlyTheCallersOwnAccounts.Check(CompiledBoundaries.Solution);
+        theProtocolBoundaryNamesOnlyTheCallerScopedCatalog.Check(CompiledBoundaries.Solution);
     }
 }

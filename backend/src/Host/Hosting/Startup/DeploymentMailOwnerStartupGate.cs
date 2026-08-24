@@ -44,7 +44,7 @@ internal sealed partial class DeploymentMailOwnerStartupGate : IHostedService
     /// <param name="deploymentOwner">The holder this gate publishes the resolved owner into.</param>
     /// <param name="startupGates">The tracker this gate reports its completion to, which is what the startup probe reads.</param>
     /// <param name="logger">The startup logger.</param>
-    /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="scopeFactory" />, <paramref name="deploymentOwner" />, or <paramref name="startupGates" /> is <see langword="null" />.</exception>
     public DeploymentMailOwnerStartupGate(
         IServiceScopeFactory scopeFactory,
         DeploymentMailOwner deploymentOwner,

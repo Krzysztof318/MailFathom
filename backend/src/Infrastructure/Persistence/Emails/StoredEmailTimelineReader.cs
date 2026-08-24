@@ -165,8 +165,13 @@ internal sealed class StoredEmailTimelineReader(MailFathomDbContext dbContext) :
     /// </para>
     /// <para>
     /// Each walk takes the whole page limit rather than a share of it, because the page may come entirely from one
-    /// account: a share would silently truncate a mailbox whose mail is the newest of the set. The cost of that is
-    /// bounded by the accounts in scope, which resolution has already bounded to what one owner owns.
+    /// account: a share would silently truncate a mailbox whose mail is the newest of the set. What that costs is one
+    /// branch and one page of rows per account in scope, and the merge states no ceiling of its own on how many that
+    /// is. <see cref="MailboxScope.MaximumAccountIds" /> bounds what a request may *name*, and a request naming
+    /// nothing resolves to every account its owner owns, so the branch count follows the deployment's configured
+    /// account list rather than that limit. Capping it here is the wrong repair — a page assembled from some of the
+    /// caller's accounts would be a page missing mail nobody could tell was missing — so a deployment serving one
+    /// owner enough accounts for the fan-out to matter is a bound to place on the accounts rather than on the walk.
     /// </para>
     /// </remarks>
     private static IQueryable<StoredEmailSummaryRow> MergedPage(

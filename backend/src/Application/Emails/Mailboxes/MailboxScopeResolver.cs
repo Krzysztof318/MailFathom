@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Folders;
 using MailFathom.Domain.Accounts;
@@ -59,6 +60,7 @@ public sealed class MailboxScopeResolver
     /// <param name="folders">The folders a request named, each by alias or by role, or empty for every folder.</param>
     /// <param name="junkMail">Whether the caller asked for the account's junk folder, which defaults to it being left out.</param>
     /// <returns>The scope a query runs with.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no owner, which the deployment administrator and this process's own identity both are.</exception>
     /// <exception cref="MailboxQueryFilterInvalidException">Thrown when either list names more values than its limit permits.</exception>
     /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account the caller's owner does not own, which includes every account this deployment does not serve.</exception>
     /// <exception cref="MailFolderRoleUnmappedException">Thrown when the request names a role no account in scope maps a folder with.</exception>
@@ -154,9 +156,13 @@ public sealed class MailboxScopeResolver
         // scope naming no account and admitting every other owner's folders, and a scope naming no account is read as
         // unrestricted by every narrowing site — so the one caller with nothing to read would be the one caller reading
         // everything. The scope that admits nothing is what such a caller resolves to instead.
+        //
+        // The junk-mail answer is still recorded on it, for the reason WithJunkMail records one when no account maps a
+        // junk folder: the answer is part of what a continuation cursor was issued for, and a page that reported the
+        // caller's own filter back to them differently is a page whose cursor no longer matches the request.
         if (accountsInScope.Length is 0)
         {
-            return MailboxScope.NothingReadable;
+            return MailboxScope.NothingReadable.WithJunkMail(junkMail, this.junkFolders.JunkFolders);
         }
 
         var resolvedScope = MailboxScope.Create(
@@ -172,6 +178,7 @@ public sealed class MailboxScopeResolver
     /// <param name="accountId">The account the email was read from.</param>
     /// <param name="folderAlias">The folder the email was read from.</param>
     /// <returns><see langword="true" /> when the owner in hand owns that account and a mapping admits that folder to tools.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no owner, which is a refusal rather than the <see langword="false" /> a caller with nothing readable is answered with.</exception>
     /// <remarks>
     /// This is <see cref="ReadableScope" /> asked about one email instead of about a query, and it exists because
     /// several reads reach an email by its identifier and build no scope at all. Both questions are answered from the

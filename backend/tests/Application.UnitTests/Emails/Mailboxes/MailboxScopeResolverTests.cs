@@ -145,7 +145,7 @@ public sealed class MailboxScopeResolverTests
         var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
 
         // Assert
-        Assert.Equal(MailboxScope.NothingReadable, scope);
+        AssertNothingIsReadable(scope);
     }
 
     /// <summary>
@@ -162,7 +162,30 @@ public sealed class MailboxScopeResolverTests
         var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
 
         // Assert
-        Assert.Equal(MailboxScope.NothingReadable, scope);
+        AssertNothingIsReadable(scope);
+    }
+
+    /// <summary>
+    /// The caller's junk-mail answer is recorded on the empty scope too, because it is part of what a continuation
+    /// cursor was issued for: a page whose fingerprint disagreed with the request that asked for it would refuse the
+    /// caller's own cursor the moment they came to own an account.
+    /// </summary>
+    [Theory]
+    [InlineData(JunkMailInclusion.Included, true)]
+    [InlineData(JunkMailInclusion.Excluded, false)]
+    public void ReadableScope_AnOwnerWhoOwnsNoAccount_StillRecordsWhatTheCallerAskedAboutJunkMail(
+        JunkMailInclusion junkMail,
+        bool recorded)
+    {
+        // Arrange
+        var resolver = ResolverFor(SyntheticMailOwner.Another, Work, Private);
+
+        // Act
+        var scope = resolver.ReadableScope([], [], junkMail);
+
+        // Assert
+        Assert.Equal(recorded, scope.IncludesJunkMail);
+        AssertNothingIsReadable(scope);
     }
 
     /// <summary>
@@ -566,6 +589,21 @@ public sealed class MailboxScopeResolverTests
         // Act, Assert
         Assert.Throws<MailboxQueryFilterInvalidException>(
             () => resolver.ReadableScope([], tooMany, JunkMailInclusion.Excluded));
+    }
+
+    /// <summary>Asserts a scope admits no mail at all, which is three statements rather than one.</summary>
+    /// <remarks>
+    /// It is written out rather than compared against <see cref="MailboxScope.NothingReadable" />, because the scope's
+    /// generated equality compares its collections by reference: two scopes that both admit nothing are unequal when
+    /// one of them was built by a <c>with</c> expression. What matters here is that no account is named, that no folder
+    /// is admitted, and that the two are true together — an empty account list alone is read as every account by the
+    /// persistence predicate.
+    /// </remarks>
+    private static void AssertNothingIsReadable(MailboxScope scope)
+    {
+        Assert.Empty(scope.AccountIds);
+        Assert.Empty(scope.ReadableFolders);
+        Assert.Empty(scope.SelectedFolders);
     }
 
     private static MailboxScopeResolver ResolverServing(params ServedMailAccount[] servedAccounts) =>
