@@ -118,7 +118,7 @@ The chosen option.
 
 ## More Information
 
-The first application of this record is LibVLCSharp 3.7.0, whose row in `THIRD_PARTY_LICENSES.md` carries the verdict, the LGPL section 6 obligations that fall on a packaged desktop head, and the levers that were available and not taken. Issue [#1091](https://github.com/Krzysztof318/MailFathom/issues/1091) holds the evidence the verdict was read against.
+The first application of this record is LibVLCSharp 3.7.0, whose row in `THIRD_PARTY_LICENSES.md` carries the verdict, the levers that were available, and which of them was taken: the package is excluded from the `net10.0-desktop` publish, so it is resolved and undistributed rather than shipped under LGPL section 6, which is the state this record calls latent. Issue [#1091](https://github.com/Krzysztof318/MailFathom/issues/1091) holds the evidence the original verdict was read against and [#1222](https://github.com/Krzysztof318/MailFathom/issues/1222) the evidence the exclusion was.
 
 Revisit this record if an artifact is ever built that cannot satisfy the separate-replaceability constraint for a component it genuinely needs — a Native AOT head, or a browser bundle whose linking model leaves no separate unit. That is the case the constraint was written to refuse, and refusing it is the intended outcome; a decision to allow it is a different decision and belongs in a record that supersedes this one.
 
