@@ -31,4 +31,8 @@ internal enum HostStartupGate
     /// <summary>The spam scanner answers and has named the corpus every classification will record.</summary>
     /// <remarks>Expected only where the scanner switch is on, which is the only state in which anything asks a scanner for a score.</remarks>
     SpamScanner = 3,
+
+    /// <summary>This deployment holds exactly one owner, and every mail account it is configured with belongs to them.</summary>
+    /// <remarks>Expected on every deployment, because every caller a mail-reading surface admits is composed for that owner and a host that could not name them has nothing to admit a caller for.</remarks>
+    DeploymentMailOwner = 4,
 }

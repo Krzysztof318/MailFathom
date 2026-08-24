@@ -41,7 +41,7 @@ namespace MailFathom.Application.Mail.Delivery.Governance;
 /// <param name="senderIdentities">Says which address each of those accounts sends as.</param>
 public sealed class RecipientVouching(
     IContactDirectory contacts,
-    IMailAccountCatalog accounts,
+    IDeploymentMailAccountCatalog accounts,
     IOutgoingSenderIdentityReader senderIdentities)
 {
     /// <summary>Counts the recipients a caller named itself that nothing this deployment holds vouches for.</summary>

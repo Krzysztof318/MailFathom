@@ -56,16 +56,31 @@ namespace MailFathom.Host.Security.Transport;
 /// admit it out of the transport instead of out of the verified ticket — a second way in, and one holding on the
 /// permissive posture only, which is the worst shape a protection can take.
 /// </para>
+/// <para>
+/// Whose mail a caller is acting on is decided here too, and it is decided by the surface rather than by the credential.
+/// The MCP and client surfaces serve one person their own mail, so a caller either reaches them acting for the owner
+/// this deployment serves or is not admitted; the administrative surface serves the deployment rather than a person, so
+/// a caller there acts for no owner and every owner-scoped use case refuses it. That is the whole of the distinction
+/// between an ordinary caller and the deployment administrator, and it holds on both postures, because it is the path
+/// that decides it rather than what the request carried.
+/// </para>
+/// <para>
+/// The owner comes from a startup gate rather than from a credential, because a credential is configured today and
+/// names no owner. When credentials become records of an owner's own, this reads the admitted credential's owner and
+/// nothing above it changes.
+/// </para>
 /// </remarks>
 internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalSource
 {
     private readonly IHttpContextAccessor httpContextAccessor;
+    private readonly IDeploymentMailOwnerSource deploymentOwner;
     private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly AdminEndpointOptions adminEndpointSettings;
     private readonly ClientEndpointOptions clientEndpointSettings;
 
     /// <summary>Initializes the adapter over the request being served, if there is one.</summary>
     /// <param name="httpContextAccessor">Reports the request this scope belongs to, or nothing outside one.</param>
+    /// <param name="deploymentOwner">Names the owner a caller on a mail-serving surface is admitted to act for.</param>
     /// <param name="mcpEndpointSettings">The MCP endpoint settings startup was composed from.</param>
     /// <param name="adminEndpointSettings">The administrative endpoint settings startup was composed from.</param>
     /// <param name="clientEndpointSettings">The client endpoint settings startup was composed from.</param>
@@ -73,16 +88,19 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
     /// <remarks>The settings are the startup snapshot the schemes were registered from, which is the same one the startup report states the resolved grant out of; reading a reloaded value here would answer for a posture no scheme was composed against.</remarks>
     public TransportAuthorizedPrincipalSource(
         IHttpContextAccessor httpContextAccessor,
+        IDeploymentMailOwnerSource deploymentOwner,
         IOptions<McpEndpointOptions> mcpEndpointSettings,
         IOptions<AdminEndpointOptions> adminEndpointSettings,
         IOptions<ClientEndpointOptions> clientEndpointSettings)
     {
         ArgumentNullException.ThrowIfNull(httpContextAccessor);
+        ArgumentNullException.ThrowIfNull(deploymentOwner);
         ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
         ArgumentNullException.ThrowIfNull(adminEndpointSettings);
         ArgumentNullException.ThrowIfNull(clientEndpointSettings);
 
         this.httpContextAccessor = httpContextAccessor;
+        this.deploymentOwner = deploymentOwner;
         this.mcpEndpointSettings = mcpEndpointSettings.Value;
         this.adminEndpointSettings = adminEndpointSettings.Value;
         this.clientEndpointSettings = clientEndpointSettings.Value;
@@ -109,10 +127,32 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
             return AuthorizedPrincipal.Process;
         }
 
+        var path = context.Request.Path;
+
         return TransportCallerIdentity.NameOf(context.User) is { } identity
-            ? AuthorizedPrincipal.Caller(identity, TransportGrant.PermissionsCarriedBy(context.User))
-            : this.UnnarrowedCallerOn(context.Request.Path);
+            ? this.AdmittedCallerOn(path, identity, TransportGrant.PermissionsCarriedBy(context.User))
+            : this.UnnarrowedCallerOn(path);
     }
+
+    /// <summary>Describes a caller a scheme validated, acting for the owner the surface it reached serves.</summary>
+    /// <remarks>
+    /// The two mail-serving surfaces answer one person about their own mail, so a caller admitted there is admitted for
+    /// the owner this deployment serves. The administrative surface answers for the deployment, so a caller admitted
+    /// there acts for no owner and is refused by every use case scoped to one — which is what makes the deployment
+    /// administrator a principal rather than a grant. A path neither surface serves is neither, and a caller cannot
+    /// reach one: the routes this host maps all belong to a surface.
+    /// </remarks>
+    private AuthorizedPrincipal AdmittedCallerOn(
+        PathString path,
+        string identity,
+        IEnumerable<MailFathomPermission> grantedPermissions) =>
+        ServesOneOwnersMail(path)
+            ? AuthorizedPrincipal.CallerActingFor(this.deploymentOwner.Owner, identity, grantedPermissions)
+            : AuthorizedPrincipal.Caller(identity, grantedPermissions);
+
+    /// <summary>Reports whether a surface answers one person about their own mail rather than answering for the deployment.</summary>
+    private static bool ServesOneOwnersMail(PathString path) =>
+        TransportSurface.Client.Serves(path) || TransportSurface.Mcp.Serves(path);
 
     /// <summary>Describes the caller a surface admits where it configures no credential for one to be told apart by.</summary>
     /// <remarks>
@@ -129,19 +169,23 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
 
         if (TransportSurface.Admin.Serves(path))
         {
-            return this.adminEndpointSettings.RequiresAuthentication ? null : WholeSurfaceCaller(TransportSurface.Admin);
+            return this.adminEndpointSettings.RequiresAuthentication
+                ? null
+                : this.WholeSurfaceCaller(TransportSurface.Admin, path);
         }
 
         if (TransportSurface.Client.Serves(path))
         {
             return this.clientEndpointSettings.RequiresAuthentication
                 ? null
-                : WholeSurfaceCaller(TransportSurface.Client);
+                : this.WholeSurfaceCaller(TransportSurface.Client, path);
         }
 
         if (TransportSurface.Mcp.Serves(path))
         {
-            return this.mcpEndpointSettings.RequiresAuthentication ? null : WholeSurfaceCaller(TransportSurface.Mcp);
+            return this.mcpEndpointSettings.RequiresAuthentication
+                ? null
+                : this.WholeSurfaceCaller(TransportSurface.Mcp, path);
         }
 
         return null;
@@ -158,7 +202,15 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
     private static bool ReachedOnlyUnderACapability(PathString path) =>
         path.StartsWithSegments(EmailAttachmentDownloadEndpoint.RoutePrefix);
 
-    private static AuthorizedPrincipal WholeSurfaceCaller(TransportSurface surface) => AuthorizedPrincipal.Caller(
+    /// <summary>Describes the caller a surface configuring no credential admits, acting for whoever that surface serves.</summary>
+    /// <remarks>
+    /// This is the unauthenticated posture, and the owner reaches it by the same rule as an authenticated caller rather
+    /// than by one written for it: the surface decides. A deployment that authenticates nobody therefore constructs the
+    /// same owner principal for every request on the two mail-serving surfaces, which is exactly what an installation
+    /// serving one person expects, and the startup gate is what guarantees there is one owner for that to mean.
+    /// </remarks>
+    private AuthorizedPrincipal WholeSurfaceCaller(TransportSurface surface, PathString path) => this.AdmittedCallerOn(
+        path,
         TransportCallerIdentity.AnonymousCaller,
         MailFathomPermission.PublishedFor(surface.GrantedSurface));
 }

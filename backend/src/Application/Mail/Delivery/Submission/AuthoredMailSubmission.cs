@@ -57,7 +57,7 @@ namespace MailFathom.Application.Mail.Delivery.Submission;
 /// <param name="authorization">Answers whether the caller that reached this holds the grant that lets it send.</param>
 /// <param name="timeProvider">Says whether a time the author named is still one a message can be held until.</param>
 public sealed class AuthoredMailSubmission(
-    IMailAccountCatalog accountCatalog,
+    IDeploymentMailAccountCatalog accountCatalog,
     NamedRecipientResolver recipientResolver,
     IAuthoredEmailComposer composer,
     MailOutbox outbox,

@@ -7,7 +7,7 @@ using MailFathom.Application.Accounts;
 namespace MailFathom.Host.Configuration.Mail.Readers;
 
 /// <summary>Publishes the accounts this deployment serves, read from the bound section that defines them.</summary>
-internal sealed class ConfiguredMailAccountCatalog(MailSynchronizationOptions settings) : IMailAccountCatalog
+internal sealed class ConfiguredMailAccountCatalog(MailSynchronizationOptions settings) : IDeploymentMailAccountCatalog
 {
     /// <inheritdoc />
     public bool SynchronizationEnabled => settings.Enabled;

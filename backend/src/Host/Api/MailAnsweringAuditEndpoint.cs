@@ -69,7 +69,7 @@ internal static class MailAnsweringAuditEndpoint
         [FromQuery] DateTimeOffset? before,
         [FromQuery] int? pageSize,
         [FromQuery] string? cursor,
-        [FromServices] IMailAccountCatalog accounts,
+        [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailAnsweringAuditTrailReader trail,
         CancellationToken cancellationToken)
     {

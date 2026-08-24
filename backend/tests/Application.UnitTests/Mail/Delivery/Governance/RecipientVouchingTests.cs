@@ -137,7 +137,7 @@ public sealed class RecipientVouchingTests
 
     private static RecipientVouching Vouching(InMemoryContactBookStore book, string? ownAddress = null)
     {
-        var accounts = Substitute.For<IMailAccountCatalog>();
+        var accounts = Substitute.For<IDeploymentMailAccountCatalog>();
         accounts.ServedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
 
         var senderIdentities = Substitute.For<IOutgoingSenderIdentityReader>();

@@ -28,7 +28,7 @@ namespace MailFathom.Application.Synchronization.Administration;
 /// </remarks>
 public sealed class MailSynchronizationStatusReader
 {
-    private readonly IMailAccountCatalog accounts;
+    private readonly IDeploymentMailAccountCatalog accounts;
     private readonly IMailFolderParticipationReader folders;
     private readonly MailSynchronizationRunLedger runLedger;
     private readonly IMailFolderSynchronizationProgressReader progressReader;
@@ -42,7 +42,7 @@ public sealed class MailSynchronizationStatusReader
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailSynchronizationStatusReader(
-        IMailAccountCatalog accounts,
+        IDeploymentMailAccountCatalog accounts,
         IMailFolderParticipationReader folders,
         MailSynchronizationRunLedger runLedger,
         IMailFolderSynchronizationProgressReader progressReader,

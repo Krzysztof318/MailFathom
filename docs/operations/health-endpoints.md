@@ -80,7 +80,7 @@ Kestrel's own default address.
 
 | Probe | Path | Consults | A failure means |
 |---|---|---|---|
-| Startup | `/started` | The host's own startup gates: every secret reference resolved, the database schema verified, and — only where its own switch is on — the spam scanner naming the corpus it scores under | The process has not finished coming up; the grace period continues |
+| Startup | `/started` | The host's own startup gates: every secret reference resolved, the database schema verified, the deployment's one owner resolved, and — only where its own switch is on — the spam scanner naming the corpus it scores under | The process has not finished coming up; the grace period continues |
 | Readiness | `/health` | The dependencies a request needs: the database, each declared AI provider, and — only where its own switch is on — the personal-data analyzer and the object-storage bucket | The instance stops receiving traffic; it is not restarted |
 | Liveness | `/alive` | Process-local state only | The container is restarted |
 
@@ -145,6 +145,19 @@ catch, which is what
 § 1 decided; the host comes up, reports unready, and becomes ready by itself once the bucket answers. Each transition is
 written to the log at `Error` and `Information` as the analyzer's are, with the classified failure behind it, because
 the response carries no reason and the message names the configuration key rather than the address.
+
+**The owner gate refuses to start rather than reporting unready.** A mail account declared in configuration says
+nothing about whose mail it holds, so the deployment answers that by holding exactly one owner record for every
+configured account to belong to. The gate reads it while the host starts, behind the schema gate because it reads a
+table the schema creates, and a deployment holding any other number of owners does not come up:
+
+| What the gate found | What it means | What to do |
+|---|---|---|
+| No owner record | The release's schema has not been applied, since applying it is what provisions the owner | Apply the [schema artifact](database-schema.md), then start the process again |
+| Several owner records | The deployment has acquired owners while its mail accounts are still declared in a file that cannot say whose they are | Leave one owner while accounts live in configuration; serving this would attribute every configured account to whichever owner a query answered with first |
+
+Both are refusals rather than degraded readiness, and deliberately: the alternative is a process that serves mail while
+it cannot say whose mail it is serving.
 
 The startup gates are reported rather than re-run. The probe reads a flag the gates set as they complete, so polling it
 opens no connection and costs nothing, and once it turns healthy it stays healthy. Under the host builder MailFathom

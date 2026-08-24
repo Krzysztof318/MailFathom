@@ -11,12 +11,18 @@ using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Application.Accounts;
 
-/// <summary>Reads which accounts this deployment serves and how current the local copy of each one is.</summary>
+/// <summary>Reads which accounts the caller's owner owns and how current the local copy of each one is.</summary>
 /// <remarks>
 /// <para>
 /// It is the one use case that publishes the account set rather than using it as a bound. Every other reader asks the
 /// catalog what it may read and answers only about the account the caller already named; this exists because a caller
 /// that cannot see the accounts cannot name one, and a filter it has no way to fill in is a filter nobody uses.
+/// </para>
+/// <para>
+/// Publishing a set is why it reads the caller-scoped catalog rather than the deployment's. Naming the accounts a
+/// deployment serves is publishing that they exist, so answering from the deployment's own catalog would hand every
+/// caller holding <see cref="MailFathomPermission.MailRead" /> the names of accounts belonging to everybody. An owner
+/// who owns none is answered with an empty directory rather than with the deployment's.
 /// </para>
 /// <para>
 /// What it publishes is MailFathom's own configured names and the progress of synchronization against them. The mail
@@ -30,21 +36,21 @@ namespace MailFathom.Application.Accounts;
 /// </remarks>
 public sealed class MailAccountDirectoryReader
 {
-    private readonly IMailAccountCatalog accountCatalog;
+    private readonly ICallerMailAccountCatalog accountCatalog;
     private readonly ISynchronizationFreshnessReader freshnessReader;
     private readonly MailboxScopeResolver scopeResolver;
     private readonly IMailboxReadTelemetry readTelemetry;
     private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the use case.</summary>
-    /// <param name="accountCatalog">Describes the accounts this deployment serves.</param>
+    /// <param name="accountCatalog">Describes the accounts the caller's owner owns.</param>
     /// <param name="freshnessReader">Reads how current the local copy of each folder is.</param>
     /// <param name="scopeResolver">Answers which folders of those accounts a tool may see.</param>
     /// <param name="readTelemetry">Publishes the read as the operation it is, beside the call it happened inside.</param>
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public MailAccountDirectoryReader(
-        IMailAccountCatalog accountCatalog,
+        ICallerMailAccountCatalog accountCatalog,
         ISynchronizationFreshnessReader freshnessReader,
         MailboxScopeResolver scopeResolver,
         IMailboxReadTelemetry readTelemetry,
@@ -63,17 +69,18 @@ public sealed class MailAccountDirectoryReader
         this.authorization = authorization;
     }
 
-    /// <summary>Reads the served accounts and their synchronization freshness.</summary>
+    /// <summary>Reads the accounts the caller's owner owns and their synchronization freshness.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>The served accounts with their folders, and whether the deployment refreshes them.</returns>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailRead" />.</exception>
+    /// <returns>The owner's accounts with their folders, and whether the deployment refreshes them.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.MailRead" /> that is acting for an owner.</exception>
     /// <remarks>
     /// Nothing here writes, so the operation is safe to repeat, and it sets no remote state because it speaks to no mail
     /// server at all.
     /// <para>
     /// The grant is asked for before anything is read, and it is asked for here rather than only at the transport that
-    /// withholds the tool: naming the accounts a deployment serves is publishing that they exist, and an entrypoint added
-    /// later would otherwise publish them by reaching this use case without passing a filter.
+    /// withholds the tool: naming the accounts a caller may reach is publishing that they exist, and an entrypoint added
+    /// later would otherwise publish them by reaching this use case without passing a filter. Which accounts those are
+    /// is the catalog's answer rather than this use case's, so the owner bound cannot be forgotten here either.
     /// </para>
     /// </remarks>
     public async Task<MailAccountDirectory> ReadAsync(CancellationToken cancellationToken)
@@ -84,9 +91,9 @@ public sealed class MailAccountDirectoryReader
             MailboxReadOperation.ReadAccountDirectory,
             cancellationToken);
 
-        var servedAccounts = this.accountCatalog.ServedAccounts;
+        var ownedAccounts = this.accountCatalog.OwnedAccounts;
 
-        if (servedAccounts.Count is 0)
+        if (ownedAccounts.Count is 0)
         {
             read.Completed(0);
 
@@ -105,11 +112,11 @@ public sealed class MailAccountDirectoryReader
             .GroupBy(static freshness => freshness.AccountId)
             .ToDictionary(static group => group.Key, FoldersOrderedByAlias);
 
-        read.Completed(servedAccounts.Count);
+        read.Completed(ownedAccounts.Count);
 
         return new MailAccountDirectory(
             this.accountCatalog.SynchronizationEnabled,
-            [.. servedAccounts.Select(account => new DescribedMailAccount(account, FoldersOf(foldersByAccount, account.Id)))]);
+            [.. ownedAccounts.Select(account => new DescribedMailAccount(account, FoldersOf(foldersByAccount, account.Id)))]);
     }
 
     private static IReadOnlyList<MailboxFolderFreshness> FoldersOrderedByAlias(IGrouping<MailAccountId, MailboxFolderFreshness> group) =>

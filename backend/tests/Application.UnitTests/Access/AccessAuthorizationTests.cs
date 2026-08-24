@@ -5,6 +5,7 @@
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
+using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -185,7 +186,7 @@ public sealed class AccessAuthorizationTests
     public void RequirePermission_SignedCapability_RefusesNamingNoPermission()
     {
         // Arrange
-        var authorization = AuthorizationOver(AuthorizedPrincipal.SignedCapability("/attachments/an-object/0"));
+        var authorization = AuthorizationOver(AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Deployment, "/attachments/an-object/0"));
 
         // Act
         var refusal = Assert.Throws<PrincipalNotAuthorizedException>(() =>
@@ -230,7 +231,7 @@ public sealed class AccessAuthorizationTests
     public void RequireSignedCapability_AVerifiedCapability_Permits()
     {
         // Arrange
-        var authorization = AuthorizationOver(AuthorizedPrincipal.SignedCapability("/attachments/an-object/0"));
+        var authorization = AuthorizationOver(AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Deployment, "/attachments/an-object/0"));
 
         // Act
         var refusal = Record.Exception(authorization.RequireSignedCapability);
@@ -249,6 +250,43 @@ public sealed class AccessAuthorizationTests
         Assert.Throws<PrincipalNotAuthorizedException>(authorization.RequireSignedCapability);
     }
 
+    /// <summary>A caller admitted to act for an owner carries that owner into every use case reading one owner's mail.</summary>
+    [Fact]
+    public void RequireOwner_ACallerAdmittedToActForAnOwner_ReportsThatOwner()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(
+            AuthorizedPrincipal.CallerActingFor(SyntheticMailOwner.Another, "mcp-key", [MailFathomPermission.MailRead]));
+
+        // Act
+        var owner = authorization.RequireOwner();
+
+        // Assert
+        Assert.Equal(SyntheticMailOwner.Another, owner);
+    }
+
+    /// <summary>
+    /// The second axis is not a permission, so holding every permission there is settles nothing about whose mail is
+    /// being read. The deployment administrator and this process's own identity are each admitted to something, and
+    /// neither of them is acting for anybody.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(PrincipalsActingForNoOwner))]
+    public void RequireOwner_APrincipalActingForNoOwner_Refuses(AuthorizedPrincipal principal)
+    {
+        // Arrange
+        var authorization = AuthorizationOver(principal);
+
+        // Act & Assert
+        Assert.Throws<PrincipalNotAuthorizedException>(() => authorization.RequireOwner());
+    }
+
+    public static TheoryData<AuthorizedPrincipal> PrincipalsActingForNoOwner() =>
+    [
+        AuthorizedPrincipal.Caller("admin-key", [.. MailFathomPermission.All]),
+        AuthorizedPrincipal.Process,
+    ];
+
     /// <summary>
     /// The case an entrypoint added later produces by omission: nothing said what admitted the work. Every requirement
     /// refuses it, which is what "fails rather than defaulting to permitted" means in the one place it is decided.
@@ -263,6 +301,7 @@ public sealed class AccessAuthorizationTests
             () => authorization.RequirePermission(MailFathomPermission.MailRead),
             authorization.RequireProcessIdentity,
             authorization.RequireSignedCapability,
+            () => authorization.RequireOwner(),
         ];
 
         // Act
@@ -309,7 +348,7 @@ public sealed class AccessAuthorizationTests
     {
         // Arrange
         var processIdentity = AuthorizationOver(AuthorizedPrincipal.Process);
-        var signedCapability = AuthorizationOver(AuthorizedPrincipal.SignedCapability("/attachments/an-object/0"));
+        var signedCapability = AuthorizationOver(AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Deployment, "/attachments/an-object/0"));
 
         // Act, Assert
         Assert.False(processIdentity.Permits(permission));

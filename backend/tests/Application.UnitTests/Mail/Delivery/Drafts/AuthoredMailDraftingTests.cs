@@ -180,7 +180,7 @@ public sealed class AuthoredMailDraftingTests
         InMemoryContactBookStore? book = null,
         IAuthoredEmailComposer? composer = null)
     {
-        var accountCatalog = Substitute.For<IMailAccountCatalog>();
+        var accountCatalog = Substitute.For<IDeploymentMailAccountCatalog>();
         accountCatalog.ServedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
 
         return new AuthoredMailDrafting(

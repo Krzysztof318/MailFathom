@@ -193,7 +193,7 @@ public sealed class MailSynchronizationStatusReaderTests
         IReadOnlyList<MailFolderSynchronizationProgress>? progress = null,
         AccessAuthorization? authorization = null)
     {
-        var accounts = Substitute.For<IMailAccountCatalog>();
+        var accounts = Substitute.For<IDeploymentMailAccountCatalog>();
         accounts.SynchronizationEnabled.Returns(enabled);
         accounts.ServedAccounts.Returns([SyntheticServedAccount.Of(Work)]);
 

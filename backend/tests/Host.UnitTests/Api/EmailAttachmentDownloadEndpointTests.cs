@@ -56,6 +56,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
             AttachmentOpening(principals, new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
             principals,
+            DeploymentOwner(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -89,6 +90,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
                 "text/html",
                 "<script>alert(1)</script>"u8.ToArray())),
             principals,
+            DeploymentOwner(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -118,6 +120,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
             AttachmentOpening(principals, new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
             principals,
+            DeploymentOwner(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -147,6 +150,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
                 "application/pdf",
                 "bytes"u8.ToArray())),
             principals,
+            DeploymentOwner(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -178,6 +182,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
             AttachmentOpening(principals, new StubOpenedEmailAttachment("file.bin", declared, "bytes"u8.ToArray())),
             principals,
+            DeploymentOwner(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -201,6 +206,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
             TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
             AttachmentOpening(principals, new StubOpenedEmailAttachment(fileName: null, "image/png", "png"u8.ToArray())),
             principals,
+            DeploymentOwner(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -229,6 +235,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
             TicketReaderRedeeming(null),
             AttachmentOpening(principals, null),
             principals,
+            DeploymentOwner(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -237,6 +244,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
             TicketReaderRedeeming(ticket),
             AttachmentOpening(principals, null),
             principals,
+            DeploymentOwner(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -265,6 +273,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
             TicketReaderRedeeming(new AttachmentDownloadTicket(storedEmailId, 3)),
             AttachmentOpening(principals, null),
             principals,
+            DeploymentOwner(),
             context,
             TestContext.Current.CancellationToken);
 
@@ -296,9 +305,19 @@ public sealed class EmailAttachmentDownloadEndpointTests
         // the route states once the ticket has verified.
         return new TransportAuthorizedPrincipalSource(
             httpContextAccessor,
+            DeploymentOwner(),
             Options.Create(new McpEndpointOptions()),
             Options.Create(new AdminEndpointOptions()),
             Options.Create(new ClientEndpointOptions()));
+    }
+
+    /// <summary>Names the owner this deployment serves, which is the owner a redeemed capability acts for.</summary>
+    private static IDeploymentMailOwnerSource DeploymentOwner()
+    {
+        var deploymentOwner = Substitute.For<IDeploymentMailOwnerSource>();
+        deploymentOwner.Owner.Returns(SyntheticMailOwner.Deployment);
+
+        return deploymentOwner;
     }
 
     private static IAttachmentDownloadTicketReader TicketReaderRedeeming(AttachmentDownloadTicket? ticket)
@@ -340,8 +359,8 @@ public sealed class EmailAttachmentDownloadEndpointTests
                 ? OpenedEmailAttachmentResult.NoSuchAttachment()
                 : OpenedEmailAttachmentResult.Opened(attachment)));
 
-        var accountCatalog = Substitute.For<IMailAccountCatalog>();
-        accountCatalog.ServedAccounts.Returns([SyntheticServedAccount.Of(summary.AccountId)]);
+        var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
+        accountCatalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(summary.AccountId)]);
 
         return new EmailAttachmentDownloadReader(
             summaryReader,

@@ -149,8 +149,8 @@ public sealed class AuthoredResponseDraftingTests
             MailFathomPermission.MailDraftsWrite,
             MailFathomPermission.MailRead);
 
-        var catalog = Substitute.For<IMailAccountCatalog>();
-        catalog.ServedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+        var catalog = Substitute.For<ICallerMailAccountCatalog>();
+        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
 
         var authoring = new StoredEmailResponseAuthoring(
             summaries,

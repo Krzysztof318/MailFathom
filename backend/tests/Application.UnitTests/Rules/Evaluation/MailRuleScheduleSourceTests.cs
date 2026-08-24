@@ -19,7 +19,7 @@ namespace MailFathom.Application.UnitTests.Rules.Evaluation;
 /// <summary>Which recurring dispatches a rule set asks for: one per scheduled rule and account it reaches.</summary>
 public sealed class MailRuleScheduleSourceTests
 {
-    private readonly IMailAccountCatalog accounts = Substitute.For<IMailAccountCatalog>();
+    private readonly IDeploymentMailAccountCatalog accounts = Substitute.For<IDeploymentMailAccountCatalog>();
 
     /// <summary>A rule reaching three mailboxes is three walks, each able to be under way or behind independently.</summary>
     [Fact]

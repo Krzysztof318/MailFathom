@@ -76,7 +76,7 @@ internal static class MailFolderErasureEndpoint
     /// </remarks>
     internal static async Task<Results<Ok<MailFolderErasureResponse>, ProblemHttpResult>> EraseAsync(
         [FromBody] MailFolderErasureRequest? request,
-        [FromServices] IMailAccountCatalog accounts,
+        [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] IMailFolderMappingReader mappings,
         [FromServices] UnmirroredMailFolderEraser eraser,
         CancellationToken cancellationToken)

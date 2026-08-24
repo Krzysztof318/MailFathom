@@ -214,7 +214,11 @@ internal static class RegisteredMcpToolSurface
         services.AddSingleton<IEmailContentStore>(new StubEmailContentStore());
         services.AddSingleton(Substitute.For<IEmailContentRenderer>());
         services.AddSingleton(Substitute.For<IEmailContentRepairRequestStore>());
-        services.AddSingleton<IMailAccountCatalog>(new StubMailAccountCatalog("personal"));
+        // One stub answering both catalogs, because this surface is a deployment serving one owner: what it serves and
+        // what that owner owns are the same set, and a tool test here is about the tool rather than about the difference.
+        var accountCatalog = new StubMailAccountCatalog("personal");
+        services.AddSingleton<IDeploymentMailAccountCatalog>(accountCatalog);
+        services.AddSingleton<ICallerMailAccountCatalog>(accountCatalog);
         services.AddSingleton<MailboxScopeResolver>();
         services.AddSingleton(Substitute.For<IMailboxReadTelemetry>());
         services.AddSingleton(Substitute.For<IAuthorizationRefusalTelemetry>());

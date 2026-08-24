@@ -29,7 +29,7 @@ internal static class AdminAccountRequest
     /// <param name="account">The account identifier the request carried, which may be absent or blank.</param>
     /// <param name="accounts">Reports the accounts this deployment serves.</param>
     /// <returns>The served account, or <see langword="null" /> when the request named none or named one this deployment does not serve.</returns>
-    internal static MailAccountId? Resolve(string? account, IMailAccountCatalog accounts)
+    internal static MailAccountId? Resolve(string? account, IDeploymentMailAccountCatalog accounts)
     {
         if (string.IsNullOrWhiteSpace(account))
         {
@@ -79,7 +79,7 @@ internal static class AdminAccountRequest
     /// </remarks>
     internal static bool TryResolveFilter(
         string? account,
-        IMailAccountCatalog accounts,
+        IDeploymentMailAccountCatalog accounts,
         out MailAccountId? accountId,
         [NotNullWhen(false)] out ProblemHttpResult? refusal)
     {

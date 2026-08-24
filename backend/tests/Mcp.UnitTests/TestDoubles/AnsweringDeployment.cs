@@ -56,11 +56,11 @@ internal static class AnsweringDeployment
 
     /// <summary>Describes the one account this suite's deployment serves.</summary>
     /// <returns>The catalog the use case bounds its reads with and the tool publishes names from.</returns>
-    public static IMailAccountCatalog AccountCatalog()
+    public static ICallerMailAccountCatalog AccountCatalog()
     {
-        var accountCatalog = Substitute.For<IMailAccountCatalog>();
+        var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
         accountCatalog.SynchronizationEnabled.Returns(true);
-        accountCatalog.ServedAccounts.Returns([SyntheticServedAccount.Of(ServedAccountId)]);
+        accountCatalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(ServedAccountId)]);
 
         return accountCatalog;
     }

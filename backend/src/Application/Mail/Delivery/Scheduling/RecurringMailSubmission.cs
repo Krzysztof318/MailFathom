@@ -43,7 +43,7 @@ namespace MailFathom.Application.Mail.Delivery.Scheduling;
 /// </remarks>
 public sealed class RecurringMailSubmission
 {
-    private readonly IMailAccountCatalog accountCatalog;
+    private readonly IDeploymentMailAccountCatalog accountCatalog;
     private readonly NamedRecipientResolver recipientResolver;
     private readonly IAuthoredEmailComposer composer;
     private readonly IRecurringSendStore recurringSends;
@@ -61,7 +61,7 @@ public sealed class RecurringMailSubmission
     /// <param name="authorization">Answers whether the caller that reached this holds the grant that lets it send.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public RecurringMailSubmission(
-        IMailAccountCatalog accountCatalog,
+        IDeploymentMailAccountCatalog accountCatalog,
         NamedRecipientResolver recipientResolver,
         IAuthoredEmailComposer composer,
         IRecurringSendStore recurringSends,

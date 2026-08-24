@@ -821,10 +821,10 @@ public sealed class AuthoredResponseSubmissionTests
         return senderIdentities;
     }
 
-    private static IMailAccountCatalog CatalogServing(MailAccountId accountId)
+    private static ICallerMailAccountCatalog CatalogServing(MailAccountId accountId)
     {
-        var catalog = Substitute.For<IMailAccountCatalog>();
-        catalog.ServedAccounts.Returns([SyntheticServedAccount.Of(accountId)]);
+        var catalog = Substitute.For<ICallerMailAccountCatalog>();
+        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(accountId)]);
 
         return catalog;
     }

@@ -170,10 +170,10 @@ public sealed class StubEmailThreadReaderTests
         reader.ReadEmailsAsync(threadId, ReadableScope(), TestContext.Current.CancellationToken);
 
     /// <summary>Serves the accounts a test names, because this project carries no substitute package to produce one.</summary>
-    private sealed class ServingCatalog(params IReadOnlyList<ServedMailAccount> served) : IMailAccountCatalog
+    private sealed class ServingCatalog(params IReadOnlyList<ServedMailAccount> served) : ICallerMailAccountCatalog
     {
         public bool SynchronizationEnabled => true;
 
-        public IReadOnlyList<ServedMailAccount> ServedAccounts => served;
+        public IReadOnlyList<ServedMailAccount> OwnedAccounts => served;
     }
 }

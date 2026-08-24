@@ -29,9 +29,10 @@ transport having already asked, and the transport never relies on the use case b
 
 ## What the application layer is told
 
-`AuthorizedPrincipal` is the whole of it: the identity the work was admitted under, and the permissions that identity
-holds. Nothing from `System.Security.Claims`, ASP.NET Core, or the MCP SDK crosses that line, and no use case learns
-*which* credential admitted a caller — that is a question the transport already answered. `Boundaries.UnitTests` holds a
+`AuthorizedPrincipal` is the whole of it: the identity the work was admitted under, the permissions that identity holds,
+and — where the work is somebody's mail rather than the deployment's — the owner it is acting for. Nothing from
+`System.Security.Claims`, ASP.NET Core, or the MCP SDK crosses that line, and no use case learns *which* credential
+admitted a caller — that is a question the transport already answered. `Boundaries.UnitTests` holds a
 rule keeping claims types out of `Application` and `Domain`, because those are the one family of types the project
 references cannot refuse on their own.
 
@@ -52,6 +53,15 @@ There are three kinds of principal, and none of them is a weaker version of anot
 The process identity is a kind of its own rather than a caller holding everything, and that is the point of modelling
 it. A principal that could be admitted by holding a permission would be reachable by whoever an operator granted that
 permission to — so a use case that may run without a caller admits it **by name**, and never by a permission check.
+
+**The owner is a second axis, and it is not a permission.** A permission says which operations a caller may perform;
+the owner says whose mail those operations run against, and no grant an operator writes can make one caller act for
+another. So a principal carries an owner or carries none, and the two questions are asked separately: `RequirePermission`
+answers the first and `RequireOwner` the second. A caller admitted on a surface that serves one owner's mail acts for
+that owner; the deployment administrator and this process's own identity act for nobody, and a caller-scoped read
+reached by either is refused rather than answered with an empty set — an empty answer there would publish the read to
+them in the shape of an answer. Which surfaces carry an owner is settled where a request becomes a principal, one
+section below.
 
 The signed capability is what `GET /attachments/{capability}` runs under. That route authenticates nobody by design: the
 URL carries a ticket verified against the deployment's key ring, and what it names is one attachment of one email rather
@@ -84,6 +94,20 @@ credential — a second and weaker way into an attachment than the signature the
 one posture only. The adapter therefore answers no principal for a path that route serves before it asks either surface,
 and the route's own statement, made once the ticket verifies, is the only thing that authorizes it.
 
+**Two of the three surfaces serve one owner's mail, and the adapter is where that is decided.** A caller admitted on
+the MCP surface or on the client surface is admitted to act for the owner this deployment serves; a caller admitted on
+the administrative surface is not, because an administrator is admitted to a deployment rather than to somebody's
+mailbox. The split holds on either posture — a caller the surface authenticated and a caller admitted by the surface
+configuring no credential are both admitted the same way — because it follows from the path the request arrived on
+rather than from what it presented.
+
+Which owner that is comes from a startup gate rather than from the request. A mail account declared in configuration
+names no owner, so the deployment holds exactly one owner record for every configured account to belong to, and the host
+reads it once while starting and refuses to come up on any other number.
+[The health endpoints](../operations/health-endpoints.md#the-three-probes) record what each refusal means to an
+operator. When accounts, owners, and credentials move into the database together, the owner a request acts for comes
+from what admitted it and nothing above this line changes.
+
 **The client surface reaches the same adapter and asks it for nothing yet.** It is the third surface a request can
 arrive on, its grant is resolved exactly as the two above are — from the entry that admitted the caller, or from the
 whole of the mail half where it configures none — and today the one route it serves reports that grant rather than
@@ -96,6 +120,11 @@ A use case refuses by raising `PrincipalNotAuthorizedException`, which carries e
 requirement was a grant rather than a kind, the permission that would have sufficed. It is an application failure rather
 than a status code or a protocol result, because the same refusal is meant to reach two boundaries that answer it
 differently — and a use case that raised either shape directly would have decided both.
+
+A use case that acts on one owner's mail and is reached by a principal acting for no owner is refused the same way and
+with the same code, because from the use case's side it is the same fact: what reached it cannot say whose mail it is
+about. A deployment that cannot resolve its own owner never reaches a use case at all — it fails to start, with
+`14002 DeploymentMailOwnerUnresolved`.
 
 A use case reached under no principal at all is refused the same way. That is the case an entrypoint produces by
 omission — it never said what admitted the work — and refusing it is what "fails rather than defaulting to permitted"

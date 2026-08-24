@@ -904,7 +904,7 @@ public sealed class MailboxTimelineReaderTests
 
     private static MailboxTimelineReader ReaderOver(
         InMemoryStoredEmailTimeline timeline,
-        IMailAccountCatalog? accountCatalog = null,
+        ICallerMailAccountCatalog? accountCatalog = null,
         ISynchronizationFreshnessReader? freshnessReader = null,
         SensitiveContentEgressGuard? egressGuard = null,
         IMailboxReadTelemetry? readTelemetry = null,
@@ -921,10 +921,10 @@ public sealed class MailboxTimelineReaderTests
         authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
 
     /// <summary>Builds a catalog that serves exactly the accounts named, in the order the port promises.</summary>
-    private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
+    private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
-        var catalog = Substitute.For<IMailAccountCatalog>();
-        catalog.ServedAccounts.Returns(
+        var catalog = Substitute.For<ICallerMailAccountCatalog>();
+        catalog.OwnedAccounts.Returns(
         [
             .. servedAccountIds
                 .OrderBy(accountId => accountId.Value, StringComparer.Ordinal)

@@ -288,8 +288,8 @@ public sealed class MailFlagChangeRecorderTests
         Func<IPersistenceSession>? sessionFactory = null,
         FakeTimeProvider? clock = null)
     {
-        var accountCatalog = Substitute.For<IMailAccountCatalog>();
-        accountCatalog.ServedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+        var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
+        accountCatalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
 
         var targets = Substitute.For<IAuthoredMailboxTargetReader>();
         targets.FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(target));

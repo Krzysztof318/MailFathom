@@ -228,9 +228,9 @@ public sealed class MailFolderErasureEndpointTests
             AdministrativeGrant.WholeSurface);
     }
 
-    private static IMailAccountCatalog CatalogServing(params MailAccountId[] accounts)
+    private static IDeploymentMailAccountCatalog CatalogServing(params MailAccountId[] accounts)
     {
-        var catalog = Substitute.For<IMailAccountCatalog>();
+        var catalog = Substitute.For<IDeploymentMailAccountCatalog>();
         catalog.ServedAccounts.Returns(
         [
             .. accounts.Select(account => new ServedMailAccount(

@@ -357,8 +357,8 @@ public sealed class MailboxEmailSelectionTests
     /// <summary>Builds the resolver a mailbox read gets its scope from, since the scope's own narrowing is not public.</summary>
     private static MailboxScopeResolver ResolverWithJunkFolder(IJunkMailFolderCatalog? junkFolders = null)
     {
-        var catalog = Substitute.For<IMailAccountCatalog>();
-        catalog.ServedAccounts.Returns(
+        var catalog = Substitute.For<ICallerMailAccountCatalog>();
+        catalog.OwnedAccounts.Returns(
         [
             new ServedMailAccount(
                 Account,

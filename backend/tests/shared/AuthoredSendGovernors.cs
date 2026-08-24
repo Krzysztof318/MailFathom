@@ -47,7 +47,7 @@ internal static class AuthoredSendGovernors
         AuthoredSendSettings? settings = null,
         AuthoredSendUsageLedger? ledger = null,
         IContactDirectory? contacts = null,
-        IMailAccountCatalog? accounts = null,
+        IDeploymentMailAccountCatalog? accounts = null,
         IOutgoingSenderIdentityReader? senderIdentities = null,
         IAuthoredSendAuditor? auditor = null,
         AccessAuthorization? authorization = null,
@@ -96,7 +96,7 @@ internal static class AuthoredSendGovernors
     }
 
     /// <summary>A deployment serving no account, which vouches for no address of its own.</summary>
-    private sealed class ServingNobody : IMailAccountCatalog
+    private sealed class ServingNobody : IDeploymentMailAccountCatalog
     {
         public IReadOnlyList<ServedMailAccount> ServedAccounts { get; } = [];
 

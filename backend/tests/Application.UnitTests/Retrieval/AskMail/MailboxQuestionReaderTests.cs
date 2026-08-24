@@ -758,10 +758,10 @@ public sealed class MailboxQuestionReaderTests
         return ledger;
     }
 
-    private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
+    private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
-        var catalog = Substitute.For<IMailAccountCatalog>();
-        catalog.ServedAccounts.Returns([.. servedAccountIds.Select(SyntheticServedAccount.Of)]);
+        var catalog = Substitute.For<ICallerMailAccountCatalog>();
+        catalog.OwnedAccounts.Returns([.. servedAccountIds.Select(SyntheticServedAccount.Of)]);
 
         return catalog;
     }

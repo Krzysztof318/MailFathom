@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Access;
@@ -67,7 +68,7 @@ public sealed class AuthorizedPrincipalTests
     public void SignedCapability_AVerifiedTicket_NamesItsObjectAndHoldsNothing()
     {
         // Arrange & Act
-        var capability = AuthorizedPrincipal.SignedCapability("/attachments/an-object/0");
+        var capability = AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Deployment, "/attachments/an-object/0");
 
         // Assert
         Assert.Equal(AuthorizedPrincipalKind.SignedCapability, capability.Kind);

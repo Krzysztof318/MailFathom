@@ -28,7 +28,7 @@ namespace MailFathom.Application.Accounts;
 /// </remarks>
 public sealed class MailboxRefreshTokenRecorder
 {
-    private readonly IMailAccountCatalog accountCatalog;
+    private readonly IDeploymentMailAccountCatalog accountCatalog;
     private readonly IMailboxRefreshTokenStore refreshTokenStore;
     private readonly AccessAuthorization authorization;
 
@@ -38,7 +38,7 @@ public sealed class MailboxRefreshTokenRecorder
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public MailboxRefreshTokenRecorder(
-        IMailAccountCatalog accountCatalog,
+        IDeploymentMailAccountCatalog accountCatalog,
         IMailboxRefreshTokenStore refreshTokenStore,
         AccessAuthorization authorization)
     {

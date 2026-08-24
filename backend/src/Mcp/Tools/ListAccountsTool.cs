@@ -36,7 +36,7 @@ namespace MailFathom.Mcp.Tools;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The MCP server materializes this tool type per tool call.")]
 internal sealed class ListAccountsTool(
     MailAccountDirectoryReader mailAccountDirectoryReader,
-    IMailAccountCatalog accountCatalog)
+    ICallerMailAccountCatalog accountCatalog)
 {
     /// <summary>The name the tool is advertised and called under.</summary>
     /// <remarks>Snake case because it is the naming the Model Context Protocol tool ecosystem uses; the C# member naming stops at the boundary.</remarks>

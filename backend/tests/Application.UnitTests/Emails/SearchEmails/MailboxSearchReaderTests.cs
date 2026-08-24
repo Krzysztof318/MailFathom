@@ -717,7 +717,7 @@ public sealed class MailboxSearchReaderTests
 
     private static MailboxSearchReader ReaderOver(
         InMemoryEmailSearchIndex index,
-        IMailAccountCatalog? accountCatalog = null,
+        ICallerMailAccountCatalog? accountCatalog = null,
         EmailSearchSnippetBounds? snippetBounds = null,
         SemanticEmailSearch? semanticSearch = null,
         SensitiveContentEgressGuard? egressGuard = null,
@@ -787,10 +787,10 @@ public sealed class MailboxSearchReaderTests
         EmbeddingInputPreparation.Create(2_000, passageInstruction: null, normalizesVector: true));
 
     /// <summary>Builds a catalog that serves exactly the accounts named, in the order the port promises.</summary>
-    private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
+    private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
-        var catalog = Substitute.For<IMailAccountCatalog>();
-        catalog.ServedAccounts.Returns(
+        var catalog = Substitute.For<ICallerMailAccountCatalog>();
+        catalog.OwnedAccounts.Returns(
         [
             .. servedAccountIds
                 .OrderBy(accountId => accountId.Value, StringComparer.Ordinal)

@@ -154,6 +154,12 @@ internal static class HostComposition
         builder.Services.AddScoped<TransportAuthorizedPrincipalSource>();
         builder.Services.AddScoped<IAuthorizedPrincipalSource>(provider =>
             provider.GetRequiredService<TransportAuthorizedPrincipalSource>());
+        // Whose mail an admitted caller is acting on. A singleton because it is a property of the deployment rather than
+        // of a request: a startup gate settles it once, and the two registrations are the same object so nothing can
+        // read an owner the gate has not established.
+        builder.Services.AddSingleton<DeploymentMailOwner>();
+        builder.Services.AddSingleton<IDeploymentMailOwnerSource>(provider =>
+            provider.GetRequiredService<DeploymentMailOwner>());
         // ReferenceOnly is the default, so a deployment that configures nothing gets the mode under which a plain-text value
         // where a reference belongs fails startup instead of authenticating.
         builder.Services.AddSecretResolution(
@@ -556,7 +562,7 @@ internal static class HostComposition
         builder.Services.AddScoped<IMailRuleActionPermissionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.RuleActionPermissions);
         builder.Services.AddScoped<IMailboxMutationAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.MutationAuditSettings);
         builder.Services.AddScoped<IMailAnsweringAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.AnsweringAuditSettings);
-        builder.Services.AddScoped<IMailAccountCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.AccountCatalog);
+        builder.Services.AddScoped<IDeploymentMailAccountCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.AccountCatalog);
         builder.Services.AddScoped<ITrustedAuthenticationAuthorityReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.TrustedAuthenticationAuthorities);
         builder.Services.AddScoped<ISenderTrustPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.SenderTrustPolicies);
         // Resolved from the same snapshot as the verdicts above, so one work unit reads mail under one reload. Which of
@@ -743,6 +749,7 @@ internal static class HostComposition
         [
             HostStartupGate.SecretConfiguration,
             HostStartupGate.DatabaseSchema,
+            HostStartupGate.DeploymentMailOwner,
             .. spamScannerIsConfigured
                 ? (HostStartupGate[])[HostStartupGate.SpamScanner]
                 : [],
@@ -1030,6 +1037,11 @@ internal static class HostComposition
         // Ahead of the workers so no unit of work reads or writes mail before the schema this build expects is proven, and
         // after the infrastructure that registers the inspector it resolves.
         builder.Services.AddHostedService<DatabaseSchemaStartupGate>();
+
+        // Behind the schema gate, because the owner records live in a table that migration creates, and ahead of
+        // everything that serves a request, because a caller is admitted to act for an owner and there is nothing to
+        // admit one for until this has run.
+        builder.Services.AddHostedService<DeploymentMailOwnerStartupGate>();
 
         // Ahead of the workers for a different reason from the gate above, because the spam scanner does not fail
         // closed: a deployment whose daemon is absent would classify every message from its headers alone and look

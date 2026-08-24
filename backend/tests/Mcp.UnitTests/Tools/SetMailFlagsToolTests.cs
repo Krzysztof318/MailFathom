@@ -335,8 +335,8 @@ public sealed class SetMailFlagsToolTests
                 EmailOccurrenceId.Create(Account, folder.Id, ImapUidValidity.Create(9), ImapUid.Create(41)),
                 folder)));
 
-        var accountCatalog = Substitute.For<IMailAccountCatalog>();
-        accountCatalog.ServedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+        var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
+        accountCatalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());

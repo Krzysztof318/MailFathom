@@ -114,7 +114,7 @@ public sealed class MailboxSynchronizationStatusEndpointTests
         MailSynchronizationRunLedger ledger,
         IReadOnlyList<MailFolderSynchronizationProgress>? progress = null)
     {
-        var accounts = Substitute.For<IMailAccountCatalog>();
+        var accounts = Substitute.For<IDeploymentMailAccountCatalog>();
         accounts.SynchronizationEnabled.Returns(true);
         accounts.ServedAccounts.Returns([SyntheticServedAccount.Of(Work)]);
 

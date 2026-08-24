@@ -50,7 +50,7 @@ namespace MailFathom.Mcp.Tools;
 internal sealed class SearchEmailsTool(
     MailboxSearchReader mailboxSearchReader,
     EmailSearchSnippetBounds snippetBounds,
-    IMailAccountCatalog accountCatalog)
+    ICallerMailAccountCatalog accountCatalog)
 {
     /// <summary>The name the tool is advertised and called under.</summary>
     /// <remarks>Snake case because it is the naming the Model Context Protocol tool ecosystem uses; the C# member naming stops at the boundary.</remarks>

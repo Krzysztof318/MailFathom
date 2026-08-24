@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,10 +12,19 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 
 /// <summary>Turns the structured filters of a mailbox read into the PostgreSQL predicate that evaluates them.</summary>
 /// <remarks>
+/// <para>
 /// Both read models narrow the same table by the same filters and differ only in the order they then read it, so the
 /// predicate is written once. Two copies would be two chances for a filter to come to mean one thing in a listing and
 /// another in a search — an attachment filter that matched inline images on one side, a recipient filter that reached
 /// <c>Cc</c> on one side only — and neither copy would look wrong on its own.
+/// </para>
+/// <para>
+/// What a scope admits is separated from what a caller asked for, because a fourth read model reaches this table
+/// without a selection at all: a conversation is read by membership rather than by filters, and narrowing it by the
+/// caller's own folder filter would cut the conversation. <see cref="WithinScope" /> is therefore the narrowing every
+/// mail-returning read composes and <see cref="Matching" /> is that narrowing plus the caller's filters, so no path to
+/// this table carries a second reading of which mail a caller may see.
+/// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
 internal static class StoredEmailSelectionPredicate
@@ -28,45 +38,34 @@ internal static class StoredEmailSelectionPredicate
     /// </remarks>
     private const string PatternEscapeCharacter = "\\";
 
-    /// <summary>Narrows the stored emails to the ones a selection admits.</summary>
+    /// <summary>Narrows the stored emails to the ones a selection admits, within the scope that selection was built on.</summary>
     /// <param name="emails">The emails to narrow.</param>
     /// <param name="selection">The validated structural filters.</param>
+    /// <param name="withinAccount">One account of the scope to narrow to, or <see langword="null" /> for the scope's accounts as a set.</param>
     /// <returns>The narrowed query, which PostgreSQL evaluates in full.</returns>
     /// <remarks>
+    /// <para>
+    /// What the caller may see is <see cref="WithinScope" />'s to decide and is applied first; everything below it is
+    /// what the caller asked for within that.
+    /// </para>
     /// <para>
     /// Each nullable filter is unwrapped into a local before it enters an expression, so the predicate PostgreSQL
     /// receives compares a value rather than an optional one. A recipient filter tests the <c>To</c> and <c>Cc</c>
     /// arrays for containment, which is the operation their GIN indexes serve; the provider emits <c>@&gt;</c> for a
     /// <c>Contains</c> over a GIN-indexed array column and <c>= ANY</c> for one without an index.
     /// </para>
-    /// <para>
-    /// The tombstone exclusion leads and no caller can turn it off, which is why it is written here rather than left to
-    /// each read model. An email a tombstone hides is not part of any mailbox a reader may see, and a filter that could
-    /// opt out of that would be a way to read deleted mail. Which rows a tombstone hides is
-    /// <see cref="StoredEmailTombstone" />'s to say, because a delete the owner authored can keep its local copy
-    /// readable and the other reads have to agree with this one about that.
-    /// </para>
     /// </remarks>
     internal static IQueryable<StoredEmailEntity> Matching(
         IQueryable<StoredEmailEntity> emails,
-        MailboxEmailSelection selection)
+        MailboxEmailSelection selection,
+        MailAccountId? withinAccount = null)
     {
-        emails = emails.Where(StoredEmailTombstone.IsNotTombstoned);
+        emails = WithinScope(emails, selection.Scope, withinAccount);
 
-        if (selection.Scope.AccountIds.Count > 0)
-        {
-            var accountIds = selection.Scope.AccountIds.Select(static accountId => accountId.Value).ToArray();
-            emails = emails.Where(email => accountIds.Contains(email.MailboxAccountId));
-        }
-
+        // Stated apart from the narrowing above rather than beside it, because the two are different statements: this
+        // is the folder the caller asked to read, and that is what the scope admits and withholds whatever they asked
+        // for. Both were settled before the selection was built, so nothing here decides either.
         emails = AccountScopedMailFolders.Selecting(emails, selection.Scope.SelectedFolders);
-
-        // Applied after the requested narrowing rather than before it, because the two are different statements: the
-        // filters above are what the caller asked for, and these are what the scope admits and withholds whatever they
-        // asked for. Both were settled before the selection was built — the folders a mapping admits to tools, which no
-        // caller can widen, and the junk folder unless the caller asked for it — so nothing here decides either.
-        emails = AccountScopedMailFolders.Admitting(emails, selection.Scope.ReadableFolders);
-        emails = AccountScopedMailFolders.Excluding(emails, selection.Scope.WithheldJunkFolders);
 
         if (selection.SenderNormalizedAddress is { } senderAddress)
         {
@@ -87,6 +86,62 @@ internal static class StoredEmailSelectionPredicate
         }
 
         return MatchingReceivedRange(MatchingFlags(emails, selection), selection);
+    }
+
+    /// <summary>Narrows the stored emails to the mail a scope admits, whatever the caller then asked for.</summary>
+    /// <param name="emails">The emails to narrow.</param>
+    /// <param name="scope">The resolved scope, which ownership and folder mapping settled before the read began.</param>
+    /// <param name="withinAccount">One account of the scope to narrow to, or <see langword="null" /> for the scope's accounts as a set.</param>
+    /// <returns>The narrowed query, which PostgreSQL evaluates in full.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is the whole of what decides which mail a caller may see, and every read model that returns mail composes
+    /// it — the timeline, the search index, the vector index, and the thread reader, which reaches it without a
+    /// selection because a conversation is read by membership. A second copy of any part of it would be a second
+    /// reading of a caller's entitlement, which is the one thing here nobody may state twice.
+    /// </para>
+    /// <para>
+    /// The tombstone exclusion leads and no caller can turn it off, which is why it is written here rather than left to
+    /// each read model. An email a tombstone hides is not part of any mailbox a reader may see, and a filter that could
+    /// opt out of that would be a way to read deleted mail. Which rows a tombstone hides is
+    /// <see cref="StoredEmailTombstone" />'s to say, because a delete the owner authored can keep its local copy
+    /// readable and the other reads have to agree with this one about that.
+    /// </para>
+    /// <para>
+    /// The folder decisions follow: the folders a mapping admits to tools, which no caller can widen, and the junk
+    /// folder unless the caller asked for it.
+    /// </para>
+    /// <para>
+    /// Naming one account replaces the scope's containment with an equality and changes nothing else, because the named
+    /// account is one of the scope's own and the containment it replaces was already true of every row this can return.
+    /// It exists for a read that walks each account separately and merges the results —
+    /// <see cref="StoredEmailTimelineReader" /> is the one that does — where a containment over the whole list is what
+    /// stops PostgreSQL from serving the walk as an ordered one. Every other narrowing this composes is applied
+    /// unchanged, deliberately: the folder decisions are stated per account already, and a copy of them narrowed to one
+    /// account would be a second reading of what a scope admits.
+    /// </para>
+    /// </remarks>
+    internal static IQueryable<StoredEmailEntity> WithinScope(
+        IQueryable<StoredEmailEntity> emails,
+        MailboxScope scope,
+        MailAccountId? withinAccount = null)
+    {
+        emails = emails.Where(StoredEmailTombstone.IsNotTombstoned);
+
+        if (withinAccount is { } account)
+        {
+            var accountId = account.Value;
+            emails = emails.Where(email => email.MailboxAccountId == accountId);
+        }
+        else if (scope.AccountIds.Count > 0)
+        {
+            var accountIds = scope.AccountIds.Select(static accountId => accountId.Value).ToArray();
+            emails = emails.Where(email => accountIds.Contains(email.MailboxAccountId));
+        }
+
+        emails = AccountScopedMailFolders.Admitting(emails, scope.ReadableFolders);
+
+        return AccountScopedMailFolders.Excluding(emails, scope.WithheldJunkFolders);
     }
 
     private static IQueryable<StoredEmailEntity> MatchingFlags(

@@ -101,7 +101,7 @@ internal static class SpamClassificationEndpoints
     /// </remarks>
     internal static async Task<Results<Ok<SpamClassificationRunStartResponse>, ProblemHttpResult>> StartRunAsync(
         [FromBody] SpamClassificationRunRequestBody? request,
-        [FromServices] IMailAccountCatalog accounts,
+        [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] ISpamClassificationSettingsReader settings,
         [FromServices] SpamClassificationRunRequests requests,
         CancellationToken cancellationToken)
@@ -148,7 +148,7 @@ internal static class SpamClassificationEndpoints
     /// </remarks>
     internal static async Task<Results<Ok<SpamClassificationRunStateResponse>, ProblemHttpResult>> ReadRunAsync(
         [FromQuery] string? account,
-        [FromServices] IMailAccountCatalog accounts,
+        [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] SpamClassificationRunReader runs,
         CancellationToken cancellationToken)
     {
@@ -193,7 +193,7 @@ internal static class SpamClassificationEndpoints
         [FromQuery] DateTimeOffset? before,
         [FromQuery] int? pageSize,
         [FromQuery] string? cursor,
-        [FromServices] IMailAccountCatalog accounts,
+        [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] SpamClassificationHistory classifications,
         CancellationToken cancellationToken)
     {
