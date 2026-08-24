@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
-using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Mail.Mutations.Authoring;
 using MailFathom.Application.Mail.Mutations.Authoring.Failures;
@@ -128,6 +127,30 @@ public sealed class MailFlagChangeRecorderTests
         // Arrange
         var records = new InMemoryMailboxMutationRecordStore();
         var recorder = RecorderOver(records, target: null);
+        var change = AuthoredMailFlagChange.Create(LocalEmail, seen: true, null, null, null);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailFlagChangeTargetNotFoundException>(() =>
+            recorder.RecordAsync(change, Requester, TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.StoredEmailNotFound, refusal.ErrorCode);
+        Assert.Equal(0, records.OpenedRecordCount);
+    }
+
+    /// <summary>
+    /// An email in an account another owner owns answers as one no row carries, so a flag cannot be written onto
+    /// somebody else's mail and the refusal says nothing about it existing.
+    /// </summary>
+    [Fact]
+    public async Task RecordAsync_AnEmailInAnAccountTheCallersOwnerDoesNotOwn_IsRefusedAsNotFound()
+    {
+        // Arrange
+        var records = new InMemoryMailboxMutationRecordStore();
+        var recorder = RecorderOver(
+            records,
+            TargetIn(Inbox),
+            AccessAuthorizations.ForOwnerGranted(SyntheticMailOwner.Another, MailFathomPermission.MailFlagsWrite));
         var change = AuthoredMailFlagChange.Create(LocalEmail, seen: true, null, null, null);
 
         // Act
@@ -288,8 +311,9 @@ public sealed class MailFlagChangeRecorderTests
         Func<IPersistenceSession>? sessionFactory = null,
         FakeTimeProvider? clock = null)
     {
-        var accountCatalog = Substitute.For<ICallerMailAccountCatalog>();
-        accountCatalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+        var callerAuthorization =
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailFlagsWrite);
+        var accountCatalog = OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account));
 
         var targets = Substitute.For<IAuthoredMailboxTargetReader>();
         targets.FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(target));
@@ -302,7 +326,7 @@ public sealed class MailFlagChangeRecorderTests
                 : sessionFactory());
 
         return new MailFlagChangeRecorder(
-            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailFlagsWrite),
+            callerAuthorization,
             new MailboxScopeResolver(
                 accountCatalog,
                 StubMailFolderParticipation

@@ -5,7 +5,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using MailFathom.Application.Access;
-using MailFathom.Application.Accounts;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Rendering;
@@ -521,6 +520,30 @@ public sealed class StoredEmailResponseAuthoringTests
             MailFathomErrorCode.AnsweredEmailNotFound);
     }
 
+    /// <summary>
+    /// Mail in an account another owner owns is refused identically, so answering it is not a way to read what is in
+    /// it: the quotation a reply would carry is the message itself.
+    /// </summary>
+    [Fact]
+    public async Task AuthorAsync_EmailOfAnAccountTheCallersOwnerDoesNotOwn_IsRefusedAsNoSuchEmail()
+    {
+        // Arrange
+        var authoring = AuthoringOver(
+            Rendering(),
+            authorization: AccessAuthorizations.ForOwnerGranted(
+                SyntheticMailOwner.Another,
+                MailFathomPermission.MailRead));
+
+        // Act
+        var response = await authoring.AuthorAsync(Request(), TestContext.Current.CancellationToken);
+
+        // Assert
+        AssertRefused(
+            response,
+            AuthoredResponseRefusalReason.AnsweredEmailNotFound,
+            MailFathomErrorCode.AnsweredEmailNotFound);
+    }
+
     /// <summary>An identity this deployment holds nothing for is refused identically, so nobody learns what exists by asking.</summary>
     [Fact]
     public async Task AuthorAsync_EmailThisDeploymentDoesNotHold_IsRefusedAsNoSuchEmail()
@@ -1015,6 +1038,7 @@ public sealed class StoredEmailResponseAuthoringTests
         AccessAuthorization? authorization = null)
     {
         var answered = summary ?? SyntheticEmailSummaries.Create();
+        var callerAuthorization = authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead);
 
         return new StoredEmailResponseAuthoring(
             summaryReader ?? SummaryReaderReturning(answered),
@@ -1023,7 +1047,7 @@ public sealed class StoredEmailResponseAuthoringTests
             attachmentContentReader ?? Substitute.For<IEmailAttachmentContentReader>(),
             repairRequestStore ?? new RecordingEmailContentRepairRequestStore(),
             new MailboxScopeResolver(
-                CatalogServing(answered.AccountId),
+                OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(answered.AccountId)),
                 folderParticipation ?? StubMailFolderParticipation.Mapping(
                     new MailFolderIdentity(answered.AccountId, answered.FolderAlias)),
                 StubJunkMailFolderCatalog.None,
@@ -1031,7 +1055,7 @@ public sealed class StoredEmailResponseAuthoringTests
             senderIdentities ?? SenderIdentitiesFor(answered.AccountId),
             new NamedRecipientResolver(contacts ?? new InMemoryContactBookStore()),
             bounds ?? Bounds(),
-            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
+            callerAuthorization);
     }
 
     private static IStoredEmailSummaryReader SummaryReaderReturning(EmailSummary? summary)
@@ -1085,14 +1109,6 @@ public sealed class StoredEmailResponseAuthoringTests
             .Returns(OutgoingSenderIdentity.Create(accountId, address));
 
         return senderIdentities;
-    }
-
-    private static ICallerMailAccountCatalog CatalogServing(MailAccountId accountId)
-    {
-        var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(accountId)]);
-
-        return catalog;
     }
 
     private static OutgoingEmailBounds Bounds(int maxBodyCharacters = 4096) => new()

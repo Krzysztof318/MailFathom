@@ -43,7 +43,7 @@ namespace MailFathom.Application.Mail.Delivery.Scheduling;
 /// </remarks>
 public sealed class RecurringMailSubmission
 {
-    private readonly IDeploymentMailAccountCatalog accountCatalog;
+    private readonly ICallerMailAccountCatalog accountCatalog;
     private readonly NamedRecipientResolver recipientResolver;
     private readonly IAuthoredEmailComposer composer;
     private readonly IRecurringSendStore recurringSends;
@@ -52,7 +52,7 @@ public sealed class RecurringMailSubmission
     private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the use case from the accounts it serves and the two writes it commits together.</summary>
-    /// <param name="accountCatalog">Says which accounts this deployment serves, and therefore which one a caller may name.</param>
+    /// <param name="accountCatalog">Says which accounts the caller's owner owns, and therefore which one a caller may name.</param>
     /// <param name="recipientResolver">Turns the people the author named into the addresses every occurrence is offered to.</param>
     /// <param name="composer">Builds the draft, and decides every header this system owns rather than the author.</param>
     /// <param name="recurringSends">Holds the declaration and its idempotency identity.</param>
@@ -61,7 +61,7 @@ public sealed class RecurringMailSubmission
     /// <param name="authorization">Answers whether the caller that reached this holds the grant that lets it send.</param>
     /// <exception cref="ArgumentNullException">Thrown when a collaborator is <see langword="null" />.</exception>
     public RecurringMailSubmission(
-        IDeploymentMailAccountCatalog accountCatalog,
+        ICallerMailAccountCatalog accountCatalog,
         NamedRecipientResolver recipientResolver,
         IAuthoredEmailComposer composer,
         IRecurringSendStore recurringSends,
@@ -91,8 +91,8 @@ public sealed class RecurringMailSubmission
     /// <param name="cancellationToken">Cancels the reads and the write.</param>
     /// <returns>The declaration, whether this call created it or an identical earlier one did.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailSend" />.</exception>
-    /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account this deployment does not serve.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.MailSend" />, or is acting for no owner.</exception>
+    /// <exception cref="MailAccountNotAccessibleException">Thrown when the request names an account the caller's owner does not own, which includes every account this deployment does not serve.</exception>
     /// <exception cref="MailSubmissionRefusedException">Thrown when the repetition is unreadable, a recipient names nobody, a field cannot be composed, a bound is exceeded, or the account configures no address to send from.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when the write lost its race for the same identity on every allowed attempt.</exception>
     public async Task<RecurringSend> DeclareAsync(
@@ -103,7 +103,10 @@ public sealed class RecurringMailSubmission
 
         this.authorization.RequirePermission(MailFathomPermission.MailSend);
 
-        var account = this.accountCatalog.ServedAccounts.FirstOrDefault(served => served.IsNamedBy(request.Account))
+        // Resolved against the accounts the caller's owner owns for the reason the single send is, and here the
+        // exposure repeats: a declaration written against somebody else's account would send as them on every occasion
+        // the schedule names rather than once.
+        var account = this.accountCatalog.OwnedAccounts.FirstOrDefault(owned => owned.IsNamedBy(request.Account))
             ?? throw new MailAccountNotAccessibleException(request.Account);
 
         // First of the three, because it is the only one that costs nothing: a repetition nobody can resolve is

@@ -37,11 +37,14 @@ public sealed class EmailAttachmentDownloadReaderTests
 {
     private const string ServedAccountId = "primary";
 
+    /// <summary>The one attachment of the one email every capability in this suite is minted for.</summary>
+    private const string AuthorizedObject = "/attachments/0198f0aa-0000-7000-8000-000000000000/0";
+
     private static readonly byte[] StoredRawMime = Encoding.UTF8.GetBytes("From: sender@example.test\r\n\r\nBody");
 
     /// <summary>The principal the download route states once it has verified a link, which is what this use case admits.</summary>
     private static readonly AuthorizedPrincipal RedeemedCapability =
-        AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Deployment, "/attachments/0198f0aa-0000-7000-8000-000000000000/0");
+        AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Deployment, AuthorizedObject);
 
     [Fact]
     public async Task OpenAsync_AttachmentOfAServedEmail_OpensItThroughTheStoredCopy()
@@ -120,6 +123,31 @@ public sealed class EmailAttachmentDownloadReaderTests
         // Arrange
         var summary = SyntheticEmailSummaries.Create(accountId: "retired");
         var reader = ReaderOver(summary, accountCatalog: CatalogServing(MailAccountId.Create(ServedAccountId)));
+
+        // Act
+        await using var attachment = await reader.OpenAsync(
+            new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(attachment);
+    }
+
+    /// <summary>
+    /// A capability carries the owner it was minted for, so one redeemed for another owner reaches nothing: holding the
+    /// link is not holding the mail, and the refusal is the one a deleted message gets.
+    /// </summary>
+    [Fact]
+    public async Task OpenAsync_EmailOfAnAccountTheTicketsOwnerDoesNotOwn_Refuses()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create();
+        var authorization = AuthorizationOver(
+            AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Another, AuthorizedObject));
+        var reader = ReaderOver(
+            summary,
+            accountCatalog: OwnedMailAccountCatalogs.For(authorization, SyntheticServedAccount.Of(summary.AccountId)),
+            authorization: authorization);
 
         // Act
         await using var attachment = await reader.OpenAsync(

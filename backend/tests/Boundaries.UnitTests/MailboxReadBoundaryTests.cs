@@ -2,12 +2,15 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using ArchUnitNET.Domain;
 using ArchUnitNET.Fluent;
 using ArchUnitNET.xUnitV3;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Emails.Threads;
+using MailFathom.Application.Mail.Delivery.Governance;
+using MailFathom.Application.Mail.Delivery.Submission;
 using Xunit;
 using static ArchUnitNET.Fluent.ArchRuleDefinition;
 
@@ -36,7 +39,10 @@ public sealed class MailboxReadBoundaryTests
         @"^MailFathom\.Infrastructure\.Persistence\.Emails\.StoredEmailSelectionPredicate$";
 
     /// <summary>The protocol boundary, whose every tool answers one caller acting for one owner.</summary>
-    private const string ProtocolBoundaryPattern = @"^MailFathom\.Mcp\.";
+    private const string ProtocolBoundaryNamespace = "MailFathom.Mcp.";
+
+    /// <summary>What the traversal below follows, which is this solution's own code and nothing it is built on.</summary>
+    private const string SolutionNamespace = "MailFathom.";
 
     [Theory]
     [InlineData(typeof(IStoredEmailTimelineReader))]
@@ -67,32 +73,82 @@ public sealed class MailboxReadBoundaryTests
 
     /// <summary>
     /// The two account catalogs are told apart by the members they publish rather than by a flag, and this holds one
-    /// half of that separation: nothing in the protocol assembly names the deployment-wide catalog itself, so a tool
-    /// cannot read every account the deployment serves without going through a use case that already decided to.
+    /// half of that separation: nothing an MCP call reaches names the deployment-wide catalog, so no tool can answer
+    /// one caller out of every account the deployment serves.
     /// </summary>
     /// <remarks>
-    /// It is a rule about the protocol assembly's own dependencies and not about what the use cases it composes reach.
-    /// A use case behind a tool may still hold the deployment-wide catalog, and one does today —
-    /// <c>AuthoredMailSubmission</c>, whose account resolution ADR 0014 moves in its next delivery step — so this rule
-    /// being green is not the statement that no MCP call can reach the deployment's whole account set. Widening it to
-    /// the composed use cases is what would say that, and it is the step that becomes true rather than merely
-    /// assertable once the send resolves through the caller-scoped port.
+    /// <para>
+    /// It is stated over everything a call reaches rather than over the protocol assembly's own dependencies, because
+    /// a tool composes a use case and that use case composes others. <c>send_email</c> resolves its account one hop
+    /// away in <c>AuthoredMailSubmission</c>, and vouches for its recipients two hops further down in
+    /// <c>RecipientVouching</c>, so a rule reading the assembly's own dependencies alone would be green while a use
+    /// case behind a tool read the deployment's whole account set.
+    /// </para>
+    /// <para>
+    /// The traversal follows this solution's own types and stops at everything it is built on, which is what keeps the
+    /// closure the composition rather than the framework. It admits the caller-scoped adapter by never reaching it: the
+    /// implementation that holds both catalogs is named by the container rather than by any use case, so a tool reaches
+    /// the port and never the type behind it.
+    /// </para>
     /// </remarks>
     [Fact]
-    public void DeploymentWideAccountCatalog_InWhatTheProtocolAssemblyItselfDependsOn_IsAbsent()
+    public void DeploymentWideAccountCatalog_InEverythingAnMcpCallReaches_IsAbsent()
     {
         // Arrange
-        IArchRule theProtocolBoundaryNamesOnlyTheCallerScopedCatalog = Types()
+        var reachedFromTheProtocolBoundary = ReachedFromTheProtocolBoundary();
+
+        // The guard: a closure that stopped at the assembly's own types would satisfy the rule while proving nothing,
+        // so the two the ADR names — the send one hop out and the vouching two further — are asserted to be in it.
+        Assert.Contains(
+            reachedFromTheProtocolBoundary,
+            type => type.FullName == typeof(AuthoredMailSubmission).FullName);
+        Assert.Contains(
+            reachedFromTheProtocolBoundary,
+            type => type.FullName == typeof(RecipientVouching).FullName);
+
+        IArchRule nothingAnMcpCallReachesNamesTheDeploymentCatalog = Types()
             .That()
-            .HaveFullNameMatching(ProtocolBoundaryPattern)
+            .Are(reachedFromTheProtocolBoundary)
             .Should()
             .NotDependOnAny(typeof(IDeploymentMailAccountCatalog))
             .Because(
-                "every MCP tool answers one caller acting for one owner, so a tool that named the accounts the "
-                    + "deployment serves would publish one person's mailbox to another's request; this holds the "
-                    + "protocol assembly's own dependencies rather than what the use cases it composes reach");
+                "every MCP tool answers one caller acting for one owner, so a use case behind one that named the "
+                    + "accounts the deployment serves would resolve one person's mailbox for another's request; the "
+                    + "caller-scoped catalog is what a caller-facing resolution reads");
 
         // Act & Assert
-        theProtocolBoundaryNamesOnlyTheCallerScopedCatalog.Check(CompiledBoundaries.Solution);
+        nothingAnMcpCallReachesNamesTheDeploymentCatalog.Check(CompiledBoundaries.Solution);
+    }
+
+    /// <summary>Walks out from the protocol assembly to every type of this solution an MCP call can reach.</summary>
+    /// <remarks>
+    /// Breadth rather than depth, because what matters is membership rather than the path that found it, and a
+    /// composition graph with a cycle in it would not terminate without the set the walk already visited.
+    /// </remarks>
+    private static IReadOnlyList<IType> ReachedFromTheProtocolBoundary()
+    {
+        var reached = new HashSet<IType>();
+        var pending = new Queue<IType>(
+            CompiledBoundaries.Solution.Types.Where(type =>
+                type.FullName.StartsWith(ProtocolBoundaryNamespace, StringComparison.Ordinal)));
+
+        while (pending.Count > 0)
+        {
+            var type = pending.Dequeue();
+
+            if (!reached.Add(type))
+            {
+                continue;
+            }
+
+            foreach (var target in type.Dependencies
+                .Select(dependency => dependency.Target)
+                .Where(target => target.FullName.StartsWith(SolutionNamespace, StringComparison.Ordinal)))
+            {
+                pending.Enqueue(target);
+            }
+        }
+
+        return [.. reached];
     }
 }

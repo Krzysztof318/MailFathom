@@ -36,7 +36,7 @@ internal static class AuthoredSendGovernors
     /// <param name="settings">What to do about a recipient nothing here vouches for, or <see langword="null" /> to admit one.</param>
     /// <param name="ledger">What this caller has already been admitted for, or <see langword="null" /> for no ceiling at all.</param>
     /// <param name="contacts">The book an address is vouched against, or <see langword="null" /> for an empty one.</param>
-    /// <param name="accounts">The accounts this deployment serves, or <see langword="null" /> for none.</param>
+    /// <param name="accounts">The accounts the caller's owner owns, or <see langword="null" /> for none.</param>
     /// <param name="senderIdentities">The addresses those accounts send as, or <see langword="null" /> for none.</param>
     /// <param name="auditor">Where the record of the send goes, or <see langword="null" /> to drop it.</param>
     /// <param name="authorization">The caller the send runs for, or <see langword="null" /> for one granted the send capability.</param>
@@ -47,7 +47,7 @@ internal static class AuthoredSendGovernors
         AuthoredSendSettings? settings = null,
         AuthoredSendUsageLedger? ledger = null,
         IContactDirectory? contacts = null,
-        IDeploymentMailAccountCatalog? accounts = null,
+        ICallerMailAccountCatalog? accounts = null,
         IOutgoingSenderIdentityReader? senderIdentities = null,
         IAuthoredSendAuditor? auditor = null,
         AccessAuthorization? authorization = null,
@@ -57,7 +57,7 @@ internal static class AuthoredSendGovernors
             settings ?? AuthoredSendSettings.Permissive,
             new RecipientVouching(
                 contacts ?? new VouchingNobody(),
-                accounts ?? new ServingNobody(),
+                accounts ?? new OwningNobody(),
                 senderIdentities ?? new SendingAsNobody()),
             ledger ?? new AuthoredSendUsageLedger(
                 AuthoredSendCeilings.Unbounded,
@@ -95,10 +95,10 @@ internal static class AuthoredSendGovernors
             Task.FromResult(new ContactPage([], null));
     }
 
-    /// <summary>A deployment serving no account, which vouches for no address of its own.</summary>
-    private sealed class ServingNobody : IDeploymentMailAccountCatalog
+    /// <summary>An owner owning no account, which vouches for no address of their own.</summary>
+    private sealed class OwningNobody : ICallerMailAccountCatalog
     {
-        public IReadOnlyList<ServedMailAccount> ServedAccounts { get; } = [];
+        public IReadOnlyList<ServedMailAccount> OwnedAccounts { get; } = [];
 
         public bool SynchronizationEnabled => false;
     }
