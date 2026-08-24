@@ -594,6 +594,34 @@ object ceiling is what to move.
 Nothing here carries an object key, a bucket, or any part of a payload. A key names one message, so what is published
 is counts, volumes, and MailFathom's own two words for the two mechanisms.
 
+### The move of stored content
+
+Carrying the content already in the database into that bucket is an operator's act rather than a setting, and what it
+publishes answers a question asked across passes rather than within one: how much of the mailbox is in the bucket now,
+what that came to in bytes, and how much the move would not touch. The run's own row answers that for one move; these
+answer it for a deployment, across the restarts and the pauses a move of a large mailbox lives through.
+[Moving stored content into the bucket](moving-stored-content.md) is the operation.
+
+`mailfathom.mail.content.move.moved` counts the payloads copied, verified, and repointed at their object, and
+`mailfathom.mail.content.move.moved.bytes` how much raw MIME they carried between them. Both move per payload rather
+than per pass, because a pass a restart stopped has still moved everything it repointed — a counter that only advanced
+when a pass finished cleanly would report a deployment restarting under load as one doing nothing.
+
+`mailfathom.mail.content.move.refused` counts the payloads left in the database, and carries
+`mailfathom.mail.content.move.failure` as `source_mismatch`, `object_mismatch`, `object_absent`, or `oversized`. The
+reason is a dimension rather than four instruments because it is what an operator acts on and the acts differ: stored
+bytes that disagree with their own row are a mailbox to re-synchronize, an object that came back wrong is an endpoint to
+look at, and a payload too large to hold is a bound to raise.
+
+`mailfathom.mail.content.move.pass.duration` is how long one bounded pass took, in seconds, and one pass is also a span
+of its own — `move_stored_content` — so the endpoint and database work a pass causes is attributable to the pass rather
+than arriving as parentless spans among the requests around them. The pass that walked past the last payload publishes
+`reached_end_of_content` as an event on that span, which is what says when the backlog ran out.
+
+**There is no dimension for the payload kind**, deliberately: a kind names which table a row is in, an operator does
+nothing differently for one, and it would put the shape of the schema into every series the move publishes. Nothing here
+carries an object key, a payload identifier, or any part of a message.
+
 ### Durable background work
 
 Every attempt at a job opens **`run_job`**, and that span is what makes durable work readable as work at all. A job is

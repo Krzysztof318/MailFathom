@@ -67,7 +67,9 @@ setting on moves nothing already stored and turning it back off re-encodes nothi
 readable from the database, and mail written to a bucket stays readable from that bucket. The one thing an operator owes
 that arrangement is the endpoint itself — a deployment holding mail in a bucket it no longer names reports unready until
 the block comes back, which [health endpoints](health-endpoints.md) describes and [email
-content](../features/email-content.md#where-a-payload-is-kept) reads off the schema.
+content](../features/email-content.md#where-a-payload-is-kept) reads off the schema. Carrying what is already stored
+into the bucket is an operator's act rather than a setting; [moving stored content into the
+bucket](moving-stored-content.md) is the operation, and `ContentStorage:Move` below is what bounds its cost.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
@@ -117,6 +119,28 @@ whose other contents it cannot reach.
 | `ContentStorage:ObjectStorage:Reclamation:Schedule` | string | `Every 06:00:00` | The occasions a sweep is dispatched on: `Every <hh:mm:ss>`, `Every <d.hh:mm:ss>`, or `Daily at <HH:mm> [<zone>]`, the same syntax a scheduled [mail rule](../features/mail-rules.md#running-a-rule-on-a-schedule) is written in. Longer intervals lengthen how long an orphaned payload lives | restart |
 | `ContentStorage:ObjectStorage:Reclamation:MinimumObjectAge` | TimeSpan | `24:00:00` | 1 h – 30 d. Below the floor a sweep could meet an object whose unit of work has not committed yet, which is mail lost rather than reclaimed; above the ceiling the floor would be a retention decision written in the wrong place | restart |
 | `ContentStorage:ObjectStorage:Reclamation:MaximumObjectsPerRun` | int | `100000` | At least 1000, the number of keys one listing request answers with. A run that reaches the ceiling hands its listing position to the run after it rather than starting over | restart |
+
+### Moving stored content into the object backend
+
+Selecting the backend leaves everything already stored where it is, so carrying it across is an operator's act through
+the administrative endpoint rather than a setting. What these three settle is what that move costs the deployment
+*while it runs*: one bounded pass per interval, ending on whichever of the two ceilings it reaches first, so most of
+every interval is left for synchronization, delivery, and the reads a caller is waiting on.
+[Moving stored content into the bucket](moving-stored-content.md) is the operation.
+
+They are judged only where `ContentStorage:Backend` is `ObjectStorage`, because a deployment holding its content in the
+database has nowhere to carry it to and runs no pass — a bound it declared for a backend it did not select must not be
+what stops it from starting.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `ContentStorage:Move:Interval` | TimeSpan | `00:00:10` | 1 s – 1 h. Below a second the move stops being background work and becomes a second workload beside the deployment's own | restart |
+| `ContentStorage:Move:PayloadsPerPass` | int | `20` | Positive. A pass that carries no payload would leave the move running forever without moving anything | restart |
+| `ContentStorage:Move:MaxBytesPerPass` | long | `67108864` | Positive, in bytes. A pass ends on whichever ceiling it reaches first, so a ceiling of nothing would end every pass before its first payload | restart |
+
+A single payload larger than `MailSynchronization:MaxInFlightRawMimeBytes` is refused rather than carried, because the
+move reads under the same process-wide budget synchronization reads under. It is counted, reported, and stepped past;
+raising that ceiling and asking for another move is what reaches it.
 
 ## `DataEncryption`
 

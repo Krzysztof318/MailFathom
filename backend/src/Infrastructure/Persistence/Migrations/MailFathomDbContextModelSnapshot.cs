@@ -126,6 +126,55 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("contacts", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.ContentMoveRunEntity", b =>
+                {
+                    b.Property<string>("Name")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<uint>("ConcurrencyVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<long>("CopiedPayloadCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("FailedPayloadCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long>("MovedByteCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ResumeAfter")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Name")
+                        .HasName("pk_content_move_runs");
+
+                    b.ToTable("content_move_runs", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_content_move_runs_singleton", "\"Name\" = 'stored-content'");
+                        });
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailChunkEntity", b =>
                 {
                     b.Property<Guid>("Id")

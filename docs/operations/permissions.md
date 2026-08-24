@@ -30,7 +30,7 @@ two disjoint halves, and the prefix after `mailfathom.` says which half a name b
 | `mailfathom.mail.contacts.write` | mail | `create_contact`, `update_contact`, `delete_contact`, and `promote_contact`, which record, amend, erase, and take on a person in that book. The erasure is here rather than apart, because a grant that cannot edit the book cannot be trusted to take somebody out of it |
 | `mailfathom.admin.read` | administrative | The reads reporting the deployment's own state and no mail: what synchronization is doing per account and per folder, embedding status and the activation preview, the loaded rules, a run's progress, what a rewind would cost, where a re-derivation has got to, the stopped-job list, and the outbox counted by stage and listed without naming anybody |
 | `mailfathom.admin.audit.read` | administrative | Everything derived from somebody's mail: the mailbox-mutation audit, the answering audit, the rules history, the spam classifications, one queued message with the addresses it is offered to, and reading the contact book — a listing, one person, or their export |
-| `mailfathom.admin.operate` | administrative | Asking the deployment to do work it can already do: running rules over an account, classifying an account, retrying or dropping a stopped job, cancelling a reindex, rewinding synchronization, re-deriving stored mail, withdrawing or re-queueing one queued message, and writing to the contact book |
+| `mailfathom.admin.operate` | administrative | Asking the deployment to do work it can already do: running rules over an account, classifying an account, retrying or dropping a stopped job, cancelling a reindex, rewinding synchronization, re-deriving stored mail, carrying stored content into the object backend, withdrawing or re-queueing one queued message, and writing to the contact book |
 | `mailfathom.admin.credentials.write` | administrative | Storing a mailbox refresh token |
 | `mailfathom.admin.spend` | administrative | Activating the declared embedding model, which is the one operation that starts a provider bill |
 | `mailfathom.admin.erase` | administrative | Disposing of what this deployment holds: the mail stored for a folder an account no longer mirrors, and one person and everything the contact book derived from them |
@@ -146,7 +146,7 @@ Every administrative route publishes the one permission it requires as endpoint 
 [what the endpoint serves](admin-endpoint.md#what-the-endpoint-serves) states it route by route beside what each route
 does. Two consequences of that mapping belong here rather than to any one route.
 
-**Six `mfctl` commands make two requests and therefore need two permissions**, because what such a command reads is
+**Seven `mfctl` commands make two requests and therefore need two permissions**, because what such a command reads is
 what it puts in front of you or amends from:
 
 | Command | Needs |
@@ -154,6 +154,7 @@ what it puts in front of you or amends from:
 | `mfctl contact update`, `mfctl contact add-address`, `mfctl contact remove-address` | `mailfathom.admin.audit.read` beside `mailfathom.admin.operate` |
 | `mfctl contact delete` | `mailfathom.admin.audit.read` beside `mailfathom.admin.erase` |
 | `mfctl mailbox rewind` | `mailfathom.admin.read` beside `mailfathom.admin.operate` |
+| `mfctl content move` | `mailfathom.admin.read` beside `mailfathom.admin.operate` |
 | `mfctl embedding activate` | `mailfathom.admin.read` beside `mailfathom.admin.spend` |
 
 A credential granted only the permission the operation itself is published under meets the refusal at the first request

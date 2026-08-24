@@ -138,6 +138,7 @@ internal static class AdminApiEndpoints
         api.MapMailboxRefreshToken();
         api.MapMailboxSynchronizationStatus();
         api.MapMailboxMaintenance();
+        api.MapContentMove();
         api.MapMailboxMutationAudit();
         api.MapMailAnsweringAudit();
         api.MapEmbeddingProfile();

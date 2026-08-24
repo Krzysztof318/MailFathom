@@ -511,7 +511,9 @@ configures nothing keeps every payload in the PostgreSQL table beside the metada
 **The setting decides only where the next write goes.** Every content row states which store holds its own payload, so
 turning the object backend on moves nothing and turning it off re-encodes nothing: mail written to the database stays
 readable from the database, and mail written to an endpoint stays readable from that endpoint. A read resolves the
-backend from the row it is reading rather than from the setting, which is what makes both true at once.
+backend from the row it is reading rather than from the setting, which is what makes both true at once. Carrying what
+is already stored across is a separate act an operator asks for, under
+[carrying what is already stored across](#carrying-what-is-already-stored-across).
 
 What a reader of the schema sees is one shape per row across all four tables that hold raw MIME —
 `email_message_contents`, `outgoing_email_contents`, `mail_draft_contents`, and `recurring_send_drafts`:
@@ -605,6 +607,24 @@ raising either lengthens how long mail whose record is gone still exists as byte
 A superseded draft revision is the crashed write's ordinary twin. Every placement mints a fresh key, so revising a
 draft leaves the previous object with nothing pointing at it the moment the new row commits — an orphan by design
 rather than by failure, and reclaimed on the same path.
+
+### Carrying what is already stored across
+
+The setting deciding only where the next write goes leaves an operator with a mailbox in the database and a bucket that
+is empty. Moving it across is a separate, explicit operation: `mfctl content move` records a move, and the deployment
+carries it in bounded background passes that copy each payload, check it against the byte length and SHA-256 digest its
+own row records, read the object back and check it again, and only then point the row at the object and empty its
+payload column. A payload whose copy cannot be vouched for stays database-backed, counted, and reported by reason.
+
+It is an operator's act rather than a consequence of the setting, because it rewrites where somebody's mail is held —
+and it is startable, pausable, and resumable, because it runs for as long as the mailbox takes.
+[Moving stored content into the bucket](../operations/moving-stored-content.md) is the whole operation: what one pass
+does, what it costs while it runs, how progress is read, and what each refusal asks of an operator.
+
+Two things it deliberately does not do. It never reads a payload from both stores — a row is repointed only once its
+object has been read back and vouched for, so every read still resolves the backend from the row it is reading — and it
+never moves anything the other way: a deployment that goes back to the database backend goes on reading its
+object-backed rows from the endpoint, which is what the readiness condition below is about.
 
 ### Losing the endpoint is a readiness condition
 

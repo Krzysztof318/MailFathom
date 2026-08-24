@@ -5,6 +5,7 @@
 using System.Text.Json.Serialization;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Administration.Contacts;
+using MailFathom.Cli.Administration.Content;
 using MailFathom.Cli.Administration.Embeddings;
 using MailFathom.Cli.Administration.Folders;
 using MailFathom.Cli.Administration.Jobs;
@@ -44,6 +45,8 @@ namespace MailFathom.Cli;
 [JsonSerializable(typeof(MailboxRewind))]
 [JsonSerializable(typeof(MailboxRederivationStart))]
 [JsonSerializable(typeof(MailboxRederivationState))]
+[JsonSerializable(typeof(ContentMoveReport))]
+[JsonSerializable(typeof(ContentMoveRun))]
 [JsonSerializable(typeof(AdminProblem))]
 [JsonSerializable(typeof(EmbeddingStatus))]
 [JsonSerializable(typeof(EmbeddingActivationAssessment))]

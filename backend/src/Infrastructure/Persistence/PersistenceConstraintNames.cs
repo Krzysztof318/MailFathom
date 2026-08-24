@@ -388,4 +388,16 @@ internal static class PersistenceConstraintNames
 
     /// <inheritdoc cref="EmailMessageContentObjectLocatorUniqueIndexName" />
     internal const string RecurringSendDraftObjectLocatorUniqueIndexName = "ix_recurring_send_drafts_object_locator";
+
+    /// <summary>The key of the one row a deployment's move of its stored content is kept in.</summary>
+    internal const string ContentMoveRunPrimaryKeyConstraintName = "pk_content_move_runs";
+
+    /// <summary>The constraint that admits the one key a move is written under, and therefore one move per deployment.</summary>
+    /// <remarks>
+    /// The invariant is structural because every reader of that row assumes it and none of them re-checks: the control
+    /// answers a second request with the move already under way, and a pass commits its counts onto whatever it finds.
+    /// A second row under a name of its own would give a deployment two moves that each believed themselves to be the
+    /// one.
+    /// </remarks>
+    internal const string ContentMoveRunSingletonCheckConstraintName = "ck_content_move_runs_singleton";
 }

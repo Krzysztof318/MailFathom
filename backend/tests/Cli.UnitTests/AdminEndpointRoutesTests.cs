@@ -71,6 +71,19 @@ public sealed class AdminEndpointRoutesTests
     }
 
     /// <summary>
+    /// The three routes the move of stored content is asked for, stopped, and set going again on, pinned for the reason
+    /// every other path here is. Stopping and resuming are paths of their own rather than a field in a body, so a
+    /// mistyped value can never be the difference between stopping a move of somebody's mailbox and starting one over.
+    /// </summary>
+    [Fact]
+    public void ContentMovePaths_AreTheRoutesTheDeploymentCarriesItsStoredContentAt()
+    {
+        Assert.Equal("/api/admin/content/move", AdminEndpointRoutes.ContentMovePath);
+        Assert.Equal("/api/admin/content/move/pause", AdminEndpointRoutes.ContentMovePausePath);
+        Assert.Equal("/api/admin/content/move/resume", AdminEndpointRoutes.ContentMoveResumePath);
+    }
+
+    /// <summary>
     /// The contact-book paths, pinned for the reason every other path here is. The three composed ones are written out
     /// rather than built from the constant, because what would break is the shape rather than the prefix: a deployment
     /// serves one contact beneath a UUID segment, and a command composing the identity anywhere else would reach a 404

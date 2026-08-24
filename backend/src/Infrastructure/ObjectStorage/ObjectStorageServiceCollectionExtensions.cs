@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.EmailContent.Storage.Reclamation;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Observability;
@@ -69,6 +70,9 @@ public static class ObjectStorageServiceCollectionExtensions
         // Scoped rather than singleton, because the sweep's other half is a database read and the context that answers
         // it is scoped. The job worker opens a scope per attempt, which is the boundary a whole run belongs to.
         services.AddScoped<IContentObjectReclamation, ObjectStorageContentReclamation>();
+        // The same store seen from a use case, and registered on the same terms, which is what lets the move of already
+        // stored content read its own availability out of the container exactly as the content store reads its backend.
+        services.AddSingleton<IEmailContentObjectBackend, EmailContentObjectBackend>();
 
         AddObjectStorageTransport(services);
 

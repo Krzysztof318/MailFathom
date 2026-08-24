@@ -8,6 +8,7 @@ using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent.Attachments;
+using MailFathom.Application.EmailContent.Move;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
@@ -448,6 +449,24 @@ public static class ServiceCollectionExtensions
         // payloads.
         services.AddScoped<IOwnerStoredContentLedger, OwnerStoredContentLedger>();
         services.AddScoped<IStoredEmailExtractionBackfillStore, StoredEmailExtractionBackfillStore>();
+        // What the move of already-stored content reads and rewrites: the four content tables as one walk, and the one
+        // row that says what an operator asked for. Registered whatever the selected backend is, because reading how
+        // much content the database still holds is an ordinary question of a deployment that moves none of it.
+        services.AddScoped<IStoredContentMoveStore, StoredContentMoveStore>();
+        services.AddScoped<IStoredContentMoveRunStore, StoredContentMoveRunStore>();
+        // A singleton for the reason every other publisher of instruments is: the instruments belong to the instance
+        // rather than to a scope, and a registration per scope publishes a second set of series nothing collects.
+        services.AddSingleton<IStoredContentMoveTelemetry, StoredContentMoveTelemetry>();
+        // The two halves an operator reaches the move through. Composed by hand for one parameter, exactly as the content
+        // store is: the object backend is registered only where the deployment selected it, so it is asked for rather
+        // than required and its absence is what says a move is not available here.
+        services.AddScoped(provider => new StoredContentMoveControl(
+            provider.GetRequiredService<IStoredContentMoveRunStore>(),
+            provider.GetRequiredService<OptimisticConcurrencyRetryPolicy>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<AccessAuthorization>(),
+            provider.GetService<IEmailContentObjectBackend>()));
+        services.AddScoped<StoredContentMoveReader>();
         // What the two maintenance commands read and write. Both are ordinary scoped stores over stored mail: the
         // counter is what puts a figure in front of an operator before a rewind is agreed to, and the walk is the pass
         // that re-reads what a rewind would otherwise fetch again.
