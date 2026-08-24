@@ -39,20 +39,33 @@
 # repository is deliberately not in English. `AGENTS.md` puts every artifact in English and the
 # client's localized resource tables are the one thing that rule is not about: what a person reads in
 # the application is read in their own language. A dictionary of English has nothing true to say
-# about those files — Polish `adres` is not a misspelling of `address` — so they are excluded whole
-# rather than word by word, which would fill the vocabulary above with another language's spellings
-# and silence those spellings everywhere else too. The English table stays checked, because it is the
-# one the rest of this repository is written in.
+# about those files: the Polish noun for a network address differs from the English one by two
+# letters, which the checker reads as a misspelling of it. They are excluded whole rather than word
+# by word, because a word admitted above is admitted everywhere, and filling the vocabulary with
+# another language's spellings would stop those spellings being caught in English prose. The English
+# table stays checked, because it is the language the rest of this repository is written in.
 #
 # None of them is a place to put a genuine typo that is inconvenient to fix. What this file says of a
 # string is that it is correct, is deliberate, is not prose, or is not English, and a reader has to
 # be able to trust that it means one of them.
 
 [files]
-# The client's non-English resource tables, for the reason above. A language added to the client adds
-# a line here, deliberately: each one is a statement that this particular file is not English, rather
-# than a pattern that would quietly stop checking the English table beside them.
-extend-exclude = ["frontend/src/Client/Strings/pl/Resources.resw"]
+# The client's non-English resource tables, for the reason above. The negation is what keeps the
+# English one checked, and it has to come second: these are gitignore patterns, so the last one to
+# match a path decides. A language added to the client needs no edit here — it is excluded the day
+# its directory appears, and `en` goes on being read.
+#
+# This is half of the exclusion and `.github/workflows/typo-check.yml` carries the other half, which
+# is not one decision written twice but the two ways `typos` is reached. This field applies to the
+# walk it does when it is given a directory, which is the whole-checkout fallback that workflow
+# takes on a pull request too large to enumerate; a path named on the command line is read whether
+# any of this says so or not. `--force-exclude` is the flag that would make one statement cover
+# both, and `crate-ci/typos` passes none through, so that workflow's file-collection step drops the
+# same paths with the same pattern and says why there.
+extend-exclude = [
+  "frontend/src/Client/Strings/*/*.resw",
+  "!frontend/src/Client/Strings/en/*.resw",
+]
 
 # Hidden files are checked, which is not the default. Most of the prose that decides how this
 # repository works lives behind a leading dot — the workflows under `.github/`, the skills under
