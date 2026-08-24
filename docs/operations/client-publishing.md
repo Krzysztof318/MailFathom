@@ -1,6 +1,6 @@
 # Publishing the client
 
-<!-- describes: frontend/src/Client/Client.csproj, frontend/Directory.Build.props, .github/workflows/build-desktop-client.yml -->
+<!-- describes: frontend/src/Client/Client.csproj, frontend/Directory.Build.props, .github/workflows/build-desktop-client.yml, deploy/docker/Dockerfile -->
 
 Which of the client's heads is trimmed, which is compiled ahead of time, and why each answer is what it is. The two
 heads are published by two different builds for two different audiences, and the optimizations available to one are
