@@ -1,0 +1,94 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Client.Backend.Authorization;
+
+namespace MailFathom.Client.Backend;
+
+/// <summary>Which deployment this client is pointed at, for as long as it is pointed there.</summary>
+/// <remarks>
+/// <para>
+/// The one value in this assembly that a person decides at run time rather than an installation states, which is why it
+/// is held here rather than on <see cref="DeploymentOptions" />. Nothing here has a default and nothing composes one
+/// from a literal: a client that guessed would reach somebody else's deployment, and until something points it
+/// somewhere <see cref="Current" /> is <see langword="null" /> and no route can be resolved at all.
+/// </para>
+/// <para>
+/// It is read every time a transport is created rather than captured when the host is composed, which is what makes
+/// pointing the client elsewhere something a running window can do. That is also why every caller that talks to a
+/// deployment asks <see cref="IHttpClientFactory" /> for a transport per exchange instead of holding one: a captured
+/// transport would keep the address it was created with, and the client would go on reaching the deployment somebody
+/// had just left.
+/// </para>
+/// <para>
+/// Ending the session is part of pointing it elsewhere rather than something each caller remembers. A credential
+/// belongs to an owner on one deployment and means nothing on another, so it is dropped here, where the change is —
+/// stated as a reference this type holds rather than as a rule a reviewer has to check for at every call site.
+/// </para>
+/// </remarks>
+public sealed class DeploymentAddress
+{
+    private readonly AccessTokenStore tokens;
+    private readonly Lock guard = new();
+    private Uri? current;
+
+    /// <summary>Initializes the address with the credential store whose session it ends when the deployment changes.</summary>
+    /// <param name="tokens">Where the signed-in credential is held for this run.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="tokens" /> is <see langword="null" />.</exception>
+    public DeploymentAddress(AccessTokenStore tokens)
+    {
+        ArgumentNullException.ThrowIfNull(tokens);
+
+        this.tokens = tokens;
+    }
+
+    /// <summary>Gets the deployment this client is pointed at, or <see langword="null" /> where nothing has pointed it yet.</summary>
+    /// <remarks>Null is a state a first run is genuinely in rather than a failure: nobody has said where their MailFathom is, and the client's answer to that is to ask.</remarks>
+    public Uri? Current
+    {
+        get
+        {
+            lock (this.guard)
+            {
+                return this.current;
+            }
+        }
+    }
+
+    /// <summary>Gets whether this client knows which deployment it reaches.</summary>
+    public bool IsPointed => this.Current is not null;
+
+    /// <summary>Points the client at a deployment, ending any session held against a different one.</summary>
+    /// <param name="address">The deployment's base address, which every route is resolved against.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="address" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when the address is not one this client may be pointed at, as <see cref="DeploymentAddressRule" /> decides.</exception>
+    /// <remarks>Pointing it at the address it already carries changes nothing, session included, so re-reading what was persisted at every start does not sign anybody out.</remarks>
+    public void PointAt(Uri address)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+
+        var refusal = DeploymentAddressRule.Judge(address);
+
+        if (refusal != DeploymentAddressRefusal.None)
+        {
+            throw new ArgumentException(
+                $"{DeploymentAddressRule.Describe(address)} is not an address this client may be pointed at "
+                + $"({refusal}).",
+                nameof(address));
+        }
+
+        bool moved;
+
+        lock (this.guard)
+        {
+            moved = this.current is not null && this.current != address;
+            this.current = address;
+        }
+
+        if (moved)
+        {
+            this.tokens.Forget();
+        }
+    }
+}

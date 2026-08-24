@@ -8,10 +8,11 @@ namespace MailFathom.Client.UnitTests.Deployment;
 
 /// <summary>Covers how an installed head reads the deployment it was told to reach.</summary>
 /// <remarks>
-/// Three claims, and the first two matter more than they look. An installation stating nothing fails rather than
-/// reaching a default, because the default anyone would pick is somebody else's deployment; and a value with no scheme
-/// is read as HTTPS, because reading it as clear text would turn an omission into a token handed to whatever is on the
-/// path. Whether a clear-text address is acceptable at all is <c>Client.Backend</c>'s rule and is asserted with it.
+/// The two claims that matter are the two ways of saying nothing usable, and they are deliberately different answers.
+/// An installation that stated no address at all is the ordinary state of a fresh one, so it answers nothing and the
+/// client asks whoever is using it; an installation that stated something unreadable is a value somebody wrote and
+/// would otherwise never learn was ignored, so it fails. The third claim is that a value with no scheme is read as
+/// HTTPS, because reading it as clear text would turn an omission into a sign-in handed to whatever is on the path.
 /// </remarks>
 public sealed class ConfiguredDeploymentAddressTests
 {
@@ -45,27 +46,23 @@ public sealed class ConfiguredDeploymentAddressTests
         Assert.Equal(new Uri("https://mail.example.test"), address);
     }
 
-    /// <summary>The failure a head with no deployment has to end on, naming the setting rather than opening a window that cannot explain itself.</summary>
+    /// <summary>A fresh installation is one nobody has configured, and the client's answer to that is to ask rather than to fail.</summary>
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public void Resolve_AnInstallationStatingNoAddress_FailsNamingTheSetting(string stated)
+    public void Resolve_AnInstallationStatingNoAddress_HasNothingToSay(string stated)
     {
         // Arrange
         var source = new ConfiguredDeploymentAddress();
 
         // Act
-        var failure = Assert.Throws<InvalidOperationException>(
-            () => source.Resolve(new DeploymentSettings { Address = stated }));
+        var address = source.Resolve(new DeploymentSettings { Address = stated });
 
         // Assert
-        Assert.Contains(
-            $"{DeploymentSettings.SectionName}:{nameof(DeploymentSettings.Address)}",
-            failure.Message,
-            StringComparison.Ordinal);
+        Assert.Null(address);
     }
 
-    /// <summary>A mistyped address is the same failure rather than a silent fallback, and the message repeats what was written so it can be found.</summary>
+    /// <summary>A mistyped address is a failure rather than a silent fallback, and the message repeats what was written so it can be found.</summary>
     [Fact]
     public void Resolve_AnAddressNothingCanBeReachedAt_FailsRepeatingWhatWasWritten()
     {
@@ -79,6 +76,10 @@ public sealed class ConfiguredDeploymentAddressTests
 
         // Assert
         Assert.Contains(stated, failure.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            $"{DeploymentSettings.SectionName}:{nameof(DeploymentSettings.Address)}",
+            failure.Message,
+            StringComparison.Ordinal);
     }
 
     [Fact]

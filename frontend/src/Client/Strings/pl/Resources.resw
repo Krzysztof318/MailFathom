@@ -121,6 +121,66 @@
     <value>MailFathom</value>
     <comment>The product name. It is the same in every language: a name is not translated.</comment>
   </data>
+  <data name="MainPage.TextBlock.Deployment.Text" xml:space="preserve">
+    <value>Połączono z</value>
+    <comment>Labels the address of the MailFathom deployment this client reaches. Phrased as the relationship rather than as "Deployment address", which names a setting instead of saying where you are.</comment>
+  </data>
+  <data name="MainPage.Button.ChangeDeployment.Content" xml:space="preserve">
+    <value>Użyj innego MailFathom</value>
+    <comment>Opens the screen that asks for a deployment address. Named for what a person wants rather than for the setting it changes.</comment>
+  </data>
+  <data name="ConnectPage.NavigationBar.Title.Content" xml:space="preserve">
+    <value>Twój MailFathom</value>
+    <comment>Titles the screen that asks which deployment this client reaches. Possessive, because a deployment is somebody's own server rather than a service they sign up to.</comment>
+  </data>
+  <data name="ConnectPage.TextBlock.Lead.Text" xml:space="preserve">
+    <value>MailFathom działa na serwerze, który należy do Ciebie. Podaj tej aplikacji adres swojego, a od teraz będzie się od niego zaczynać.</value>
+    <comment>Says why the screen is asking, for somebody who has just installed the client and may not know that no address is assumed.</comment>
+  </data>
+  <data name="ConnectPage.TextBlock.Address.Text" xml:space="preserve">
+    <value>Adres</value>
+    <comment>Labels the box the deployment address is written in, for a reader and for a screen reader.</comment>
+  </data>
+  <data name="ConnectPage.TextBox.Address.PlaceholderText" xml:space="preserve">
+    <value>mail.example.com</value>
+    <comment>An example of the shape rather than a suggestion: it is a reserved example domain, so nobody reaches anything by leaving it as it is.</comment>
+  </data>
+  <data name="ConnectPage.TextBlock.AddressHint.Text" xml:space="preserve">
+    <value>Sam adres, bez niczego po nim. Zapisany bez https:// jest odczytywany jako https://.</value>
+    <comment>States the two things about the shape somebody could otherwise only learn from a refusal: no path, and what an omitted scheme means.</comment>
+  </data>
+  <data name="ConnectPage.Button.Connect.Content" xml:space="preserve">
+    <value>Połącz</value>
+    <comment>Takes the address written above and checks that a MailFathom answers there. Phrased as the act, and nothing is kept unless it succeeds.</comment>
+  </data>
+  <data name="ConnectPage.InfoBar.Refusal.Title" xml:space="preserve">
+    <value>Brak połączenia</value>
+    <comment>Heads the sentence explaining why an address was not taken. States the outcome; the message beside it states the cause.</comment>
+  </data>
+  <data name="ConnectPage.Refusal.NotAnAddress" xml:space="preserve">
+    <value>To nie jest adres. Wpisz nazwę serwera, na przykład mail.example.com.</value>
+    <comment>Shown when the text cannot be read as an address at all. Repeats the shape rather than the text, which the person can still see.</comment>
+  </data>
+  <data name="ConnectPage.Refusal.ClearTextOffThisMachine" xml:space="preserve">
+    <value>Ten adres nie jest zabezpieczony. Wszystko, co ta aplikacja wysyła, niesie Twoje logowanie, więc wpisz adres https://.</value>
+    <comment>Shown for clear text to anything but this machine. Says why rather than only that it is refused, because the person chose http:// deliberately.</comment>
+  </data>
+  <data name="ConnectPage.Refusal.MoreThanAnOrigin" xml:space="preserve">
+    <value>Wpisz sam adres, bez niczego po nim — bez ścieżki i bez wpisanego w niego logowania.</value>
+    <comment>Shown when the address carries a path, a query, a fragment, or embedded credentials.</comment>
+  </data>
+  <data name="ConnectPage.Refusal.Unreachable" xml:space="preserve">
+    <value>Pod tym adresem nic nie odpowiedziało. Sprawdź, czy jest poprawny i czy to urządzenie ma połączenie.</value>
+    <comment>Shown when the connection failed outright. Names both causes, because from here they are indistinguishable.</comment>
+  </data>
+  <data name="ConnectPage.Refusal.TimedOut" xml:space="preserve">
+    <value>Ten adres nie odpowiedział na czas. Spróbuj ponownie za chwilę.</value>
+    <comment>Shown when something is there and was too slow. Worth retrying unchanged, which is what separates it from the message above.</comment>
+  </data>
+  <data name="ConnectPage.Refusal.NotADeployment" xml:space="preserve">
+    <value>Coś tam odpowiedziało, ale to nie jest MailFathom. Sprawdź adres.</value>
+    <comment>Shown when the answer was not MailFathom's own — a captive portal, a proxy, or another service on the port.</comment>
+  </data>
   <data name="MainPage.TextBlock.Language.Text" xml:space="preserve">
     <value>Język</value>
     <comment>Labels the control that chooses which language the application is read in, for a reader and for a screen reader.</comment>

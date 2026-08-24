@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Collections.Immutable;
+using MailFathom.Client.Backend;
 using Microsoft.Extensions.Localization;
 
 namespace MailFathom.Client.Presentation;
@@ -16,28 +17,45 @@ public partial record MainModel
 {
     private readonly ILocalizationService localization;
     private readonly IThemeService themes;
+    private readonly DeploymentAddress address;
     private readonly IImmutableList<AppLanguage> languages;
     private readonly IImmutableList<AppThemeOption> themeOptions;
 
-    /// <summary>Initializes the model over the two services a reader's choices are held by.</summary>
+    /// <summary>Initializes the model over the services a reader's choices are held by, and over the deployment reached.</summary>
     /// <param name="localization">Which languages the application is readable in, and which one it is being read in.</param>
     /// <param name="themes">The theme service, which holds the choice and persists it across restarts.</param>
+    /// <param name="address">Which deployment this client is pointed at, which is what the screen names.</param>
     /// <param name="localizer">Where a string resolved here rather than by a <c>x:Uid</c> in the view comes from.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
-    public MainModel(ILocalizationService localization, IThemeService themes, IStringLocalizer localizer)
+    public MainModel(
+        ILocalizationService localization,
+        IThemeService themes,
+        DeploymentAddress address,
+        IStringLocalizer localizer)
     {
         ArgumentNullException.ThrowIfNull(localization);
         ArgumentNullException.ThrowIfNull(themes);
+        ArgumentNullException.ThrowIfNull(address);
         ArgumentNullException.ThrowIfNull(localizer);
 
         this.localization = localization;
         this.themes = themes;
+        this.address = address;
         this.languages = [.. localization.SupportedCultures.Select(AppLanguage.FromCulture)];
         this.themeOptions = [.. AppThemeOption.Offered.Select(theme => AppThemeOption.Named(theme, localizer))];
     }
 
     /// <summary>What this build of the client reports about itself.</summary>
     public IFeed<ClientBuild> Build => Feed.Async(_ => ValueTask.FromResult(ClientBuild.Current));
+
+    /// <summary>The deployment this client is pointed at, as it would be typed.</summary>
+    /// <remarks>
+    /// A person running a client against more than one deployment has to be able to tell which one they are looking at
+    /// without signing in to find out, and it is what makes the way to change it findable rather than remembered. It is
+    /// read once, because pointing the client elsewhere leaves this screen and comes back to a new one.
+    /// </remarks>
+    public IFeed<string> Deployment =>
+        Feed.Async(_ => ValueTask.FromResult(this.address.Current?.AbsoluteUri ?? string.Empty));
 
     /// <summary>
     /// The languages this application can be read in, in the order the configuration names them, carrying which of

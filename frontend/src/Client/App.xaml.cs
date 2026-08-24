@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Client.Backend;
 using MailFathom.Client.Deployment;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MailFathom.Client;
 
@@ -74,8 +75,7 @@ public partial class App : Application
                 // point at which it takes effect, because applying a culture is what Uno does on the next launch
                 // rather than to a visual tree already built. The screen offering it says so.
                 .UseLocalization()
-                .ConfigureServices((context, services) => services.AddMailFathomDeployment(
-                    this.ComposeDeployment(context.Configuration)))
+                .ConfigureServices((context, services) => this.ComposeDeployment(services, context.Configuration))
                 // Light, dark, and follow-the-system, with the choice written to the platform's own settings store so
                 // the application starts the way it was left. Nothing here decides which one: AppTheme.System is the
                 // default the service reads back when nothing was ever chosen.
@@ -97,26 +97,42 @@ public partial class App : Application
 #endif
         this.MainWindow.SetWindowIcon();
 
-        this.Host = await builder.NavigateAsync<Shell>();
+        // Where the client starts is decided here rather than by a route's default, because it is the one thing about
+        // this application that cannot be known until something has been read: an installation that has been pointed at
+        // a deployment opens on the application, and one that has not opens on the screen that asks. Nothing in between
+        // — a shell that starts and then fails at its first request is exactly what this replaces.
+        this.Host = await builder.NavigateAsync<Shell>(
+            async (services, navigator) =>
+            {
+                var pointed = services.GetRequiredService<DeploymentChoice>().Restore();
+
+                await navigator.NavigateRouteAsync(
+                    this,
+                    pointed ? ClientRoutes.Main : ClientRoutes.Connect);
+            });
     }
 
-    /// <summary>Reads which deployment this head reaches, and as which registered client.</summary>
+    /// <summary>Registers everything that decides which deployment this head reaches, and how it is reached.</summary>
     /// <remarks>
     /// <para>
-    /// The composition root's whole part in it. Where the deployment is, is the head's answer and what to present is
-    /// the installation's, and neither is decided in <c>Client.Backend</c>: that assembly has no default address and
-    /// composes none from a literal, so a client that reached the wrong deployment would have been sent there by
-    /// something readable rather than by a constant nobody saw. A head that cannot answer says so here, while the host
-    /// is being built, rather than opening a window that fails at its first request.
+    /// The composition root's whole part in it. Nothing here names a deployment and <c>Client.Backend</c> has no
+    /// default address and composes none from a literal, so a client that reached the wrong one would have been sent
+    /// there by something readable — a file somebody wrote, a build somebody ran, or an address somebody typed.
     /// </para>
     /// <para>
-    /// The two values are read by name rather than bound onto the record. Binding is reflection over properties, and
+    /// What each of the three registrations is for: the settings are what an installation stated, the source is what
+    /// this head knows for itself, and the store is where a person's own choice outlives a restart.
+    /// <see cref="DeploymentChoice" /> is where they meet, and it is asked once, after the host is built and before
+    /// anything is navigated to.
+    /// </para>
+    /// <para>
+    /// The stated values are read by name rather than bound onto the record. Binding is reflection over properties, and
     /// the browser head is trimmed — the same reason this stack source-generates every serializer it uses — so a bound
     /// section is one the trimmer can quietly empty. Two keys are not worth a source-generated binder either, and
     /// reading them is the shape that cannot be trimmed away.
     /// </para>
     /// </remarks>
-    private DeploymentOptions ComposeDeployment(IConfiguration configuration)
+    private void ComposeDeployment(IServiceCollection services, IConfiguration configuration)
     {
         var stated = configuration.GetSection(DeploymentSettings.SectionName);
 
@@ -126,22 +142,32 @@ public partial class App : Application
             ClientId = stated[nameof(DeploymentSettings.ClientId)] ?? string.Empty,
         };
 
-        return new DeploymentOptions(this.deploymentAddress.Resolve(settings), settings.ClientId);
+        services
+            .AddSingleton(settings)
+            .AddSingleton<IDeploymentAddressSource>(this.deploymentAddress)
+            .AddSingleton<IDeploymentChoiceStore, LocalSettingsDeploymentChoiceStore>()
+            .AddSingleton<DeploymentChoice>()
+            .AddMailFathomDeployment(new DeploymentOptions(settings.ClientId));
     }
 
     private static void RegisterRoutes(IViewRegistry views, IRouteRegistry routes)
     {
         views.Register(
             new ViewMap(ViewModel: typeof(ShellModel)),
-            new ViewMap<MainPage, MainModel>());
+            new ViewMap<MainPage, MainModel>(),
+            new ViewMap<ConnectPage, ConnectModel>());
 
+        // No default among the two, deliberately. Which of them a launch opens on is what OnLaunched decides from
+        // whether this installation has been pointed at a deployment, and a route marked default here would be the
+        // second answer to that question.
         routes.Register(
             new RouteMap(
                 "",
                 View: views.FindByViewModel<ShellModel>(),
                 Nested:
                 [
-                    new RouteMap("Main", View: views.FindByViewModel<MainModel>(), IsDefault: true),
+                    new RouteMap(ClientRoutes.Main, View: views.FindByViewModel<MainModel>()),
+                    new RouteMap(ClientRoutes.Connect, View: views.FindByViewModel<ConnectModel>()),
                 ]));
     }
 }

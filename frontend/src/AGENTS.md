@@ -256,33 +256,69 @@ records what the client resource costs, what it needs installed, and how to run 
 the browser head needs the `wasm-tools` workload; the Uno SDK is pinned in the repository-root `global.json` and
 restored like any other.
 
-**Where the deployment is, is answered per head, through `IDeploymentAddressSource`.** `AddMailFathomDeployment` still
-takes the address as an argument and `Client.Backend` still has no default; what composition does is ask the head. A
-head that was *installed* reads what somebody wrote: `App.ComposeDeployment` reads the two `Deployment` keys **by name**
-out of the embedded `appsettings.json` and hands them to `ConfiguredDeploymentAddress`, which resolves the address and
-refuses an installation that states none — while the host is being composed, naming the setting, rather than opening a
-window pointed at a guess. By name rather than bound onto the record, because binding is reflection over properties and
-the browser head is trimmed, which is the reason this stack source-generates every serializer it uses. A head that was *served* already knows: the browser head
-hands `PageOriginDeploymentAddress`, which reads `globalThis.location.origin` through `[JSImport]`, because MailFathom
-serves the bundle from the same origin as the surface it calls and a browser head reads no environment anyway. A value
-written with no scheme is read as HTTPS, since the alternative would turn an omission into a token on the wire;
-whether a stated clear-text address is acceptable at all stays `Client.Backend`'s rule, which permits loopback and
-refuses everything else.
+**Which deployment the client reaches is a person's decision, and `DeploymentChoice` is the whole of it.** Four things
+can hold an answer and they are read in one order, highest first:
 
-**One source is not a head's answer, and it is read before them.** `BuildStatedDeploymentAddress` carries whatever the
-build that produced this head stated, and `App` wraps the head's own source in it, so a new head still owes exactly one
-implementation. It exists for the case neither answer above fits: a head an orchestration started is served by a
-development server on a socket of its own while the service listens on another, so the origin it was fetched from is a
-file server and there is no installation to have written anything. The channel is the build, because a browser reads no
-process environment and has no file beside it — `Client.csproj` writes the value of the `MailFathomDeploymentAddress`
-property into a runtime host configuration option, the WebAssembly SDK carries it into the boot document the page
-fetches, and `AppContext` is what reads it back, with no reflection for the trimmer to remove. The desktop head takes
-the same property and reads the same key out of its own `runtimeconfig.json`. A build that states nothing writes no
-option, which is every published artifact:
+1. **What somebody chose**, kept in `IDeploymentChoiceStore` — `ApplicationData.Current.LocalSettings` behind it, which
+   is a per-user preferences store on a desktop and the browser's own storage for the page's origin in the browser
+   head. It is read first because it is the most recent thing anybody actually decided, and it is what makes starting
+   the client again opening it rather than configuring it.
+2. **What the build stated**, through `BuildStatedDeploymentAddress`.
+3. **What the head knows for itself**, through `IDeploymentAddressSource` — `ConfiguredDeploymentAddress` on an
+   installed head, reading the `Deployment` keys **by name** out of the embedded `appsettings.json`;
+   `PageOriginDeploymentAddress` on the browser head, reading `globalThis.location.origin` through `[JSImport]`,
+   because MailFathom serves the bundle from the same origin as the surface it calls. By name rather than bound onto
+   the record, because binding is reflection over properties and the browser head is trimmed, which is the reason this
+   stack source-generates every serializer it uses.
+4. **Nobody**, which is an ordinary state rather than a failure. `App.OnLaunched` opens `ConnectPage` instead of the
+   application, and a person says where their MailFathom is. What used to happen here — a head refusing to start
+   because nothing was configured — is gone: a window that cannot explain itself was only ever the least bad answer
+   while there was no screen to ask on.
+
+**A stated address that cannot be honoured still fails loudly.** Unreadable text in `appsettings.json` fails in
+`ConfiguredDeploymentAddress`, naming the setting; an address the rule below refuses fails in `DeploymentChoice.Restore`,
+naming the address. Only *absence* is answered by asking. Two answers are held to a weaker standard, and both for the
+same reason — nobody wrote them, so nobody can go and correct them. A kept choice that no longer passes the rule is
+forgotten rather than fatal. A page origin that does not pass it is no answer at all: `PageOriginDeploymentAddress`
+judges it and reports nothing, so a bundle served over clear text from something that is not this machine opens the
+screen that asks instead of failing at launch over a fact its reader could do nothing about.
+
+**One rule judges every address, wherever it came from.** `DeploymentAddressRule.Judge` is it, and it is applied before
+an address is stored, before one is probed, and again when the client is pointed at one: an absolute `http` or `https`
+address, an origin and nothing beneath it, and clear text only to this machine, because every request carries the
+signed-in credential. A value written with no scheme is read as HTTPS by `DeploymentAddressText`, which the screen and
+the configuration reader share, since the alternative would turn an omission into a credential on the wire.
+`DeploymentAddressRule.Describe` is the other half of owning the rule: every refusal is raised as an exception by
+somebody and an exception message is read into a log, so the message that refuses an address for carrying embedded
+credentials is exactly the one most likely to name a secret. It names the scheme and the authority and nothing else —
+composed rather than taken from `GetLeftPart(UriPartial.Authority)`, which keeps the user information — and names
+nothing at all of a value that is not an absolute address.
+
+**Nothing is kept until something has answered.** `DeploymentProbe` asks the candidate for `/api/client/session` on a
+transport carrying no credential — the address is a machine nobody has vouched for yet — and believes it only when the
+answer is MailFathom's own document naming MailFathom. A deployment that refuses an unauthenticated caller is still a
+deployment, because that is what a correctly configured one does; the probe reports that as reached-but-guarded rather
+than as not MailFathom. This is what turns a typing mistake into a sentence on the screen a person is still looking at
+rather than an authentication failure after they have entered a password.
+
+**Pointing the client elsewhere ends the session.** `DeploymentAddress` holds the current address and drops the access
+token when it moves, because a credential belongs to an owner on one deployment and means nothing on another. It is
+also why `DeploymentClient`, `DeploymentSignIn`, and `DeploymentProbe` ask `IHttpClientFactory` for a transport per
+exchange instead of holding one: a captured transport keeps the base address it was created with, and the client would
+go on reaching the deployment somebody had just left.
+
+**The build-stated source exists for the case none of the head answers fits.** A head an orchestration started is served
+by a development server on a socket of its own while the service listens on another, so the origin it was fetched from
+is a file server and there is no installation to have written anything. The channel is the build, because a browser
+reads no process environment and has no file beside it — `Client.csproj` writes the value of the
+`MailFathomDeploymentAddress` property into a runtime host configuration option, the WebAssembly SDK carries it into the
+boot document the page fetches, and `AppContext` is what reads it back, with no reflection for the trimmer to remove.
+The desktop head takes the same property and reads the same key out of its own `runtimeconfig.json`. A build that states
+nothing writes no option, which is every published artifact:
 [the client resource](../../docs/operations/local-development.md#the-client-resource) is the one thing that states it.
 
-Add a head, and what it owes is an implementation of that interface — not a branch on the running platform, and not a
-second mechanism invented in a screen.
+Add a head, and what it owes is an implementation of `IDeploymentAddressSource` — not a branch on the running platform,
+and not a second mechanism invented in a screen.
 
 ## Reaching the backend
 
@@ -302,12 +338,15 @@ what keeps that from being a rule somebody has to enforce by reading.
 - **Serialization is source-generated.** The browser head is trimmed, and a reflection-based `ReadFromJsonAsync` is
   removed by the trimmer rather than reported; `.config/BannedSymbols.txt` already refuses those overloads. One
   `JsonSerializerContext` covers every document the client reads.
-- **Where the deployment is, is the composing host's to state**, never this assembly's. `AddMailFathomDeployment` takes
-  the address and the timeout as arguments; there is no default address anywhere and nothing composes one from a
-  literal, because a client that guessed would reach somebody else's deployment on a mistyped value. What it does
-  refuse is a clear-text address to anything but this machine: every request carries the signed-in token, so `http` to
-  a routable host would hand it to whatever is on the path. `backend/src/Host/Configuration/DeploymentOptions.cs`
-  draws the same line about the address that deployment publishes, and for the same reason.
+- **Where the deployment is, is nobody's to state here**, and `AddMailFathomDeployment` does not take it. What it takes
+  is `DeploymentOptions` — the registered client identifier and the timeout — and it registers `DeploymentAddress`,
+  which starts pointed at nothing and is pointed by whoever composes the application. There is no default address
+  anywhere and nothing composes one from a literal, because a client that guessed would reach somebody else's
+  deployment on a mistyped value. What this assembly does own is the rule that judges one: `DeploymentAddressRule`
+  refuses a clear-text address to anything but this machine, because every request carries the signed-in credential and
+  `http` to a routable host would hand it to whatever is on the path, and it refuses anything carrying more than an
+  origin. `backend/src/Host/Configuration/DeploymentOptions.cs` draws the same line about the address that deployment
+  publishes, and for the same reason.
 - **Everything the backend returns about mail is personal data**, and the root instructions' classification follows it
   across the wire: it is not logged, not written to local storage without a stated reason, and not put in a telemetry
   event. A failure message never carries a deployment's own answer back either — the body is text from a machine this

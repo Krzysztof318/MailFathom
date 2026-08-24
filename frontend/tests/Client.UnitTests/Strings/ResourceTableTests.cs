@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Client.Deployment;
 using MailFathom.Client.Presentation;
 
 namespace MailFathom.Client.UnitTests.Strings;
@@ -74,6 +75,28 @@ public sealed class ResourceTableTests
     {
         // Arrange
         var expected = AppThemeOption.Offered.Select(AppThemeOption.ResourceKeyFor);
+
+        // Act
+        var table = DeclaredLanguages.TableOf(culture);
+
+        // Assert
+        Assert.All(expected, key => Assert.True(table.ContainsKey(key), key));
+    }
+
+    /// <summary>
+    /// The reason an address was refused is turned into a resource name in code rather than named by a <c>x:Uid</c>, so
+    /// the keys the model composes are the ones this asserts the tables hold — and a case added to that set with no
+    /// string behind it would reach somebody who has just mistyped their server's address as the key itself.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Languages))]
+    public void Tables_EveryWayAnAddressCanBeRefused_IsExplainedInEveryLanguage(string culture)
+    {
+        // Arrange
+        var expected = Enum
+            .GetValues<DeploymentChoiceOutcome>()
+            .Where(outcome => outcome != DeploymentChoiceOutcome.Accepted)
+            .Select(outcome => $"ConnectPage.Refusal.{outcome}");
 
         // Act
         var table = DeclaredLanguages.TableOf(culture);

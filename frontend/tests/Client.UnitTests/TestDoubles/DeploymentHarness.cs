@@ -27,6 +27,7 @@ internal sealed class DeploymentHarness : IDisposable
 
     private readonly HttpClient deploymentTransport;
     private readonly HttpClient authorizationServerTransport;
+    private readonly HttpClient probeTransport;
     private readonly AccessTokenHandler? tokenHandler;
 
     /// <summary>Builds a deployment answering from a script, reached with or without a signed-in token.</summary>
@@ -42,7 +43,9 @@ internal sealed class DeploymentHarness : IDisposable
     {
         this.Deployment = new StubTransport(deployment);
         this.AuthorizationServer = new StubTransport(authorizationServer ?? (_ => StubTransport.JsonResponse("{}")));
+        this.Probed = new StubTransport(deployment);
         this.Listener = new StubSignInRedirectListener(redirect ?? (_ => new SignInRedirect(null, null, null)));
+        this.probeTransport = new HttpClient(this.Probed);
 
         if (throughTokenHandler)
         {
@@ -56,12 +59,22 @@ internal sealed class DeploymentHarness : IDisposable
 
         this.authorizationServerTransport = new HttpClient(this.AuthorizationServer);
 
-        this.Client = new DeploymentClient(this.deploymentTransport);
+        // The probe is aimed by absolute address rather than by a base one, exactly as the registration leaves it, so
+        // the same scripted deployment answers it.
+        this.Transports = new StubHttpClientFactory(
+            new Dictionary<string, HttpClient>(StringComparer.Ordinal)
+            {
+                [DeploymentHttpClients.Deployment] = this.deploymentTransport,
+                [DeploymentHttpClients.AuthorizationServer] = this.authorizationServerTransport,
+                [DeploymentHttpClients.DeploymentProbe] = this.probeTransport,
+            });
+
+        this.Client = new DeploymentClient(this.Transports);
+        this.Probe = new DeploymentProbe(this.Transports);
 
         this.SignIn = new DeploymentSignIn(
-            this.deploymentTransport,
-            this.authorizationServerTransport,
-            new DeploymentOptions(DeploymentAddress, "the-client"),
+            this.Transports,
+            new DeploymentOptions("the-client"),
             this.Listener,
             this.Tokens);
     }
@@ -71,6 +84,16 @@ internal sealed class DeploymentHarness : IDisposable
 
     /// <summary>Gets what the authorization server was asked, in order.</summary>
     internal StubTransport AuthorizationServer { get; }
+
+    /// <summary>Gets what the candidate address was asked while it was being probed, in order.</summary>
+    /// <remarks>Separate from <see cref="Deployment" /> although it answers the same way, because what a test asserts about a probe is that it carried no credential — which is only visible if the two are not the same recording.</remarks>
+    internal StubTransport Probed { get; }
+
+    /// <summary>Gets the factory the client, the sign-in, and the probe take their transports from.</summary>
+    internal StubHttpClientFactory Transports { get; }
+
+    /// <summary>Gets the probe under test.</summary>
+    internal DeploymentProbe Probe { get; }
 
     /// <summary>Gets the stand-in for the head's redirect listener.</summary>
     internal StubSignInRedirectListener Listener { get; }
@@ -89,9 +112,11 @@ internal sealed class DeploymentHarness : IDisposable
     {
         this.deploymentTransport.Dispose();
         this.authorizationServerTransport.Dispose();
+        this.probeTransport.Dispose();
         this.tokenHandler?.Dispose();
         this.Deployment.Dispose();
         this.AuthorizationServer.Dispose();
+        this.Probed.Dispose();
         this.Listener.Dispose();
     }
 }

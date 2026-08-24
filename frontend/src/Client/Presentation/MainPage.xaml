@@ -8,6 +8,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:local="using:MailFathom.Client.Presentation"
       xmlns:mvux="using:Uno.Extensions.Reactive.UI"
+      xmlns:uen="using:Uno.Extensions.Navigation.UI"
       xmlns:utu="using:Uno.Toolkit.UI"
       NavigationCacheMode="Required"
       Background="{ThemeResource BackgroundBrush}">
@@ -49,6 +50,30 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             </StackPanel>
           </DataTemplate>
         </mvux:FeedView>
+
+        <!-- Which deployment this client reaches, and the way to point it at another one. It is on the screen rather
+             than buried in a setting because somebody running a client against a test deployment and a real one has to
+             be able to tell which of them they are looking at without signing in to find out. -->
+        <StackPanel Spacing="8">
+          <TextBlock x:Uid="MainPage.TextBlock.Deployment"
+                     Style="{StaticResource BodyTextBlockStyle}" />
+
+          <mvux:FeedView Source="{Binding Deployment}">
+            <DataTemplate>
+              <TextBlock Text="{Binding Data}"
+                         Style="{StaticResource BodyStrongTextBlockStyle}"
+                         TextWrapping="Wrap"
+                         IsTextSelectionEnabled="True" />
+            </DataTemplate>
+          </mvux:FeedView>
+
+          <!-- Declarative navigation rather than a handler: the route is what a reader of this page looks for, and a
+               screen reached this way is one the system back gesture moves back through. -->
+          <Button x:Uid="MainPage.Button.ChangeDeployment"
+                  uen:Navigation.Request="Connect"
+                  Style="{StaticResource OutlinedButtonStyle}"
+                  HorizontalAlignment="Stretch" />
+        </StackPanel>
 
         <!-- Both pickers sit outside the FeedView deliberately: they are the application's own state rather than
              anything the build feed carries, so they stay reachable while that feed is loading or has failed. -->

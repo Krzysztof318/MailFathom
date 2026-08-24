@@ -27,54 +27,30 @@ namespace MailFathom.Client.Backend.Authorization;
 /// </remarks>
 public sealed class DeploymentSignIn
 {
-    private readonly HttpClient deployment;
-    private readonly HttpClient authorizationServer;
+    private readonly IHttpClientFactory transports;
     private readonly DeploymentOptions options;
     private readonly ISignInRedirectListenerFactory listeners;
     private readonly AccessTokenStore tokens;
 
     /// <summary>Initializes the sign-in over the transports, the head's redirect listener, and the token store.</summary>
     /// <param name="transports">Supplies the two configured clients this flow talks to.</param>
-    /// <param name="options">Which deployment, and as which registered client.</param>
+    /// <param name="options">As which registered client this application signs in.</param>
     /// <param name="listeners">How this head catches the redirect.</param>
     /// <param name="tokens">Where the issued token is held for this run.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <remarks>The transports are asked for per sign-in rather than held, so the deployment this reaches is whichever one <see cref="DeploymentAddress" /> carries when somebody signs in rather than the one the host was composed against.</remarks>
     public DeploymentSignIn(
         IHttpClientFactory transports,
         DeploymentOptions options,
         ISignInRedirectListenerFactory listeners,
         AccessTokenStore tokens)
-        : this(
-            (transports ?? throw new ArgumentNullException(nameof(transports))).CreateClient(DeploymentHttpClients.Deployment),
-            transports.CreateClient(DeploymentHttpClients.AuthorizationServer),
-            options,
-            listeners,
-            tokens)
     {
-    }
-
-    /// <summary>Initializes the sign-in over transports supplied directly, which is how a test stubs them.</summary>
-    /// <param name="deployment">Aimed at the deployment.</param>
-    /// <param name="authorizationServer">Aimed at the authorization server.</param>
-    /// <param name="options">Which deployment, and as which registered client.</param>
-    /// <param name="listeners">How this head catches the redirect.</param>
-    /// <param name="tokens">Where the issued token is held for this run.</param>
-    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    internal DeploymentSignIn(
-        HttpClient deployment,
-        HttpClient authorizationServer,
-        DeploymentOptions options,
-        ISignInRedirectListenerFactory listeners,
-        AccessTokenStore tokens)
-    {
-        ArgumentNullException.ThrowIfNull(deployment);
-        ArgumentNullException.ThrowIfNull(authorizationServer);
+        ArgumentNullException.ThrowIfNull(transports);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(listeners);
         ArgumentNullException.ThrowIfNull(tokens);
 
-        this.deployment = deployment;
-        this.authorizationServer = authorizationServer;
+        this.transports = transports;
         this.options = options;
         this.listeners = listeners;
         this.tokens = tokens;
@@ -86,7 +62,10 @@ public sealed class DeploymentSignIn
     /// <exception cref="DeploymentFailure">Thrown when discovery, the person's approval, or the exchange did not produce a token.</exception>
     public async Task SignInAsync(CancellationToken cancellationToken = default)
     {
-        var authorization = await new DeploymentAuthorizationDiscovery(this.deployment, this.authorizationServer)
+        var deployment = this.transports.CreateClient(DeploymentHttpClients.Deployment);
+        var authorizationServer = this.transports.CreateClient(DeploymentHttpClients.AuthorizationServer);
+
+        var authorization = await new DeploymentAuthorizationDiscovery(deployment, authorizationServer)
             .ReadAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -101,7 +80,13 @@ public sealed class DeploymentSignIn
         var authorizationCode = ReadAuthorizationCode(redirect, pending);
 
         var issued = await this
-            .RedeemAsync(authorization, pending, listener.RedirectUri, authorizationCode, cancellationToken)
+            .RedeemAsync(
+                authorizationServer,
+                authorization,
+                pending,
+                listener.RedirectUri,
+                authorizationCode,
+                cancellationToken)
             .ConfigureAwait(false);
 
         this.tokens.Accept(issued);
@@ -207,6 +192,7 @@ public sealed class DeploymentSignIn
 
     /// <summary>Exchanges the authorization code the redirect carried for an access token.</summary>
     private async Task<string> RedeemAsync(
+        HttpClient authorizationServer,
         DeploymentAuthorization authorization,
         PendingSignIn pending,
         Uri redirectUri,
@@ -229,7 +215,7 @@ public sealed class DeploymentSignIn
         };
 
         using var response = await DeploymentExchange
-            .SendAsync(this.authorizationServer, request, cancellationToken)
+            .SendAsync(authorizationServer, request, cancellationToken)
             .ConfigureAwait(false);
 
         // The status code is not the verdict. RFC 6749 requires a rejected grant to arrive as 400 with a
