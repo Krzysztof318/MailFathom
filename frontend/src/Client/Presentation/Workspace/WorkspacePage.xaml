@@ -1,0 +1,194 @@
+<!--
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+-->
+<Page x:Class="MailFathom.Client.Presentation.Workspace.WorkspacePage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:uen="using:Uno.Extensions.Navigation.UI"
+      xmlns:utu="using:Uno.Toolkit.UI"
+      NavigationCacheMode="Required"
+      Background="{ThemeResource BackgroundBrush}">
+
+  <!-- SafeArea keeps every composition below clear of a notch, a rounded corner, and a system bar. It is stated once
+       at the root because the toolkit insets an element by how much of it the unsafe area actually covers, so the
+       bottom navigation nested inside adds nothing on top of what is taken here. The soft keyboard is the one mask
+       that cannot be attached to an ordinary element — the toolkit supports `SoftInput` on a SafeArea or a
+       ScrollViewer alone, and warns at run time rather than failing — so it is stated below, around the text this
+       frame owns. -->
+  <Grid uen:Region.Attached="True"
+        utu:SafeArea.Insets="VisibleBounds">
+    <VisualStateManager.VisualStateGroups>
+      <VisualStateGroup>
+
+        <!-- Bottom navigation over one column, which is the composition a window narrower than every breakpoint below
+             lands in. It states a trigger of its own rather than relying on being first: a state no trigger selects is
+             never entered, so a group whose narrowest member carries none falls back to what the elements were
+             authored with instead — which here is the rail, on a phone. -->
+        <VisualState x:Name="Narrow">
+          <VisualState.StateTriggers>
+            <AdaptiveTrigger MinWindowWidth="0" />
+          </VisualState.StateTriggers>
+          <VisualState.Setters>
+            <Setter Target="Spaces.Visibility" Value="Visible" />
+            <Setter Target="Rail.IsPaneToggleButtonVisible" Value="False" />
+            <Setter Target="Rail.IsPaneVisible" Value="False" />
+            <Setter Target="Rail.PaneDisplayMode" Value="LeftMinimal" />
+            <Setter Target="Rail.IsPaneOpen" Value="False" />
+          </VisualState.Setters>
+        </VisualState>
+
+        <VisualState x:Name="Normal">
+          <VisualState.StateTriggers>
+            <AdaptiveTrigger MinWindowWidth="{StaticResource WorkspaceRailWindowWidth}" />
+          </VisualState.StateTriggers>
+          <VisualState.Setters>
+            <Setter Target="Spaces.Visibility" Value="Collapsed" />
+            <Setter Target="Rail.IsPaneToggleButtonVisible" Value="True" />
+            <Setter Target="Rail.IsPaneVisible" Value="True" />
+            <Setter Target="Rail.PaneDisplayMode" Value="LeftCompact" />
+          </VisualState.Setters>
+        </VisualState>
+
+        <!-- The wide composition differs from the one above only in what the workspace beside the rail does with the
+             room, which WorkspaceColumns decides at the same breakpoint. -->
+        <VisualState x:Name="Wide">
+          <VisualState.StateTriggers>
+            <AdaptiveTrigger MinWindowWidth="{StaticResource WorkspaceWideWindowWidth}" />
+          </VisualState.StateTriggers>
+          <VisualState.Setters>
+            <Setter Target="Spaces.Visibility" Value="Collapsed" />
+            <Setter Target="Rail.IsPaneToggleButtonVisible" Value="True" />
+            <Setter Target="Rail.IsPaneVisible" Value="True" />
+            <Setter Target="Rail.PaneDisplayMode" Value="LeftCompact" />
+          </VisualState.Setters>
+        </VisualState>
+      </VisualStateGroup>
+    </VisualStateManager.VisualStateGroups>
+
+    <!-- The rail and the bottom navigation are one navigation rather than two: both are regions, and an item in
+         either names the same route as its counterpart, so whichever the width put in front of somebody moves the
+         same content area. -->
+    <NavigationView x:Name="Rail"
+                    uen:Region.Attached="True"
+                    IsSettingsVisible="False"
+                    IsBackButtonVisible="Collapsed"
+                    PaneDisplayMode="LeftCompact">
+      <NavigationView.MenuItems>
+        <NavigationViewItem x:Uid="Workspace.Rail.Discover"
+                            uen:Region.Name="Discover">
+          <NavigationViewItem.Icon>
+            <SymbolIcon Symbol="Find" />
+          </NavigationViewItem.Icon>
+        </NavigationViewItem>
+        <NavigationViewItem x:Uid="Workspace.Rail.Mail"
+                            uen:Region.Name="Mail">
+          <NavigationViewItem.Icon>
+            <SymbolIcon Symbol="Mail" />
+          </NavigationViewItem.Icon>
+        </NavigationViewItem>
+        <NavigationViewItem x:Uid="Workspace.Rail.Cases"
+                            uen:Region.Name="Cases">
+          <NavigationViewItem.Icon>
+            <SymbolIcon Symbol="Folder" />
+          </NavigationViewItem.Icon>
+        </NavigationViewItem>
+      </NavigationView.MenuItems>
+
+      <NavigationView.Content>
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
+
+          <!-- What the frame owns above the spaces: the field the product puts a question in, and the indicator
+               beside it saying what that question would be asked against. Neither runs anything here — the field
+               holds what somebody typed, the indicator reads the scope, and both survive moving between spaces
+               because both live in the workspace rather than in the space on screen. -->
+          <Grid Padding="16,12"
+                ColumnSpacing="12"
+                Background="{ThemeResource SurfaceBrush}">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition />
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- The one place this frame takes typing, and therefore the one place the soft keyboard can cover
+                 something: SafeArea as a control rather than as an attached mask, which is what the `SoftInput` mask
+                 is supported on. A space that takes typing of its own says the same thing around its own field. -->
+            <utu:SafeArea Insets="SoftInput">
+              <TextBox x:Uid="Workspace.TextBox.Intent"
+                       Text="{Binding Intent, Mode=TwoWay}"
+                       MaxWidth="720"
+                       HorizontalAlignment="Stretch" />
+            </utu:SafeArea>
+
+            <!-- Bound to the feed's value rather than displayed through a FeedView, because MVUX projects a feed of a
+                 scalar as the scalar itself: the generated bindable exposes this one as a `string`, and a FeedView
+                 handed a string has no feed to render. A FeedView is what a feed of a record is shown through — as
+                 the settings screen shows its build — and this indicator becomes one the day a scope is resolved
+                 against the deployment and can therefore be loading or failed. -->
+            <Border Grid.Column="1"
+                    Padding="12,6"
+                    CornerRadius="16"
+                    VerticalAlignment="Center"
+                    Background="{ThemeResource SecondaryContainerBrush}">
+              <!-- No x:Uid: the words are the scope itself, resolved in the model because they are composed from what
+                   is in scope rather than fixed per control. -->
+              <TextBlock Text="{Binding ScopeDescription}"
+                         Style="{StaticResource CaptionTextBlockStyle}"
+                         Foreground="{ThemeResource OnSecondaryContainerBrush}"
+                         TextTrimming="CharacterEllipsis"
+                         MaxWidth="280" />
+            </Border>
+
+            <!-- The one destination that is not a space, so it is reached from the frame rather than named beside
+                 the three. It is a route like every other, which is what puts it on the stack the system back
+                 gesture and the browser's history move through. -->
+            <Button x:Uid="Workspace.Button.Settings"
+                    Grid.Column="2"
+                    uen:Navigation.Request="Settings"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource TextBlockButtonStyle}">
+              <SymbolIcon Symbol="Setting" />
+            </Button>
+          </Grid>
+
+          <!-- Left empty deliberately: navigation resolves a registered route and puts the view for it here. -->
+          <Grid Grid.Row="1"
+                uen:Region.Attached="True"
+                uen:Region.Navigator="Visibility" />
+
+          <utu:TabBar x:Name="Spaces"
+                      Grid.Row="2"
+                      uen:Region.Attached="True"
+                      Style="{StaticResource BottomTabBarStyle}"
+                      Visibility="Collapsed">
+            <utu:TabBarItem x:Uid="Workspace.Tab.Discover"
+                            uen:Region.Name="Discover">
+              <utu:TabBarItem.Icon>
+                <SymbolIcon Symbol="Find" />
+              </utu:TabBarItem.Icon>
+            </utu:TabBarItem>
+            <utu:TabBarItem x:Uid="Workspace.Tab.Mail"
+                            uen:Region.Name="Mail">
+              <utu:TabBarItem.Icon>
+                <SymbolIcon Symbol="Mail" />
+              </utu:TabBarItem.Icon>
+            </utu:TabBarItem>
+            <utu:TabBarItem x:Uid="Workspace.Tab.Cases"
+                            uen:Region.Name="Cases">
+              <utu:TabBarItem.Icon>
+                <SymbolIcon Symbol="Folder" />
+              </utu:TabBarItem.Icon>
+            </utu:TabBarItem>
+          </utu:TabBar>
+        </Grid>
+      </NavigationView.Content>
+    </NavigationView>
+  </Grid>
+</Page>

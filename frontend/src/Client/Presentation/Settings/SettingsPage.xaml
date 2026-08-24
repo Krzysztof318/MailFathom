@@ -3,33 +3,48 @@ Copyright © 2026 Krzysztof Kasprowicz
 Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 Project repository: https://github.com/Krzysztof318/MailFathom
 -->
-<Page x:Class="MailFathom.Client.Presentation.MainPage"
+<Page x:Class="MailFathom.Client.Presentation.Settings.SettingsPage"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      xmlns:local="using:MailFathom.Client.Presentation"
+      xmlns:local="using:MailFathom.Client.Presentation.Settings"
       xmlns:mvux="using:Uno.Extensions.Reactive.UI"
       xmlns:uen="using:Uno.Extensions.Navigation.UI"
       xmlns:utu="using:Uno.Toolkit.UI"
       NavigationCacheMode="Required"
       Background="{ThemeResource BackgroundBrush}">
-  <ScrollViewer IsTabStop="True">
-    <!-- SafeArea keeps the content clear of a notch, a rounded corner, and a system bar, which is the difference
-         between a layout that runs on a phone and one that only fits a window. -->
-    <Grid utu:SafeArea.Insets="VisibleBounds">
-      <Grid.RowDefinitions>
-        <RowDefinition Height="Auto" />
-        <RowDefinition />
-      </Grid.RowDefinitions>
 
-      <!-- Every visible string on this page is reached by x:Uid rather than written here, including this one: the
-           product name is the same in both tables, and a name a page states for itself is a name the next page states
-           again slightly differently. -->
-      <utu:NavigationBar x:Uid="MainPage.NavigationBar.Title" />
+  <!-- Settings is reached from the frame and takes the whole surface rather than opening inside it, so it states its
+       own SafeArea: there is nothing above it left to keep this clear of a notch, a rounded corner, or a system bar. -->
+  <Grid utu:SafeArea.Insets="VisibleBounds">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition />
+    </Grid.RowDefinitions>
 
+    <!-- The way back out, as a navigation rather than as a handler: this is the same request the Android back key and
+         back gesture make, so a screen that answers one answers both. Without it settings is where the application
+         ends, and the system back leaves it. -->
+    <StackPanel Orientation="Horizontal"
+                Padding="16,12"
+                Spacing="12">
+      <Button x:Uid="SettingsPage.Button.Back"
+              uen:Navigation.Request="-"
+              VerticalAlignment="Center"
+              Style="{StaticResource TextBlockButtonStyle}">
+        <SymbolIcon Symbol="Back" />
+      </Button>
+
+      <!-- Every visible string on this page is reached by x:Uid rather than written here. -->
+      <TextBlock x:Uid="SettingsPage.TextBlock.Title"
+                 VerticalAlignment="Center"
+                 Style="{StaticResource TitleLargeTextBlockStyle}" />
+    </StackPanel>
+
+    <ScrollViewer Grid.Row="1"
+                  IsTabStop="True">
       <!-- One column, capped rather than fixed, so the block reads the same in a phone-width window and stops growing
            into a line nobody can follow on a wide desktop one. -->
-      <StackPanel Grid.Row="1"
-                  HorizontalAlignment="Center"
+      <StackPanel HorizontalAlignment="Center"
                   VerticalAlignment="Center"
                   MaxWidth="360"
                   Padding="24"
@@ -43,7 +58,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                         Spacing="8">
               <TextBlock Text="{Binding Data.Product}"
                          HorizontalAlignment="Center"
-                         Style="{StaticResource TitleLargeTextBlockStyle}" />
+                         Style="{StaticResource SubtitleTextBlockStyle}" />
               <TextBlock Text="{Binding Data.Version}"
                          HorizontalAlignment="Center"
                          Style="{StaticResource BodyTextBlockStyle}" />
@@ -55,21 +70,21 @@ Project repository: https://github.com/Krzysztof318/MailFathom
              than buried in a setting because somebody running a client against a test deployment and a real one has to
              be able to tell which of them they are looking at without signing in to find out. -->
         <StackPanel Spacing="8">
-          <TextBlock x:Uid="MainPage.TextBlock.Deployment"
+          <TextBlock x:Uid="SettingsPage.TextBlock.Deployment"
                      Style="{StaticResource BodyTextBlockStyle}" />
 
-          <mvux:FeedView Source="{Binding Deployment}">
-            <DataTemplate>
-              <TextBlock Text="{Binding Data}"
-                         Style="{StaticResource BodyStrongTextBlockStyle}"
-                         TextWrapping="Wrap"
-                         IsTextSelectionEnabled="True" />
-            </DataTemplate>
-          </mvux:FeedView>
+          <!-- Bound to the feed's value rather than shown through a FeedView, because MVUX projects a feed of a scalar
+               as the scalar itself: the generated bindable exposes this one as a `string`, and a FeedView handed a
+               string has no feed to render. A FeedView is what a feed of a record is shown through, which is what the
+               build above is. -->
+          <TextBlock Text="{Binding Deployment}"
+                     Style="{StaticResource BodyStrongTextBlockStyle}"
+                     TextWrapping="Wrap"
+                     IsTextSelectionEnabled="True" />
 
           <!-- Declarative navigation rather than a handler: the route is what a reader of this page looks for, and a
                screen reached this way is one the system back gesture moves back through. -->
-          <Button x:Uid="MainPage.Button.ChangeDeployment"
+          <Button x:Uid="SettingsPage.Button.ChangeDeployment"
                   uen:Navigation.Request="Connect"
                   Style="{StaticResource OutlinedButtonStyle}"
                   HorizontalAlignment="Stretch" />
@@ -79,7 +94,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
              anything the build feed carries, so they stay reachable while that feed is loading or has failed. -->
         <StackPanel Spacing="12">
           <TextBlock x:Name="LanguageLabel"
-                     x:Uid="MainPage.TextBlock.Language"
+                     x:Uid="SettingsPage.TextBlock.Language"
                      Style="{StaticResource BodyTextBlockStyle}" />
 
           <!-- Each language is named in its own words rather than in the one currently on screen, which is what
@@ -94,7 +109,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                     AutomationProperties.LabeledBy="{Binding ElementName=LanguageLabel}"
                     HorizontalAlignment="Stretch" />
 
-          <Button x:Uid="MainPage.Button.ApplyLanguage"
+          <Button x:Uid="SettingsPage.Button.ApplyLanguage"
                   Command="{Binding ApplyLanguage}"
                   Style="{StaticResource FilledButtonStyle}"
                   HorizontalAlignment="Stretch" />
@@ -102,14 +117,14 @@ Project repository: https://github.com/Krzysztof318/MailFathom
           <!-- Uno applies a culture while a head starts, so the words already on screen keep the language they were
                built in. This is where the application says that, rather than leaving somebody pressing the button
                again because nothing appeared to happen. -->
-          <InfoBar x:Uid="MainPage.InfoBar.LanguageRestart"
+          <InfoBar x:Uid="SettingsPage.InfoBar.LanguageRestart"
                    IsOpen="{Binding LanguageAwaitsRestart, Mode=TwoWay}"
                    Severity="Informational" />
         </StackPanel>
 
         <StackPanel Spacing="12">
           <TextBlock x:Name="ThemeLabel"
-                     x:Uid="MainPage.TextBlock.Theme"
+                     x:Uid="SettingsPage.TextBlock.Theme"
                      Style="{StaticResource BodyTextBlockStyle}" />
 
           <!-- Named in the model rather than here, because the words are per item and a x:Uid names a control. A
@@ -120,6 +135,6 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                     HorizontalAlignment="Stretch" />
         </StackPanel>
       </StackPanel>
-    </Grid>
-  </ScrollViewer>
+    </ScrollViewer>
+  </Grid>
 </Page>

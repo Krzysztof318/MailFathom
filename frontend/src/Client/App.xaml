@@ -24,7 +24,13 @@ Project repository: https://github.com/Krzysztof318/MailFathom
         </utum:MaterialToolkitTheme>
       </ResourceDictionary.MergedDictionaries>
 
-      <!-- Add resources here -->
+      <!-- The two widths the client's composition changes at, written once and read by every adaptive trigger that
+           acts on them. Below the first, navigation is a bar along the bottom over one column of workspace; at it,
+           navigation becomes a rail beside the workspace; at the second, the workspace itself opens a companion
+           column. They are window widths rather than platform tests, which is what makes a resized desktop window
+           and a phone the same case. -->
+      <x:Double x:Key="WorkspaceRailWindowWidth">700</x:Double>
+      <x:Double x:Key="WorkspaceWideWindowWidth">1000</x:Double>
 
     </ResourceDictionary>
   </Application.Resources>

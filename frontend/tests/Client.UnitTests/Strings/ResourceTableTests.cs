@@ -4,6 +4,7 @@
 
 using MailFathom.Client.Deployment;
 using MailFathom.Client.Presentation;
+using MailFathom.Client.Presentation.Workspace;
 
 namespace MailFathom.Client.UnitTests.Strings;
 
@@ -97,6 +98,24 @@ public sealed class ResourceTableTests
             .GetValues<DeploymentChoiceOutcome>()
             .Where(outcome => outcome != DeploymentChoiceOutcome.Accepted)
             .Select(outcome => $"ConnectPage.Refusal.{outcome}");
+
+        // Act
+        var table = DeclaredLanguages.TableOf(culture);
+
+        // Assert
+        Assert.All(expected, key => Assert.True(table.ContainsKey(key), key));
+    }
+
+    /// <summary>
+    /// The scope indicator is composed from words rather than named by a <c>x:Uid</c>, so the keys the frame's model
+    /// asks for are the ones this asserts the tables hold — the other place a typo would reach a reader as the key.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Languages))]
+    public void Tables_TheWordsAScopeIsDescribedWith_AreNamedInEveryLanguage(string culture)
+    {
+        // Arrange
+        var expected = WorkspaceModel.ScopeResourceKeys;
 
         // Act
         var table = DeclaredLanguages.TableOf(culture);

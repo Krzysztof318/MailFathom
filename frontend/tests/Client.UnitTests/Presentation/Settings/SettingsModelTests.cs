@@ -7,13 +7,14 @@ using System.Reflection;
 using MailFathom.Client.Backend;
 using MailFathom.Client.Backend.Authorization;
 using MailFathom.Client.Presentation;
+using MailFathom.Client.Presentation.Settings;
 using MailFathom.Client.UnitTests.TestDoubles;
 
-namespace MailFathom.Client.UnitTests.Presentation;
+namespace MailFathom.Client.UnitTests.Presentation.Settings;
 
-public sealed class MainModelTests
+public sealed class SettingsModelTests
 {
-    /// <summary>Awaiting a feed is how a model's state is asserted in this stack, and this one proves the MVUX path behind the only screen reaches the running build.</summary>
+    /// <summary>Awaiting a feed is how a model's state is asserted in this stack, and this one proves the MVUX path behind the settings screen reaches the running build.</summary>
     [Fact]
     public async Task Build_TheScaffoldModel_YieldsTheRunningBuild()
     {
@@ -212,10 +213,10 @@ public sealed class MainModelTests
         var localizer = ThemeWords();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new MainModel(null!, themes, address, localizer));
-        Assert.Throws<ArgumentNullException>(() => new MainModel(localization, null!, address, localizer));
-        Assert.Throws<ArgumentNullException>(() => new MainModel(localization, themes, null!, localizer));
-        Assert.Throws<ArgumentNullException>(() => new MainModel(localization, themes, address, null!));
+        Assert.Throws<ArgumentNullException>(() => new SettingsModel(null!, themes, address, localizer));
+        Assert.Throws<ArgumentNullException>(() => new SettingsModel(localization, null!, address, localizer));
+        Assert.Throws<ArgumentNullException>(() => new SettingsModel(localization, themes, null!, localizer));
+        Assert.Throws<ArgumentNullException>(() => new SettingsModel(localization, themes, address, null!));
     }
 
     /// <summary>
@@ -223,11 +224,11 @@ public sealed class MainModelTests
     /// tree. Nothing on its surface or in its fields is a WinUI type, which is what keeps that true as it grows.
     /// </summary>
     [Fact]
-    public void MainModel_TheModelOfferingTheLanguages_NamesNoXamlType()
+    public void SettingsModel_TheModelOfferingTheLanguages_NamesNoXamlType()
     {
         // Arrange
         const BindingFlags Instance = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
-        var model = typeof(MainModel);
+        var model = typeof(SettingsModel);
 
         // Act
         var named = model.GetConstructors().SelectMany(constructor => constructor.GetParameters()).Select(parameter => parameter.ParameterType)
@@ -250,7 +251,7 @@ public sealed class MainModelTests
             type.GetGenericArguments().SelectMany(Unwrap).Append(type);
     }
 
-    private static MainModel ModelOver(
+    private static SettingsModel ModelOver(
         StubLocalizationService? localization = null,
         StubThemeService? themes = null,
         DeploymentAddress? address = null) =>
