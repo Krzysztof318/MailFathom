@@ -290,15 +290,30 @@ The `IntegrationTesting=true` switch that selects the ephemeral topology leaves 
 it decides every other resource there: a suite that tests the service would otherwise build a WebAssembly bundle on
 every run that no test reads.
 
-**What this resource still does not give the client is the service's address.** The browser head resolves its
+**What tells the head where the service is, is the build rather than the process.** The browser head resolves its
 deployment as the origin it was served from, which is exactly right where a deployment serves the bundle itself and
 wrong here: under `aspire run` the head is served by its own dev server on a socket of its own, so the origin it
 resolves is that socket rather than the host beside it. The app model cannot close that by handing over a value
-either — the head runs in a browser, which reads none of the process environment.
-[Issue #1097](https://github.com/Krzysztof318/MailFathom/issues/1097) owns delivering the address into a locally
-started head, and the cross-origin permission that comes with it. A **desktop** head started by hand has no such gap:
-it reads `Deployment:Address` out of `frontend/src/Client/appsettings.development.json`, which only a Debug build
-reads.
+either — the head runs in a browser, which reads none of the process environment. What that process does do is build
+the bundle the browser downloads, so the address travels into the build: the resource is started with
+`--property:MailFathomDeploymentAddress=<origin>`, `frontend/src/Client/Client.csproj` turns that into a runtime host
+configuration option named `MailFathom.Client.DeploymentAddress`, the WebAssembly SDK carries the runtime configuration
+into the boot document the page fetches, and the client reads it back through `AppContext` before the head is asked to
+answer for itself. Nothing else states that property, so a bundle built anywhere else carries no such option and a head
+served from a deployment's own container image still resolves the origin it was fetched from.
+
+The origin it is pointed at is the **MCP endpoint's own socket**, because that is where the client surface answers
+here. Starting the client also enables `ClientEndpoint` on the host, on the port the MCP endpoint already binds — which
+is what every surface's default port means, one socket serving each surface at its own prefix — so the address a
+developer reads out of the dashboard is the address the head calls. The head's own origin is written into
+`ClientEndpoint:Cors:AllowedOrigins` as the one browser origin that endpoint answers, which is what makes the first
+cross-origin call a served request rather than a refused preflight. Neither surface is given a credential here, which
+is the posture the MCP endpoint has always had locally; what a person presents to their own client is a decision of its
+own. A run started with `Client:Enabled` false opens no client surface either — there is no head to call it.
+
+A **desktop** head takes the same property and reads the same key, so an orchestration could point one the same way.
+Started by hand it is given none, and reads `Deployment:Address` out of
+`frontend/src/Client/appsettings.development.json`, which only a Debug build reads.
 
 ### Pinning a port
 

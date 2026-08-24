@@ -10,6 +10,12 @@ namespace MailFathom.Client.Deployment;
 /// answers are genuinely different mechanisms rather than two values of one. A head that is installed reads what
 /// somebody wrote; a head that was downloaded from the deployment already knows, because it is the deployment that
 /// served it. Composition takes whichever the head handed it and knows about neither.
+/// <para>
+/// One implementation here is not a head's answer at all: <see cref="BuildStatedDeploymentAddress" /> carries what the
+/// build stated and wraps the head's own source, which is the case where neither of the two answers above exists —
+/// a head an orchestration started, served from a socket of its own beside the service. <c>App</c> applies it, so a
+/// new head still owes exactly one implementation of this interface.
+/// </para>
 /// </remarks>
 internal interface IDeploymentAddressSource
 {

@@ -492,6 +492,15 @@ else
     // an orchestration that already publishes the address as an endpoint does not need to do for the developer.
     if (OrchestrationContract.ResolveClientEnabled(builder.Configuration[OrchestrationContract.ClientEnabledKey]))
     {
+        // The two origins this pair is wired from, each composed once because both sides read the same one. The
+        // client's is what its development server binds and what the service is told to answer as a browser origin;
+        // the service's is what the head is built to call, and it is the socket the MCP endpoint already binds because
+        // the client surface joins that one rather than opening a fourth.
+        var clientOrigin =
+            $"http://{OrchestrationContract.DeveloperLoopbackAddress}:{clientPort.ToString(CultureInfo.InvariantCulture)}";
+        var serviceAddress =
+            $"http://{OrchestrationContract.DeveloperLoopbackAddress}:{mcpEndpointPort.ToString(CultureInfo.InvariantCulture)}/";
+
         builder
             .AddExecutable(
                 OrchestrationContract.ClientResourceName,
@@ -500,21 +509,43 @@ else
                 "run",
                 "--framework",
                 OrchestrationContract.ClientBrowserTargetFramework,
-                "--no-launch-profile")
+                "--no-launch-profile",
+                // Where the service is, handed to the build rather than to the process. The head runs in a browser tab
+                // and reads none of this process's environment, so the one channel that reaches it is the bundle the
+                // build produces: the client's project file writes this property into the runtime host configuration,
+                // and the WebAssembly SDK carries that into the boot configuration the page fetches.
+                $"--property:{OrchestrationContract.ClientDeploymentAddressProperty}={serviceAddress}")
             // The address the development server binds, stated to it and published to the app model as one number, so
             // the endpoint the dashboard links is the endpoint the browser head is served on. Unproxied for the reason
             // the host's sockets are: what the app model publishes is then what a browser connects to.
             //
             // On loopback, because a WebAssembly bundle built in Debug against a developer's own machine is not
             // something anything on a local network has any business loading.
-            .WithEnvironment(
-                OrchestrationContract.ClientServerUrlsVariable,
-                $"http://127.0.0.1:{clientPort.ToString(CultureInfo.InvariantCulture)}")
+            .WithEnvironment(OrchestrationContract.ClientServerUrlsVariable, clientOrigin)
             .WithHttpEndpoint(
                 name: OrchestrationContract.ClientHttpEndpointName,
                 port: clientPort,
                 targetPort: clientPort,
                 isProxied: false);
+
+        // The service's half of the same wiring, stated only where a head exists to call it: a run without the client
+        // opens no surface for one.
+        //
+        // The client surface answers on the MCP endpoint's own socket, which is what every surface's default port
+        // already means — one socket serving each surface at its own prefix, with the port a request arrived on
+        // deciding which prefixes may be asked for there. That keeps the address a developer reads out of the
+        // dashboard the address the head calls, and it is why the head is pointed at that port rather than at a
+        // fourth one this run would have to find and publish.
+        //
+        // The head's own origin is the one browser origin the endpoint answers, rather than the every-origin posture
+        // an unstated list means: a local run is the one place the exact origin is known, so narrowing it costs
+        // nothing and proves the preflight a deployment will also have to answer. Authentication stays unstated, as it
+        // is on the MCP endpoint here — what a person presents to their own client is a decision of its own, and this
+        // wiring decides only where the client points.
+        mailFathomHost
+            .WithEnvironment("ClientEndpoint__Enabled", "true")
+            .WithEnvironment("ClientEndpoint__Port", mcpEndpointPort.ToString(CultureInfo.InvariantCulture))
+            .WithEnvironment("ClientEndpoint__Cors__AllowedOrigins__0", clientOrigin);
     }
 }
 

@@ -22,6 +22,12 @@ namespace MailFathom.Client.Platforms.WebAssembly;
 /// rather than as a page that reached whoever served it.
 /// </para>
 /// <para>
+/// The one case this is the wrong answer to is a head an orchestration started, where the origin is a development
+/// server and the service listens on another socket. That is not a second reading of this document — nothing here can
+/// know it — and it is answered before this is asked, by
+/// <see cref="BuildStatedDeploymentAddress" />.
+/// </para>
+/// <para>
 /// This type is compiled into the browser head alone, as everything under <c>Platforms/WebAssembly/</c> is, which is
 /// what lets it use the JavaScript interop no other head has a counterpart for.
 /// </para>

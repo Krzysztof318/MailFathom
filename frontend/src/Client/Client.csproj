@@ -59,6 +59,27 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <!-- Where the service is, when whoever built this head knows and the head could not find out for itself. A browser
+       head reads no process environment, so the orchestration that starts it cannot hand it an address the way it
+       hands one to every other resource — but it does start the build, and what the build writes is what the browser
+       downloads. A runtime host configuration option is that channel: MSBuild writes it into the runtimeconfig, the
+       WebAssembly SDK carries the runtimeconfig into the boot configuration the page fetches, and the type that reads
+       it back — Deployment/BuildStatedDeploymentAddress.cs — asks AppContext.GetData for this key, with no reflection
+       for the trimmer to remove. That type names the key on its own side: the two names are one decision recorded in
+       two files, because a project and the app model that starts it share no build file. The desktop head takes the
+       same property and reads the same key out of its own runtimeconfig.json.
+
+       Emitted only when the property carries a value, which one caller states and no publish does: the local
+       orchestration's client resource, in backend/src/AppHost/Program.cs. An artifact built without it carries no
+       option at all, so a head served from the container image resolves its deployment as the origin it was fetched
+       from exactly as before. Trim="false" because this is an address rather
+       than a feature switch — the trimmer must not read it as a constant to substitute and branch away. -->
+  <ItemGroup Condition="'$(MailFathomDeploymentAddress)' != ''">
+    <RuntimeHostConfigurationOption Include="MailFathom.Client.DeploymentAddress"
+                                    Value="$(MailFathomDeploymentAddress)"
+                                    Trim="false" />
+  </ItemGroup>
+
   <!-- The bootstrapper deploys and loads what it finds embedded under WasmScripts, but the Uno SDK only ever adds one
        file there by itself: Uno.SingleProject.Wasm.targets includes AppManifest.js by name and globs nothing. A second
        script therefore has to be named here, or it stays an ordinary None item, never reaches the bundle, and the

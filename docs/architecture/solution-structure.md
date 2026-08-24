@@ -203,8 +203,11 @@ The client reaches MailFathom over the endpoints `Host` exposes and shares no ty
 OAuth code are its own, stated again at this end rather than referenced across the boundary. Which deployment it
 reaches is the composing head's to supply, through `IDeploymentAddressSource`: an installed head reads the `Deployment`
 section out of an embedded `appsettings.json`, and the browser head reads the origin it was served from, because the
-container image serves the bundle from the same origin as the surface it calls. `frontend/src/AGENTS.md` states what
-governs a change there, and `frontend/tests/AGENTS.md` what governs one in its suite.
+container image serves the bundle from the same origin as the surface it calls. One source belongs to neither head and
+is read in front of both: `BuildStatedDeploymentAddress` takes an address the build that produced the head stated,
+which is how a head an orchestration started — served by its own development server beside the service rather than by
+it — is pointed at the socket the service listens on. `frontend/src/AGENTS.md` states what governs a change there, and
+`frontend/tests/AGENTS.md` what governs one in its suite.
 
 That image is the one place the two stacks meet in a build, and it is a file copy rather than a reference. A stage of
 `deploy/docker/Dockerfile` publishes the browser head and copies its output into the runtime image's `wwwroot`; no

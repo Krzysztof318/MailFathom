@@ -313,6 +313,46 @@ public sealed class OrchestrationContractTests
         Assert.Contains(OrchestrationContract.ClientEnabledKey, failure.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>The address the client and the service are wired together on is one nothing outside this machine reaches.</summary>
+    /// <remarks>
+    /// The one property of that constant the compiler cannot state. Three things are built from it — the socket the
+    /// client's development server binds, the browser origin the service is configured to answer, and the address the
+    /// head is built to call — so a value that stopped being loopback would publish a Debug WebAssembly bundle to
+    /// every interface of a developer's machine without any of the three disagreeing about it.
+    /// </remarks>
+    [Fact]
+    public void DeveloperLoopbackAddress_IsAnAddressOnlyThisMachineReaches()
+    {
+        // Act
+        var parsed = IPAddress.TryParse(OrchestrationContract.DeveloperLoopbackAddress, out var address);
+
+        // Assert
+        Assert.True(parsed);
+        Assert.True(IPAddress.IsLoopback(address!));
+    }
+
+    /// <summary>The name the deployment address travels into the client's build under has to be one MSBuild will carry.</summary>
+    /// <remarks>
+    /// It is passed as <c>--property:&lt;name&gt;=&lt;value&gt;</c>, and MSBuild takes a property name to be a letter
+    /// or an underscore followed by letters, digits, underscores, or hyphens. A name outside that is not refused: the
+    /// command line is accepted, the property never comes into being, the condition guarding the item in
+    /// <c>frontend/src/Client/Client.csproj</c> is false, and the head is built with no address at all — which arrives
+    /// as a client calling its own development server rather than as anything the run said.
+    /// </remarks>
+    [Fact]
+    public void ClientDeploymentAddressProperty_IsANameMsBuildAcceptsAsAProperty()
+    {
+        // Act
+        var name = OrchestrationContract.ClientDeploymentAddressProperty;
+
+        // Assert
+        Assert.NotEmpty(name);
+        Assert.True(char.IsAsciiLetter(name[0]) || name[0] == '_');
+        Assert.All(name[1..], character => Assert.True(
+            char.IsAsciiLetterOrDigit(character) || character is '_' or '-',
+            $"'{character}' is not a character an MSBuild property name may carry."));
+    }
+
     private static string IdentifierOf(string prefix) =>
         prefix[(OrchestrationContract.EphemeralResourceNamePrefix.Length + GeneratedIdentifierSeparator.Length)..];
 }

@@ -53,6 +53,11 @@ what stays each surface's own.
 Every key this section takes is in
 [endpoint configuration](configuration-endpoints.md#clientendpoint), with its default and its constraint.
 
+**A local `aspire run` turns it on for you**, on the port the MCP endpoint already binds and with the browser head's own
+origin as the one origin it answers, because that run starts a head that has to reach something. It configures no
+credential, which is the posture every surface has locally.
+[The client resource](local-development.md#the-client-resource) is what does it and what to state to stop it.
+
 ## What it serves
 
 One route, and deliberately one:
