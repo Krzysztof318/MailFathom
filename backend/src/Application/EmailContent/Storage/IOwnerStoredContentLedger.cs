@@ -25,6 +25,11 @@ namespace MailFathom.Application.EmailContent.Storage;
 /// it was derived from stays available rather than being a one-off in a migration. That is what makes drift repairable
 /// instead of permanent, and it is the same statement the counter is asserted against.
 /// </para>
+/// <para>
+/// Both members refuse an owner naming nobody. Nothing gates this port — a synchronization run calls it directly —
+/// so the refusal is the port's own, and an implementation that answered such an owner would be keeping a counter for
+/// "nobody" that reads exactly like a working figure.
+/// </para>
 /// </remarks>
 public interface IOwnerStoredContentLedger
 {
@@ -37,6 +42,7 @@ public interface IOwnerStoredContentLedger
     /// upgraded deployment and one that has just erased and re-synchronized both start from what storage actually
     /// holds. Every later read is the single row.
     /// </remarks>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
     Task<long> ReadStoredContentBytesAsync(MailOwnerId owner, CancellationToken cancellationToken);
 
     /// <summary>Recomputes one owner's figure from their stored payloads and adopts it.</summary>
@@ -50,5 +56,6 @@ public interface IOwnerStoredContentLedger
     /// a store committing meanwhile is either counted by the recomputation or applied on top of it, never discarded by
     /// it. That makes it the one operation here which needs a transaction of its own.
     /// </remarks>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
     Task<long> RederiveStoredContentBytesAsync(MailOwnerId owner, CancellationToken cancellationToken);
 }

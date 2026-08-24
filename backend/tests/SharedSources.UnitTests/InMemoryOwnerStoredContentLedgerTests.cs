@@ -71,6 +71,26 @@ public sealed class InMemoryOwnerStoredContentLedgerTests
         Assert.Equal(0, ledger.ReadCount);
     }
 
+    /// <summary>The double refuses an unnamed owner exactly as the persisted ledger does.</summary>
+    /// <remarks>
+    /// A fake that answered such an owner from an entry keyed by an empty identifier would let a caller pass a test it
+    /// would be refused by in a deployment, which is the one thing a double must not do.
+    /// </remarks>
+    [Fact]
+    public async Task EveryMember_AnOwnerNamingNobody_IsRefused()
+    {
+        // Arrange
+        var ledger = new InMemoryOwnerStoredContentLedger();
+
+        // Act, Assert
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => ledger.ReadStoredContentBytesAsync(default, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => ledger.RederiveStoredContentBytesAsync(default, TestContext.Current.CancellationToken));
+        Assert.Equal(0, ledger.ReadCount);
+        Assert.Equal(0, ledger.RederiveCount);
+    }
+
     [Fact]
     public async Task ReadStoredContentBytesAsync_ACancelledToken_IsObserved()
     {

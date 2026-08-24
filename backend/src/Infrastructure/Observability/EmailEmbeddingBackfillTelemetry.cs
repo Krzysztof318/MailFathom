@@ -60,6 +60,7 @@ public sealed class EmailEmbeddingBackfillTelemetry
     private readonly Counter<long> embeddedEmailCount;
     private readonly Counter<long> passageCount;
     private readonly Counter<long> callBudgetExhaustedEmailCount;
+    private readonly Counter<long> ownerSpendCeilingEmailCount;
     private readonly Counter<long> generationSwitchCount;
     private readonly Counter<long> removedSupersededVectorCount;
     private int outstandingEmailCount;
@@ -87,6 +88,10 @@ public sealed class EmailEmbeddingBackfillTelemetry
             "mailfathom.embedding.backfill.exhausted",
             unit: "{message}",
             description: "Messages the backfill left part-way through because one turn spent every provider call it is allowed.");
+        this.ownerSpendCeilingEmailCount = Telemetry.Meter.CreateCounter<long>(
+            "mailfathom.embedding.backfill.owner_ceiling",
+            unit: "{message}",
+            description: "Messages the backfill stepped past because the owner they belong to had spent what one period admits for them.");
         this.generationSwitchCount = Telemetry.Meter.CreateCounter<long>(
             "mailfathom.embedding.generation.switches",
             unit: "{switch}",
@@ -141,8 +146,8 @@ public sealed class EmailEmbeddingBackfillTelemetry
 
         this.runCount.Add(1, tags);
 
-        // Each of the three is added only when it moved. A stream of zeroes on every interval would make an instance
-        // with nothing to backfill indistinguishable from one that is working through a mailbox.
+        // Each count is added only when it moved. A stream of zeroes on every interval would make an instance with
+        // nothing to backfill indistinguishable from one that is working through a mailbox.
         if (result.ChunkedEmailCount > 0)
         {
             this.chunkedEmailCount.Add(result.ChunkedEmailCount);
@@ -161,6 +166,14 @@ public sealed class EmailEmbeddingBackfillTelemetry
         if (result.CallBudgetExhaustedEmailCount > 0)
         {
             this.callBudgetExhaustedEmailCount.Add(result.CallBudgetExhaustedEmailCount);
+        }
+
+        // The one number here that says a bound was reached without the run stopping. The worker's own line is written
+        // once per period so it does not bury the log, which is exactly why the meter has to carry every pass: without
+        // it there is nothing an operator can read the size of the refusal from after the first line.
+        if (result.OwnerSpendCeilingEmailCount > 0)
+        {
+            this.ownerSpendCeilingEmailCount.Add(result.OwnerSpendCeilingEmailCount);
         }
 
         if (result.OutstandingEmailCountAtSweepStart is { } outstanding)

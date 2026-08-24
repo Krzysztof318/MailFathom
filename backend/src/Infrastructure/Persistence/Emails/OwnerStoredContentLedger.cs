@@ -37,7 +37,7 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
     /// <inheritdoc />
     public async Task<long> ReadStoredContentBytesAsync(MailOwnerId owner, CancellationToken cancellationToken)
     {
-        var ownerId = owner.Value;
+        var ownerId = RequireNamedOwner(owner);
 
         var storedBytes = await dbContext.OwnerStoredContent
             .AsNoTracking()
@@ -54,7 +54,7 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
     /// <inheritdoc />
     public async Task<long> RederiveStoredContentBytesAsync(MailOwnerId owner, CancellationToken cancellationToken)
     {
-        var ownerId = owner.Value;
+        var ownerId = RequireNamedOwner(owner);
 
         // The one operation here that cannot be a single statement. Every movement adds a difference, so PostgreSQL
         // re-reads the row it is adding to after waiting for whoever held it; this one writes a total instead, and the
@@ -242,6 +242,26 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
     /// against the recomputation that follows. A total is written back rather than a constant because PostgreSQL
     /// re-reads the row after waiting for whoever held it, so this cannot lose what that writer had just added.
     /// </remarks>
+    /// <summary>Resolves the identifier one owner's counter is keyed by, refusing an owner naming nobody.</summary>
+    /// <remarks>
+    /// This port carries no gate above it — <c>MailboxSynchronizer</c> calls it directly, unlike the spend ledger,
+    /// which only <c>EmbeddingSpendGate</c> reaches. So the refusal belongs here rather than at a caller: without it an
+    /// unnamed owner would be given a counter row of its own keyed by an empty identifier, and bytes would be counted,
+    /// maintained, and re-derived for "nobody" — which reads as a working figure until somebody asks whose it was.
+    /// <c>StoredContentCeiling.LevelOf</c> refuses the same argument for the same reason.
+    /// </remarks>
+    private static Guid RequireNamedOwner(MailOwnerId owner)
+    {
+        if (!owner.IsSpecified)
+        {
+            throw new ArgumentException(
+                "A stored-content counter is kept for a named owner, so an owner naming nobody has none to read or re-derive.",
+                nameof(owner));
+        }
+
+        return owner.Value;
+    }
+
     private static string ClaimStatement(IModel model)
     {
         var names = StoredContentTableNames.Of(model);

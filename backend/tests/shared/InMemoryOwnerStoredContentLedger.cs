@@ -10,7 +10,9 @@ namespace MailFathom.TestSupport;
 /// <summary>Keeps what each owner's stored content holds in memory, so a per-owner ceiling has a figure to read.</summary>
 /// <remarks>
 /// Hand-written rather than substituted, because a ceiling test arranges a figure and then asserts against what the
-/// ceiling did with it: a substitute would answer from a script and the assertion would be about the script.
+/// ceiling did with it: a substitute would answer from a script and the assertion would be about the script. It refuses
+/// an owner naming nobody exactly as the persisted ledger does, so a caller that would be refused in a deployment is
+/// refused here rather than quietly answered from an entry keyed by an empty identifier.
 /// </remarks>
 internal sealed class InMemoryOwnerStoredContentLedger : IOwnerStoredContentLedger
 {
@@ -36,6 +38,7 @@ internal sealed class InMemoryOwnerStoredContentLedger : IOwnerStoredContentLedg
     /// <inheritdoc />
     public Task<long> ReadStoredContentBytesAsync(MailOwnerId owner, CancellationToken cancellationToken)
     {
+        RequireNamedOwner(owner);
         cancellationToken.ThrowIfCancellationRequested();
         this.ReadCount++;
 
@@ -45,9 +48,20 @@ internal sealed class InMemoryOwnerStoredContentLedger : IOwnerStoredContentLedg
     /// <inheritdoc />
     public Task<long> RederiveStoredContentBytesAsync(MailOwnerId owner, CancellationToken cancellationToken)
     {
+        RequireNamedOwner(owner);
         cancellationToken.ThrowIfCancellationRequested();
         this.RederiveCount++;
 
         return Task.FromResult(this.storedBytesByOwner.GetValueOrDefault(owner));
+    }
+
+    private static void RequireNamedOwner(MailOwnerId owner)
+    {
+        if (!owner.IsSpecified)
+        {
+            throw new ArgumentException(
+                "A stored-content counter is kept for a named owner, so an owner naming nobody has none to read or re-derive.",
+                nameof(owner));
+        }
     }
 }

@@ -637,9 +637,11 @@ public sealed class MailboxSynchronizer
                 collection,
                 cancellationToken);
 
-            // A ceiling filled up again while this pass ran, which is true of the whole queue rather than of this
-            // occurrence — the queue is one folder's and a folder belongs to one owner, so either ceiling refusing here
-            // will refuse the rest too. The pass ends instead of asking about each of them in turn.
+            // A ceiling filled up again while this pass ran. The pass stops asking rather than working down the queue
+            // one refusal at a time: a claim is measured against the payload's own size, so a smaller occurrence behind
+            // this one could still fit, and asking about each of them would spend a round trip per message to find the
+            // few that do. Nothing is lost by stopping — the queue keeps what it held and the next pass picks it up
+            // against whatever headroom the ceiling has by then.
             if (occurrence.Availability == StoredEmailContentAvailability.AwaitingStorageHeadroom)
             {
                 break;

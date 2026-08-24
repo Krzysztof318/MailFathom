@@ -383,6 +383,60 @@ public sealed class MailEmbeddingBackfillWorkerTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// Nothing ends on an owner's ceiling, so the same fact is true of every pass until the period rolls over — and a
+    /// busy instance takes the short interval. The warning is written once for the period and the counter beside it
+    /// carries the rest, which is what keeps one owner over their share from burying the log for everybody.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_AnOwnerStaysOverTheirShareAcrossPasses_WarnsOnceForThePeriod()
+    {
+        // Arrange
+        using var world = CreateWorld(
+            new EmbeddingBackfillOptions { BatchSize = 1, MaxBatchesPerRun = 1 },
+            EmbeddingSpendBudget.Create(
+                maxInputCharactersPerPeriod: 1_000,
+                maxInputCharactersPerPeriodPerOwner: 10,
+                TimeSpan.FromDays(1)),
+            consumedInputCharacterCount: 10,
+            deploymentConsumedInputCharacterCount: 10);
+        var message = StoredEmailId.Create(Guid.CreateVersion7());
+
+        world.BackfillStore
+            .GetEmailsAwaitingEmbeddingAsync(
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<EmbeddingProfileId>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingEmbedding>>(
+                [new StoredEmailAwaitingEmbedding(message, RequiresChunking: false)]));
+        world.EmbeddingStore
+            .GetChunksAwaitingEmbeddingAsync(
+                Arg.Any<StoredEmailId>(),
+                Arg.Any<EmbeddingProfileId>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<EmailChunkAwaitingEmbedding>>(
+                [new EmailChunkAwaitingEmbedding(EmailChunkId.Create(Guid.CreateVersion7()), "a passage")]));
+
+        // Act
+        await world.Worker.StartAsync(CancellationToken.None);
+        await world.Logger.WaitForOccurrences(
+            "has spent what one period admits for them",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
+
+        // Three passes rather than two, so the assertion is about a period rather than about the first repeat.
+        await world.AdvanceUntilLogged("The next embedding backfill pass is due in", occurrences: 3);
+        await world.Worker.StopAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(
+            1,
+            world.Logger.Messages.Count(
+                line => line.Contains("has spent what one period admits for them", StringComparison.Ordinal)));
+    }
+
     private static EmbeddingProfileIdentity CreateIdentity() =>
         EmbeddingProfileIdentity.Create(
             "a-provider",

@@ -248,6 +248,7 @@ public sealed class StoredEmailEmbeddingBackfill
             progress.EmbeddedChunkCount,
             progress.CallBudgetExhaustedEmailCount,
             progress.OwnerSpendCeilingEmailCount,
+            progress.OwnerSpendPeriodEndsAt,
             outstandingAtSweepStart,
             failure,
             spendPeriodEndsAt,
@@ -258,21 +259,24 @@ public sealed class StoredEmailEmbeddingBackfill
     /// A message counts as embedded only when its turn reported the message whole. One that spent every call a turn is
     /// allowed keeps the passages it did get — which the passage count carries — and is deliberately not counted as a
     /// message brought up to date, because a later sweep still has to reach it. The same holds for one the walk stepped
-    /// past because its owner had spent their period: it is counted where an operator can see it and nowhere else.
+    /// past because its owner had spent their period: it is counted where an operator can see it and nowhere else, and
+    /// the period it was refused in is carried beside the count so the worker can report it once rather than per pass.
     /// </remarks>
     private sealed record RunProgress(
         int ChunkedEmailCount,
         int EmbeddedEmailCount,
         int EmbeddedChunkCount,
         int CallBudgetExhaustedEmailCount,
-        int OwnerSpendCeilingEmailCount)
+        int OwnerSpendCeilingEmailCount,
+        DateTimeOffset? OwnerSpendPeriodEndsAt)
     {
         public static RunProgress Empty { get; } = new(
             ChunkedEmailCount: 0,
             EmbeddedEmailCount: 0,
             EmbeddedChunkCount: 0,
             CallBudgetExhaustedEmailCount: 0,
-            OwnerSpendCeilingEmailCount: 0);
+            OwnerSpendCeilingEmailCount: 0,
+            OwnerSpendPeriodEndsAt: null);
 
         public RunProgress Add(StoredEmailAwaitingEmbedding email, StoredEmailEmbeddingRun turn) => this with
         {
@@ -284,6 +288,12 @@ public sealed class StoredEmailEmbeddingBackfill
                 + (turn.Outcome == StoredEmailEmbeddingOutcome.CallBudgetExhausted ? 1 : 0),
             OwnerSpendCeilingEmailCount = this.OwnerSpendCeilingEmailCount
                 + (turn.ReachedSpendBound == EmbeddingSpendBound.Owner ? 1 : 0),
+
+            // The latest one wins rather than the first, because a sweep can outlive a rollover: two owners refused on
+            // either side of it are one count, and the period a reader acts on is the one still in force.
+            OwnerSpendPeriodEndsAt = turn.ReachedSpendBound == EmbeddingSpendBound.Owner
+                ? turn.SpendPeriodEndsAt
+                : this.OwnerSpendPeriodEndsAt,
         };
     }
 }

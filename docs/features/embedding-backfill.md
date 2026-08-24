@@ -145,6 +145,10 @@ which is exactly the harm bounding spend per owner exists to prevent. The steppe
 passages, so the next sweep after the roll-over reaches it, and the run reports how many messages it stepped past that
 way beside how many it embedded.
 
+Because nothing ends, that fact is true of every pass until the period rolls over — and a busy instance sweeps on the
+short interval. The warning is therefore written once per period rather than once per pass, so it does not bury the rest
+of the log for as long as an owner has mail waiting, and the counter beside it is what carries every pass.
+
 Nothing about a per-owner ceiling makes the resume position per owner, and that is a decision rather than a gap. One
 walk serves every owner at once, so a cursor each would record the same walk several times over and the run would still
 have to visit every message to decide which cursor to move.
@@ -191,6 +195,7 @@ from recording a pass nothing would ever reach. The log says the same at `Debug`
 | `mailfathom.embedding.backfill.messages` | Messages brought up to date with the active profile |
 | `mailfathom.embedding.backfill.passages` | Passages given a vector |
 | `mailfathom.embedding.backfill.exhausted` | Messages left part-way through because one turn spent every provider call it is allowed |
+| `mailfathom.embedding.backfill.owner_ceiling` | Messages the sweep stepped past because the owner they belong to had spent what one period admits for them |
 | `mailfathom.embedding.generation.switches` | Generations that finished being built and became the one searches are answered from |
 | `mailfathom.embedding.generation.removed` | Vectors of a superseded generation removed after a switch |
 
