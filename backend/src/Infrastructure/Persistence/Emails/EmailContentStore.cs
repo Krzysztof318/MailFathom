@@ -164,7 +164,7 @@ internal sealed class EmailContentStore(
             await OwnerStoredContentLedger.MoveAsync(
                 dbContext,
                 storedEmail.MailboxAccountId,
-                byteLength - trackedEntity.MimeByteLength,
+                placedContent.ByteLength - trackedEntity.MimeByteLength,
                 cancellationToken);
 
             trackedEntity.RawMime = bytes;
@@ -186,7 +186,7 @@ internal sealed class EmailContentStore(
             dbContext,
             storedEmail.MailboxAccountId,
             storedEmailId.Value,
-            byteLength,
+            placedContent.ByteLength,
             cancellationToken);
 
         // Re-synchronizing an occurrence that is already stored must not read its existing bytea payload back into memory or

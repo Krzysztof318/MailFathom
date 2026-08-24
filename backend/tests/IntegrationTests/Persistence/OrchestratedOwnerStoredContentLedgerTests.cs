@@ -208,7 +208,8 @@ public sealed class OrchestratedOwnerStoredContentLedgerTests(MailFathomOrchestr
                 await scope.GetRequiredService<IEmailContentStore>().SaveContentAsync(
                     session,
                     storedEmailId,
-                    new RemoteEmailContent(occurrenceId, SyntheticEmail.RawMimeOf($"{FolderAlias}-{uid}", byteCount)),
+                    occurrenceId,
+                    PlacedEmailContent.InDatabase(SyntheticEmail.RawMimeOf($"{FolderAlias}-{uid}", byteCount)),
                     token);
             },
             cancellationToken);
@@ -230,7 +231,8 @@ public sealed class OrchestratedOwnerStoredContentLedgerTests(MailFathomOrchestr
             (scope, session, token) => scope.GetRequiredService<IEmailContentStore>().SaveContentAsync(
                 session,
                 storedEmailIds[uid],
-                new RemoteEmailContent(occurrenceId, SyntheticEmail.RawMimeOf($"{FolderAlias}-{uid}", byteCount)),
+                occurrenceId,
+                PlacedEmailContent.InDatabase(SyntheticEmail.RawMimeOf($"{FolderAlias}-{uid}", byteCount)),
                 token),
             cancellationToken);
 
