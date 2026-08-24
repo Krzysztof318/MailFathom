@@ -57,16 +57,19 @@ public sealed class OptimisticConcurrencyRetryPolicyTests
         }
 
         var stagedAttemptCount = 0;
-        var policy = CreatePolicy(sessionFactory);
+        var clock = new FakeTimeProvider();
+        var policy = CreatePolicy(sessionFactory, timeProvider: clock);
 
         // Act
-        await Assert.ThrowsAsync<PersistenceConcurrencyConflictException>(() => policy.CommitAsync(
+        var commitTask = policy.CommitAsync(
             (_, _) =>
             {
                 stagedAttemptCount++;
                 return Task.CompletedTask;
             },
-            CancellationToken.None));
+            CancellationToken.None);
+        await Assert.ThrowsAsync<PersistenceConcurrencyConflictException>(
+            () => AdvanceUntilCompletedAsync(clock, commitTask));
 
         // Assert
         Assert.Equal(2, stagedAttemptCount);
@@ -91,16 +94,19 @@ public sealed class OptimisticConcurrencyRetryPolicyTests
         }
 
         var stagedAttemptCount = 0;
-        var policy = CreatePolicy(sessionFactory, maximumCommitAttempts: 3);
+        var clock = new FakeTimeProvider();
+        var policy = CreatePolicy(sessionFactory, maximumCommitAttempts: 3, timeProvider: clock);
 
         // Act
-        var thrown = await Assert.ThrowsAsync<PersistenceConcurrencyConflictException>(() => policy.CommitAsync(
+        var commitTask = policy.CommitAsync(
             (_, _) =>
             {
                 stagedAttemptCount++;
                 return Task.CompletedTask;
             },
-            CancellationToken.None));
+            CancellationToken.None);
+        var thrown = await Assert.ThrowsAsync<PersistenceConcurrencyConflictException>(
+            () => AdvanceUntilCompletedAsync(clock, commitTask));
 
         // Assert
         Assert.Contains("3", thrown.Message, StringComparison.Ordinal);
@@ -219,16 +225,18 @@ public sealed class OptimisticConcurrencyRetryPolicyTests
                 new IOException("the connection was reset")));
         secondSession.CommitAsync(CancellationToken.None).Returns(PersistenceCommitResult.Committed);
         var stagedSessions = new List<IPersistenceSession>();
-        var policy = CreatePolicy(sessionFactory);
+        var clock = new FakeTimeProvider();
+        var policy = CreatePolicy(sessionFactory, timeProvider: clock);
 
         // Act
-        await policy.CommitAsync(
+        var commitTask = policy.CommitAsync(
             (session, _) =>
             {
                 stagedSessions.Add(session);
                 return Task.CompletedTask;
             },
             CancellationToken.None);
+        await AdvanceUntilCompletedAsync(clock, commitTask);
 
         // Assert
         Assert.Equal([firstSession, secondSession], stagedSessions);
