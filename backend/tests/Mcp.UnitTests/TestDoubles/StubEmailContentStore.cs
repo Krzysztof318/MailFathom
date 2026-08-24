@@ -24,10 +24,18 @@ internal sealed class StubEmailContentStore(StoredEmailContent? storedContent = 
     public int ReadCount { get; private set; }
 
     /// <inheritdoc />
+    public Task<PlacedEmailContent> PlaceContentAsync(
+        EmailContentKind kind,
+        ReadOnlyMemory<byte> rawMime,
+        CancellationToken cancellationToken) =>
+        throw new NotSupportedException("Reading an email never places content.");
+
+    /// <inheritdoc />
     public Task SaveContentAsync(
         IPersistenceSession session,
         StoredEmailId storedEmailId,
-        RemoteEmailContent content,
+        EmailOccurrenceId occurrenceId,
+        PlacedEmailContent placedContent,
         CancellationToken cancellationToken) =>
         throw new NotSupportedException("Reading an email never stores content.");
 
@@ -47,7 +55,7 @@ internal sealed class StubEmailContentStore(StoredEmailContent? storedContent = 
     public Task SaveOutgoingContentAsync(
         IPersistenceSession session,
         OutgoingEmailId outgoingEmailId,
-        ReadOnlyMemory<byte> rawMime,
+        PlacedEmailContent placedContent,
         CancellationToken cancellationToken) =>
         throw new NotSupportedException("Reading an email never stores an outgoing message.");
 
@@ -61,7 +69,7 @@ internal sealed class StubEmailContentStore(StoredEmailContent? storedContent = 
     public Task SaveRecurringSendDraftAsync(
         IPersistenceSession session,
         RecurringSendId recurringSendId,
-        ReadOnlyMemory<byte> draftMime,
+        PlacedEmailContent placedContent,
         CancellationToken cancellationToken) =>
         throw new NotSupportedException("Reading an email never declares a repeated send.");
 
@@ -75,7 +83,7 @@ internal sealed class StubEmailContentStore(StoredEmailContent? storedContent = 
     public Task SaveMailDraftContentAsync(
         IPersistenceSession session,
         MailDraftId draftId,
-        ReadOnlyMemory<byte> rawMime,
+        PlacedEmailContent placedContent,
         CancellationToken cancellationToken) =>
         throw new NotSupportedException("Reading an email never stores a draft.");
 

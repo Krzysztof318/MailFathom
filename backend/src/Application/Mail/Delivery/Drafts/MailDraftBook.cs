@@ -127,6 +127,13 @@ public sealed class MailDraftBook
 
         var writtenAt = this.timeProvider.GetUtcNow();
 
+        // Before the unit of work rather than inside it. Every revision is placed under a key of its own, so a commit
+        // that never happens leaves the row pointing at the previous revision's object, which is intact.
+        var placedContent = await this.contentStore.PlaceContentAsync(
+            EmailContentKind.MailDraft,
+            composed.RawMime,
+            cancellationToken);
+
         var draft = await this.retryPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
@@ -150,7 +157,7 @@ public sealed class MailDraftBook
                 await this.contentStore.SaveMailDraftContentAsync(
                     session,
                     written.Id,
-                    composed.RawMime,
+                    placedContent,
                     attemptCancellationToken);
 
                 return written;

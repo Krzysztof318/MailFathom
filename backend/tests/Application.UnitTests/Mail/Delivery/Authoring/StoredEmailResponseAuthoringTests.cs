@@ -1044,7 +1044,7 @@ public sealed class StoredEmailResponseAuthoringTests
 
     private static IEmailContentStore ContentStoreReturning(StoredEmailContent? storedContent)
     {
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         contentStore
             .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(storedContent));

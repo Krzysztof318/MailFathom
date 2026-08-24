@@ -8,6 +8,7 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent.Derivation;
+using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
@@ -147,7 +148,7 @@ public sealed class StoredEmailExtractionBackfillTests
     {
         // Arrange
         var store = new FakeBackfillStore(EmailsAwaitingExtraction(2));
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         contentStore
             .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<StoredEmailContent?>(null));
@@ -327,7 +328,7 @@ public sealed class StoredEmailExtractionBackfillTests
 
     private static IEmailContentStore CreateContentStoreWithReadableMime()
     {
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         contentStore
             .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<StoredEmailContent?>(StoredContent([1, 2, 3])));

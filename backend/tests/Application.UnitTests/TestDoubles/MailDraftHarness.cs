@@ -68,6 +68,7 @@ internal sealed class MailDraftHarness
 
     private StubMailFolderMappings mappings = StubMailFolderMappings.Nothing;
     private OutgoingMailScreening screening = OutgoingMailScreenings.Inactive();
+    private int conflictingAttempts;
 
     internal MailDraftHarness(
         TimeProvider clock,
@@ -127,14 +128,27 @@ internal sealed class MailDraftHarness
 
         this.transportSecurityPolicies.GetPolicy(Arg.Any<MailAccountId>()).Returns(RequiredTlsPolicy);
 
-        var persistenceSession = Substitute.For<IPersistenceSession>();
-        persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
-        this.persistenceSessions.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(persistenceSession);
+        // One session per call rather than one for the harness, because a replayed unit of work gets a fresh one and a
+        // test about a replay reads how many were opened.
+        this.persistenceSessions.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            var persistenceSession = Substitute.For<IPersistenceSession>();
+            persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(
+                this.conflictingAttempts-- > 0
+                    ? PersistenceCommitResult.ConcurrencyConflict
+                    : PersistenceCommitResult.Committed);
+            this.PersistenceSessionsOpened++;
 
+            return persistenceSession;
+        });
+
+        // The real clock, not the harness's. The backoff between attempts is a delay against whichever provider the
+        // policy holds, and a controlled one that nothing advances never completes it — so a conflicting test would
+        // hang rather than replay. What it costs is the few tens of milliseconds the one such test waits.
         this.commitPolicy = new OptimisticConcurrencyRetryPolicy(
             this.persistenceSessions,
             new PersistenceConcurrencyOptions(),
-            clock);
+            TimeProvider.System);
 
         this.BeginNewScope();
     }
@@ -160,6 +174,9 @@ internal sealed class MailDraftHarness
     /// <summary>Gets how many appends the server has been asked for.</summary>
     internal int AppendCount { get; private set; }
 
+    /// <summary>Gets how many persistence sessions have been opened, which is what a replay costs and a placement does not.</summary>
+    internal int PersistenceSessionsOpened { get; private set; }
+
     /// <summary>Gets every occurrence the server was asked to take back out, in the order it was asked.</summary>
     internal List<(ImapUidValidity UidValidity, ImapUid Uid)> Withdrawn { get; } = [];
 
@@ -175,6 +192,10 @@ internal sealed class MailDraftHarness
 
     /// <summary>Gets or sets what the server does when asked to take a copy back out, which defaults to doing it.</summary>
     internal Func<ImapUidValidity, ImapUid, Task> Withdraw { get; set; } = (_, _) => Task.CompletedTask;
+
+    /// <summary>Makes the next commits report a conflict, which is how a race with another run reaches this code.</summary>
+    /// <param name="attempts">How many attempts conflict before one commits.</param>
+    internal void ConflictOnTheNextCommits(int attempts) => this.conflictingAttempts = attempts;
 
     /// <summary>Puts a screening in front of the book, and rebuilds it so the next save meets that screening.</summary>
     /// <param name="outgoingMailScreening">What the book asks before it writes anything down.</param>

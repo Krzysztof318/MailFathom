@@ -593,7 +593,7 @@ public sealed class MailOutboxDeliveryTests
                 (request, envelope, token) => this.Transmit(request, envelope, token),
                 capabilities);
 
-            var contentStore = Substitute.For<IEmailContentStore>();
+            var contentStore = ContentStores.Substituted();
             contentStore
                 .FindOutgoingContentAsync(Arg.Any<OutgoingEmailId>(), Arg.Any<CancellationToken>())
                 .Returns(storeContent

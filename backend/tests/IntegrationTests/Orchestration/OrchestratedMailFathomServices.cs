@@ -42,6 +42,7 @@ using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.OAuth;
+using MailFathom.Infrastructure.ObjectStorage;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets.Discovery;
@@ -183,6 +184,11 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     /// everywhere but the class proving that an edit leaves one draft and a promotion leaves none, because a deployment
     /// that maps the role would let any other class's draft reach a folder nothing else here maps.
     /// </param>
+    /// <param name="storesContentInObjectStorage">
+    /// Whether the composition selects the object backend for message content. Off by default, which is the deployment
+    /// that writes payloads into its own tables; a test about the second backend turns it on and gets the orchestrated
+    /// endpoint the fixture started.
+    /// </param>
     /// <returns>The composed services, which the caller owns and must dispose.</returns>
     internal static async Task<OrchestratedMailFathomServices> StartAsync(
         MailFathomOrchestrationFixture orchestration,
@@ -199,7 +205,8 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         SpamAssassinScannerProfile? spamScanner = null,
         ContactCollectionSettings? contactCollection = null,
         bool filesSentCopies = false,
-        bool keepsDrafts = false)
+        bool keepsDrafts = false,
+        bool storesContentInObjectStorage = false)
     {
         var builder = new HostApplicationBuilder();
         var account = new SyntheticMailAccount(
@@ -397,6 +404,18 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             _ => new PostgresConnectionSettings(orchestration.DatabaseConnectionString, null, null),
             PostgresTextSearchConfiguration.Default,
             MailAnsweringBudget.Default);
+
+        // The object backend, registered exactly the way a composition root registers it — which is what makes its
+        // presence the selection: the content store asks the container for an object store and writes to the database
+        // when it is absent, so a harness that composed one unconditionally would leave the database backend untested.
+        if (storesContentInObjectStorage)
+        {
+            builder.Services.AddSingleton<IObjectStorageCredentialSource,
+                OrchestratedObjectStorage.StatedCredentialSource>();
+            builder.Services.AddObjectStorage(
+                OrchestratedObjectStorage.EndpointAt(orchestration.ObjectStorage),
+                configuredTrustAnchor: null);
+        }
         // Registered by a composition root for the reason the generator above is: AddInfrastructure registers neither
         // the embedding generation nor the backfill, because both resolve a text embedding generator an instance that
         // declared no chain does not have. This suite declared one, so it registers both.

@@ -5,6 +5,7 @@
 using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text;
+using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Common;
 using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration;

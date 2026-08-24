@@ -1,6 +1,6 @@
 # Email content
 
-<!-- describes: backend/src/Application/EmailContent/**, backend/src/Application/Emails/GetEmailContent/**, backend/src/Application/Emails/DownloadAttachment/**, backend/src/Infrastructure/Mail/Mime/**, backend/src/Infrastructure/Mail/Attachments/**, backend/src/Infrastructure/Persistence/Emails/**, backend/src/Host/Api/EmailAttachmentDownloadEndpoint.cs, backend/src/Host/Configuration/Persistence/AttachmentDownloadOptions.cs -->
+<!-- describes: backend/src/Application/EmailContent/**, backend/src/Application/Emails/GetEmailContent/**, backend/src/Application/Emails/DownloadAttachment/**, backend/src/Infrastructure/Mail/Mime/**, backend/src/Infrastructure/Mail/Attachments/**, backend/src/Infrastructure/Persistence/Emails/**, backend/src/Infrastructure/ObjectStorage/**, backend/src/Host/Api/EmailAttachmentDownloadEndpoint.cs, backend/src/Host/Configuration/Persistence/AttachmentDownloadOptions.cs -->
 
 MailFathom serves the content of the emails one call names, from its local copy. `EmailContentReader` is the second read
 use case: it takes the stable local identifiers a listing returned and answers for each of them with normalized headers,
@@ -501,6 +501,67 @@ Both are per-email outcomes rather than raised failures, so neither ends a call.
 request itself — a count outside the bound, a repeated identifier, or text that names no email at all — because none of
 those leaves an email to report an outcome against.
 
+## Where a payload is kept
+
+Raw MIME lives in one of two places, and which one is a deployment's decision rather than a message's. A deployment that
+configures nothing keeps every payload in the PostgreSQL table beside the metadata; one that configures
+`ContentStorage:ObjectStorage` writes new payloads to that S3-compatible endpoint instead.
+[Configuration](../operations/configuration-runtime.md) holds the keys.
+
+**The setting decides only where the next write goes.** Every content row states which store holds its own payload, so
+turning the object backend on moves nothing and turning it off re-encodes nothing: mail written to the database stays
+readable from the database, and mail written to an endpoint stays readable from that endpoint. A read resolves the
+backend from the row it is reading rather than from the setting, which is what makes both true at once.
+
+What a reader of the schema sees is one shape per row across all four tables that hold raw MIME —
+`email_message_contents`, `outgoing_email_contents`, `mail_draft_contents`, and `recurring_send_drafts`:
+
+- **`Backend`** names the store, `Database` or `ObjectStorage`. Its column default names the database, which is what
+  makes every row written before the discriminator existed read as the thing it is, and what keeps an ordinary
+  database-backed insert from having to state anything.
+- **`ObjectLocator`** carries the whole key an object was written under, and is empty for a database-backed row. Nothing
+  ever recomputes it — see below.
+- **The payload column** carries the bytes for a database-backed row and is empty for an object-backed one. A payload is
+  never in both places: a second copy would be mail nobody agreed to keep.
+- **The byte length and the SHA-256 digest are on the row either way**, so the integrity check a read performs is the
+  same one under both backends. Under the object backend the digest is also what the endpoint was asked to verify the
+  upload against, so a row carrying it describes an object the endpoint agreed it received intact rather than one this
+  process merely believes it sent.
+
+A check constraint pairs those three, so a row that named the object backend and carried no locator, or named the
+database and carried no bytes, cannot be written at all.
+
+### The object write happens before the transaction, and every placement mints its own key
+
+Writing to an endpoint is a remote call, and
+[ADR 0001](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md)
+does not allow one inside a database transaction — a network that stalls would otherwise hold a transaction open for as
+long as it stalled. So a write is two acts rather than one. The payload is **placed** first, before the caller opens its
+unit of work, and what comes back says where it went; the caller then passes that along to the write that stages the
+row, inside its transaction, alongside everything else that has to commit with it.
+
+Two consequences are worth reading off that, because both are observable:
+
+- **Every placement mints a fresh key.** Nothing derives a key from the identity of the row that will point at it,
+  because at the moment the key is minted that row does not exist yet. A draft revised three times therefore leaves
+  three objects and one row pointing at the newest, and re-synchronizing a message already stored points its row at a
+  newer object rather than overwriting the one under it.
+- **A replay writes no second object.** The persistence layer replays a whole unit of work when a concurrent writer wins
+  the row, and the placement happened before that unit of work began — so every attempt stages the same locator over the
+  same object, and the endpoint sees one write however many attempts the commit took.
+
+**An object the row stopped pointing at is left where it is.** Nothing here deletes one, which is a deliberate omission
+rather than an oversight: what removes content is erasure, retention, and the data-subject workflows those belong to,
+and a store that quietly dropped a payload the moment a row moved would decide that question in the wrong place.
+
+### Losing the endpoint is a readiness condition
+
+A deployment that stored mail through an endpoint and then lost the configuration keeps those rows intact and
+unreadable, and nothing about a listing or a timeline says so — both answer from the database. The readiness probe is
+what says so instead, reporting unhealthy while such rows exist and no endpoint is named, and becoming ready by itself
+once one is. [Health endpoints](../operations/health-endpoints.md) records both halves of that: the check that asks the
+configured bucket whether it answers, and the check that asks the stored content whether a bucket is still needed.
+
 ## Where the pieces live
 
 - `MailFathom.Application.Emails.GetEmailContent` — the use case, its request, its per-email outcome and failure, and the
@@ -511,9 +572,10 @@ those leaves an email to report an outcome against.
   earlier attempt may already have begun transmitting. A repeated send's draft is a third kind, written once beside the
   declaration each occasion is composed from. A draft's message is the fourth and the one exception to writing once: it
   is stored against the draft and **rewritten** with each revision, because what it holds is a message somebody is
-  still editing rather than bytes a later attempt has to reproduce. One port is what keeps raw MIME behind one seam, so
-  the move to object storage this port was shaped for stays one adapter's rather than four. [Mail
-  delivery](mail-delivery.md) holds why the send's write may never be repeated and why the draft's must be.
+  still editing rather than bytes a later attempt has to reproduce. One port is what keeps raw MIME behind one seam,
+  which is what let the object backend arrive as one adapter's concern rather than four — no use case above it knows
+  which store answered. [Mail delivery](mail-delivery.md) holds why the send's write may never be repeated and why the
+  draft's must be, and [where a payload is kept](#where-a-payload-is-kept) holds what the two backends are.
 - `MailFathom.Application.EmailContent.Rendering` — the renderer port, the body representations with their bounds, and
   the headers.
 - `MailFathom.Application.EmailContent.Repair` — the repair-request port, the request it carries, and the defect that

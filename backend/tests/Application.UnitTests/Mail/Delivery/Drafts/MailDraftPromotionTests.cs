@@ -41,7 +41,7 @@ public sealed class MailDraftPromotionTests
         // Arrange
         var harness = Harness();
         var draft = await SaveAsync(harness, "the message as written");
-        var contentStore = Substitute.For<IEmailContentStore>();
+        var contentStore = ContentStores.Substituted();
         var promotion = PromotionOver(harness, contentStore: contentStore);
 
         // Act
@@ -54,7 +54,7 @@ public sealed class MailDraftPromotionTests
         await contentStore.Received(1).SaveOutgoingContentAsync(
             Arg.Any<IPersistenceSession>(),
             record.Id,
-            Arg.Is<ReadOnlyMemory<byte>>(mime => mime.ToArray().SequenceEqual(stored)),
+            Arg.Any<PlacedEmailContent>(),
             Arg.Any<CancellationToken>());
         Assert.Equal(record.Id, harness.Drafts.Peek(draft.Id)!.PromotedTo);
     }
@@ -464,7 +464,7 @@ public sealed class MailDraftPromotionTests
 
         var outbox = new MailOutbox(
             store,
-            contentStore ?? Substitute.For<IEmailContentStore>(),
+            contentStore ?? ContentStores.Substituted(),
             retryPolicy,
             new MailOutboxSignal(capacity: 8),
             Substitute.For<IJobStore>(),

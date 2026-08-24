@@ -136,7 +136,8 @@ public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationF
                     await scope.GetRequiredService<IEmailContentStore>().SaveContentAsync(
                         abandonedSession,
                         storedEmailId,
-                        new RemoteEmailContent(occurrenceId, abandonedRawMime),
+                        occurrenceId,
+                        PlacedEmailContent.InDatabase(abandonedRawMime),
                         token);
                 }
 
@@ -428,7 +429,8 @@ public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationF
             (scope, session, token) => scope.GetRequiredService<IEmailContentStore>().SaveContentAsync(
                 session,
                 storedEmailId,
-                new RemoteEmailContent(occurrenceId, rawMime),
+                occurrenceId,
+                PlacedEmailContent.InDatabase(rawMime),
                 token),
             cancellationToken);
 

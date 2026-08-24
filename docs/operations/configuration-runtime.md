@@ -58,11 +58,16 @@ writing them into a bucket still runs every metadata row, every index, and every
 records the whole decision.
 
 An absent section is `Database`, which is what a deployment that has never heard of this setting is already running.
-**What selecting `ObjectStorage` does today is reach the endpoint**: the client is composed, its transport and its trust
-are established, and the readiness probe asks the bucket on every scrape whether it is reachable, readable, and
-writable. Payloads are still written to and read from the database, so an instance that selects the backend stores mail
-exactly where an instance that did not would, and an operator gains a dependency to watch rather than a new place their
-mail lives.
+Selecting `ObjectStorage` composes the client, establishes its transport and its trust, has the readiness probe ask the
+bucket on every scrape whether it is reachable, readable, and writable, and writes every payload from then on to that
+bucket rather than into PostgreSQL.
+
+**It decides only where the next write goes.** Every stored payload's own row names the store holding it, so turning the
+setting on moves nothing already stored and turning it back off re-encodes nothing: mail written to the database stays
+readable from the database, and mail written to a bucket stays readable from that bucket. The one thing an operator owes
+that arrangement is the endpoint itself — a deployment holding mail in a bucket it no longer names reports unready until
+the block comes back, which [health endpoints](health-endpoints.md) describes and [email
+content](../features/email-content.md#where-a-payload-is-kept) reads off the schema.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |

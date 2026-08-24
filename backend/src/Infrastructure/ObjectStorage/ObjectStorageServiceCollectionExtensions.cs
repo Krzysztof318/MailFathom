@@ -27,7 +27,7 @@ namespace MailFathom.Infrastructure.ObjectStorage;
 /// </remarks>
 public static class ObjectStorageServiceCollectionExtensions
 {
-    /// <summary>Registers the object-storage transport, its client, its telemetry, and its readiness probe.</summary>
+    /// <summary>Registers the object-storage transport, its client, its telemetry, its readiness probe, and the content store that writes through it.</summary>
     /// <param name="services">The service collection the registrations are added to.</param>
     /// <param name="endpoint">Where the endpoint is, which bucket it holds, and how a request to it is addressed and bounded.</param>
     /// <param name="configuredTrustAnchor">The block referencing the private authority that signed the endpoint's certificate, or <see langword="null" /> for one the platform already trusts.</param>
@@ -53,8 +53,13 @@ public static class ObjectStorageServiceCollectionExtensions
         services.AddHostedService(provider => provider.GetRequiredService<ObjectStorageTransportTrust>());
 
         services.AddSingleton<ObjectStorageTelemetry>();
+        services.AddSingleton<ObjectStorageOperationRunner>();
         services.AddSingleton<IObjectStorageClientFactory, S3ObjectStorageClientFactory>();
         services.AddSingleton<IObjectStorageEndpointProbe, S3ObjectStorageEndpointProbe>();
+
+        // Registered here and nowhere else, which is what makes the presence of this service the deployment's selection
+        // of the object backend: the content store asks the container for it and writes to the database when it is absent.
+        services.AddSingleton<IEmailContentObjectStore, S3EmailContentObjectStore>();
 
         AddObjectStorageTransport(services);
 

@@ -81,7 +81,7 @@ Kestrel's own default address.
 | Probe | Path | Consults | A failure means |
 |---|---|---|---|
 | Startup | `/started` | The host's own startup gates: every secret reference resolved, the database schema verified, the deployment's one owner resolved, and — only where its own switch is on — the spam scanner naming the corpus it scores under | The process has not finished coming up; the grace period continues |
-| Readiness | `/health` | The dependencies a request needs: the database, each declared AI provider, and — only where its own switch is on — the personal-data analyzer and the object-storage bucket | The instance stops receiving traffic; it is not restarted |
+| Readiness | `/health` | The dependencies a request needs: the database, each declared AI provider, and — only where its own switch is on — the personal-data analyzer and the object-storage bucket, or, where no endpoint is configured, whether stored content points into one anyway | The instance stops receiving traffic; it is not restarted |
 | Liveness | `/alive` | Process-local state only | The container is restarted |
 
 One endpoint cannot answer all three, because the three have different consequences. Wiring liveness to the readiness
@@ -145,6 +145,23 @@ catch, which is what
 § 1 decided; the host comes up, reports unready, and becomes ready by itself once the bucket answers. Each transition is
 written to the log at `Error` and `Information` as the analyzer's are, with the classified failure behind it, because
 the response carries no reason and the message names the configuration key rather than the address.
+
+**The opposite case has a check of its own, and it is on where that one is off.** A deployment that selected the object
+backend, stored messages through it, and then lost the configuration keeps every one of those rows intact and
+unreadable — and nothing else notices, because the mailbox, the timeline, and the metadata all answer from the database.
+So where `ContentStorage` names no endpoint at all, an `object-backed-content` check joins the readiness probe instead,
+asks the four content tables on each scrape whether any row names the object backend, and reports **unhealthy** when one
+does. The two are never both registered: where an endpoint is named, the check above already asks the sharper question,
+about the endpoint rather than about the configuration.
+
+It is a readiness condition rather than a startup gate for the reason the bucket is one, and for a second: the question
+is asked of the database, so a host that answered it while composing would refuse to start against a database no
+migration had reached yet. A read that fails is reported as this check failing rather than answered as an absence,
+because a database nothing can be read from is not a deployment holding no object-backed content. The remedy is a
+configuration key rather than anything that can be done to the process, which is what the `Error` record says: restore
+the `ContentStorage:ObjectStorage` block the content was stored through, and the instance becomes ready by itself. **It
+reads no mail to find out** — the query asks which backend a row names and nothing about the message, the account, or
+the folder.
 
 **The owner gate refuses to start rather than reporting unready.** A mail account declared in configuration says
 nothing about whose mail it holds, so the deployment answers that by holding exactly one owner record for every

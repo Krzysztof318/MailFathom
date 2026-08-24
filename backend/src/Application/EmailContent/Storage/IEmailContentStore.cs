@@ -27,16 +27,53 @@ namespace MailFathom.Application.EmailContent.Storage;
 /// </remarks>
 public interface IEmailContentStore
 {
+    /// <summary>Puts one raw MIME payload wherever this deployment writes content next, before any unit of work is open.</summary>
+    /// <param name="kind">Which of the four payload kinds is being placed.</param>
+    /// <param name="rawMime">The raw RFC 822 bytes.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>Where the payload was put, and what was measured over it.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="rawMime" /> is empty.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>A caller calls this before it opens its unit of work, never inside one.</b> That is the whole reason the
+    /// placement is a step of its own: under the object backend this reaches the network, and a database transaction
+    /// may not be held open across a call to a remote store. Every caller here has a transaction open by the time it
+    /// reaches one of the write methods below, because the repository that mints the owning row's identity has already
+    /// run — so the only moment at which the object can legally be written is before all of it.
+    /// </para>
+    /// <para>
+    /// It is also what keeps a replay off the endpoint. <c>OptimisticConcurrencyRetryPolicy</c> repeats the caller's
+    /// whole unit of work, and this call sits outside what it repeats, so every attempt records the same placement over
+    /// the same object and no attempt writes bytes a second time.
+    /// </para>
+    /// <para>
+    /// A placement whose unit of work never commits — one abandoned, or one that resolved to a record already carrying
+    /// a payload — leaves an object nothing points at. That is the designed failure rather than a leak: no reader can
+    /// observe it, and reclamation removes it once it is older than the configured age floor.
+    /// </para>
+    /// <para>
+    /// Under the database backend this reaches no store at all. It measures the payload and hands it back, so that
+    /// backend keeps committing content and metadata in one transaction exactly as it always has.
+    /// </para>
+    /// </remarks>
+    Task<PlacedEmailContent> PlaceContentAsync(
+        EmailContentKind kind,
+        ReadOnlyMemory<byte> rawMime,
+        CancellationToken cancellationToken);
+
     /// <summary>Saves raw MIME content idempotently for one locally stored email.</summary>
     /// <param name="session">The explicit persistence session this content write participates in.</param>
     /// <param name="storedEmailId">The stable local identifier of the corresponding metadata row.</param>
-    /// <param name="content">The raw content to store.</param>
+    /// <param name="occurrenceId">The remote occurrence the payload was fetched from, which the row is checked against.</param>
+    /// <param name="placedContent">What <see cref="PlaceContentAsync" /> answered for this payload.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>A task that completes after durable storage.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the row under <paramref name="storedEmailId" /> mirrors a different occurrence.</exception>
     Task SaveContentAsync(
         IPersistenceSession session,
         StoredEmailId storedEmailId,
-        RemoteEmailContent content,
+        EmailOccurrenceId occurrenceId,
+        PlacedEmailContent placedContent,
         CancellationToken cancellationToken);
 
     /// <summary>Reads back the raw MIME stored for one locally stored email, with what was recorded about it.</summary>
@@ -57,11 +94,10 @@ public interface IEmailContentStore
     /// <summary>Saves the raw MIME one outgoing email will be transmitted as, once and only once.</summary>
     /// <param name="session">The explicit persistence session this content write participates in.</param>
     /// <param name="outgoingEmailId">The record of the send this message was composed for.</param>
-    /// <param name="rawMime">The composed RFC 822 bytes.</param>
+    /// <param name="placedContent">What <see cref="PlaceContentAsync" /> answered for this payload.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>A task that completes after durable storage.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="rawMime" /> is empty.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="placedContent" /> is <see langword="null" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when no outgoing record carries <paramref name="outgoingEmailId" />.</exception>
     /// <remarks>
     /// <para>
@@ -79,7 +115,7 @@ public interface IEmailContentStore
     Task SaveOutgoingContentAsync(
         IPersistenceSession session,
         OutgoingEmailId outgoingEmailId,
-        ReadOnlyMemory<byte> rawMime,
+        PlacedEmailContent placedContent,
         CancellationToken cancellationToken);
 
     /// <summary>Reads back the raw MIME stored for one outgoing email, with what was recorded about it.</summary>
@@ -99,11 +135,10 @@ public interface IEmailContentStore
     /// <summary>Saves the draft every occurrence of one recurring send is composed from, once and only once.</summary>
     /// <param name="session">The explicit persistence session this content write participates in.</param>
     /// <param name="recurringSendId">The declaration the draft belongs to.</param>
-    /// <param name="draftMime">The composed RFC 822 bytes the occurrences are made from.</param>
+    /// <param name="placedContent">What <see cref="PlaceContentAsync" /> answered for this payload.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>A task that completes after durable storage.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="draftMime" /> is empty.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="placedContent" /> is <see langword="null" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when no declaration carries <paramref name="recurringSendId" />.</exception>
     /// <remarks>
     /// A draft is RFC 822 and therefore lives here rather than in a table of its own, which is what keeps every piece
@@ -114,7 +149,7 @@ public interface IEmailContentStore
     Task SaveRecurringSendDraftAsync(
         IPersistenceSession session,
         RecurringSendId recurringSendId,
-        ReadOnlyMemory<byte> draftMime,
+        PlacedEmailContent placedContent,
         CancellationToken cancellationToken);
 
     /// <summary>Reads back the draft stored for one recurring send.</summary>
@@ -132,11 +167,10 @@ public interface IEmailContentStore
     /// <summary>Saves the raw MIME one revision of a draft is held as, replacing whatever the previous revision stored.</summary>
     /// <param name="session">The explicit persistence session this content write participates in.</param>
     /// <param name="draftId">The draft this message is the current revision of.</param>
-    /// <param name="rawMime">The composed RFC 822 bytes.</param>
+    /// <param name="placedContent">What <see cref="PlaceContentAsync" /> answered for this payload.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>A task that completes after durable storage.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="rawMime" /> is empty.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="placedContent" /> is <see langword="null" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when no draft is held under <paramref name="draftId" />.</exception>
     /// <remarks>
     /// <para>
@@ -154,7 +188,7 @@ public interface IEmailContentStore
     Task SaveMailDraftContentAsync(
         IPersistenceSession session,
         MailDraftId draftId,
-        ReadOnlyMemory<byte> rawMime,
+        PlacedEmailContent placedContent,
         CancellationToken cancellationToken);
 
     /// <summary>Reads back the raw MIME stored for the current revision of one draft.</summary>

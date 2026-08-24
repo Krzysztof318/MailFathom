@@ -61,7 +61,7 @@ public sealed class RecurringMailSubmissionTests
         await contentStore.Received(1).SaveRecurringSendDraftAsync(
             stagedSessions.Single(),
             declaration.Id,
-            ComposedMime,
+            Arg.Is<PlacedEmailContent>(placed => placed!.RawMime.ToArray().SequenceEqual(ComposedMime.ToArray())),
             Arg.Any<CancellationToken>());
     }
 
@@ -130,7 +130,7 @@ public sealed class RecurringMailSubmissionTests
         await contentStore.DidNotReceiveWithAnyArgs().SaveRecurringSendDraftAsync(
             default!,
             default,
-            default,
+            default!,
             TestContext.Current.CancellationToken);
     }
 
@@ -263,6 +263,75 @@ public sealed class RecurringMailSubmissionTests
         Assert.Equal(MailFathomPermission.MailSend, refusal.RequiredPermission);
     }
 
+    /// <summary>
+    /// The draft is handed over before anything opens a unit of work, which is what makes the object backend legal
+    /// here: joining a session is what opens its transaction, so a placement made while no session exists is one made
+    /// with no transaction open across it.
+    /// </summary>
+    [Fact]
+    public async Task DeclareAsync_ARepetitionThisSystemCanRun_PlacesTheDraftBeforeAnyPersistenceSessionExists()
+    {
+        // Arrange
+        var store = new InMemoryRecurringSendStore(new FakeTimeProvider(Declared));
+        var stagedSessions = new List<IPersistenceSession>();
+        var submission = SubmissionOver(store, out var contentStore, stagedSessions: stagedSessions);
+        var sessionsOpenWhenPlaced = -1;
+        contentStore
+            .PlaceContentAsync(
+                Arg.Any<EmailContentKind>(),
+                Arg.Any<ReadOnlyMemory<byte>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                sessionsOpenWhenPlaced = stagedSessions.Count;
+
+                return Task.FromResult(PlacedEmailContent.InDatabase(call.ArgAt<ReadOnlyMemory<byte>>(1)));
+            });
+
+        // Act
+        await submission.DeclareAsync(
+            RequestFor("Daily at 09:00 Europe/Warsaw"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(0, sessionsOpenWhenPlaced);
+        Assert.Single(stagedSessions);
+    }
+
+    /// <summary>
+    /// A conflicted attempt replays the whole unit of work, and the placement is not part of it. Every attempt stages
+    /// the same locator over the same object, so the endpoint sees one write however many times the commit is repeated.
+    /// </summary>
+    [Fact]
+    public async Task DeclareAsync_APersistenceConflictThenACommit_PlacesTheDraftOnceAcrossBothAttempts()
+    {
+        // Arrange
+        var store = new InMemoryRecurringSendStore(new FakeTimeProvider(Declared));
+        var stagedSessions = new List<IPersistenceSession>();
+        var submission = SubmissionOver(
+            store,
+            out var contentStore,
+            stagedSessions: stagedSessions,
+            conflictingAttempts: 1);
+
+        // Act
+        var declaration = await submission.DeclareAsync(
+            RequestFor("Daily at 09:00 Europe/Warsaw"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(2, stagedSessions.Count);
+        await contentStore.Received(1).PlaceContentAsync(
+            EmailContentKind.RecurringSendDraft,
+            Arg.Any<ReadOnlyMemory<byte>>(),
+            Arg.Any<CancellationToken>());
+        await contentStore.Received(2).SaveRecurringSendDraftAsync(
+            Arg.Any<IPersistenceSession>(),
+            declaration.Id,
+            Arg.Any<PlacedEmailContent>(),
+            Arg.Any<CancellationToken>());
+    }
+
     private static RecurringMailSubmissionRequest RequestFor(string schedule) => new()
     {
         Account = MailAccountSelector.For(Account),
@@ -277,18 +346,23 @@ public sealed class RecurringMailSubmissionTests
         IRecurringSendStore recurringSends,
         out IEmailContentStore contentStore,
         AccessAuthorization? authorization = null,
-        List<IPersistenceSession>? stagedSessions = null)
+        List<IPersistenceSession>? stagedSessions = null,
+        int conflictingAttempts = 0)
     {
-        contentStore = Substitute.For<IEmailContentStore>();
+        contentStore = ContentStores.Substituted();
 
         var accountCatalog = Substitute.For<IDeploymentMailAccountCatalog>();
         accountCatalog.ServedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
 
+        var conflictsLeft = conflictingAttempts;
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ =>
         {
             var session = Substitute.For<IPersistenceSession>();
-            session.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
+            session.CommitAsync(Arg.Any<CancellationToken>()).Returns(
+                conflictsLeft-- > 0
+                    ? PersistenceCommitResult.ConcurrencyConflict
+                    : PersistenceCommitResult.Committed);
             stagedSessions?.Add(session);
 
             return session;

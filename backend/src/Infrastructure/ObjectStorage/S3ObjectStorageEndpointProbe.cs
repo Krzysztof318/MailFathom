@@ -2,12 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Diagnostics.CodeAnalysis;
 using Amazon.S3.Model;
-using MailFathom.Application.Resilience;
 using MailFathom.Infrastructure.Observability;
-using MailFathom.Infrastructure.Resilience;
-using Microsoft.Extensions.Hosting;
 
 namespace MailFathom.Infrastructure.ObjectStorage;
 
@@ -25,10 +21,10 @@ namespace MailFathom.Infrastructure.ObjectStorage;
 /// that a replica's own object had not yet been removed by another replica running the same probe.
 /// </para>
 /// <para>
-/// Each of the three runs under the <see cref="OutboundDependency.ObjectStorageInvocation" /> pipeline, so a probe is
-/// bounded and retried on exactly the terms every other call to the endpoint is, and one slow endpoint sheds probes
-/// rather than holding a scrape open. They run one after another rather than together for the reason the executor
-/// enforces: one logical operation is retried at exactly one layer, and re-entering the class on one flow is refused.
+/// Each of the three goes through <see cref="ObjectStorageOperationRunner" />, so a probe is bounded, retried, and
+/// classified on exactly the terms every other call to the endpoint is, and one slow endpoint sheds probes rather than
+/// holding a scrape open. They run one after another rather than together for the reason the executor enforces: one
+/// logical operation is retried at exactly one layer, and re-entering the class on one flow is refused.
 /// </para>
 /// </remarks>
 internal sealed class S3ObjectStorageEndpointProbe : IObjectStorageEndpointProbe
@@ -42,31 +38,21 @@ internal sealed class S3ObjectStorageEndpointProbe : IObjectStorageEndpointProbe
     private const string ProbeRelativeKey = ".mailfathom/readiness-probe";
 
     private readonly IObjectStorageClientFactory clientFactory;
-    private readonly OutboundOperationExecutor operationExecutor;
-    private readonly ObjectStorageTelemetry telemetry;
-    private readonly IHostApplicationLifetime applicationLifetime;
+    private readonly ObjectStorageOperationRunner operationRunner;
 
     /// <summary>Initializes the probe.</summary>
     /// <param name="clientFactory">Opens the client the probe's three requests are made through.</param>
-    /// <param name="operationExecutor">Runs each request under the object-storage resilience budget.</param>
-    /// <param name="telemetry">Publishes what each request cost and what stopped it.</param>
-    /// <param name="applicationLifetime">Supplies the stopping token that tells a shutdown from a caller giving up.</param>
+    /// <param name="operationRunner">Runs each request under the object-storage budget and classifies what stopped it.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public S3ObjectStorageEndpointProbe(
         IObjectStorageClientFactory clientFactory,
-        OutboundOperationExecutor operationExecutor,
-        ObjectStorageTelemetry telemetry,
-        IHostApplicationLifetime applicationLifetime)
+        ObjectStorageOperationRunner operationRunner)
     {
         ArgumentNullException.ThrowIfNull(clientFactory);
-        ArgumentNullException.ThrowIfNull(operationExecutor);
-        ArgumentNullException.ThrowIfNull(telemetry);
-        ArgumentNullException.ThrowIfNull(applicationLifetime);
+        ArgumentNullException.ThrowIfNull(operationRunner);
 
         this.clientFactory = clientFactory;
-        this.operationExecutor = operationExecutor;
-        this.telemetry = telemetry;
-        this.applicationLifetime = applicationLifetime;
+        this.operationRunner = operationRunner;
     }
 
     /// <inheritdoc />
@@ -77,9 +63,8 @@ internal sealed class S3ObjectStorageEndpointProbe : IObjectStorageEndpointProbe
 
         using var openedClient = await this.clientFactory.OpenAsync(cancellationToken);
 
-        await this.RunAsync(
+        await this.operationRunner.RunAsync(
             ObjectStorageTelemetry.ListOperationName,
-            payloadByteLength: null,
             attemptToken => openedClient.Client.ListObjectsV2Async(
                 new ListObjectsV2Request
                 {
@@ -88,11 +73,11 @@ internal sealed class S3ObjectStorageEndpointProbe : IObjectStorageEndpointProbe
                     MaxKeys = 1,
                 },
                 attemptToken),
+            _ => null,
             cancellationToken);
 
-        await this.RunAsync(
+        await this.operationRunner.RunAsync(
             ObjectStorageTelemetry.PutOperationName,
-            payloadByteLength: 0,
             attemptToken => openedClient.Client.PutObjectAsync(
                 new PutObjectRequest
                 {
@@ -105,102 +90,15 @@ internal sealed class S3ObjectStorageEndpointProbe : IObjectStorageEndpointProbe
                     InputStream = Stream.Null,
                 },
                 attemptToken),
+            _ => 0,
             cancellationToken);
 
-        await this.RunAsync(
+        await this.operationRunner.RunAsync(
             ObjectStorageTelemetry.DeleteOperationName,
-            payloadByteLength: null,
             attemptToken => openedClient.Client.DeleteObjectAsync(
                 new DeleteObjectRequest { BucketName = endpoint.Bucket, Key = probeKey },
                 attemptToken),
+            _ => null,
             cancellationToken);
-    }
-
-    /// <summary>Runs one request under the resilience budget, measures it, and reports what stopped it.</summary>
-    /// <remarks>
-    /// A caller's own cancellation is recorded and rethrown rather than translated, so a scrape the caller abandoned
-    /// stays what it was: a fact about the caller, not a bucket that failed.
-    /// </remarks>
-    [SuppressMessage(
-        "Design",
-        "CA1031:Do not catch general exception types",
-        Justification = "Whatever stopped the request, it is classified into what an operator acts on and rethrown; narrowing the catch would let an unrecognized failure reach a readiness scrape uncoded.")]
-    private async Task RunAsync<TAnswer>(
-        string operation,
-        long? payloadByteLength,
-        Func<CancellationToken, Task<TAnswer>> request,
-        CancellationToken cancellationToken)
-    {
-        using var measurement = this.telemetry.Begin(operation);
-
-        try
-        {
-            await this.operationExecutor.ExecuteAsync(
-                OutboundDependency.ObjectStorageInvocation,
-                attemptToken => this.AttemptAsync(request, attemptToken, cancellationToken),
-                cancellationToken);
-
-            measurement.Succeeded(payloadByteLength);
-        }
-        catch (Exception failure)
-        {
-            // An attempt has already classified what it met, so its verdict is read rather than derived a second time
-            // from a wrapper the classifier would not recognize.
-            var classification = failure is ObjectStorageUnavailableException alreadyClassified
-                ? alreadyClassified.Failure
-                : ObjectStorageFailureClassifier.Classify(
-                    failure,
-                    cancellationToken,
-                    this.applicationLifetime.ApplicationStopping);
-
-            measurement.Failed(classification);
-
-            if (failure is ObjectStorageUnavailableException
-                || classification == ObjectStorageFailure.CallerCancelled)
-            {
-                throw;
-            }
-
-            throw ObjectStorageUnavailableException.From(classification, failure);
-        }
-    }
-
-    /// <summary>Makes one attempt and classifies whatever ended it, before the pipeline decides whether to repeat it.</summary>
-    /// <remarks>
-    /// The translation belongs inside the attempt rather than around the whole operation, because the retry and the
-    /// circuit breaker judge the exception an attempt threw: handed the AWS client's own type they would fall through to
-    /// the transport rules, which match neither a <c>5xx</c> nor a <c>429</c> the endpoint answered, and the configured
-    /// budget would collapse to a single attempt. Translating here is what makes the classification a caller reads and
-    /// the one the pipeline acts on the same value. <c>MailOAuthAccessTokenSource</c> translates inside its own attempt
-    /// for the same reason.
-    /// <para>
-    /// Cancellation passes through untouched, in all three of its shapes. An attempt cut by the pipeline's own timeout
-    /// is cancelled through <paramref name="attemptToken" />, and the timeout strategy recognizes that only as the
-    /// <see cref="OperationCanceledException" /> it raised; a translation here would leave it looking like a failure the
-    /// endpoint produced.
-    /// </para>
-    /// </remarks>
-    [SuppressMessage(
-        "Design",
-        "CA1031:Do not catch general exception types",
-        Justification = "Every failure an attempt can meet is classified into what the pipeline acts on; narrowing the catch would leave a class of them judged by the transport rules instead.")]
-    private async Task<TAnswer> AttemptAsync<TAnswer>(
-        Func<CancellationToken, Task<TAnswer>> request,
-        CancellationToken attemptToken,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await request(attemptToken);
-        }
-        catch (Exception failure) when (failure is not OperationCanceledException)
-        {
-            var classification = ObjectStorageFailureClassifier.Classify(
-                failure,
-                cancellationToken,
-                this.applicationLifetime.ApplicationStopping);
-
-            throw ObjectStorageUnavailableException.From(classification, failure);
-        }
     }
 }

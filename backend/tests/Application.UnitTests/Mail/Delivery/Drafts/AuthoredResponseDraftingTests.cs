@@ -7,7 +7,6 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
-using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Mail.Delivery.Addressing;
@@ -154,7 +153,7 @@ public sealed class AuthoredResponseDraftingTests
 
         var authoring = new StoredEmailResponseAuthoring(
             summaries,
-            Substitute.For<IEmailContentStore>(),
+            ContentStores.Substituted(),
             Substitute.For<IEmailContentRenderer>(),
             Substitute.For<IEmailAttachmentContentReader>(),
             Substitute.For<IEmailContentRepairRequestStore>(),

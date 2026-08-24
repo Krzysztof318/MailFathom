@@ -5,7 +5,6 @@
 using System.Text;
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
-using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Addressing;
@@ -613,7 +612,7 @@ public sealed class AuthoredMailSubmissionTests
             composer,
             new MailOutbox(
                 store,
-                Substitute.For<IEmailContentStore>(),
+                ContentStores.Substituted(),
                 new OptimisticConcurrencyRetryPolicy(
                     sessionFactory,
                     new PersistenceConcurrencyOptions(),

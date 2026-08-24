@@ -519,16 +519,16 @@ words, which is a cardinality rule as much as a privacy one.
 
 ### Reaching the object-storage endpoint
 
-A deployment that selected the object-storage content backend reaches a second remote party — today for readiness alone,
-since payloads are still written to and read from the database — and three instruments answer the three questions an
-operator has about one operation against it. They are published only where that backend is selected; an instance storing
-content in the database opens no transport and publishes none of this.
+A deployment that selected the object-storage content backend reaches a second remote party — for the readiness probe,
+and for every payload it stores and reads back — and three instruments answer the three questions an operator has about
+one operation against it. They are published only where that backend is selected; an instance storing content in the
+database opens no transport and publishes none of this.
 [`ContentStorage`](configuration-runtime.md#contentstorage) is where the backend is selected.
 
 `mailfathom.object_storage.operations` counts how much of it is happening,
 `mailfathom.object_storage.operation.duration` how long one operation took in seconds, and
 `mailfathom.object_storage.bytes` how many payload bytes it carried. The first two carry
-`mailfathom.object_storage.operation` — `list`, `put`, or `delete` — and `mailfathom.object_storage.outcome` as
+`mailfathom.object_storage.operation` — `list`, `put`, `get`, or `delete` — and `mailfathom.object_storage.outcome` as
 `succeeded` or `failed`; the size carries the operation alone, and an operation that carried no payload records nothing
 there rather than a zero that would read as a write that moved nothing. Both distributions are histograms rather than
 totals, for the reason the content store's are: what is acted on is the tail.

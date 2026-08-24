@@ -272,8 +272,8 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
             (scope, session, token) => scope.GetRequiredService<IEmailContentStore>().SaveContentAsync(
                 session,
                 erasedId,
-                new RemoteEmailContent(
-                    SyntheticEmail.OccurrenceIn(binding, ErasedUid),
+                SyntheticEmail.OccurrenceIn(binding, ErasedUid),
+                PlacedEmailContent.InDatabase(
                     SyntheticEmail.RawMimeOf("reconciliation-erasure", totalByteCount: 4096)),
                 token),
             cancellationToken);

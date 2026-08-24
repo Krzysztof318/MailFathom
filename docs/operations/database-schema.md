@@ -228,7 +228,16 @@ already serving:
 - **Index creation on a large table takes time proportional to the table.** Stop MailFathom, or accept that its writes
   wait, for the duration.
 
-The first release's script creates a schema from nothing, so neither applies to an empty database.
+- **A `CHECK` constraint added to a table that already holds rows is validated by scanning it.**
+  `AddContentStorageBackendAndObjectLocator` adds one to each of the four tables that hold raw MIME, so each is scanned
+  under `ACCESS EXCLUSIVE` before the migration commits. What the scan costs follows the row count rather than the mail
+  volume: the predicate asks which backend a row names and whether its payload column is null, and neither question
+  dereferences a payload PostgreSQL stored out of line. The columns the constraints are about are added without a
+  rewrite — a column default is recorded in the catalog rather than written into every row, which is what makes
+  `ADD COLUMN "Backend" … NOT NULL DEFAULT 'Database'` fast on a table of any size and what leaves every row written
+  before that column existed reading as the thing it is.
+
+The first release's script creates a schema from nothing, so none of these applies to an empty database.
 
 ## Ordering a deployment
 
@@ -283,6 +292,15 @@ That leaves two answers, and which one applies is decided before the upgrade rat
   `AddOwnerAccounts`**: a build older than that release cannot bind a folder for an account this deployment has never
   synchronized against a schema whose mail accounts require an owner, so rolling the image back leaves a deployment
   that serves the mail it holds and takes on no new mailbox. Restoring from the backup is the way back there.
+
+  **`AddContentStorageBackendAndObjectLocator` narrows it conditionally**, and which way depends on what the deployment
+  did rather than on the migration. A build older than that release reads a payload column it expects to be filled, and
+  a row written to the object backend leaves that column empty — so rolling the image back is a complete answer for a
+  deployment that configured no object endpoint and never wrote such a row, and is no answer at all for one that did.
+  The schema alone does not say which: `SELECT count(*) FROM email_message_contents WHERE "Backend" <> 'Database'`, and
+  the same over `outgoing_email_contents`, `mail_draft_contents`, and `recurring_send_drafts`, is the question to ask
+  before choosing. The running deployment answers it too — the `object-backed-content` readiness check reports the same
+  fact, as [health endpoints](health-endpoints.md) describes.
 
 ## What a release records
 
