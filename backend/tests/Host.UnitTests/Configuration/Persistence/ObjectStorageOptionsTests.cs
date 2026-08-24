@@ -46,8 +46,9 @@ public sealed class ObjectStorageOptionsTests
 
     /// <summary>
     /// The message is asserted rather than only the key, because the two address rules report under the same key and a
-    /// value that reaches the wrong one would otherwise satisfy this test. <c>objects.example.test:9000</c> is the trap:
-    /// it parses absolutely, as an opaque URI whose scheme is the host name, so it fails the https rule instead.
+    /// value that reaches the wrong one would otherwise satisfy this test. Both inputs here are genuinely relative:
+    /// a phrase carrying a space parses as no URI at all, and a host with a path and no scheme parses as a relative
+    /// reference. The values that parse absolutely under the wrong scheme belong to the test below.
     /// </summary>
     [Theory]
     [InlineData("not an address")]

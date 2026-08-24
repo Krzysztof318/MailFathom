@@ -50,6 +50,19 @@ internal sealed class ContentStorageOptions : IValidatableObject
     /// </remarks>
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
+        // The binder converts a bare number onto an enum without asking whether any member carries it, and
+        // ErrorOnUnknownConfiguration does not catch that: it rejects unknown keys and failed conversions, and this
+        // conversion succeeds. An undefined value is not the object-storage backend, so the block beneath it would go
+        // unjudged and the deployment would write payloads to a database the operator did not select.
+        if (!Enum.IsDefined(this.Backend))
+        {
+            yield return new ValidationResult(
+                $"{SectionName}:{nameof(this.Backend)} — '{(int)this.Backend}' names no backend; state one of {string.Join(", ", Enum.GetNames<ContentStorageBackend>())}.",
+                [nameof(this.Backend)]);
+
+            yield break;
+        }
+
         if (!this.IsObjectStorageSelected)
         {
             yield break;

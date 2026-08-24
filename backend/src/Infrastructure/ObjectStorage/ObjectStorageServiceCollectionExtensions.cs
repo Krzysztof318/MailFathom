@@ -18,9 +18,11 @@ namespace MailFathom.Infrastructure.ObjectStorage;
 /// <c>AddInfrastructure</c>'s, so a suite that never selects the backend never has to supply its inputs.
 /// </para>
 /// <para>
-/// The endpoint is composed by the caller because it comes from configuration and this boundary binds none, and the
-/// credential source is supplied for the same reason: references, schemes, and resolution rules stay in the composition
-/// root, and what crosses is material with a defined lifetime.
+/// The endpoint is composed by the caller because it comes from configuration and this boundary binds none. The
+/// credential source is not a parameter at all: the composition root registers its own implementation of
+/// <see cref="IObjectStorageCredentialSource" /> as a separate singleton, because references, schemes, and resolution
+/// rules stay there and what crosses this boundary is material with a defined lifetime. So this method registers what
+/// consumes the credentials and never what produces them.
 /// </para>
 /// </remarks>
 public static class ObjectStorageServiceCollectionExtensions

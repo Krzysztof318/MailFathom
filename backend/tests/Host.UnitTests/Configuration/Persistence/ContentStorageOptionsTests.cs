@@ -72,6 +72,29 @@ public sealed class ContentStorageOptionsTests
         Assert.Contains(results, result => Names(result, nameof(ObjectStorageOptions.SecretAccessKey)));
     }
 
+    /// <summary>
+    /// A bare number binds onto the enum whether or not a member carries it, and an undefined value is not the
+    /// object-storage backend, so the block beneath it would go unjudged and the deployment would quietly write to the
+    /// database an operator did not select.
+    /// </summary>
+    [Fact]
+    public void Validate_ABackendNoMemberCarries_FailsStartupNamingTheKey()
+    {
+        // Arrange
+        var options = new ContentStorageOptions { Backend = (ContentStorageBackend)9 };
+
+        // Act
+        var results = Validate(options);
+
+        // Assert
+        var failure = Assert.Single(results);
+        Assert.Equal([nameof(ContentStorageOptions.Backend)], failure.MemberNames);
+        Assert.Contains("ContentStorage:Backend", failure.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains(nameof(ContentStorageBackend.Database), failure.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains(nameof(ContentStorageBackend.ObjectStorage), failure.ErrorMessage, StringComparison.Ordinal);
+        Assert.False(options.IsObjectStorageSelected);
+    }
+
     [Fact]
     public void Validate_AUsableObjectStorageBlock_IsAccepted()
     {

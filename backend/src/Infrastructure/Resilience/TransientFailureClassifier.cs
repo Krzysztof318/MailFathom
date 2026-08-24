@@ -150,9 +150,10 @@ internal sealed class TransientFailureClassifier : ITransientFailureClassifier
     /// classification only inside the adapter's translation, so the classification a caller sees and the one the retry
     /// acts on are the same value.
     /// <para>
-    /// A failure that reaches this untranslated is one raised before the adapter classified anything — a credential
-    /// reference that could not be resolved, for instance — and is terminal, because no repetition resolves a reference
-    /// an operator has to repair.
+    /// A failure that reaches this untranslated is one raised before the adapter classified anything, and it falls to
+    /// the same transport fallback every other family here ends on. So a socket, an I/O failure, or a timeout raised on
+    /// the way to the endpoint is still repeated, and everything else is terminal — a credential reference that could
+    /// not be resolved, for instance, because no repetition resolves a reference an operator has to repair.
     /// </para>
     /// </remarks>
     private static bool IsTransientObjectStorageFailure(Exception failure) => failure switch
