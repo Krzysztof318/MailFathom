@@ -370,12 +370,12 @@ what keeps that from being a rule somebody has to enforce by reading.
   what this application does not do.
 - **The credential lives in memory for the process's lifetime and nowhere else** — no file, no browser storage, no
   platform credential store — and it is not readable outside `Client.Backend`: a screen may ask whether somebody is
-  signed in, and the handler in the transport pipeline is the only thing that sees it. So the session ends when the
-  process does and the person signs in again.
+  signed in, and the handler in the transport pipeline is the only thing that sees it. No refresh token is asked for or
+  kept, so the session ends when the issued token does or when the process does, and the person signs in again.
 - **Where it may be kept instead is settled and not yet built**, and
   [ADR 0018](../../docs/decisions/0018-where-the-client-keeps-its-sign-in-credential.md) is the whole of it — read the
   record before writing any of it rather than deciding a store while building a screen. It keeps the credential only
-  where the operating system holds a secret for one user: the Credential Manager or the Data Protection API on Windows,
+  where the operating system holds a secret for one user: the Credential Manager on Windows,
   the login keychain on macOS, Secret Service over D-Bus on Linux, and `PasswordVault` on a mobile head, which Uno backs
   with the Keystore and the Keychain but marks unsupported on its Skia targets — which is why the desktop head reaches
   its three operating systems itself. **The browser head keeps nothing**, because every store a browser offers is scoped

@@ -64,7 +64,7 @@ Nothing else of the session goes into the store or beside it: not the session do
 
 **The desktop head reaches its operating system directly.** `net10.0-desktop` is one target framework running on Windows, Linux, and macOS, and Uno's own credential store does not reach it: `Windows.Security.Credentials.PasswordVault` is marked unsupported on the Skia targets, so a head that renders through Skia on every operating system cannot rest on it. There is no cross-platform store to take, and the port has three implementations:
 
-- **Windows** — the Credential Manager, holding an item under the logged-on user's profile. The Data Protection API at `DataProtectionScope.CurrentUser` protects to the same user account and is an acceptable alternative where the interop is not worth it; what this decision requires is the user-account boundary rather than one particular way of reaching it.
+- **Windows** — the Credential Manager, holding a generic credential under the logged-on user's profile. The Data Protection API at `DataProtectionScope.CurrentUser` is deliberately *not* offered as an alternative: it protects a value to the same user account but stores nothing, so taking it would leave whoever implements it choosing where the ciphertext is written, and the two locations nearest to hand are the two this record refuses below. The Credential Manager is protected under that profile by the same mechanism and answers where as well as how.
 - **macOS** — Keychain Services, as a generic password item in the login keychain, scoped to this application and not synchronized to iCloud.
 - **Linux** — the Secret Service API over D-Bus, which GNOME Keyring and KWallet implement, storing the item in the session's default collection. A session running no such service has no store, which is the case below rather than a licence to write a file.
 
@@ -80,7 +80,7 @@ A Linux session with no Secret Service, a keychain the person declines to unlock
 
 A stored credential the deployment then refuses is cleared, and the person meets the sign-in. The store holds a copy of something the deployment owns, so the deployment's answer wins; an item that cannot be read or does not parse is cleared for the same reason.
 
-The item is keyed by the deployment address that was signed into, so pointing the client elsewhere never presents one deployment's password to another. `DeploymentAddress` already ends the session when it moves; this makes the stored half follow it.
+The item is keyed by the deployment address that was signed into, so pointing the client elsewhere never presents one deployment's password to another — and **pointing the client elsewhere also clears the item for the address being left**, so at most one is held at any moment. `DeploymentAddress` already drops the in-memory copy when the address moves, and the stored half follows it rather than merely failing to match: the client points at one deployment at a time, so a credential for a deployment it is no longer pointed at is a password nothing will ever present, which is precisely what storage limitation refuses to keep. Somebody who moves between two deployments therefore signs in each time they move, which is the cost of not accumulating passwords for deployments nobody is using.
 
 ### What sign-out clears, and what it does not
 
@@ -114,12 +114,13 @@ Only material that fails that test reopens the question. Something bound to the 
 - Bad, because a Linux desktop with no keyring running is in the same position, and the client can only say so.
 - Bad, because a password at rest on a desktop is reachable by anything running as that person, and nothing here narrows that.
 - Bad, because sign-out looks like revocation and is not, so the interface carries a distinction a person did not ask for.
+- Bad, because somebody who moves between two deployments signs in on every move, since at most one item is held and pointing the client away clears the one it is leaving.
 
 ## Validation
 
 - `Client.Backend` declares the port and is the only thing that reads the credential back out of it. A head's implementation under `frontend/src/Client/Platforms/` reaches that platform's store and hands the value to nothing else, which is the arrangement `BrowserSignInRedirectListener` already has for a port of the same shape. Both halves are checked the same way — by review of what each side makes public, neither of which offers a credential to a screen.
 - The browser head implements the port by reporting that it has no store, rather than by registering nothing. A head with no implementation is a missing registration somewhere; a head with an implementation that answers "none" is a behaviour a test can assert.
-- `frontend/tests/Client.UnitTests` covers the paths this record creates: a store that is unavailable leaving the credential in memory, a deployment refusal clearing the stored item, sign-out clearing it, and the address key keeping one deployment's credential away from another.
+- `frontend/tests/Client.UnitTests` covers the paths this record creates: a store that is unavailable leaving the credential in memory, a deployment refusal clearing the stored item, sign-out clearing it, the address key keeping one deployment's credential away from another, and pointing the client elsewhere leaving no item behind for the address it left.
 - Review is what checks the per-head mechanism, because no analyzer distinguishes a Secret Service call from a file write. `frontend/src/AGENTS.md` states the outcome, so a change that puts the credential somewhere else contradicts an instruction file every session working in that stack loads.
 - `$check-docs-licenses` covers any component taken to reach an operating system's store, under [ADR 0016](0016-third-party-licence-obligations-per-artifact.md).
 
