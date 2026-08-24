@@ -102,6 +102,7 @@ public sealed class StoredContentMoveControl
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The move as it now stands, or <see langword="null" /> when this deployment has never been asked for one.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminOperate" />.</exception>
+    /// <exception cref="PersistenceConcurrencyConflictException">Thrown when this decision and a running pass's own commit raced past the bounded retries.</exception>
     /// <remarks>
     /// Nothing is cancelled. A pass that is running reads this decision between payloads, so it finishes the message it
     /// holds — already put and verified — and ends there rather than carrying the rest of what its ceilings allowed. A move that has finished is left as it is rather than
@@ -123,6 +124,7 @@ public sealed class StoredContentMoveControl
     /// <returns>The move as it now stands, or <see langword="null" /> when this deployment has never been asked for one.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the deployment configured no object-storage endpoint, which <see cref="IsAvailable" /> reports.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminOperate" />.</exception>
+    /// <exception cref="PersistenceConcurrencyConflictException">Thrown when this decision and a running pass's own commit raced past the bounded retries.</exception>
     /// <remarks>
     /// A move that finished is not resumed, because its walk reached the end of the content: what reaches the payloads
     /// it left behind is a further move, which <see cref="StartAsync" /> begins.

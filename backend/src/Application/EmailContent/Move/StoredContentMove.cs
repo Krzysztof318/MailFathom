@@ -95,7 +95,8 @@ public sealed class StoredContentMove
     /// <param name="cancellationToken">Cancels the pass between payloads.</param>
     /// <returns>What this pass carried, and whether the database still holds payloads behind it.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when anything but this deployment's own process reached the use case.</exception>
-    /// <exception cref="OperationCanceledException">Thrown when the caller cancels before any payload was carried.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the caller cancels while a payload is being carried, however many the pass had already carried and committed before it.</exception>
+    /// <exception cref="PersistenceConcurrencyConflictException">Thrown when committing this pass's progress raced an operator's decision past the bounded retries.</exception>
     /// <remarks>
     /// <para>
     /// It asks for no permission and requires the process itself instead, exactly as every other walk this deployment

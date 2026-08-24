@@ -289,6 +289,44 @@ public sealed class StoredContentMoveTests
         Assert.Equal(1L, this.runs.Current?.CopiedPayloadCount);
     }
 
+    /// <summary>An endpoint that cannot be written to writes nothing, and the row it was about to hold stays in the database.</summary>
+    [Fact]
+    public async Task RunAsync_EndpointCannotAnswerTheWrite_LeavesTheRowInTheDatabase()
+    {
+        // Arrange
+        this.ArrangeRunningMove();
+        this.ArrangePayload(EmailContentKind.IncomingMessage, 1);
+        this.objects.IsUnavailable = true;
+
+        // Act
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            this.MoveOver().RunAsync(TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(0, this.objects.PlacementCount);
+        Assert.Empty(this.content.Repoints);
+        Assert.Equal(0L, this.runs.Current?.CopiedPayloadCount);
+    }
+
+    /// <summary>An endpoint that goes away between the write and the read-back leaves the row exactly where it was.</summary>
+    [Fact]
+    public async Task RunAsync_EndpointCannotAnswerTheReadBack_LeavesTheRowInTheDatabase()
+    {
+        // Arrange
+        this.ArrangeRunningMove();
+        this.ArrangePayload(EmailContentKind.IncomingMessage, 1);
+        this.objects.WhenPlacing = _ => this.objects.IsUnavailable = true;
+
+        // Act
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            this.MoveOver().RunAsync(TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(1, this.objects.PlacementCount);
+        Assert.Empty(this.content.Repoints);
+        Assert.Equal(0L, this.runs.Current?.CopiedPayloadCount);
+    }
+
     /// <summary>A pause reaches the pass that is running, which ends after the payload in flight rather than at its own ceilings.</summary>
     [Fact]
     public async Task RunAsync_PausedMidPass_EndsAfterThePayloadInFlightRatherThanAtTheCeiling()
