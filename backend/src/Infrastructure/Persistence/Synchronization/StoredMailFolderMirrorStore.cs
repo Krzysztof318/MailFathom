@@ -57,6 +57,13 @@ internal sealed class StoredMailFolderMirrorStore : IStoredMailFolderMirrorStore
             [.. removed.Select(email => email.Id)],
             cancellationToken);
 
+        // Read before the removal is staged, because the payload rows go by cascade and the keys they carry are the
+        // only pointers to the objects holding this folder's mail.
+        await ReleasedContentObjects.ReleaseForStoredEmailsAsync(
+            session,
+            [.. removed.Select(static email => email.Id)],
+            cancellationToken);
+
         sessionContext.StoredEmails.RemoveRange(removed);
 
         if (!emailsRemain)

@@ -100,6 +100,24 @@ The trust anchor is the one exception to that, and it is why the row says restar
 callback inside a pooled TLS handler, so the authority is loaded once while the host starts; there is no setting
 anywhere that turns validation off. [Platform TLS policy](platform-tls-policy.md) is the page.
 
+**Reclamation is where mail whose record is gone stops being mail**, and both settings below are privacy-relevant
+rather than housekeeping. Deleting a stored email, an outgoing record, a recurring declaration, or a draft removes the
+object immediately after the transaction that removed its row commits, so in the ordinary case neither of these decides
+anything. What they decide is the other case — a write that never committed, a superseded draft revision, an endpoint
+that refused the removal — where the bytes go within one reclamation interval instead, and these two numbers are what
+that bound is composed of. [An object nothing points at is
+reclaimed](../features/email-content.md#an-object-nothing-points-at-is-reclaimed) states the whole promise, and
+[telemetry](telemetry.md#reclaiming-content-objects) is where an operator sees whether it is being kept.
+
+The sweep lists beneath `KeyPrefix` and nowhere else, so a bucket MailFathom shares with anything else is a bucket
+whose other contents it cannot reach.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `ContentStorage:ObjectStorage:Reclamation:Schedule` | string | `Every 06:00:00` | The occasions a sweep is dispatched on: `Every <hh:mm:ss>`, `Every <d.hh:mm:ss>`, or `Daily at <HH:mm> [<zone>]`, the same syntax a scheduled [mail rule](../features/mail-rules.md#running-a-rule-on-a-schedule) is written in. Longer intervals lengthen how long an orphaned payload lives | restart |
+| `ContentStorage:ObjectStorage:Reclamation:MinimumObjectAge` | TimeSpan | `24:00:00` | 1 h – 30 d. Below the floor a sweep could meet an object whose unit of work has not committed yet, which is mail lost rather than reclaimed; above the ceiling the floor would be a retention decision written in the wrong place | restart |
+| `ContentStorage:ObjectStorage:Reclamation:MaximumObjectsPerRun` | int | `100000` | At least 1000, the number of keys one listing request answers with. A run that reaches the ceiling hands its listing position to the run after it rather than starting over | restart |
+
 ## `DataEncryption`
 
 The key ring every value MailFathom seals at rest is sealed under. A configuration root of its own rather than a

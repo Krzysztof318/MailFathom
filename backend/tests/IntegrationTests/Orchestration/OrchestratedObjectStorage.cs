@@ -24,6 +24,14 @@ internal static class OrchestratedObjectStorage
     /// <summary>How long one request to the orchestrated endpoint may take in total.</summary>
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(60);
 
+    /// <summary>The bounds the sweep runs under in this suite, which are the shipped defaults.</summary>
+    /// <remarks>
+    /// The age floor above all: a suite that lowered it would be exercising a sweep that can race the write ordering
+    /// this whole backend rests on, and every object a test writes is younger than any floor worth configuring.
+    /// </remarks>
+    internal static readonly ContentObjectReclamationBounds ReclamationBounds =
+        ContentObjectReclamationBounds.Create(TimeSpan.FromHours(24), maximumObjectsPerRun: 100_000);
+
     /// <summary>Describes the endpoint the fixture started.</summary>
     /// <param name="published">The address the orchestration allocated for it.</param>
     /// <returns>The endpoint, addressed path-style because a container answers no bucket subdomain.</returns>

@@ -88,6 +88,10 @@ internal sealed class ObjectStorageOptions
     /// <remarks>Absent by default for the reason the identifier is, and required on the same terms.</remarks>
     public ConfiguredSecret? SecretAccessKey { get; set; }
 
+    /// <summary>Gets or sets how often the endpoint is swept for mail nothing points at, and what a sweep leaves alone.</summary>
+    /// <remarks>Present by default rather than absent, because a deployment that selected this backend is swept whether or not it wrote the block: an object nothing points at is mail nobody agreed to keep, so leaving the sweep off is not one of the things an operator may configure.</remarks>
+    public ContentObjectReclamationOptions Reclamation { get; set; } = new();
+
     /// <summary>Gets or sets the reference to the certificate authority that signed the endpoint's certificate.</summary>
     /// <remarks>
     /// Absent for an endpoint the platform's own trust store already answers for, which is every hosted provider. It is
@@ -131,6 +135,11 @@ internal sealed class ObjectStorageOptions
         }
 
         foreach (var error in this.FindTimeoutErrors())
+        {
+            yield return error;
+        }
+
+        foreach (var error in this.Reclamation.FindConfigurationErrors())
         {
             yield return error;
         }

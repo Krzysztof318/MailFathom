@@ -92,6 +92,7 @@ public sealed class TelemetrySurfaceContractTests
         new(NullLogger<AuthorizationRefusalTelemetry>.Instance);
 
     private static readonly ContactCollectionTelemetry ContactCollection = new();
+    private static readonly ContentObjectReclamationTelemetry ContentObjectReclamation = new();
     private static readonly DerivedWorkGateTelemetry DerivedWorkGate = new();
     private static readonly EmailEmbeddingBackfillTelemetry EmbeddingBackfill = new();
     private static readonly EmailEmbeddingTelemetry Embedding = new();
@@ -141,6 +142,7 @@ public sealed class TelemetrySurfaceContractTests
         typeof(AuthorizationRefusalTelemetry),
         typeof(BoundedEmailEmbeddingBacklog),
         typeof(ContactCollectionTelemetry),
+        typeof(ContentObjectReclamationTelemetry),
         typeof(DerivedWorkGateTelemetry),
         typeof(EmailEmbeddingBackfillTelemetry),
         typeof(EmailEmbeddingTelemetry),
@@ -280,6 +282,7 @@ public sealed class TelemetrySurfaceContractTests
         DriveDelivery();
         DriveSynchronization();
         DriveContentStore();
+        DriveContentObjectReclamation();
         DriveObjectStorage();
         DriveSensitiveContent();
         DriveStoredMailRederivation();
@@ -688,6 +691,14 @@ public sealed class TelemetrySurfaceContractTests
 
         using var write = StoredContent.BeginWrite();
         write.Stored(61_043);
+    }
+
+    /// <summary>Drives both mechanisms that reclaim an object, because the dimension telling them apart is the surface.</summary>
+    private static void DriveContentObjectReclamation()
+    {
+        ContentObjectReclamation.RecordErased(reclaimedCount: 3, failedCount: 1);
+        ContentObjectReclamation.RecordSwept(reclaimedCount: 7, reclaimedBytes: 61_051, failedCount: 2);
+        ContentObjectReclamation.RecordOldestOrphanAge(TimeSpan.FromHours(37));
     }
 
     private static void DriveObjectStorage()

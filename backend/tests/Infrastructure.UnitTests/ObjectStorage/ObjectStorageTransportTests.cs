@@ -39,6 +39,9 @@ public sealed class ObjectStorageTransportTests
         TimeSpan.FromSeconds(10),
         TimeSpan.FromSeconds(45));
 
+    private static readonly ContentObjectReclamationBounds ReclamationBounds =
+        ContentObjectReclamationBounds.Create(TimeSpan.FromHours(24), maximumObjectsPerRun: 100_000);
+
     /// <summary>The transport carries no retry of its own, so a refusal is one request rather than a burst of them.</summary>
     [Fact]
     public async Task ObjectStorageTransport_ComposedUnderTheServiceDefaults_ReachesARefusingEndpointOnce()
@@ -141,9 +144,15 @@ public sealed class ObjectStorageTransportTests
 
         // Act, Assert
         Assert.Throws<ArgumentNullException>(
-            () => ObjectStorageServiceCollectionExtensions.AddObjectStorage(null!, Endpoint, configuredTrustAnchor: null));
+            () => ObjectStorageServiceCollectionExtensions.AddObjectStorage(
+                null!,
+                Endpoint,
+                ReclamationBounds,
+                configuredTrustAnchor: null));
         Assert.Throws<ArgumentNullException>(
-            () => services.AddObjectStorage(endpoint: null!, configuredTrustAnchor: null));
+            () => services.AddObjectStorage(endpoint: null!, ReclamationBounds, configuredTrustAnchor: null));
+        Assert.Throws<ArgumentNullException>(
+            () => services.AddObjectStorage(Endpoint, reclamationBounds: null!, configuredTrustAnchor: null));
     }
 
     private static ServiceProvider ComposedServices(FakeHttpMessageHandler endpointServer)
@@ -177,7 +186,7 @@ public sealed class ObjectStorageTransportTests
 
         services.AddSingleton<ISecretReferenceResolver, ProvisionedMaterialResolver>();
         services.AddSingleton<TrustAnchorLoader>();
-        services.AddObjectStorage(Endpoint, configuredTrustAnchor: null);
+        services.AddObjectStorage(Endpoint, ReclamationBounds, configuredTrustAnchor: null);
 
         return services;
     }

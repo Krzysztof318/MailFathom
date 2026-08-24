@@ -11,6 +11,7 @@ using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.EmailContent.Storage.Reclamation;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Folders;
@@ -738,6 +739,11 @@ internal static class HostComposition
         // The second source of recurring dispatches, beside the rules': the repetitions an owner declared, read from
         // the database rather than from configuration because that is where somebody makes and stops one.
         builder.Services.AddScoped<IScheduledJobSource, RecurringSendScheduleSource>();
+        // Registered whatever backend the deployment stores content in, because the queue resolves a handler by type
+        // and a segment enqueued before an endpoint was taken away would otherwise find none. It reclaims nothing
+        // where no endpoint is configured: the sweep it drives is what AddContentStorage registers, and its absence is
+        // the deployment saying its payloads leave with the rows they are a column of.
+        builder.Services.AddScoped<IJobHandler, ContentObjectReclamationHandler>();
     }
 
     /// <summary>Declares the gates the startup probe waits on, and the validators that report before the workers run.</summary>
@@ -1033,7 +1039,17 @@ internal static class HostComposition
         builder.Services.AddSingleton<IObjectStorageCredentialSource, ConfiguredObjectStorageCredentialSource>();
         builder.Services.AddObjectStorage(
             declaredContentStorage.ObjectStorage.ToEndpoint(),
+            declaredContentStorage.ObjectStorage.Reclamation.ToBounds(),
             declaredContentStorage.ObjectStorage.TrustAnchor);
+
+        // The sweep's occasions, declared only here: a deployment storing content in the database has no bucket to
+        // list, so it dispatches nothing rather than dispatching work that would do nothing. The recurrence is closed
+        // over rather than registered, because a bare JobRecurrence in the container would be the interval of whichever
+        // schedule resolved it first.
+        var reclamationRecurrence = declaredContentStorage.ObjectStorage.Reclamation.ToRecurrence();
+
+        builder.Services.AddScoped<IScheduledJobSource>(
+            _ => new ContentObjectReclamationScheduleSource(reclamationRecurrence));
 
         // Readiness alone, and unhealthy rather than degraded: an instance whose selected content backend cannot be
         // written to cannot store the next message it synchronizes. It must never reach the liveness probe, because

@@ -725,7 +725,11 @@ mirroring it again starts from the beginning rather than resuming.
 ```
 
 The row goes and PostgreSQL takes its raw MIME, its search document, its passages, their vectors, and any outstanding
-repair request with it — the same deletion path an erasing disposition already uses rather than a second one. The
+repair request with it — the same deletion path an erasing disposition already uses rather than a second one. On a
+deployment storing payloads in a bucket the object goes too, immediately after the pass commits, so an erasure is true
+of both stores rather than of the database alone; where the endpoint refuses, the bytes go within one reclamation
+interval instead, which [an object nothing points at is
+reclaimed](../features/email-content.md#an-object-nothing-points-at-is-reclaimed) states in full. The
 folder's checkpoint goes too, in the pass that empties it, which is what makes a folder erased and then switched back
 on mirror from the start instead of resuming in front of mail that is no longer there. **The alias survives**: its
 binding stays, so the folder goes on resolving and goes on being somewhere a rule can file mail into.

@@ -336,6 +336,16 @@ public static class ServiceCollectionExtensions
         // The counter every session reports its ending to is a singleton, because the instrument it holds belongs to the
         // process rather than to a scope: one per request would create the same instrument again on every call.
         services.AddSingleton<PersistenceCommitTelemetry>();
+        // Both are singletons and both are registered whether or not the deployment named an object endpoint. What
+        // decides whether they do anything is the object store, which is registered by AddObjectStorage alone: without
+        // it the eraser is handed nothing to reach and every locator it could have been given would have been null,
+        // because a database-backed payload has no key.
+        services.AddSingleton<ContentObjectReclamationTelemetry>();
+        services.AddSingleton<ReleasedContentObjectEraser>();
+        // The database half of the sweep, registered with persistence rather than with the endpoint because that is
+        // what it reads. Nothing resolves it where no endpoint is configured, since the sweep that asks it is what
+        // AddObjectStorage registers.
+        services.AddScoped<IContentObjectReferenceReader, ContentObjectReferenceReader>();
         services.AddScoped<IPersistenceSessionFactory, PersistenceSessionFactory>();
         services.AddScoped<ISynchronizationCheckpointStore, SynchronizationCheckpointStore>();
         // Registered here rather than beside the chunker it calls, because what it is is a table: it decides which

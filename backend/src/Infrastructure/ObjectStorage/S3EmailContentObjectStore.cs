@@ -121,6 +121,77 @@ internal sealed class S3EmailContentObjectStore : IEmailContentObjectStore
         return new ReadOnlyMemory<byte>(payload);
     }
 
+    /// <inheritdoc />
+    public async Task DeleteAsync(string objectLocator, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(objectLocator);
+
+        var endpoint = this.clientFactory.Endpoint;
+
+        using var openedClient = await this.clientFactory.OpenAsync(cancellationToken);
+
+        await this.operationRunner.RunAsync(
+            ObjectStorageTelemetry.DeleteOperationName,
+            attemptToken => openedClient.Client.DeleteObjectAsync(
+                new DeleteObjectRequest { BucketName = endpoint.Bucket, Key = objectLocator },
+                attemptToken),
+            _ => null,
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<ObjectStorageListingPage> ListAsync(
+        string? continuationToken,
+        int maxObjects,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(maxObjects, 0);
+
+        var endpoint = this.clientFactory.Endpoint;
+
+        using var openedClient = await this.clientFactory.OpenAsync(cancellationToken);
+
+        var answer = await this.operationRunner.RunAsync(
+            ObjectStorageTelemetry.ListOperationName,
+            attemptToken => openedClient.Client.ListObjectsV2Async(
+                new ListObjectsV2Request
+                {
+                    BucketName = endpoint.Bucket,
+
+                    // An empty prefix is the whole bucket, which is what a deployment that has one to itself configured.
+                    // Where a prefix is configured this is the only thing keeping the listing inside it, and reclamation
+                    // deletes what the listing named.
+                    Prefix = endpoint.KeyPrefix,
+                    ContinuationToken = continuationToken,
+                    MaxKeys = maxObjects,
+                },
+                attemptToken),
+            _ => null,
+            cancellationToken);
+
+        // The SDK leaves an absent collection null rather than empty from version 4 onwards, and a bucket holding
+        // nothing beneath the prefix is exactly that case.
+        var listed = answer.S3Objects ?? [];
+
+        return new ObjectStorageListingPage(
+            [.. listed.Select(static held => new ListedObject(held.Key, WrittenAtOf(held), held.Size ?? 0))],
+
+            // Read from the answer's own flag rather than from the token being present, because an endpoint that ended
+            // the listing may still echo a token, and continuing from one would list the same page for ever.
+            answer.IsTruncated == true ? answer.NextContinuationToken : null);
+    }
+
+    /// <summary>Reads the moment an endpoint recorded one object at, as the instant an age is measured from.</summary>
+    /// <remarks>
+    /// The SDK reports it as a kind-free <see cref="DateTime" /> that S3 defines as UTC, and answers with none where
+    /// the endpoint named none. That absence is carried through rather than resolved to an instant: a moment invented
+    /// here would decide the age floor, and the floor is the only thing standing between reclamation and a payload
+    /// whose unit of work has not committed yet.
+    /// </remarks>
+    private static DateTimeOffset? WrittenAtOf(S3Object held) => held.LastModified is { } writtenAt
+        ? new DateTimeOffset(DateTime.SpecifyKind(writtenAt, DateTimeKind.Utc))
+        : null;
+
     /// <summary>Reads one object whole, answering with nothing when the endpoint holds none under that key.</summary>
     /// <remarks>
     /// The absent case is resolved here rather than by the failure classifier, because it is not a failure: it reaches

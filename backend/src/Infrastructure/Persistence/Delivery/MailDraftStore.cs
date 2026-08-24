@@ -11,6 +11,7 @@ using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Delivery.Filing;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
+using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using Microsoft.EntityFrameworkCore;
@@ -303,6 +304,10 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
         {
             return;
         }
+
+        // Read before the removal, because the stored message's row goes by cascade and its key is the only pointer to
+        // the object holding the revision the author is discarding.
+        await ReleasedContentObjects.ReleaseForMailDraftAsync(session, draftId.Value, cancellationToken);
 
         // The copies, the recipients, and the stored message go with it through the cascades declared on their foreign
         // keys, which is what makes erasing a draft one act rather than four.

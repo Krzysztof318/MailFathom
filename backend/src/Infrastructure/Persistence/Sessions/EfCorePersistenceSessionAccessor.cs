@@ -24,6 +24,25 @@ internal interface IEfCorePersistenceSession
     /// <summary>Holds a measurement of work staged here until this session's ending is known.</summary>
     /// <param name="measurement">The measurement to publish once the session has committed or rolled back.</param>
     void MeasureOnEnding(ISessionScopedMeasurement measurement);
+
+    /// <summary>States that committing this session leaves an object with nothing pointing at it.</summary>
+    /// <param name="objectLocators">The whole keys the rows this session is deleting carry.</param>
+    /// <remarks>
+    /// <para>
+    /// Collected here, before the rows go, because that is the only moment the locators exist to be read. The payload
+    /// row is removed by a cascade from the message it belongs to, so a deletion path that waited until after the
+    /// commit would find the pointer to the object already gone and no way to derive one — a key is minted by the
+    /// write that produced it and nothing about a row determines it.
+    /// </para>
+    /// <para>
+    /// Stating it is not deleting it. What is stated on a session that rolls back is discarded with the session, and
+    /// what is stated on one that commits is removed from the endpoint afterwards, which is the ordering
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see>
+    /// § 7 requires: deleting an object before its row's deletion is durable would destroy mail whose deletion then
+    /// rolled back.
+    /// </para>
+    /// </remarks>
+    void ReleaseOnCommit(IReadOnlyCollection<string> objectLocators);
 }
 
 /// <summary>Resolves the EF Core context enlisted in an application persistence session.</summary>

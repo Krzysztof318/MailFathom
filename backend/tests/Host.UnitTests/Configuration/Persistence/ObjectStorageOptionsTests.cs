@@ -267,5 +267,26 @@ public sealed class ObjectStorageOptionsTests
         Assert.Equal(TimeSpan.FromSeconds(30), endpoint.RequestTimeout);
     }
 
+    /// <summary>The block that bounds reclamation is validated with the endpoint it belongs to, not separately.</summary>
+    /// <remarks>
+    /// A nested block nothing folds into its parent is one a deployment states wrongly and starts anyway, and the
+    /// setting it holds decides how long mail whose record is gone still exists as bytes.
+    /// </remarks>
+    [Fact]
+    public void FindConfigurationErrors_AReclamationBlockThatIsUnusable_FailsStartupNamingTheNestedKey()
+    {
+        // Arrange
+        var options = Usable();
+        options.Reclamation.MinimumObjectAge = TimeSpan.FromSeconds(30);
+
+        // Act
+        var errors = options.FindConfigurationErrors().ToArray();
+
+        // Assert
+        var error = Assert.Single(errors);
+
+        Assert.Contains("ContentStorage:ObjectStorage:Reclamation:MinimumObjectAge", error, StringComparison.Ordinal);
+    }
+
     private static ObjectStorageOptions Usable() => ContentStorageOptionsTests.UsableEndpoint();
 }

@@ -6,6 +6,7 @@ using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
 using MailFathom.Application.Persistence;
+using MailFathom.Infrastructure.ObjectStorage;
 using MailFathom.Infrastructure.Observability;
 using Microsoft.EntityFrameworkCore;
 
@@ -54,10 +55,13 @@ internal interface IEfCorePersistenceSessionResources : IAsyncDisposable
 /// </remarks>
 internal sealed class EfCorePersistenceSession(
     IEfCorePersistenceSessionResources resources,
-    PersistenceCommitTelemetry telemetry)
+    PersistenceCommitTelemetry telemetry,
+    ReleasedContentObjectEraser? releasedContentObjects = null)
     : IPersistenceSession, IEfCorePersistenceSession
 {
     private readonly List<ISessionScopedMeasurement> heldMeasurements = [];
+
+    private readonly List<string> releasedObjectLocators = [];
 
     private bool completed;
 
@@ -73,6 +77,14 @@ internal sealed class EfCorePersistenceSession(
         ArgumentNullException.ThrowIfNull(measurement);
 
         this.heldMeasurements.Add(measurement);
+    }
+
+    /// <inheritdoc />
+    public void ReleaseOnCommit(IReadOnlyCollection<string> objectLocators)
+    {
+        ArgumentNullException.ThrowIfNull(objectLocators);
+
+        this.releasedObjectLocators.AddRange(objectLocators);
     }
 
     /// <inheritdoc />
@@ -131,6 +143,12 @@ internal sealed class EfCorePersistenceSession(
         this.completed = true;
         telemetry.RecordCommitted();
         this.PublishHeldMeasurements(sessionCommitted: true);
+
+        // The one act of this session that reaches outside the database, and it is here rather than in a caller
+        // because this is the only place that knows the deletion is durable. It raises nothing: the write has already
+        // committed, so an object the endpoint would not remove is an orphan reclamation takes rather than a reason to
+        // tell the caller its write did not happen.
+        await this.EraseReleasedObjectsAsync(cancellationToken);
 
         return PersistenceCommitResult.Committed;
     }
@@ -192,6 +210,22 @@ internal sealed class EfCorePersistenceSession(
         {
             ExceptionDispatchInfo.Capture(firstCleanupException).Throw();
         }
+    }
+
+    /// <summary>Removes the objects this session's committed deletions stopped pointing at.</summary>
+    /// <remarks>
+    /// A session created without an eraser releases nothing, which is the shape a persistence provider with no object
+    /// endpoint behind it has: a deployment storing content in the database has no object to remove, and every locator
+    /// this could have collected would have been null.
+    /// </remarks>
+    private async Task EraseReleasedObjectsAsync(CancellationToken cancellationToken)
+    {
+        if (releasedContentObjects is null || this.releasedObjectLocators.Count == 0)
+        {
+            return;
+        }
+
+        await releasedContentObjects.EraseAsync(this.releasedObjectLocators, cancellationToken);
     }
 
     /// <summary>Rolls one session back after a race it lost, and counts the conflict as one that happened.</summary>

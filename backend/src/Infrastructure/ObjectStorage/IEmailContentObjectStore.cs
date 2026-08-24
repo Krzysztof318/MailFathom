@@ -43,4 +43,32 @@ internal interface IEmailContentObjectStore
     /// request, which is a different thing from an endpoint that could not be reached at all.
     /// </remarks>
     Task<ReadOnlyMemory<byte>?> FindAsync(string objectLocator, CancellationToken cancellationToken);
+
+    /// <summary>Removes one object, which is what carries a committed deletion of its row through to the endpoint.</summary>
+    /// <param name="objectLocator">The whole key, exactly as the row that was deleted carried it.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>A task that completes once the endpoint holds no object under that key.</returns>
+    /// <exception cref="ObjectStorageUnavailableException">Thrown when the endpoint did not answer.</exception>
+    /// <remarks>
+    /// Removing a key nothing holds succeeds, which is what makes the operation safe to repeat: the deletion path and
+    /// the reclamation can both reach one object, and an attempt after a crash meets a key the attempt before it
+    /// already removed.
+    /// </remarks>
+    Task DeleteAsync(string objectLocator, CancellationToken cancellationToken);
+
+    /// <summary>Reads one page of the objects held beneath this deployment's own key prefix.</summary>
+    /// <param name="continuationToken">The token a previous page answered with, or <see langword="null" /> to begin the listing.</param>
+    /// <param name="maxObjects">How many objects the page may name at most.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>The page, carrying the token the next one is asked for with or none when the listing ended.</returns>
+    /// <exception cref="ObjectStorageUnavailableException">Thrown when the endpoint did not answer.</exception>
+    /// <remarks>
+    /// <b>The prefix is the whole of what this may see.</b> A deployment sharing a bucket with another one is separated
+    /// from it by prefix alone, so a listing that reached outside it would let reclamation delete somebody else's mail.
+    /// The prefix is applied here rather than by a caller for exactly that reason.
+    /// </remarks>
+    Task<ObjectStorageListingPage> ListAsync(
+        string? continuationToken,
+        int maxObjects,
+        CancellationToken cancellationToken);
 }
