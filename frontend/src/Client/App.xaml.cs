@@ -68,6 +68,12 @@ public partial class App : Application
                 // know at startup has to travel inside the bundle. A desktop installation that has to state something
                 // of its own writes appsettings.json beside the executable, which the same reader layers on top.
                 .UseConfiguration(configure: configuration => configuration.EmbeddedSource<App>())
+                // Which language the application is read in. The cultures it offers are the ones
+                // `LocalizationConfiguration:Cultures` names in the file above, and the choice a person makes is
+                // written to a settings file of this application's own so it survives a restart — which is the only
+                // point at which it takes effect, because applying a culture is what Uno does on the next launch
+                // rather than to a visual tree already built. The screen offering it says so.
+                .UseLocalization()
                 .ConfigureServices((context, services) => services.AddMailFathomDeployment(
                     this.ComposeDeployment(context.Configuration)))
                 // Light, dark, and follow-the-system, with the choice written to the platform's own settings store so

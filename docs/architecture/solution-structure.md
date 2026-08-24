@@ -188,6 +188,9 @@ project here and neither build reads the other's files.
   naming the one component in that head's graph whose licence obliges them. The project file attaches them to every
   `net10.0-desktop` publish and fails the build when one is missing, so the obligation travels with the artifact rather
   than with the workflow that happens to produce it.
+- `src/Client/Strings/` holds one string table per language the application is readable in, one directory per neutral
+  culture. Which of them are offered is `LocalizationConfiguration:Cultures` in the embedded `appsettings.json`, so a
+  language reaches a reader only where both the table and that list name it.
 - `tests/Client.UnitTests` covers both, referencing the application through its plain target and `Client.Backend`
   directly, on the same xUnit.net v3 and Microsoft Testing Platform the service's suites use.
 - Almost no client package version is written in this repository. `UnoFeatures` in the project file names capabilities

@@ -20,13 +20,14 @@ What is inside the two projects:
 | `Client/Presentation/` | The shell, the pages, and the MVUX models behind them |
 | `Client/Styles/` | The Material palette every brush resolves from — the one place a colour value is written |
 | `Client/Platforms/` | What belongs to one head only: the two entry points, the browser head's web manifest, linker configuration, and font stylesheet, and its half of the sign-in redirect |
-| `Client/Assets/`, `Client/Strings/` | The application icon and splash screen, and the string table |
+| `Client/Assets/` | The application icon and the splash screen, from one SVG per head |
+| `Client/Strings/` | One string table per language the application is readable in, keyed by the neutral culture |
 | `Client.Backend/` | The typed client, the wire records, and the source-generated readers for them |
 | `Client.Backend/Authorization/` | Signing in: discovery, the proof key, the exchange, and the token held in memory for the run |
 
 The application is empty of features. It shows what it is — the product name and the version this build was stamped
-with, read from the assembly rather than written here, so the client and the service report one number — and which
-theme it is being shown in.
+with, read from the assembly rather than written here, so the client and the service report one number — and the two
+things a reader can already decide about it: which language it is read in, and which theme it is shown in.
 
 It reaches MailFathom over the endpoints `backend/src/Host/` exposes and shares nothing else with it: no build file, no
 package manifest, no configuration file, and no type. Which deployment it reaches is the composing host's to state, and
@@ -57,3 +58,32 @@ rather than in palette keys — an icon is not themed, and the palette was deriv
 other way round. Both grounds are the navy, named by `UnoIconBackgroundColor` and `UnoSplashScreenColor` in
 `Client/Client.csproj` rather than painted in an SVG, because the Uno resizetizer composes the ground itself. The
 splash therefore reads the same whichever theme the application starts in.
+
+## What it reads in
+
+The client is readable in **English** and **Polish**, and English is the default: it is what `DefaultLanguage` in
+`Client/Client.csproj` declares, so a head asked for a language neither table carries falls back to it, and a first run
+by somebody who has configured nothing is readable before any setting has been found.
+
+The two are one decision written in two places. `Client/Strings/en/Resources.resw` and `Client/Strings/pl/Resources.resw`
+hold the words, and `LocalizationConfiguration:Cultures` in `Client/appsettings.json` names which of them
+`Uno.Extensions.Localization.ILocalizationService` offers a person to choose from — a culture named there with no table
+beside it would reach somebody as a screen with no words on it, so the unit suite asserts that the two agree and that
+neither table holds a key the other is missing. Both are neutral cultures rather than regional variants; a variant
+arrives when something actually differs between regions.
+
+A visible string reaches a screen through `x:Uid` rather than being written in a page, which is why no page here
+carries user-visible text. The exception is a string that is per item rather than per control — the three theme
+offers — and that one is resolved in the model through `IStringLocalizer` against the same tables.
+
+**A chosen language arrives on the next launch, and the screen says so.** Uno applies a culture while a head is
+starting, so the visual tree already built keeps the words it was built with; the choice is written to a settings file
+of the application's own and survives a restart, and an `InfoBar` states that plainly rather than leaving somebody
+pressing the button again because nothing appeared to happen. A theme needs no restart, which is why only one of the
+two pickers has a button beside it.
+
+The browser head loads the whole ICU data set rather than the shards the WebAssembly SDK ships by default. Left alone,
+the runtime picks one shard from the reader's browser languages, and a browser reporting English resolves no `pl` at
+all — so Polish would disappear from the picker for exactly the person most likely to want it, on a build whose Polish
+table is present and correct. `Client/Client.csproj` carries the property and the reasoning; the desktop head resolves
+cultures from the operating system and needs none of it.

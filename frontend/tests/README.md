@@ -18,7 +18,9 @@ covers, so `Client.UnitTests/Presentation/` covers `src/Client/Presentation/` an
 `Client.UnitTests/TestDoubles/`, because they cover nothing themselves.
 
 What it asserts today is what a scaffold has to say for itself — that the client reports the product and version the
-build declares, and that the MVUX model behind the only screen yields it — and the whole of what `Client.Backend` does
+build declares, that the MVUX model behind the only screen yields it, and that the languages the model offers are the
+ones the embedded configuration names and that the string tables under `src/Client/Strings/` agree with each other —
+and the whole of what `Client.Backend` does
 against a stubbed transport: the wire contract, the four ways an exchange can fail, and the sign-in end to end with the
 one head-specific step stubbed at its port. `AGENTS.md` beside this file states what belongs here, how a feed is
 asserted, and what is deliberately left to a head that actually runs.
