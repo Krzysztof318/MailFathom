@@ -415,11 +415,12 @@ The route above answers what this caller may do, and every screen follows it rat
 - **Withheld means absent, not present and refused.** The service is what enforces; the client's part is to decline to
   offer. A destination the session does not carry is not in the navigation, and an action it does not carry is not on
   the screen.
-- **An answer that has not arrived is not a refusal.** A feed carrying no value yet reaches a binding as nothing at
-  all, so `OfferedVisibilityConverter` shows a capability only on an outright yes and its withheld twin only on an
-  outright no — never opening a space before anything said it may be opened, and never reporting a fetch still under
-  way as something taken away. A session that failed is rendered by the shell, with what it means and what to try,
-  rather than left as an empty frame.
+- **An answer that has not arrived is not a refusal.** A property carrying no answer yet reaches a binding as nothing
+  at all or as its type's default, so both sides of a decision are stated as their own affirmative — `Offers` and
+  `Withholds`, never one flag read backwards — and `AffirmedVisibilityConverter` shows a control on an outright yes
+  and on nothing else. That is what keeps a space from being offered before anything said it may be opened, and keeps
+  one from being announced as taken away while the fetch that decides it is still running. A session that failed is
+  rendered by the shell, with what it means and what to try, rather than left as an empty frame.
 - **Every grant is a statement about the signed-in owner's scope.** Nothing the client shows may read as a view across
   the deployment, and nothing that identifies a credential is modelled, logged, stored, or put in telemetry — which is
   why `DeploymentSession` carries the service, the version, and the permissions, and carries nothing else.

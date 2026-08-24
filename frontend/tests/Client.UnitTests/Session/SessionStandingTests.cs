@@ -100,6 +100,40 @@ public sealed class SessionStandingTests
     }
 
     /// <summary>
+    /// Both sides are their own affirmative rather than one flag the view reads backwards, because a control shown on
+    /// the absence of an offer would be on the screen before the session answered. Whichever reason withheld a space,
+    /// the space says so; whichever grant carried one, it does not.
+    /// </summary>
+    [Fact]
+    public void Withholds_ASessionWithholdingForBothReasons_IsTrueForEachAndFalseForWhatIsOffered()
+    {
+        // Arrange
+        var reported = SessionGranting("mailfathom.mail.read");
+
+        // Act
+        var standing = SessionStanding.Of(reported, WithoutDiscover);
+
+        // Assert
+        Assert.True(standing.Withholds(ClientCapability.Discover));
+        Assert.False(standing.Withholds(ClientCapability.Mail));
+        Assert.False(standing.Withholds(ClientCapability.Cases));
+        Assert.Equal(standing.Offers(ClientCapability.Mail), !standing.Withholds(ClientCapability.Mail));
+    }
+
+    /// <summary>A capability nothing composed is withheld rather than quietly neither, which is what a space renders.</summary>
+    [Fact]
+    public void Withholds_ACapabilityNothingComposed_IsTrue()
+    {
+        // Arrange
+        var standing = new SessionStanding(
+            "0.8.0",
+            ImmutableDictionary<ClientCapability, CapabilityStanding>.Empty);
+
+        // Act, Assert
+        Assert.True(standing.Withholds(ClientCapability.Mail));
+    }
+
+    /// <summary>
     /// The session names a version and a grant and no feature, so nothing on the wire can say a capability is absent
     /// from this installation. Reading that silence as "provides everything" is what keeps a grant meaning something;
     /// the alternative would withhold every space on every deployment.

@@ -118,6 +118,18 @@ public sealed record SessionStanding(
     public bool Offers(ClientCapability capability) =>
         this.StandingOf(capability) is CapabilityStanding.Offered;
 
+    /// <summary>Reports whether this session keeps a capability from being put in front of this caller.</summary>
+    /// <param name="capability">The capability to answer for.</param>
+    /// <returns><see langword="true" /> where this session withholds it, for either of the two reasons.</returns>
+    /// <remarks>
+    /// The negation of <see cref="Offers" /> stated as its own affirmative, because the view needs both sides as
+    /// something that is outright true. A control shown on the absence of an answer rather than on an answer would be
+    /// on the screen before the session arrived — and a screen saying a space is withheld while the fetch is still
+    /// running reports a delay as a capability taken away. A session that has not answered exposes neither of these,
+    /// so both read as <see langword="false" /> until one is decided.
+    /// </remarks>
+    public bool Withholds(ClientCapability capability) => !this.Offers(capability);
+
     private static CapabilityStanding StandingOf(
         ClientCapability capability,
         DeploymentSession reported,

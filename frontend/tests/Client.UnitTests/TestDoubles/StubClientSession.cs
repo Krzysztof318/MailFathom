@@ -8,9 +8,10 @@ namespace MailFathom.Client.UnitTests.TestDoubles;
 
 /// <summary>Answers what a deployment allows, from a script, without one being reached.</summary>
 /// <remarks>
-/// A state rather than a value, because what a screen does with a session it is still waiting for and one it could not
-/// have are as much of the behaviour as what it does with an answer. Setting <see cref="Failure" /> is how a test
-/// states the second of those.
+/// A state rather than a value, because what a screen does with a session it is still waiting for is as much of the
+/// behaviour as what it does with an answer. It scripts no failure: the failure axis of this feed is asserted against
+/// the real <c>DeploymentClientSession</c> over a refusing transport, which is where a failed fetch actually comes
+/// from, and a second way to produce one here would be surface nothing exercises.
 /// </remarks>
 internal sealed class StubClientSession : IClientSession, IDisposable
 {
@@ -26,9 +27,6 @@ internal sealed class StubClientSession : IClientSession, IDisposable
 
     /// <summary>Gets or sets what the deployment is read as having reported.</summary>
     internal SessionStanding? Answer { get; set; }
-
-    /// <summary>Gets or sets what asking the deployment raises instead of answering.</summary>
-    internal Exception? Failure { get; set; }
 
     /// <summary>Gets how many times the session was asked to fetch again.</summary>
     internal int Refreshes { get; private set; }
@@ -48,13 +46,8 @@ internal sealed class StubClientSession : IClientSession, IDisposable
 
     private ValueTask<SessionStanding> ReadAsync(CancellationToken cancellationToken)
     {
-        if (this.Failure is { } failure)
-        {
-            throw failure;
-        }
-
         return this.Answer is { } answer
             ? ValueTask.FromResult(answer)
-            : throw new InvalidOperationException("This stub was told neither what the deployment answers nor how it fails.");
+            : throw new InvalidOperationException("This stub was not told what the deployment answers.");
     }
 }

@@ -199,6 +199,24 @@ public sealed class WorkspaceModelTests : IDisposable
     }
 
     /// <summary>
+    /// A withheld space renders what it is instead, so the frame states the withholding as its own affirmative rather
+    /// than leaving a view to read the offer backwards. A control shown on the absence of an offer would be on the
+    /// screen before the session had answered, which would announce a fetch still under way as a space taken away.
+    /// </summary>
+    [Fact]
+    public async Task WithholdsMail_AGrantNotCarryingReading_SaysSoRatherThanLeavingTheOfferToBeInverted()
+    {
+        // Arrange
+        using var session = SessionOffering("mailfathom.mail.ask");
+        await using var model = this.ModelOver(session: session);
+
+        // Act, Assert
+        Assert.True(await model.WithholdsMail);
+        Assert.True(await model.WithholdsCases);
+        Assert.False(await model.WithholdsDiscover);
+    }
+
+    /// <summary>
     /// The two reasons a thing is withheld reach the frame separately, because a credential is widened by whoever
     /// runs the deployment and a deployment that does not have something is widened by no credential at all.
     /// </summary>

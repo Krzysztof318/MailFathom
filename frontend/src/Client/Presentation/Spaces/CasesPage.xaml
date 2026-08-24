@@ -22,11 +22,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       </workspace:WorkspaceColumns.Companion>
     </workspace:WorkspaceColumns>
 
-    <!-- What this space is instead where the session does not offer it; DiscoverPage carries why it is stated over
-         the space rather than instead of it. -->
-    <Grid Background="{ThemeResource BackgroundBrush}"
-          Visibility="{Binding OffersCases, Converter={StaticResource WithheldVisibility}}">
-      <local:SpacePlaceholder x:Uid="Workspace.Space.Withheld" />
-    </Grid>
+    <!-- What this space is instead where the session does not offer it. -->
+    <local:WithheldOverlay Withheld="{Binding WithholdsCases}" />
   </Grid>
 </Page>

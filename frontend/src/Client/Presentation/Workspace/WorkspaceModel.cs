@@ -57,6 +57,9 @@ public partial record WorkspaceModel
         this.OffersDiscover = this.Offers(ClientCapability.Discover);
         this.OffersMail = this.Offers(ClientCapability.Mail);
         this.OffersCases = this.Offers(ClientCapability.Cases);
+        this.WithholdsDiscover = this.Withholds(ClientCapability.Discover);
+        this.WithholdsMail = this.Withholds(ClientCapability.Mail);
+        this.WithholdsCases = this.Withholds(ClientCapability.Cases);
         this.OffersNothing = this.Session.Select(standing => standing.OffersNothing);
         this.AnythingUngranted = this.Any(CapabilityStanding.Ungranted);
         this.AnythingUnavailable = this.Any(CapabilityStanding.Unavailable);
@@ -89,6 +92,21 @@ public partial record WorkspaceModel
 
     /// <summary>Whether the space a thread of work is followed in may be put in front of this caller.</summary>
     public IFeed<bool> OffersCases { get; }
+
+    /// <summary>Whether this session keeps the space a question is asked in from being put in front of this caller.</summary>
+    /// <remarks>
+    /// Stated beside its opposite rather than derived from it in the view, because a space says what it is instead
+    /// only where the session outright withheld it. A feed carrying no value yet reaches a binding as the type's
+    /// default, so a view that showed the withheld state on the absence of an offer would announce it before the
+    /// session had answered — see <see cref="SessionStanding.Withholds" />.
+    /// </remarks>
+    public IFeed<bool> WithholdsDiscover { get; }
+
+    /// <summary>Whether this session keeps the space correspondence is read in from being put in front of this caller.</summary>
+    public IFeed<bool> WithholdsMail { get; }
+
+    /// <summary>Whether this session keeps the space a thread of work is followed in from being put in front of this caller.</summary>
+    public IFeed<bool> WithholdsCases { get; }
 
     /// <summary>Whether this session leaves the frame with no space at all to open on.</summary>
     /// <remarks>
@@ -128,6 +146,9 @@ public partial record WorkspaceModel
 
     private IFeed<bool> Offers(ClientCapability capability) =>
         this.Session.Select(standing => standing.Offers(capability));
+
+    private IFeed<bool> Withholds(ClientCapability capability) =>
+        this.Session.Select(standing => standing.Withholds(capability));
 
     private IFeed<bool> Any(CapabilityStanding standing) =>
         this.Session.Select(session => session.Any(standing));

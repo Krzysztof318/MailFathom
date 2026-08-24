@@ -33,15 +33,11 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       <x:Double x:Key="WorkspaceRailWindowWidth">700</x:Double>
       <x:Double x:Key="WorkspaceWideWindowWidth">1000</x:Double>
 
-      <!-- What turns "the session offers this" into a composition. It is stated once for the whole application because
-           every screen that follows a grant asks the same question of the same kind of value, and because the safe
-           reading of an answer that has not arrived — collapse it — is one decision rather than one per page. -->
-      <presentation:OfferedVisibilityConverter x:Key="OfferedVisibility" />
-
-      <!-- The same rule read from the other side, for the control that explains an absence rather than the one being
-           withheld. It shows only where the session outright said no: an answer that has not arrived leaves both this
-           and the one above collapsed, which is what keeps an unknown session from being reported as a refused one. -->
-      <presentation:OfferedVisibilityConverter x:Key="WithheldVisibility" Withheld="True" />
+      <!-- What turns something the session stated into a composition — that a capability is offered, and equally that
+           one is withheld. It is stated once for the whole application because every screen that follows a grant asks
+           the same question of the same kind of value, and because the safe reading of an answer that has not arrived
+           — collapse it — is one decision rather than one per page. -->
+      <presentation:AffirmedVisibilityConverter x:Key="AffirmedVisibility" />
 
     </ResourceDictionary>
   </Application.Resources>

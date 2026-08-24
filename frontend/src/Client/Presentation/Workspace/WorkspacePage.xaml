@@ -83,21 +83,21 @@ Project repository: https://github.com/Krzysztof318/MailFathom
              nothing. -->
         <NavigationViewItem x:Uid="Workspace.Rail.Discover"
                             uen:Region.Name="Discover"
-                            Visibility="{Binding OffersDiscover, Converter={StaticResource OfferedVisibility}}">
+                            Visibility="{Binding OffersDiscover, Converter={StaticResource AffirmedVisibility}}">
           <NavigationViewItem.Icon>
             <SymbolIcon Symbol="Find" />
           </NavigationViewItem.Icon>
         </NavigationViewItem>
         <NavigationViewItem x:Uid="Workspace.Rail.Mail"
                             uen:Region.Name="Mail"
-                            Visibility="{Binding OffersMail, Converter={StaticResource OfferedVisibility}}">
+                            Visibility="{Binding OffersMail, Converter={StaticResource AffirmedVisibility}}">
           <NavigationViewItem.Icon>
             <SymbolIcon Symbol="Mail" />
           </NavigationViewItem.Icon>
         </NavigationViewItem>
         <NavigationViewItem x:Uid="Workspace.Rail.Cases"
                             uen:Region.Name="Cases"
-                            Visibility="{Binding OffersCases, Converter={StaticResource OfferedVisibility}}">
+                            Visibility="{Binding OffersCases, Converter={StaticResource AffirmedVisibility}}">
           <NavigationViewItem.Icon>
             <SymbolIcon Symbol="Folder" />
           </NavigationViewItem.Icon>
@@ -132,7 +132,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             <!-- The field follows the space that would run what is typed into it: asking is Discover's act, so a
                  credential that may not ask is not offered a field to ask in. -->
             <utu:SafeArea Insets="SoftInput"
-                          Visibility="{Binding OffersDiscover, Converter={StaticResource OfferedVisibility}}">
+                          Visibility="{Binding OffersDiscover, Converter={StaticResource AffirmedVisibility}}">
               <TextBox x:Uid="Workspace.TextBox.Intent"
                        Text="{Binding Intent, Mode=TwoWay}"
                        MaxWidth="720"
@@ -250,21 +250,21 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                  exactly as the rail does. -->
             <utu:TabBarItem x:Uid="Workspace.Tab.Discover"
                             uen:Region.Name="Discover"
-                            Visibility="{Binding OffersDiscover, Converter={StaticResource OfferedVisibility}}">
+                            Visibility="{Binding OffersDiscover, Converter={StaticResource AffirmedVisibility}}">
               <utu:TabBarItem.Icon>
                 <SymbolIcon Symbol="Find" />
               </utu:TabBarItem.Icon>
             </utu:TabBarItem>
             <utu:TabBarItem x:Uid="Workspace.Tab.Mail"
                             uen:Region.Name="Mail"
-                            Visibility="{Binding OffersMail, Converter={StaticResource OfferedVisibility}}">
+                            Visibility="{Binding OffersMail, Converter={StaticResource AffirmedVisibility}}">
               <utu:TabBarItem.Icon>
                 <SymbolIcon Symbol="Mail" />
               </utu:TabBarItem.Icon>
             </utu:TabBarItem>
             <utu:TabBarItem x:Uid="Workspace.Tab.Cases"
                             uen:Region.Name="Cases"
-                            Visibility="{Binding OffersCases, Converter={StaticResource OfferedVisibility}}">
+                            Visibility="{Binding OffersCases, Converter={StaticResource AffirmedVisibility}}">
               <utu:TabBarItem.Icon>
                 <SymbolIcon Symbol="Folder" />
               </utu:TabBarItem.Icon>
