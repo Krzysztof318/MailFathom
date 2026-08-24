@@ -28,17 +28,6 @@ public sealed class MailboxScopeResolverTests
         MailAccountDisplayName.Create("Private mail"),
         MailSynchronizationMode.Push);
 
-    /// <summary>A mapping that admits a folder on both served accounts, so a scope resolved against nothing is visible as one.</summary>
-    /// <remarks>
-    /// The folder decisions a deployment holds are the deployment's rather than any owner's, so a resolver that
-    /// resolved an owner to no account and carried on would return this mapping's folders beside an empty account list.
-    /// Arranging a mapping that admits something is what makes an assertion about the empty scope an assertion at all.
-    /// </remarks>
-    private static readonly StubMailFolderParticipation MappingAnInboxOnEachServedAccount =
-        StubMailFolderParticipation.Mapping(
-            new MailFolderIdentity(Work.Id, MailFolderAlias.Create("INBOX")),
-            new MailFolderIdentity(Private.Id, MailFolderAlias.Create("INBOX")));
-
     [Fact]
     public void ReadableScope_AnAccountNamedByItsIdentifier_ResolvesToThatAccount()
     {
@@ -150,7 +139,7 @@ public sealed class MailboxScopeResolverTests
     public void ReadableScope_ADeploymentServingNoAccount_ReadsNothingRatherThanEverything()
     {
         // Arrange
-        var resolver = ResolverServing();
+        var resolver = ResolverServing(MappingAnInboxOnEachServedAccount());
 
         // Act
         var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
@@ -174,7 +163,7 @@ public sealed class MailboxScopeResolverTests
     public void ReadableScope_AnOwnerWhoOwnsNoAccount_ReadsNothingRatherThanEverything()
     {
         // Arrange
-        var resolver = ResolverFor(SyntheticMailOwner.Another, MappingAnInboxOnEachServedAccount, Work, Private);
+        var resolver = ResolverFor(SyntheticMailOwner.Another, MappingAnInboxOnEachServedAccount(), Work, Private);
 
         // Act
         var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
@@ -184,7 +173,7 @@ public sealed class MailboxScopeResolverTests
 
         var forTheOwningOwner = ResolverFor(
                 SyntheticMailOwner.Deployment,
-                MappingAnInboxOnEachServedAccount,
+                MappingAnInboxOnEachServedAccount(),
                 Work,
                 Private)
             .ReadableScope([], [], JunkMailInclusion.Excluded);
@@ -206,7 +195,7 @@ public sealed class MailboxScopeResolverTests
         bool recorded)
     {
         // Arrange
-        var resolver = ResolverFor(SyntheticMailOwner.Another, MappingAnInboxOnEachServedAccount, Work, Private);
+        var resolver = ResolverFor(SyntheticMailOwner.Another, MappingAnInboxOnEachServedAccount(), Work, Private);
 
         // Act
         var scope = resolver.ReadableScope([], [], junkMail);
@@ -633,6 +622,19 @@ public sealed class MailboxScopeResolverTests
         Assert.Empty(scope.ReadableFolders);
         Assert.Empty(scope.SelectedFolders);
     }
+
+    /// <summary>Builds a mapping that admits a folder on both served accounts, so a scope admitting none is visible as one.</summary>
+    /// <remarks>
+    /// The folder decisions a deployment holds are the deployment's rather than any owner's, so a resolver that
+    /// resolved a caller to no account and carried on would return this mapping's folders beside an empty account list.
+    /// Arranging a mapping that admits something is what makes an assertion about the empty scope an assertion at all.
+    /// A method rather than a field, because the stub mutates in place and returns itself: one instance shared between
+    /// tests would carry the arrangement of whichever test first reached for <c>Hiding</c> into the others.
+    /// </remarks>
+    private static StubMailFolderParticipation MappingAnInboxOnEachServedAccount() =>
+        StubMailFolderParticipation.Mapping(
+            new MailFolderIdentity(Work.Id, MailFolderAlias.Create("INBOX")),
+            new MailFolderIdentity(Private.Id, MailFolderAlias.Create("INBOX")));
 
     private static MailboxScopeResolver ResolverServing(params ServedMailAccount[] servedAccounts) =>
         Resolver(

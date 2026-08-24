@@ -90,6 +90,29 @@ public sealed partial class StoredEmailTimelineReaderCommandTests
     }
 
     /// <summary>
+    /// Each walk names an account of its own, which the predicate count above cannot establish: the parameters are
+    /// <c>@accountId</c>, <c>@accountId0</c>, <c>@accountId1</c>, so a merge that composed every walk against the same
+    /// account would emit the same number of equalities, the same appends, and the same bounds while answering a
+    /// caller listing several accounts with only the first account's mail.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void Page_AScopeNamingSeveralAccounts_BindsEachAccountToAWalkOfItsOwn(int accountsInScope)
+    {
+        // Arrange
+        var accountIds = AccountIdentifiers(accountsInScope);
+
+        // Act
+        var declarations = DeclarationsIn(CommandFor(accountIds));
+
+        // Assert
+        Assert.All(
+            accountIds,
+            accountId => Assert.Contains($"='{accountId}'", declarations, StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// The merged page has to be ordered the way a single walk is ordered, because a continuation cursor taken from a
     /// merged page is a boundary in that order: the undated key leads, the received timestamp follows, and the
     /// identifier breaks the tie. A page ordered any other way would resume somewhere else.
@@ -151,6 +174,14 @@ public sealed partial class StoredEmailTimelineReaderCommandTests
         var orderingStart = command.LastIndexOf("ORDER BY", StringComparison.Ordinal);
 
         return orderingStart < 0 ? string.Empty : SourceAlias().Replace(command[orderingStart..], string.Empty);
+    }
+
+    /// <summary>Keeps the parameter declarations a generated command is prefixed with, which is where a bound value is readable.</summary>
+    private static string DeclarationsIn(string command)
+    {
+        var statementStart = command.IndexOf("SELECT", StringComparison.Ordinal);
+
+        return statementStart < 0 ? string.Empty : command[..statementStart];
     }
 
     private static int Occurrences(string command, string fragment)
