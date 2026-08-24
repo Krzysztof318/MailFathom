@@ -29,6 +29,15 @@
           Link="Build/Client.csproj"
           TargetPath="Build/Client.csproj"
           CopyToOutputDirectory="PreserveNewest" />
+
+    <!-- The string tables, on the same terms and for the same reason: they are compiled into a resource map a running
+         head resolves and this host has none, so the suite reads the authored files instead. What it asserts of them
+         is which languages are authored at all and whether every table says the same things, neither of which a build
+         reports. -->
+    <None Include="..\..\src\Client\Strings\**\Resources.resw"
+          Link="Strings/%(RecursiveDir)Resources.resw"
+          TargetPath="Strings/%(RecursiveDir)Resources.resw"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

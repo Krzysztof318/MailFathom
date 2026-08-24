@@ -192,6 +192,9 @@ project here and neither build reads the other's files.
   head publishes trimmed and enables Uno's XAML resource trimming with it; the desktop head is neither trimmed nor
   compiled ahead of time, because the component that puts the notices above beside it has to stay unmodified and
   separately replaceable. [Publishing the client](../operations/client-publishing.md) carries the whole posture.
+- `src/Client/Strings/` holds one string table per language the application is readable in, one directory per neutral
+  culture. Which of them are offered is `LocalizationConfiguration:Cultures` in the embedded `appsettings.json`, so a
+  language reaches a reader only where both the table and that list name it.
 - `tests/Client.UnitTests` covers both, referencing the application through its plain target and `Client.Backend`
   directly, on the same xUnit.net v3 and Microsoft Testing Platform the service's suites use.
 - Almost no client package version is written in this repository. `UnoFeatures` in the project file names capabilities

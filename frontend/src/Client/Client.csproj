@@ -29,18 +29,27 @@
     <UnoIconBackgroundColor>#010D33</UnoIconBackgroundColor>
     <UnoSplashScreenColor>#010D33</UnoSplashScreenColor>
 
+    <!-- The language a head falls back to when the operating system asks for one this application does not carry, and
+         the one a resource lookup resolves against when nothing else answers. English rather than Polish because the
+         person who has configured nothing is the one this decides for, and a first run has to be readable before any
+         setting has been found. It is an IETF language tag and it names a neutral culture: `en` and `pl` are what
+         Strings/ carries, and a regional variant arrives when something actually differs between regions. -->
+    <DefaultLanguage>en</DefaultLanguage>
+
     <!-- UnoFeatures is how an Uno single project asks for a capability rather than for a package: the SDK resolves each
          one to the packages and versions its own pin decides. Material is the design system every brush and style here
          resolves against, Configuration is what reads the deployment an installed head reaches out of an embedded
-         appsettings.json — the one source a browser head can read too — Toolkit adds the controls the shell is built
-         from, Hosting and Logging are the generic-host wiring the application starts through, MVUX is the state model,
-         Navigation is the router, ThemeService is what puts the application into light or dark and remembers which,
+         appsettings.json — the one source a browser head can read too — Localization is what resolves a string against
+         the culture the person is reading in, Toolkit adds the controls the shell is built from, Hosting and Logging
+         are the generic-host wiring the application starts through, MVUX is the state model, Navigation is the router,
+         ThemeService is what puts the application into light or dark and remembers which,
          and SkiaRenderer is what makes one rendering path serve every head.
          https://aka.platform.uno/singleproject-features -->
     <UnoFeatures>
       Material;
       Configuration;
       Hosting;
+      Localization;
       Toolkit;
       Logging;
       MVUX;
@@ -57,6 +66,22 @@
        it rather than declared for the project. -->
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- The whole ICU data set rather than the shards the WebAssembly SDK ships by default, because the default makes
+         the languages this application offers depend on the language the reader's browser is set to. Left alone, the
+         SDK deploys icudt_EFIGS.dat, icudt_CJK.dat, and icudt_no_CJK.dat, writes `"globalizationMode": "sharded"` into
+         the boot document, and the runtime picks one of the three from `navigator.languages`: a browser reporting
+         English loads EFIGS, `CultureInfo.GetCultures` then holds no `pl` at all, and Uno's localization drops a
+         culture it cannot resolve without saying so — so Polish disappears from the picker for exactly the person most
+         likely to want it, on a build whose Polish string table is present and correct. It costs roughly a megabyte
+         over a shard, compressed on the wire and cached, and it is what makes the offered languages the same wherever
+         the client runs. The desktop head resolves cultures from the operating system and needs none of it.
+
+         The property is named for Blazor and this is not a Blazor application, but it is the one that acts here: the
+         WebAssembly SDK reads it while composing the static web assets. `WasmIncludeFullIcuData`, which the runtime
+         SDK documents for the same thing, belongs to the older WasmAppBuilder bundle path that this project does not
+         take, and setting it changes nothing. -->
+    <BlazorWebAssemblyLoadAllGlobalizationData>true</BlazorWebAssemblyLoadAllGlobalizationData>
   </PropertyGroup>
 
   <!-- XAML resource trimming, on the browser head and on no other. Uno's pass is not a second trimmer: it runs inside
