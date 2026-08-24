@@ -7594,7 +7594,10 @@ the_client_publishes_what_its_licences_allow() {
       failures+='Client.csproj still attaches an LGPL notice to the desktop publish. '
     fi
 
-    if grep -qF 'LGPL' "$source_repository_root/.github/workflows/release.yml"; then
+    # The notes the archives are downloaded from, which is where section 6's source offer had to be. Read as the
+    # `printf` lines that compose them rather than as the whole file, so the comment above them stays free to say
+    # what the offer was and why it went.
+    if grep -qE '^[[:space:]]*printf .*LGPL' "$source_repository_root/.github/workflows/release.yml"; then
       failures+='release.yml still writes the LGPL source offer into the release notes. '
     fi
   fi

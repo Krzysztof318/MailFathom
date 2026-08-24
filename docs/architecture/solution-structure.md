@@ -184,10 +184,12 @@ project here and neither build reads the other's files.
   the desktop head uses ships in `Client.Backend`; the browser head's lives under `src/Client/Platforms/WebAssembly/`,
   because it needs the JavaScript interop only that target framework compiles — and that interop is why the browser
   head is the one place the application project sets `AllowUnsafeBlocks`, which the `[JSImport]` generator requires.
-- A published desktop head carries the repository's own `LICENSE` and `NOTICE` beside it and nothing further, because
-  no component in that head's graph obliges a notice of its own. The project file attaches both to every
-  `net10.0-desktop` publish and fails the build when one is missing, so the attribution travels with the artifact
-  rather than with the workflow that happens to produce it.
+- A published desktop head carries the repository's own `LICENSE` and `NOTICE` beside it, and those are the two files
+  this project attaches by hand. The project file attaches both to every `net10.0-desktop` publish and fails the build
+  when one is missing, so the attribution travels with the artifact rather than with the workflow that happens to
+  produce it. The permissive components inside that head oblige notices of their own, which the notice bundle carries
+  for every artifact at once rather than per publish; what the head no longer carries is a copyleft component and the
+  two files this project attached for that one alone.
 - What a published head is optimized with is conditioned per target framework in that same project file. The browser
   head publishes trimmed and enables Uno's XAML resource trimming with it; the desktop head does neither, and since
   the one copyleft component in its graph is excluded from the publish, what keeps it that way is a measurement nobody

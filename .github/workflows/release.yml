@@ -327,10 +327,12 @@ jobs:
           name: ${{ needs.cli-binaries.outputs.artifact }}
           path: artifacts/cli
 
-      # Conditional for the same reason, and carrying its own notices: each archive holds the application with
-      # MailFathom's own licence and attribution beside it. Nothing else is owed — every component that head
-      # redistributes is permissive, and the one copyleft package its restore graph resolves is excluded from the
-      # publish rather than shipped under conditions. THIRD_PARTY_LICENSES.md carries that verdict.
+      # Conditional for the same reason: each archive holds the application with MailFathom's own licence and
+      # attribution beside it. What it no longer carries is the LGPL notice, licence text, and source offer, because
+      # the one copyleft package the restore graph resolves is now excluded from the publish rather than shipped under
+      # conditions — THIRD_PARTY_LICENSES.md carries that verdict. The permissive components inside it still oblige
+      # their own notices, which the notice bundle issue #191 owns discharges for every artifact at once rather than
+      # this step for one.
       - name: Download the desktop client
         if: needs.desktop-client.result == 'success'
         uses: actions/download-artifact@v8
@@ -428,8 +430,11 @@ jobs:
             printf '`MailFathom.Client.exe`. Verify a download against `mailfathom-client-%s.sha256`, which is the ' "$VERSION"
             printf 'only thing that verifies it: no artifact here is code-signed either.\n\n'
             printf 'Each archive carries `LICENSE` and `NOTICE` beside the application, which are the terms '
-            printf 'MailFathom itself is under: everything else inside it is permissively licensed and owes no '
-            printf 'notice of its own.\n'
+            printf 'MailFathom itself is under. Everything else inside it is permissively licensed — MIT, '
+            printf 'Apache-2.0, and the Unicode License — and '
+            printf '[THIRD_PARTY_LICENSES.md](https://github.com/%s/blob/%s/THIRD_PARTY_LICENSES.md) ' \
+              "$REPOSITORY" "$RELEASE_TAG"
+            printf 'records each component and the terms it arrives under.\n'
           } > "$notes_file"
 
           # Idempotent, because a re-run of a release must not fail on the release it already created.

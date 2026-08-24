@@ -159,11 +159,13 @@
   </ItemGroup>
 
   <!-- What a distributed desktop head has to carry, attached to the publish rather than to the workflow that
-       publishes: the project's own Apache-2.0 grant and attribution. Nothing else in this head's graph obliges a
-       notice — every package it resolves is permissive, and the one that was not is excluded above — so these two
-       files are MailFathom's own terms rather than somebody else's. Written here so that every publish of this head
-       carries them, including one a contributor runs. The browser head is served from the container image, whose own
-       LICENSE and NOTICE the service publishes beside its assemblies. -->
+       publishes: the project's own Apache-2.0 grant and attribution. These two are MailFathom's own terms, and they
+       are all this project attaches by hand — the components inside the head are permissive rather than free of
+       obligation, and the MIT, Apache-2.0, and Unicode notices they oblige are the notice bundle's to carry for every
+       artifact at once, which is what issue #191 owns. What is gone is the one copyleft component and the two files
+       this project attached for it alone; see THIRD_PARTY_LICENSES.md. Written here so that every publish of this
+       head carries these two, including one a contributor runs. The browser head is served from the container image,
+       whose own LICENSE and NOTICE the service publishes beside its assemblies. -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">
     <None Include="$(RepositoryRoot)LICENSE" Link="LICENSE" CopyToPublishDirectory="PreserveNewest" />
     <None Include="$(RepositoryRoot)NOTICE" Link="NOTICE" CopyToPublishDirectory="PreserveNewest" />

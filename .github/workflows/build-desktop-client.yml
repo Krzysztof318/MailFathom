@@ -14,12 +14,13 @@ name: Build the desktop client
 # supports rather than a flag nobody set. What a Linux or macOS user has today is the browser head the container image
 # serves.
 #
-# Nothing here is a licence condition any more. The `net10.0-desktop` restore graph resolves one copyleft package —
-# `LibVLCSharp`, LGPL-2.1-or-later, declared unconditionally by `Uno.WinUI.Runtime.Skia.X11` and used by nothing this
-# project builds — and `frontend/src/Client/Client.csproj` excludes it from the publish, so the archives this job
-# produces carry no component that obliges a notice. THIRD_PARTY_LICENSES.md holds that verdict. MailFathom's own
-# LICENSE and NOTICE are attached by the project file rather than by a step here, so a contributor's own publish
-# carries them too.
+# No licence condition constrains how this job builds any more. The `net10.0-desktop` restore graph resolves one
+# copyleft package — `LibVLCSharp`, LGPL-2.1-or-later, declared unconditionally by `Uno.WinUI.Runtime.Skia.X11` and
+# used by nothing this project builds — and `frontend/src/Client/Client.csproj` excludes it from the publish, so
+# nothing in these archives asks to stay unmodified or separately replaceable. THIRD_PARTY_LICENSES.md holds that
+# verdict. What the archives still owe is the ordinary permissive notice — MIT, Apache-2.0, Unicode — which the notice
+# bundle issue #191 owns discharges rather than a step here. MailFathom's own LICENSE and NOTICE are attached by the
+# project file rather than by a step here, so a contributor's own publish carries them too.
 #
 # What keeps this job on a Linux runner is a second reason entirely, and it outlives the one above. A Native AOT
 # publish runs the native toolchain of the platform it targets and cannot cross-compile, so enabling it would cost a
