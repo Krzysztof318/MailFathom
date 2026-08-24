@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Embeddings.Backfill;
-using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Persistence;
 
 namespace MailFathom.Application.Emails.Embeddings.Generations;
@@ -26,29 +25,24 @@ namespace MailFathom.Application.Emails.Embeddings.Generations;
 public sealed class EmbeddingProfileActivation
 {
     private readonly IEmbeddingGenerationStore generationStore;
-    private readonly IEmbeddingProfileVectorIndex vectorIndex;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
     private readonly EmbeddingBackfillSchedule backfillSchedule;
 
     /// <summary>Initializes a new activation.</summary>
     /// <param name="generationStore">Reads which generations exist and registers the one being started.</param>
-    /// <param name="vectorIndex">Builds the approximate index the new generation will be searched through.</param>
     /// <param name="concurrencyRetryPolicy">Commits the registration, retrying a conflict with a competing writer.</param>
     /// <param name="backfillSchedule">Brings the next upkeep pass forward once there is a generation for it to walk towards.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public EmbeddingProfileActivation(
         IEmbeddingGenerationStore generationStore,
-        IEmbeddingProfileVectorIndex vectorIndex,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         EmbeddingBackfillSchedule backfillSchedule)
     {
         ArgumentNullException.ThrowIfNull(generationStore);
-        ArgumentNullException.ThrowIfNull(vectorIndex);
         ArgumentNullException.ThrowIfNull(concurrencyRetryPolicy);
         ArgumentNullException.ThrowIfNull(backfillSchedule);
 
         this.generationStore = generationStore;
-        this.vectorIndex = vectorIndex;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
         this.backfillSchedule = backfillSchedule;
     }
@@ -58,11 +52,6 @@ public sealed class EmbeddingProfileActivation
     /// <param name="cancellationToken">Cancels the reads and the registration.</param>
     /// <returns>What the activation did, and which generation it did it to.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="declared" /> is <see langword="null" />.</exception>
-    /// <exception cref="EmbeddingVectorIndexFailedException">
-    /// Thrown when the registration committed but the database refused to build the generation's approximate index. The
-    /// generation is registered and the reindex will run; searching it stays exact until an activation of the same
-    /// declaration builds the index, which is why repeating the command is what repairs this.
-    /// </exception>
     /// <exception cref="PersistenceConcurrencyConflictException">
     /// Thrown when a competing writer wins a race the bounded retries could not resolve and which was not another
     /// activation: losing to one of those is reported as an outcome rather than raised, because what the operator has
@@ -90,7 +79,7 @@ public sealed class EmbeddingProfileActivation
         if (generations.Building is { } building)
         {
             return Fingerprints(building) == declaredFingerprint
-                ? await this.ResumeBuildingAsync(building, cancellationToken)
+                ? this.ResumeBuilding(building)
                 : new EmbeddingProfileActivationResult(
                     EmbeddingProfileActivationOutcome.DifferentReindexRunning,
                     building.Id);
@@ -110,10 +99,6 @@ public sealed class EmbeddingProfileActivation
         {
             return await this.ReportTheReindexThatWonAsync(conflict, declaredFingerprint, cancellationToken);
         }
-
-        // Built while the generation is empty, which is the cheapest moment it can be built and the reason no migration
-        // creates it: the index covers one profile and one width, neither of which exists before this call.
-        await this.vectorIndex.EnsureBuiltAsync(registered, cancellationToken);
 
         this.AskForAPassNow();
 
@@ -142,23 +127,19 @@ public sealed class EmbeddingProfileActivation
         }
 
         return Fingerprints(building) == declaredFingerprint
-            ? await this.ResumeBuildingAsync(building, cancellationToken)
+            ? this.ResumeBuilding(building)
             : new EmbeddingProfileActivationResult(
                 EmbeddingProfileActivationOutcome.DifferentReindexRunning,
                 building.Id);
     }
 
-    /// <summary>Reports the reindex already under way, having made sure it has the index it will be read through.</summary>
+    /// <summary>Reports the reindex already under way, and asks for the pass that carries it forward.</summary>
     /// <remarks>
-    /// The index build is repeated rather than skipped because it is idempotent and because a failed one is exactly what
-    /// brings an operator back to this command. Skipping it would leave the only repair path doing nothing.
+    /// Repeating the command on a generation already being built is how an operator asks for a stalled reindex to be
+    /// picked up again, so it brings a pass forward rather than answering and doing nothing.
     /// </remarks>
-    private async Task<EmbeddingProfileActivationResult> ResumeBuildingAsync(
-        RegisteredEmbeddingProfile building,
-        CancellationToken cancellationToken)
+    private EmbeddingProfileActivationResult ResumeBuilding(RegisteredEmbeddingProfile building)
     {
-        await this.vectorIndex.EnsureBuiltAsync(building, cancellationToken);
-
         this.AskForAPassNow();
 
         return new EmbeddingProfileActivationResult(

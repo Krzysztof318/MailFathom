@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Embeddings.Backfill;
-using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Persistence;
 
 namespace MailFathom.Application.Emails.Embeddings.Generations;
@@ -37,33 +36,28 @@ public sealed class EmbeddingGenerationUpkeep
     private readonly IEmbeddingGenerationStore generationStore;
     private readonly IStoredEmailEmbeddingBackfillStore backfillStore;
     private readonly StoredEmailEmbeddingBackfill backfill;
-    private readonly IEmbeddingProfileVectorIndex vectorIndex;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
 
     /// <summary>Initializes a new upkeep pass.</summary>
     /// <param name="generationStore">Reads the generations and writes the transitions between them.</param>
     /// <param name="backfillStore">Answers how much of the target generation is still outstanding.</param>
     /// <param name="backfill">Walks the stored mail towards the target generation.</param>
-    /// <param name="vectorIndex">Removes the approximate index of a generation nothing reads any more.</param>
     /// <param name="concurrencyRetryPolicy">Commits a transition or a removal batch, retrying a conflict with a competing writer.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public EmbeddingGenerationUpkeep(
         IEmbeddingGenerationStore generationStore,
         IStoredEmailEmbeddingBackfillStore backfillStore,
         StoredEmailEmbeddingBackfill backfill,
-        IEmbeddingProfileVectorIndex vectorIndex,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy)
     {
         ArgumentNullException.ThrowIfNull(generationStore);
         ArgumentNullException.ThrowIfNull(backfillStore);
         ArgumentNullException.ThrowIfNull(backfill);
-        ArgumentNullException.ThrowIfNull(vectorIndex);
         ArgumentNullException.ThrowIfNull(concurrencyRetryPolicy);
 
         this.generationStore = generationStore;
         this.backfillStore = backfillStore;
         this.backfill = backfill;
-        this.vectorIndex = vectorIndex;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
     }
 
@@ -71,7 +65,6 @@ public sealed class EmbeddingGenerationUpkeep
     /// <param name="cancellationToken">Cancels the pass between its steps and inside each of them.</param>
     /// <returns>What the pass produced, and whether running again shortly would reach more.</returns>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when a competing writer wins a race the bounded retries could not resolve.</exception>
-    /// <exception cref="EmbeddingVectorIndexFailedException">Thrown when the database refused to remove a superseded generation's index.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels. Everything already committed stays durable.</exception>
     public async Task<EmbeddingGenerationUpkeepResult> RunAsync(CancellationToken cancellationToken)
     {
@@ -130,21 +123,13 @@ public sealed class EmbeddingGenerationUpkeep
             return EmbeddingGenerationTransition.None;
         }
 
-        // Dropped after the switch rather than with it, and outside its transaction: an index is not something the
-        // switch can roll back, and every batched delete below would otherwise maintain an index nothing will read.
-        if (generations.Serving is { } superseded)
-        {
-            await this.vectorIndex.RemoveAsync(superseded.Id, cancellationToken);
-        }
-
         return EmbeddingGenerationTransition.Switched;
     }
 
     /// <summary>Removes one bounded batch of a superseded generation's vectors.</summary>
     /// <remarks>
-    /// One generation per pass, and the index goes when the last batch of it does. A batch that came back short is the
-    /// generation being empty, which is also the moment an index left behind by a process that stopped mid-removal is
-    /// cleared — the call is idempotent, so paying it once per emptied generation costs nothing.
+    /// One generation per pass. A batch that came back short is the generation being empty, which is what ends the
+    /// removal of that generation and lets the next pass find the next one.
     /// </remarks>
     private async Task<int> RemoveSupersededVectorsAsync(CancellationToken cancellationToken)
     {
@@ -161,11 +146,6 @@ public sealed class EmbeddingGenerationUpkeep
                 SupersededVectorRemovalBatchSize,
                 attemptCancellationToken),
             cancellationToken);
-
-        if (removedVectorCount < SupersededVectorRemovalBatchSize)
-        {
-            await this.vectorIndex.RemoveAsync(supersededProfileId, cancellationToken);
-        }
 
         return removedVectorCount;
     }

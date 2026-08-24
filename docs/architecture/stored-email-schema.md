@@ -241,7 +241,7 @@ Nothing operational reaches this table. The endpoint address, the credential, th
 
 `email_embeddings` holds one vector per chunk per profile. Its key is `(EmailChunkId, EmbeddingProfileId)`, named `pk_email_embeddings`, because that pair is what a vector *is*: re-embedding a passage under the profile already serving it replaces the row rather than adding one, and the constraint is what an idempotent upsert conflicts on. Nothing references a vector row, so unlike a chunk it needs no identifier of its own.
 
-`Embedding` is pgvector's **dimensionless `vector`** rather than `vector(N)`. That is what lets two profiles of different widths share one table, each reachable by an expression index built when that profile is activated; declaring a width on the column would fix the whole table to one profile's geometry. Before such an index exists, exact vector search remains correct and slower.
+`Embedding` is pgvector's **dimensionless `vector`** rather than `vector(N)`. That is what lets two profiles of different widths share one table; declaring a width on the column would fix the whole table to one profile's geometry. Every read of it casts to the profile's own width, and the search over it is exact — [the vector index that is not there](#the-vector-index-that-is-not-there) is why nothing indexes the column.
 
 Dropping the width from the column does not drop it from the schema, and the pair of constraints that replaces it is the point of the table's shape:
 
@@ -1085,25 +1085,15 @@ account reach these four tables through the same cascade every other table is re
 
 The recipient, keyword, and search-vector indexes are GIN rather than B-tree because all of them serve containment tests. A B-tree over an array column serves only equality against a whole array, and over a `tsvector` it serves nothing search asks for; a GIN index is what turns either into an index scan.
 
-No partial index over remotely deleted messages exists, and its absence is deliberate; one waits for the remote-expunge reconciliation that introduces the state it would filter on. The per-profile HNSW index is absent from the migrations for a different reason, and permanently.
+No partial index over remotely deleted messages exists, and its absence is deliberate; one waits for the remote-expunge reconciliation that introduces the state it would filter on. The absence of any index over `Embedding` is deliberate in a stronger sense, and permanent.
 
-### The index no migration creates
+### The vector index that is not there
 
-An approximate index over `Embedding` covers one width and one generation, and neither is known when a migration runs. So `email_embeddings` carries one per profile, built and removed as a profile's lifecycle asks rather than when the table is created:
+Nothing indexes `Embedding`. A semantic search measures every eligible message's nearest passage against the query, which is exact and linear in the number of vectors it reads; there is no approximate path beside it, and a profile's activation builds nothing in the database.
 
-```sql
-CREATE INDEX IF NOT EXISTS "ix_email_embeddings_hnsw_0198f3d24b6a7c1e9f042a5b8c7d6e10"
-ON email_embeddings USING hnsw (("Embedding"::vector(1536)) vector_cosine_ops)
-WHERE "EmbeddingProfileId" = '0198f3d2-4b6a-7c1e-9f04-2a5b8c7d6e10'::uuid
-```
+That is a measured decision rather than an omission. An approximate index over `Embedding` covers one width and one generation, so it could only ever have been a partial index per profile, built and dropped as a profile's lifecycle asked — and on a hundred-thousand-message mailbox at 1536 dimensions the ranking query never chose one, an approximate window kept a median of four of its fifty results once the caller's own folder and date filters were applied and none once they named a sender, while the index cost 3073 MB beside a 3137 MB table, three quarters of an hour of blocked writes to build, and a hundredfold on every embedding insert. [What a semantic search costs](semantic-ranking-cost.md) holds the measurement and what it decided.
 
-Both unusual halves follow from the dimensionless column. The cast is what gives HNSW a width to index; the predicate is what keeps this index over the rows that have that width, so a second generation is served by an index of its own instead of colliding with this one. The operator class follows the profile's metric — `vector_cosine_ops`, `vector_ip_ops`, or `vector_l2_ops` — because a space indexed under a distance it was not built for returns a plausible number rather than an error.
-
-The name is the profile's identifier written as thirty-two hexadecimal digits, which does two things. It keeps the whole name inside the sixty-three bytes PostgreSQL keeps of an identifier, where truncation would let two profiles share one index. And because a profile's identity is immutable, an index already carrying the name *is* the index a repeated build would have produced — which is what makes `IF NOT EXISTS` safe here, given that PostgreSQL does not compare an existing index against the one asked for.
-
-**Nothing in either statement comes from a caller.** PostgreSQL accepts no parameter in a utility statement, so the width, the operator class, the predicate value, and the name are all part of the text; each is read from the registered profile's own immutable columns or chosen by a closed mapping over an enum. The provider and model names a profile carries never enter it at all.
-
-Building one is therefore an administrative act rather than a schema migration, and it is the one place MailFathom changes the schema outside the artifact an operator applies. [Applying the database schema](../operations/database-schema.md#the-one-index-mailfathom-creates-itself) states what that costs a deployment that separates its migrating role from its serving one. Before an index exists, a vector search over that profile is exact — correct, and linear in the number of vectors — which is what makes a failure to build one a performance finding rather than a wrong answer.
+Two things follow for this table. `ix_email_embeddings_profile` is the only index it carries beyond its keys, and it earns that on a different query — reading a whole generation in bounded batches when a superseded one is removed. And MailFathom now changes the schema nowhere outside the artifact an operator applies, which is what [Applying the database schema](../operations/database-schema.md#every-index-is-in-the-script) states for a deployment that separates its migrating role from its serving one.
 
 ## The timeline ordering contract
 

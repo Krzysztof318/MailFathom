@@ -17,7 +17,6 @@ using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Administration;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
-using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Emails.Extraction;
@@ -390,15 +389,11 @@ public static class ServiceCollectionExtensions
         // reads it on every instance; what decides that no pass is ever scheduled is the worker saying so, not the
         // absence of anything to embed.
         services.AddSingleton<EmbeddingBackfillSchedule>();
-        // The only registration here that changes the schema. It is scoped like every other store so that a caller
-        // which has opened a persistence session gets its statement inside that session's transaction rather than
-        // beside it.
-        services.AddScoped<IEmbeddingProfileVectorIndex, EmbeddingProfileVectorIndex>();
         services.AddScoped<IStoredEmailEmbeddingBackfillStore, StoredEmailEmbeddingBackfillStore>();
         services.AddScoped<IEmbeddingGenerationStore, EmbeddingGenerationStore>();
         // The two operator acts on a generation, registered here rather than beside the generation work because neither
-        // resolves an `ITextEmbeddingGenerator`: they move a profile row and maintain an index, so they build in every
-        // container. What decides that there is anything to activate is the declaration the caller reads, not this.
+        // resolves an `ITextEmbeddingGenerator`: they move a profile row, so they build in every container. What decides
+        // that there is anything to activate is the declaration the caller reads, not this.
         services.AddScoped<EmbeddingProfileActivation>();
         services.AddScoped<EmbeddingReindexCancellation>();
         // What the administrative surface asks of those two: the counting in front of an activation, and the one read

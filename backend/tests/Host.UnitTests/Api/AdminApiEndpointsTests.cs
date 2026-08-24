@@ -9,7 +9,6 @@ using MailFathom.Application.Contacts;
 using MailFathom.Application.Emails.Embeddings.Administration;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
-using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Observability;
@@ -389,7 +388,6 @@ public sealed class AdminApiEndpointsTests
     {
         var generationStore = Substitute.For<IEmbeddingGenerationStore>();
         var workloadReader = Substitute.For<IEmbeddingWorkloadReader>();
-        var vectorIndex = Substitute.For<IEmbeddingProfileVectorIndex>();
         var timeProvider = new FakeTimeProvider();
         var spendGate = new EmbeddingSpendGate(
             Substitute.For<IEmbeddingSpendLedger>(),
@@ -414,11 +412,10 @@ public sealed class AdminApiEndpointsTests
             generationStore,
             workloadReader,
             spendGate,
-            new EmbeddingProfileActivation(generationStore, vectorIndex, retryPolicy, backfillSchedule),
+            new EmbeddingProfileActivation(generationStore, retryPolicy, backfillSchedule),
             Authorization));
         services.AddScoped(_ => new EmbeddingReindexCancellation(
             generationStore,
-            vectorIndex,
             retryPolicy,
             backfillSchedule,
             Authorization));

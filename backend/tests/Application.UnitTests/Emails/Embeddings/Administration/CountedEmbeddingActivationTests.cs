@@ -7,7 +7,6 @@ using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Administration;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
-using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
@@ -281,7 +280,6 @@ public sealed class CountedEmbeddingActivationTests
                 timeProvider),
             new EmbeddingProfileActivation(
                 generationStore,
-                Substitute.For<IEmbeddingProfileVectorIndex>(),
                 new OptimisticConcurrencyRetryPolicy(
                     sessionFactory,
                     new PersistenceConcurrencyOptions(),

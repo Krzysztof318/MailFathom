@@ -17,6 +17,9 @@
 - name: The stored email schema
   href: stored-email-schema.md
   description: The columns, constraints, and indexes the mail timeline is read from, and why raw MIME and search text live in tables of their own.
+- name: What a semantic search costs
+  href: semantic-ranking-cost.md
+  description: What ranking a full mailbox by vector distance costs at the scale an owner reaches, measured, and why that ranking is exact and no approximate index is kept for it.
 - name: Outbound resilience
   href: outbound-resilience.md
   description: The one model for deciding whether repeating a failed call to a dependency is recovery or damage.

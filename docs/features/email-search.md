@@ -179,8 +179,10 @@ for two instances to disagree about what "most relevant" means while both report
 - **Semantic recall follows the backfill.** A mailbox that is still being embedded reports `Hybrid` and finds only what
   already carries vectors. [Embedding backfill](embedding-backfill.md) records how that catches up.
 - **The vector ranking is exact rather than approximate**, because the caller's filters join it and an approximate index
-  scan cannot carry a filter on a joined table. That is what makes the fused order deterministic for a given index
-  state, which is the property the whole method rests on.
+  scan cannot carry a filter on a joined table. No vector index is built at all, so the fused order is deterministic —
+  the property the whole method rests on. [What a semantic search
+  costs](../architecture/semantic-ranking-cost.md) states what exactness costs on a mailbox at the scale an owner
+  reaches, measured, what a caller's own filters take off that, and what an approximate path was found to cost.
 - **The query is prepared exactly as a passage is.** A profile's `PassageInstruction` is applied to the query text too,
   because the preparation is part of the profile's identity and a search that prepared its query differently would be
   measuring against a space the stored vectors do not belong to. A model that asks for a different prefix on a query

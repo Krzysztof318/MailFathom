@@ -110,8 +110,8 @@ public sealed class CountedEmbeddingActivation
     /// <remarks>
     /// The assessment is taken again here rather than accepted from the caller, so what refuses a spend is the state of
     /// the deployment at the moment it would happen rather than a figure a client read earlier and may have edited on
-    /// the way back. Every other failure of the activation itself — a lost registration race, an index the database
-    /// refused — is <see cref="EmbeddingProfileActivation" />'s and reaches the caller unchanged.
+    /// the way back. Every other failure of the activation itself — a lost registration race above all — is
+    /// <see cref="EmbeddingProfileActivation" />'s and reaches the caller unchanged.
     /// <para>
     /// This is the one operation on the administrative surface that starts a provider bill, which is why it is the only
     /// one asking for <see cref="MailFathomPermission.AdminSpend" /> and why holding the read permission does not reach

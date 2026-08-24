@@ -6,7 +6,6 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
-using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
@@ -46,24 +45,6 @@ public sealed class EmbeddingReindexCancellationTests
     }
 
     /// <summary>
-    /// The abandoned generation's index goes with it, because every batched delete of its vectors would otherwise
-    /// maintain an index nothing will ever read.
-    /// </summary>
-    [Fact]
-    public async Task CancelAsync_AReindexRunning_RemovesTheApproximateIndexOfTheAbandonedGeneration()
-    {
-        // Arrange
-        var world = CreateWorld();
-        var building = world.GenerationStore.Add(CreateIdentity("a-model"), EmbeddingProfileLifecycleState.Building);
-
-        // Act
-        await world.Cancellation.CancelAsync(TestContext.Current.CancellationToken);
-
-        // Assert
-        await world.VectorIndex.Received(1).RemoveAsync(building.Id, Arg.Any<CancellationToken>());
-    }
-
-    /// <summary>
     /// What a cancellation leaves is a generation nothing reads whose partial vectors are personal data with no purpose
     /// left, and the pass that removes them is the one the interval before it chose while there was still a reindex to
     /// pace. Asking for it here is what keeps that removal from waiting out as much as a quarter of an hour.
@@ -99,20 +80,17 @@ public sealed class EmbeddingReindexCancellationTests
         // Assert
         Assert.Equal(EmbeddingReindexCancellationOutcome.NothingBuilding, outcome);
         Assert.Equal(EmbeddingProfileLifecycleState.Active, world.GenerationStore.StateOf(serving.Id));
-        await world.VectorIndex.DidNotReceiveWithAnyArgs().RemoveAsync(default, TestContext.Current.CancellationToken);
         Assert.Null(world.BackfillSchedule.NextPassDueAt);
     }
 
     /// <summary>
     /// A reindex that completed between the read and the write took its generation into service, and abandoning that is
-    /// not what this command means. Removing its index would be worse than the report: searches would go on being
-    /// answered, exactly and slowly, with nothing saying why.
+    /// not what this command means, so the command reports rather than acting.
     /// </summary>
     [Fact]
-    public async Task CancelAsync_TheReindexCompletedFirst_ChangesNothingAndLeavesTheIndexAlone()
+    public async Task CancelAsync_TheReindexCompletedFirst_ChangesNothingAndReportsIt()
     {
         // Arrange
-        var vectorIndex = Substitute.For<IEmbeddingProfileVectorIndex>();
         var building = new RegisteredEmbeddingProfile(
             EmbeddingProfileId.Create(Guid.CreateVersion7()),
             CreateIdentity("a-model"));
@@ -132,7 +110,6 @@ public sealed class EmbeddingReindexCancellationTests
 
         var cancellation = new EmbeddingReindexCancellation(
             generationStore,
-            vectorIndex,
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
@@ -145,7 +122,10 @@ public sealed class EmbeddingReindexCancellationTests
 
         // Assert
         Assert.Equal(EmbeddingReindexCancellationOutcome.NothingBuilding, outcome);
-        await vectorIndex.DidNotReceiveWithAnyArgs().RemoveAsync(default, TestContext.Current.CancellationToken);
+        await generationStore.Received(1).AbandonAsync(
+            Arg.Any<IPersistenceSession>(),
+            building.Id,
+            Arg.Any<CancellationToken>());
     }
 
     private static EmbeddingProfileIdentity CreateIdentity(string modelIdentifier) =>
@@ -175,7 +155,6 @@ public sealed class EmbeddingReindexCancellationTests
     private static CancellationWorld CreateWorld(AccessAuthorization? authorization = null)
     {
         var generationStore = new InMemoryEmbeddingGenerationStore(new InMemoryEmailEmbeddingStore());
-        var vectorIndex = Substitute.For<IEmbeddingProfileVectorIndex>();
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>())
@@ -184,7 +163,6 @@ public sealed class EmbeddingReindexCancellationTests
         var backfillSchedule = new EmbeddingBackfillSchedule(new FakeTimeProvider(Now));
         var cancellation = new EmbeddingReindexCancellation(
             generationStore,
-            vectorIndex,
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
@@ -192,13 +170,12 @@ public sealed class EmbeddingReindexCancellationTests
             backfillSchedule,
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate));
 
-        return new CancellationWorld(generationStore, vectorIndex, backfillSchedule, cancellation);
+        return new CancellationWorld(generationStore, backfillSchedule, cancellation);
     }
 
     /// <summary>The generations and the collaborators one cancellation works against.</summary>
     private sealed record CancellationWorld(
         InMemoryEmbeddingGenerationStore GenerationStore,
-        IEmbeddingProfileVectorIndex VectorIndex,
         EmbeddingBackfillSchedule BackfillSchedule,
         EmbeddingReindexCancellation Cancellation);
 }

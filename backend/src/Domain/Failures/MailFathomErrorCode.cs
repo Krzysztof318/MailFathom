@@ -326,22 +326,6 @@ public readonly record struct MailFathomErrorCode
     /// <summary>Gets subcategory 2, schema state: the lexical index was built with a different text search configuration than the one configured.</summary>
     public static MailFathomErrorCode DatabaseSchemaTextSearchConfigurationMismatch { get; } = new(32003);
 
-    /// <summary>Gets subcategory 3, vector indexes: the approximate index one embedding profile's vectors are searched through is not in the state its lifecycle asked for.</summary>
-    /// <remarks>
-    /// <para>
-    /// One code covers a build that did not happen and a removal that did not, because both leave the same finding for
-    /// an operator to act on: the index a profile's lifecycle calls for is not the index the database holds. Which of
-    /// the two it was is in the message, which names the profile.
-    /// </para>
-    /// <para>
-    /// It is a subcategory of its own rather than one more schema-state failure, because the state it describes is not
-    /// the migration history. This index belongs to no migration at all — it is tied to one profile's dimension, so it
-    /// is built when that profile is activated — and a database missing it is serving correct results slowly rather
-    /// than running against a schema the build does not recognize.
-    /// </para>
-    /// </remarks>
-    public static MailFathomErrorCode EmbeddingVectorIndexUnavailable { get; } = new(33001);
-
     /// <summary>Gets subcategory 4, durable jobs: a job payload serialized to more than the enqueue boundary accepts.</summary>
     /// <remarks>
     /// It is a subcategory of its own rather than one more schema-state failure, because nothing about the database is
@@ -878,7 +862,6 @@ public readonly record struct MailFathomErrorCode
         DatabaseSchemaOutOfDate,
         DatabaseSchemaStateUnreadable,
         DatabaseSchemaTextSearchConfigurationMismatch,
-        EmbeddingVectorIndexUnavailable,
         JobPayloadTooLarge,
         PersistenceTransientFailure,
         PersistenceCommitOutcomeUnknown,

@@ -38,10 +38,10 @@ rest on its own.
    deployment reports the passages the run would send as characters and approximate tokens, refuses outright where that
    estimate exceeds `Embeddings:MaxInputCharactersPerPeriod`, and otherwise asks. Past the confirmation, the declared
    geometry is fingerprinted and resolved against `embedding_profiles`: an identity already registered resolves to the
-   row that exists, and a new one is inserted. The row starts as *building*, and its approximate vector index is
-   created immediately — while the generation is empty, which is the cheapest moment it can be built. Activating what
-   is already serving reports that and spends nothing; activating while a *different* generation is being built is
-   refused rather than started beside it, because one walk between two partial generations would finish neither.
+   row that exists, and a new one is inserted. The row starts as *building*, and nothing is built in the database
+   beside it: the ranking is exact and no index serves it. Activating what is already serving reports that and spends
+   nothing; activating while a *different* generation is being built is refused rather than started beside it, because
+   one walk between two partial generations would finish neither.
    [Administering the embedding profile](admin-endpoint.md#administering-the-embedding-profile) holds the command, its
    flag, and each refusal.
 2. **The reindex fills it, starting at once.** The same bounded, resumable sweep that backfills mail now walks towards
@@ -57,9 +57,9 @@ rest on its own.
    only at zero. Promoting the new generation and superseding the old one is one transaction, reported as
    `The generation being built is complete and is now the one searches are answered from` and counted by
    `mailfathom.embedding.generation.switches`.
-4. **The superseded vectors are removed in bounded batches.** The old generation's index is dropped as soon as it
-   stops being read, and its vectors go a batch per pass, counted by `mailfathom.embedding.generation.removed`. The
-   profile row itself survives: it is what a vector was once attributable to, and its identity may never move.
+4. **The superseded vectors are removed in bounded batches.** The old generation's vectors go a batch per pass,
+   counted by `mailfathom.embedding.generation.removed`. The profile row itself survives: it is what a vector was once
+   attributable to, and its identity may never move.
 
 While the reindex is running, `mailfathom.embedding.backfill.outstanding` is how much of the mailbox the new
 generation is still missing, and the counters beside it are what move in between.
@@ -81,9 +81,9 @@ a profile's identity — so a model change pays for provider calls and local wri
 ## Stopping one, and going back
 
 **Cancelling a reindex** — `mfctl embedding cancel-reindex` — abandons the generation being built and leaves the one
-serving exactly where it is. The abandoned row becomes superseded, its index is dropped, and whatever partial vectors it
-accumulated are removed in the same bounded batches, beginning with a pass the cancellation asks for rather than one an
-earlier pause happened to schedule. What was spent on those vectors is spent; nothing about the search results changes,
+serving exactly where it is. The abandoned row becomes superseded and whatever partial vectors it accumulated are
+removed in the same bounded batches, beginning with a pass the cancellation asks for rather than one an earlier pause
+happened to schedule. What was spent on those vectors is spent; nothing about the search results changes,
 because that generation was never read.
 
 A cancellation that arrives after the reindex has already completed reports that nothing was being built, and changes
@@ -104,7 +104,7 @@ the rest.
 ## What is never affected
 
 - **Retrieval reads exactly one generation.** A partially built generation is never mixed with the one still serving,
-  which is what the lifecycle states and the index over them are for.
+  which is what the lifecycle states are for.
 - **No mail is re-read.** A reindex reaches no IMAP server, so it cannot touch a remote `\Seen` flag however long it
   runs.
 - **Nothing is logged about the mail.** Every line and every metric here carries counts, a state name, and a profile

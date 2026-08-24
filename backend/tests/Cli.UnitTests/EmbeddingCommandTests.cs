@@ -198,6 +198,31 @@ public sealed class EmbeddingCommandTests : IDisposable
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("started a reindex", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The sentence an operator reads when the reindex was already running says what actually happened to it, which is
+    /// that a pass was asked for rather than that anything was built.
+    /// </summary>
+    [Fact]
+    public async Task Activate_TheGeometryAlreadyBeingBuilt_SaysTheReindexWasLeftRunningAndAPassBroughtForward()
+    {
+        // Arrange
+        this.harness.Console.AnswerToGive = true;
+        using var deployment = FakeEmbeddingDeployment.Answering(
+            assessment: SpendingAssessment,
+            activation: (HttpStatusCode.OK, ActivationAnswer("AlreadyBuilding")));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "embedding", "activate", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            this.harness.Console.Lines,
+            line => line.Contains(
+                "the reindex was left running and the next backfill pass was brought forward",
+                StringComparison.Ordinal));
+    }
+
     /// <summary>Declining leaves the provider bill unstarted, which is the whole of what the prompt is for.</summary>
     [Fact]
     public async Task Activate_ATerminalThatDeclines_ActivatesNothing()

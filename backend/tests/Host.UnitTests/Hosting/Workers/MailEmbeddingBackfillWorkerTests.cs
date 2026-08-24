@@ -7,7 +7,6 @@ using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
-using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Persistence;
@@ -386,7 +385,6 @@ public sealed class MailEmbeddingBackfillWorkerTests
         services.AddSingleton<TimeProvider>(world.TimeProvider);
         services.AddSingleton(world.BackfillStore);
         services.AddSingleton(generationStore);
-        services.AddSingleton(Substitute.For<IEmbeddingProfileVectorIndex>());
         services.AddSingleton(world.EmbeddingStore);
         services.AddSingleton(textEmbeddingGenerator);
         services.AddSingleton(Substitute.For<IPersistenceSessionFactory>());
