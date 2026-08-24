@@ -260,7 +260,7 @@ next, never what a search is currently able to do; only an activation does that.
 
 ### What an instance is willing to spend
 
-The four keys below bound cost rather than correctness, and they are validated whether or not a chain is declared:
+The five keys below bound cost rather than correctness, and they are validated whether or not a chain is declared:
 passages are cut for every synchronized message on an instance that has chosen no provider, so a ceiling left
 unvalidated would be one already applying. None of them is part of an embedding profile — they decide how many vectors
 exist and never what one means, so moving any of them leaves every stored vector as comparable as it was. [Embedding

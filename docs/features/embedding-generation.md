@@ -363,7 +363,7 @@ rather than a row the database rejects later with no provider in sight.
 
 ## What an instance is willing to spend
 
-The bounds above are about one call. Three more are about the deployment, and they exist because embedding is the first
+The bounds above are about one call. Four more are about the deployment, and they exist because embedding is the first
 thing MailFathom does that costs money per unit of mail: a runaway loop somewhere else costs CPU, and a runaway
 embedding loop is an invoice that arrives a month later. Each is configuration, each is validated at startup, and none
 of them is part of an embedding profile — they decide how many vectors exist, never what any vector means, so moving

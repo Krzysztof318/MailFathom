@@ -99,6 +99,11 @@ public sealed class StoredEmailEmbeddingGenerator
     /// durable and the passages they cover are no longer outstanding.
     /// </exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels or the host is shutting down. Committed vectors stay durable.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no message is stored under <paramref name="storedEmailId" />, so the owner whose spend this turn
+    /// would be charged against cannot be established. The caller holds an identifier it read from this deployment, so
+    /// what this reports is a message erased underneath the turn rather than an argument a caller can correct.
+    /// </exception>
     /// <remarks>
     /// The generation is a parameter rather than something read here, because the live path and a reindex write into
     /// different ones at the same moment: mail arriving is embedded into the generation serving searches, and the sweep

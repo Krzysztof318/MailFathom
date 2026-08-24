@@ -139,6 +139,12 @@ public sealed class MailboxSynchronizer
     /// namespace that forbids the name, or a name the server will not accept asks the operator for something different
     /// from a path they mistyped.
     /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no owner can be established for the account, which is what the stored-content bound is measured and
+    /// charged against. An account never synchronized falls back to the deployment's owner record, so this reports a
+    /// deployment holding no owner record or more than one — a state provisioning is supposed to make impossible, and
+    /// therefore a defect rather than a condition a caller recovers from.
+    /// </exception>
     /// <remarks>
     /// <para>
     /// The alias is resolved against the server's advertised folders before anything is read, so a run always works

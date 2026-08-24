@@ -259,8 +259,9 @@ content whole.
 
 The deferral is counted apart from the instance one and reported apart from it, because the two ask an operator for
 different things: one for more disk or a higher instance ceiling, the other for a larger share for one person or for
-that person to wait. A run that met both reports the instance's, which is the wider fact — raising a share changes
-nothing while the instance itself is full.
+that person to wait. A run that left messages for both reasons reports both, one measurement each, so neither remedy
+is hidden by the other. One message is deferred by one of them rather than by both, because the instance's room is
+claimed first and an owner is never charged for a payload the instance had no room for.
 
 **The two ceilings are counted in different quantities, deliberately.** The instance's is what the disk fills with,
 which only PostgreSQL's catalog can report; an owner's is what their payloads hold, because a catalog answers for a
