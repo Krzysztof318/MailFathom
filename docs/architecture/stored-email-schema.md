@@ -1063,7 +1063,7 @@ account reach these four tables through the same cascade every other table is re
 
 The recipient, keyword, and search-vector indexes are GIN rather than B-tree because all of them serve containment tests. A B-tree over an array column serves only equality against a whole array, and over a `tsvector` it serves nothing search asks for; a GIN index is what turns either into an index scan.
 
-The partial indexes over remotely deleted messages that the architecture draft lists are still deliberately absent; they wait for the remote-expunge reconciliation that introduces the state they would filter on. The per-profile HNSW index is absent from the migrations for a different reason, and permanently.
+No partial index over remotely deleted messages exists, and its absence is deliberate; one waits for the remote-expunge reconciliation that introduces the state it would filter on. The per-profile HNSW index is absent from the migrations for a different reason, and permanently.
 
 ### The index no migration creates
 

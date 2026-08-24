@@ -38,9 +38,6 @@ Four kinds of file under `docs/` are deliberately not published:
   documentation of the product.
 - **The `toc.yml` files**, which are the navigation itself.
 
-The architecture draft under `specs/` is not published either, and is not under `docs/` to begin with: the draft
-states intent, and every page on this site states fact.
-
 ## What an agent reads
 
 The same documentation is published a second time, in the form an AI agent uses. A rendered page is a template around
@@ -108,11 +105,10 @@ rule without the pointer that completes it — these pages state a rule in one p
 else, so a fragment of one is confidently incomplete rather than merely partial.
 
 `context7.json` at the repository root is what bounds what it reads. Without it the service scans the whole tree, which
-here means the architectural decision records including superseded ones, the workflow contract every `AGENTS.md`
-carries, and the architecture draft under `specs/` that states intent where every page here states fact — none of them
-product documentation, and each of them read as such by an agent that found it under this project's name. The file
-therefore names three of the four sections [this site carries](#what-the-site-carries): the user guide, the operations
-pages, and the feature reference.
+here means the architectural decision records including superseded ones, and the workflow contract every `AGENTS.md`
+carries — neither of them product documentation, and each of them read as such by an agent that found it under this
+project's name. The file therefore names three of the four sections [this site carries](#what-the-site-carries): the
+user guide, the operations pages, and the feature reference.
 
 **The architecture pages are left out, and that is a decision about the reader rather than about the pages.** They are
 product documentation and the site publishes them as such; what they answer is where the boundaries of the code are
@@ -181,8 +177,8 @@ Two forms, and which one to use is decided by whether the target is on the site:
 - **A link to another published page stays relative**, as `../operations/mcp-endpoint.md`. docfx rewrites it to the
   published page, and GitHub resolves it to the file, so one link works in both renderings.
 - **A link to anything the site does not carry is written as an absolute `https://github.com/Krzysztof318/MailFathom`
-  URL** — an ADR, the architecture draft, a deployment asset, a source file. A relative link to one of those resolves on
-  GitHub and reaches a 404 on the site.
+  URL** — an ADR, a deployment asset, a source file. A relative link to one of those resolves on GitHub and reaches a
+  404 on the site.
 - **A link into the API reference is a `xref:`**, naming the type or namespace rather than the generated file, as
   `[Domain](xref:MailFathom.Domain)`. It is the one kind of link a refactor breaks without touching the page, so it
   resolves through docfx's cross-reference map and fails the build when the name stops being generated. On GitHub such

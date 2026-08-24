@@ -101,8 +101,8 @@ rule is a wrong finding, and so is one these files already reject.
 - `.agents/skills/check-docs-licenses/SKILL.md` for MailFathom's own Apache-2.0 record
   and the third-party licensing rules, and `docs/operations/issue-tracking.md` for what
   an issue and its board placement have to carry.
-- The ADRs under `docs/decisions/` that govern the area it changes, and the architecture
-  draft under `specs/` where the change touches a boundary it describes.
+- The ADRs under `docs/decisions/` that govern the area it changes, and the pages under
+  `docs/architecture/` that describe the boundary it touches.
 
 ## Scope
 

@@ -28,14 +28,14 @@ An open pull request moves both of the bottom two rows, and that is not the dupl
 
 ## The issue that governs a change
 
-- Every change starts from an issue. Identify it during `$start-task`, before editing files, and name it in the task brief. Read whatever governs the change first — the ADR context, the architecture draft, or both — because an issue body is written from it.
-- An issue names whatever governs it: the ADR under `docs/decisions/`, the architecture draft under `specs/`, or the issue it follows from. None of those is what entitles work to exist, so an issue nothing backs — a feature as readily as maintenance, an ADR consequence, or a defect — is opened on exactly the same terms. Where nothing governs it, its own body is the governing text and there is nothing further to declare: that nothing is linked is already visible to anyone reading it.
+- Every change starts from an issue. Identify it during `$start-task`, before editing files, and name it in the task brief. Read whatever governs the change first — the ADR context, the pages describing the behavior it touches, or both — because an issue body is written from it.
+- An issue names whatever governs it: the ADR under `docs/decisions/`, or the issue it follows from. None of those is what entitles work to exist, so an issue nothing backs — a feature as readily as maintenance, an ADR consequence, or a defect — is opened on exactly the same terms. Where nothing governs it, its own body is the governing text and there is nothing further to declare: that nothing is linked is already visible to anyone reading it.
 - Do not open a second issue for work an existing issue already covers. Extend the existing issue when scope grows and record why.
 
 ## Issue content
 
 - Every issue body carries two or three user stories and a condensed acceptance list.
-- Do not copy the text of an ADR or of the architecture draft into an issue. That text is the contract, and a duplicated copy goes stale silently.
+- Do not copy the text of an ADR into an issue. That text is the contract, and a duplicated copy goes stale silently.
 - Express dependencies as issue references so the board shows them as links.
 - Nothing on the board schedules work. The owner works alone at irregular times, so order is recorded and timing is not. There is no date, deadline, day-estimate, sprint, or capacity field, and none is to be added: the two the board once carried accumulated no value on any item across its whole history, which is what a field for a question nobody asks looks like. Do not read `Size` as one either — it estimates a diff, not a duration.
 - Use a parent issue only where it carries something no other field can. A parent standing over the issues a release needs answers the question the milestone already answers, and one standing over a theme does what `Area` does, so both create a second hierarchy next to the roadmap and neither is worth having. What earns a parent is one feature large enough that it had to be split into several issues, whose parts then have an order between them: which piece gates the rest, which two can run in either order, and what has to be true across all of them before the feature is done. The milestone cannot say that, `Area` cannot say it, and dependency references say it only to somebody who opens every child. `#332` is the worked example — one mailbox credential, four issues, one gate. Where the feature is small enough to be one issue, or where its parts have no order, the references each body already carries are enough, and a parent adds a place to keep up to date instead. Opening a parent also settles which milestone the parent itself takes, which is a decision rather than a step, and the rules under **Milestones** are where it is made.
@@ -60,7 +60,7 @@ Several changes match more than one description — a defect in database wiring,
 |---|---|
 | `type:decision` | Work whose deliverable *is* a decision: an ADR, a policy, or a measurement that settles a question |
 | `type:defect` | Something already implemented behaves incorrectly, whatever part of the system it lives in |
-| `type:docs` | Documentation only, under `docs/`, `README`, or the architecture draft's prose. `AGENTS.md` and `.agents/skills/` are the workflow contract, not documentation, and belong to the next row |
+| `type:docs` | Documentation only, under `docs/` or `README`. `AGENTS.md` and `.agents/skills/` are the workflow contract, not documentation, and belong to the next row |
 | `type:workflow` | Repository tooling, CI, verification scripts, the release process, and this workflow contract |
 | `type:infra` | Orchestration, database wiring, telemetry, build and packaging plumbing |
 | `type:feature` | Any remaining production-code change: a feature, a refactor, or hardening |

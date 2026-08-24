@@ -55,7 +55,7 @@ public sealed class MailKitImapSessionResilienceTests
         await recoveredFolder.DidNotReceive().OpenAsync(FolderAccess.ReadWrite, Arg.Any<CancellationToken>());
     }
 
-    /// <summary>The case draft section 11.1 makes non-negotiable: recovery must not become the path that marks mail as read.</summary>
+    /// <summary>The case the repository's read-only invariant makes non-negotiable: recovery must not become the path that marks mail as read.</summary>
     [Fact]
     public async Task FetchEmailContentWithoutSettingSeenAsync_RetriedAfterADroppedConnection_ReselectsReadOnlyAndNeverSetsSeen()
     {

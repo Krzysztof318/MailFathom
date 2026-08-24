@@ -19,7 +19,7 @@ Every write on that port takes the caller's `IPersistenceSession`, and the port 
 
 The decision question is eight questions that an implementation would otherwise answer by accident, in a way that is expensive to reverse once mail is in a bucket: what selects the backend, what replaces the shared transaction, how an object is named, whether the port stays byte-based, whether the payload is encrypted before it leaves the process, whether both stores may be authoritative at once, whether erasure reaches the bucket synchronously, and which client reaches the endpoint.
 
-Recorded on issue [#1124](https://github.com/Krzysztof318/MailFathom/issues/1124), which gates every other child of its parent: [#1125](https://github.com/Krzysztof318/MailFathom/issues/1125) through [#1132](https://github.com/Krzysztof318/MailFathom/issues/1132). No numbered specification backs it; [§21.2 of the architecture draft](https://github.com/Krzysztof318/MailFathom/blob/main/specs/2026-07-22-mail-fathom-architecture-draft.md) describes the staged move and is corrected by this record where it describes a port that was never built.
+Recorded on issue [#1124](https://github.com/Krzysztof318/MailFathom/issues/1124), which gates every other child of its parent: [#1125](https://github.com/Krzysztof318/MailFathom/issues/1125) through [#1132](https://github.com/Krzysztof318/MailFathom/issues/1132). No numbered specification backs it; an earlier design described the staged move, and this record corrects it where it described a port that was never built.
 
 ## Decision Drivers
 
@@ -103,7 +103,7 @@ Streaming the put would not remove the buffering it appears to remove. A payload
 
 Where streaming genuinely pays is a read path that serves a whole message to a network client without buffering it, and no such path exists: nothing today streams raw MIME outward. **This is the condition that reopens the question** — an IMAP gateway or an attachment download that serves bytes straight to a socket earns a streaming *read* overload at that point, and the write half stays as it is regardless, because the digest and the length must both be known before the row is written.
 
-[§21.2 of the architecture draft](https://github.com/Krzysztof318/MailFathom/blob/main/specs/2026-07-22-mail-fathom-architecture-draft.md) describes the port as offering streaming put, open-read, existence, and delete operations. It never did, and the draft is corrected in the change that carries this record rather than left to be read as a plan.
+An earlier design described the port as offering streaming put, open-read, existence, and delete operations. It never did, and this record states what the port is rather than leaving that description standing to be read as a plan.
 
 ### 5. Neither backend encrypts mail content in MailFathom's own process
 

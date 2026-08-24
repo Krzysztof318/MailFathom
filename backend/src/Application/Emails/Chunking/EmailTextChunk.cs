@@ -13,8 +13,8 @@ namespace MailFathom.Application.Emails.Chunking;
 /// the same offsets applied to the same extracted text return exactly this text.
 /// </para>
 /// <para>
-/// The remaining source coordinates draft section 12.1 asks a chunk to carry — the account, the folder, the sender, the
-/// recipients, the date, and the subject — are the stored email's own columns and are reached through the message a
+/// The remaining source coordinates a chunk could carry — the account, the folder, the sender, the recipients, the
+/// date, and the subject — are the stored email's own columns and are reached through the message a
 /// persisted chunk hangs on. They are deliberately not copied here: every one of them is mail content or personal data,
 /// and a second copy would widen the access, export, and erasure surface without answering a question the message
 /// cannot already answer.

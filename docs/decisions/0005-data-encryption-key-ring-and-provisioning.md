@@ -19,7 +19,7 @@ Giving the service a store it can write moves the credential out of the operator
 
 The decision question has three parts that are usually collapsed into one: **what seals the data**, **where the key comes from**, and **who creates the key in the first place**. The third is the part that decides whether the feature is usable, and it is the one where the obvious courtesy — generate it so nobody has to — is the dangerous answer.
 
-Recorded on issue 329, whose scope this ADR is part of. Issue 330 delivers the provisioning through each deployment channel and issue 331 writes a grant through the administrative endpoint; both depend on what is decided here. No numbered specification under `specs/` backs it, though specification 02a defines the secret-reference grammar this reuses and specification 02b defines the rotation vocabulary.
+Recorded on issue 329, whose scope this ADR is part of. Issue 330 delivers the provisioning through each deployment channel and issue 331 writes a grant through the administrative endpoint; both depend on what is decided here. No numbered specification backs it, though specification 02a defines the secret-reference grammar this reuses and specification 02b defines the rotation vocabulary.
 
 ## Decision Drivers
 

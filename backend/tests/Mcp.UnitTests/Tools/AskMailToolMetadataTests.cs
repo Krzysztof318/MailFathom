@@ -29,7 +29,7 @@ public sealed class AskMailToolMetadataTests
         Assert.Equal("Ask about mail", advertisedTool.Title);
     }
 
-    /// <summary>The four hints the architecture draft requires of every read-only tool.</summary>
+    /// <summary>The four hints the tool descriptor conventions require of every read-only tool.</summary>
     [Fact]
     public void AddMailFathomServer_AdvertisesTheReadOnlyLocalStateAnnotations()
     {

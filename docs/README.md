@@ -53,4 +53,4 @@ below for depth instead of duplicating them.
 
 ## Planned work
 
-This documentation set describes behavior that exists. The [architecture draft](https://github.com/Krzysztof318/MailFathom/blob/main/specs/2026-07-22-mail-fathom-architecture-draft.md) describes the system MailFathom is being built into, and the roadmap board decomposes the gap between it and the code into issues. The draft is a statement of intent; a page here is a statement of fact.
+This documentation set describes behavior that exists. What MailFathom is still being built into is decomposed into [issues](https://github.com/Krzysztof318/MailFathom/issues), and where a decision has been taken ahead of the code that answers it, the record under [`docs/decisions/`](https://github.com/Krzysztof318/MailFathom/tree/main/docs/decisions) is where it is stated. Intent lives in those two places; a page here is a statement of fact.
