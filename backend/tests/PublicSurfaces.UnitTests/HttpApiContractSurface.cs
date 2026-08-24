@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using MailFathom.Host;
 using MailFathom.Host.Api;
 using MailFathom.Host.Api.Documentation;
+using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Hosting;
 using MailFathom.Mcp;
 using Microsoft.AspNetCore.Builder;
@@ -37,9 +38,12 @@ namespace MailFathom.PublicSurfaces.UnitTests;
 /// </para>
 /// <para>
 /// Every other route the host maps is mapped here too, and none of them belongs in the document: the protocol route,
-/// the attachment download, the probes, the document itself, and the explorer. They are the control for
-/// <see cref="ApiDocumentation.DescribesHttpApi" /> — the allow-list is what keeps them out, and a rendering that
-/// never mapped them would record the same file whether that allow-list worked or had been deleted.
+/// the attachment download, the probes, the two RFC 9728 metadata documents, the document itself, and the explorer.
+/// They are the control for <see cref="ApiDocumentation.DescribesHttpApi" /> — the allow-list is what keeps them out,
+/// and a rendering that never mapped them would record the same file whether that allow-list worked or had been
+/// deleted. The last two of those are the reason the deployment below configures an authorization server as well as a
+/// key: a surface allowing no OAuth maps no metadata document, so leaving that out would have made two of these
+/// absences mean nothing.
 /// </para>
 /// <para>
 /// Nothing here starts a host. The routes are read from the mapping, which is the boundary
@@ -60,9 +64,17 @@ internal static class HttpApiContractSurface
 
     /// <summary>The deployment the recorded document is generated from, as the configuration an operator would have written.</summary>
     /// <remarks>
+    /// <para>
     /// Every surface enabled and every one of them authenticating, for the reason the class remarks give. The API key
     /// is the cheapest credential that makes a surface authenticate — the requirement an operation carries is the same
     /// whichever credential admitted it, because all three arrive in one header and are published as one scheme.
+    /// </para>
+    /// <para>
+    /// An authorization server is configured beside each key so that the surface allows OAuth, which is the condition
+    /// under which its RFC 9728 metadata document is mapped at all. Nothing validates a token here and no request is
+    /// made to that issuer: what the setting buys is the two routes existing, so the record has to leave them out
+    /// rather than never meeting them.
+    /// </para>
     /// </remarks>
     private static readonly KeyValuePair<string, string?>[] DeploymentServingEverySurface =
     [
@@ -74,10 +86,18 @@ internal static class HttpApiContractSurface
         new("AdminEndpoint:Port", "8082"),
         new("AdminEndpoint:Authentication:0:ApiKey:Name", "operator"),
         new("AdminEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key-either"),
+        new("AdminEndpoint:Authentication:1:OAuth:Resource", $"https://mailfathom.example.test{AdminEndpointOptions.RoutePrefix}"),
+        new("AdminEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Name", "example-issuer"),
+        new("AdminEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Issuer", "https://issuer.example.test"),
+        new("AdminEndpoint:Authentication:1:OAuth:AuthorizationServers:0:AuthorizedSubjects:0", "not-a-real-subject"),
         new("ClientEndpoint:Enabled", "true"),
         new("ClientEndpoint:Port", "8084"),
         new("ClientEndpoint:Authentication:0:ApiKey:Name", "desktop-client"),
         new("ClientEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-client-key"),
+        new("ClientEndpoint:Authentication:1:OAuth:Resource", $"https://mailfathom.example.test{ClientEndpointOptions.RoutePrefix}"),
+        new("ClientEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Name", "example-issuer"),
+        new("ClientEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Issuer", "https://issuer.example.test"),
+        new("ClientEndpoint:Authentication:1:OAuth:AuthorizationServers:0:AuthorizedSubjects:0", "not-a-real-subject"),
     ];
 
     /// <summary>Maps the routes one rendering describes.</summary>
@@ -140,7 +160,7 @@ internal static class HttpApiContractSurface
     }
 
     /// <summary>Maps every route the composed host serves, whether or not the document describes it.</summary>
-    private static void MapEveryRouteTheHostServes(
+    internal static void MapEveryRouteTheHostServes(
         IEndpointRouteBuilder routes,
         ComposedHostSurfaces surfaces,
         IHostEnvironment environment)

@@ -38,6 +38,9 @@ public sealed class HttpApiContractSurfaceTests
     /// <summary>The route the fixture endpoint answers on, beneath a prefix the document describes.</summary>
     private const string FixtureRoute = "/public-surface-fixture";
 
+    /// <summary>Where RFC 9728 puts a protected resource's metadata document, which is the one thing both of them share.</summary>
+    private const string MetadataDocumentPrefix = "/.well-known/";
+
     /// <summary>One mutation per thing a client binds to, each against <see cref="MapTheFixture" />.</summary>
     private static readonly IReadOnlyDictionary<string, Action<IEndpointRouteBuilder>> Mutations =
         new Dictionary<string, Action<IEndpointRouteBuilder>>(StringComparer.Ordinal)
@@ -69,7 +72,8 @@ public sealed class HttpApiContractSurfaceTests
     /// The absences are the assertion rather than the presences. Each of those routes is mapped by the rendering, so a
     /// path missing here is missing because <see cref="ApiDocumentation.DescribesHttpApi" /> left it out — which is
     /// the one thing standing between an anonymous development document and a catalogue of the protocol route, the
-    /// attachment download, the probes, and the explorer.
+    /// attachment download, the probes, the metadata documents, and the explorer. That each of them really was mapped
+    /// is the next test's subject rather than something taken on trust here.
     /// </remarks>
     [Fact]
     public async Task RenderAsync_ForTheComposedHost_RecordsBothApiSurfacesAndNothingElseTheHostMaps()
@@ -82,17 +86,54 @@ public sealed class HttpApiContractSurfaceTests
         Assert.Contains($"{ClientEndpointOptions.RoutePrefix}{ClientApiEndpoints.SessionRoute}", paths, StringComparer.Ordinal);
 
         Assert.DoesNotContain(McpEndpointRoute.Path, paths, StringComparer.Ordinal);
-        Assert.DoesNotContain(ApiDocumentation.DocumentPath, paths, StringComparer.Ordinal);
+        Assert.DoesNotContain(ApiDocumentation.DocumentRoute, paths, StringComparer.Ordinal);
         Assert.Equal(
             [],
             HealthProbe.All.Select(probe => probe.Path).Intersect(paths, StringComparer.Ordinal).Order(StringComparer.Ordinal));
     }
 
+    /// <summary>The routes the record leaves out are routes the rendering really mapped, which is what makes their absence mean anything.</summary>
+    /// <remarks>
+    /// The control for the absences above. Each of them is asserted against a record produced by a composition that
+    /// mapped the route — so this reads the endpoints back out of that same composition and requires the two RFC 9728
+    /// metadata documents to be among them, since those are the ones a deployment maps only where it allows OAuth and
+    /// would otherwise be absent from the record for never having existed.
+    /// </remarks>
+    [Fact]
+    public async Task RenderAsync_ForTheComposedHost_MapsTheMetadataDocumentsItThenLeavesOut()
+    {
+        // Arrange
+        var metadataDocuments = new List<string>();
+
+        // Act
+        var recorded = await HttpApiContractSurface.RenderAsync(
+            (routes, surfaces, environment) =>
+            {
+                HttpApiContractSurface.MapEveryRouteTheHostServes(routes, surfaces, environment);
+
+                // Read while the rendering's container is still alive: a route group builds its endpoints on demand
+                // and asks that container which of a handler's parameters are services, so the same read afterwards
+                // meets a provider this method has already disposed.
+                metadataDocuments.AddRange(routes.DataSources
+                    .SelectMany(source => source.Endpoints)
+                    .OfType<RouteEndpoint>()
+                    .Select(endpoint => $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}")
+                    .Where(route => route.StartsWith(MetadataDocumentPrefix, StringComparison.Ordinal))
+                    .Order(StringComparer.Ordinal));
+            },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(2, metadataDocuments.Count);
+        Assert.Equal([], metadataDocuments.Intersect(PathsIn(recorded), StringComparer.Ordinal));
+    }
+
     /// <summary>Every path the record holds is one of the two surfaces', whatever the host comes to map beside them.</summary>
     /// <remarks>
-    /// The rule the assertion above states by example. A route added later to the protocol surface, to the probes, or
-    /// to anything else this process serves reaches the record only if the allow-list admits it, and this is what
-    /// fails when one does.
+    /// The rule the assertion above states by example, and stated as the prefixes themselves rather than by asking the
+    /// allow-list. The allow-list is what put each path in the record, so re-running it here could only report it
+    /// having been unwired — a widened one, admitting the documentation prefix or a metadata document, would put that
+    /// path in the record and be agreed with by its own predicate.
     /// </remarks>
     [Fact]
     public async Task RenderAsync_ForTheComposedHost_RecordsNoPathOutsideTheTwoApiPrefixes()
@@ -102,7 +143,10 @@ public sealed class HttpApiContractSurfaceTests
 
         // Assert
         Assert.NotEmpty(paths);
-        Assert.All(paths, path => Assert.True(ApiDocumentation.DescribesHttpApi(new() { RelativePath = path.TrimStart('/') })));
+        Assert.All(paths, path => Assert.True(
+            path.StartsWith(AdminEndpointOptions.RoutePrefix, StringComparison.Ordinal)
+            || path.StartsWith(ClientEndpointOptions.RoutePrefix, StringComparison.Ordinal),
+            $"'{path}' is on neither API surface."));
     }
 
     /// <summary>
@@ -140,12 +184,12 @@ public sealed class HttpApiContractSurfaceTests
             TestContext.Current.CancellationToken);
 
     /// <summary>Reads the paths out of the record the composed host produces.</summary>
-    private static async Task<IReadOnlyList<string>> RecordedPathsAsync()
-    {
-        var recorded = await HttpApiContractSurface.RenderAsync(TestContext.Current.CancellationToken);
+    private static async Task<IReadOnlyList<string>> RecordedPathsAsync() =>
+        PathsIn(await HttpApiContractSurface.RenderAsync(TestContext.Current.CancellationToken));
 
-        return [.. JsonNode.Parse(recorded)!["paths"]!.AsObject().Select(path => path.Key)];
-    }
+    /// <summary>Reads the paths out of a rendering.</summary>
+    private static IReadOnlyList<string> PathsIn(string recorded) =>
+        [.. JsonNode.Parse(recorded)!["paths"]!.AsObject().Select(path => path.Key)];
 
     /// <summary>What the fixture endpoint accepts.</summary>
     /// <param name="Note">A value with no meaning beyond being one the schema describes.</param>
