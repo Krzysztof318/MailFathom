@@ -38,12 +38,13 @@ nothing states it yet. `AGENTS.md` beside this file states why, and states the c
 ## How it is put together
 
 The product is three spaces — **Discover**, **Mail**, and **Cases** — and they are one application rather than three.
-What makes them one is the frame around them, which is what `Client/Presentation/Workspace/` holds and what the
-application opens on. The spaces themselves are empty: `Client/Presentation/Spaces/` carries a page per space that says
-so, and each of the three parents that owns a space fills its own page in.
+What makes them one is the frame around them, which is what `Client/Presentation/Workspace/` holds and what a client
+already pointed at a deployment opens on. The spaces themselves are empty: `Client/Presentation/Spaces/` carries a page
+per space that says so, and each of the three parents that owns a space fills its own page in.
 
 **Each space is a route, and so is everything else on screen.** `App.RegisterRoutes` nests `Discover`, `Mail`, and
-`Cases` inside the frame and registers `Settings` beside it, so each is reachable and reloadable by its route — the
+`Cases` inside the frame and registers `Settings` and `Connect` beside it, every one of them named once in
+`ClientRoutes`, so each is reachable and reloadable by its route — the
 browser opened at `/Workspace/Cases` lands on Cases with that space named on the bar. Because Uno's navigation is what
 moved there, the Android system back gesture and back key and the browser's back button all move back through the
 client's own screens rather than out of the application: going to settings and back returns to the space somebody left,
@@ -76,8 +77,9 @@ than by the model of whichever screen is on top. A scope names accounts, folders
 carries the same classification as anything else about mail: it lives in memory and is written nowhere.
 
 **Settings is reached from the frame rather than named among the spaces**, because it is not one. It is the screen that
-says which build is running and carries the two choices below, and it carries the way back out as a navigation request
-rather than as a handler — the same request the system back key makes, so one answer serves both.
+says which build is running and which deployment this client is pointed at, carries the two choices below and the way to
+point it at another deployment, and carries the way back out as a navigation request rather than as a handler — the same
+request the system back key makes, so one answer serves both.
 
 ## How it looks
 

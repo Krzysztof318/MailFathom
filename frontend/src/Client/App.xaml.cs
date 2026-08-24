@@ -78,7 +78,15 @@ public partial class App : Application
                 // point at which it takes effect, because applying a culture is what Uno does on the next launch
                 // rather than to a visual tree already built. The screen offering it says so.
                 .UseLocalization()
-                .ConfigureServices((context, services) => this.ComposeDeployment(services, context.Configuration))
+                .ConfigureServices((context, services) =>
+                {
+                    this.ComposeDeployment(services, context.Configuration);
+
+                    // What the three spaces share, so that moving between them keeps the question somebody was
+                    // composing and what it would be asked against. One for the run rather than one per model: a
+                    // model is discarded as its view is navigated away from, and so would be anything it held.
+                    services.AddSingleton<IWorkspace, SharedWorkspace>();
+                })
                 // Light, dark, and follow-the-system, with the choice written to the platform's own settings store so
                 // the application starts the way it was left. Nothing here decides which one: AppTheme.System is the
                 // default the service reads back when nothing was ever chosen.
