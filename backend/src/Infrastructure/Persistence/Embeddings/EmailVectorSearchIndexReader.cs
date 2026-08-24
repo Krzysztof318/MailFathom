@@ -30,11 +30,21 @@ namespace MailFathom.Infrastructure.Persistence.Embeddings;
 /// the scope most.
 /// </para>
 /// <para>
-/// It follows from that join that the approximate index a profile owns cannot serve this query: an HNSW scan orders the
-/// whole table, and a filter on a joined table is not something the index can carry. The ranking is therefore exact,
-/// which is the trade this feature is willing to make — an exact ranking is deterministic, and determinism is what the
-/// fused order rests on. There is no measurement here saying an approximate ranking would be faster on a mailbox this
-/// system holds; when there is one, it belongs in this method and nowhere else.
+/// It follows from that join that an approximate index cannot serve this query: an HNSW scan orders the whole table,
+/// and a filter on a joined table is not something the index can carry. The ranking is therefore exact, which is the
+/// trade this feature is willing to make — an exact ranking is deterministic, and determinism is what the fused order
+/// rests on.
+/// </para>
+/// <para>
+/// That trade has been measured rather than assumed, on 100 000 messages and 259 034 vectors at 1536 dimensions, and
+/// the exactness stands: a five-hundred-row approximate window comes back as forty rows and keeps a median of four of
+/// them once the caller's own folder and date filters are applied, and none at all once they name a sender.
+/// A profile-partial HNSW index built over that corpus was never chosen by this query's plan, and it cost 3073 MB
+/// beside a 3137 MB table, forty-five minutes to build, and a hundredfold slowdown on every embedding write — so
+/// MailFathom builds none. <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/architecture/semantic-ranking-cost.md">What
+/// a semantic search costs</see> holds the whole measurement, including the one thing it found that is worth changing:
+/// the ordering key below is a correlated subquery re-entered per message, and the same exact answer written as one
+/// pass costs less than a quarter of it.
 /// </para>
 /// <para>
 /// The query vector reaches PostgreSQL as a parameter, like every other value a request carries. Nothing about a query

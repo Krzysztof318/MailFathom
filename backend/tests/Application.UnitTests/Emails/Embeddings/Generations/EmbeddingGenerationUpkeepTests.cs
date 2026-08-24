@@ -5,7 +5,6 @@
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
-using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Persistence;
@@ -157,25 +156,6 @@ public sealed class EmbeddingGenerationUpkeepTests
     }
 
     /// <summary>
-    /// The index of a generation nothing reads goes when its last vectors do, which is also what clears one left behind
-    /// by a process that stopped part-way through a removal.
-    /// </summary>
-    [Fact]
-    public async Task RunAsync_TheLastVectorsOfASupersededGeneration_RemovesItsApproximateIndexToo()
-    {
-        // Arrange
-        var world = CreateWorld();
-        var superseded = await world.ServeAGenerationWithVectorsAsync(messageCount: 1);
-        world.GenerationStore.Add(CreateIdentity("a-model"), EmbeddingProfileLifecycleState.Building);
-
-        // Act
-        await world.Upkeep.RunAsync(TestContext.Current.CancellationToken);
-
-        // Assert
-        await world.VectorIndex.Received().RemoveAsync(superseded.Id, Arg.Any<CancellationToken>());
-    }
-
-    /// <summary>
     /// A reindex cancelled on an instance that had never served a generation leaves one superseded row and no sibling,
     /// so there is nothing to sweep towards and still something to clear out. The vectors it accumulated are personal
     /// data derived from mail, and a pass that walked away from them because it had no target would keep them forever.
@@ -286,7 +266,6 @@ public sealed class EmbeddingGenerationUpkeepTests
         var textEmbeddingGenerator = new ScriptedTextEmbeddingGenerator(
             CreateIdentity("a-model"),
             maximumPassagesPerCall: 8);
-        var vectorIndex = Substitute.For<IEmbeddingProfileVectorIndex>();
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>())
@@ -318,7 +297,6 @@ public sealed class EmbeddingGenerationUpkeepTests
                     BatchSize = batchSize,
                     MaxBatchesPerRun = maxBatchesPerRun,
                 }),
-            vectorIndex,
             concurrencyRetryPolicy);
 
         return new UpkeepWorld(
@@ -326,7 +304,6 @@ public sealed class EmbeddingGenerationUpkeepTests
             backfillStore,
             generationStore,
             textEmbeddingGenerator,
-            vectorIndex,
             upkeep);
     }
 
@@ -336,7 +313,6 @@ public sealed class EmbeddingGenerationUpkeepTests
         InMemoryStoredEmailEmbeddingBackfillStore BackfillStore,
         InMemoryEmbeddingGenerationStore GenerationStore,
         ScriptedTextEmbeddingGenerator TextEmbeddingGenerator,
-        IEmbeddingProfileVectorIndex VectorIndex,
         EmbeddingGenerationUpkeep Upkeep)
     {
         /// <summary>Adds mail that has its passages and no vector under any generation.</summary>

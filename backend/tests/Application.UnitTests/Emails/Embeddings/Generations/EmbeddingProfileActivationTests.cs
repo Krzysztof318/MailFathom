@@ -5,7 +5,6 @@
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
-using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
 using Microsoft.Extensions.Time.Testing;
@@ -44,24 +43,6 @@ public sealed class EmbeddingProfileActivationTests
         var generations = await world.GenerationStore.ReadGenerationsAsync(TestContext.Current.CancellationToken);
         Assert.Equal(serving.Id, generations.Serving?.Id);
         Assert.Equal(result.ProfileId, generations.Building?.Id);
-    }
-
-    /// <summary>The index is built while the generation is empty, which is the cheapest moment it can be built.</summary>
-    [Fact]
-    public async Task ActivateAsync_ANewGeometry_BuildsTheApproximateIndexForTheGenerationItRegistered()
-    {
-        // Arrange
-        var world = CreateWorld();
-
-        // Act
-        var result = await world.Activation.ActivateAsync(
-            CreateIdentity("a-model"),
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        await world.VectorIndex.Received(1).EnsureBuiltAsync(
-            Arg.Is<RegisteredEmbeddingProfile>(profile => profile!.Id == result.ProfileId),
-            Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -108,11 +89,11 @@ public sealed class EmbeddingProfileActivationTests
     }
 
     /// <summary>
-    /// Repeating the command against the generation already being built is what an operator does after an index build
-    /// failed, so it re-ensures the index rather than reporting the reindex and doing nothing.
+    /// Repeating the command against the generation already being built reports that reindex rather than registering a
+    /// second one, and answers with the row that is already there.
     /// </summary>
     [Fact]
-    public async Task ActivateAsync_TheGeometryAlreadyBeingBuilt_LeavesTheReindexRunningAndReEnsuresItsIndex()
+    public async Task ActivateAsync_TheGeometryAlreadyBeingBuilt_LeavesTheReindexRunning()
     {
         // Arrange
         var world = CreateWorld();
@@ -125,9 +106,6 @@ public sealed class EmbeddingProfileActivationTests
         // Assert
         Assert.Equal(EmbeddingProfileActivationOutcome.AlreadyBuilding, result.Outcome);
         Assert.Equal(building.Id, result.ProfileId);
-        await world.VectorIndex.Received(1).EnsureBuiltAsync(
-            Arg.Is<RegisteredEmbeddingProfile>(profile => profile!.Id == building.Id),
-            Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -149,9 +127,9 @@ public sealed class EmbeddingProfileActivationTests
     }
 
     /// <summary>
-    /// Repeating the command against a reindex already running is the repair path for a failed index build, and it is
-    /// also what an operator reaches for when a sweep that completed left messages a refused call had stepped past. The
-    /// pass that reaches them is the one the long interval has just put a quarter of an hour away.
+    /// Repeating the command against a reindex already running is what an operator reaches for when a sweep that
+    /// completed left messages a refused call had stepped past. The pass that reaches them is the one the long interval
+    /// has just put a quarter of an hour away.
     /// </summary>
     [Fact]
     public async Task ActivateAsync_TheGeometryAlreadyBeingBuilt_AsksForTheNextBackfillPassNow()
@@ -205,7 +183,6 @@ public sealed class EmbeddingProfileActivationTests
         // Assert
         Assert.Equal(EmbeddingProfileActivationOutcome.DifferentReindexRunning, result.Outcome);
         Assert.Equal(building.Id, result.ProfileId);
-        await world.VectorIndex.DidNotReceiveWithAnyArgs().EnsureBuiltAsync(null!, TestContext.Current.CancellationToken);
         Assert.Null(world.BackfillSchedule.NextPassDueAt);
 
         var generations = await world.GenerationStore.ReadGenerationsAsync(TestContext.Current.CancellationToken);
@@ -248,7 +225,6 @@ public sealed class EmbeddingProfileActivationTests
             CreateIdentity("the-model-that-won"));
         var activation = CreateActivation(
             RacedRegistrationStore(buildingAfterTheRace: winner),
-            Substitute.For<IEmbeddingProfileVectorIndex>(),
             new EmbeddingBackfillSchedule(new FakeTimeProvider(Now)));
 
         // Act
@@ -271,7 +247,6 @@ public sealed class EmbeddingProfileActivationTests
         // Arrange
         var activation = CreateActivation(
             RacedRegistrationStore(buildingAfterTheRace: null),
-            Substitute.For<IEmbeddingProfileVectorIndex>(),
             new EmbeddingBackfillSchedule(new FakeTimeProvider(Now)));
 
         // Act
@@ -315,19 +290,16 @@ public sealed class EmbeddingProfileActivationTests
     private static ActivationWorld CreateWorld()
     {
         var generationStore = new InMemoryEmbeddingGenerationStore(new InMemoryEmailEmbeddingStore());
-        var vectorIndex = Substitute.For<IEmbeddingProfileVectorIndex>();
         var backfillSchedule = new EmbeddingBackfillSchedule(new FakeTimeProvider(Now));
 
         return new ActivationWorld(
             generationStore,
-            vectorIndex,
             backfillSchedule,
-            CreateActivation(generationStore, vectorIndex, backfillSchedule));
+            CreateActivation(generationStore, backfillSchedule));
     }
 
     private static EmbeddingProfileActivation CreateActivation(
         IEmbeddingGenerationStore generationStore,
-        IEmbeddingProfileVectorIndex vectorIndex,
         EmbeddingBackfillSchedule backfillSchedule)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
@@ -336,7 +308,6 @@ public sealed class EmbeddingProfileActivationTests
 
         return new EmbeddingProfileActivation(
             generationStore,
-            vectorIndex,
             new OptimisticConcurrencyRetryPolicy(
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
@@ -347,7 +318,6 @@ public sealed class EmbeddingProfileActivationTests
     /// <summary>The generations and the collaborators one activation works against.</summary>
     private sealed record ActivationWorld(
         InMemoryEmbeddingGenerationStore GenerationStore,
-        IEmbeddingProfileVectorIndex VectorIndex,
         EmbeddingBackfillSchedule BackfillSchedule,
         EmbeddingProfileActivation Activation);
 }

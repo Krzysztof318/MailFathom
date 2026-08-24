@@ -19,7 +19,7 @@ public enum EmbeddingProfileActivationOutcome
     ReindexStarted = 0,
 
     /// <summary>This geometry is the generation already being built, and the reindex was left running.</summary>
-    /// <remarks>Repeating the command is what an operator does after an index build failed, so it re-ensures the index rather than doing nothing at all.</remarks>
+    /// <remarks>Repeating the command is what an operator does when a reindex looks stalled, so it brings the next pass forward rather than doing nothing at all.</remarks>
     AlreadyBuilding = 1,
 
     /// <summary>This geometry is already the generation retrieval reads, so nothing was registered and nothing spent.</summary>

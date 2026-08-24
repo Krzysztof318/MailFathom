@@ -111,19 +111,18 @@ to be](#what-an-address-has-to-be) and [authentication has three shapes](#authen
 ## Vector width is a database decision
 
 pgvector stores far more than it indexes: a `vector` column holds up to 16000 dimensions and an HNSW index covers
-2000. So a model is not merely large or small — it is indexable, or it is stored and searched exactly, which is
-correct but linear in the number of vectors.
+2000. MailFathom builds no such index, so every profile is stored and searched exactly, at any width the column holds —
+[the vector index that is not there](../architecture/stored-email-schema.md#the-vector-index-that-is-not-there) states
+what the table carries and [what a semantic search costs](../architecture/semantic-ranking-cost.md) holds the
+measurement behind it.
 
-The index that covers it belongs to one profile rather than to the table, which is why a width is a property of a
-generation instead of of the schema. [Stored email
-schema](../architecture/stored-email-schema.md#the-index-no-migration-creates) describes its shape and what maintaining
-one costs.
-
-`AllowTrimVectors` decides which, and it is off by default. With it off, a declared dimension above what an index
-covers is refused at startup, naming the dimension and the ceiling, rather than quietly producing an instance whose
-semantic search never becomes fast. With it on, the declared width is what the profile records and what the stored
-vectors have — because a trimmed vector occupies a different space than the full one, and a profile claiming the
-model's nominal width would be describing vectors that do not exist.
+The declared width is nonetheless bounded at what an index would cover, and `AllowTrimVectors` is what lifts that
+bound. It is off by default: with it off, a declared dimension above 2000 is refused at startup, naming the dimension
+and the ceiling; with it on, the declared width is what the profile records and what the stored vectors have — because
+a trimmed vector occupies a different space than the full one, and a profile claiming the model's nominal width would
+be describing vectors that do not exist. The ceiling is
+[ADR 0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)'s,
+and what a wider model costs is storage and scan time rather than a search that never becomes fast.
 
 Where the endpoint can produce the narrower vector itself, that is used in preference to cutting one down:
 `SupportsRequestedDimension` asks for the declared width, and a model trained to answer at it returns a vector already

@@ -7,7 +7,6 @@ using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Administration;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
-using MailFathom.Application.Emails.Embeddings.Indexing;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Persistence;
 using MailFathom.Host.Api;
@@ -281,7 +280,6 @@ public sealed class EmbeddingProfileEndpointsTests
             sessionFactory,
             new PersistenceConcurrencyOptions(),
             timeProvider);
-        var vectorIndex = Substitute.For<IEmbeddingProfileVectorIndex>();
         var backfillSchedule = new EmbeddingBackfillSchedule(timeProvider);
 
         return new EndpointWorld(
@@ -292,7 +290,7 @@ public sealed class EmbeddingProfileEndpointsTests
                 generationStore,
                 workloadReader,
                 spendGate,
-                new EmbeddingProfileActivation(generationStore, vectorIndex, retryPolicy, backfillSchedule),
+                new EmbeddingProfileActivation(generationStore, retryPolicy, backfillSchedule),
                 AdministrativeGrant.WholeSurface),
             new EmbeddingStatusReader(
                 generationStore,
@@ -303,7 +301,6 @@ public sealed class EmbeddingProfileEndpointsTests
                 AdministrativeGrant.WholeSurface),
             new EmbeddingReindexCancellation(
                 generationStore,
-                vectorIndex,
                 retryPolicy,
                 backfillSchedule,
                 AdministrativeGrant.WholeSurface));

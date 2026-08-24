@@ -14,7 +14,7 @@ namespace MailFathom.Host.Hosting.Warnings;
 /// <remarks>
 /// <para>
 /// The report this feature exists for. Switching a scanner on protects what is derived from now on and reaches nothing
-/// already in the chunk store or the vector index, and an operator reading their own configuration file has no way to
+/// already in the chunk store or among the stored vectors, and an operator reading their own configuration file has no way to
 /// see that: the switch is on, the file says so, and the passages a retrieval hit returns were still built from
 /// unredacted text. Widening a category set leaves the same gap one category wide. Neither is visible in the product
 /// without this, which is why the gap is stated at every start rather than left in a column.
