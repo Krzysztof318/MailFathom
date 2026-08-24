@@ -68,9 +68,11 @@ by somebody who has configured nothing is readable before any setting has been f
 The two are one decision written in two places. `Client/Strings/en/Resources.resw` and `Client/Strings/pl/Resources.resw`
 hold the words, and `LocalizationConfiguration:Cultures` in `Client/appsettings.json` names which of them
 `Uno.Extensions.Localization.ILocalizationService` offers a person to choose from — a culture named there with no table
-beside it would reach somebody as a screen with no words on it, so the unit suite asserts that the two agree and that
-neither table holds a key the other is missing. Both are neutral cultures rather than regional variants; a variant
-arrives when something actually differs between regions.
+beside it would reach somebody as a screen with no words on it. So the unit suite derives both lists rather than naming
+either: it reads the cultures out of the embedded configuration and the tables out of the directories under `Strings/`,
+fails when one list holds a language the other does not, and fails again when a key is in one table and missing from
+another. Both are neutral cultures rather than regional variants; a variant arrives when something actually differs
+between regions.
 
 A visible string reaches a screen through `x:Uid` rather than being written in a page, which is why no page here
 carries user-visible text. The exception is a string that is per item rather than per control — the three theme

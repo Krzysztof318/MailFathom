@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
-using System.Text.Json;
+using MailFathom.Client.UnitTests.Strings;
 
 namespace MailFathom.Client.UnitTests;
 
@@ -12,20 +12,18 @@ namespace MailFathom.Client.UnitTests;
 /// </summary>
 /// <remarks>
 /// The declaration is the embedded <c>appsettings.json</c> every head reads at startup, which is what
-/// <c>ILocalizationService</c> offers a person and therefore what a screen's picker is filled from. A culture named
-/// there with no string table under <c>Strings/</c> beside it would reach somebody as a screen with no words on it, so
-/// the list is asserted rather than left to a reviewer to notice.
+/// <c>ILocalizationService</c> offers a person and therefore what a screen's picker is filled from. What that list has
+/// to agree with is asserted beside the tables it names, in <see cref="ResourceTableTests"/>; what is asserted here is
+/// the list itself, which is a product decision rather than a consistency one.
 /// </remarks>
 public sealed class ClientLocalizationTests
 {
-    private const string CulturesSection = "LocalizationConfiguration";
-
-    /// <summary>English and Polish, and neither more nor fewer: the two the client carries a string table for.</summary>
+    /// <summary>English and Polish, and neither more nor fewer: the two languages this release is readable in.</summary>
     [Fact]
     public void Cultures_TheEmbeddedConfiguration_NamesTheLanguagesTheClientCarries()
     {
         // Act
-        var cultures = DeclaredCultures();
+        var cultures = DeclaredLanguages.Offered();
 
         // Assert
         Assert.Equal(["en", "pl"], cultures);
@@ -39,32 +37,9 @@ public sealed class ClientLocalizationTests
     public void Cultures_TheEmbeddedConfiguration_NamesNeutralCultures()
     {
         // Act
-        var cultures = DeclaredCultures().Select(CultureInfo.GetCultureInfo);
+        var cultures = DeclaredLanguages.Offered().Select(CultureInfo.GetCultureInfo);
 
         // Assert
         Assert.All(cultures, culture => Assert.True(culture.IsNeutralCulture, culture.Name));
-    }
-
-    private static string[] DeclaredCultures()
-    {
-        var assembly = typeof(App).Assembly;
-        var name = Array.Find(
-            assembly.GetManifestResourceNames(),
-            resource => resource.EndsWith("appsettings.json", StringComparison.Ordinal));
-
-        Assert.NotNull(name);
-
-        using var settings = assembly.GetManifestResourceStream(name)!;
-
-        // The file is written for a reader rather than for a parser, so it carries comments the JSON grammar does not.
-        using var document = JsonDocument.Parse(
-            settings,
-            new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
-
-        return [.. document.RootElement
-            .GetProperty(CulturesSection)
-            .GetProperty("Cultures")
-            .EnumerateArray()
-            .Select(culture => culture.GetString()!)];
     }
 }
