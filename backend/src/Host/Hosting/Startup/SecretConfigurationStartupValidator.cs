@@ -38,6 +38,7 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
     private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly AdminEndpointOptions adminEndpointSettings;
     private readonly ClientEndpointOptions clientEndpointSettings;
+    private readonly ContentStorageOptions contentStorageSettings;
     private readonly SecretConfigurationValidator validator;
     private readonly SecretResolutionOptions resolutionOptions;
     private readonly HostStartupGates startupGates;
@@ -53,6 +54,7 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
         IOptions<McpEndpointOptions> mcpEndpointSettings,
         IOptions<AdminEndpointOptions> adminEndpointSettings,
         IOptions<ClientEndpointOptions> clientEndpointSettings,
+        IOptions<ContentStorageOptions> contentStorageSettings,
         SecretConfigurationValidator validator,
         SecretResolutionOptions resolutionOptions,
         HostStartupGates startupGates,
@@ -61,6 +63,7 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
         ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
         ArgumentNullException.ThrowIfNull(adminEndpointSettings);
         ArgumentNullException.ThrowIfNull(clientEndpointSettings);
+        ArgumentNullException.ThrowIfNull(contentStorageSettings);
         ArgumentNullException.ThrowIfNull(startupGates);
 
         this.mailSynchronizationSettings = mailSynchronizationSettings;
@@ -69,6 +72,7 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
         this.mcpEndpointSettings = mcpEndpointSettings.Value;
         this.adminEndpointSettings = adminEndpointSettings.Value;
         this.clientEndpointSettings = clientEndpointSettings.Value;
+        this.contentStorageSettings = contentStorageSettings.Value;
         this.validator = validator;
         this.resolutionOptions = resolutionOptions;
         this.startupGates = startupGates;
@@ -109,6 +113,11 @@ internal sealed partial class SecretConfigurationStartupValidator : IHostedLifec
         failures.AddRange(
             await this.validator.FindClientEndpointConfigurationErrorsAsync(
                 this.clientEndpointSettings,
+                cancellationToken));
+
+        failures.AddRange(
+            await this.validator.FindContentStorageConfigurationErrorsAsync(
+                this.contentStorageSettings,
                 cancellationToken));
 
         if (failures.Count > 0)

@@ -517,6 +517,38 @@ Nothing on any of these spans is derived from a message. There is nowhere on the
 cursor, a subject, an address, or a stored identity — the values are counts, sizes, and closed sets of MailFathom's own
 words, which is a cardinality rule as much as a privacy one.
 
+### Reaching the object-storage endpoint
+
+A deployment that selected the object-storage content backend reaches a second remote party for every payload, and three
+instruments answer the three questions an operator has about one. They are published only where that backend is
+selected; an instance storing content in the database opens no transport and publishes none of this.
+[`ContentStorage`](configuration-runtime.md#contentstorage) is where the backend is selected.
+
+`mailfathom.object_storage.operations` counts how much of it is happening,
+`mailfathom.object_storage.operation.duration` how long one operation took in seconds, and
+`mailfathom.object_storage.bytes` how many payload bytes it carried. The first two carry
+`mailfathom.object_storage.operation` — `list`, `put`, or `delete` — and `mailfathom.object_storage.outcome` as
+`succeeded` or `failed`; the size carries the operation alone, and an operation that carried no payload records nothing
+there rather than a zero that would read as a write that moved nothing. Both distributions are histograms rather than
+totals, for the reason the content store's are: what is acted on is the tail.
+
+**Why it is failing is a dimension rather than an instrument.** A failed operation additionally carries
+`mailfathom.object_storage.failure`, one of `caller_cancelled`, `host_shutting_down`, `timed_out`,
+`authentication_failed`, `transient_transport_failure`, or `unrecognized` — a refused credential and an unreachable
+endpoint are the same operation ending differently, and an operator wants them in one series they can split. Each of
+those words is also the classification a boundary reports the failure's error code under, so a dashboard query and an
+alert match the same value; [outbound resilience](../architecture/outbound-resilience.md#classifying-a-failure) states
+how each is decided and which are worth repeating.
+
+Nothing here carries an object key, a bucket, an endpoint address, or any part of a payload. A key names the row that
+owns it and therefore a message, and the payload is mail; the operation and the classification are MailFathom's own
+words and are the whole of what is published. The endpoint's own answers are the one place a response could carry a
+key, and the client is constructed with response and metric logging off so neither reaches a log at any level.
+
+The readiness probe is what publishes these today, one `list`, one `put`, and one `delete` per scrape — a zero-length
+object under a key of the deployment's own, written and removed, so nothing about a message reaches the bucket to
+establish that the bucket works. [Health endpoints](health-endpoints.md) records what an unready instance means.
+
 ### Durable background work
 
 Every attempt at a job opens **`run_job`**, and that span is what makes durable work readable as work at all. A job is

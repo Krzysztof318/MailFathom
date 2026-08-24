@@ -5,13 +5,14 @@
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using MailFathom.Domain.Transport;
+using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.TestSupport;
 using Xunit;
 
-namespace MailFathom.Infrastructure.UnitTests.Mail;
+namespace MailFathom.Infrastructure.UnitTests.Certificates;
 
-public sealed class MailServerCertificateValidatorTests
+public sealed class PrivateAuthorityServerCertificateValidatorTests
 {
     [Fact]
     public void IsServerCertificateTrusted_ServerCertificateChainingToTheConfiguredAnchor_IsTrusted()
@@ -23,7 +24,7 @@ public sealed class MailServerCertificateValidatorTests
         using var handshakeChain = BuildHandshakeChain(serverCertificate);
 
         // Act
-        var trusted = MailServerCertificateValidator.IsServerCertificateTrusted(
+        var trusted = PrivateAuthorityServerCertificateValidator.IsServerCertificateTrusted(
             anchor,
             serverCertificate,
             handshakeChain,
@@ -44,7 +45,7 @@ public sealed class MailServerCertificateValidatorTests
         using var handshakeChain = BuildHandshakeChain(serverCertificate);
 
         // Act
-        var trusted = MailServerCertificateValidator.IsServerCertificateTrusted(
+        var trusted = PrivateAuthorityServerCertificateValidator.IsServerCertificateTrusted(
             anchor,
             serverCertificate,
             handshakeChain,
@@ -62,7 +63,7 @@ public sealed class MailServerCertificateValidatorTests
         using var anchor = TestCertificates.WithoutPrivateKey(authority);
 
         // Act
-        var trusted = MailServerCertificateValidator.IsServerCertificateTrusted(
+        var trusted = PrivateAuthorityServerCertificateValidator.IsServerCertificateTrusted(
             anchor,
             serverCertificate: null,
             platformChain: null,
@@ -83,7 +84,7 @@ public sealed class MailServerCertificateValidatorTests
         using var handshakeChain = BuildHandshakeChain(serverCertificate);
 
         // Act
-        var trusted = MailServerCertificateValidator.IsServerCertificateTrusted(
+        var trusted = PrivateAuthorityServerCertificateValidator.IsServerCertificateTrusted(
             anchor,
             serverCertificate,
             handshakeChain,
@@ -106,7 +107,7 @@ public sealed class MailServerCertificateValidatorTests
         using var handshakeChain = BuildHandshakeChain(serverCertificate, publicIntermediate);
 
         // Act
-        var trusted = MailServerCertificateValidator.IsServerCertificateTrusted(
+        var trusted = PrivateAuthorityServerCertificateValidator.IsServerCertificateTrusted(
             anchor,
             serverCertificate,
             handshakeChain,
@@ -129,7 +130,7 @@ public sealed class MailServerCertificateValidatorTests
         using var handshakeChain = BuildHandshakeChain(serverCertificate, authorityWithoutKey);
 
         // Act
-        var trusted = MailServerCertificateValidator.IsServerCertificateTrusted(
+        var trusted = PrivateAuthorityServerCertificateValidator.IsServerCertificateTrusted(
             anchor,
             serverCertificate,
             handshakeChain,
@@ -150,7 +151,7 @@ public sealed class MailServerCertificateValidatorTests
         using var handshakeChain = BuildHandshakeChain(clientCertificate);
 
         // Act
-        var trusted = MailServerCertificateValidator.IsServerCertificateTrusted(
+        var trusted = PrivateAuthorityServerCertificateValidator.IsServerCertificateTrusted(
             anchor,
             clientCertificate,
             handshakeChain,
@@ -169,7 +170,7 @@ public sealed class MailServerCertificateValidatorTests
         using var serverCertificate = TestCertificates.IssueServerCertificate(authority, "imap.example.test");
 
         // Act
-        var trusted = MailServerCertificateValidator.IsServerCertificateTrusted(
+        var trusted = PrivateAuthorityServerCertificateValidator.IsServerCertificateTrusted(
             anchor,
             serverCertificate,
             platformChain: null,

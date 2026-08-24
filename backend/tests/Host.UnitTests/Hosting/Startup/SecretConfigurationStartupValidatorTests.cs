@@ -900,7 +900,8 @@ public sealed class SecretConfigurationStartupValidatorTests
         McpEndpointOptions? mcpEndpointOptions = null,
         AdminEndpointOptions? adminEndpointOptions = null,
         ClientEndpointOptions? clientEndpointOptions = null,
-        DataEncryptionOptions? dataEncryptionOptions = null)
+        DataEncryptionOptions? dataEncryptionOptions = null,
+        ContentStorageOptions? contentStorageOptions = null)
     {
         var resolver = new PlaintextOnlySecretReferenceResolver { Source = source };
         var connectionSettingsValidator = databaseConnectionSettings ?? new StubDatabaseConnectionSettingsValidator();
@@ -915,6 +916,7 @@ public sealed class SecretConfigurationStartupValidatorTests
             Options.Create(mcpEndpointOptions ?? new McpEndpointOptions()),
             Options.Create(adminEndpointOptions ?? new AdminEndpointOptions()),
             Options.Create(clientEndpointOptions ?? new ClientEndpointOptions()),
+            Options.Create(contentStorageOptions ?? new ContentStorageOptions()),
             new SecretConfigurationValidator(
                 resolver,
                 new TrustAnchorLoader(resolver),

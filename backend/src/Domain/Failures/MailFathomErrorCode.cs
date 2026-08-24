@@ -361,6 +361,42 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode PersistenceCommitOutcomeUnknown { get; } = new(35002);
 
+    /// <summary>Gets subcategory 6, object storage: a caller abandoned an operation against the configured object-storage endpoint.</summary>
+    /// <remarks>
+    /// It is recorded rather than raised. A caller's own cancellation stays an <see cref="OperationCanceledException" />
+    /// wherever this system reports one, so what carries this code is the telemetry and the log record naming why an
+    /// operation ended — which is the one place a cancelled call and a refused one have to be told apart.
+    /// </remarks>
+    public static MailFathomErrorCode ObjectStorageOperationCancelled { get; } = new(36001);
+
+    /// <summary>Gets subcategory 6, object storage: an operation against the configured object-storage endpoint ended because the host is shutting down.</summary>
+    /// <remarks>
+    /// Separate from a cancelled call because the two are acted on differently: a caller that went away is nobody's
+    /// problem, while work abandoned by a shutdown is work a later run has to pick up.
+    /// </remarks>
+    public static MailFathomErrorCode ObjectStorageHostShuttingDown { get; } = new(36002);
+
+    /// <summary>Gets subcategory 6, object storage: the configured object-storage endpoint did not answer within the budget the operation was given.</summary>
+    public static MailFathomErrorCode ObjectStorageOperationTimedOut { get; } = new(36003);
+
+    /// <summary>Gets subcategory 6, object storage: the configured object-storage endpoint refused the credential the deployment presented.</summary>
+    /// <remarks>
+    /// It covers a rejected signature, an unknown access key, and a bucket the credential may not reach. All three are
+    /// the same finding for an operator — the credential in <c>ContentStorage:ObjectStorage</c> is not one this bucket
+    /// admits — and none of them clears by being repeated.
+    /// </remarks>
+    public static MailFathomErrorCode ObjectStorageAuthenticationFailed { get; } = new(36004);
+
+    /// <summary>Gets subcategory 6, object storage: the configured object-storage endpoint could not be reached, or answered in a way that invites the request again.</summary>
+    public static MailFathomErrorCode ObjectStorageEndpointUnavailable { get; } = new(36005);
+
+    /// <summary>Gets subcategory 6, object storage: an operation against the configured object-storage endpoint failed in a way this system does not recognize.</summary>
+    /// <remarks>
+    /// The catch-all exists so that no failure reaches a caller uncoded, and it is deliberately terminal: an answer
+    /// nothing here recognizes is not one a repetition improves on.
+    /// </remarks>
+    public static MailFathomErrorCode ObjectStorageOperationFailed { get; } = new(36006);
+
     #endregion
 
     #region Category 4 — Outbound resilience
@@ -836,6 +872,12 @@ public readonly record struct MailFathomErrorCode
         JobPayloadTooLarge,
         PersistenceTransientFailure,
         PersistenceCommitOutcomeUnknown,
+        ObjectStorageOperationCancelled,
+        ObjectStorageHostShuttingDown,
+        ObjectStorageOperationTimedOut,
+        ObjectStorageAuthenticationFailed,
+        ObjectStorageEndpointUnavailable,
+        ObjectStorageOperationFailed,
         OutboundDependencyUnavailable,
         MailboxQueryPageSizeOutOfRange,
         MailboxQueryFilterInvalid,

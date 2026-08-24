@@ -75,6 +75,27 @@ public sealed class HostCompositionTests
         new("Chat:Unauthenticated", "true"),
     ];
 
+    /// <summary>The declared object-storage endpoint, which is what makes the deployment one that stores payloads outside the database.</summary>
+    private static readonly KeyValuePair<string, string?>[] ObjectStorageBackend =
+    [
+        new("ContentStorage:Backend", "ObjectStorage"),
+        new("ContentStorage:ObjectStorage:Endpoint", "https://objects.example.test:9000/"),
+        new("ContentStorage:ObjectStorage:Bucket", "payloads"),
+        new("ContentStorage:ObjectStorage:AccessKeyId:Name", "object-storage-key-id"),
+        new("ContentStorage:ObjectStorage:AccessKeyId:SecretReference", "plaintext:not-a-real-key-id"),
+        new("ContentStorage:ObjectStorage:SecretAccessKey:Name", "object-storage-secret"),
+        new("ContentStorage:ObjectStorage:SecretAccessKey:SecretReference", "plaintext:not-a-real-signing-secret"),
+    ];
+
+    /// <summary>The settings the object-storage backend cannot be composed without, each of which names itself in the refusal.</summary>
+    private static readonly string[] RequiredObjectStorageSettings =
+    [
+        "ContentStorage:ObjectStorage:Endpoint",
+        "ContentStorage:ObjectStorage:Bucket",
+        "ContentStorage:ObjectStorage:AccessKeyId",
+        "ContentStorage:ObjectStorage:SecretAccessKey",
+    ];
+
     /// <summary>Each deployment shape, as the configuration an operator would have written to reach it.</summary>
     /// <remarks>
     /// Written as configuration rather than as flags, because that is the input the composition actually reads: the
@@ -120,6 +141,7 @@ public sealed class HostCompositionTests
                 .. ChatEndpoint,
                 new("Chat:RelevanceFilter:Enabled", "true"),
             ],
+            ["content stored in a bucket"] = ObjectStorageBackend,
             ["secret scanning"] =
             [
                 new("SensitiveContent:Secrets:Enabled", "true"),
@@ -164,6 +186,7 @@ public sealed class HostCompositionTests
                 new("SpamClassification:Enabled", "true"),
                 new("SpamClassification:UseScanner", "true"),
                 new("SpamClassification:Scanner:Host", "spamd.example.test"),
+                .. ObjectStorageBackend,
             ],
         };
 
@@ -362,6 +385,30 @@ public sealed class HostCompositionTests
         // Assert
         Assert.NotNull(refusal);
         Assert.Contains("No network surface is enabled", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Selecting the object-storage backend and declaring nothing beneath it is refused while the services are being
+    /// registered, with every faulty setting named at once. The composition maps the block into an endpoint there,
+    /// before the container that would run the options pipeline exists, so without this the deployment would meet a
+    /// <c>UriFormatException</c> out of a <c>Create</c> method instead of the report every other section produces.
+    /// </summary>
+    [Fact]
+    public void Compose_WithTheObjectStorageBackendSelectedAndNothingDeclared_NamesEveryFaultySetting()
+    {
+        // Arrange
+        var builder = ConfiguredBuilder("probes only", [new("ContentStorage:Backend", "ObjectStorage")]);
+
+        // Act
+        var refusal = Record.Exception(() => HostComposition.Compose(builder));
+
+        // Assert
+        var validationFailure = Assert.IsType<OptionsValidationException>(refusal);
+        Assert.All(
+            RequiredObjectStorageSettings,
+            setting => Assert.Contains(
+                validationFailure.Failures,
+                failure => failure.StartsWith(setting, StringComparison.Ordinal)));
     }
 
     /// <summary>

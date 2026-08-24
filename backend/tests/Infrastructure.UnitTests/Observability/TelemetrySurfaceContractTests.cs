@@ -39,6 +39,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Mutations.Audit;
 using MailFathom.Infrastructure.Embeddings;
+using MailFathom.Infrastructure.ObjectStorage;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -125,6 +126,7 @@ public sealed class TelemetrySurfaceContractTests
     private static readonly PersistenceCommitTelemetry PersistenceCommits = new();
     private static readonly SensitiveContentDerivationTelemetry Derivation = new();
     private static readonly SensitiveContentEgressTelemetry Egress = new();
+    private static readonly ObjectStorageTelemetry ObjectStorage = new(Clock);
     private static readonly StoredEmailContentTelemetry StoredContent = new(Clock);
     private static readonly StoredMailRederivationTelemetry Rederivation = new(Clock);
 
@@ -153,6 +155,7 @@ public sealed class TelemetrySurfaceContractTests
         typeof(MailboxReadTelemetry),
         typeof(MailExtractionBackfillTelemetry),
         typeof(MailSynchronizationTelemetry),
+        typeof(ObjectStorageTelemetry),
         typeof(PersistenceCommitTelemetry),
         typeof(SensitiveContentDerivationTelemetry),
         typeof(SensitiveContentEgressTelemetry),
@@ -276,6 +279,7 @@ public sealed class TelemetrySurfaceContractTests
         DriveDelivery();
         DriveSynchronization();
         DriveContentStore();
+        DriveObjectStorage();
         DriveSensitiveContent();
         DriveStoredMailRederivation();
 
@@ -674,6 +678,27 @@ public sealed class TelemetrySurfaceContractTests
 
         using var write = StoredContent.BeginWrite();
         write.Stored(61_043);
+    }
+
+    private static void DriveObjectStorage()
+    {
+        using (var listed = ObjectStorage.Begin(ObjectStorageTelemetry.ListOperationName))
+        {
+            listed.Succeeded();
+        }
+
+        using (var written = ObjectStorage.Begin(ObjectStorageTelemetry.PutOperationName))
+        {
+            written.Succeeded(61_051);
+        }
+
+        // Every classification, because each is a dimension value an exporter sees and the contract is over the whole
+        // set rather than over whichever one a failure happened to produce.
+        foreach (var classification in ObjectStorageFailure.All)
+        {
+            using var failed = ObjectStorage.Begin(ObjectStorageTelemetry.DeleteOperationName);
+            failed.Failed(classification);
+        }
     }
 
     private static void DriveSensitiveContent()

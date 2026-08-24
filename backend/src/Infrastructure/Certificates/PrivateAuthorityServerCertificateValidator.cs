@@ -6,14 +6,16 @@ using System.Net.Security;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
-namespace MailFathom.Infrastructure.Mail;
+namespace MailFathom.Infrastructure.Certificates;
 
-/// <summary>Decides whether a mail server certificate is trusted once a deployment-provisioned authority is configured.</summary>
+/// <summary>Decides whether a TLS server's certificate is trusted once a deployment-provisioned authority is configured.</summary>
 /// <remarks>
 /// <para>
-/// This runs only for an account whose certificate trust names an additional authority. Every other account keeps the
-/// mail client's own validating default, and no configuration path anywhere turns validation off: a private server is
-/// supported by supplying an anchor, never by accepting an error.
+/// It runs only where the configuration named an additional authority: a mail account whose certificate trust carries
+/// one, and an object-storage endpoint the deployment runs itself. Everything else keeps the platform's own validating
+/// default, and no configuration path anywhere turns validation off — a private server is supported by supplying an
+/// anchor, never by accepting an error. The rule is one rule rather than one per protocol, because which authority
+/// signed a certificate is not a question a mail server and an object store answer differently.
 /// </para>
 /// <para>
 /// Trust is decided by rebuilding the chain against the configured anchor rather than by forgiving the error the
@@ -22,7 +24,7 @@ namespace MailFathom.Infrastructure.Mail;
 /// path into the validation bypass this design exists to avoid.
 /// </para>
 /// </remarks>
-internal static class MailServerCertificateValidator
+internal static class PrivateAuthorityServerCertificateValidator
 {
     /// <summary>The extended key usage a certificate must carry to authenticate a TLS server, <c>id-kp-serverAuth</c>.</summary>
     private const string ServerAuthenticationOid = "1.3.6.1.5.5.7.3.1";

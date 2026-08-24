@@ -51,4 +51,14 @@ public enum OutboundDependency
     /// during establishment from nesting one retry budget inside another.
     /// </remarks>
     MailAuthorizationServerInvocation = 5,
+
+    /// <summary>Calling the S3-compatible endpoint a deployment stores message content in.</summary>
+    /// <remarks>
+    /// It is its own class rather than part of <see cref="DatabaseCommandExecution" /> because the two are different
+    /// remote parties with different failure modes: the database is local and its transient failures clear in
+    /// milliseconds, while an object-storage endpoint may be across a network, rate-limits with an HTTP status, and
+    /// refuses a rejected credential identically however often it is asked. A deployment storing content in a bucket
+    /// still runs every metadata write against the database, so one being unavailable must not open the other's circuit.
+    /// </remarks>
+    ObjectStorageInvocation = 6,
 }

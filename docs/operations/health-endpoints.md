@@ -1,6 +1,6 @@
 # The health endpoints and the listener they are served on
 
-<!-- describes: backend/src/Host/Hosting/**, backend/src/Host/Configuration/Endpoints/HealthEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/EndpointTransport.cs, backend/src/Host/Configuration/Endpoints/ListenerComposition.cs, backend/src/Host/Configuration/Endpoints/ServedSurfaces.cs, backend/src/Host/Security/Endpoints/Health*, backend/src/Infrastructure/SensitiveContent/PersonalData/PresidioAnalyzerProbe.cs -->
+<!-- describes: backend/src/Host/Hosting/**, backend/src/Host/Configuration/Endpoints/HealthEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/EndpointTransport.cs, backend/src/Host/Configuration/Endpoints/ListenerComposition.cs, backend/src/Host/Configuration/Endpoints/ServedSurfaces.cs, backend/src/Host/Security/Endpoints/Health*, backend/src/Infrastructure/SensitiveContent/PersonalData/PresidioAnalyzerProbe.cs, backend/src/Infrastructure/ObjectStorage/S3ObjectStorageEndpointProbe.cs -->
 
 An orchestrator decides three things about a process by asking it: whether it has finished coming up, whether it can
 serve a request right now, and whether it is still running rather than stuck. MailFathom answers those three questions on
@@ -81,7 +81,7 @@ Kestrel's own default address.
 | Probe | Path | Consults | A failure means |
 |---|---|---|---|
 | Startup | `/started` | The host's own startup gates: every secret reference resolved, the database schema verified, and — only where its own switch is on — the spam scanner naming the corpus it scores under | The process has not finished coming up; the grace period continues |
-| Readiness | `/health` | The dependencies a request needs: the database, each declared AI provider, and — only where its switch is on — the personal-data analyzer | The instance stops receiving traffic; it is not restarted |
+| Readiness | `/health` | The dependencies a request needs: the database, each declared AI provider, and — only where its own switch is on — the personal-data analyzer and the object-storage bucket | The instance stops receiving traffic; it is not restarted |
 | Liveness | `/alive` | Process-local state only | The container is restarted |
 
 One endpoint cannot answer all three, because the three have different consequences. Wiring liveness to the readiness
@@ -125,6 +125,26 @@ at `Error` and `Information` respectively, because a probe response carries no r
 reads one.
 [Sensitive-content scanning](../features/sensitive-content-scanning.md#the-analyzer-is-deployed-only-when-the-switch-is-on)
 records what the scanner does with an analyzer that is not there.
+
+**The object-storage bucket is the same case, for the same reason.** Where `ContentStorage:Backend` selects
+`ObjectStorage`, an `object-storage` check joins the readiness probe alone and reports **unhealthy** when the bucket
+does not answer. Unhealthy rather than degraded because a content backend is not a service a deployment can serve a
+narrower version of: the bucket a deployment selected is where it means its message payloads to live, so an endpoint
+that refuses a write is the store failing rather than one feature being unavailable. Reaching the liveness probe would
+turn one endpoint's outage into a restart loop across every replica, since restarting this process cannot make a bucket
+reachable.
+
+It reaches the bucket on each scrape, and asks all three questions a payload needs answered: it lists beneath the
+deployment's prefix, writes a zero-length object under a key of its own, and removes what it wrote. All three because
+each fails on its own — an endpoint that answers a listing and refuses a write is a deployment that will accept mail and
+be unable to store it — and they stop at the first failure, because reporting three would tell an operator that three
+things are wrong. **The probe stores no mail to find out**: nothing about a message, an account, or a folder takes part
+in it. A bucket that has been taken away is a readiness condition rather than a configuration error a binder could
+catch, which is what
+[ADR 0017](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md)
+§ 1 decided; the host comes up, reports unready, and becomes ready by itself once the bucket answers. Each transition is
+written to the log at `Error` and `Information` as the analyzer's are, with the classified failure behind it, because
+the response carries no reason and the message names the configuration key rather than the address.
 
 The startup gates are reported rather than re-run. The probe reads a flag the gates set as they complete, so polling it
 opens no connection and costs nothing, and once it turns healthy it stays healthy. Under the host builder MailFathom

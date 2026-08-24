@@ -17,6 +17,17 @@
          provision. Referenced by AI alone, and only for the four credential types a background service can hold; the
          chain is composed explicitly rather than through DefaultAzureCredential, which would reach a developer tool. -->
     <PackageVersion Include="Azure.Identity" Version="1.21.0" />
+    <!-- The client an S3-compatible endpoint is reached over, chosen on shape by ADR 0017 § 8. Referenced by
+         Infrastructure alone, so every Amazon type stays inside the object-storage adapter. It declares exactly one
+         dependency, AWSSDK.Core below, which is the second half of the same decision: the alternative clients each
+         brought a stack this repository takes nowhere else. Both are Apache-2.0 and both carry a row in
+         THIRD_PARTY_LICENSES.md. -->
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.102.3" />
+    <!-- The runtime behind AWSSDK.S3 rather than a dependency of MailFathom's own: the credential, the endpoint, the
+         signer, and the client configuration are its types. Pinned directly for the reason MimeKit is — the version the
+         code compiles against is decided here instead of inherited from another package's dependency range — and it
+         carries no package dependencies of its own on the net8.0 assets .NET 10 resolves. -->
+    <PackageVersion Include="AWSSDK.Core" Version="4.0.102" />
     <PackageVersion Include="System.CommandLine" Version="2.0.10" />
     <!-- What draws the command's output: the tables its listings are laid out in, and the colour that tells a failure
          from a result. Referenced by Cli alone. It brings Spectre.Console.Ansi with it, which is the same project under

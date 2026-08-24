@@ -67,6 +67,7 @@ using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.OAuth;
+using MailFathom.Infrastructure.ObjectStorage;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Rules;
@@ -129,6 +130,7 @@ internal static class HostComposition
 
         var embedsMail = AddPersistenceAndProviders(builder);
 
+        AddContentStorage(builder);
         AddBackgroundWork(builder, declaredSensitiveContent, spamScannerIsConfigured, embedsMail);
 
         // Ahead of the surfaces rather than inside one, because the document it generates describes two of them and
@@ -216,6 +218,17 @@ internal static class HostComposition
         builder.Services.AddOptions<MailDeliveryOptions>()
             .Bind(
                 builder.Configuration.GetSection(MailDeliveryOptions.SectionName),
+                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        // A configuration root of its own rather than a block inside Persistence, because what it selects is whether
+        // message payloads are in the database at all: a deployment writing them into a bucket still runs every metadata
+        // row, every index, and every job through PostgreSQL. A root is also what gives the endpoint's credentials their
+        // own secret-name uniqueness scope. An absent section is the database backend, which is what every deployment
+        // that has never heard of the setting is already running.
+        builder.Services.AddOptions<ContentStorageOptions>()
+            .Bind(
+                builder.Configuration.GetSection(ContentStorageOptions.SectionName),
                 binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             .ValidateDataAnnotations()
             .ValidateOnStart();
@@ -954,6 +967,57 @@ internal static class HostComposition
             probeTags: [HealthProbe.Readiness.Tag]);
 
         return declaredEmbeddings?.IsConfigured is true;
+    }
+
+    /// <summary>Registers the object-storage endpoint a deployment selected, or nothing at all for one storing content in the database.</summary>
+    /// <remarks>
+    /// <para>
+    /// Read here rather than resolved, for the reason the embedding chain is: which backend was selected decides which
+    /// services exist, and that decision is taken before the container that would resolve an options snapshot. The block
+    /// is therefore judged here as well, by the same rules <c>ValidateOnStart</c> applies to it: the mapping below runs
+    /// while the builder is being composed, so a deployment that selected the backend and named no address would meet a
+    /// <c>UriFormatException</c> out of a <c>Create</c> method rather than the aggregated report every other section
+    /// produces.
+    /// </para>
+    /// <para>
+    /// It runs after persistence, because the trust anchor loader it composes over is registered by
+    /// <c>AddInfrastructure</c>, and after the startup reporting, so the hosted service that loads the endpoint's
+    /// authority starts behind the pass that reports every unusable secret of a deployment at once.
+    /// </para>
+    /// </remarks>
+    private static void AddContentStorage(WebApplicationBuilder builder)
+    {
+        var declaredContentStorage = builder.Configuration
+            .GetSection(ContentStorageOptions.SectionName)
+            .Get<ContentStorageOptions>();
+
+        if (declaredContentStorage?.IsObjectStorageSelected is not true)
+        {
+            return;
+        }
+
+        var objectStorageConfigurationErrors = declaredContentStorage.ObjectStorage.FindConfigurationErrors().ToArray();
+
+        if (objectStorageConfigurationErrors.Length > 0)
+        {
+            throw new OptionsValidationException(
+                ContentStorageOptions.SectionName,
+                typeof(ContentStorageOptions),
+                objectStorageConfigurationErrors);
+        }
+
+        builder.Services.AddSingleton<IObjectStorageCredentialSource, ConfiguredObjectStorageCredentialSource>();
+        builder.Services.AddObjectStorage(
+            declaredContentStorage.ObjectStorage.ToEndpoint(),
+            declaredContentStorage.ObjectStorage.TrustAnchor);
+
+        // Readiness alone, and unhealthy rather than degraded: an instance whose selected content backend cannot be
+        // written to cannot store the next message it synchronizes. It must never reach the liveness probe, because
+        // restarting this process cannot make a bucket reachable. A singleton because the check holds the last
+        // observation it made, which is what keeps one outage to one pair of log records instead of one per scrape.
+        builder.Services.AddSingleton<ObjectStorageHealthCheck>();
+        builder.Services.AddHealthChecks()
+            .Add(ObjectStorageHealthCheck.Registration());
     }
 
     /// <summary>Registers the startup gates and the workers behind them, in the order a run may first touch mail.</summary>

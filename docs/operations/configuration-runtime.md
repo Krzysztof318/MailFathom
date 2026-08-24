@@ -49,6 +49,52 @@ Repointing a reference or editing the connection string reloads; changing *which
 moving a password out of the connection string into `Persistence:Password`, or back — is refused on reload and needs a
 restart, because the connection pool attaches its password provider once.
 
+## `ContentStorage`
+
+Where the raw MIME of the messages this deployment stores next is written. A configuration root of its own rather than a
+section of `Persistence`, because what it selects is whether message payloads are in the database at all: an instance
+writing them into a bucket still runs every metadata row, every index, and every job through PostgreSQL.
+[ADR 0017](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md)
+records the whole decision.
+
+An absent section is `Database`, which is what a deployment that has never heard of this setting is already running.
+**What selecting `ObjectStorage` does today is reach the endpoint**: the client is composed, its transport and its trust
+are established, and the readiness probe asks the bucket on every scrape whether it is reachable, readable, and
+writable. Payloads are still written to and read from the database, so an instance that selects the backend stores mail
+exactly where an instance that did not would, and an operator gains a dependency to watch rather than a new place their
+mail lives.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `ContentStorage:Backend` | enum | `Database` | `Database`, `ObjectStorage` | restart |
+
+Selecting `ObjectStorage` makes the block below required, and startup then refuses a declaration missing an address, a
+bucket, or either half of a credential. That refusal is the point rather than a formality: the S3 client's own
+credential chain reaches environment variables, a shared credentials file, and an instance metadata service, so a
+deployment that configured none must fail instead of quietly signing as whatever identity the host carries.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `ContentStorage:ObjectStorage:Endpoint` | string | unset | Required; an absolute `https` address. A plain `http` address is refused, because a request carries a signature and, on a write, the message itself | restart |
+| `ContentStorage:ObjectStorage:Bucket` | string | unset | Required | restart |
+| `ContentStorage:ObjectStorage:KeyPrefix` | string | empty | Empty is a bucket MailFathom has to itself; whitespace is refused. Two deployments sharing one bucket need disjoint prefixes, and nothing here can check that | restart |
+| `ContentStorage:ObjectStorage:Region` | string | `us-east-1` | The region a request is signed under. SigV4 carries one whether the endpoint has a notion of a region or not | restart |
+| `ContentStorage:ObjectStorage:UsePathStyleAddressing` | bool | `true` | Off only for an endpoint that genuinely serves virtual-hosted buckets, which needs a wildcard DNS name and a certificate to match it | restart |
+| `ContentStorage:ObjectStorage:ConnectTimeout` | TimeSpan | `00:00:10` | 1 s – 1 min | restart |
+| `ContentStorage:ObjectStorage:RequestTimeout` | TimeSpan | `00:01:40` | 5 s – 10 min, and longer than `ConnectTimeout`. The transport's backstop rather than the operation's budget, which is `Resilience:ObjectStorageInvocation` | restart |
+| `ContentStorage:ObjectStorage:AccessKeyId` | secret block | unset | Required; a present block must carry a reference | restart; material per request |
+| `ContentStorage:ObjectStorage:SecretAccessKey` | secret block | unset | Required; a present block must carry a reference | restart; material per request |
+| `ContentStorage:ObjectStorage:TrustAnchor` | secret block | unset | The certificate authority that signed the endpoint's certificate, for an endpoint the operator runs themselves. Absent for one the platform already trusts | restart |
+
+**The access key identifier is a secret block like the secret beside it**, rather than a plain string. It names an
+identity at the endpoint, it is one half of what an attacker needs, and every provider that issues one issues it
+together with its secret from the same place. Both are resolved before every request, so a key rotated behind an
+unchanged reference takes effect on the next call with nothing to invalidate.
+
+The trust anchor is the one exception to that, and it is why the row says restart. The decision is a synchronous
+callback inside a pooled TLS handler, so the authority is loaded once while the host starts; there is no setting
+anywhere that turns validation off. [Platform TLS policy](platform-tls-policy.md) is the page.
+
 ## `DataEncryption`
 
 The key ring every value MailFathom seals at rest is sealed under. A configuration root of its own rather than a
@@ -169,7 +215,8 @@ instant.
 
 Retry, timeout, circuit-breaker, and concurrency budgets for the non-HTTP outbound dependencies, one subsection per
 dependency class: `MailboxSessionEstablishment`, `MailboxDataRetrieval`, `MailAuthorizationServerInvocation`,
-`EmailDelivery`, `DatabaseCommandExecution`, `AiProviderInvocation`. A subsection naming no class fails startup. Every setting is **restart** by construction, and
+`EmailDelivery`, `DatabaseCommandExecution`, `AiProviderInvocation`, `ObjectStorageInvocation`. A subsection naming no
+class fails startup. Every setting is **restart** by construction, and
 [outbound resilience](../architecture/outbound-resilience.md#configuration) explains each strategy and the
 per-class reasoning.
 
@@ -195,6 +242,7 @@ Defaults, per class:
 | `EmailDelivery` | 2 | 5 s / 60 s | 60 s / 3 min | 0.5 · 5 · 60 s · 60 s | 4 |
 | `DatabaseCommandExecution` | 3 | 200 ms / 2 s | 15 s / 30 s | 0.5 · 20 · 30 s · 5 s | 32 |
 | `AiProviderInvocation` | 3 | 2 s / 30 s | 120 s / 5 min | 0.5 · 5 · 60 s · 30 s | 4 |
+| `ObjectStorageInvocation` | 3 | 500 ms / 10 s | 30 s / 2 min | 0.5 · 10 · 60 s · 15 s | 16 |
 
 ## `Logging`
 
