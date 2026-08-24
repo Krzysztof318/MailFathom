@@ -214,11 +214,17 @@ stored content occupies, as the most recent run measured it. It carries no accou
 because content storage is one store every account writes into and a per-account copy of the same number would invite a
 dashboard to sum it.
 
-`mailfathom.mail.content.limits_reached` counts the folder runs that ended against one of the two byte limits, tagged
-with which: `run_budget` for a run that spent what it may fetch, and `storage_ceiling` for one that had to record
-messages without their content. Both are counted rather than only logged because both are conditions that persist — a
-run that stopped for its budget will stop again next interval, and a deployment at its ceiling stays there until
-somebody acts — so a rising count says it has been running that way rather than that it did once.
+`mailfathom.mail.content.limits_reached` counts the folder runs that ended against one of the byte limits, tagged with
+which: `run_budget` for a run that spent what it may fetch, `storage_ceiling` for one that had to record messages
+without their content, and `owner_storage_ceiling` for one whose owner was at their own share while the deployment
+still had room. The last two are separate values rather than one because they ask an operator for different things —
+more disk or a higher instance ceiling against the first, a larger share for one person or a wait against the second —
+and a run that left messages for both reasons reports both, one measurement each. One message is deferred by one of
+them rather than by both, because the instance's room is claimed first and an owner is never charged for a payload the
+instance had no room for. All are counted rather than only logged
+because each is a condition that persists — a run that stopped for its budget will stop again next interval, and a
+deployment or an owner at a ceiling stays there until somebody acts — so a rising count says it has been running that
+way rather than that it did once.
 [Bounding how much mail a run brings in](../features/imap-synchronization.md#bounding-how-much-mail-a-run-brings-in)
 states what each limit does when it is reached and how the gap a ceiling leaves is closed.
 
@@ -270,7 +276,9 @@ ceiling bounds.
 
 The backfill over mail stored before a profile existed publishes its own family beside that one, under
 `mailfathom.embedding.backfill.*`: how many messages awaited embedding when the current sweep began, how each bounded
-run ended, and how many messages it cut into passages, brought up to date, and gave vectors to. The instruments are
+run ended, how many messages it cut into passages, brought up to date, and gave vectors to, and how many it stepped
+past because the owner they belong to had spent their share. That last one has an instrument rather than a tag because
+an owner's ceiling ends nothing: the run carries on, so there is no ending for a tag to describe. The instruments are
 separate and the tag keys are shared, because a rate an instance settles at and a finite amount of work an operator
 started are different questions about one provider bill.
 [Embedding backfill](../features/embedding-backfill.md#what-an-operator-can-see) names each of them, and says why the

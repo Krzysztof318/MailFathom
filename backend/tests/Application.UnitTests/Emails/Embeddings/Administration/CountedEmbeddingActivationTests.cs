@@ -138,7 +138,7 @@ public sealed class CountedEmbeddingActivationTests
         var world = CreateWorld(maxInputCharactersPerPeriod: 100_000);
         var declared = CreateIdentity("a-model");
         world.WorkloadReader.Set(declared, new EmbeddingWorkload(500, 500, 2_000, 90_000));
-        world.Ledger.Seed(new DateTimeOffset(2026, 8, 8, 0, 0, 0, TimeSpan.Zero), 80_000);
+        world.Ledger.Seed(new DateTimeOffset(2026, 8, 8, 0, 0, 0, TimeSpan.Zero), SyntheticMailOwner.Deployment, 80_000);
 
         // Act
         var result = await world.Activation.ActivateAsync(declared, TestContext.Current.CancellationToken);
@@ -276,7 +276,7 @@ public sealed class CountedEmbeddingActivationTests
             workloadReader,
             new EmbeddingSpendGate(
                 ledger,
-                EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod, TimeSpan.FromDays(1)),
+                EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod, 0, TimeSpan.FromDays(1)),
                 timeProvider),
             new EmbeddingProfileActivation(
                 generationStore,

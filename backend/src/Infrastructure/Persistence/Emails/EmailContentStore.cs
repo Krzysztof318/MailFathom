@@ -158,6 +158,15 @@ internal sealed class EmailContentStore(
         var trackedEntity = dbContext.EmailMessageContents.Local.AsQueryable().SingleOrDefault(matchesStoredEmail);
         if (trackedEntity is not null)
         {
+            // Measured against what this session already staged rather than against the database, which still holds
+            // whatever was there before this transaction began: a statement reading the stored row would count the
+            // payload this session is replacing a second time.
+            await OwnerStoredContentLedger.MoveAsync(
+                dbContext,
+                storedEmail.MailboxAccountId,
+                placedContent.ByteLength - trackedEntity.MimeByteLength,
+                cancellationToken);
+
             trackedEntity.RawMime = bytes;
             trackedEntity.MimeByteLength = placedContent.ByteLength;
             trackedEntity.Sha256Hash = placedContent.Sha256Hash.ToArray();
@@ -169,6 +178,16 @@ internal sealed class EmailContentStore(
 
             return;
         }
+
+        // What the owner's figure moves by is the difference between this payload and whatever is stored, which the
+        // statement measures for itself. It runs before the write below for that reason, and inside the same
+        // transaction, so a rolled-back store leaves the figure exactly where it found it.
+        await OwnerStoredContentLedger.AdoptLengthAsync(
+            dbContext,
+            storedEmail.MailboxAccountId,
+            storedEmailId.Value,
+            placedContent.ByteLength,
+            cancellationToken);
 
         // Re-synchronizing an occurrence that is already stored must not read its existing bytea payload back into memory or
         // into the change tracker, so the overwrite is issued as a set-based update inside the caller's open transaction.

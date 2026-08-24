@@ -137,6 +137,22 @@ for first. [Embedding generation](embedding-generation.md#what-an-instance-is-wi
 itself, and an initial backfill of a large mailbox is the case for raising it deliberately rather than being paced by
 it.
 
+**A per-owner ceiling ends nothing.** Where the turn reports that the message's owner has spent their share while the
+deployment still has room, the walk commits its position and carries on to the next message. That is not a smaller
+version of the ending above but the opposite of it: the walk visits the whole deployment's mail in identifier order and
+owners interleave in it, so ending here would leave every other owner's mail unembedded until the period rolled over —
+which is exactly the harm bounding spend per owner exists to prevent. The stepped-over message keeps its outstanding
+passages, so the next sweep after the roll-over reaches it, and the run reports how many messages it stepped past that
+way beside how many it embedded.
+
+Because nothing ends, that fact is true of every pass until the period rolls over — and a busy instance sweeps on the
+short interval. The warning is therefore written once per period rather than once per pass, so it does not bury the rest
+of the log for as long as an owner has mail waiting, and the counter beside it is what carries every pass.
+
+Nothing about a per-owner ceiling makes the resume position per owner, and that is a decision rather than a gap. One
+walk serves every owner at once, so a cursor each would record the same walk several times over and the run would still
+have to visit every message to decide which cursor to move.
+
 The removal of a superseded generation's vectors is bounded too, and it is not a setting: it deletes rows nobody reads,
 reaches no provider, and costs nothing an operator has to consent to, so what paces it is the interval between passes
 rather than a number beside the ones above. A pass that removed a full batch is followed by the short interval, because
@@ -179,6 +195,7 @@ from recording a pass nothing would ever reach. The log says the same at `Debug`
 | `mailfathom.embedding.backfill.messages` | Messages brought up to date with the active profile |
 | `mailfathom.embedding.backfill.passages` | Passages given a vector |
 | `mailfathom.embedding.backfill.exhausted` | Messages left part-way through because one turn spent every provider call it is allowed |
+| `mailfathom.embedding.backfill.owner_ceiling` | Messages the sweep stepped past because the owner they belong to had spent what one period admits for them |
 | `mailfathom.embedding.generation.switches` | Generations that finished being built and became the one searches are answered from |
 | `mailfathom.embedding.generation.removed` | Vectors of a superseded generation removed after a switch |
 

@@ -8,6 +8,7 @@ using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Mailboxes;
@@ -380,7 +381,11 @@ public sealed class TelemetrySurfaceContractTests
     {
         Embedding.RecordEmbeddedMessage(StoredEmailEmbeddingRun.Embedded(3), TimeSpan.FromSeconds(2));
         Embedding.RecordEmbeddedMessage(
-            StoredEmailEmbeddingRun.SpendCeilingReached(2, inputCharacterCount: 61_007, Moment),
+            StoredEmailEmbeddingRun.SpendCeilingReached(
+                2,
+                inputCharacterCount: 61_007,
+                Moment,
+                EmbeddingSpendBound.Deployment),
             TimeSpan.FromSeconds(1));
 
         foreach (var failure in Enum.GetValues<EmbeddingGenerationFailure>())
@@ -404,6 +409,8 @@ public sealed class TelemetrySurfaceContractTests
                     EmbeddedEmailCount: 2,
                     EmbeddedChunkCount: 5,
                     CallBudgetExhaustedEmailCount: 0,
+                    OwnerSpendCeilingEmailCount: 0,
+                    OwnerSpendPeriodEndsAt: null,
                     OutstandingEmailCountAtSweepStart: 61_011,
                     Failure: null,
                     SpendPeriodEndsAt: null),
@@ -418,6 +425,8 @@ public sealed class TelemetrySurfaceContractTests
                 EmbeddedEmailCount: 2,
                 EmbeddedChunkCount: 5,
                 CallBudgetExhaustedEmailCount: 0,
+                OwnerSpendCeilingEmailCount: 0,
+                OwnerSpendPeriodEndsAt: null,
                 OutstandingEmailCountAtSweepStart: 61_011,
                 Failure: null,
                 SpendPeriodEndsAt: null),
@@ -516,6 +525,7 @@ public sealed class TelemetrySurfaceContractTests
                 StoredBytes: 61_027,
                 StoredContentBytes: 61_029,
                 DeferredForStorageEmailCount: 1,
+                DeferredForOwnerStorageEmailCount: 1,
                 RefilledEmailCount: 1,
                 StoppedForContentBudget: true));
 

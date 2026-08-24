@@ -159,9 +159,7 @@ internal static class OwnerAccountErasure
     /// <summary>The statement that holds one owner's row for the rest of the transaction.</summary>
     private static string OwnerRowLockStatement(IModel model)
     {
-        var ownerEntityType = model.FindEntityType(typeof(OwnerAccountEntity))
-            ?? throw new InvalidOperationException(
-                $"The model holds no {nameof(OwnerAccountEntity)}, so there is no owner record to erase.");
+        var ownerEntityType = PersistedSchemaNames.EntityTypeOf<OwnerAccountEntity>(model);
 
         var ownerKeyColumn = QuotedColumn(ownerEntityType, nameof(OwnerAccountEntity.Id));
 
@@ -173,23 +171,12 @@ internal static class OwnerAccountErasure
     }
 
     private static IEntityType MailboxAccountEntityTypeOf(IModel model) =>
-        model.FindEntityType(typeof(MailboxAccountEntity))
-        ?? throw new InvalidOperationException(
-            $"The model holds no {nameof(MailboxAccountEntity)}, so no mail account can be attributed to an owner.");
+        PersistedSchemaNames.EntityTypeOf<MailboxAccountEntity>(model);
 
     /// <summary>Quotes a table name the model states, which is where every identifier in the statement comes from.</summary>
-    private static string QuotedTable(IEntityType entityType) =>
-        entityType.GetSchema() is { Length: > 0 } schema
-            ? $"\"{schema}\".\"{entityType.GetTableName()}\""
-            : $"\"{entityType.GetTableName()}\"";
+    private static string QuotedTable(IEntityType entityType) => PersistedSchemaNames.QuotedTable(entityType);
 
     /// <summary>Quotes the column one mapped property is stored in.</summary>
-    private static string QuotedColumn(IEntityType entityType, string propertyName)
-    {
-        var property = entityType.FindProperty(propertyName)
-            ?? throw new InvalidOperationException(
-                $"{entityType.GetTableName()} maps no {propertyName}, so the erasure cannot name the column to take rows by.");
-
-        return $"\"{property.GetColumnName()}\"";
-    }
+    private static string QuotedColumn(IEntityType entityType, string propertyName) =>
+        PersistedSchemaNames.QuotedColumn(entityType, propertyName);
 }

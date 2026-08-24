@@ -264,12 +264,13 @@ public sealed class EmbeddingProfileEndpointsTests
             new AiProviderHealth(callInfo.Arg<AiProviderRole>(), AiProviderHealthState.Unobserved, ObservedAt: null));
 
         var ledger = Substitute.For<IEmbeddingSpendLedger>();
-        ledger.ReadConsumedInputCharactersAsync(Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>()).Returns(0L);
+        ledger.ReadDeploymentConsumedInputCharactersAsync(Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(0L);
 
         var timeProvider = new FakeTimeProvider(Now);
         var spendGate = new EmbeddingSpendGate(
             ledger,
-            EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod, TimeSpan.FromDays(1)),
+            EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod, 0, TimeSpan.FromDays(1)),
             timeProvider);
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();

@@ -363,7 +363,7 @@ rather than a row the database rejects later with no provider in sight.
 
 ## What an instance is willing to spend
 
-The bounds above are about one call. Three more are about the deployment, and they exist because embedding is the first
+The bounds above are about one call. Four more are about the deployment, and they exist because embedding is the first
 thing MailFathom does that costs money per unit of mail: a runaway loop somewhere else costs CPU, and a runaway
 embedding loop is an invoice that arrives a month later. Each is configuration, each is validated at startup, and none
 of them is part of an embedding profile — they decide how many vectors exist, never what any vector means, so moving
@@ -383,6 +383,11 @@ one leaves every stored vector exactly as comparable as it was.
   Unix epoch, so every restart agrees on where one begins without anything being stored to say so, and what each period
   has spent is kept in the database rather than in memory: a process crashing and restarting in a loop would otherwise
   begin every period again from zero.
+- **What one owner may cost of it.** `MaxInputCharactersPerPeriodPerOwner` bounds any one person's share of the same
+  window, in the same unit, and is unset by default. It exists because the aggregate ceiling is otherwise the only
+  thing bounding spend: on a deployment serving several owners, one person's backfill can consume the whole window
+  before anybody else's arriving mail is embedded. What each owner has spent is recorded on its own row, so the ledger
+  answers both questions from one key without a second count.
 
 Reaching the aggregate ceiling pauses embedding until the period rolls over, and nothing is lost by the pause: a
 passage with no vector is exactly the condition the [backfill](embedding-backfill.md) selects on. The wait is the
@@ -393,6 +398,23 @@ The ceiling binds to within one batch. A batch is admitted whenever anything at 
 paid for whole, because weighing a batch against what remains would stall a deployment whose ceiling is smaller than one
 batch for ever — it would refuse the same request at every roll-over. The overshoot is therefore at most one batch per
 call in flight.
+
+**One owner's ceiling stops that owner and nobody else.** A request is admitted only where both ceilings admit it, and
+a refusal names which of the two it met, because they need different actions: the aggregate one asks for a larger
+budget, an owner's asks for a larger share or for that owner to wait out the period. Meeting the aggregate one pauses
+the worker and ends the backfill sweep, since nothing more can be spent for anybody. Meeting one owner's does neither —
+the worker takes the next message and the backfill walk steps past theirs, committing its position, so every other
+owner's mail keeps being embedded and the stepped-over messages keep their outstanding passages for the next sweep.
+Where both are reached the aggregate one is what is reported, because raising a share changes nothing while the
+deployment itself has stopped spending.
+
+**The backfill's resume position and the embedding profile stay deployment-wide, by decision rather than by omission.**
+One walk serves every owner at once, in identifier order, so a cursor per owner would record the same walk several times
+over and the run would still visit every message to decide which cursor to move; what an owner's ceiling costs is their
+messages being stepped over for the rest of the period, which the walk already does without remembering anything. The
+profile is deployment-wide because [ADR
+0006](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0006-embedding-profile-identity-lifecycle-and-activation-cost.md)
+makes it the meaning of a stored vector, and two owners' vectors sharing an index have to mean the same thing.
 
 **Concurrency is not one of these keys.** How many provider calls may be in flight at once is
 `Resilience:AiProviderInvocation:ConcurrencyLimit`, which is the one mechanism that owns that question; [outbound

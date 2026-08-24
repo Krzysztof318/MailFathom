@@ -1,0 +1,61 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Domain.Access;
+
+namespace MailFathom.Application.EmailContent.Storage;
+
+/// <summary>Answers how much stored mail content one owner holds, without reading their mail to find out.</summary>
+/// <remarks>
+/// <para>
+/// A deployment-wide ceiling can ask the database what a table occupies, in constant time and without touching a row.
+/// A per-owner ceiling has no such question available: a catalogue answers for a table and never for a share of one, and
+/// summing an owner's payload lengths would put a scan of somebody's whole mailbox in front of every folder run. So the
+/// figure is maintained as it changes — one counter per owner, moved inside the transaction that stores or removes the
+/// payload — and read here as a single row.
+/// </para>
+/// <para>
+/// The figure is the payload bytes rather than what a disk fills with, which is what the deployment's ceiling counts.
+/// The two are deliberately different quantities, because only one of them is attributable to a person at all, and
+/// nothing reconciles one against the other.
+/// </para>
+/// <para>
+/// A maintained counter can drift where a payload leaves storage by a path nothing told it about, so the recomputation
+/// it was derived from stays available rather than being a one-off in a migration. That is what makes drift repairable
+/// instead of permanent, and it is the same statement the counter is asserted against.
+/// </para>
+/// <para>
+/// Both members refuse an owner naming nobody. Nothing gates this port — a synchronization run calls it directly —
+/// so the refusal is the port's own, and an implementation that answered such an owner would be keeping a counter for
+/// "nobody" that reads exactly like a working figure.
+/// </para>
+/// </remarks>
+public interface IOwnerStoredContentLedger
+{
+    /// <summary>Reads what one owner's stored mail content occupies, from the maintained counter.</summary>
+    /// <param name="owner">The owner asked about.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The bytes that owner's stored payloads hold.</returns>
+    /// <remarks>
+    /// An owner whose counter has never been written is derived once and adopted rather than answered as zero, so an
+    /// upgraded deployment and one that has just erased and re-synchronized both start from what storage actually
+    /// holds. Every later read is the single row.
+    /// </remarks>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
+    Task<long> ReadStoredContentBytesAsync(MailOwnerId owner, CancellationToken cancellationToken);
+
+    /// <summary>Recomputes one owner's figure from their stored payloads and adopts it.</summary>
+    /// <param name="owner">The owner whose counter is re-derived.</param>
+    /// <param name="cancellationToken">Cancels the recomputation.</param>
+    /// <returns>The figure that was adopted.</returns>
+    /// <remarks>
+    /// This is the expensive answer the maintained one exists to avoid, so it is a repair rather than something a run
+    /// reaches for. Unlike every movement of the figure, it replaces a total rather than adding to one, so it cannot be
+    /// left to race: it claims the owner's row before it recomputes and holds it until the recomputation is written, so
+    /// a store committing meanwhile is either counted by the recomputation or applied on top of it, never discarded by
+    /// it. That makes it the one operation here which needs a transaction of its own.
+    /// </remarks>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
+    Task<long> RederiveStoredContentBytesAsync(MailOwnerId owner, CancellationToken cancellationToken);
+}

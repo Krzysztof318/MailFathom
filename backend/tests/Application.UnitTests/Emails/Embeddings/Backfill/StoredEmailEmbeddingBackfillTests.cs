@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Limits;
@@ -223,7 +224,7 @@ public sealed class StoredEmailEmbeddingBackfillTests
     {
         // Arrange
         var world = CreateWorld(
-            spendBudget: EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 1, TimeSpan.FromDays(1)));
+            spendBudget: EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 1, 0, TimeSpan.FromDays(1)));
         AddMessagesAwaitingEmbedding(world, count: 3, passagesEach: 1);
         var backfill = world.CreateBackfill();
 
@@ -352,6 +353,59 @@ public sealed class StoredEmailEmbeddingBackfillTests
 
     private static StoredEmailId NextEmail() => StoredEmailId.Create(Guid.CreateVersion7());
 
+    /// <summary>
+    /// One owner reaching their share steps the walk past their mail and leaves every other owner's being embedded,
+    /// which is the whole reason the per-owner ceiling does not end the run the way the deployment's does.
+    /// </summary>
+    /// <remarks>
+    /// The walk visits messages in identifier order and owners interleave in it, so ending the sweep at the first
+    /// owner-bound refusal would leave everybody else unembedded until the period rolled over — the harm bounding
+    /// spend per owner exists to prevent.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_OneOwnerHasSpentTheirShare_KeepsEmbeddingEveryOtherOwnersMail()
+    {
+        // Arrange
+        const long OwnerCeiling = 1_000;
+
+        var ledger = new InMemoryEmbeddingSpendLedger();
+        ledger.Seed(PeriodStart, SyntheticMailOwner.Another, OwnerCeiling);
+        var ownership = new StubMailOwnership();
+        var world = CreateWorld(
+            spendBudget: EmbeddingSpendBudget.Create(
+                maxInputCharactersPerPeriod: 1_000_000,
+                maxInputCharactersPerPeriodPerOwner: OwnerCeiling,
+                TimeSpan.FromDays(1)),
+            ownership: ownership,
+            spendLedger: ledger);
+
+        // The two owners' mail interleaves in the order the walk visits it, which is what makes stepping past one of
+        // them a different thing from ending the run.
+        var messages = AddMessagesAwaitingEmbedding(world, count: 4, passagesEach: 1);
+        ownership.Owns(messages[0], SyntheticMailOwner.Another);
+        ownership.Owns(messages[2], SyntheticMailOwner.Another);
+        var backfill = world.CreateBackfill();
+
+        // Act
+        var result = await backfill.RunAsync(world.Target, TestContext.Current.CancellationToken);
+
+        // Assert
+        // The spent owner's two messages are stepped past and the other owner's two are embedded between them, so the
+        // sweep reaches the end of the mail rather than ending at the first refusal.
+        Assert.Equal(StoredEmailEmbeddingBackfillOutcome.SweepCompleted, result.Outcome);
+        Assert.Equal(EmbeddingSpendBound.None, result.ReachedSpendBound);
+        Assert.Equal(2, result.EmbeddedEmailCount);
+        Assert.Equal(2, result.EmbeddedChunkCount);
+        Assert.Equal(2, result.OwnerSpendCeilingEmailCount);
+
+        // The stepped-over messages keep their outstanding passages, which is what the next sweep selects on.
+        Assert.Equal(
+            2,
+            await world.BackfillStore.CountEmailsAwaitingEmbeddingAsync(
+                world.Target.Id,
+                TestContext.Current.CancellationToken));
+    }
+
     private static IReadOnlyList<StoredEmailId> AddMessagesAwaitingEmbedding(
         BackfillWorld world,
         int count,
@@ -380,7 +434,9 @@ public sealed class StoredEmailEmbeddingBackfillTests
     private static BackfillWorld CreateWorld(
         string generatorModelIdentifier = "a-model",
         int maximumPassagesPerCall = 8,
-        EmbeddingSpendBudget? spendBudget = null)
+        EmbeddingSpendBudget? spendBudget = null,
+        IMailOwnership? ownership = null,
+        InMemoryEmbeddingSpendLedger? spendLedger = null)
     {
         var embeddingStore = new InMemoryEmailEmbeddingStore();
         var backfillStore = new InMemoryStoredEmailEmbeddingBackfillStore(embeddingStore);
@@ -407,10 +463,11 @@ public sealed class StoredEmailEmbeddingBackfillTests
                 textEmbeddingGenerator,
                 concurrencyRetryPolicy,
                 new EmbeddingSpendGate(
-                    new InMemoryEmbeddingSpendLedger(),
+                    spendLedger ?? new InMemoryEmbeddingSpendLedger(),
                     spendBudget ?? EmbeddingSpendBudget.Unbounded,
                     new FakeTimeProvider(PeriodStart)),
-                EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider())),
+                EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider()),
+                ownership ?? new StubMailOwnership()),
             concurrencyRetryPolicy,
             new RecordingDerivedWorkGateTelemetry());
     }

@@ -260,7 +260,7 @@ next, never what a search is currently able to do; only an activation does that.
 
 ### What an instance is willing to spend
 
-The four keys below bound cost rather than correctness, and they are validated whether or not a chain is declared:
+The five keys below bound cost rather than correctness, and they are validated whether or not a chain is declared:
 passages are cut for every synchronized message on an instance that has chosen no provider, so a ceiling left
 unvalidated would be one already applying. None of them is part of an embedding profile — they decide how many vectors
 exist and never what one means, so moving any of them leaves every stored vector as comparable as it was. [Embedding
@@ -271,12 +271,33 @@ generation](../features/embedding-generation.md#what-an-instance-is-willing-to-s
 | `Embeddings:MaxCharactersPerEmail` | int | `200000` | 1000 – 10000000; how much of one message's extracted text is cut into passages. A message beyond it is bounded rather than refused — its opening is embedded and the length its text had is recorded on the message | restart |
 | `Embeddings:MaxRequestsPerMinute` | int | `0` | 0 – 100000; `0` paces nothing, which is the default. For a provider whose quota is stated per minute; a caller takes the next free slot and waits for it | restart |
 | `Embeddings:MaxInputCharactersPerPeriod` | long | `50000000` | zero or positive; the characters one period may send a provider, counted as sent rather than as stored. `0` declares no ceiling at all, which is supported and means an enabled feature can produce a bill nobody agreed to | restart |
+| `Embeddings:MaxInputCharactersPerPeriodPerOwner` | long | `0` | zero or positive; the characters one period may send for any **one** owner. `0` declares no per-owner ceiling, which is what a deployment serving one owner wants and what leaves a deployment serving several exposed to one person's backfill spending the whole window | restart |
 | `Embeddings:SpendPeriod` | TimeSpan | `1.00:00:00` | 1 min – 31 days; the fixed window the ceiling is counted over, anchored at the Unix epoch so every restart places it identically | restart |
 
 Reaching `MaxInputCharactersPerPeriod` pauses embedding until the period rolls over, and resumes without anybody
 acting; nothing is dropped, because a passage with no vector is what the backfill selects on. The ceiling binds to
 within one batch: a batch is admitted whenever anything at all is left and is then paid for whole, because weighing it
 against what remains would stall a deployment whose ceiling is smaller than one batch for ever.
+
+**The two ceilings answer different questions and a request has to pass both.** `MaxInputCharactersPerPeriod` bounds
+the bill; `MaxInputCharactersPerPeriodPerOwner` bounds any one person's share of it, over the same window and the same
+unit. Reaching the deployment's pauses the worker and ends the backfill sweep, because nothing more can be spent for
+anybody. Reaching one owner's stops that owner's mail alone: the worker carries on with the next message and the
+backfill steps past theirs, so everybody else keeps being embedded and their own passages wait for the roll-over.
+
+Which of the two a refusal met is read from the log line, which names the key to raise — and raising an owner's share
+answers nothing while the deployment itself has stopped spending, so the distinction is the whole point of reporting it.
+The backfill's counters separate them as well, because the deployment's ceiling ends the sweep and is reported as its
+outcome while an owner's is counted on `mailfathom.embedding.backfill.owner_ceiling`. The counter the worker embedding
+arriving mail keeps does not: both bounds reach it as one `spend_ceiling_reached` outcome, so on that path the log is
+what tells them apart.
+
+Leaving `MaxInputCharactersPerPeriodPerOwner` unset is the default and is right for a deployment serving one owner,
+whose spending the aggregate ceiling already bounds. What it exposes on a deployment serving several is one owner's
+backfill consuming the whole window before anybody else's arriving mail is embedded — which is a wait rather than a
+loss, and a wait that repeats every period until somebody sets a share. The embedding profile and the backfill's resume
+position stay deployment-wide by decision: two owners' vectors share an index and have to mean the same thing, and one
+walk over the mail visits every message whoever it belongs to.
 
 The default is chosen to bind. Fifty million characters a day is roughly twelve million tokens and embeds something
 like sixteen thousand ordinary messages, so an instance keeping up with arriving mail never meets it and one working

@@ -12,7 +12,7 @@ MailFathom synchronizes mailboxes read-only, on a bounded schedule, and — for 
 - How far back a run reaches is bounded per account by an optional earliest date, which travels into the IMAP search itself rather than filtering what came back. An account that names one pays no `FETCH`, no MIME read, no `bytea` write, and no search-vector computation for the mail it excludes, and the folder checkpoint still advances across the excluded range so a run ends instead of rescanning it every interval. [Bounding how far back a run reaches](#bounding-how-far-back-a-run-reaches) states which date the bound compares against and what widening one later does not do.
 - Batches are bounded by email count, not by UID-space width. The adapter searches the whole remaining assigned UID range — a UID SEARCH returns identifiers only — and then fetches envelopes for at most `MaxMetadataBatchSize` emails. A folder whose UIDs are sparse after deletions therefore still advances a full batch per iteration instead of crawling the UID space, which keeps an initial backfill practical.
 - An email that exceeds `MaxRawMimeBytes` is never silently dropped. Its occurrence metadata is committed with `ContentAvailability = ExceededSizeLimit` before the checkpoint moves past it, so the gap stays queryable and auditable instead of existing only as a counter in a log line. The same applies when the advertised size understated the payload and the bounded stream read abandons it mid-fetch: the session reports that as a `RemoteEmailContentFetchResult` outcome rather than as a failure, because the caller records the occurrence and continues, exactly as it does for MIME the reader cannot parse.
-- How much mail a run brings in is bounded in bytes as well as in messages, and how much of it may be kept is bounded too. A folder run fetches at most `MaxContentBytesPerRun` of raw MIME and then ends at a committed checkpoint; local content storage stops accepting payloads at `MaxStoredContentBytes` and keeps recording occurrences without them, which a later run with room fills in; and every folder work unit of the process shares `MaxInFlightRawMimeBytes` of buffer, so peak memory does not grow with the concurrency bounds. [Bounding how much mail a run brings in](#bounding-how-much-mail-a-run-brings-in) describes all three, what each one does when it is reached, and what an operator sees.
+- How much mail a run brings in is bounded in bytes as well as in messages, and how much of it may be kept is bounded too. A folder run fetches at most `MaxContentBytesPerRun` of raw MIME and then ends at a committed checkpoint; local content storage stops accepting payloads at `MaxStoredContentBytes`, and one owner's stops at `MaxStoredContentBytesPerOwner` while everybody else's keeps arriving, with the occurrences still recorded for a later run with room to fill in; and every folder work unit of the process shares `MaxInFlightRawMimeBytes` of buffer, so peak memory does not grow with the concurrency bounds. [Bounding how much mail a run brings in](#bounding-how-much-mail-a-run-brings-in) describes all four, what each one does when it is reached, and what an operator sees.
 - Committing occurrences before the window checkpoint means a process failure may cause a later run to fetch an already stored occurrence again. Content and metadata writes use the stable remote occurrence identity and are idempotent, so this retry does not create duplicate stored emails.
 - `Infrastructure` maps the pre-migration PostgreSQL model to `mailbox_accounts`, `mail_folders`, `stored_emails`, `email_message_contents`, and separate `synchronization_checkpoints`. A `mail_folders` row is one alias binding: it carries the alias, its resolution generation, the remote path, and the hierarchy delimiter the server advertised, and is unique on `(account, alias, generation)` rather than on `(account, alias)`. Each stored email has a local UUIDv7; its raw MIME row uses the same UUID as both primary key and foreign key and records byte length, SHA-256, and storage time. Each stored email also records a `ContentAvailability` value as text so a metadata-only occurrence is distinguishable from one whose raw MIME is present, alongside the normalized participants, thread identifiers, attachment summary, and remote flag snapshot that [Stored email schema](../architecture/stored-email-schema.md) describes in full. Persistence sessions clear tracked state after cleanup so one scoped context does not retain MIME arrays between per-email transactions, and re-synchronizing an occurrence that is already stored overwrites its payload with a set-based update rather than reading the existing `bytea` back into the change tracker.
 - A write repository takes its EF Core context from the `IPersistenceSession` it is handed, and injects none of its own. The write is therefore always issued on that session's own context, whichever scope the session came from, so "this write joined the caller's transaction" is structurally true instead of being an effect of both objects happening to resolve from the same DI scope. A session backed by a different persistence provider cannot supply a context at all and is rejected outright. Read methods take no session and use the scoped context, because a read joins no transaction.
@@ -170,12 +170,14 @@ Three settings bound the volume instead, and each answers a different question:
 | --- | --- | --- | --- | --- |
 | Per run | `MaxContentBytesPerRun` | 1 GiB | How fast may storage fill? | One folder run |
 | In total | `MaxStoredContentBytes` | *(none)* | How full may it get? | The whole process |
+| Per owner | `MaxStoredContentBytesPerOwner` | *(none)* | How much of that may one person hold? | One owner, process-wide |
 | At one moment | `MaxInFlightRawMimeBytes` | 128 MiB | How much may be in memory while it does? | The whole process |
 
-Two of the three are process-wide, and that is the point of them rather than an implementation detail: both bound a
-resource every concurrent folder run draws on at once, so a per-run version of either would be no bound at all.
+Three of the four are process-wide, and that is the point of them rather than an implementation detail: each bounds a
+resource every concurrent folder run draws on at once, so a per-run version of any of them would be no bound at all. The
+per-owner one is process-wide in the same sense and is simply counted per person rather than once.
 
-All three are validated at startup against `MaxRawMimeBytes`, and none may be below it. That is one rule stated three
+All four are validated at startup against `MaxRawMimeBytes`, and none may be below it. That is one rule stated three
 times rather than three rules: a bound smaller than a single message would not make that message rare, it would make it
 unfetchable — and the folder holding it would stop in front of it on every run, forever.
 
@@ -244,6 +246,34 @@ and the out-of-line storage the payloads live in — read from the catalog in co
 rows. That is the quantity a disk fills with, and it is cheap enough to read once per folder run. Two consequences
 follow from it and are intended: the number is somewhat above the sum of the message sizes, because storage overhead is
 part of what fills a disk; and space a deletion freed counts as occupied until the database reclaims it.
+
+### One owner's share stops their mail and nobody else's
+
+`MaxStoredContentBytesPerOwner` asks the same question of one person that `MaxStoredContentBytes` asks of the instance,
+and a payload is fetched only where both have room. It exists because the instance ceiling is otherwise the only thing
+bounding storage: on a deployment serving several owners, one large mailbox fills it and every other owner's mail is
+then recorded without content until somebody frees space. Reaching an owner's share defers that owner's messages exactly
+as the instance ceiling defers everybody's — `ContentAvailability = AwaitingStorageHeadroom`, the checkpoint still
+advancing, the refill pass fetching what was left as soon as there is room — and leaves every other owner's run storing
+content whole.
+
+The deferral is counted apart from the instance one and reported apart from it, because the two ask an operator for
+different things: one for more disk or a higher instance ceiling, the other for a larger share for one person or for
+that person to wait. A run that left messages for both reasons reports both, one measurement each, so neither remedy
+is hidden by the other. One message is deferred by one of them rather than by both, because the instance's room is
+claimed first and an owner is never charged for a payload the instance had no room for.
+
+**The two ceilings are counted in different quantities, deliberately.** The instance's is what the disk fills with,
+which only PostgreSQL's catalog can report; an owner's is what their payloads hold, because a catalog answers for a
+table and never for a share of one. So an owner's figure excludes the indexes, the row overhead, and the space a
+deletion freed that the database has not reclaimed, and the two are not expected to agree. That figure is maintained as
+a counter moved inside the same transaction that stores or removes a payload, rather than summed over one person's whole
+mailbox before every message; an owner with no counter yet — a deployment upgraded before their first message, or an
+owner provisioned since — has it derived once and adopted.
+
+There is deliberately **no default share**, and leaving it unset is right for a deployment serving one owner: the
+instance ceiling already bounds that person. What leaving it unset exposes on a deployment serving several is the fault
+above.
 
 ### The in-flight budget is the one bound that spans work units
 

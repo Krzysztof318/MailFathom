@@ -91,6 +91,39 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Contains("stored content ceiling", result.ErrorMessage, StringComparison.Ordinal);
     }
 
+    /// <summary>An owner's share that cannot hold one message would leave that owner with nothing storable.</summary>
+    [Fact]
+    public void ValidateForSynchronization_PerOwnerStoredContentCeilingBelowTheMessageSizeLimit_IsRejected()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions
+        {
+            MaxRawMimeBytes = 25L * 1024L * 1024L,
+            MaxStoredContentBytesPerOwner = 1024L * 1024L,
+        };
+
+        // Act
+        var results = options.ValidateForSynchronization().ToArray();
+
+        // Assert
+        var result = Assert.Single(results);
+        Assert.Contains("per-owner stored content ceiling", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>An owner's share is unset by default, which is what a deployment serving one owner wants.</summary>
+    [Fact]
+    public void ValidateForSynchronization_NoPerOwnerStoredContentCeilingConfigured_ReportsNoError()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions { MaxStoredContentBytesPerOwner = null };
+
+        // Act
+        var results = options.ValidateForSynchronization().ToArray();
+
+        // Assert
+        Assert.Empty(results);
+    }
+
     /// <summary>An in-flight budget smaller than one message is a wait for room that can never exist.</summary>
     [Fact]
     public void ValidateForSynchronization_InFlightContentBudgetBelowTheMessageSizeLimit_IsRejected()

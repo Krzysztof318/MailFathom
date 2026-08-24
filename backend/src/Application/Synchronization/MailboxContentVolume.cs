@@ -12,8 +12,15 @@ namespace MailFathom.Application.Synchronization;
 /// run wrote. It is the level a ceiling is compared against, so it is reported whether or not one is configured.
 /// </param>
 /// <param name="DeferredForStorageEmailCount">
-/// How many occurrences were recorded without their content because storage had reached its ceiling. They are counted
-/// apart from the oversized ones because the two have opposite futures: this one is fetched by a later run.
+/// How many occurrences were recorded without their content because the deployment's storage had reached its ceiling.
+/// They are counted apart from the oversized ones because the two have opposite futures: this one is fetched by a later
+/// run.
+/// </param>
+/// <param name="DeferredForOwnerStorageEmailCount">
+/// How many were recorded without their content because the owner this folder belongs to had reached theirs, while the
+/// deployment still had room. Counted apart from the deployment's for the reason that one is counted apart from the
+/// oversized: the two ask an operator for different things, and only this one leaves every other owner's mail arriving
+/// whole.
 /// </param>
 /// <param name="RefilledEmailCount">How many occurrences deferred by an earlier run had their content fetched by this one.</param>
 /// <param name="StoppedForContentBudget">
@@ -31,6 +38,7 @@ public sealed record MailboxContentVolume(
     long StoredBytes,
     long StoredContentBytes,
     int DeferredForStorageEmailCount,
+    int DeferredForOwnerStorageEmailCount,
     int RefilledEmailCount,
     bool StoppedForContentBudget)
 {
@@ -40,6 +48,7 @@ public sealed record MailboxContentVolume(
         StoredBytes: 0,
         StoredContentBytes: 0,
         DeferredForStorageEmailCount: 0,
+        DeferredForOwnerStorageEmailCount: 0,
         RefilledEmailCount: 0,
         StoppedForContentBudget: false);
 }

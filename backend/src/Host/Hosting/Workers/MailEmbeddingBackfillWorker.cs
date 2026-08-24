@@ -48,6 +48,16 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
     private readonly ILogger<MailEmbeddingBackfillWorker> logger;
     private readonly TimeProvider timeProvider;
 
+    /// <summary>The period an owner's ceiling has already been reported for, so one line is written per period.</summary>
+    /// <remarks>
+    /// The sweep steps past such a message rather than ending, so this fact is true of every pass for as long as the
+    /// period lasts — and a busy instance takes the short interval, which would write the same warning every few
+    /// seconds and bury the rest of the log. The first pass of a period writes it and the meter carries the rest.
+    /// <c>MailEmbeddingWorker</c> holds the same field for the live path, for the same reason. It is only ever touched
+    /// from the single loop below, which is why it needs no synchronization.
+    /// </remarks>
+    private DateTimeOffset? ownerCeilingReportedForPeriodEndingAt;
+
     /// <summary>Initializes a new embedding backfill worker.</summary>
     public MailEmbeddingBackfillWorker(
         IServiceScopeFactory scopeFactory,
@@ -235,6 +245,18 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
             this.LogCallBudgetExhausted(result.CallBudgetExhaustedEmailCount);
         }
 
+        // Reported beside the run's ending for the same reason, and it is the one number that says a bound was reached
+        // without the run stopping: the walk steps past a message whose owner has spent their period so that everybody
+        // else's mail keeps being embedded, which leaves nothing else for an operator to read it from. Once per period
+        // rather than once per pass, because the run does not end on it and every pass until the rollover would repeat
+        // the same fact — which is why the result names the period rather than only the count.
+        if (result.OwnerSpendCeilingEmailCount > 0
+            && this.ownerCeilingReportedForPeriodEndingAt != result.OwnerSpendPeriodEndsAt)
+        {
+            this.ownerCeilingReportedForPeriodEndingAt = result.OwnerSpendPeriodEndsAt;
+            this.LogOwnerSpendCeilingReached(result.OwnerSpendCeilingEmailCount);
+        }
+
         // Every one of the three is asked about, because a run can move the third alone: a message that spends its whole
         // call budget mid-way is neither cut nor brought up to date, and the hundreds of vectors it did write would go
         // unreported by a line that only counted whole messages — while the meter recorded them either way.
@@ -324,8 +346,13 @@ internal sealed partial class MailEmbeddingBackfillWorker : BackgroundService
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "The embedding spend ceiling for this period is reached, so the backfill is paused for {Wait} until the period rolls over; the position it committed is where it resumes and nothing is lost by the wait. Raise Embeddings:MaxInputCharactersPerPeriod to spend more per period.")]
+        Message = "This deployment's embedding spend ceiling for this period is reached, so the backfill is paused for {Wait} until the period rolls over; the position it committed is where it resumes and nothing is lost by the wait. Raise Embeddings:MaxInputCharactersPerPeriod to spend more per period.")]
     private partial void LogSpendCeilingReached(TimeSpan wait);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "{OwnerSpendCeilingEmailCount} messages were stepped past because the owner they belong to has spent what one period admits for them; every other owner's mail kept being embedded, and the rolled-over period reaches these. Raise Embeddings:MaxInputCharactersPerPeriodPerOwner to admit more per owner, or set it to zero to bound only the deployment.")]
+    private partial void LogOwnerSpendCeilingReached(int ownerSpendCeilingEmailCount);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

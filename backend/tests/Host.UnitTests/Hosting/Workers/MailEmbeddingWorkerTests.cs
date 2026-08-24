@@ -3,15 +3,18 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics;
+using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Observability;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
@@ -144,7 +147,7 @@ public sealed class MailEmbeddingWorkerTests
             CreateProfileReader(CreateProfile()),
             embeddingStore,
             logger,
-            EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 10, period),
+            EmbeddingSpendBudget.Create(maxInputCharactersPerPeriod: 10, 0, period),
             consumedInputCharacterCount: 10,
             timeProvider);
 
@@ -172,6 +175,50 @@ public sealed class MailEmbeddingWorkerTests
             Arg.Any<EmbeddingProfileId>(),
             Arg.Any<int>(),
             Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// One owner at their share stops that owner's mail and nobody else's, so the loop keeps taking messages with the
+    /// clock standing still — and says so once for the period rather than once for every message of theirs waiting.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_OneOwnerHasSpentTheirShare_KeepsTakingMessagesAndReportsItOncePerPeriod()
+    {
+        // Arrange
+        var messages = CreateMessages(3);
+        var embeddingStore = CreateStoreWithOnePassageOutstanding();
+        var logger = new RecordingLogger<MailEmbeddingWorker>();
+        using var worker = CreateWorker(
+            messages,
+            CreateProfileReader(CreateProfile()),
+            embeddingStore,
+            logger,
+            EmbeddingSpendBudget.Create(
+                maxInputCharactersPerPeriod: 1_000,
+                maxInputCharactersPerPeriodPerOwner: 10,
+                TimeSpan.FromDays(1)),
+            consumedInputCharacterCount: 10,
+            new FakeTimeProvider(),
+            deploymentConsumedInputCharacterCount: 10);
+
+        // Act
+        await worker.StartAsync(CancellationToken.None);
+        await worker.ExecuteTask!.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+
+        // Assert
+        // The run reached the end of the backlog without the clock moving, which is what says no pause was taken.
+        await embeddingStore.Received(messages.Count).GetChunksAwaitingEmbeddingAsync(
+            Arg.Any<StoredEmailId>(),
+            Arg.Any<EmbeddingProfileId>(),
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>());
+        Assert.Equal(
+            1,
+            logger.Messages.Count(
+                message => message.Contains("has spent what one period admits for them", StringComparison.Ordinal)));
+        Assert.DoesNotContain(
+            logger.Messages,
+            message => message.Contains("embedding is paused", StringComparison.Ordinal));
     }
 
     /// <summary>Moves the clock on until the worker has logged the line the given number of times.</summary>
@@ -276,15 +323,21 @@ public sealed class MailEmbeddingWorkerTests
         ILogger<MailEmbeddingWorker> logger,
         EmbeddingSpendBudget spendBudget,
         long consumedInputCharacterCount,
-        FakeTimeProvider timeProvider)
+        FakeTimeProvider timeProvider,
+        long? deploymentConsumedInputCharacterCount = null)
     {
         var textEmbeddingGenerator = Substitute.For<ITextEmbeddingGenerator>();
         textEmbeddingGenerator.Identity.Returns(Identity);
         textEmbeddingGenerator.MaximumPassagesPerCall.Returns(8);
 
         var spendLedger = Substitute.For<IEmbeddingSpendLedger>();
-        spendLedger.ReadConsumedInputCharactersAsync(Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
-            .Returns(consumedInputCharacterCount);
+        spendLedger.ReadConsumedInputCharactersAsync(
+                Arg.Any<DateTimeOffset>(),
+                Arg.Any<MailOwnerId>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new EmbeddingSpendTotals(
+                consumedInputCharacterCount,
+                deploymentConsumedInputCharacterCount ?? consumedInputCharacterCount));
 
         var services = new ServiceCollection();
         services.AddSingleton<TimeProvider>(timeProvider);
@@ -298,6 +351,7 @@ public sealed class MailEmbeddingWorkerTests
         services.AddSingleton(EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, timeProvider));
         services.AddScoped<EmbeddingSpendGate>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
+        services.AddSingleton<IMailOwnership>(new StubMailOwnership());
         services.AddScoped<StoredEmailEmbeddingGenerator>();
 
         var serviceProvider = services.BuildServiceProvider();

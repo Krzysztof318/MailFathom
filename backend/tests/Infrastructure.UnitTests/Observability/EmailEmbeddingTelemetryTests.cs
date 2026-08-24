@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
@@ -139,7 +140,7 @@ public sealed class EmailEmbeddingTelemetryTests
             StoredEmailEmbeddingRun.Embedded(3, inputCharacterCount: 30),
             TimeSpan.FromSeconds(1));
         telemetry.RecordEmbeddedMessage(
-            StoredEmailEmbeddingRun.SpendCeilingReached(1, inputCharacterCount: 12, DateTimeOffset.UnixEpoch),
+            StoredEmailEmbeddingRun.SpendCeilingReached(1, inputCharacterCount: 12, DateTimeOffset.UnixEpoch, EmbeddingSpendBound.Deployment),
             TimeSpan.FromSeconds(1));
         telemetry.RecordEmbeddedMessage(
             StoredEmailEmbeddingRun.CallBudgetExhausted(2, inputCharacterCount: 20),
@@ -205,7 +206,7 @@ public sealed class EmailEmbeddingTelemetryTests
             StoredEmailEmbeddingRun.NoActiveProfile(),
             StoredEmailEmbeddingRun.GeneratorDisagreesWithProfile(),
             StoredEmailEmbeddingRun.CallBudgetExhausted(7),
-            StoredEmailEmbeddingRun.SpendCeilingReached(2, inputCharacterCount: 40, DateTimeOffset.UnixEpoch),
+            StoredEmailEmbeddingRun.SpendCeilingReached(2, inputCharacterCount: 40, DateTimeOffset.UnixEpoch, EmbeddingSpendBound.Deployment),
             .. Enum.GetValues<EmbeddingGenerationFailure>()
                 .Select(failure => StoredEmailEmbeddingRun.ProviderFailed(1, failure)),
         ];

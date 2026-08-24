@@ -292,6 +292,31 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     [Range(1024, long.MaxValue)]
     public long? MaxStoredContentBytes { get; set; }
 
+    /// <summary>Gets or sets how much stored content any one owner's mail may occupy, or nothing for no such ceiling.</summary>
+    /// <remarks>
+    /// <para>
+    /// The same bound asked of one person rather than of the instance. It exists because
+    /// <see cref="MaxStoredContentBytes" /> is the only thing bounding storage otherwise, so one large mailbox can fill
+    /// it and leave every other owner's mail recorded without content. Reaching this one defers that owner's messages
+    /// and nobody else's, and a later run with room for them fetches exactly what was left.
+    /// </para>
+    /// <para>
+    /// It is compared against what that owner's stored payloads hold, which is not the quantity
+    /// <see cref="MaxStoredContentBytes" /> is compared against: a catalogue reports what a table occupies on disk and
+    /// can never report a share of one. The two are therefore different measures of the same storage and are not
+    /// expected to agree — an owner's figure excludes the indexes, the row overhead, and the space a deletion freed
+    /// that PostgreSQL has not reclaimed.
+    /// </para>
+    /// <para>
+    /// There is deliberately no default, and leaving it unset is what a deployment serving one owner wants: the
+    /// instance ceiling already bounds that person. What leaving it unset exposes on a deployment serving several is
+    /// exactly the fault above, and the configuration reference says so. It may not be lower than
+    /// <see cref="MaxRawMimeBytes" />, which would leave no message storable for anybody.
+    /// </para>
+    /// </remarks>
+    [Range(1024, long.MaxValue)]
+    public long? MaxStoredContentBytesPerOwner { get; set; }
+
     /// <summary>Gets or sets how many bytes of raw MIME every folder work unit together may hold in memory at once.</summary>
     /// <remarks>
     /// <para>
@@ -563,6 +588,14 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
             yield return new ValidationResult(
                 $"The stored content ceiling of {storageCeiling} bytes is below the {this.MaxRawMimeBytes} bytes one message may occupy, so no message could ever be stored.",
                 [nameof(this.MaxStoredContentBytes)]);
+        }
+
+        if (this.MaxStoredContentBytesPerOwner is { } ownerStorageCeiling
+            && ownerStorageCeiling < this.MaxRawMimeBytes)
+        {
+            yield return new ValidationResult(
+                $"The per-owner stored content ceiling of {ownerStorageCeiling} bytes is below the {this.MaxRawMimeBytes} bytes one message may occupy, so no owner could ever have a message stored.",
+                [nameof(this.MaxStoredContentBytesPerOwner)]);
         }
 
         if (this.MaxInFlightRawMimeBytes < this.MaxRawMimeBytes)

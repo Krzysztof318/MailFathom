@@ -117,6 +117,23 @@ internal sealed class EmbeddingOptions : IValidatableObject
     /// </remarks>
     public long MaxInputCharactersPerPeriod { get; set; } = DefaultMaxInputCharactersPerPeriod;
 
+    /// <summary>Gets or sets the characters one period may send for any one owner, or zero to bound no owner.</summary>
+    /// <remarks>
+    /// <para>
+    /// The same ceiling asked of one person rather than of the instance. It exists because a deployment serving several
+    /// owners bounds the bill with <see cref="MaxInputCharactersPerPeriod" /> and nothing else, so an initial backfill
+    /// of one large mailbox can exhaust the window everybody else was working in. Reaching this one leaves the message
+    /// unembedded and every other owner's mail embedding normally; the rolled-over period reaches it.
+    /// </para>
+    /// <para>
+    /// Zero is the default and declares no per-owner ceiling, which is what a deployment serving one owner wants: the
+    /// instance ceiling already bounds that person, and a second number below it would only make them meet a smaller
+    /// one. What leaving it at zero on a deployment serving several owners exposes is exactly the fault above, and the
+    /// configuration reference says so.
+    /// </para>
+    /// </remarks>
+    public long MaxInputCharactersPerPeriodPerOwner { get; set; }
+
     /// <summary>Gets or sets the window the aggregate ceiling is counted over.</summary>
     /// <remarks>A fixed window anchored at the Unix epoch, so every restart agrees on where a period begins without anything being stored to say so.</remarks>
     public TimeSpan SpendPeriod { get; set; } = TimeSpan.FromDays(1);
@@ -163,7 +180,7 @@ internal sealed class EmbeddingOptions : IValidatableObject
         }
     }
 
-    /// <summary>Refuses an aggregate ceiling that could not bound a spend, or a period that could not carry one.</summary>
+    /// <summary>Refuses either ceiling where it could not bound a spend, or a period that could not carry one.</summary>
     private IEnumerable<ValidationResult> FindSpendCeilingErrors()
     {
         if (this.MaxInputCharactersPerPeriod < 0)
@@ -172,6 +189,14 @@ internal sealed class EmbeddingOptions : IValidatableObject
                 "Embeddings MaxInputCharactersPerPeriod is zero or positive. Zero declares no aggregate ceiling at all, "
                 + "which is a supported deployment; a negative one describes no budget.",
                 [nameof(this.MaxInputCharactersPerPeriod)]);
+        }
+
+        if (this.MaxInputCharactersPerPeriodPerOwner < 0)
+        {
+            yield return new ValidationResult(
+                "Embeddings MaxInputCharactersPerPeriodPerOwner is zero or positive. Zero declares no per-owner ceiling "
+                + "at all, which is what a deployment serving one owner wants; a negative one describes no budget.",
+                [nameof(this.MaxInputCharactersPerPeriodPerOwner)]);
         }
 
         if (this.SpendPeriod < ShortestSpendPeriod || this.SpendPeriod > LongestSpendPeriod)

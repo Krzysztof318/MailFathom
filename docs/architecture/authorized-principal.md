@@ -63,6 +63,14 @@ reached by either is refused rather than answered with an empty set — an empty
 them in the shape of an answer. Which surfaces carry an owner is settled where a request becomes a principal, one
 section below.
 
+**Work that runs for nobody still has to know whose mail it touches.** Synchronization and embedding are performed
+under this process's own identity, which carries no owner by construction — so a bound stated per owner cannot be read
+off the principal, and asking `RequireOwner` there would refuse the work rather than answer it. `IMailOwnership` is what
+answers instead: it resolves the owner of a mail account or of a stored message from the mail graph, where ownership
+lives on the account row, and it is the only way to reach that fact without a caller. Reading it is not an authorization
+decision and grants nothing — a worker was already admitted by name — and it is deliberately not a way for a caller to
+act for somebody else, because nothing published to a caller consults it.
+
 The signed capability is what `GET /attachments/{capability}` runs under. That route authenticates nobody by design: the
 URL carries a ticket verified against the deployment's key ring, and what it names is one attachment of one email rather
 than a surface. So the capability *is* the authorization, already bounded to a single object and a lifetime, and the use

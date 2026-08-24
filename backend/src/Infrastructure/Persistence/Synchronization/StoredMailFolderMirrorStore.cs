@@ -7,6 +7,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
+using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using Microsoft.EntityFrameworkCore;
 
@@ -44,8 +45,19 @@ internal sealed class StoredMailFolderMirrorStore : IStoredMailFolderMirrorStore
             .ToArrayAsync(cancellationToken);
 
         var emailsRemain = erased.Length > maxEmails;
+        var removed = emailsRemain ? erased[..maxEmails] : erased;
 
-        sessionContext.StoredEmails.RemoveRange(emailsRemain ? erased[..maxEmails] : erased);
+        // What these messages hold leaves storage with them, so their owner's figure gives it back inside the same
+        // transaction. What it subtracts is read from the payloads, so the constraint is that it runs before this
+        // session commits rather than before the line below it: the removal below only stages a delete the change
+        // tracker applies at that commit, so neither statement sees the other's effect until then. A later change
+        // making the removal set-based would execute immediately and turn that ordering into a real one.
+        await OwnerStoredContentLedger.RemoveAsync(
+            sessionContext,
+            [.. removed.Select(email => email.Id)],
+            cancellationToken);
+
+        sessionContext.StoredEmails.RemoveRange(removed);
 
         if (!emailsRemain)
         {

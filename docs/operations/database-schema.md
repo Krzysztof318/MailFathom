@@ -33,6 +33,12 @@ record, with the mail accounts this deployment already holds carried onto it —
 from the moment its row exists. It is written on the apply that introduces it and left alone by every apply after that,
 so applying the file twice still provisions one owner.
 
+Some migrations in the chain carry existing data onto a new shape as well, and one of them reads a table rather than
+only rewriting a column: the per-owner stored-content counter is seeded from what the message payloads already hold, so
+that apply scans the content table once. It reads the recorded lengths rather than the payloads beside them, so the cost
+is a sequential scan rather than a detoast, but on a mailbox of hundreds of thousands of messages it is the part of the
+apply that takes noticeable time.
+
 It is also **only forward**. The script carries no reverse migrations, so it cannot undo anything, and nothing in
 MailFathom can. [Rolling back](#rolling-back) is what that leaves.
 

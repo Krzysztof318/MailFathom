@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
+using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
@@ -23,6 +24,7 @@ public sealed class EmailEmbeddingBackfillTelemetryTests
     private const string PassageCountInstrument = "mailfathom.embedding.backfill.passages";
 
     private const string ExhaustedCountInstrument = "mailfathom.embedding.backfill.exhausted";
+    private const string OwnerCeilingCountInstrument = "mailfathom.embedding.backfill.owner_ceiling";
 
     private const string OutstandingGauge = "mailfathom.embedding.backfill.outstanding";
 
@@ -109,6 +111,35 @@ public sealed class EmailEmbeddingBackfillTelemetryTests
 
         // The signal that a message needs several sweeps to finish, which no other number here would show.
         Assert.Equal([1], measurements.ValuesOf(ExhaustedCountInstrument));
+    }
+
+    /// <summary>The meter carries every pass an owner was over their share, because the log deliberately does not.</summary>
+    /// <remarks>
+    /// The worker writes its warning once per period so it does not bury the rest of the log, which leaves the meter as
+    /// the only place the size of the refusal is readable after that first line. A sweep that stepped past nobody adds
+    /// nothing, so an instance with no owner over their share stays distinguishable from one that has.
+    /// </remarks>
+    [Fact]
+    public void RecordPass_ASweepSteppedPastAnOwnerOverTheirShare_CountsEveryPass()
+    {
+        // Arrange
+        var telemetry = new EmailEmbeddingBackfillTelemetry();
+        using var measurements = new RecordedMailFathomMeasurements(OwnerCeilingCountInstrument);
+        var periodEndsAt = new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
+
+        // Act
+        RecordSweep(telemetry, CreateResult(
+            StoredEmailEmbeddingBackfillOutcome.BatchBudgetSpent,
+            ownerSpendCeilingEmailCount: 3,
+            ownerSpendPeriodEndsAt: periodEndsAt));
+        RecordSweep(telemetry, CreateResult(
+            StoredEmailEmbeddingBackfillOutcome.BatchBudgetSpent,
+            ownerSpendCeilingEmailCount: 2,
+            ownerSpendPeriodEndsAt: periodEndsAt));
+        RecordSweep(telemetry, CreateResult(StoredEmailEmbeddingBackfillOutcome.SweepCompleted));
+
+        // Assert
+        Assert.Equal([3, 2], measurements.ValuesOf(OwnerCeilingCountInstrument));
     }
 
     /// <summary>
@@ -205,16 +236,22 @@ public sealed class EmailEmbeddingBackfillTelemetryTests
         int embeddedEmailCount = 0,
         int embeddedChunkCount = 0,
         int callBudgetExhaustedEmailCount = 0,
+        int ownerSpendCeilingEmailCount = 0,
+        DateTimeOffset? ownerSpendPeriodEndsAt = null,
         int? outstandingEmailCountAtSweepStart = null,
         EmbeddingGenerationFailure? failure = null,
-        DateTimeOffset? spendPeriodEndsAt = null) =>
+        DateTimeOffset? spendPeriodEndsAt = null,
+        EmbeddingSpendBound reachedSpendBound = EmbeddingSpendBound.None) =>
         new(
             outcome,
             chunkedEmailCount,
             embeddedEmailCount,
             embeddedChunkCount,
             callBudgetExhaustedEmailCount,
+            ownerSpendCeilingEmailCount,
+            ownerSpendPeriodEndsAt,
             outstandingEmailCountAtSweepStart,
             failure,
-            spendPeriodEndsAt);
+            spendPeriodEndsAt,
+            reachedSpendBound);
 }

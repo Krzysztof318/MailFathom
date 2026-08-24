@@ -536,11 +536,15 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("PeriodStartsAt");
 
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("OwnerId");
+
                     b.Property<long>("ConsumedInputCharacterCount")
                         .HasColumnType("bigint")
                         .HasColumnName("ConsumedInputCharacterCount");
 
-                    b.HasKey("PeriodStartsAt");
+                    b.HasKey("PeriodStartsAt", "OwnerId");
 
                     b.ToTable("embedding_spend_periods", (string)null);
                 });
@@ -1696,6 +1700,21 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("settings_accounts", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OwnerStoredContentEntity", b =>
+                {
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("OwnerId");
+
+                    b.Property<long>("StoredContentByteCount")
+                        .HasColumnType("bigint")
+                        .HasColumnName("StoredContentByteCount");
+
+                    b.HasKey("OwnerId");
+
+                    b.ToTable("owner_stored_content", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.RecurringSendDraftEntity", b =>
                 {
                     b.Property<Guid>("RecurringSendId")
@@ -2495,6 +2514,15 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_outgoing_email_recipients_emails");
 
                     b.Navigation("OutgoingEmail");
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OwnerStoredContentEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.OwnerAccountEntity", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.RecurringSendDraftEntity", b =>

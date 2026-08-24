@@ -38,8 +38,16 @@ public sealed partial class MailboxContentVolumeTelemetry
     /// <summary>Names the run budget in the limit dimension, matching the setting an operator would raise.</summary>
     private const string RunBudgetLimitName = "run_budget";
 
-    /// <summary>Names the storage ceiling in the limit dimension.</summary>
+    /// <summary>Names the deployment-wide storage ceiling in the limit dimension.</summary>
     private const string StorageCeilingLimitName = "storage_ceiling";
+
+    /// <summary>Names the per-owner storage ceiling in the limit dimension.</summary>
+    /// <remarks>
+    /// A value of its own rather than the same one, because the two describe different states of a deployment: one says
+    /// the instance is full and the other that one person is at their share while everybody else's mail keeps arriving
+    /// whole. An alert written against either would be wrong if they shared a name.
+    /// </remarks>
+    private const string OwnerStorageCeilingLimitName = "owner_storage_ceiling";
 
     private readonly Counter<long> fetchedBytes;
     private readonly Counter<long> storedBytes;
@@ -116,6 +124,15 @@ public sealed partial class MailboxContentVolumeTelemetry
                 volume.StoredContentBytes);
         }
 
+        if (volume.DeferredForOwnerStorageEmailCount > 0)
+        {
+            this.limitsReached.Add(1, [.. tags, new KeyValuePair<string, object?>(LimitTagName, OwnerStorageCeilingLimitName)]);
+            this.LogOwnerStorageCeilingReached(
+                accountId.Value,
+                folderAlias,
+                volume.DeferredForOwnerStorageEmailCount);
+        }
+
         if (volume.RefilledEmailCount > 0)
         {
             this.LogDeferredContentRefilled(accountId.Value, folderAlias, volume.RefilledEmailCount);
@@ -135,6 +152,14 @@ public sealed partial class MailboxContentVolumeTelemetry
         string folderAlias,
         int deferredEmailCount,
         long storedContentBytes);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The owner of {AccountId} holds what MailSynchronization:MaxStoredContentBytesPerOwner allows one owner, so {DeferredEmailCount} messages of {AccountId}/{FolderAlias} were recorded without their content and are fetched once that owner has room. Every other owner's mail is stored as usual.")]
+    private partial void LogOwnerStorageCeilingReached(
+        string accountId,
+        string folderAlias,
+        int deferredEmailCount);
 
     [LoggerMessage(
         Level = LogLevel.Information,

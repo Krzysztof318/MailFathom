@@ -616,10 +616,16 @@ internal static class HostComposition
             provider.GetRequiredService<MailSynchronizationOptions>().ToConvergenceOptions());
         builder.Services.AddScoped(provider =>
             provider.GetRequiredService<MailSynchronizationOptions>().ToSynchronizationOptions());
-        // A singleton, because the ceiling is one answer for the one content store every account writes into. Reading it
-        // per scope would give each concurrent folder run a ceiling of its own, which is the sum it exists to bound.
-        builder.Services.AddSingleton(provider => new StoredContentCeiling(
-            provider.GetRequiredService<ISettingsSnapshot<MailSynchronizationOptions>>().Current.MaxStoredContentBytes));
+        // A singleton, because the ceilings are one answer for the one content store every account writes into. Reading
+        // them per scope would give each concurrent folder run ceilings of its own, which is the sum they exist to
+        // bound — and the per-owner level would stop bounding anything at all, since two runs of one owner would each
+        // hold a level the other could not see.
+        builder.Services.AddSingleton(provider =>
+        {
+            var settings = provider.GetRequiredService<ISettingsSnapshot<MailSynchronizationOptions>>().Current;
+
+            return new StoredContentCeiling(settings.MaxStoredContentBytes, settings.MaxStoredContentBytesPerOwner);
+        });
         // A singleton, because what it bounds is the memory of the whole process rather than of any one run: a budget read
         // per scope would give every concurrent work unit a budget of its own, which is the sum this exists to bound. That
         // is also why the capacity is read once at startup, which the configuration reference marks as needing a restart.
@@ -815,7 +821,10 @@ internal static class HostComposition
         {
             var settings = provider.GetRequiredService<IOptions<EmbeddingOptions>>().Value;
 
-            return EmbeddingSpendBudget.Create(settings.MaxInputCharactersPerPeriod, settings.SpendPeriod);
+            return EmbeddingSpendBudget.Create(
+                settings.MaxInputCharactersPerPeriod,
+                settings.MaxInputCharactersPerPeriodPerOwner,
+                settings.SpendPeriod);
         });
         // A singleton because the reservation it hands out is what makes one process's requests add up to the declared
         // rate; one per scope would let every worker send at the full rate on its own.

@@ -416,6 +416,12 @@ spends nothing and is performed without a question; activating while a *differen
 ADR 0006 takes a budget that only slows a run down to be a schedule rather than a budget. Raising
 `Embeddings:MaxInputCharactersPerPeriod`, or setting it to zero to declare no ceiling at all, is what gets past it.
 
+The ceiling weighed here is the deployment's alone, and `Embeddings:MaxInputCharactersPerPeriodPerOwner` is deliberately
+absent from this reading. An activation reindexes every owner's mail under one profile — the profile is what a stored
+vector means, so it is deployment-wide — and there is no owner for this estimate to be weighed against. What the
+per-owner ceiling then does to the reindex is what it does to any other work: the walk steps past an owner who has spent
+their share and keeps embedding everybody else's, until the period rolls over.
+
 **`mfctl embedding cancel-reindex` stops a run you have changed your mind about.** The generation being built is
 abandoned and its partial vectors are removed; nothing about search results changes, because that generation was never
 read. A cancellation arriving after the run finished reports that nothing was building and changes nothing — this
