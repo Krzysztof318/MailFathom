@@ -528,8 +528,10 @@ What a reader of the schema sees is one shape per row across all four tables tha
   upload against, so a row carrying it describes an object the endpoint agreed it received intact rather than one this
   process merely believes it sent.
 
-A check constraint pairs those three, so a row that named the object backend and carried no locator, or named the
-database and carried no bytes, cannot be written at all.
+A check constraint pairs those three, so none of the three ways of getting it wrong can be written at all: a row that
+names the object backend and carries no locator, one that names the database and carries no bytes, and one that names
+the object backend and carries bytes anyway — which would be the second copy of a message that the "never in both
+places" rule above forbids.
 
 ### The object write happens before the transaction, and every placement mints its own key
 

@@ -68,6 +68,8 @@ internal sealed class MailDraftHarness
 
     private StubMailFolderMappings mappings = StubMailFolderMappings.Nothing;
     private OutgoingMailScreening screening = OutgoingMailScreenings.Inactive();
+    private readonly TaskCompletionSource conflictObserved = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     private int conflictingAttempts;
 
     internal MailDraftHarness(
@@ -133,22 +135,29 @@ internal sealed class MailDraftHarness
         this.persistenceSessions.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ =>
         {
             var persistenceSession = Substitute.For<IPersistenceSession>();
-            persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(
-                this.conflictingAttempts-- > 0
-                    ? PersistenceCommitResult.ConcurrencyConflict
-                    : PersistenceCommitResult.Committed);
+            persistenceSession.CommitAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+            {
+                if (this.conflictingAttempts-- <= 0)
+                {
+                    return PersistenceCommitResult.Committed;
+                }
+
+                // Signalled from inside the commit, because the backoff that follows it is a delay against the
+                // harness's clock and nothing else advances that clock. A test waits for this and then advances,
+                // which is what lets the replay happen without a real wait.
+                this.conflictObserved.TrySetResult();
+
+                return PersistenceCommitResult.ConcurrencyConflict;
+            });
             this.PersistenceSessionsOpened++;
 
             return persistenceSession;
         });
 
-        // The real clock, not the harness's. The backoff between attempts is a delay against whichever provider the
-        // policy holds, and a controlled one that nothing advances never completes it — so a conflicting test would
-        // hang rather than replay. What it costs is the few tens of milliseconds the one such test waits.
         this.commitPolicy = new OptimisticConcurrencyRetryPolicy(
             this.persistenceSessions,
             new PersistenceConcurrencyOptions(),
-            TimeProvider.System);
+            this.clock);
 
         this.BeginNewScope();
     }
@@ -196,6 +205,13 @@ internal sealed class MailDraftHarness
     /// <summary>Makes the next commits report a conflict, which is how a race with another run reaches this code.</summary>
     /// <param name="attempts">How many attempts conflict before one commits.</param>
     internal void ConflictOnTheNextCommits(int attempts) => this.conflictingAttempts = attempts;
+
+    /// <summary>Completes once a commit has reported a conflict, which is the moment the retry backoff begins.</summary>
+    /// <remarks>
+    /// A test awaits this before advancing the clock it handed this harness. The backoff is a delay against that clock,
+    /// so advancing it earlier would elapse nothing and advancing it never would leave the replay waiting forever.
+    /// </remarks>
+    internal Task ConflictObserved => this.conflictObserved.Task;
 
     /// <summary>Puts a screening in front of the book, and rebuilds it so the next save meets that screening.</summary>
     /// <param name="outgoingMailScreening">What the book asks before it writes anything down.</param>

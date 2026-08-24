@@ -354,4 +354,23 @@ internal static class PersistenceConstraintNames
     /// so the read that orders a conversation arrives already sorted on the tie-breaker the order ends with.
     /// </remarks>
     internal const string StoredEmailThreadIndexName = "ix_stored_emails_thread";
+
+    /// <summary>The index the readiness census of object-backed content runs on, one per table that holds raw MIME.</summary>
+    /// <remarks>
+    /// Four partial indexes filtered to the object backend, and partial for the reason that answers the cost: the
+    /// stored default names the database, so on a deployment that configured no endpoint every one of them is empty and
+    /// the census reads four empty indexes rather than sequentially scanning four tables of mail. That census runs on
+    /// every readiness scrape, which is what makes the difference a per-scrape cost rather than a startup one. No query
+    /// but the census reads them — a payload is reached through the row that owns it, never through its backend.
+    /// </remarks>
+    internal const string EmailMessageContentObjectBackedIndexName = "ix_email_message_contents_object_backed";
+
+    /// <inheritdoc cref="EmailMessageContentObjectBackedIndexName" />
+    internal const string OutgoingEmailContentObjectBackedIndexName = "ix_outgoing_email_contents_object_backed";
+
+    /// <inheritdoc cref="EmailMessageContentObjectBackedIndexName" />
+    internal const string MailDraftContentObjectBackedIndexName = "ix_mail_draft_contents_object_backed";
+
+    /// <inheritdoc cref="EmailMessageContentObjectBackedIndexName" />
+    internal const string RecurringSendDraftObjectBackedIndexName = "ix_recurring_send_drafts_object_backed";
 }

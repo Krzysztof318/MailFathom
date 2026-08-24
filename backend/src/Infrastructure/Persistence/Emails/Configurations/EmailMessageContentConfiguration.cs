@@ -21,7 +21,7 @@ internal sealed class EmailMessageContentConfiguration : IEntityTypeConfiguratio
                 "ck_email_message_contents_backend_payload",
                 """
                 ("Backend" = 'Database' AND "RawMime" IS NOT NULL AND "ObjectLocator" IS NULL)
-                OR ("Backend" = 'ObjectStorage' AND "ObjectLocator" IS NOT NULL)
+                OR ("Backend" = 'ObjectStorage' AND "ObjectLocator" IS NOT NULL AND "RawMime" IS NULL)
                 """));
         entity.HasKey(content => content.StoredEmailId);
         entity.Property(content => content.StoredEmailId).ValueGeneratedNever();
@@ -37,5 +37,11 @@ internal sealed class EmailMessageContentConfiguration : IEntityTypeConfiguratio
             .WithOne(email => email.Content)
             .HasForeignKey<EmailMessageContentEntity>(content => content.StoredEmailId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // The census the readiness check runs, and the only reader of this column. Filtered to the object backend so a
+        // deployment that configured no endpoint answers it from an empty index rather than by scanning the table.
+        entity.HasIndex(content => content.Backend)
+            .HasDatabaseName(PersistenceConstraintNames.EmailMessageContentObjectBackedIndexName)
+            .HasFilter($"\"Backend\" = '{nameof(ContentStorageBackend.ObjectStorage)}'");
     }
 }

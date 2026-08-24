@@ -229,13 +229,15 @@ already serving:
   wait, for the duration.
 
 - **A `CHECK` constraint added to a table that already holds rows is validated by scanning it.**
-  `AddContentStorageBackendAndObjectLocator` adds one to each of the four tables that hold raw MIME, so each is scanned
-  under `ACCESS EXCLUSIVE` before the migration commits. What the scan costs follows the row count rather than the mail
-  volume: the predicate asks which backend a row names and whether its payload column is null, and neither question
-  dereferences a payload PostgreSQL stored out of line. The columns the constraints are about are added without a
-  rewrite — a column default is recorded in the catalog rather than written into every row, which is what makes
-  `ADD COLUMN "Backend" … NOT NULL DEFAULT 'Database'` fast on a table of any size and what leaves every row written
-  before that column existed reading as the thing it is.
+  `AddContentStorageBackendAndObjectLocator` adds one to each of the four tables that hold raw MIME, and
+  `IndexObjectBackedContentAndRequireItsPayloadEmpty` replaces all four with a stricter form, so each table is scanned
+  under `ACCESS EXCLUSIVE` twice across the two. What a scan costs follows the row count rather than the mail volume:
+  the predicate asks which backend a row names and whether its payload column is null, and neither question
+  dereferences a payload PostgreSQL stored out of line. Nothing else in the pair is proportional to the table — the
+  columns are added without a rewrite, since a column default is recorded in the catalog rather than written into every
+  row, which is what makes `ADD COLUMN "Backend" … NOT NULL DEFAULT 'Database'` fast on a table of any size and what
+  leaves every row written before that column existed reading as the thing it is; and the four indexes the second
+  migration creates are partial, filtered to a backend no row on an upgrading deployment names, so each is built empty.
 
 The first release's script creates a schema from nothing, so none of these applies to an empty database.
 

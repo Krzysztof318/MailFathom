@@ -305,17 +305,21 @@ public sealed class MailDraftBookTests
     public async Task SaveAsync_APersistenceConflictThenACommit_PlacesTheMessageOnceAcrossBothAttempts()
     {
         // Arrange
-        var harness = Harness();
+        var clock = new FakeTimeProvider(Moment);
+        var harness = HarnessOn(clock);
         harness.MapDraftsFolder(Account);
         harness.ConflictOnTheNextCommits(1);
 
         // Act
-        var draft = await harness.Book.SaveAsync(
+        var saving = harness.Book.SaveAsync(
             Account,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             Composed("first version"),
             revises: null,
             CancellationToken.None);
+        await harness.ConflictObserved;
+        clock.Advance(TimeSpan.FromSeconds(1));
+        var draft = await saving;
 
         // Assert
         Assert.Equal(1, harness.Contents.PlacementCount);
@@ -352,8 +356,14 @@ public sealed class MailDraftBookTests
         Assert.Equal(2, harness.Contents.PlacementCount);
     }
 
-    private static MailDraftHarness Harness(params IEnumerable<MailFathomPermission> permissions) => new(
-        new FakeTimeProvider(Moment),
+    private static MailDraftHarness Harness(params IEnumerable<MailFathomPermission> permissions) =>
+        HarnessOn(new FakeTimeProvider(Moment), permissions);
+
+    /// <summary>Builds the harness over a clock the test keeps, which is what a test that has to advance one needs.</summary>
+    private static MailDraftHarness HarnessOn(
+        TimeProvider clock,
+        params IEnumerable<MailFathomPermission> permissions) => new(
+        clock,
         new InMemoryOutgoingEmailStore(),
         Settings(),
         permissions);

@@ -3014,7 +3014,7 @@ public sealed class MailboxSynchronizerTests
         await arrangement.ContentStore.Received(1).SaveContentAsync(
             Arg.Any<IPersistenceSession>(),
             Arg.Any<StoredEmailId>(),
-            Arg.Any<EmailOccurrenceId>(),
+            Arg.Is<EmailOccurrenceId>(occurrenceId => occurrenceId == deferred),
             Arg.Any<PlacedEmailContent>(),
             CancellationToken.None);
         await arrangement.CheckpointStore.DidNotReceive().SaveCheckpointAsync(

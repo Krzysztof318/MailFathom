@@ -27,7 +27,7 @@ internal sealed class RecurringSendDraftConfiguration : IEntityTypeConfiguration
                 "ck_recurring_send_drafts_backend_payload",
                 """
                 ("Backend" = 'Database' AND "DraftMime" IS NOT NULL AND "ObjectLocator" IS NULL)
-                OR ("Backend" = 'ObjectStorage' AND "ObjectLocator" IS NOT NULL)
+                OR ("Backend" = 'ObjectStorage' AND "ObjectLocator" IS NOT NULL AND "DraftMime" IS NULL)
                 """));
         entity.HasKey(draft => draft.RecurringSendId);
         entity.Property(draft => draft.RecurringSendId).ValueGeneratedNever();
@@ -44,5 +44,11 @@ internal sealed class RecurringSendDraftConfiguration : IEntityTypeConfiguration
             .HasForeignKey<RecurringSendDraftEntity>(draft => draft.RecurringSendId)
             .HasConstraintName(PersistenceConstraintNames.RecurringSendDraftForeignKeyName)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // The census the readiness check runs, and the only reader of this column. Filtered to the object backend so a
+        // deployment that configured no endpoint answers it from an empty index rather than by scanning the table.
+        entity.HasIndex(draft => draft.Backend)
+            .HasDatabaseName(PersistenceConstraintNames.RecurringSendDraftObjectBackedIndexName)
+            .HasFilter($"\"Backend\" = '{nameof(ContentStorageBackend.ObjectStorage)}'");
     }
 }

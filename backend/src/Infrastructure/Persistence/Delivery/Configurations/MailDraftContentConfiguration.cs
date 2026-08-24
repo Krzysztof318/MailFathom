@@ -38,7 +38,7 @@ internal sealed class MailDraftContentConfiguration : IEntityTypeConfiguration<M
                 "ck_mail_draft_contents_backend_payload",
                 """
                 ("Backend" = 'Database' AND "RawMime" IS NOT NULL AND "ObjectLocator" IS NULL)
-                OR ("Backend" = 'ObjectStorage' AND "ObjectLocator" IS NOT NULL)
+                OR ("Backend" = 'ObjectStorage' AND "ObjectLocator" IS NOT NULL AND "RawMime" IS NULL)
                 """));
         entity.HasKey(content => content.MailDraftId);
         entity.Property(content => content.MailDraftId).ValueGeneratedNever();
@@ -55,5 +55,11 @@ internal sealed class MailDraftContentConfiguration : IEntityTypeConfiguration<M
             .HasForeignKey<MailDraftContentEntity>(content => content.MailDraftId)
             .HasConstraintName(PersistenceConstraintNames.MailDraftContentForeignKeyName)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // The census the readiness check runs, and the only reader of this column. Filtered to the object backend so a
+        // deployment that configured no endpoint answers it from an empty index rather than by scanning the table.
+        entity.HasIndex(content => content.Backend)
+            .HasDatabaseName(PersistenceConstraintNames.MailDraftContentObjectBackedIndexName)
+            .HasFilter($"\"Backend\" = '{nameof(ContentStorageBackend.ObjectStorage)}'");
     }
 }

@@ -10,9 +10,18 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 
 /// <summary>Asks each of the four content tables whether it holds a row naming the object backend.</summary>
 /// <remarks>
-/// Four reads rather than one union, and short-circuited, because the answer is a presence: the common case on a
-/// deployment that never selected the object backend is four index-free existence probes that each stop at the first
-/// row, and the case that matters stops at whichever table holds one.
+/// <para>
+/// Four reads rather than one union, and short-circuited, because the answer is a presence: a deployment that holds
+/// object-backed mail stops at whichever table holds the first of it, and one that holds none pays for all four.
+/// </para>
+/// <para>
+/// <b>Each read resolves through a partial index rather than by scanning a table</b>, which is what makes this
+/// affordable on a readiness probe. `ix_&lt;table&gt;_object_backed` is filtered to this backend, so on the deployment
+/// that runs this most — the one that configured no endpoint, where the answer is always no — every one of those
+/// indexes is empty and the four reads together cost nothing proportional to the mail stored. Without the filter the
+/// negative answer would be four sequential scans on every scrape, which is the shape this looked like before the
+/// index existed.
+/// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
 internal sealed class ObjectBackedContentInventory(MailFathomDbContext dbContext) : IObjectBackedContentInventory

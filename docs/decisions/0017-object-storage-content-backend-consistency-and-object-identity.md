@@ -9,7 +9,7 @@ informed:
 
 # Select the content backend once per deployment, write the object before the unit of work that points at it, and name an object by the write that produced it
 
-<!-- describes: backend/src/Application/EmailContent/Storage/**, backend/src/Infrastructure/Persistence/Emails/** -->
+<!-- describes: backend/src/Application/EmailContent/Storage/**, backend/src/Infrastructure/Persistence/Emails/**, backend/src/Infrastructure/ObjectStorage/** -->
 
 ## Context and Problem Statement
 

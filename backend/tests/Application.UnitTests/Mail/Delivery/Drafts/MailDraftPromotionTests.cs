@@ -54,7 +54,7 @@ public sealed class MailDraftPromotionTests
         await contentStore.Received(1).SaveOutgoingContentAsync(
             Arg.Any<IPersistenceSession>(),
             record.Id,
-            Arg.Any<PlacedEmailContent>(),
+            Arg.Is<PlacedEmailContent>(placed => placed!.RawMime.ToArray().SequenceEqual(stored)),
             Arg.Any<CancellationToken>());
         Assert.Equal(record.Id, harness.Drafts.Peek(draft.Id)!.PromotedTo);
     }
