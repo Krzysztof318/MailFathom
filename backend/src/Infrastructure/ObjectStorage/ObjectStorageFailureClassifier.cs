@@ -5,6 +5,7 @@
 using System.Net;
 using System.Net.Sockets;
 using Amazon.Runtime;
+using MailFathom.Infrastructure.Resilience;
 
 namespace MailFathom.Infrastructure.ObjectStorage;
 
@@ -21,8 +22,12 @@ namespace MailFathom.Infrastructure.ObjectStorage;
 /// are three different facts, and only the last of them is worth attempting again.
 /// </para>
 /// <para>
+/// A limit the pipeline itself imposed is separated before any of that, because it is the one shape that reaches here
+/// without the endpoint having said anything at all.
+/// </para>
+/// <para>
 /// Everything unrecognized is <see cref="ObjectStorageFailure.Unrecognized" /> and therefore terminal, on the reasoning
-/// every family in <see cref="Resilience.TransientFailureClassifier" /> follows: a rejection whose meaning is unknown is
+/// every family in <see cref="TransientFailureClassifier" /> follows: a rejection whose meaning is unknown is
 /// not one a repetition improves on.
 /// </para>
 /// </remarks>
@@ -60,6 +65,17 @@ internal static class ObjectStorageFailureClassifier
         CancellationToken shutdownToken)
     {
         ArgumentNullException.ThrowIfNull(failure);
+
+        if (failure is OutboundDependencyUnavailableException pipelineRejection)
+        {
+            // A limit the pipeline imposed says nothing about what the endpoint answered, because no answer arrived:
+            // the operation either outlived its budget or was refused before it left this process. Reporting either as
+            // unrecognized would send an operator looking for an endpoint answer that does not exist, and would call a
+            // shed probe terminal when it is the one thing a readiness scrape exists to keep asking about.
+            return pipelineRejection.ExhaustedItsTimeBudget
+                ? ObjectStorageFailure.TimedOut
+                : ObjectStorageFailure.TransientTransportFailure;
+        }
 
         if (failure is OperationCanceledException)
         {

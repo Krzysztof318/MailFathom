@@ -519,9 +519,10 @@ words, which is a cardinality rule as much as a privacy one.
 
 ### Reaching the object-storage endpoint
 
-A deployment that selected the object-storage content backend reaches a second remote party for every payload, and three
-instruments answer the three questions an operator has about one. They are published only where that backend is
-selected; an instance storing content in the database opens no transport and publishes none of this.
+A deployment that selected the object-storage content backend reaches a second remote party — today for readiness alone,
+since payloads are still written to and read from the database — and three instruments answer the three questions an
+operator has about one operation against it. They are published only where that backend is selected; an instance storing
+content in the database opens no transport and publishes none of this.
 [`ContentStorage`](configuration-runtime.md#contentstorage) is where the backend is selected.
 
 `mailfathom.object_storage.operations` counts how much of it is happening,

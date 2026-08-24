@@ -194,7 +194,7 @@ takes part in:
 - the IMAP connections it was set for, across every configured account rather than the one that needed it;
 - the PostgreSQL connection, whenever it is encrypted;
 - the cipher selection of the MCP endpoint's own HTTPS listeners, when this process terminates TLS;
-- the connections to the S3-compatible endpoint, where a deployment stores message payloads there;
+- the readiness connections to the S3-compatible endpoint, where a deployment selected the object-storage backend;
 - every further TLS session the process takes part in.
 
 A weakened level accepted for one legacy mail server therefore also accepts a weaker parameter from every other peer

@@ -140,8 +140,9 @@ internal static class OutboundDependencyResilienceDefaults
         // An object-storage endpoint answers a single request per operation and rate-limits with a status rather than by
         // going quiet, so the class waits briefly and gives up quickly: the attempt timeout covers one request against a
         // service that is either reachable or not, and the total timeout leaves room for two backoffs inside it. The
-        // in-flight limit is well above the database's, because a payload write is one request rather than a connection
-        // held open, and well below what a bucket would serve, because a deployment's own budget is the point.
+        // in-flight limit is well below the database's, because a request to a remote endpoint costs latency the local
+        // connection pool does not, and far below what a bucket would serve, because a deployment's own budget is the
+        // point.
         OutboundDependency.ObjectStorageInvocation => new OutboundDependencyResilienceOptions
         {
             MaxAttempts = 3,

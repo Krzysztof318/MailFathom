@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Resilience;
 using MailFathom.Domain.Failures;
+using Polly.Timeout;
 
 namespace MailFathom.Infrastructure.Resilience;
 
@@ -37,4 +38,14 @@ public sealed class OutboundDependencyUnavailableException : MailFathomException
 
     /// <summary>Gets the dependency class whose pipeline declined the operation.</summary>
     public OutboundDependency Dependency { get; }
+
+    /// <summary>Gets whether the limit that was reached was a time budget rather than this process declining to call the dependency.</summary>
+    /// <remarks>
+    /// The distinction exists because an adapter mapping this onto its own failure classification has to tell a
+    /// dependency that stopped answering from one this process refused to reach — an open circuit or a shed execution —
+    /// and those are different facts for whoever reads the code an adapter reports. It is answered here rather than by
+    /// each adapter reading <see cref="Exception.InnerException" />, so the resilience library stays inside this
+    /// boundary exactly as the remarks above require.
+    /// </remarks>
+    public bool ExhaustedItsTimeBudget => this.InnerException is TimeoutRejectedException;
 }

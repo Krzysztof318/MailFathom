@@ -5,7 +5,11 @@
 using System.Net;
 using System.Net.Sockets;
 using Amazon.Runtime;
+using MailFathom.Application.Resilience;
 using MailFathom.Infrastructure.ObjectStorage;
+using MailFathom.Infrastructure.Resilience;
+using Polly.CircuitBreaker;
+using Polly.Timeout;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.ObjectStorage;
@@ -260,6 +264,42 @@ public sealed class ObjectStorageFailureClassifierTests
         // Assert
         Assert.Equal(ObjectStorageFailure.Unrecognized, classification);
         Assert.False(classification.IsWorthRepeating);
+    }
+
+    /// <summary>An operation that outlived the budget the pipeline gave it timed out, whatever the endpoint would have said.</summary>
+    [Fact]
+    public void Classify_APipelineThatSpentTheWholeTimeBudget_IsATimeout()
+    {
+        // Act
+        var classification = ObjectStorageFailureClassifier.Classify(
+            new OutboundDependencyUnavailableException(
+                OutboundDependency.ObjectStorageInvocation,
+                new TimeoutRejectedException("the budget was spent")),
+            CancellationToken.None,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(ObjectStorageFailure.TimedOut, classification);
+    }
+
+    /// <summary>
+    /// An open circuit and a shed execution are this process declining to call the endpoint rather than a failure it
+    /// does not recognize, and a readiness scrape asking again is exactly what resolves one.
+    /// </summary>
+    [Fact]
+    public void Classify_APipelineThatRefusedToCallTheEndpoint_IsTransportRatherThanUnrecognized()
+    {
+        // Act
+        var classification = ObjectStorageFailureClassifier.Classify(
+            new OutboundDependencyUnavailableException(
+                OutboundDependency.ObjectStorageInvocation,
+                new BrokenCircuitException("the circuit is open")),
+            CancellationToken.None,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(ObjectStorageFailure.TransientTransportFailure, classification);
+        Assert.True(classification.IsWorthRepeating);
     }
 
     [Fact]
