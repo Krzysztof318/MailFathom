@@ -15,10 +15,10 @@ namespace MailFathom.Client;
 /// </summary>
 public partial class App : Application
 {
-    private readonly IDeploymentAddressSource deploymentAddress;
+    private readonly BuildStatedDeploymentAddress deploymentAddress;
 
     /// <summary>Initializes the singleton application object for a head that is installed rather than served.</summary>
-    /// <remarks>The address comes from what the installation states, which is what a desktop head reads. A head served by the deployment it talks to passes its own source instead, exactly as it registers its own sign-in redirect listener.</remarks>
+    /// <remarks>The address comes from what the installation states, which is what a desktop head reads, unless the build that produced this head stated one — see the constructor below. A head served by the deployment it talks to passes its own source instead, exactly as it registers its own sign-in redirect listener.</remarks>
     public App()
         : this(new ConfiguredDeploymentAddress())
     {
@@ -27,11 +27,18 @@ public partial class App : Application
     /// <summary>Initializes the singleton application object for a head that answers the address question itself.</summary>
     /// <param name="deploymentAddress">How this head learns where its deployment is.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="deploymentAddress" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// An address the build stated takes precedence over whatever the head would have answered, and the wrapping
+    /// happens here rather than at each head so that adding one owes an implementation of the interface and nothing
+    /// else. It is not a head's answer: a head started by an orchestration is served from a socket of its own while
+    /// the service listens on another, so neither the origin it was fetched from nor an installation that does not
+    /// exist can say where the deployment is. A build that stated nothing changes nothing.
+    /// </remarks>
     internal App(IDeploymentAddressSource deploymentAddress)
     {
         ArgumentNullException.ThrowIfNull(deploymentAddress);
 
-        this.deploymentAddress = deploymentAddress;
+        this.deploymentAddress = new BuildStatedDeploymentAddress(deploymentAddress);
 
         this.InitializeComponent();
     }

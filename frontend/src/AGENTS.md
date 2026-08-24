@@ -266,6 +266,18 @@ written with no scheme is read as HTTPS, since the alternative would turn an omi
 whether a stated clear-text address is acceptable at all stays `Client.Backend`'s rule, which permits loopback and
 refuses everything else.
 
+**One source is not a head's answer, and it is read before them.** `BuildStatedDeploymentAddress` carries whatever the
+build that produced this head stated, and `App` wraps the head's own source in it, so a new head still owes exactly one
+implementation. It exists for the case neither answer above fits: a head an orchestration started is served by a
+development server on a socket of its own while the service listens on another, so the origin it was fetched from is a
+file server and there is no installation to have written anything. The channel is the build, because a browser reads no
+process environment and has no file beside it — `Client.csproj` writes the value of the `MailFathomDeploymentAddress`
+property into a runtime host configuration option, the WebAssembly SDK carries it into the boot document the page
+fetches, and `AppContext` is what reads it back, with no reflection for the trimmer to remove. The desktop head takes
+the same property and reads the same key out of its own `runtimeconfig.json`. A build that states nothing writes no
+option, which is every published artifact:
+[the client resource](../../docs/operations/local-development.md#the-client-resource) is the one thing that states it.
+
 Add a head, and what it owes is an implementation of that interface — not a branch on the running platform, and not a
 second mechanism invented in a screen.
 

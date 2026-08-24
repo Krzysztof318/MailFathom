@@ -271,6 +271,16 @@ public static class OrchestrationContract
     /// <summary>The one permission the entry above grants, which is what its key holds and the whole of what it reaches.</summary>
     public const string AdminNarrowedPermission = "mailfathom.admin.read";
 
+    /// <summary>The endpoint the MailFathom host serves its client surface on.</summary>
+    /// <remarks>
+    /// A socket of its own rather than the MCP endpoint's, and the difference is the bind address rather than the
+    /// number. This one is on <see cref="DeveloperLoopbackAddress" />, because the only thing that calls it is a
+    /// browser head served on the same machine, and a wildcard beside a specific address on one port is two sockets
+    /// the operating system grants only one of — so sharing would have meant publishing the client surface wherever
+    /// the MCP endpoint is published, or moving that endpoint to loopback as a side effect.
+    /// </remarks>
+    public const string HostClientEndpointName = "client";
+
     /// <summary>The EF Core migration tool resource.</summary>
     public const string MigrationsResourceName = "mailfathom-migrations";
 
@@ -319,6 +329,40 @@ public static class OrchestrationContract
     /// takes a pair of ports of its own choosing and the dashboard would link an address nothing is served on.
     /// </remarks>
     public const string ClientServerUrlsVariable = "ASPNETCORE_URLS";
+
+    /// <summary>The address a developer's own machine serves the client on and reaches the service at.</summary>
+    /// <remarks>
+    /// Loopback, because a WebAssembly bundle built in Debug against somebody's own machine is not something anything
+    /// on a local network has any business loading. Stated once rather than beside each of the three things built from
+    /// it, which have to agree with one another: the address the client's development server binds, the browser origin
+    /// the service is configured to answer, and the address the head is built to call. A page served under one
+    /// spelling and permitted under another is a first call refused on a preflight, which reads as a broken client
+    /// rather than as two spellings of one machine.
+    /// </remarks>
+    public const string DeveloperLoopbackAddress = "127.0.0.1";
+
+    /// <summary>The MSBuild property the client's build takes the deployment address it points its head at from.</summary>
+    /// <remarks>
+    /// <para>
+    /// The one name here handed to a build rather than to a process, and the browser is the reason. Every other
+    /// resource in this app model is told where its dependencies are through its own environment; the client resource
+    /// is a development server that serves static files, and the application runs in a tab that reads none of that
+    /// process's environment — measured while <c>#1095</c> was implemented, against the served document, the runtime
+    /// loader, and every boot document beside them.
+    /// </para>
+    /// <para>
+    /// What the process does do is build the bundle the tab downloads, so the address travels into the build instead.
+    /// <c>frontend/src/Client/Client.csproj</c> writes the value of this property into the runtime host configuration,
+    /// which the WebAssembly SDK carries into the boot configuration the page fetches and every head reads back
+    /// without reflection a trimmer could remove. The desktop head takes the same property and reads the same key out
+    /// of its own <c>runtimeconfig.json</c>, so the two heads differ in nothing but which answer they fall back to.
+    /// </para>
+    /// <para>
+    /// Nothing but this app model states it. A publish that states none emits no such option at all, which is what
+    /// keeps a head served from the container image resolving its deployment as the origin it was fetched from.
+    /// </para>
+    /// </remarks>
+    public const string ClientDeploymentAddressProperty = "MailFathomDeploymentAddress";
 
     /// <summary>The IMAP and SMTP server the integration-test topology synchronizes against.</summary>
     /// <remarks>
@@ -571,6 +615,15 @@ public static class OrchestrationContract
     /// <summary>The configuration key a developer states the client's development server port under to pin it.</summary>
     /// <remarks>Read the way <see cref="PinnedMcpEndpointPortKey" /> is. Pinning it is what a bookmarked browser tab wants; leaving it unset is what lets a second checkout serve a head of its own.</remarks>
     public const string PinnedClientPortKey = "Ports:Client";
+
+    /// <summary>The configuration key a developer states the client surface's port under to pin it.</summary>
+    /// <remarks>
+    /// Read the way <see cref="PinnedMcpEndpointPortKey" /> is. Pinning it is what a request written once against
+    /// <c>/api/client</c> wants; leaving it unset is what lets a second checkout serve the surface of its own. Nothing
+    /// about the browser head depends on it — that head is told the address by the build that produced it — so this
+    /// exists for whoever calls the surface by hand.
+    /// </remarks>
+    public const string PinnedClientEndpointPortKey = "Ports:ClientEndpoint";
 
     /// <summary>The configuration key a developer states <see langword="false" /> under to run the orchestration without the client.</summary>
     /// <remarks>

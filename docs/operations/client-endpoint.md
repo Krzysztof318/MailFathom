@@ -53,6 +53,12 @@ what stays each surface's own.
 Every key this section takes is in
 [endpoint configuration](configuration-endpoints.md#clientendpoint), with its default and its constraint.
 
+**A local `aspire run` configures everything but this key**: a loopback socket of its own and the browser head's own
+origin as the one origin it answers, because that run starts a head that has to reach something. It does not turn the
+surface on — that stays a developer's act here as much as anywhere else.
+[The client resource](local-development.md#the-client-resource) is what to state locally, and what is already stated
+for you.
+
 ## What it serves
 
 One route, and deliberately one:
