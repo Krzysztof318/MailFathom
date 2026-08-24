@@ -298,10 +298,10 @@ copyleft any more: the one that was — `LibVLCSharp`, LGPL-2.1-or-later, which 
 unconditionally and which nothing built here calls — is excluded from the publish by the project file, so
 [ADR 0016](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0016-third-party-licence-obligations-per-artifact.md)
 places it among the packages a build resolves and no artifact carries, and the licence text and source offer that used
-to travel with each archive are gone with it. The permissive components inside the head still oblige their own MIT,
-Apache-2.0, and Unicode notices, which the notice bundle discharges for every artifact rather than this publish for
-one. `THIRD_PARTY_LICENSES.md` holds the verdict and `frontend/src/AGENTS.md` what turning `MediaPlayerElement` on
-would bring back with it.
+to travel with each archive are gone with it. The permissive components inside the head still oblige their own
+notices, which the notice bundle discharges for every artifact rather than this publish for one.
+`THIRD_PARTY_LICENSES.md` holds the verdict and the terms each component arrives under, and
+`frontend/src/AGENTS.md` what turning `MediaPlayerElement` on would bring back with it.
 
 The chart is published **after** the image and **against the digest it produced**, because a chart names the image it
 deploys: before pushing, the run renders the packaged chart against that digest and refuses to publish one that would

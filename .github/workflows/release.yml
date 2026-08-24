@@ -431,7 +431,7 @@ jobs:
             printf 'only thing that verifies it: no artifact here is code-signed either.\n\n'
             printf 'Each archive carries `LICENSE` and `NOTICE` beside the application, which are the terms '
             printf 'MailFathom itself is under. Everything else inside it is permissively licensed — MIT, '
-            printf 'Apache-2.0, and the Unicode License — and '
+            printf 'Apache-2.0, MS-PL, and the Unicode License — and '
             printf '[THIRD_PARTY_LICENSES.md](https://github.com/%s/blob/%s/THIRD_PARTY_LICENSES.md) ' \
               "$REPOSITORY" "$RELEASE_TAG"
             printf 'records each component and the terms it arrives under.\n'
