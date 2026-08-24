@@ -120,7 +120,7 @@ internal sealed partial record ConnectModel
             .NavigateAsync(
                 new NavigationRequest(
                     this,
-                    new Route(Qualifier: Qualifiers.ClearBackStack, Base: ClientRoutes.Main),
+                    new Route(Qualifier: Qualifiers.ClearBackStack, Base: ClientRoutes.Workspace),
                     ct))
             .ConfigureAwait(false);
     }

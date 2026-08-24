@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using Microsoft.Extensions.Localization;
 
 namespace MailFathom.Client.UnitTests.TestDoubles;
@@ -30,7 +31,22 @@ internal sealed class StubStringLocalizer : IStringLocalizer
             : new LocalizedString(name, name, resourceNotFound: true);
 
     /// <inheritdoc />
-    public LocalizedString this[string name, params object[] arguments] => this[name];
+    /// <remarks>
+    /// The arguments are formatted into the word rather than dropped, because that is what
+    /// <see cref="IStringLocalizer"/> promises and a model composing a sentence from a format string would otherwise
+    /// be asserted against a stub that cannot fail the way the real table would.
+    /// </remarks>
+    public LocalizedString this[string name, params object[] arguments]
+    {
+        get
+        {
+            var word = this[name];
+
+            return word.ResourceNotFound
+                ? word
+                : new LocalizedString(name, string.Format(CultureInfo.CurrentCulture, word.Value, arguments));
+        }
+    }
 
     /// <inheritdoc />
     public IEnumerable<LocalizedString> GetAllStrings(bool includeParentCultures) =>

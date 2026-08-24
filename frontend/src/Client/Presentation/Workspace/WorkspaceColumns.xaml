@@ -1,0 +1,67 @@
+<!--
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+-->
+<UserControl x:Class="MailFathom.Client.Presentation.Workspace.WorkspaceColumns"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="600"
+             d:DesignWidth="1200">
+
+  <!-- The workspace a space fills. A wide window shows both columns side by side; a narrow one shows the primary
+       column alone, and what would have been beside it is reached as a screen of its own instead. The switch is a
+       window width and nothing else: no code here reads which platform is running, and neither does anything it is
+       nested in. -->
+  <Grid>
+    <VisualStateManager.VisualStateGroups>
+      <VisualStateGroup>
+
+        <!-- The narrow composition is the default state and carries no trigger, so a window narrower than every
+             breakpoint still lands in a state rather than in none. -->
+        <VisualState x:Name="SingleColumn" />
+
+        <VisualState x:Name="TwoColumns">
+          <VisualState.StateTriggers>
+            <AdaptiveTrigger MinWindowWidth="{StaticResource WorkspaceWideWindowWidth}" />
+          </VisualState.StateTriggers>
+          <VisualState.Setters>
+            <Setter Target="CompanionColumn.Width" Value="2*" />
+            <Setter Target="Divider.Visibility" Value="Visible" />
+            <Setter Target="CompanionContent.Visibility" Value="Visible" />
+          </VisualState.Setters>
+        </VisualState>
+      </VisualStateGroup>
+    </VisualStateManager.VisualStateGroups>
+
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="3*" />
+      <ColumnDefinition Width="Auto" />
+      <!-- Zero rather than collapsed, because a column keeps its share of the grid whatever its content does. -->
+      <ColumnDefinition x:Name="CompanionColumn"
+                        Width="0" />
+    </Grid.ColumnDefinitions>
+
+    <ContentPresenter Content="{x:Bind Primary, Mode=OneWay}"
+                      HorizontalContentAlignment="Stretch"
+                      VerticalContentAlignment="Stretch" />
+
+    <!-- A decorative edge rather than an interactive one, which is the role OutlineVariant names. -->
+    <Border x:Name="Divider"
+            Grid.Column="1"
+            Width="1"
+            Visibility="Collapsed"
+            Background="{ThemeResource OutlineVariantBrush}" />
+
+    <ContentPresenter x:Name="CompanionContent"
+                      Grid.Column="2"
+                      MinWidth="280"
+                      Visibility="Collapsed"
+                      Content="{x:Bind Companion, Mode=OneWay}"
+                      HorizontalContentAlignment="Stretch"
+                      VerticalContentAlignment="Stretch" />
+  </Grid>
+</UserControl>

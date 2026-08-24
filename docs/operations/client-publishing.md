@@ -44,7 +44,7 @@ XAML to decide which controls are never referenced and telling the trimmer that 
 this project is the browser head and nothing else.
 
 **No control has to be told to keep, today.** The pass decides from what the XAML names, and every control this
-application uses is named in `App.xaml`, `Presentation/Shell.xaml`, or `Presentation/MainPage.xaml` — there is no
+application uses is named in `App.xaml` or in one of the pages and controls under `Presentation/` — there is no
 `XamlReader` call anywhere in the client and no control resolved from a string at run time. That is the condition under
 which the pass is safe, rather than a fact about it: a control whose only use is dynamic is one the pass cannot see, its
 style is removed, and the failure arrives when the screen loads rather than when the branch builds. If that changes, the

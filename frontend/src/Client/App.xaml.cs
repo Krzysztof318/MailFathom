@@ -5,6 +5,9 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Client.Backend;
 using MailFathom.Client.Deployment;
+using MailFathom.Client.Presentation.Settings;
+using MailFathom.Client.Presentation.Spaces;
+using MailFathom.Client.Presentation.Workspace;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace MailFathom.Client;
@@ -75,7 +78,15 @@ public partial class App : Application
                 // point at which it takes effect, because applying a culture is what Uno does on the next launch
                 // rather than to a visual tree already built. The screen offering it says so.
                 .UseLocalization()
-                .ConfigureServices((context, services) => this.ComposeDeployment(services, context.Configuration))
+                .ConfigureServices((context, services) =>
+                {
+                    this.ComposeDeployment(services, context.Configuration);
+
+                    // What the three spaces share, so that moving between them keeps the question somebody was
+                    // composing and what it would be asked against. One for the run rather than one per model: a
+                    // model is discarded as its view is navigated away from, and so would be anything it held.
+                    services.AddSingleton<IWorkspace, SharedWorkspace>();
+                })
                 // Light, dark, and follow-the-system, with the choice written to the platform's own settings store so
                 // the application starts the way it was left. Nothing here decides which one: AppTheme.System is the
                 // default the service reads back when nothing was ever chosen.
@@ -108,7 +119,7 @@ public partial class App : Application
 
                 await navigator.NavigateRouteAsync(
                     this,
-                    pointed ? ClientRoutes.Main : ClientRoutes.Connect);
+                    pointed ? ClientRoutes.Workspace : ClientRoutes.Connect);
             });
     }
 
@@ -150,23 +161,54 @@ public partial class App : Application
             .AddMailFathomDeployment(new DeploymentOptions(settings.ClientId));
     }
 
+    /// <summary>
+    /// Every screen the client is reachable by, as a route rather than as content something swaps by hand.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The three spaces are nested inside the frame that holds them, which is what lets the rail and the bottom
+    /// navigation name the same destinations and move the same content area. Settings sits beside that frame rather
+    /// than inside it: it is not a space, and registering it a level up is what makes going to it a screen somebody
+    /// comes back from — a route nested among the three would be switched to like a fourth space, leaving the
+    /// workspace with nothing behind it to return to.
+    /// </para>
+    /// <para>
+    /// Registering them as routes is also what makes the Android system back gesture and the browser's history move
+    /// through the client's own screens — Uno's navigation is what answers both, and a screen reached by swapping
+    /// content by hand is a screen neither of them knows about.
+    /// </para>
+    /// </remarks>
     private static void RegisterRoutes(IViewRegistry views, IRouteRegistry routes)
     {
         views.Register(
             new ViewMap(ViewModel: typeof(ShellModel)),
-            new ViewMap<MainPage, MainModel>(),
+            new ViewMap<WorkspacePage, WorkspaceModel>(),
+            new ViewMap<DiscoverPage>(),
+            new ViewMap<MailPage>(),
+            new ViewMap<CasesPage>(),
+            new ViewMap<SettingsPage, SettingsModel>(),
             new ViewMap<ConnectPage, ConnectModel>());
 
-        // No default among the two, deliberately. Which of them a launch opens on is what OnLaunched decides from
-        // whether this installation has been pointed at a deployment, and a route marked default here would be the
-        // second answer to that question.
+        // No default among the three the shell holds, deliberately. Which of them a launch opens on is what
+        // OnLaunched decides from whether this installation has been pointed at a deployment, and a route marked
+        // default here would be the second answer to that question. The default inside the frame is a different
+        // question — which space the workspace opens on — and Discover carries it.
         routes.Register(
             new RouteMap(
                 "",
                 View: views.FindByViewModel<ShellModel>(),
                 Nested:
                 [
-                    new RouteMap(ClientRoutes.Main, View: views.FindByViewModel<MainModel>()),
+                    new RouteMap(
+                        ClientRoutes.Workspace,
+                        View: views.FindByViewModel<WorkspaceModel>(),
+                        Nested:
+                        [
+                            new RouteMap(ClientRoutes.Discover, View: views.FindByView<DiscoverPage>(), IsDefault: true),
+                            new RouteMap(ClientRoutes.Mail, View: views.FindByView<MailPage>()),
+                            new RouteMap(ClientRoutes.Cases, View: views.FindByView<CasesPage>()),
+                        ]),
+                    new RouteMap(ClientRoutes.Settings, View: views.FindByViewModel<SettingsModel>()),
                     new RouteMap(ClientRoutes.Connect, View: views.FindByViewModel<ConnectModel>()),
                 ]));
     }

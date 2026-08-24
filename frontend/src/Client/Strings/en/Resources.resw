@@ -121,11 +121,11 @@
     <value>MailFathom</value>
     <comment>The product name. It is the same in every language: a name is not translated.</comment>
   </data>
-  <data name="MainPage.TextBlock.Deployment.Text" xml:space="preserve">
+  <data name="SettingsPage.TextBlock.Deployment.Text" xml:space="preserve">
     <value>Connected to</value>
     <comment>Labels the address of the MailFathom deployment this client reaches. Phrased as the relationship rather than as "Deployment address", which names a setting instead of saying where you are.</comment>
   </data>
-  <data name="MainPage.Button.ChangeDeployment.Content" xml:space="preserve">
+  <data name="SettingsPage.Button.ChangeDeployment.Content" xml:space="preserve">
     <value>Use a different MailFathom</value>
     <comment>Opens the screen that asks for a deployment address. Named for what a person wants rather than for the setting it changes.</comment>
   </data>
@@ -181,23 +181,23 @@
     <value>Something answered there, but it is not a MailFathom. Check the address.</value>
     <comment>Shown when the answer was not MailFathom's own — a captive portal, a proxy, or another service on the port.</comment>
   </data>
-  <data name="MainPage.TextBlock.Language.Text" xml:space="preserve">
+  <data name="SettingsPage.TextBlock.Language.Text" xml:space="preserve">
     <value>Language</value>
     <comment>Labels the control that chooses which language the application is read in, for a reader and for a screen reader.</comment>
   </data>
-  <data name="MainPage.Button.ApplyLanguage.Content" xml:space="preserve">
+  <data name="SettingsPage.Button.ApplyLanguage.Content" xml:space="preserve">
     <value>Use this language</value>
     <comment>Takes the language selected beside it. Phrased as the act rather than as "OK", because nothing is undone by leaving the screen.</comment>
   </data>
-  <data name="MainPage.InfoBar.LanguageRestart.Title" xml:space="preserve">
+  <data name="SettingsPage.InfoBar.LanguageRestart.Title" xml:space="preserve">
     <value>Language saved</value>
     <comment>Shown once a language has been taken. Saved rather than changed, because the words on screen have not changed yet.</comment>
   </data>
-  <data name="MainPage.InfoBar.LanguageRestart.Message" xml:space="preserve">
+  <data name="SettingsPage.InfoBar.LanguageRestart.Message" xml:space="preserve">
     <value>MailFathom reads in the language you chose the next time it starts.</value>
     <comment>Says plainly that the choice takes effect on the next launch, which is when Uno applies a culture.</comment>
   </data>
-  <data name="MainPage.TextBlock.Theme.Text" xml:space="preserve">
+  <data name="SettingsPage.TextBlock.Theme.Text" xml:space="preserve">
     <value>Theme</value>
     <comment>Labels the control that chooses whether the application is shown light, dark, or the way the system is set.</comment>
   </data>
@@ -212,5 +212,109 @@
   <data name="AppTheme.Dark" xml:space="preserve">
     <value>Dark</value>
     <comment>One of the three theme offers.</comment>
+  </data>
+  <data name="Workspace.Rail.Discover.Content" xml:space="preserve">
+    <value>Discover</value>
+    <comment>Names the first of the three spaces, on the navigation rail a wide window shows.</comment>
+  </data>
+  <data name="Workspace.Rail.Mail.Content" xml:space="preserve">
+    <value>Mail</value>
+    <comment>Names the second of the three spaces, on the navigation rail a wide window shows.</comment>
+  </data>
+  <data name="Workspace.Rail.Cases.Content" xml:space="preserve">
+    <value>Cases</value>
+    <comment>Names the third of the three spaces, on the navigation rail a wide window shows.</comment>
+  </data>
+  <data name="Workspace.Tab.Discover.Content" xml:space="preserve">
+    <value>Discover</value>
+    <comment>The same space as the rail item above, named on the bottom navigation a narrow window shows.</comment>
+  </data>
+  <data name="Workspace.Tab.Mail.Content" xml:space="preserve">
+    <value>Mail</value>
+    <comment>The same space as the rail item above, named on the bottom navigation a narrow window shows.</comment>
+  </data>
+  <data name="Workspace.Tab.Cases.Content" xml:space="preserve">
+    <value>Cases</value>
+    <comment>The same space as the rail item above, named on the bottom navigation a narrow window shows.</comment>
+  </data>
+  <data name="Workspace.TextBox.Intent.PlaceholderText" xml:space="preserve">
+    <value>Ask about your mail</value>
+    <comment>What the field invites, shown while it is empty. An invitation rather than a label, because the label is read by a screen reader below.</comment>
+  </data>
+  <data name="Workspace.TextBox.Intent.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Your question</value>
+    <comment>Names the field to a screen reader, which does not read a placeholder once anything has been typed.</comment>
+  </data>
+  <data name="Workspace.Button.Settings.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Settings</value>
+    <comment>Names the button that opens the settings screen, which carries an icon rather than words.</comment>
+  </data>
+  <data name="WorkspaceScope.Everything" xml:space="preserve">
+    <value>All your mail</value>
+    <comment>What the scope indicator says when nothing has been narrowed. Resolved in the model rather than by a x:Uid, because the indicator is composed from what is in scope.</comment>
+  </data>
+  <data name="WorkspaceScope.AccountFolder" xml:space="preserve">
+    <value>{0} · {1}</value>
+    <comment>An account and a folder within it, in that order. Punctuation rather than words, so the two names stay readable in any language.</comment>
+  </data>
+  <data name="WorkspaceScope.Selected" xml:space="preserve">
+    <value>{0} · {1} selected</value>
+    <comment>What is in scope, and how many things are selected within it. {0} is the scope as the two entries above phrase it and {1} is a count.</comment>
+  </data>
+  <data name="DiscoverPage.Answer.Heading" xml:space="preserve">
+    <value>Discover</value>
+    <comment>Names the primary column of the Discover space while that space is being built.</comment>
+  </data>
+  <data name="DiscoverPage.Answer.Detail" xml:space="preserve">
+    <value>This space is still being built.</value>
+    <comment>Says plainly that the space is empty because nothing has been put in it yet, rather than because something failed.</comment>
+  </data>
+  <data name="DiscoverPage.Evidence.Heading" xml:space="preserve">
+    <value>Evidence</value>
+    <comment>Names the companion column of the Discover space, which a wide window shows beside the answer.</comment>
+  </data>
+  <data name="DiscoverPage.Evidence.Detail" xml:space="preserve">
+    <value>This column is still being built.</value>
+    <comment>The companion column's counterpart to the sentence above.</comment>
+  </data>
+  <data name="MailPage.Messages.Heading" xml:space="preserve">
+    <value>Mail</value>
+    <comment>Names the primary column of the Mail space while that space is being built.</comment>
+  </data>
+  <data name="MailPage.Messages.Detail" xml:space="preserve">
+    <value>This space is still being built.</value>
+    <comment>Says plainly that the space is empty because nothing has been put in it yet, rather than because something failed.</comment>
+  </data>
+  <data name="MailPage.Reading.Heading" xml:space="preserve">
+    <value>Reading</value>
+    <comment>Names the companion column of the Mail space, which a wide window shows beside the list.</comment>
+  </data>
+  <data name="MailPage.Reading.Detail" xml:space="preserve">
+    <value>This column is still being built.</value>
+    <comment>The companion column's counterpart to the sentence above.</comment>
+  </data>
+  <data name="CasesPage.Cases.Heading" xml:space="preserve">
+    <value>Cases</value>
+    <comment>Names the primary column of the Cases space while that space is being built.</comment>
+  </data>
+  <data name="CasesPage.Cases.Detail" xml:space="preserve">
+    <value>This space is still being built.</value>
+    <comment>Says plainly that the space is empty because nothing has been put in it yet, rather than because something failed.</comment>
+  </data>
+  <data name="CasesPage.Case.Heading" xml:space="preserve">
+    <value>Case</value>
+    <comment>Names the companion column of the Cases space, which a wide window shows beside the list.</comment>
+  </data>
+  <data name="CasesPage.Case.Detail" xml:space="preserve">
+    <value>This column is still being built.</value>
+    <comment>The companion column's counterpart to the sentence above.</comment>
+  </data>
+  <data name="SettingsPage.Button.Back.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Back</value>
+    <comment>Names the button that returns to the workspace, which carries an icon rather than words.</comment>
+  </data>
+  <data name="SettingsPage.TextBlock.Title.Text" xml:space="preserve">
+    <value>Settings</value>
+    <comment>Names the screen the frame reaches beside its three spaces.</comment>
   </data>
 </root>

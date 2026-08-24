@@ -13,8 +13,23 @@ namespace MailFathom.Client.Presentation;
 /// </remarks>
 internal static class ClientRoutes
 {
-    /// <summary>The application itself, which is where a client pointed at a deployment starts.</summary>
-    internal const string Main = "Main";
+    /// <summary>The frame the three spaces are shown inside, which is where a client pointed at a deployment starts.</summary>
+    internal const string Workspace = "Workspace";
+
+    /// <summary>The space a question is asked in, and the one the frame opens on.</summary>
+    internal const string Discover = "Discover";
+
+    /// <summary>The space correspondence is read in.</summary>
+    internal const string Mail = "Mail";
+
+    /// <summary>The space a thread being worked through is followed in.</summary>
+    internal const string Cases = "Cases";
+
+    /// <summary>
+    /// The screen reached from the frame rather than named among the spaces, because it is not one. It sits beside the
+    /// frame rather than inside it, which is what makes going to it a screen somebody comes back from.
+    /// </summary>
+    internal const string Settings = "Settings";
 
     /// <summary>The screen that asks which deployment this client reaches, which is where one pointed nowhere starts.</summary>
     internal const string Connect = "Connect";

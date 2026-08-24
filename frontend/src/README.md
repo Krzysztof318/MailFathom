@@ -17,7 +17,7 @@ What is inside the two projects:
 | Path | What it holds |
 |---|---|
 | `Client/App.xaml`, `App.xaml.cs` | The composition root: the host every head starts through, logging, and the route registry |
-| `Client/Presentation/` | The shell, the pages, and the MVUX models behind them |
+| `Client/Presentation/` | The shell, the frame the three spaces are shown inside, the spaces themselves, and the MVUX models behind them |
 | `Client/Styles/` | The Material palette every brush resolves from — the one place a colour value is written |
 | `Client/Platforms/` | What belongs to one head only: the two entry points, the browser head's web manifest, linker configuration, and font stylesheet, and its half of the sign-in redirect |
 | `Client/Assets/` | The application icon and the splash screen, from one SVG per head |
@@ -25,13 +25,61 @@ What is inside the two projects:
 | `Client.Backend/` | The typed client, the wire records, and the source-generated readers for them |
 | `Client.Backend/Authorization/` | Signing in: discovery, the proof key, the exchange, and the token held in memory for the run |
 
-The application is empty of features. It shows what it is — the product name and the version this build was stamped
-with, read from the assembly rather than written here, so the client and the service report one number — and the two
-things a reader can already decide about it: which language it is read in, and which theme it is shown in.
+The application is empty of features, and it is no longer empty of structure: it opens on the frame the three spaces
+are shown inside, and the section below says what that frame is. What it can do beyond moving between them is what a
+reader decides about the application itself — which language it is read in, and which theme it is shown in — beside the
+version this build was stamped with, read from the assembly rather than written here so the client and the service
+report one number.
 
 It reaches MailFathom over the endpoints `backend/src/Host/` exposes and shares nothing else with it: no build file, no
 package manifest, no configuration file, and no type. Which deployment it reaches is the composing host's to state, and
 nothing states it yet. `AGENTS.md` beside this file states why, and states the conventions anything added here follows.
+
+## How it is put together
+
+The product is three spaces — **Discover**, **Mail**, and **Cases** — and they are one application rather than three.
+What makes them one is the frame around them, which is what `Client/Presentation/Workspace/` holds and what a client
+already pointed at a deployment opens on. The spaces themselves are empty: `Client/Presentation/Spaces/` carries a page
+per space that says so, and each of the three parents that owns a space fills its own page in.
+
+**Each space is a route, and so is everything else on screen.** `App.RegisterRoutes` nests `Discover`, `Mail`, and
+`Cases` inside the frame and registers `Settings` and `Connect` beside it, every one of them named once in
+`ClientRoutes`, so each is reachable and reloadable by its route — the
+browser opened at `/Workspace/Cases` lands on Cases with that space named on the bar. Because Uno's navigation is what
+moved there, the Android system back gesture and back key and the browser's back button all move back through the
+client's own screens rather than out of the application: going to settings and back returns to the space somebody left,
+not to the first one. A screen reached by swapping content by hand would be a screen neither of them knows about, which
+is why nothing here does that.
+
+**Where a route is registered decides whether it can be returned from**, which is why settings is a level up rather
+than a fourth name beside the three. The spaces share one content area and are switched between, so moving among them
+leaves nothing behind to go back to — which is what a bar of tabs means. Settings is entered instead, and entering is
+what puts the workspace behind it.
+
+**The composition follows the width of the window and never the platform.** Below 700 pixels the spaces are named on a
+bar along the bottom and the workspace is one column; at 700 that bar is replaced by a navigation rail beside the
+workspace; at 1000 the workspace itself opens a companion column, so what a space shows beside its main content stands
+next to it instead of being reached as a separate screen. The two widths are `WorkspaceRailWindowWidth` and
+`WorkspaceWideWindowWidth` in `App.xaml`, read by every adaptive trigger that acts on them, and the switch is
+`VisualStateManager` throughout: no code asks which platform is running, so a resized desktop window and a phone are
+the same case. `WorkspaceColumns` is the control that gives a space that workspace, so all three read the same at the
+same width. Content stays clear of a notch, a rounded corner, and a system bar through `utu:SafeArea.Insets`, stated at
+the root of the frame and again on the settings screen, which takes the whole surface rather than opening inside it.
+The soft keyboard is the one mask the toolkit supports on a `SafeArea` or a `ScrollViewer` alone, so it is stated as a
+control around the field this frame takes typing in.
+
+**What travels with somebody between spaces is `IWorkspace`**, registered once for the run. It holds the question being
+composed and the scope that question would be asked against — an account, a folder within it, and what is selected
+there — and the frame shows both above the spaces: the field a question is typed in, and the indicator beside it saying
+what it would be asked against. Neither answers anything here. Asking is Discover's work and narrowing is done by the
+space somebody narrows in; what this settles is that both survive the move, because both are held for the run rather
+than by the model of whichever screen is on top. A scope names accounts, folders, and message identifiers, so it
+carries the same classification as anything else about mail: it lives in memory and is written nowhere.
+
+**Settings is reached from the frame rather than named among the spaces**, because it is not one. It is the screen that
+says which build is running and which deployment this client is pointed at, carries the two choices below and the way to
+point it at another deployment, and carries the way back out as a navigation request rather than as a handler — the same
+request the system back key makes, so one answer serves both.
 
 ## How it looks
 
@@ -75,8 +123,14 @@ another. Both are neutral cultures rather than regional variants; a variant arri
 between regions.
 
 A visible string reaches a screen through `x:Uid` rather than being written in a page, which is why no page here
-carries user-visible text. The exception is a string that is per item rather than per control — the three theme
-offers — and that one is resolved in the model through `IStringLocalizer` against the same tables.
+carries user-visible text. What is per item rather than per control is the exception — the three theme offers, and what
+the scope indicator says — and each of those is resolved in the model through `IStringLocalizer` against the same
+tables.
+
+**A `x:Uid` nothing answers is a control with no words on it**, which the application compiles without complaint and a
+head shows without saying why. So the suite reads the authored pages the way it reads the tables, and fails when a name
+a view states is answered by no entry — the failure that holding the tables against each other cannot see, because a
+name missing from both is a name they agree about.
 
 **A chosen language arrives on the next launch, and the screen says so.** Uno applies a culture while a head is
 starting, so the visual tree already built keeps the words it was built with; the choice is written to a settings file

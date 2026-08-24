@@ -6,14 +6,14 @@ using System.Collections.Immutable;
 using MailFathom.Client.Backend;
 using Microsoft.Extensions.Localization;
 
-namespace MailFathom.Client.Presentation;
+namespace MailFathom.Client.Presentation.Settings;
 
 /// <summary>
-/// The model behind <see cref="MainPage"/>. The application is empty of features, so what it has to say is what it is
-/// — the product name and the version this build was stamped with — and the two things a reader can already decide
-/// about it: which language it is read in, and which theme it is shown in.
+/// The model behind <see cref="SettingsPage"/>: the two things a reader can decide about the application itself —
+/// which language it is read in, and which theme it is shown in — beside the build it is running and the deployment it
+/// is pointed at, which are what somebody reporting a problem is asked for.
 /// </summary>
-public partial record MainModel
+public partial record SettingsModel
 {
     private readonly ILocalizationService localization;
     private readonly IThemeService themes;
@@ -27,7 +27,7 @@ public partial record MainModel
     /// <param name="address">Which deployment this client is pointed at, which is what the screen names.</param>
     /// <param name="localizer">Where a string resolved here rather than by a <c>x:Uid</c> in the view comes from.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
-    public MainModel(
+    public SettingsModel(
         ILocalizationService localization,
         IThemeService themes,
         DeploymentAddress address,

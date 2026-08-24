@@ -1,0 +1,23 @@
+<!--
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+-->
+<Page x:Class="MailFathom.Client.Presentation.Spaces.MailPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:local="using:MailFathom.Client.Presentation.Spaces"
+      xmlns:workspace="using:MailFathom.Client.Presentation.Workspace"
+      NavigationCacheMode="Required">
+
+  <!-- The list beside what is open on a wide window, and the list alone on a narrow one, where opening something is
+       a screen rather than a second column. What either column holds is #1159's to decide. -->
+  <workspace:WorkspaceColumns>
+    <workspace:WorkspaceColumns.Primary>
+      <local:SpacePlaceholder x:Uid="MailPage.Messages" />
+    </workspace:WorkspaceColumns.Primary>
+    <workspace:WorkspaceColumns.Companion>
+      <local:SpacePlaceholder x:Uid="MailPage.Reading" />
+    </workspace:WorkspaceColumns.Companion>
+  </workspace:WorkspaceColumns>
+</Page>

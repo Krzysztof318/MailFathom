@@ -38,6 +38,16 @@
           Link="Strings/%(RecursiveDir)Resources.resw"
           TargetPath="Strings/%(RecursiveDir)Resources.resw"
           CopyToOutputDirectory="PreserveNewest" />
+
+    <!-- Every authored view, on the same terms and for the reason the tables above are here: a `x:Uid` is the other
+         end of a name the tables hold, and only reading both files can say the two still agree. A running head
+         resolves one against the compiled resource map and shows a control with no words on it when nothing answers,
+         which is neither a build failure nor something the tables can notice about themselves. -->
+    <None Include="..\..\src\Client\**\*.xaml"
+          Exclude="..\..\src\Client\bin\**;..\..\src\Client\obj\**"
+          Link="Xaml/%(RecursiveDir)%(Filename)%(Extension)"
+          TargetPath="Xaml/%(RecursiveDir)%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
