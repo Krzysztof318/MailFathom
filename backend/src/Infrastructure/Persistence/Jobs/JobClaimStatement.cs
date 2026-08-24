@@ -33,6 +33,14 @@ namespace MailFathom.Infrastructure.Persistence.Jobs;
 /// states the queue later gains.
 /// </para>
 /// <para>
+/// The order is the turn each job holds rather than the instant it became available, which is what makes the claim fair
+/// across owners: the enqueue placed each job one spacing past the latest turn its own owner already had waiting, so
+/// draining the queue in turn order interleaves owners instead of working through whoever queued first. Nothing here
+/// ranks anything — the ordering is one column of one index — because a claim that had to rank a backlog to find out
+/// whose turn it was could no longer be one statement under <c>FOR UPDATE SKIP LOCKED</c>, which PostgreSQL refuses to
+/// combine with a window function at all.
+/// </para>
+/// <para>
 /// Every value is a parameter. The identifiers are quoted because EF Core names the columns after the properties, which
 /// PostgreSQL would otherwise fold to lower case and fail to find.
 /// </para>
@@ -67,7 +75,7 @@ internal static class JobClaimStatement
                       AND candidate."JobType" = ANY({handledTypeNames})
                       AND ((candidate."State" = {pending} AND candidate."AvailableAt" <= {claimedAt})
                         OR (candidate."State" = {claimed} AND candidate."LeaseExpiresAt" <= {claimedAt}))
-                    ORDER BY candidate."AvailableAt", candidate."Id"
+                    ORDER BY candidate."TurnAt", candidate."Id"
                     LIMIT {batchSize}
                     FOR UPDATE SKIP LOCKED
                 )

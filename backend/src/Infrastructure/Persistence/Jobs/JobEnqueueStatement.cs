@@ -20,6 +20,20 @@ namespace MailFathom.Infrastructure.Persistence.Jobs;
 /// exercised the port.
 /// </para>
 /// <para>
+/// It is also where a job's turn is decided, which is the whole of what makes the claim fair across owners. Deciding it
+/// here rather than in the claim is what keeps the claim one indexed statement: the order is a column by the time the
+/// queue is drained, so no worker has to rank a backlog to find out whose turn it is. The cost is one read of where the
+/// owner's waiting work has reached, on the enqueue rather than on the hot path.
+/// </para>
+/// <para>
+/// Two enqueues for one owner arriving together both read the same latest turn and both take the one after it, so an
+/// owner occasionally holds two jobs at a single turn. That is the shape the queue-depth bound already has and is
+/// answered the same way: what fairness owes is a limit on how far a backlog may run ahead of everybody else rather
+/// than an invariant, and a turn shared by as many jobs as raced for it costs nothing that serializing every enqueue
+/// behind a lock would not cost far more of. The identifier breaks the tie, so the order stays total and stays the
+/// order the two were written in.
+/// </para>
+/// <para>
 /// Every value is a parameter. The identifiers are quoted because EF Core names the columns after the properties, which
 /// PostgreSQL would otherwise fold to lower case and fail to find, and the payload is cast rather than parameterized as
 /// <c>jsonb</c> because the document reaches the statement as text.
@@ -27,6 +41,24 @@ namespace MailFathom.Infrastructure.Persistence.Jobs;
 /// </remarks>
 internal static class JobEnqueueStatement
 {
+    /// <summary>How far past its owner's latest waiting turn a newly enqueued job is placed.</summary>
+    /// <remarks>
+    /// <para>
+    /// The rate at which one owner may claim ground ahead of the clock: a second of turn per job. An owner enqueuing
+    /// nothing sits on the instant its work becomes available, so a deployment serving one owner claims in the order it
+    /// always did, and an owner enqueuing a thousand jobs at once holds turns spread over the next thousand seconds
+    /// rather than a thousand turns at the same instant. That is what lets another owner's due job, whose turn is the
+    /// instant it arrived, overtake the part of the backlog whose turn has not come.
+    /// </para>
+    /// <para>
+    /// A second rather than a tuned figure, because what the spacing has to be smaller than is how fast the deployment
+    /// drains one owner's work, and every deployment that keeps up at all drains more than one job per second per
+    /// active owner. Larger would interleave more coarsely without bounding anything further; smaller would let a
+    /// backlog claim more of the clock than the workers can serve, which is the FIFO behaviour this replaces.
+    /// </para>
+    /// </remarks>
+    internal static readonly TimeSpan TurnSpacing = TimeSpan.FromSeconds(1);
+
     /// <summary>Composes the statement that writes one job unless its identity is already taken.</summary>
     /// <param name="jobId">The identifier a created job takes.</param>
     /// <param name="request">The execution to enqueue.</param>
@@ -54,18 +86,46 @@ internal static class JobEnqueueStatement
         var accountId = request.AccountId?.Value;
         var availableAt = request.AvailableAt ?? enqueuedAt;
         var pending = nameof(JobState.Pending);
+        var claimableStates = new[] { pending, nameof(JobState.Claimed) };
+        var turnSpacing = TurnSpacing;
         var traceParent = enqueuedTrace?.TraceParent;
         var traceState = enqueuedTrace?.TraceState;
 
+        // Written as a select over one composed row rather than as a values list, because the turn is decided from what
+        // the same owner already has waiting and a values list has nothing to correlate that against. The row is always
+        // produced: the owner is read as a scalar subquery, which answers null for work that belongs to no account
+        // rather than answering no row at all, so an ownerless job is still inserted and still claimable.
+        //
+        // The latest turn is taken one mailbox at a time and the largest of those kept, rather than as one maximum over
+        // the owner's work joined together. The two answer the same value and only the first is a read of the index: an
+        // aggregate over a join is computed from the whole join, so against a backlog of two hundred thousand rows
+        // PostgreSQL scans the queue for it — measured at 6742 buffers against 10 for the form below, which walks the
+        // claim index backwards from each mailbox and stops at the first row.
         return $"""
                 INSERT INTO jobs (
                     "Id", "JobType", "IdempotencyKey", "Payload", "MailboxAccountId",
-                    "State", "AvailableAt", "EnqueuedAt", "StateChangedAt", "AttemptCount",
+                    "State", "AvailableAt", "TurnAt", "EnqueuedAt", "StateChangedAt", "AttemptCount",
                     "EnqueuedTraceParent", "EnqueuedTraceState")
-                VALUES (
+                SELECT
                     {jobId}, {jobTypeName}, {idempotencyKey}, CAST({payload} AS jsonb), {accountId},
-                    {pending}, {availableAt}, {enqueuedAt}, {enqueuedAt}, 0,
-                    {traceParent}, {traceState})
+                    {pending}, {availableAt},
+                    GREATEST(
+                        {availableAt},
+                        (SELECT MAX(mailbox."TurnAt")
+                         FROM mailbox_accounts AS owned
+                         CROSS JOIN LATERAL (
+                             SELECT waiting."TurnAt"
+                             FROM jobs AS waiting
+                             WHERE waiting."State" = ANY({claimableStates})
+                               AND waiting."MailboxAccountId" = owned."Id"
+                             ORDER BY waiting."TurnAt" DESC
+                             LIMIT 1) AS mailbox
+                         WHERE owned."OwnerId" = owning."OwnerId") + {turnSpacing}),
+                    {enqueuedAt}, {enqueuedAt}, 0,
+                    {traceParent}, {traceState}
+                FROM (
+                    SELECT (SELECT account."OwnerId" FROM mailbox_accounts AS account WHERE account."Id" = {accountId})
+                        AS "OwnerId") AS owning
                 ON CONFLICT ("JobType", "IdempotencyKey") DO NOTHING
                 RETURNING "Id" AS "Value"
                 """;

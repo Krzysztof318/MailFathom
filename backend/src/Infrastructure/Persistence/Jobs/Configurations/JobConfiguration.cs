@@ -21,12 +21,17 @@ namespace MailFathom.Infrastructure.Persistence.Jobs.Configurations;
 /// correctness floor rather than housekeeping.
 /// </para>
 /// <para>
-/// The claim index carries the type and the instant a job becomes available, because the claim statement is the only
-/// query this table runs at any volume and those are what it selects on. It is filtered to the states a claim can
+/// The claim index carries the type and the instant a job's turn comes, because the claim statement is the only query
+/// this table runs at any volume and those are what it selects and orders on. It is filtered to the states a claim can
 /// still take, so a queue that has been running for a year holds an index the size of its backlog rather than of its
 /// history — and the claim repeats that same membership in its own predicate so PostgreSQL can prove the index
 /// applies to it. Naming the two claimable states rather than excluding the terminal ones is what keeps the filter
 /// correct as terminal states are added: a job that failed leaves the index the moment it stops being claimable.
+/// </para>
+/// <para>
+/// The turn rather than the available instant, because the order a claim drains the queue in is what decides whether
+/// one owner's backlog postpones another owner's due work. The available instant stays a predicate — it is what makes
+/// a job due — and the turn is what orders the jobs that are.
 /// </para>
 /// <para>
 /// The account is a column with an index of its own rather than a value inside the payload, because erasure,
@@ -74,12 +79,21 @@ internal sealed class JobConfiguration : IEntityTypeConfiguration<JobEntity>
         entity.HasIndex(job => new { job.JobType, job.IdempotencyKey })
             .IsUnique()
             .HasDatabaseName(PersistenceConstraintNames.JobIdentityUniqueIndexName);
-        entity.HasIndex(job => new { job.JobType, job.AvailableAt })
+        entity.HasIndex(job => new { job.JobType, job.TurnAt })
             .HasDatabaseName(PersistenceConstraintNames.JobClaimIndexName)
             .HasFilter(
                 $"\"{nameof(JobEntity.State)}\" IN ('{nameof(JobState.Pending)}', '{nameof(JobState.Claimed)}')");
         entity.HasIndex(job => new { job.MailboxAccountId, job.EnqueuedAt })
             .HasDatabaseName(PersistenceConstraintNames.JobAccountIndexName);
+
+        // Filtered to the same states the claim index is, and for the same reason: what an enqueue asks is where the
+        // owner's *waiting* work has reached, so a queue that has been running for a year reads a structure the size of
+        // its backlog. The account leads because the owner's accounts are resolved first and each one's latest turn is
+        // then one descending step into this index.
+        entity.HasIndex(job => new { job.MailboxAccountId, job.TurnAt })
+            .HasDatabaseName(PersistenceConstraintNames.JobAccountTurnIndexName)
+            .HasFilter(
+                $"\"{nameof(JobEntity.State)}\" IN ('{nameof(JobState.Pending)}', '{nameof(JobState.Claimed)}')");
 
         // Partial for the reason the claim index is: the state it is filtered to is a small part of a table that
         // grows with every enqueue, and an operator reading what has stopped orders by the instant it stopped. The
