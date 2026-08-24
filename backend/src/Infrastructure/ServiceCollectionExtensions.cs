@@ -665,6 +665,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IMailboxReadTelemetry, MailboxReadTelemetry>();
         services.AddSingleton<StoredEmailContentTelemetry>();
         services.AddScoped<MailAccountDirectoryReader>();
+        services.AddScoped<MailAccountFreshnessReader>();
         // The guard every egress point calls, registered for every deployment rather than only where a scanner is
         // switched on. What is conditional is the redaction behind it: with both switches off the provider hands over
         // no redactor, no detector is constructed, and every call returns its argument. Registering it conditionally

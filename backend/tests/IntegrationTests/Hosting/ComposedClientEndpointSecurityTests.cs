@@ -49,6 +49,8 @@ public sealed class ComposedClientEndpointSecurityTests
 
     private const string ClientSessionRoute = "/api/client/session";
 
+    private const string ClientAccountsRoute = "/api/client/accounts";
+
     private const string AdminSessionRoute = "/api/admin/session";
 
     private const string ClientProtectedResourceMetadataPath = "/.well-known/oauth-protected-resource/api/client";
@@ -56,6 +58,10 @@ public sealed class ComposedClientEndpointSecurityTests
     private const string ClientKeyName = "desktop-client";
 
     private const string ClientKey = "not-a-real-client-key";
+
+    private const string NarrowedClientKeyName = "narrowed-client";
+
+    private const string NarrowedClientKey = "not-a-real-narrowed-client-key";
 
     private const string McpKeyName = "workstation";
 
@@ -152,6 +158,70 @@ public sealed class ComposedClientEndpointSecurityTests
 
         // Assert
         Assert.Equal(StatusCodes.Status200OK, response.StatusCode);
+    }
+
+    /// <summary>
+    /// The mail-reading routes follow their surface exactly as the session route does, and this is the one that returns
+    /// something about a mailbox — so a listener an operator opened for agents or for administering the service must not
+    /// answer it at all.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(PortsOfTheOtherSurfaces))]
+    public async Task ClientAccountsRoute_ServedBesideTheOthers_AnswersOnItsOwnListenerAndNoOther(int localPort)
+    {
+        // Arrange
+        await using var host = await InProcessComposedHost.StartAsync(
+            EverySurfaceServed(),
+            TestContext.Current.CancellationToken);
+
+        // Act
+        var elsewhere = await host.SendAsync(
+            HttpMethods.Get,
+            ClientAccountsRoute,
+            localPort,
+            (HeaderNames.Authorization, $"Bearer {NarrowedClientKey}"));
+
+        var served = await host.SendAsync(
+            HttpMethods.Get,
+            ClientAccountsRoute,
+            ClientPort,
+            (HeaderNames.Authorization, $"Bearer {NarrowedClientKey}"));
+
+        // Assert
+        Assert.Equal(StatusCodes.Status404NotFound, elsewhere.StatusCode);
+        Assert.Equal(StatusCodes.Status403Forbidden, served.StatusCode);
+    }
+
+    /// <summary>
+    /// The route is served on its own listener and is gated there, which the pair above reads as a refusal rather than
+    /// as an absence. The credential is one an operator narrowed to the answering grant alone: it authenticates, it
+    /// reaches the session route, and it is refused this one — which is a different answer from the empty collection an
+    /// owner with no account receives.
+    /// </summary>
+    [Fact]
+    public async Task ClientAccountsRoute_ACredentialWithoutTheMailboxGrant_IsRefusedRatherThanServedAnEmptyAnswer()
+    {
+        // Arrange
+        await using var host = await InProcessComposedHost.StartAsync(
+            EverySurfaceServed(),
+            TestContext.Current.CancellationToken);
+
+        // Act
+        var session = await host.SendAsync(
+            HttpMethods.Get,
+            ClientSessionRoute,
+            ClientPort,
+            (HeaderNames.Authorization, $"Bearer {NarrowedClientKey}"));
+
+        var accounts = await host.SendAsync(
+            HttpMethods.Get,
+            ClientAccountsRoute,
+            ClientPort,
+            (HeaderNames.Authorization, $"Bearer {NarrowedClientKey}"));
+
+        // Assert
+        Assert.Equal(StatusCodes.Status200OK, session.StatusCode);
+        Assert.Equal(StatusCodes.Status403Forbidden, accounts.StatusCode);
     }
 
     /// <summary>
@@ -354,7 +424,11 @@ public sealed class ComposedClientEndpointSecurityTests
         new("AdminEndpoint:Authentication:0:ApiKey:SecretReference", $"plaintext:{AdminKey}"),
     ];
 
-    /// <summary>All three surfaces served, each with a key of its own, which is the shape the isolation claims are read across.</summary>
+    /// <summary>
+    /// All three surfaces served, each with a key of its own, which is the shape the isolation claims are read across.
+    /// The client surface carries a second key an operator narrowed to the answering grant alone, which is how a route
+    /// that is gated is told from a route that is absent.
+    /// </summary>
     private static IReadOnlyList<KeyValuePair<string, string?>> EverySurfaceServed() =>
     [
         .. OtherSurfacesServed(),
@@ -363,6 +437,9 @@ public sealed class ComposedClientEndpointSecurityTests
         new("ClientEndpoint:Cors:AllowedOrigins:0", PageOrigin),
         new("ClientEndpoint:Authentication:0:ApiKey:Name", ClientKeyName),
         new("ClientEndpoint:Authentication:0:ApiKey:SecretReference", $"plaintext:{ClientKey}"),
+        new("ClientEndpoint:Authentication:1:ApiKey:Name", NarrowedClientKeyName),
+        new("ClientEndpoint:Authentication:1:ApiKey:SecretReference", $"plaintext:{NarrowedClientKey}"),
+        new("ClientEndpoint:Authentication:1:Permissions:0", "mailfathom.mail.ask"),
     ];
 
     /// <summary>The client surface accepting an access token, which is the shape that publishes its metadata document.</summary>

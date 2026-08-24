@@ -179,7 +179,7 @@ public sealed class AdminApiEndpointsTests
         // Assert
         var mapped = endpoints.Materialize();
         Assert.NotEmpty(mapped);
-        Assert.All(mapped, endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<AdminRoutePermission>()));
+        Assert.All(mapped, endpoint => Assert.NotNull(endpoint.Metadata.GetMetadata<RoutePermission>()));
     }
 
     /// <summary>
@@ -262,7 +262,7 @@ public sealed class AdminApiEndpointsTests
             .OfType<RouteEndpoint>()
             .Single(endpoint => endpoint.RoutePattern.RawText?.EndsWith(AdminApiEndpoints.SessionRoute, StringComparison.Ordinal) == true);
 
-        Assert.False(sessionRoute.Metadata.GetMetadata<AdminRoutePermission>()!.Permission.IsSpecified);
+        Assert.False(sessionRoute.Metadata.GetMetadata<RoutePermission>()!.Permission.IsSpecified);
     }
 
     /// <summary>The write route is a post, because a get carrying a credential reaches every access log on the path.</summary>
@@ -346,7 +346,7 @@ public sealed class AdminApiEndpointsTests
 
     /// <summary>Names what a route decided, with the route that decided on none saying so.</summary>
     private static string Describe(Endpoint endpoint) =>
-        endpoint.Metadata.GetMetadata<AdminRoutePermission>() is { Permission.IsSpecified: true } published
+        endpoint.Metadata.GetMetadata<RoutePermission>() is { Permission.IsSpecified: true } published
             ? published.Permission.Name
             : "none";
 

@@ -124,9 +124,10 @@ internal static class AdminApiEndpoints
 
         // On the group rather than on each route, because what a route supplies is its decision and what this supplies
         // is the enforcement: a route mapped without stating a permission is refused by this rather than served, which
-        // is what makes forgetting to decide fail closed. Group filters reach every route the group holds, whenever it
-        // was added, so nothing here depends on this line staying first.
-        api.AddEndpointFilter(AdminRouteAuthorization.RefuseUnpermittedAsync);
+        // is what makes forgetting to decide fail closed. The surface is stated here rather than on each route, because
+        // it is the group that decides which half of the published set these grants come from. Group filters reach every
+        // route the group holds, whenever it was added, so nothing here depends on this line staying first.
+        api.AddEndpointFilter(RouteAuthorization.RefusingUnpermitted(ProtectedSurface.Administration));
 
         // TypedResults rather than Results, so the response type reaches the endpoint's metadata and the generated
         // OpenAPI document describes what this answers with rather than an untyped 200.

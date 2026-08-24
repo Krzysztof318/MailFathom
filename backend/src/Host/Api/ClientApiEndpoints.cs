@@ -5,6 +5,7 @@
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Security.Endpoints;
 using MailFathom.Versioning;
 
 namespace MailFathom.Host.Api;
@@ -12,28 +13,27 @@ namespace MailFathom.Host.Api;
 /// <summary>Maps the routes the MailFathom client reaches.</summary>
 /// <remarks>
 /// <para>
-/// One route, and deliberately one. A transport surface is where a misordered middleware, a scheme that authenticates
-/// the wrong caller, or a listener bound where it should not be fails silently and arrives as a working deployment
-/// answering the wrong way, so the surface is published with nothing on it but proof of life: the decisions can then be
-/// reviewed and tested for what they are rather than underneath six mail-reading routes. The routes the client actually
-/// needs are a separate change on top of this one.
+/// The surface was published carrying proof of life alone, because a transport surface is where a misordered middleware,
+/// a scheme that authenticates the wrong caller, or a listener bound where it should not be fails silently and arrives
+/// as a working deployment answering the wrong way. Those decisions have since been reviewed and tested for what they
+/// are, so the routes a client actually needs arrive on top of them one at a time.
 /// </para>
 /// <para>
-/// The route answers what a client needs before it has drawn a single message: that this is MailFathom rather than
-/// something else answering the port, which version it is, and what the credential the client just presented is allowed
-/// to do. That last part is what lets sign-in be built and proven end to end before a screen exists — a client that
-/// reached here with a token it had just been issued knows the token works, and knows what the rest of the surface will
-/// serve it.
+/// The session route answers what a client needs before it has drawn a single message: that this is MailFathom rather
+/// than something else answering the port, which version it is, and what the credential the client just presented is
+/// allowed to do. That last part is what lets sign-in be built and proven end to end before a screen exists — a client
+/// that reached here with a token it had just been issued knows the token works, and knows what the rest of the surface
+/// will serve it.
 /// </para>
 /// <para>
 /// Every route is mapped into one group so the requirement the endpoint attaches covers everything the surface serves,
-/// including a route added later.
+/// including a route added later, and so the one filter that reads each route's published grant covers them all too.
 /// </para>
 /// </remarks>
 internal static class ClientApiEndpoints
 {
     /// <summary>The route reporting what the deployment grants the caller, relative to the client prefix.</summary>
-    /// <remarks>It is what a client reads first, and the only thing this surface answers today.</remarks>
+    /// <remarks>It is what a client reads first, before it has a grant to reach anything else with.</remarks>
     internal const string SessionRoute = "/session";
 
     /// <summary>Maps the client routes beneath the endpoint's route prefix.</summary>
@@ -46,10 +46,20 @@ internal static class ClientApiEndpoints
 
         var api = endpoints.MapGroup(ClientEndpointOptions.RoutePrefix);
 
+        // On the group rather than on each route, because what a route supplies is its decision and what this supplies
+        // is the enforcement: a route mapped without stating a permission is refused by this rather than served, which
+        // is what makes forgetting to decide fail closed. The surface is the mailbox half, which is where this surface's
+        // grants are drawn from. Group filters reach every route the group holds, whenever it was added, so nothing here
+        // depends on this line staying first.
+        api.AddEndpointFilter(RouteAuthorization.RefusingUnpermitted(ProtectedSurface.Mail));
+
         // TypedResults rather than Results, so the response type reaches the endpoint's metadata and the generated
         // OpenAPI document describes what this answers with rather than an untyped 200.
         api.MapGet(SessionRoute, (IAuthorizedPrincipalSource principals) =>
-            TypedResults.Ok(ClientSessionResponse.For(principals.Current)));
+                TypedResults.Ok(ClientSessionResponse.For(principals.Current)))
+            .RequireNoPermission();
+
+        api.MapClientMailAccounts();
 
         return api;
     }

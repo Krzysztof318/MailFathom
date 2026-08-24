@@ -17,15 +17,25 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Security.Endpoints;
 
-/// <summary>Covers the one filter the administrative group carries, which is what a published decision costs a caller.</summary>
+/// <summary>Covers the one filter an HTTP route group carries, which is what a published decision costs a caller.</summary>
 /// <remarks>
-/// Three behaviors, and the third is the one that makes the arrangement fail closed. A route that decided a permission
-/// admits the callers holding it and refuses the rest; a route that decided none admits everybody, including a
-/// credential granted nothing; and a route that decided nothing at all is refused rather than served, so forgetting to
-/// decide produces a route nobody reaches instead of a route everybody does.
+/// <para>
+/// Four behaviors, and the last two are what make the arrangement fail closed. A route that decided a permission admits
+/// the callers holding it and refuses the rest; a route that decided none admits everybody, including a credential
+/// granted nothing; a route that decided nothing at all is refused rather than served; and a route that decided on a
+/// permission belonging to the other half of the published set is refused too, because no credential the group admits
+/// can carry that name.
+/// </para>
+/// <para>
+/// Most of it is read through the administrative surface, which is where the arrangement began, and the cases where the
+/// surface is the subject rather than the setting state it themselves.
+/// </para>
 /// </remarks>
-public sealed class AdminRouteAuthorizationTests
+public sealed class RouteAuthorizationTests
 {
+    /// <summary>The surface most of this suite reads the filter through, stated once so a case about the surface stands out.</summary>
+    private const ProtectedSurface Surface = ProtectedSurface.Administration;
+
     /// <summary>The pattern every route in this suite is mapped under, which is what a refusal is recorded as.</summary>
     private const string RoutePattern = "/api/admin/an-administrative-route";
 
@@ -38,11 +48,27 @@ public sealed class AdminRouteAuthorizationTests
     {
         // Arrange
         var context = ContextFor(
-            AdminRoutePermission.Requiring(MailFathomPermission.AdminRead),
+            RoutePermission.Requiring(MailFathomPermission.AdminRead),
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
 
         // Act
-        var answer = await AdminRouteAuthorization.RefuseUnpermittedAsync(context, _ => ValueTask.FromResult<object?>("served"));
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(context, Served, Surface);
+
+        // Assert
+        Assert.Equal("served", answer);
+    }
+
+    /// <summary>The same arrangement on the surface a client reaches, whose grants are drawn from the mailbox half.</summary>
+    [Fact]
+    public async Task RefuseUnpermittedAsync_ACallerHoldingWhatAClientRoutePublishes_ReachesTheHandler()
+    {
+        // Arrange
+        var context = ContextFor(
+            RoutePermission.Requiring(MailFathomPermission.MailRead),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead));
+
+        // Act
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(context, Served, ProtectedSurface.Mail);
 
         // Assert
         Assert.Equal("served", answer);
@@ -55,18 +81,11 @@ public sealed class AdminRouteAuthorizationTests
         // Arrange
         var reached = false;
         var context = ContextFor(
-            AdminRoutePermission.Requiring(MailFathomPermission.AdminRead),
+            RoutePermission.Requiring(MailFathomPermission.AdminRead),
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate));
 
         // Act
-        var answer = await AdminRouteAuthorization.RefuseUnpermittedAsync(
-            context,
-            _ =>
-            {
-                reached = true;
-
-                return ValueTask.FromResult<object?>("served");
-            });
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(context, Reaching(() => reached = true), Surface);
 
         // Assert
         var refusal = Assert.IsType<ProblemHttpResult>(answer);
@@ -76,23 +95,47 @@ public sealed class AdminRouteAuthorizationTests
         Assert.False(reached);
     }
 
+    /// <summary>
+    /// The client surface answers the same way, and that is the decision rather than an inheritance: its caller is a
+    /// page holding this person's own credential, and the session route already tells that caller its whole grant — so
+    /// naming what is missing from it discloses nothing the caller could not already read about itself.
+    /// </summary>
+    [Fact]
+    public async Task RefuseUnpermittedAsync_AClientCallerWithoutIt_RefusesNamingThePermissionItLacks()
+    {
+        // Arrange
+        var context = ContextFor(
+            RoutePermission.Requiring(MailFathomPermission.MailRead),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk));
+
+        // Act
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(context, Served, ProtectedSurface.Mail);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(answer);
+        Assert.Equal(StatusCodes.Status403Forbidden, refusal.StatusCode);
+        Assert.Equal(
+            MailFathomPermission.MailRead.Name,
+            Assert.Contains(RouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions));
+    }
+
     /// <summary>The permission travels as its own member as well, so <c>mfctl</c> reads what to grant rather than parsing the sentence.</summary>
     [Fact]
     public async Task RefuseUnpermittedAsync_ACallerWithoutIt_CarriesThePermissionAsItsOwnMember()
     {
         // Arrange
         var context = ContextFor(
-            AdminRoutePermission.Requiring(MailFathomPermission.AdminErase),
+            RoutePermission.Requiring(MailFathomPermission.AdminErase),
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
 
         // Act
-        var answer = await AdminRouteAuthorization.RefuseUnpermittedAsync(context, _ => ValueTask.FromResult<object?>("served"));
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(context, Served, Surface);
 
         // Assert
         var refusal = Assert.IsType<ProblemHttpResult>(answer);
         Assert.Equal(
             MailFathomPermission.AdminErase.Name,
-            Assert.Contains(AdminRouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions));
+            Assert.Contains(RouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions));
     }
 
     /// <summary>The session route's case: a credential granted nothing still reaches a route published under no permission.</summary>
@@ -100,10 +143,10 @@ public sealed class AdminRouteAuthorizationTests
     public async Task RefuseUnpermittedAsync_ARouteRequiringNoPermission_ServesACallerGrantedNothing()
     {
         // Arrange
-        var context = ContextFor(AdminRoutePermission.None, AccessAuthorizations.ForCallerGranted());
+        var context = ContextFor(RoutePermission.None, AccessAuthorizations.ForCallerGranted());
 
         // Act
-        var answer = await AdminRouteAuthorization.RefuseUnpermittedAsync(context, _ => ValueTask.FromResult<object?>("served"));
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(context, Served, Surface);
 
         // Assert
         Assert.Equal("served", answer);
@@ -123,20 +166,43 @@ public sealed class AdminRouteAuthorizationTests
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
 
         // Act
-        var answer = await AdminRouteAuthorization.RefuseUnpermittedAsync(
-            context,
-            _ =>
-            {
-                reached = true;
-
-                return ValueTask.FromResult<object?>("served");
-            });
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(context, Reaching(() => reached = true), Surface);
 
         // Assert
         var refusal = Assert.IsType<ProblemHttpResult>(answer);
         Assert.Equal(StatusCodes.Status403Forbidden, refusal.StatusCode);
         Assert.False(reached);
-        Assert.DoesNotContain(AdminRouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions);
+        Assert.DoesNotContain(RouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions);
+    }
+
+    /// <summary>
+    /// A route published under the other half's permission is the same defect wearing a decision: no credential this
+    /// group admits can carry the name, so serving it would mean serving whoever the group let through.
+    /// </summary>
+    [Theory]
+    [InlineData(ProtectedSurface.Administration)]
+    [InlineData(ProtectedSurface.Mail)]
+    public async Task RefuseUnpermittedAsync_ARouteDecidingOnTheOtherSurfacesPermission_RefusesEveryCaller(
+        ProtectedSurface served)
+    {
+        // Arrange
+        var reached = false;
+        var otherHalf = served == ProtectedSurface.Mail
+            ? MailFathomPermission.AdminRead
+            : MailFathomPermission.MailRead;
+
+        var context = ContextFor(
+            RoutePermission.Requiring(otherHalf),
+            AccessAuthorizations.ForCallerGranted(otherHalf));
+
+        // Act
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(context, Reaching(() => reached = true), served);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(answer);
+        Assert.Equal(StatusCodes.Status403Forbidden, refusal.StatusCode);
+        Assert.False(reached);
+        Assert.DoesNotContain(RouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions);
     }
 
     /// <summary>
@@ -148,24 +214,20 @@ public sealed class AdminRouteAuthorizationTests
     {
         // Arrange
         var authorization = AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead);
-        var context = ContextFor(AdminRoutePermission.Requiring(MailFathomPermission.AdminRead), authorization);
+        var context = ContextFor(RoutePermission.Requiring(MailFathomPermission.AdminRead), authorization);
 
         // Act
-        var answer = await AdminRouteAuthorization.RefuseUnpermittedAsync(
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(
             context,
-            _ =>
-            {
-                authorization.RequirePermission(MailFathomPermission.AdminErase);
-
-                return ValueTask.FromResult<object?>("served");
-            });
+            Refusing(authorization, MailFathomPermission.AdminErase),
+            Surface);
 
         // Assert
         var refusal = Assert.IsType<ProblemHttpResult>(answer);
         Assert.Equal(StatusCodes.Status403Forbidden, refusal.StatusCode);
         Assert.Equal(
             MailFathomPermission.AdminErase.Name,
-            Assert.Contains(AdminRouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions));
+            Assert.Contains(RouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions));
     }
 
     /// <summary>
@@ -182,28 +244,21 @@ public sealed class AdminRouteAuthorizationTests
         // Arrange
         var reached = false;
         var decisions = lastRequiresNothing
-            ? new object[] { AdminRoutePermission.Requiring(MailFathomPermission.AdminRead), AdminRoutePermission.None }
-            : [AdminRoutePermission.None, AdminRoutePermission.Requiring(MailFathomPermission.AdminRead)];
+            ? new object[] { RoutePermission.Requiring(MailFathomPermission.AdminRead), RoutePermission.None }
+            : [RoutePermission.None, RoutePermission.Requiring(MailFathomPermission.AdminRead)];
 
         var context = ContextFor(
             new EndpointMetadataCollection(decisions),
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
 
         // Act
-        var answer = await AdminRouteAuthorization.RefuseUnpermittedAsync(
-            context,
-            _ =>
-            {
-                reached = true;
-
-                return ValueTask.FromResult<object?>("served");
-            });
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(context, Reaching(() => reached = true), Surface);
 
         // Assert
         var refusal = Assert.IsType<ProblemHttpResult>(answer);
         Assert.Equal(StatusCodes.Status403Forbidden, refusal.StatusCode);
         Assert.False(reached);
-        Assert.DoesNotContain(AdminRouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions);
+        Assert.DoesNotContain(RouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions);
     }
 
     /// <summary>The caller is told the permission, and the deployment is told which credential kept asking for it.</summary>
@@ -213,18 +268,40 @@ public sealed class AdminRouteAuthorizationTests
         // Arrange
         var refusals = Substitute.For<IAuthorizationRefusalTelemetry>();
         var context = ContextFor(
-            AdminRoutePermission.Requiring(MailFathomPermission.AdminRead),
+            RoutePermission.Requiring(MailFathomPermission.AdminRead),
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminOperate),
             refusals);
 
         // Act
-        await AdminRouteAuthorization.RefuseUnpermittedAsync(context, _ => ValueTask.FromResult<object?>("served"));
+        await RouteAuthorization.RefuseUnpermittedAsync(context, Served, Surface);
 
         // Assert
         refusals.Received(1).RecordRefusal(
             ProtectedSurface.Administration,
             RoutePattern,
             MailFathomPermission.AdminRead,
+            CallerIdentity);
+    }
+
+    /// <summary>A refusal is counted against the surface the group serves, so one surface's rate is never read as another's.</summary>
+    [Fact]
+    public async Task RefuseUnpermittedAsync_AClientCallerWithoutIt_IsRecordedAgainstTheMailSurface()
+    {
+        // Arrange
+        var refusals = Substitute.For<IAuthorizationRefusalTelemetry>();
+        var context = ContextFor(
+            RoutePermission.Requiring(MailFathomPermission.MailRead),
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailAsk),
+            refusals);
+
+        // Act
+        await RouteAuthorization.RefuseUnpermittedAsync(context, Served, ProtectedSurface.Mail);
+
+        // Assert
+        refusals.Received(1).RecordRefusal(
+            ProtectedSurface.Mail,
+            RoutePattern,
+            MailFathomPermission.MailRead,
             CallerIdentity);
     }
 
@@ -240,7 +317,7 @@ public sealed class AdminRouteAuthorizationTests
             refusals);
 
         // Act
-        await AdminRouteAuthorization.RefuseUnpermittedAsync(context, _ => ValueTask.FromResult<object?>("served"));
+        await RouteAuthorization.RefuseUnpermittedAsync(context, Served, Surface);
 
         // Assert
         refusals.Received(1).RecordRefusal(
@@ -258,19 +335,15 @@ public sealed class AdminRouteAuthorizationTests
         var refusals = Substitute.For<IAuthorizationRefusalTelemetry>();
         var authorization = AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead);
         var context = ContextFor(
-            AdminRoutePermission.Requiring(MailFathomPermission.AdminRead),
+            RoutePermission.Requiring(MailFathomPermission.AdminRead),
             authorization,
             refusals);
 
         // Act
-        await AdminRouteAuthorization.RefuseUnpermittedAsync(
+        await RouteAuthorization.RefuseUnpermittedAsync(
             context,
-            _ =>
-            {
-                authorization.RequirePermission(MailFathomPermission.AdminErase);
-
-                return ValueTask.FromResult<object?>("served");
-            });
+            Refusing(authorization, MailFathomPermission.AdminErase),
+            Surface);
 
         // Assert
         refusals.Received(1).RecordRefusal(
@@ -287,20 +360,42 @@ public sealed class AdminRouteAuthorizationTests
         // Arrange
         var refusals = Substitute.For<IAuthorizationRefusalTelemetry>();
         var context = ContextFor(
-            AdminRoutePermission.Requiring(MailFathomPermission.AdminRead),
+            RoutePermission.Requiring(MailFathomPermission.AdminRead),
             AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead),
             refusals);
 
         // Act
-        await AdminRouteAuthorization.RefuseUnpermittedAsync(context, _ => ValueTask.FromResult<object?>("served"));
+        await RouteAuthorization.RefuseUnpermittedAsync(context, Served, Surface);
 
         // Assert
         refusals.DidNotReceiveWithAnyArgs().RecordRefusal(default, default!, default, default);
     }
 
+    /// <summary>The handler behind the filter, which answers whenever the filter lets a request reach it.</summary>
+    private static ValueTask<object?> Served(EndpointFilterInvocationContext context) =>
+        ValueTask.FromResult<object?>("served");
+
+    /// <summary>A handler that reports having been reached, which is how a refusal is told from a served request.</summary>
+    private static EndpointFilterDelegate Reaching(Action onReached) =>
+        _ =>
+        {
+            onReached();
+
+            return ValueTask.FromResult<object?>("served");
+        };
+
+    /// <summary>A handler standing in for a use case that refuses over a permission of its own.</summary>
+    private static EndpointFilterDelegate Refusing(AccessAuthorization authorization, MailFathomPermission required) =>
+        _ =>
+        {
+            authorization.RequirePermission(required);
+
+            return ValueTask.FromResult<object?>("served");
+        };
+
     /// <summary>Builds one request against a route carrying the decision named, or carrying none at all.</summary>
     private static EndpointFilterInvocationContext ContextFor(
-        AdminRoutePermission? publishedPermission,
+        RoutePermission? publishedPermission,
         AccessAuthorization authorization,
         IAuthorizationRefusalTelemetry? refusals = null) =>
         ContextFor(

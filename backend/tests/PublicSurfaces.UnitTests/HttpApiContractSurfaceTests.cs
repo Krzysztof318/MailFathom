@@ -84,6 +84,10 @@ public sealed class HttpApiContractSurfaceTests
         // Assert
         Assert.Contains($"{AdminEndpointOptions.RoutePrefix}{AdminApiEndpoints.SessionRoute}", paths, StringComparer.Ordinal);
         Assert.Contains($"{ClientEndpointOptions.RoutePrefix}{ClientApiEndpoints.SessionRoute}", paths, StringComparer.Ordinal);
+        Assert.Contains(
+            $"{ClientEndpointOptions.RoutePrefix}{ClientMailAccountsEndpoint.MailAccountsRoute}",
+            paths,
+            StringComparer.Ordinal);
 
         Assert.DoesNotContain(McpEndpointRoute.Path, paths, StringComparer.Ordinal);
         Assert.DoesNotContain(ApiDocumentation.DocumentRoute, paths, StringComparer.Ordinal);

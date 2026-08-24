@@ -21,7 +21,7 @@ two disjoint halves, and the prefix after `mailfathom.` says which half a name b
 
 | Permission | Half | What it covers |
 | --- | --- | --- |
-| `mailfathom.mail.read` | mail | The tools that read the local mailbox copy: `list_accounts`, `list_emails`, `get_email_content`, `search_emails`. Where semantic retrieval is configured, searching places the caller's own query text with the embedding provider, so this is not an egress-free grant |
+| `mailfathom.mail.read` | mail | The tools that read the local mailbox copy: `list_accounts`, `list_emails`, `get_email_content`, `search_emails`. On the client endpoint it also reaches [`GET /api/client/accounts`](client-endpoint.md#the-accounts-route), which names the signed-in owner's own accounts and how current each one is. Where semantic retrieval is configured, searching places the caller's own query text with the embedding provider, so this is not an egress-free grant |
 | `mailfathom.mail.ask` | mail | `ask_mail`, which answers from mail content by sending it to a model provider. It does not imply `mailfathom.mail.read`, and granting it is granting access to mail |
 | `mailfathom.mail.flags.write` | mail | `set_mail_flags`, which marks mail read or unread, stars or unstars it, and writes its keywords. It is the one MCP grant whose effect reaches the owner's mail server, and it does not follow from reading mail: a deployment that lets an agent read has not thereby let it change anything |
 | `mailfathom.mail.drafts.write` | mail | `save_draft`, `update_draft`, and `delete_draft`, which write a message into the owner's own drafts folder, replace it, and take it back out. It is the safe half of authoring mail and is its own name because that half is worth granting on its own: a draft is delivered to nobody, is withdrawn by deleting it, and lands in a folder the owner already reads, so an agent holding this and nothing else can prepare mail whose worst failure is a message in Drafts. It does not imply `mailfathom.mail.send` and is not implied by it — `send_draft` is admitted under the sending grant, so a caller holding this name alone cannot make a draft leave. Its effect does reach the owner's own mail server, which is `mailfathom.mail.flags.write`'s reach rather than a send's. A draft answering stored mail needs `mailfathom.mail.read` beneath it as well, because an answer is derived from the message it answers |
@@ -294,7 +294,7 @@ grant is what the deployment wrote, never who presented something.
 
 ## What a refused caller is told
 
-The two surfaces enforce the same grant and answer differently, because their callers are different.
+The three surfaces enforce the same grants and answer differently, because their callers are different.
 
 **The MCP endpoint says nothing.** A caller is offered no tool its grant does not permit — `tools/list` omits the rest,
 composed per request and never cached — and a call naming one of the omitted tools is answered as a call naming a
@@ -312,7 +312,14 @@ nothing tells a caller which of the two reasons applied —
 carries both shapes. The caller there is an operator at their own terminal rather than an agent, and a route publishing
 no decision is refused to everyone, which makes an omission a visible failure rather than an open route.
 
-**Both surfaces record every refusal, and neither answer is the record.** A refusal is counted by
+**The client endpoint answers the same way, and for a reason of its own.** Its caller is a page holding this person's
+own credential, and [`GET /api/client/session`](client-endpoint.md#the-session-route) already answers that same caller
+with the whole of its grant — so naming what is missing from that list discloses nothing the caller could not already
+read about itself, while withholding it would leave somebody unable to tell a credential that needs re-issuing from a
+deployment that is broken. A route publishing no decision is refused to everyone here too, which is the property that
+matters most on the surface that returns mail.
+
+**Every surface records its refusals, and no answer is the record.** A refusal is counted by
 `mailfathom.authorization.refusals` — by surface, by the tool or route refused, and by the permission that would have
 sufficed — with a warning beside it naming the credential the work was admitted as. On the MCP surface that record is
 the only place the boundary is visible at all, so a client that stopped working is diagnosed from it rather than from
