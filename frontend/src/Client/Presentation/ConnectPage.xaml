@@ -1,0 +1,79 @@
+<!--
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+-->
+<Page x:Class="MailFathom.Client.Presentation.ConnectPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:local="using:MailFathom.Client.Presentation"
+      xmlns:utu="using:Uno.Toolkit.UI"
+      NavigationCacheMode="Required"
+      Background="{ThemeResource BackgroundBrush}">
+  <ScrollViewer IsTabStop="True">
+    <!-- SafeArea keeps the content clear of a notch, a rounded corner, and a system bar. SoftInput is what this screen
+         adds over the others: it is the one screen whose whole purpose is typing, so the keyboard must not come up over
+         the box being typed into. -->
+    <Grid utu:SafeArea.Insets="VisibleBounds,SoftInput">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition />
+      </Grid.RowDefinitions>
+
+      <utu:NavigationBar x:Uid="ConnectPage.NavigationBar.Title" />
+
+      <!-- One column, capped rather than fixed, so the block reads the same in a phone-width window and stops growing
+           into a line nobody can follow on a wide desktop one. -->
+      <StackPanel Grid.Row="1"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  MaxWidth="420"
+                  Padding="24"
+                  Spacing="20">
+
+        <TextBlock x:Uid="ConnectPage.TextBlock.Lead"
+                   Style="{StaticResource BodyTextBlockStyle}"
+                   TextWrapping="Wrap" />
+
+        <StackPanel Spacing="8">
+          <TextBlock x:Name="AddressLabel"
+                     x:Uid="ConnectPage.TextBlock.Address"
+                     Style="{StaticResource BodyTextBlockStyle}" />
+
+          <!-- Two-way, because what is typed is the state the model reads when the button is pressed rather than
+               something read off the control. The label above names the control to a screen reader as well as to a
+               reader, which is why it is bound rather than repeated. -->
+          <TextBox x:Uid="ConnectPage.TextBox.Address"
+                   Text="{Binding Address, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                   AutomationProperties.LabeledBy="{Binding ElementName=AddressLabel}"
+                   InputScope="Url"
+                   IsSpellCheckEnabled="False"
+                   HorizontalAlignment="Stretch" />
+
+          <TextBlock x:Uid="ConnectPage.TextBlock.AddressHint"
+                     Style="{StaticResource CaptionTextBlockStyle}"
+                     TextWrapping="Wrap" />
+        </StackPanel>
+
+        <!-- The refusal, in the language being read in. It is Error rather than Informational because nothing was kept
+             and nothing was reached: the address is still waiting to be corrected. -->
+        <InfoBar x:Uid="ConnectPage.InfoBar.Refusal"
+                 IsOpen="{Binding IsRefused}"
+                 IsClosable="False"
+                 Message="{Binding Refusal}"
+                 Severity="Error" />
+
+        <Button x:Uid="ConnectPage.Button.Connect"
+                Command="{Binding Connect}"
+                IsEnabled="{Binding CanAsk}"
+                Style="{StaticResource FilledButtonStyle}"
+                HorizontalAlignment="Stretch" />
+
+        <!-- Reaching an address that is not answering takes as long as the configured timeout, so the screen says it is
+             still asking rather than appearing to have ignored the press. -->
+        <ProgressRing IsActive="{Binding IsAsking}"
+                      HorizontalAlignment="Center" />
+      </StackPanel>
+    </Grid>
+  </ScrollViewer>
+</Page>

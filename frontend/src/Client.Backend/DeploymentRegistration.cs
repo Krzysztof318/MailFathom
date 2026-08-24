@@ -12,16 +12,18 @@ namespace MailFathom.Client.Backend;
 /// <summary>Puts everything the client needs to reach one deployment into a service collection.</summary>
 public static class DeploymentRegistration
 {
-    /// <summary>Registers the transports, the sign-in, and the token store for one deployment.</summary>
+    /// <summary>Registers the transports, the sign-in, the credential store, and the address they all follow.</summary>
     /// <param name="services">The collection to add to.</param>
-    /// <param name="options">Which deployment, and as which registered client.</param>
+    /// <param name="options">What the installation states about reaching a deployment, which is not which one.</param>
     /// <returns>The same collection, so registration composes.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
-    /// The address and the timeout are the caller's to state and are stated once, here. Nothing in this assembly has a
-    /// default address and nothing composes one from a literal, so a deployment that moves is a change to whatever the
-    /// host reads its options from rather than to any code below.
+    /// No address is stated here, and none is composed from a literal. Which deployment this client reaches is
+    /// <see cref="DeploymentAddress" />'s, decided by whoever is using the application and changeable while it runs, so
+    /// the transport's base address is read from it as each transport is created rather than fixed when the host is
+    /// composed. A client registered before anybody has chosen is registered pointed at nothing, which is the accurate
+    /// state of a first run.
     /// </para>
     /// <para>
     /// The redirect listener is registered <em>if nothing already has</em>, with the loopback implementation the desktop
@@ -38,16 +40,23 @@ public static class DeploymentRegistration
 
         services.AddSingleton(options);
         services.AddSingleton<AccessTokenStore>();
+        services.AddSingleton<DeploymentAddress>();
         services.AddTransient<AccessTokenHandler>();
         services.TryAddSingleton<ISignInRedirectListenerFactory, LoopbackSignInRedirectListenerFactory>();
         services.AddSingleton<DeploymentSignIn>();
+        services.AddSingleton<DeploymentClient>();
+        services.AddSingleton<DeploymentProbe>();
 
         services
-            .AddHttpClient<DeploymentClient>(
+            .AddHttpClient(
                 DeploymentHttpClients.Deployment,
-                transport =>
+                (provider, transport) =>
                 {
-                    transport.BaseAddress = options.Address;
+                    // Read here rather than captured above, because this delegate runs once per transport created and
+                    // the address a person is pointed at can have moved since the host was built. A transport created
+                    // before anybody chose carries no base address at all, and a relative route resolved against it
+                    // fails loudly rather than reaching somewhere nobody named.
+                    transport.BaseAddress = provider.GetRequiredService<DeploymentAddress>().Current;
                     transport.Timeout = options.Timeout;
                     transport.MaxResponseContentBufferSize = DeploymentExchange.MaxDocumentBytes;
                 })
@@ -58,6 +67,18 @@ public static class DeploymentRegistration
         // somebody's identity provider, and the proof key is what authenticates this client there.
         services.AddHttpClient(
             DeploymentHttpClients.AuthorizationServer,
+            transport =>
+            {
+                transport.Timeout = options.Timeout;
+                transport.MaxResponseContentBufferSize = DeploymentExchange.MaxDocumentBytes;
+            });
+
+        // Neither a base address nor a token handler, and the second of those is the point: this transport is aimed at
+        // an address somebody has just typed, which is a machine nobody has vouched for yet. Attaching the session's
+        // credential to a request whose whole purpose is to find out what answers would hand that credential over to
+        // whatever did.
+        services.AddHttpClient(
+            DeploymentHttpClients.DeploymentProbe,
             transport =>
             {
                 transport.Timeout = options.Timeout;

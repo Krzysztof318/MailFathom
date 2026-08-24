@@ -67,7 +67,7 @@ internal sealed class BuildStatedDeploymentAddress : IDeploymentAddressSource
     /// permits clear text to loopback, which is what a local orchestration hands over, and refuses it to anything
     /// else.
     /// </remarks>
-    public Uri Resolve(DeploymentSettings settings)
+    public Uri? Resolve(DeploymentSettings settings)
     {
         var built = this.stated?.Trim();
 

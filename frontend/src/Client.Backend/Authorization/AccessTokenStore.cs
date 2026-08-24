@@ -43,4 +43,13 @@ public sealed class AccessTokenStore
 
         this.current = accessToken;
     }
+
+    /// <summary>Drops whatever is held, which ends the session without asking the deployment anything.</summary>
+    /// <remarks>
+    /// What <see cref="DeploymentAddress" /> calls when the client is pointed at another deployment. A token was issued
+    /// by one authorization server for one deployment's audience, so carrying it to a second would present a credential
+    /// that means nothing there — and the honest reading of a person moving to another deployment is that this session
+    /// is over rather than that it travels.
+    /// </remarks>
+    internal void Forget() => this.current = null;
 }

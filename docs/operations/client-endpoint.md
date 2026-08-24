@@ -120,7 +120,8 @@ issued to.
 setting. The reason is discovery rather than OAuth: the client is configured with an address and finds the
 protected-resource metadata document by appending the prefix it is about to call, which reaches the document's RFC 9728
 location exactly when the resource names the same prefix. It matters more here than on the administrative surface,
-because the reader is a page that cannot be told the address by hand.
+because the reader is given an origin and nothing else — the client refuses an address carrying anything beneath one —
+so every other address it uses is one it derived rather than one anybody could correct.
 
 The document is published at the root, beneath `/.well-known/oauth-protected-resource`, and it follows its surface: it
 answers on the client listener and is `404` on any other. It is served to a caller holding nothing, which is the whole

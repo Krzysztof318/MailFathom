@@ -4,6 +4,8 @@
 
 using System.Globalization;
 using System.Reflection;
+using MailFathom.Client.Backend;
+using MailFathom.Client.Backend.Authorization;
 using MailFathom.Client.Presentation;
 using MailFathom.Client.UnitTests.TestDoubles;
 
@@ -23,6 +25,23 @@ public sealed class MainModelTests
 
         // Assert
         Assert.Equal(ClientBuild.Current, build);
+    }
+
+    /// <summary>Which deployment is being looked at has to be readable without signing in to find out.</summary>
+    [Fact]
+    public async Task Deployment_AClientPointedAtADeployment_NamesIt()
+    {
+        // Arrange
+        var address = new DeploymentAddress(new AccessTokenStore());
+        address.PointAt(new Uri("https://mail.example/"));
+
+        await using var model = ModelOver(address: address);
+
+        // Act
+        var deployment = await model.Deployment;
+
+        // Assert
+        Assert.Equal("https://mail.example/", deployment);
     }
 
     /// <summary>The screen offers what the configuration named and nothing else, in the order it named it.</summary>
@@ -189,12 +208,14 @@ public sealed class MainModelTests
         // Arrange
         var localization = new StubLocalizationService("en", "en", "pl");
         var themes = new StubThemeService();
+        var address = new DeploymentAddress(new AccessTokenStore());
         var localizer = ThemeWords();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new MainModel(null!, themes, localizer));
-        Assert.Throws<ArgumentNullException>(() => new MainModel(localization, null!, localizer));
-        Assert.Throws<ArgumentNullException>(() => new MainModel(localization, themes, null!));
+        Assert.Throws<ArgumentNullException>(() => new MainModel(null!, themes, address, localizer));
+        Assert.Throws<ArgumentNullException>(() => new MainModel(localization, null!, address, localizer));
+        Assert.Throws<ArgumentNullException>(() => new MainModel(localization, themes, null!, localizer));
+        Assert.Throws<ArgumentNullException>(() => new MainModel(localization, themes, address, null!));
     }
 
     /// <summary>
@@ -231,8 +252,13 @@ public sealed class MainModelTests
 
     private static MainModel ModelOver(
         StubLocalizationService? localization = null,
-        StubThemeService? themes = null) =>
-        new(localization ?? new StubLocalizationService("en", "en", "pl"), themes ?? new StubThemeService(), ThemeWords());
+        StubThemeService? themes = null,
+        DeploymentAddress? address = null) =>
+        new(
+            localization ?? new StubLocalizationService("en", "en", "pl"),
+            themes ?? new StubThemeService(),
+            address ?? new DeploymentAddress(new AccessTokenStore()),
+            ThemeWords());
 
     private static StubStringLocalizer ThemeWords() => new(new Dictionary<string, string>(StringComparer.Ordinal)
     {

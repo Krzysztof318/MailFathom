@@ -306,6 +306,12 @@ into the boot document the page fetches, and the client reads it back through `A
 answer for itself. Nothing else states that property, so a bundle built anywhere else carries no such option and a head
 served from a deployment's own container image still resolves the origin it was fetched from.
 
+What the build states is not the last word, and that is deliberate: a deployment address somebody chose on the client's
+own first screen is kept per user and read before it. So an orchestrated head opens on the service beside it without
+anybody typing anything, and a developer who points that head at another deployment keeps pointing at it across
+restarts until they change it back. Clearing that choice is the platform's own settings store rather than anything
+here — a fresh browser profile, or clearing site data for the head's origin.
+
 The origin it is pointed at is the **client surface's own socket**, which this topology publishes beside the MCP
 endpoint's and the probes'. It is on `127.0.0.1`, because the only thing that calls it is a head served on this
 machine, and that is also why it is a socket rather than a share of the MCP endpoint's: a wildcard bind beside a

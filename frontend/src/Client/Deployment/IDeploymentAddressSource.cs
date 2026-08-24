@@ -16,12 +16,23 @@ namespace MailFathom.Client.Deployment;
 /// a head an orchestration started, served from a socket of its own beside the service. <c>App</c> applies it, so a
 /// new head still owes exactly one implementation of this interface.
 /// </para>
+/// <para>
+/// What none of them is, is the last word. A person's own choice is read before any of these and outlives every
+/// restart — <see cref="DeploymentChoice" /> is where the two meet — so a source here answers what this head knows
+/// before anybody has said anything.
+/// </para>
 /// </remarks>
 internal interface IDeploymentAddressSource
 {
     /// <summary>Resolves the deployment's base address for this head.</summary>
     /// <param name="settings">What the installation stated, which a head is free to have no use for.</param>
-    /// <returns>The absolute address every route is resolved against.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the head needs a stated address and the installation states none it can use.</exception>
-    Uri Resolve(DeploymentSettings settings);
+    /// <returns>The absolute address every route is resolved against, or <see langword="null" /> where this head has nothing to say.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when something did state an address and it is not one anything could be reached at.</exception>
+    /// <remarks>
+    /// Nothing to say and something unusable to say are deliberately different answers. A head nobody has configured is
+    /// the ordinary state of a first run, and the client asks a person rather than failing; a head configured with an
+    /// address that cannot be parsed was configured wrongly, and quietly asking as though nothing had been written
+    /// would leave whoever wrote it with no way to find out it was ignored.
+    /// </remarks>
+    Uri? Resolve(DeploymentSettings settings);
 }

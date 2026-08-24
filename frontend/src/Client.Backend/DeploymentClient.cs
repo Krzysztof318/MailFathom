@@ -4,13 +4,14 @@
 
 namespace MailFathom.Client.Backend;
 
-/// <summary>The client's one way of asking a MailFathom deployment something.</summary>
+/// <summary>The client's one way of asking the deployment it is pointed at something.</summary>
 /// <remarks>
 /// <para>
-/// A typed client over a transport the composing host configured with the deployment's address and a timeout, so no
-/// route here is ever an absolute address and nothing in this assembly decides where the deployment is. The bearer
-/// token, when there is one, is attached by the handler in the pipeline rather than by any method below — which is
-/// what keeps a route from being written without one by accident.
+/// A transport is asked for per exchange rather than held, which is what makes the deployment this reaches follow
+/// <see cref="DeploymentAddress" /> instead of whatever it was when the host was composed. No route here is ever an
+/// absolute address and nothing in this assembly decides where the deployment is. The bearer token, when there is one,
+/// is attached by the handler in the pipeline rather than by any method below — which is what keeps a route from being
+/// written without one by accident.
 /// </para>
 /// <para>
 /// It carries exactly one route today, deliberately. <c>/api/client/session</c> reports what the deployment made of the
@@ -19,31 +20,49 @@ namespace MailFathom.Client.Backend;
 /// </remarks>
 public sealed class DeploymentClient
 {
-    private readonly HttpClient transport;
+    private readonly IHttpClientFactory transports;
 
-    /// <summary>Initializes the client over a configured transport.</summary>
-    /// <param name="transport">The transport, whose base address and timeout the host stated.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="transport" /> is <see langword="null" />.</exception>
-    public DeploymentClient(HttpClient transport)
+    /// <summary>Initializes the client over the transports this assembly registered.</summary>
+    /// <param name="transports">Supplies the transport aimed at the deployment, configured as each one is created.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="transports" /> is <see langword="null" />.</exception>
+    public DeploymentClient(IHttpClientFactory transports)
     {
-        ArgumentNullException.ThrowIfNull(transport);
+        ArgumentNullException.ThrowIfNull(transports);
 
-        this.transport = transport;
+        this.transports = transports;
     }
 
     /// <summary>Asks the deployment what it makes of the credential this client is presenting.</summary>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>What the deployment reports about the caller.</returns>
     /// <exception cref="DeploymentFailure">Thrown when the deployment refused, was unreachable, did not answer in time, or answered with something else.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when nothing has pointed this client at a deployment yet.</exception>
     /// <remarks>
     /// A caller holding no token still gets an answer, because the route requires no permission at the other end: it
-    /// reports an anonymous caller with an empty grant. That is what makes it usable as a reachability check before
-    /// anybody has signed in.
+    /// reports an anonymous caller with an empty grant. That is what makes it usable as a reachability check once
+    /// somebody has chosen a deployment; asking an address nobody has chosen yet is <see cref="DeploymentProbe" />.
     /// </remarks>
     public Task<DeploymentSession> ReadSessionAsync(CancellationToken cancellationToken = default) =>
         DeploymentExchange.ReadAsync(
-            this.transport,
+            this.Transport(),
             new HttpRequestMessage(HttpMethod.Get, DeploymentRoutes.SessionPath),
             DeploymentJsonContext.Default.DeploymentSession,
             cancellationToken);
+
+    /// <summary>Takes a transport aimed at wherever the client is pointed right now.</summary>
+    /// <remarks>
+    /// Not disposed, which is the documented shape for a client an <see cref="IHttpClientFactory" /> produced: the
+    /// handler behind it is pooled and outlives the client, so disposing one buys nothing and returning the same
+    /// instance twice is something a factory is allowed to do.
+    /// </remarks>
+    private HttpClient Transport()
+    {
+        var transport = this.transports.CreateClient(DeploymentHttpClients.Deployment);
+
+        return transport.BaseAddress is not null
+            ? transport
+            : throw new InvalidOperationException(
+                "This client has not been pointed at a deployment, so there is nothing to resolve a route against. "
+                + $"Point {nameof(DeploymentAddress)} at one before asking the deployment anything.");
+    }
 }

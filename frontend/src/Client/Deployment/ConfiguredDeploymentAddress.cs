@@ -9,51 +9,38 @@ namespace MailFathom.Client.Deployment;
 /// <para>
 /// The desktop head's answer, and the answer for any head that is installed rather than served. There is deliberately
 /// no fallback: an application that quietly reached <c>localhost</c>, or the address of whoever wrote this file, would
-/// be a mail client pointed somewhere nobody chose — so an installation stating nothing fails while it is starting,
-/// naming the setting and where to write it, rather than opening a window that cannot explain itself.
+/// be a mail client pointed somewhere nobody chose.
 /// </para>
 /// <para>
-/// HTTPS is the default rather than a requirement stated twice. A value written without a scheme is read as HTTPS,
-/// because that is what a deployment reached across a network is served over and because the alternative — reading it
-/// as clear text — would turn an omission into an exposure. Whether a stated clear-text address is acceptable at all is
-/// <c>Client.Backend</c>'s rule and not repeated here: it permits loopback, which is where clear text is a development
-/// posture, and refuses everything else because every request this client sends carries the signed-in token.
+/// An installation stating nothing is not a failure any more. It used to be one, because the address was the whole of
+/// what a head could know and a window it could not explain was worse than a message; now a person can say where their
+/// MailFathom is while the application is running, so an installation that states nothing is simply one nobody has
+/// configured, and the honest answer is <see langword="null" /> — the client asks. What is still a failure is an
+/// installation that stated something unreadable, which is a value somebody wrote and would otherwise never learn was
+/// ignored.
+/// </para>
+/// <para>
+/// The scheme an address written without one is read as, and the reason it is HTTPS, are
+/// <see cref="DeploymentAddressText" />'s and are shared with the screen a person types into.
 /// </para>
 /// </remarks>
 internal sealed class ConfiguredDeploymentAddress : IDeploymentAddressSource
 {
-    /// <summary>What a value with no scheme is read as.</summary>
-    private const string DefaultScheme = "https";
-
     /// <inheritdoc />
-    public Uri Resolve(DeploymentSettings settings)
+    public Uri? Resolve(DeploymentSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        var stated = settings.Address.Trim();
-
-        if (stated.Length == 0)
+        if (settings.Address.Trim().Length == 0)
         {
-            throw new InvalidOperationException(
-                $"This installation states no MailFathom deployment to reach. Write the address of yours as "
-                + $"'{DeploymentSettings.SectionName}:{nameof(DeploymentSettings.Address)}' — for example "
-                + "'https://mail.example.test' — in the appsettings.json this application reads.");
+            return null;
         }
 
-        // Scheme-relative and schemeless are the same case here: the deployment is named by an origin, so anything
-        // before the host that is not a scheme is not something this can repair.
-        var addressed = stated.Contains("://", StringComparison.Ordinal)
-            ? stated
-            : $"{DefaultScheme}://{stated.TrimStart('/')}";
-
-        if (!Uri.TryCreate(addressed, UriKind.Absolute, out var address))
-        {
-            throw new InvalidOperationException(
+        return DeploymentAddressText.TryRead(settings.Address, out var address)
+            ? address
+            : throw new InvalidOperationException(
                 $"'{settings.Address}' is not an address this application can reach a deployment at. Write "
                 + $"'{DeploymentSettings.SectionName}:{nameof(DeploymentSettings.Address)}' as an origin — the scheme, "
                 + "host, and port and nothing else — for example 'https://mail.example.test'.");
-        }
-
-        return address;
     }
 }
