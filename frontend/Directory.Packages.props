@@ -18,6 +18,19 @@
     <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="4.13.1" />
   </ItemGroup>
 
+  <!-- A version for a package nothing here compiles against and no artifact carries. `Uno.WinUI.Runtime.Skia.X11`
+       declares `LibVLCSharp` unconditionally in its own package metadata, so the desktop head resolved it and copied
+       `LibVLCSharp.dll` into every publish; `frontend/src/Client/Client.csproj` now names it directly with every asset
+       excluded, and central package management wants a version on a direct reference whether or not its assets flow.
+
+       The number is the floor `Uno.WinUI.Runtime.Skia.X11` declares at the Uno.Sdk version global.json pins, rather
+       than a choice of this repository, and what matters about it is only that it is not *below* that floor: restore
+       resolves the higher of the two, so moving this line forward changes nothing an artifact sees, while an Uno bump
+       that raises the floor past it fails with NU1605 instead of drifting quietly. -->
+  <ItemGroup>
+    <PackageVersion Include="LibVLCSharp" Version="3.7.0" />
+  </ItemGroup>
+
   <!-- What the client's own service assembly restores. Microsoft.Extensions.Http is the typed-client registration and
        the delegating-handler pipeline; a plain net10.0 library resolves it as an ordinary package rather than from a
        shared framework, which is why it is pinned here and nowhere in the backend's own list. -->

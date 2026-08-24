@@ -834,7 +834,10 @@ Two things a service checkout does not need have to be present first. The **`was
 Emscripten toolchain the browser head is compiled with — `dotnet workload install wasm-tools`, and
 `dotnet workload list` shows what a machine already carries. And the **Uno SDK** named in `msbuild-sdks` in
 `global.json` is what resolves every Uno package the client restores: a version is written there rather than in
-`frontend/Directory.Packages.props`, which pins only the analyzers and the test framework. Moving that one number moves
+`frontend/Directory.Packages.props`, which pins the analyzers, the test framework, the one package `Client.Backend`
+references by hand, and `LibVLCSharp` — the last of those for a package the desktop head excludes rather than uses,
+because central package management wants a version on a direct reference whether or not its assets flow. Moving that
+one number moves
 around sixty packages at once, so regenerate the lock files in the same change and read the diff:
 
 ```bash

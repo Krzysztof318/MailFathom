@@ -292,13 +292,16 @@ The desktop client gates nothing either, for the same reason and one more: it is
 their own machine rather than the one a deployment runs, and the browser head that a deployment *does* serve is inside
 the image instead. Two runtime identifiers are published — Windows on x64 and on arm64 — because those are the ones a
 hosted Windows runner produces self-contained without a second machine; the Linux and macOS desktop heads build from
-the same target framework and are not published yet, and no mobile head exists. Each zip carries the head, the
-project's `LICENSE` and `NOTICE`, and the notices for the one component in its graph whose licence obliges them:
-`LibVLCSharp.dll` is LGPL-2.1-or-later, so the artifact ships the licence text beside a statement that the library is
-used unmodified and separately replaceable, and the release notes name where its corresponding source is. The head is
-published unmerged, untrimmed, and without Native AOT for exactly that reason —
+the same target framework and are not published yet, and no mobile head exists. Each zip carries the head and the
+project's `LICENSE` and `NOTICE`, which are the two files the publish attaches by hand. No component in that head is
+copyleft any more: the one that was — `LibVLCSharp`, LGPL-2.1-or-later, which `Uno.WinUI.Runtime.Skia.X11` declares
+unconditionally and which nothing built here calls — is excluded from the publish by the project file, so
 [ADR 0016](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0016-third-party-licence-obligations-per-artifact.md)
-is the decision and `frontend/src/AGENTS.md` holds the four build properties it forbids.
+places it among the packages a build resolves and no artifact carries, and the licence text and source offer that used
+to travel with each archive are gone with it. The permissive components inside the head still oblige their own
+notices, which the notice bundle discharges for every artifact rather than this publish for one.
+`THIRD_PARTY_LICENSES.md` holds the verdict and the terms each component arrives under, and
+`frontend/src/AGENTS.md` what turning `MediaPlayerElement` on would bring back with it.
 
 The chart is published **after** the image and **against the digest it produced**, because a chart names the image it
 deploys: before pushing, the run renders the packaged chart against that digest and refuses to publish one that would

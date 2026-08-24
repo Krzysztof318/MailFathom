@@ -7513,14 +7513,24 @@ the_editor_workspace_opens_the_client_first() {
 # styles of controls the application never names. Removing it costs payload and reports nothing, so the
 # property is asserted where it belongs: inside a property group conditioned on that one head.
 #
-# The desktop head is neither trimmed nor compiled ahead of time, and that is a licence condition rather
-# than a preference. `LibVLCSharp.dll` is in its graph, is LGPL-2.1-or-later, and has to stay unmodified
-# and separately replaceable — which `PublishTrimmed`, `PublishAot`, `PublishReadyToRun`, and a
-# single-file bundle each take away. THIRD_PARTY_LICENSES.md carries the verdict and ADR 0016 the rule.
-# None of the four is set in either of the client's build files or passed by either build that produces
-# an artifact, and a fifth reader of them is what this refuses: an artifact shipping a rewritten library
-# is a licence breach nothing else here would notice. A change that genuinely wants one of them for the
-# browser head alone is a change to this contract with its reason, not a property added quietly beside it.
+# The desktop head is neither trimmed nor compiled ahead of time, and that used to be a licence
+# condition. `LibVLCSharp.dll` was in every publish of it, is LGPL-2.1-or-later, and had to stay
+# unmodified and separately replaceable — which `PublishTrimmed`, `PublishAot`, `PublishReadyToRun`, and
+# a single-file bundle each take away. It is now excluded from that publish, so none of the four is
+# forbidden any more and all four are still unset: what keeps them unset is a measurement nobody has
+# taken, which is #1226's question, and the assertion below holds the posture rather than the licence.
+# A change that genuinely wants one of them is a change to this contract with its reason, not a property
+# added quietly beside it.
+#
+# What is a licence condition is the exclusion itself, and the one thing that would break it.
+# `Uno.WinUI.Runtime.Skia.X11` declares `LibVLCSharp` unconditionally and nothing in that package calls
+# it, so `Client.csproj` names it directly with every asset excluded. `MediaPlayerElement` in
+# `UnoFeatures` is what would need it back: that feature adds `Uno.WinUI.MediaPlayer.Skia.X11`, whose own
+# assembly calls into the library, and a head built with both publishes the control without it and fails
+# at first playback with `FileNotFoundException: Could not load file or assembly 'LibVLCSharp'`, which no
+# build reports. So the two may not stand together, neither may be absent alone, and the LGPL notices
+# that used to travel with the artifact stay gone while the exclusion stands. Turning the feature on
+# restores all of it in one change; THIRD_PARTY_LICENSES.md carries what else it then owes.
 #
 # And none of it runs in front of a pull request. Both gates and the client's own required job build and
 # test the client solution and publish no head, because an ahead-of-time or trimmed publish is minutes a
@@ -7528,6 +7538,7 @@ the_editor_workspace_opens_the_client_first() {
 the_client_publishes_what_its_licences_allow() {
   local project="$source_repository_root/frontend/src/Client/Client.csproj"
   local failures='' trimming offenders file
+  local excluded='false' plays_media='false' features leftovers
 
   # The property, and the head it is conditioned on. A property group whose condition does not name the
   # browser head would apply it to the desktop one too, which is the case the licence above refuses.
@@ -7541,6 +7552,56 @@ the_client_publishes_what_its_licences_allow() {
     failures+="Client.csproj does not enable UnoXamlResourcesTrimming for net10.0-browserwasm alone (found: ${trimming:-nothing}). "
   fi
 
+  # The exclusion and the one feature that would need the library back, in both directions.
+  if grep -qE '<PackageReference Include="LibVLCSharp"[^>]*ExcludeAssets="all"' "$project"; then
+    excluded='true'
+  fi
+
+  features="$(awk '/<UnoFeatures>/, /<\/UnoFeatures>/' "$project")"
+
+  if grep -qE '(MediaPlayerElement|MediaElement);' <<< "$features"; then
+    plays_media='true'
+  fi
+
+  if [[ "$excluded" == 'true' && "$plays_media" == 'true' ]]; then
+    failures+='Client.csproj excludes LibVLCSharp while UnoFeatures asks for MediaPlayerElement, which needs it: '
+    failures+='the control would publish without the library it calls and fail at first playback. '
+  fi
+
+  if [[ "$excluded" == 'false' && "$plays_media" == 'false' ]]; then
+    failures+='Client.csproj no longer excludes LibVLCSharp and no UnoFeature needs it, so the desktop publish '
+    failures+='carries an LGPL-2.1-or-later assembly nothing calls. '
+  fi
+
+  # The exclusion belongs to the head that resolves the package. Stated for the project, it would enter
+  # the browser head's restore for nothing.
+  if [[ "$excluded" == 'true' ]] &&
+    ! grep -B2 '<PackageReference Include="LibVLCSharp"' "$project" |
+      grep -qF "'\$(TargetFramework)' == 'net10.0-desktop'"; then
+    failures+='the LibVLCSharp exclusion is not scoped to net10.0-desktop. '
+  fi
+
+  # And the obligations that travelled with the assembly go with it: a notice naming a component the head
+  # no longer carries is an inaccuracy in something somebody downloads.
+  if [[ "$excluded" == 'true' ]]; then
+    leftovers="$(find "$source_repository_root/frontend/src/Client" -iname 'LGPL*' -o -iname 'THIRD-PARTY-NOTICES*' || true)"
+
+    if [[ -n "$leftovers" ]]; then
+      failures+="the excluded head still carries LGPL notices: $(tr '\n' ' ' <<< "$leftovers"). "
+    fi
+
+    if grep -qE 'LGPL-2\.1\.txt|THIRD-PARTY-NOTICES\.md' "$project"; then
+      failures+='Client.csproj still attaches an LGPL notice to the desktop publish. '
+    fi
+
+    # The notes the archives are downloaded from, which is where section 6's source offer had to be. Read as the
+    # `printf` lines that compose them rather than as the whole file, so the comment above them stays free to say
+    # what the offer was and why it went.
+    if grep -qE '^[[:space:]]*printf .*LGPL' "$source_repository_root/.github/workflows/release.yml"; then
+      failures+='release.yml still writes the LGPL source offer into the release notes. '
+    fi
+  fi
+
   # The four properties, in the two build files a client project reads and in the two builds that produce
   # an artifact. A comment naming one is not a setting, and every file here argues its own posture at length.
   for file in \
@@ -7552,7 +7613,7 @@ the_client_publishes_what_its_licences_allow() {
       "$source_repository_root/$file" | grep -vE '^[0-9]+:[[:space:]]*#' || true)"
 
     if [[ -n "$offenders" ]]; then
-      failures+="$file sets a publish property the desktop head's licence leaves unset: $(tr '\n' ' ' <<< "$offenders"). "
+      failures+="$file sets a publish property this posture leaves unset: $(tr '\n' ' ' <<< "$offenders"). "
     fi
   done
 
