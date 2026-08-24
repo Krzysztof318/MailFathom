@@ -23,6 +23,9 @@ public sealed class S3ObjectStorageEndpointProbeTests
 {
     private const string ProbeKey = "mailfathom/.mailfathom/readiness-probe";
 
+    /// <summary>The step the retry budget's own backoff is walked on, which is virtual time rather than the clock.</summary>
+    private static readonly TimeSpan FineAdvanceStep = TimeSpan.FromMilliseconds(100);
+
     private static readonly ObjectStorageEndpoint Endpoint = ObjectStorageEndpoint.Create(
         new Uri("https://objects.example.test:9000/"),
         "payloads",
@@ -109,6 +112,47 @@ public sealed class S3ObjectStorageEndpointProbeTests
         // Assert
         await bucket.DidNotReceive().PutObjectAsync(Arg.Any<PutObjectRequest>(), Arg.Any<CancellationToken>());
         await bucket.DidNotReceive().DeleteObjectAsync(Arg.Any<DeleteObjectRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The endpoint's own answer decides whether an attempt is repeated, so an overloaded endpoint gets the whole
+    /// configured budget and a refused credential gets one attempt. This is what the translation inside the attempt
+    /// buys: handed the AWS client's own type, the pipeline would judge both by the transport rules, match neither, and
+    /// give a transient blip a single attempt.
+    /// </summary>
+    [Fact]
+    public async Task VerifyAvailableAsync_AnEndpointThatIsOverloaded_IsAskedAgainForTheWholeConfiguredBudget()
+    {
+        // Arrange
+        var overloadedBucket = BucketAnswering();
+        overloadedBucket.ListObjectsV2Async(Arg.Any<ListObjectsV2Request>(), Arg.Any<CancellationToken>())
+            .Returns<Task<ListObjectsV2Response>>(_ => throw Answered(HttpStatusCode.ServiceUnavailable, "SlowDown"));
+
+        var refusingBucket = BucketAnswering();
+        refusingBucket.ListObjectsV2Async(Arg.Any<ListObjectsV2Request>(), Arg.Any<CancellationToken>())
+            .Returns<Task<ListObjectsV2Response>>(_ => throw Answered(HttpStatusCode.Forbidden, "SignatureDoesNotMatch"));
+
+        using var host = OutboundResilienceTestHost.WithConfiguredSettings(
+            ("ObjectStorageInvocation:MaxAttempts", "3"));
+
+        // Act
+        var overloadedScrape = ProbeOver(overloadedBucket, host)
+            .VerifyAvailableAsync(TestContext.Current.CancellationToken);
+        await Assert.ThrowsAsync<ObjectStorageUnavailableException>(
+            () => host.CompleteOnVirtualTimeAsync(overloadedScrape, FineAdvanceStep));
+
+        var refusedScrape = ProbeOver(refusingBucket, host)
+            .VerifyAvailableAsync(TestContext.Current.CancellationToken);
+        await Assert.ThrowsAsync<ObjectStorageUnavailableException>(
+            () => host.CompleteOnVirtualTimeAsync(refusedScrape, FineAdvanceStep));
+
+        // Assert
+        await overloadedBucket.Received(3).ListObjectsV2Async(
+            Arg.Any<ListObjectsV2Request>(),
+            Arg.Any<CancellationToken>());
+        await refusingBucket.Received(1).ListObjectsV2Async(
+            Arg.Any<ListObjectsV2Request>(),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>A bucket that lists and refuses a write is exactly the state worth finding before the first message needs it.</summary>

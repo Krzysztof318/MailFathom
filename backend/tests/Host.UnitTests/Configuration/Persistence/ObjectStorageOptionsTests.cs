@@ -44,12 +44,19 @@ public sealed class ObjectStorageOptionsTests
         Assert.Contains("ContentStorage:ObjectStorage:Endpoint", error, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void FindConfigurationErrors_AnAddressThatIsNotAbsolute_FailsStartup()
+    /// <summary>
+    /// The message is asserted rather than only the key, because the two address rules report under the same key and a
+    /// value that reaches the wrong one would otherwise satisfy this test. <c>objects.example.test:9000</c> is the trap:
+    /// it parses absolutely, as an opaque URI whose scheme is the host name, so it fails the https rule instead.
+    /// </summary>
+    [Theory]
+    [InlineData("not an address")]
+    [InlineData("objects.example.test/payloads")]
+    public void FindConfigurationErrors_AnAddressThatIsNotAbsolute_FailsStartup(string configuredEndpoint)
     {
         // Arrange
         var options = Usable();
-        options.Endpoint = "objects.example.test:9000";
+        options.Endpoint = configuredEndpoint;
 
         // Act
         var errors = options.FindConfigurationErrors().ToArray();
@@ -58,6 +65,32 @@ public sealed class ObjectStorageOptionsTests
         var error = Assert.Single(errors);
 
         Assert.Contains("ContentStorage:ObjectStorage:Endpoint", error, StringComparison.Ordinal);
+        Assert.Contains("is not an absolute address", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A value that parses absolutely under some scheme other than <c>https</c> is refused by the rule that reads the
+    /// scheme rather than by the one above. Both shapes here are what an operator writes by habit: a host and port with
+    /// no scheme parses as an opaque URI whose scheme is the host name, and a filesystem path parses as a <c>file</c>
+    /// URI on this platform.
+    /// </summary>
+    [Theory]
+    [InlineData("objects.example.test:9000")]
+    [InlineData("/objects/payloads")]
+    public void FindConfigurationErrors_AnAddressThatParsesUnderAnotherScheme_FailsStartupAsPlainHttp(string configuredEndpoint)
+    {
+        // Arrange
+        var options = Usable();
+        options.Endpoint = configuredEndpoint;
+
+        // Act
+        var errors = options.FindConfigurationErrors().ToArray();
+
+        // Assert
+        var error = Assert.Single(errors);
+
+        Assert.Contains("ContentStorage:ObjectStorage:Endpoint", error, StringComparison.Ordinal);
+        Assert.Contains("is not an https address", error, StringComparison.Ordinal);
     }
 
     /// <summary>A request to the endpoint carries a signature and, on a write, the message itself.</summary>

@@ -40,7 +40,7 @@ public sealed class ObjectStorageFailureTests
             code =>
             {
                 Assert.Equal(3, code.Category);
-                Assert.Equal(5, code.Subcategory);
+                Assert.Equal(6, code.Subcategory);
             });
     }
 

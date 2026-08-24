@@ -641,6 +641,61 @@ public sealed class SecretConfigurationStartupValidatorTests
     }
 
     /// <summary>
+    /// The object-storage credential is resolved before every request rather than at startup, so nothing else in a
+    /// running deployment would report a reference that resolves to nothing until the first scrape refused. Startup is
+    /// where an operator finds it, and the failure names the setting rather than what the reference points at.
+    /// </summary>
+    [Fact]
+    public async Task StartingAsync_AnUnresolvableObjectStorageCredential_FailsStartupNamingTheSetting()
+    {
+        // Arrange
+        var contentStorage = new ContentStorageOptions
+        {
+            Backend = ContentStorageBackend.ObjectStorage,
+            ObjectStorage = EndpointReferencing("file:key-id", "file:signing-secret"),
+        };
+
+        var harness = CreateHarness(
+            new MailSynchronizationOptions(),
+            new PersistenceOptions(),
+            contentStorageOptions: contentStorage);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains(
+            exception.Failures,
+            failure => failure.StartsWith("ContentStorage:ObjectStorage:AccessKeyId", StringComparison.Ordinal));
+        Assert.Contains(
+            exception.Failures,
+            failure => failure.StartsWith("ContentStorage:ObjectStorage:SecretAccessKey", StringComparison.Ordinal));
+    }
+
+    /// <summary>A deployment storing content in the database declares no endpoint, and must not be refused for one it does not have.</summary>
+    [Fact]
+    public async Task StartingAsync_TheDatabaseContentBackend_NeverJudgesTheObjectStorageBlock()
+    {
+        // Arrange
+        var contentStorage = new ContentStorageOptions
+        {
+            ObjectStorage = EndpointReferencing("file:key-id", "file:signing-secret"),
+        };
+
+        var harness = CreateHarness(
+            new MailSynchronizationOptions(),
+            new PersistenceOptions(),
+            contentStorageOptions: contentStorage);
+
+        // Act
+        await harness.Validator.StartingAsync(CancellationToken.None);
+
+        // Assert
+        Assert.True(harness.StartupGates.Completed);
+    }
+
+    /// <summary>
     /// The client endpoint carries the same credential list again, and the rule has to hold on the third surface for the
     /// reason it has to hold on the second: nothing else validates that section's secrets, so a rule that lapsed here
     /// would let an operator register a private key on the surface that serves a person their own mail.
@@ -932,6 +987,16 @@ public sealed class SecretConfigurationStartupValidatorTests
 
         return new ValidatorHarness(validator, startupGates, startupLogger, validationLogger);
     }
+
+    /// <summary>An endpoint declaration whose two credential halves reference exactly what the caller states.</summary>
+    /// <remarks>Written here rather than borrowed, because which scheme a reference carries is what each of these tests is arranging: this harness resolves <c>plaintext:</c> and fails everything else.</remarks>
+    private static ObjectStorageOptions EndpointReferencing(string accessKeyIdReference, string secretAccessKeyReference) => new()
+    {
+        Endpoint = "https://objects.example.test:9000/",
+        Bucket = "payloads",
+        AccessKeyId = new ConfiguredSecret { Name = "object-storage-key-id", SecretReference = accessKeyIdReference },
+        SecretAccessKey = new ConfiguredSecret { Name = "object-storage-secret", SecretReference = secretAccessKeyReference },
+    };
 
     private sealed record ValidatorHarness(
         SecretConfigurationStartupValidator Validator,

@@ -137,24 +137,68 @@ internal sealed class S3ObjectStorageEndpointProbe : IObjectStorageEndpointProbe
         {
             await this.operationExecutor.ExecuteAsync(
                 OutboundDependency.ObjectStorageInvocation,
-                request,
+                attemptToken => this.AttemptAsync(request, attemptToken, cancellationToken),
                 cancellationToken);
 
             measurement.Succeeded(payloadByteLength);
         }
         catch (Exception failure)
         {
+            // An attempt has already classified what it met, so its verdict is read rather than derived a second time
+            // from a wrapper the classifier would not recognize.
+            var classification = failure is ObjectStorageUnavailableException alreadyClassified
+                ? alreadyClassified.Failure
+                : ObjectStorageFailureClassifier.Classify(
+                    failure,
+                    cancellationToken,
+                    this.applicationLifetime.ApplicationStopping);
+
+            measurement.Failed(classification);
+
+            if (failure is ObjectStorageUnavailableException
+                || classification == ObjectStorageFailure.CallerCancelled)
+            {
+                throw;
+            }
+
+            throw ObjectStorageUnavailableException.From(classification, failure);
+        }
+    }
+
+    /// <summary>Makes one attempt and classifies whatever ended it, before the pipeline decides whether to repeat it.</summary>
+    /// <remarks>
+    /// The translation belongs inside the attempt rather than around the whole operation, because the retry and the
+    /// circuit breaker judge the exception an attempt threw: handed the AWS client's own type they would fall through to
+    /// the transport rules, which match neither a <c>5xx</c> nor a <c>429</c> the endpoint answered, and the configured
+    /// budget would collapse to a single attempt. Translating here is what makes the classification a caller reads and
+    /// the one the pipeline acts on the same value. <c>MailOAuthAccessTokenSource</c> translates inside its own attempt
+    /// for the same reason.
+    /// <para>
+    /// Cancellation passes through untouched, in all three of its shapes. An attempt cut by the pipeline's own timeout
+    /// is cancelled through <paramref name="attemptToken" />, and the timeout strategy recognizes that only as the
+    /// <see cref="OperationCanceledException" /> it raised; a translation here would leave it looking like a failure the
+    /// endpoint produced.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "Every failure an attempt can meet is classified into what the pipeline acts on; narrowing the catch would leave a class of them judged by the transport rules instead.")]
+    private async Task<TAnswer> AttemptAsync<TAnswer>(
+        Func<CancellationToken, Task<TAnswer>> request,
+        CancellationToken attemptToken,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await request(attemptToken);
+        }
+        catch (Exception failure) when (failure is not OperationCanceledException)
+        {
             var classification = ObjectStorageFailureClassifier.Classify(
                 failure,
                 cancellationToken,
                 this.applicationLifetime.ApplicationStopping);
-
-            measurement.Failed(classification);
-
-            if (classification == ObjectStorageFailure.CallerCancelled)
-            {
-                throw;
-            }
 
             throw ObjectStorageUnavailableException.From(classification, failure);
         }
