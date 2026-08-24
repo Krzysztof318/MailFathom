@@ -1038,6 +1038,10 @@ public sealed class StoredEmailResponseAuthoringTests
         AccessAuthorization? authorization = null)
     {
         var answered = summary ?? SyntheticEmailSummaries.Create();
+
+        // One authorization, for the reason AuthoredSendGovernors.Governing states: the mailboxes the scope is resolved
+        // against, the book the recipients are resolved out of, and the caller the authoring runs for are one scoped
+        // instance in production.
         var callerAuthorization = authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailRead);
 
         return new StoredEmailResponseAuthoring(
@@ -1053,7 +1057,9 @@ public sealed class StoredEmailResponseAuthoringTests
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             senderIdentities ?? SenderIdentitiesFor(answered.AccountId),
-            new NamedRecipientResolver(contacts ?? new InMemoryContactBookStore()),
+            new NamedRecipientResolver(
+                contacts ?? new InMemoryContactBookStore(),
+                ContactBookOwnerships.For(callerAuthorization)),
             bounds ?? Bounds(),
             callerAuthorization);
     }

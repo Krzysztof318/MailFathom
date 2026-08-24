@@ -262,6 +262,11 @@ internal static class SynchronizationTestHost
         services.AddScoped<IContactCollectionSettingsReader>(provider =>
             provider.GetRequiredService<MailSynchronizationOptions>().Readers.ContactCollection);
         services.AddScoped(_ => AccessAuthorizations.ForPrincipal(AuthorizedPrincipal.Process));
+
+        // Whose book the run writes into. The process identity acts for nobody, so the resolution answers with the
+        // owner the deployment serves, exactly as it does on a deployment where every account comes from configuration.
+        services.AddScoped(provider =>
+            ContactBookOwnerships.For(provider.GetRequiredService<AccessAuthorization>()));
         services.AddScoped<ContactBook>();
         services.AddScoped<MailContactCollector>();
 

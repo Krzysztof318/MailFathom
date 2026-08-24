@@ -1056,6 +1056,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IContactDirectory, ContactDirectory>();
         services.AddScoped<ContactBook>();
 
+        // Whose book each act reads and writes, resolved once per unit of work from the principal it was admitted
+        // under. Scoped for that reason: it answers about the work in hand rather than about the process.
+        services.AddScoped<ContactBookOwnership>();
+
         // The two caller-facing use cases over it, which are what the protocol tools reach. They are separate from the
         // book because they carry what a caller-facing act owes and the book does not: the grant the caller has to hold,
         // and the bounds every request is checked against before the store is reached.

@@ -505,8 +505,8 @@ retained personal data for a bound whose whole purpose is to stop a loop within 
 | --- | --- | --- | --- | --- |
 | `MailDelivery:UnvouchedRecipients` | enum | `Admit` | `Admit` or `Refuse` | restart |
 
-`Refuse` narrows an authored send to people this deployment already holds a record of: an address in the contact book,
-or one an account of this installation sends as. An address that is none of those and that the **caller itself named**
+`Refuse` narrows an authored send to people this deployment already holds a record of: an address in the contact book
+of the owner the send is authored for, or one an account of this installation sends as. An address that is none of those and that the **caller itself named**
 refuses the whole message, under `53007`, which names neither the address nor how many were refused.
 
 Only what the caller named is judged. A recipient this deployment derived — whoever a reply answers, whoever a

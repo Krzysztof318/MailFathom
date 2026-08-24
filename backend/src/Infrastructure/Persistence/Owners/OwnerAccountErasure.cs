@@ -30,10 +30,12 @@ namespace MailFathom.Infrastructure.Persistence.Owners;
 /// the one that occurs — has no account row to be found through and stays behind.
 /// </para>
 /// <para>
-/// <b>The contact book is deliberately not reached.</b> <c>contacts</c> and <c>contact_addresses</c> record no mail
-/// account and key onto none, so neither the cascade nor the walk finds them, and what they hold is an assembled
-/// record about third parties rather than mail an account brought in. Erasing it is a decision of its own, with an
-/// erasure of its own, so this seam reports what it took rather than implying it took that as well.
+/// The contact book is reached by the cascade rather than by the walk. <c>contacts</c> and <c>contact_addresses</c>
+/// record no mail account, so nothing here names either, and the cascade reaches them in two hops rather than one:
+/// <c>contacts</c> keys onto the owner row, and <c>contact_addresses</c> keys onto <c>contacts</c> through
+/// <c>(ContactId, OwnerId)</c>, so the addresses go with the person and the person goes with the owner — which is what
+/// an erasure request owes about a book of third parties this owner assembled.
+/// Nothing about it is reported separately, for the same reason nothing else the cascade takes is.
 /// </para>
 /// </remarks>
 internal static class OwnerAccountErasure

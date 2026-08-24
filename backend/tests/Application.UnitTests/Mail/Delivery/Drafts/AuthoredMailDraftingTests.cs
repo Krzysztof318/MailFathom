@@ -217,12 +217,17 @@ public sealed class AuthoredMailDraftingTests
         IAuthoredEmailComposer? composer = null,
         AccessAuthorization? authorization = null)
     {
+        // One authorization, for the reason AuthoredSendGovernors.Governing states: the mailboxes the draft is placed
+        // in, the book the recipients are resolved out of, and the caller the drafting runs for are one scoped instance
+        // in production.
         var callerAuthorization =
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailDraftsWrite);
 
         return new AuthoredMailDrafting(
             OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account)),
-            new NamedRecipientResolver(book ?? new InMemoryContactBookStore()),
+            new NamedRecipientResolver(
+                book ?? new InMemoryContactBookStore(),
+                ContactBookOwnerships.For(callerAuthorization)),
             composer ?? ComposingAuthoredEmails.ThatComposesDrafts(ComposedMime),
             harness.Book,
             callerAuthorization);

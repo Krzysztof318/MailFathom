@@ -39,10 +39,12 @@ namespace MailFathom.Application.Mail.Delivery.Governance;
 /// </para>
 /// </remarks>
 /// <param name="contacts">Reads which of a set of addresses the book already holds.</param>
+/// <param name="ownership">Answers whose book that is, which is the owner the send is being authored for.</param>
 /// <param name="accounts">Says which accounts the caller's owner owns.</param>
 /// <param name="senderIdentities">Says which address each of those accounts sends as.</param>
 public sealed class RecipientVouching(
     IContactDirectory contacts,
+    ContactBookOwnership ownership,
     ICallerMailAccountCatalog accounts,
     IOutgoingSenderIdentityReader senderIdentities)
 {
@@ -78,11 +80,14 @@ public sealed class RecipientVouching(
             return 0;
         }
 
+        // Resolved once, so every group of one send is answered about one book by construction rather than by each
+        // read happening to reach the same principal — and so the resolution is not repeated per chunk.
+        var owner = ownership.Owner;
         var count = 0;
 
         foreach (var group in unvouched.Chunk(Contact.MaximumAddressCount))
         {
-            var held = await contacts.FindHoldersOfAsync(group, cancellationToken);
+            var held = await contacts.FindHoldersOfAsync(owner, group, cancellationToken);
 
             count += group.Count(address => !held.ContainsKey(address));
         }

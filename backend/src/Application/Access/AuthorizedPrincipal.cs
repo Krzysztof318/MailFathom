@@ -19,8 +19,10 @@ namespace MailFathom.Application.Access;
 /// The owner and the permissions are two axes rather than one, and neither implies the other. A permission says what
 /// the work may do and the owner says whose mail it may do it to, so ownership adds no name to the published permission
 /// set and a grant however broad still reaches one owner's mail. A principal acting for nobody is not a principal
-/// acting for everybody: the deployment administrator and this process's own identity carry no owner and are refused by
-/// every use case scoped to one.
+/// acting for everybody: the deployment administrator and this process's own identity carry no owner, and every use
+/// case that reads or writes one owner's mail refuses them. A record that belongs to an owner without being mail — the
+/// contact book is the one — may resolve the absent owner instead of refusing, and where it does it says what it
+/// resolves it to; <see cref="AccessAuthorization.ActingOwner" /> is the only reading that permits it.
 /// </para>
 /// <para>
 /// It is an ordinary class rather than a record, because two principals are never compared. A record's generated
@@ -83,8 +85,10 @@ public sealed class AuthorizedPrincipal
     /// <para>
     /// Absence is a state rather than a gap. This process's own identity acts for no owner because work no caller
     /// requested is not being done on anybody's behalf, and the deployment administrator acts for none because the acts
-    /// it reaches are the deployment's rather than one owner's. Both are refused by a use case scoped to an owner, which
-    /// is what stops "acting for nobody" from being read as "acting for everybody".
+    /// it reaches are the deployment's rather than one owner's. Both are refused by a use case that reads or writes one
+    /// owner's mail, which is what stops "acting for nobody" from being read as "acting for everybody" — and a use case
+    /// over a record that belongs to an owner without being mail resolves the absence rather than reading it as
+    /// everybody, which is a different act and is stated where it happens.
     /// </para>
     /// <para>
     /// Nothing derives it from the permissions and nothing derives the permissions from it. It is stated by whatever

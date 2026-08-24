@@ -1864,6 +1864,10 @@ Six tools reach MailFathom's own contact book: `list_contacts` and `get_contact`
 a writer of it obeys — what identifies a person, when two addresses are the same address, who may amend what, and what
 an erasure removes. Nothing of that is restated here; what this section holds is what the tools publish and refuse.
 
+**A caller reads and writes the book of the owner it was admitted to act for**, and no argument of any of the six names
+another. A person another owner wrote down is answered as somebody this book does not hold, and an address another
+owner's contact holds is free for this one.
+
 The book is why an agent can answer "who is this from" without being handed a list in a prompt, and the reason the write
 half exists rather than only the read half is that a book nobody can add to is one that stays empty. A caller writes as
 **asserted** — somebody writing a person down — so a record this deployment collected from arriving mail is not an

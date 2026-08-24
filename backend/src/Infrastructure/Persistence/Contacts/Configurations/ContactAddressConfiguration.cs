@@ -8,12 +8,13 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace MailFathom.Infrastructure.Persistence.Contacts.Configurations;
 
-/// <summary>Declares the addresses one person uses, one address to one person across the whole book.</summary>
+/// <summary>Declares the addresses one person uses, one address to one person within one owner's book.</summary>
 /// <remarks>
 /// The addresses are rows rather than an array column, which is what makes both rules over them structural. One address
-/// belongs to one person, enforced across the whole table rather than within a contact, because a book that let two
+/// belongs to one person, enforced across one owner's book rather than within a contact, because a book that let two
 /// records claim one mailbox could not answer who a message is from; and erasing a person takes their addresses with
-/// them through the foreign key rather than through a second statement somebody remembers to write.
+/// them through the foreign key rather than through a second statement somebody remembers to write. The key carries
+/// the owner as well as the contact, so the owner a row is filed under is the one its contact is filed under.
 /// </remarks>
 internal sealed class ContactAddressConfiguration : IEntityTypeConfiguration<ContactAddressEntity>
 {
@@ -36,16 +37,21 @@ internal sealed class ContactAddressConfiguration : IEntityTypeConfiguration<Con
         // row is what a competing write loses on, and a token here would only repeat that decision on a row that is
         // never reached on its own.
 
-        // Unique across the book rather than within one contact, and named because a losing writer is recognized by
-        // the constraint its insert violated: two callers claiming one address is a race whose retry resolves into
-        // the answer naming whoever holds it, not a failure to report.
-        entity.HasIndex(address => address.NormalizedAddress)
+        // Unique within one owner's book rather than within one contact or across the table, and named because a
+        // losing writer is recognized by the constraint its insert violated: two callers claiming one address is a
+        // race whose retry resolves into the answer naming whoever holds it, not a failure to report. The owner leads
+        // it, so the lookup from an address to a person reads one book rather than the table, and two owners may each
+        // hold their own contact for one address.
+        entity.HasIndex(address => new { address.OwnerId, address.NormalizedAddress })
             .IsUnique()
             .HasDatabaseName(PersistenceConstraintNames.ContactAddressUniqueIndexName);
 
+        // The owner travels in the key rather than beside it, which is what makes the repeated column derived: a row
+        // can only carry the owner of the contact it hangs on, because no other pair exists to point at.
         entity.HasOne<ContactEntity>()
             .WithMany(contact => contact.Addresses)
-            .HasForeignKey(address => address.ContactId)
+            .HasForeignKey(address => new { address.ContactId, address.OwnerId })
+            .HasPrincipalKey(contact => new { contact.Id, contact.OwnerId })
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

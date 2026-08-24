@@ -117,7 +117,9 @@ internal sealed class DraftedMailDeployment
         var writing = new DraftedMailWriting(
             new AuthoredMailDrafting(
                 new StubMailAccountCatalog(ServedAccount),
-                new NamedRecipientResolver(Substitute.For<IContactDirectory>()),
+                new NamedRecipientResolver(
+                    Substitute.For<IContactDirectory>(),
+                    ContactBookOwnerships.For(authorization)),
                 this.Composer,
                 book,
                 authorization),
@@ -241,7 +243,7 @@ internal sealed class DraftedMailDeployment
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             Substitute.For<IOutgoingSenderIdentityReader>(),
-            new NamedRecipientResolver(Substitute.For<IContactDirectory>()),
+            new NamedRecipientResolver(Substitute.For<IContactDirectory>(), ContactBookOwnerships.For(authorization)),
             Bounds,
             authorization);
     }

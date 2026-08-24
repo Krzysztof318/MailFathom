@@ -3,6 +3,7 @@ using System;
 using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    partial class MailFathomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260824152343_AddContactOwner")]
+    partial class AddContactOwner
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -130,55 +133,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_contacts_owner_display_name_sort_key_id");
 
                     b.ToTable("contacts", (string)null);
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.ContentMoveRunEntity", b =>
-                {
-                    b.Property<string>("Name")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<uint>("ConcurrencyVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
-                    b.Property<long>("CopiedPayloadCount")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTimeOffset?>("EndedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<long>("FailedPayloadCount")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<long>("MovedByteCount")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTimeOffset>("RequestedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("ResumeAfter")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("State")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.HasKey("Name")
-                        .HasName("pk_content_move_runs");
-
-                    b.ToTable("content_move_runs", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_content_move_runs_singleton", "\"Name\" = 'stored-content'");
-                        });
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailChunkEntity", b =>
@@ -308,9 +262,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("StoredEmailId");
 
-                    b.HasIndex("ObjectLocator")
-                        .IsUnique()
-                        .HasDatabaseName("ix_email_message_contents_object_locator")
+                    b.HasIndex("Backend")
+                        .HasDatabaseName("ix_email_message_contents_object_backed")
                         .HasFilter("\"Backend\" = 'ObjectStorage'");
 
                     b.ToTable("email_message_contents", null, t =>
@@ -592,15 +545,11 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("PeriodStartsAt");
 
-                    b.Property<Guid>("OwnerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("OwnerId");
-
                     b.Property<long>("ConsumedInputCharacterCount")
                         .HasColumnType("bigint")
                         .HasColumnName("ConsumedInputCharacterCount");
 
-                    b.HasKey("PeriodStartsAt", "OwnerId");
+                    b.HasKey("PeriodStartsAt");
 
                     b.ToTable("embedding_spend_periods", (string)null);
                 });
@@ -819,9 +768,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("MailDraftId");
 
-                    b.HasIndex("ObjectLocator")
-                        .IsUnique()
-                        .HasDatabaseName("ix_mail_draft_contents_object_locator")
+                    b.HasIndex("Backend")
+                        .HasDatabaseName("ix_mail_draft_contents_object_backed")
                         .HasFilter("\"Backend\" = 'ObjectStorage'");
 
                     b.ToTable("mail_draft_contents", null, t =>
@@ -1520,9 +1468,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("OutgoingEmailId");
 
-                    b.HasIndex("ObjectLocator")
-                        .IsUnique()
-                        .HasDatabaseName("ix_outgoing_email_contents_object_locator")
+                    b.HasIndex("Backend")
+                        .HasDatabaseName("ix_outgoing_email_contents_object_backed")
                         .HasFilter("\"Backend\" = 'ObjectStorage'");
 
                     b.ToTable("outgoing_email_contents", null, t =>
@@ -1758,21 +1705,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("settings_accounts", (string)null);
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OwnerStoredContentEntity", b =>
-                {
-                    b.Property<Guid>("OwnerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("OwnerId");
-
-                    b.Property<long>("StoredContentByteCount")
-                        .HasColumnType("bigint")
-                        .HasColumnName("StoredContentByteCount");
-
-                    b.HasKey("OwnerId");
-
-                    b.ToTable("owner_stored_content", (string)null);
-                });
-
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.RecurringSendDraftEntity", b =>
                 {
                     b.Property<Guid>("RecurringSendId")
@@ -1805,9 +1737,8 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("RecurringSendId");
 
-                    b.HasIndex("ObjectLocator")
-                        .IsUnique()
-                        .HasDatabaseName("ix_recurring_send_drafts_object_locator")
+                    b.HasIndex("Backend")
+                        .HasDatabaseName("ix_recurring_send_drafts_object_backed")
                         .HasFilter("\"Backend\" = 'ObjectStorage'");
 
                     b.ToTable("recurring_send_drafts", null, t =>
@@ -2583,15 +2514,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_outgoing_email_recipients_emails");
 
                     b.Navigation("OutgoingEmail");
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OwnerStoredContentEntity", b =>
-                {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.OwnerAccountEntity", null)
-                        .WithMany()
-                        .HasForeignKey("OwnerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.RecurringSendDraftEntity", b =>

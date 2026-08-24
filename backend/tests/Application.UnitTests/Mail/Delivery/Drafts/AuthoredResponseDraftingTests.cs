@@ -163,7 +163,7 @@ public sealed class AuthoredResponseDraftingTests
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             Substitute.For<IOutgoingSenderIdentityReader>(),
-            new NamedRecipientResolver(new InMemoryContactBookStore()),
+            new NamedRecipientResolver(new InMemoryContactBookStore(), ContactBookOwnerships.For(granted)),
             Bounds(),
             granted);
 

@@ -98,6 +98,39 @@ public sealed class AuthoredSendGovernorTests
         Assert.DoesNotContain("elsewhere.test", refusal.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>The book vouching is read from is the caller's own, which is what one authorization on both halves buys.</summary>
+    /// <remarks>
+    /// <c>AuthoredSendGovernors.Governing</c> composes the vouching's ownership from the same authorization it hands the
+    /// governor, and nothing else asserts that it does. A wiring change there would have the vouching read a book this
+    /// caller does not own — empty, on every arrangement in this class — so every recipient would count as unvouched and
+    /// each refusing-posture test would go on passing for the wrong reason. This is the one test that would not.
+    /// </remarks>
+    [Fact]
+    public async Task RequirePermittedAsync_RecipientTheCallersOwnBookHolds_IsVouchedForUnderTheRefusingPosture()
+    {
+        // Arrange
+        var caller = AccessAuthorizations.ForOwnerGranted(
+            SyntheticMailOwner.Another,
+            MailFathomPermission.MailSend);
+
+        var book = new InMemoryContactBookStore();
+        book.Hold(SyntheticMailOwner.Another, ContactOf("Anna", "anna@example.test"));
+
+        var governor = AuthoredSendGovernors.Governing(
+            settings: new AuthoredSendSettings(UnvouchedRecipientPosture.Refuse),
+            contacts: book,
+            authorization: caller);
+
+        // Act
+        var permit = await governor.RequirePermittedAsync(
+            [NamedByCaller("anna@example.test")],
+            RequestTo("anna@example.test"),
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, permit.UnvouchedRecipientCount);
+    }
+
     /// <summary>An answer is addressed by the message it answers, so the refusing posture still lets a reply be sent.</summary>
     [Fact]
     public async Task RequirePermittedAsync_RecipientDerivedFromTheAnsweredEmail_IsAdmittedUnderTheRefusingPosture()

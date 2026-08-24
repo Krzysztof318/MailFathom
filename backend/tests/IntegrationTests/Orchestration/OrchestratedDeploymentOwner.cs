@@ -7,25 +7,55 @@ using MailFathom.Domain.Access;
 
 namespace MailFathom.IntegrationTests.Orchestration;
 
-/// <summary>Names the owner this suite's deployment serves, which every account it declares belongs to.</summary>
+/// <summary>Names the owner this suite's deployment serves, which every account it declares and every contact it writes belongs to.</summary>
 /// <remarks>
 /// <para>
-/// A composed host resolves this from its owner records while it starts. Nothing here starts one, so the harness states
-/// the answer instead — and the value only has to agree with the caller the harness admits, because what the
-/// caller-scoped catalog decides is whether the caller is acting for the owner the deployment's accounts belong to. That
-/// the persisted rows can be read at all is a claim of its own and belongs to a test about the owner directory rather
-/// than to every test that reads a mailbox.
+/// A composed host resolves this from its owner records while it starts, and so does this harness: the owner is read
+/// out of the database once the orchestration's migrations have run, rather than being an identifier stated here. It
+/// has to be the persisted one because rows now key onto it — a contact's owner is a foreign key onto the owner record
+/// — so a stated identifier would name an owner the database does not hold and every write of one would be refused.
 /// </para>
 /// <para>
-/// It is fixed rather than generated so a failure names the same value on every run, in the same spirit as the synthetic
-/// account identifiers beside it.
+/// The owner is written once from the harness's own start and read from every test's scope afterwards, and both take
+/// the same lock, exactly as the host's own holder does: the write is one assignment but the value is a multi-field
+/// struct, so nothing about a bare field would establish that a thread observing the write observes the whole of it.
 /// </para>
 /// </remarks>
 internal sealed class OrchestratedDeploymentOwner : IDeploymentMailOwnerSource
 {
-    /// <summary>Gets the owner every account this harness declares belongs to.</summary>
-    public static MailOwnerId ServedOwner { get; } = MailOwnerId.Create(new Guid("0198f0aa-0000-7000-8000-00000000000d"));
+    private readonly Lock mutex = new();
+
+    /// <summary>The owner read out of the database, or nothing while the harness has not started.</summary>
+    private MailOwnerId? resolvedOwner;
 
     /// <inheritdoc />
-    public MailOwnerId Owner => ServedOwner;
+    /// <exception cref="InvalidOperationException">Thrown when the harness has not yet read the owner the database holds.</exception>
+    public MailOwnerId Owner
+    {
+        get
+        {
+            lock (this.mutex)
+            {
+                return this.resolvedOwner
+                    ?? throw new InvalidOperationException(
+                        "The owner this harness serves is read before the composed services have established it.");
+            }
+        }
+    }
+
+    /// <summary>States the owner the harness read out of the database, which is the one owner it holds.</summary>
+    /// <param name="owner">The owner every account and every contact of this deployment belongs to.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
+    internal void Resolved(MailOwnerId owner)
+    {
+        if (!owner.IsSpecified)
+        {
+            throw new ArgumentException("The owner a deployment serves is a named one.", nameof(owner));
+        }
+
+        lock (this.mutex)
+        {
+            this.resolvedOwner = owner;
+        }
+    }
 }

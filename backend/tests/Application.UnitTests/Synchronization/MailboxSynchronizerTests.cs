@@ -1999,18 +1999,23 @@ public sealed class MailboxSynchronizerTests
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
         principals.Current.Returns(AuthorizedPrincipal.Process);
 
+        // One authorization, so the ownership resolves through the branch collection actually takes: the process
+        // identity carries no owner, so ActingOwner is null and the deployment's owner answers. A second, synthetic
+        // caller acting for an owner of its own would answer from that instead and leave the fallback unexercised.
+        var collecting = new AccessAuthorization(principals);
         var book = new InMemoryContactBookStore();
 
         return new MailContactCollector(
             new ContactBook(
                 book,
                 book,
+                ContactBookOwnerships.For(collecting),
                 new OptimisticConcurrencyRetryPolicy(
                     persistenceSessionFactory,
                     new PersistenceConcurrencyOptions(),
                     timeProvider),
                 timeProvider,
-                new AccessAuthorization(principals)),
+                collecting),
             StubContactCollectionSettingsReader.CollectingNothing,
             StubAuthoredMailTally.NobodyHasWritten,
             new RecordingContactCollectionTelemetry());
@@ -2052,16 +2057,20 @@ public sealed class MailboxSynchronizerTests
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
         principals.Current.Returns(AuthorizedPrincipal.Process);
 
+        // One authorization, for the reason the sibling factory above states.
+        var collecting = new AccessAuthorization(principals);
+
         return new MailContactCollector(
             new ContactBook(
                 book,
                 book,
+                ContactBookOwnerships.For(collecting),
                 new OptimisticConcurrencyRetryPolicy(
                     persistenceSessionFactory,
                     new PersistenceConcurrencyOptions(),
                     timeProvider),
                 timeProvider,
-                new AccessAuthorization(principals)),
+                collecting),
             new StubContactCollectionSettingsReader(new ContactCollectionSettings
             {
                 IsEnabled = true,

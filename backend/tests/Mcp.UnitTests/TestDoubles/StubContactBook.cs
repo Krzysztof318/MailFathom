@@ -8,6 +8,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 
@@ -27,15 +28,31 @@ internal sealed class StubContactBook
 
     private readonly FakeTimeProvider timeProvider = new(Now);
 
+    /// <summary>The one caller both use cases and the ownership beside them read.</summary>
+    /// <remarks>
+    /// One instance rather than one per site, for the reason <c>AuthoredSendGovernors.Governing</c> states: production
+    /// composes one scoped authorization that the use case and the ownership both read. Two of them here would let the
+    /// ownership answer from a caller the use cases never saw — this one carries no owner, so the resolution falls back
+    /// to the deployment's, and a change that made it read the use case's own principal would land on the same answer
+    /// and leave every tool suite green.
+    /// </remarks>
+    private readonly AccessAuthorization authorization = new(
+        new StubAuthorizedPrincipalSource(StubAuthorizedPrincipalSource.CallerHolding(
+            MailFathomPermission.PublishedFor(ProtectedSurface.Mail))));
+
     /// <summary>Initializes the ports with the answers a write needs before it can reach an outcome.</summary>
     public StubContactBook()
     {
         this.Directory
-            .FindHoldersOfAsync(Arg.Any<IReadOnlyCollection<EmailAddress>>(), Arg.Any<CancellationToken>())
+            .FindHoldersOfAsync(Arg.Any<MailOwnerId>(), Arg.Any<IReadOnlyCollection<EmailAddress>>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<EmailAddress, ContactId>());
 
         this.Store
-            .ReplaceAsync(Arg.Any<IPersistenceSession>(), Arg.Any<Contact>(), Arg.Any<CancellationToken>())
+            .ReplaceAsync(
+                Arg.Any<IPersistenceSession>(),
+                Arg.Any<MailOwnerId>(),
+                Arg.Any<Contact>(),
+                Arg.Any<CancellationToken>())
             .Returns(true);
     }
 
@@ -46,12 +63,19 @@ internal sealed class StubContactBook
     public IContactStore Store { get; } = Substitute.For<IContactStore>();
 
     /// <summary>Gets the use case the read tools call.</summary>
-    public ContactBookReader Reader => new(this.Directory, Authorization());
+    public ContactBookReader Reader =>
+        new(this.Directory, ContactBookOwnerships.For(this.authorization), this.authorization);
 
     /// <summary>Gets the use case the write tools call.</summary>
     public ContactBookWriter Writer => new(
-        new ContactBook(this.Store, this.Directory, this.CommitPolicy(), this.timeProvider, Authorization()),
-        Authorization());
+        new ContactBook(
+            this.Store,
+            this.Directory,
+            ContactBookOwnerships.For(this.authorization),
+            this.CommitPolicy(),
+            this.timeProvider,
+            this.authorization),
+        this.authorization);
 
     /// <summary>Builds a contact the book could be holding.</summary>
     /// <param name="displayName">The name to record.</param>
@@ -83,10 +107,6 @@ internal sealed class StubContactBook
 
         return emailAddress;
     }
-
-    private static AccessAuthorization Authorization() => new(
-        new StubAuthorizedPrincipalSource(StubAuthorizedPrincipalSource.CallerHolding(
-            MailFathomPermission.PublishedFor(ProtectedSurface.Mail))));
 
     private OptimisticConcurrencyRetryPolicy CommitPolicy()
     {

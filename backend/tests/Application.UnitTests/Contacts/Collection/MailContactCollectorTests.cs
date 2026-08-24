@@ -15,6 +15,7 @@ using MailFathom.Domain.Contacts.Collection;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -414,6 +415,7 @@ public sealed class MailContactCollectorTests
             new ContactBook(
                 book,
                 book,
+                ContactBookOwnerships.ForTheServedOwner(),
                 new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), timeProvider),
                 timeProvider,
                 new AccessAuthorization(principals)),

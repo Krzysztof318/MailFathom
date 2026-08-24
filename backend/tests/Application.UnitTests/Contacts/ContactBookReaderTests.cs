@@ -8,6 +8,7 @@ using MailFathom.Application.Contacts.Failures;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
+using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -36,7 +37,7 @@ public sealed class ContactBookReaderTests
             reader.ReadPageAsync(new ContactPageRequest(), TestContext.Current.CancellationToken));
 
         Assert.Equal(MailFathomPermission.MailContactsRead, refusal.RequiredPermission);
-        await directory.DidNotReceiveWithAnyArgs().ReadPageAsync(default!, TestContext.Current.CancellationToken);
+        await directory.DidNotReceiveWithAnyArgs().ReadPageAsync(default, default!, TestContext.Current.CancellationToken);
     }
 
     /// <summary>Work no caller requested holds no permission, so it is refused rather than admitted as a caller with everything.</summary>
@@ -47,6 +48,7 @@ public sealed class ContactBookReaderTests
         var directory = Substitute.For<IContactDirectory>();
         var reader = new ContactBookReader(
             directory,
+            ContactBookOwnerships.ForTheServedOwner(),
             AuthorizationOf(AuthorizedPrincipal.Process));
 
         // Act, Assert
@@ -62,6 +64,7 @@ public sealed class ContactBookReaderTests
         var directory = Substitute.For<IContactDirectory>();
         var reader = new ContactBookReader(
             directory,
+            ContactBookOwnerships.ForTheServedOwner(),
             AuthorizationOf(principal: null));
 
         // Act, Assert
@@ -124,7 +127,7 @@ public sealed class ContactBookReaderTests
                 new ContactPageRequest { PageSize = pageSize },
                 TestContext.Current.CancellationToken));
 
-        await directory.DidNotReceiveWithAnyArgs().ReadPageAsync(default!, TestContext.Current.CancellationToken);
+        await directory.DidNotReceiveWithAnyArgs().ReadPageAsync(default, default!, TestContext.Current.CancellationToken);
     }
 
     /// <summary>An origin nothing declares would narrow the page to a half of the book that does not exist.</summary>
@@ -206,7 +209,7 @@ public sealed class ContactBookReaderTests
                 new ContactPageRequest { Cursor = "not-a-cursor-this-system-issued" },
                 TestContext.Current.CancellationToken));
 
-        await directory.DidNotReceiveWithAnyArgs().ReadPageAsync(default!, TestContext.Current.CancellationToken);
+        await directory.DidNotReceiveWithAnyArgs().ReadPageAsync(default, default!, TestContext.Current.CancellationToken);
     }
 
     /// <summary>A cursor this deployment issued names the boundary the next page reads beyond, and reaches the store unchanged.</summary>
@@ -238,7 +241,7 @@ public sealed class ContactBookReaderTests
         var directory = Substitute.For<IContactDirectory>();
         var address = Address("anna@example.test");
         var contact = ContactOf("Anna Kowalska", "anna@example.test");
-        directory.FindByAddressAsync(address, Arg.Any<CancellationToken>()).Returns(contact);
+        directory.FindByAddressAsync(Arg.Any<MailOwnerId>(), address, Arg.Any<CancellationToken>()).Returns(contact);
 
         var reader = ReaderOver(directory);
 
@@ -266,6 +269,7 @@ public sealed class ContactBookReaderTests
 
         return new ContactBookReader(
             directory,
+            ContactBookOwnerships.ForTheServedOwner(),
             AuthorizationOf(AuthorizedPrincipal.Caller(
                 "a-caller",
                 granted.Length == 0 ? [MailFathomPermission.MailContactsRead] : granted)));
@@ -274,14 +278,14 @@ public sealed class ContactBookReaderTests
     private static IContactDirectory DirectoryAnswering(ContactPage page)
     {
         var directory = Substitute.For<IContactDirectory>();
-        directory.ReadPageAsync(Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>()).Returns(page);
+        directory.ReadPageAsync(Arg.Any<MailOwnerId>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>()).Returns(page);
 
         return directory;
     }
 
     /// <summary>Reads the query the use case composed, which is what every bound above is asserted against.</summary>
     private static ContactQuery QueryReadBy(IContactDirectory directory) =>
-        (ContactQuery)directory.ReceivedCalls().Single(call => call.GetMethodInfo().Name == nameof(IContactDirectory.ReadPageAsync)).GetArguments()[0]!;
+        (ContactQuery)directory.ReceivedCalls().Single(call => call.GetMethodInfo().Name == nameof(IContactDirectory.ReadPageAsync)).GetArguments()[1]!;
 
     private static ContactId AContactId() => ContactId.Create(Guid.CreateVersion7(Now));
 

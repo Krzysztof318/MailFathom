@@ -37,7 +37,8 @@ namespace MailFathom.Application.Mail.Delivery.Addressing;
 /// </para>
 /// </remarks>
 /// <param name="contacts">Reads the book a named contact is resolved against.</param>
-public sealed class NamedRecipientResolver(IContactDirectory contacts)
+/// <param name="ownership">Answers whose book that is, which is the owner the send is being authored for.</param>
+public sealed class NamedRecipientResolver(IContactDirectory contacts, ContactBookOwnership ownership)
 {
     /// <summary>Resolves every recipient one authored message names.</summary>
     /// <param name="recipients">The people the author named, in the order they named them.</param>
@@ -160,11 +161,13 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts)
             .Distinct()
             .ToArray();
 
+        // Resolved once for the same reason the vouching does: every group of one act reads one book by construction.
+        var owner = ownership.Owner;
         var held = new Dictionary<ContactId, Contact>();
 
         foreach (var group in identities.Chunk(ContactQuery.MaximumPageSize))
         {
-            foreach (var (contactId, contact) in await contacts.FindAllAsync(group, cancellationToken))
+            foreach (var (contactId, contact) in await contacts.FindAllAsync(owner, group, cancellationToken))
             {
                 held[contactId] = contact;
             }
@@ -185,11 +188,15 @@ public sealed class NamedRecipientResolver(IContactDirectory contacts)
             .Distinct()
             .ToArray();
 
+        var owner = ownership.Owner;
         var matches = new Dictionary<ContactDisplayName, ContactMatch>();
 
         foreach (var group in contactNames.Chunk(ContactQuery.MaximumPageSize))
         {
-            foreach (var (contactName, match) in await contacts.MatchDisplayNamesAsync(group, cancellationToken))
+            foreach (var (contactName, match) in await contacts.MatchDisplayNamesAsync(
+                owner,
+                group,
+                cancellationToken))
             {
                 matches[contactName] = match;
             }
