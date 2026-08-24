@@ -6,7 +6,7 @@ using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace MailFathom.Infrastructure.Persistence.Owners.Configurations;
+namespace MailFathom.Infrastructure.Persistence.Emails.Configurations;
 
 /// <summary>Declares the maintained figure of what one owner's stored mail content holds.</summary>
 /// <remarks>

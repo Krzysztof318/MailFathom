@@ -45,8 +45,10 @@ public interface IOwnerStoredContentLedger
     /// <returns>The figure that was adopted.</returns>
     /// <remarks>
     /// This is the expensive answer the maintained one exists to avoid, so it is a repair rather than something a run
-    /// reaches for. It is issued as one statement, which is what keeps it from adopting a total that a concurrent
-    /// store had already moved past.
+    /// reaches for. Unlike every movement of the figure, it replaces a total rather than adding to one, so it cannot be
+    /// left to race: it claims the owner's row before it recomputes and holds it until the recomputation is written, so
+    /// a store committing meanwhile is either counted by the recomputation or applied on top of it, never discarded by
+    /// it. That makes it the one operation here which needs a transaction of its own.
     /// </remarks>
     Task<long> RederiveStoredContentBytesAsync(MailOwnerId owner, CancellationToken cancellationToken);
 }

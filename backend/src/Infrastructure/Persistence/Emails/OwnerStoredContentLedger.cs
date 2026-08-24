@@ -20,9 +20,15 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 /// and every value in them is a parameter.
 /// </para>
 /// <para>
-/// Each statement resolves the owner by joining the message to its account rather than taking one from a caller. That
-/// is what keeps whose mail a payload is a fact of the mail graph instead of something a caller could pass wrongly, and
-/// it costs no round trip: the join runs inside the statement that was going to be issued anyway.
+/// Each statement resolves the owner from an account rather than taking one from a caller. That is what keeps whose
+/// mail a payload is a fact of the mail graph instead of something a caller could pass wrongly, and it costs no round
+/// trip: the resolution runs inside the statement that was going to be issued anyway.
+/// </para>
+/// <para>
+/// The recomputation is the one thing here that is not a movement, and it is therefore the one thing that needs more
+/// than a statement. Writing a total is not something PostgreSQL can make safe the way it makes an increment safe, so
+/// the recomputation claims the owner's row before it measures and holds it until it has written — which is why it is
+/// a repair rather than something any run reaches for.
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
@@ -50,16 +56,39 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
     {
         var ownerId = owner.Value;
 
+        // The one operation here that cannot be a single statement. Every movement adds a difference, so PostgreSQL
+        // re-reads the row it is adding to after waiting for whoever held it; this one writes a total instead, and the
+        // sum it writes was taken at its own statement's snapshot. A store that committed between that sum and this
+        // write would have its bytes overwritten rather than counted — which is precisely the undercount the ceiling
+        // above this would then never notice. So the row is claimed first, which creates it when it is absent and locks
+        // it either way, and the sum is taken by a later statement: every movement that had committed is in it, and
+        // every movement that had not waits for this transaction and lands on top of the total it wrote.
+        await using var ownTransaction = dbContext.Database.CurrentTransaction is null
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
+        await dbContext.Database.ExecuteSqlRawAsync(
+            ClaimStatement(dbContext.Model),
+            [ownerId],
+            cancellationToken);
+
         await dbContext.Database.ExecuteSqlRawAsync(
             RederiveStatement(dbContext.Model),
             [ownerId],
             cancellationToken);
 
-        return await dbContext.OwnerStoredContent
+        var storedBytes = await dbContext.OwnerStoredContent
             .AsNoTracking()
             .Where(total => total.OwnerId == ownerId)
             .Select(total => total.StoredContentByteCount)
             .SingleAsync(cancellationToken);
+
+        if (ownTransaction is not null)
+        {
+            await ownTransaction.CommitAsync(cancellationToken);
+        }
+
+        return storedBytes;
     }
 
     /// <summary>Moves one account's owner's figure by a difference the caller already knows.</summary>
@@ -206,27 +235,46 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
             """;
     }
 
+    /// <summary>The statement that gives one owner a row to be recomputed into, and locks it either way.</summary>
+    /// <remarks>
+    /// The conflicting branch writes the value already there, which changes nothing and is not what it is for: what it
+    /// is for is the row lock, which every movement of this figure also takes and which therefore serializes them
+    /// against the recomputation that follows. A total is written back rather than a constant because PostgreSQL
+    /// re-reads the row after waiting for whoever held it, so this cannot lose what that writer had just added.
+    /// </remarks>
+    private static string ClaimStatement(IModel model)
+    {
+        var names = StoredContentTableNames.Of(model);
+
+        return $$"""
+            INSERT INTO {{names.Totals}} ({{names.TotalsOwnerColumn}}, {{names.TotalsCountColumn}})
+            VALUES ({0}, 0)
+            ON CONFLICT ({{names.TotalsOwnerColumn}}) DO UPDATE
+            SET {{names.TotalsCountColumn}} = {{names.Totals}}.{{names.TotalsCountColumn}}
+            """;
+    }
+
     /// <summary>The statement that replaces one owner's figure with what their payloads actually hold.</summary>
     /// <remarks>
-    /// One statement rather than a read and a write, so the total it adopts is the one the same snapshot produced. The
-    /// join walks content to its message and its message to its account, which is where the owner column is: the mail
-    /// graph carries ownership on the account alone, and this is the sum that fact implies.
+    /// Issued only against a row the statement above has already claimed, which is what makes the sum it takes safe to
+    /// write as a total. The join walks content to its message and its message to its account, which is where the owner
+    /// column is: the mail graph carries ownership on the account alone, and this is the sum that fact implies.
     /// </remarks>
     private static string RederiveStatement(IModel model)
     {
         var names = StoredContentTableNames.Of(model);
 
         return $$"""
-            INSERT INTO {{names.Totals}} ({{names.TotalsOwnerColumn}}, {{names.TotalsCountColumn}})
-            SELECT {0}, COALESCE(SUM(content.{{names.ContentLengthColumn}}), 0)
-            FROM {{names.Contents}} AS content
-            JOIN {{names.Emails}} AS email
-                ON email.{{names.EmailIdColumn}} = content.{{names.ContentEmailColumn}}
-            JOIN {{names.Accounts}} AS account
-                ON account.{{names.AccountIdColumn}} = email.{{names.EmailAccountColumn}}
-            WHERE account.{{names.AccountOwnerColumn}} = {0}
-            ON CONFLICT ({{names.TotalsOwnerColumn}}) DO UPDATE
-            SET {{names.TotalsCountColumn}} = EXCLUDED.{{names.TotalsCountColumn}}
+            UPDATE {{names.Totals}}
+            SET {{names.TotalsCountColumn}} = (
+                SELECT COALESCE(SUM(content.{{names.ContentLengthColumn}}), 0)
+                FROM {{names.Contents}} AS content
+                JOIN {{names.Emails}} AS email
+                    ON email.{{names.EmailIdColumn}} = content.{{names.ContentEmailColumn}}
+                JOIN {{names.Accounts}} AS account
+                    ON account.{{names.AccountIdColumn}} = email.{{names.EmailAccountColumn}}
+                WHERE account.{{names.AccountOwnerColumn}} = {0})
+            WHERE {{names.TotalsOwnerColumn}} = {0}
             """;
     }
 
