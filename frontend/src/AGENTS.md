@@ -368,8 +368,19 @@ what keeps that from being a rule somebody has to enforce by reading.
   redirect out of it. **The browser head must not navigate the document away** — that destroys the page along with the
   proof key and the anti-forgery value, leaving browser storage as the only place to put them back, which is exactly
   what this application does not do.
-- **The access token lives in memory for the process's lifetime and nowhere else** — no file, no browser storage, no
-  platform credential store — and it is not readable outside `Client.Backend`: a screen may ask whether somebody is
-  signed in, and the handler in the transport pipeline is the only thing that sees the token. No refresh token is asked
-  for or kept, so the session ends when the issued token does and the person signs in again. A cache that survives a
-  restart is a separate decision with its own privacy reasoning; do not take it as a side effect of a screen.
+- **Where the credential is kept is settled per head**, and
+  [ADR 0018](../../docs/decisions/0018-where-the-client-keeps-its-sign-in-credential.md) is the whole of it. It is never
+  readable outside `Client.Backend` wherever it is: a screen may ask whether somebody is signed in, and the handler in
+  the transport pipeline is the only thing that sees the credential. On the desktop and mobile heads it survives a
+  restart, in the operating system's own store for one user's secret — the Credential Manager or the Data Protection API
+  on Windows, the login keychain on macOS, Secret Service over D-Bus on Linux, and `PasswordVault` on Android and iOS,
+  which Uno backs with the Keystore and the Keychain and marks unsupported on its Skia targets. **The browser head keeps
+  nothing**, because every store a browser offers is scoped to the page's origin rather than to a person, so anything
+  running on the origin would read an owner's password. Where a head has a store and it is absent or refuses, the
+  credential stays in memory for the process and the person is told this machine will ask again — never a file beside
+  the binary, and never `ApplicationData.Current.LocalSettings`, which holds the deployment address and no secret. The
+  stored item is keyed by the deployment address, so one deployment's credential is never presented to another; it is a
+  copy of something the deployment owns, so a credential the deployment refuses is cleared rather than retried; and
+  sign-out clears it along with what is in memory and everything derived from the session. Storing anything the
+  deployment would accept *instead of* the password is refused outright — that is a credential no administrator can
+  withdraw, and a store holding one is easier to use than a stolen password rather than harder.
