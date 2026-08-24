@@ -27,6 +27,51 @@
         ],
         "type": "object"
       },
+      "ClientMailAccountResponse": {
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "lastSynchronizedAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "synchronizationState": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "synchronizationState",
+          "lastSynchronizedAt"
+        ],
+        "type": "object"
+      },
+      "ClientMailAccountsResponse": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailAccountResponse"
+            },
+            "type": "array"
+          },
+          "synchronizationEnabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "synchronizationEnabled",
+          "accounts"
+        ],
+        "type": "object"
+      },
       "ClientSessionResponse": {
         "properties": {
           "permissions": {
@@ -3893,6 +3938,30 @@
         ],
         "tags": [
           "Administrative"
+        ]
+      }
+    },
+    "/api/client/accounts": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientMailAccountsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
         ]
       }
     },

@@ -371,6 +371,22 @@ historical bindings behind an alias grows every time a server recreates the fold
 make an ordinary listing pay for that history; the result itself is bounded by the folders of the accounts in scope, which
 configuration bounds.
 
+### The account-level reading
+
+A reader deciding whether to trust a mailbox at all needs the same fact one size larger, and `MailAccountFreshnessReader`
+is where the per-folder entries are reduced to it: one instant per account and one state. The instant is the newest of
+the account's folders, because it answers "when did this mailbox last take anything in" — the oldest would hold a whole
+account at the beginning of time over one folder that has been empty since it was mapped. The state is
+`MailAccountSynchronizationState`, which says whether this deployment's most recent finished run of the account failed,
+succeeded, or has never happened; that comes from the run ledger rather than from a checkpoint, so it describes the
+running process and resets with it, exactly as
+[the administrative status route's](../operations/admin-endpoint.md) phase and failure count do.
+
+The two facts stay separate because they answer different halves of one question, and the separation is what a reader
+needs: an account failing since yesterday and an account nobody has written to since yesterday carry the same instant.
+The result is one line per account and grows with nothing else — not the folders, not the messages, not the runs. It is
+what [`GET /api/client/accounts`](../operations/client-endpoint.md#the-accounts-route) publishes.
+
 ## Where the pieces live
 
 - `MailFathom.Application.Emails.ListEmails` — the use case, its request, and its result.
@@ -381,8 +397,11 @@ configuration bounds.
   identically.
 - `MailFathom.Application.Emails.Summaries` — the summary a read model publishes and the two reader ports that produce
   it.
-- `MailFathom.Application.Accounts` — the two account catalogs and `MailAccountDirectoryReader`, the one use case that
-  publishes an account set rather than bounding a read with it. `IDeploymentMailAccountCatalog` describes every account
+- `MailFathom.Application.Accounts` — the two account catalogs, `MailAccountDirectoryReader`, the one use case that
+  publishes an account set rather than bounding a read with it, and `MailAccountFreshnessReader`, which reduces that
+  answer to one line per account for a reader that wants the mailbox list rather than the folders. The second is composed
+  over the first rather than written beside it, so whose accounts these are, which folders count, the grant that is
+  required, and the read that is recorded are decided in one place. `IDeploymentMailAccountCatalog` describes every account
   this deployment serves, and `ConfiguredMailAccountCatalog` implements it over the bound mail section, so that answer
   comes from the configuration that defines the accounts. `ICallerMailAccountCatalog` describes the accounts the caller
   in hand *owns*, and it is the one every caller-facing read resolves through: its single member answers both questions

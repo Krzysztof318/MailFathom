@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -61,11 +61,16 @@ for you.
 
 ## What it serves
 
-One route, and deliberately one:
+| Route | Grant it needs |
+| --- | --- |
+| `GET /api/client/session` | none |
+| `GET /api/client/accounts` | `mailfathom.mail.read` |
 
-```http
-GET /api/client/session
-```
+There is no version segment in either path: the major version is `0` and
+[ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
+permits breaking the contract outright, so `/v1` would be scaffolding for a promise this project has not made.
+
+### The session route
 
 It answers with three fields: `service`, which is always `MailFathom`; `version`, the running release; and
 `permissions`, the published names the credential just presented carries, in the order this project publishes them.
@@ -86,12 +91,75 @@ A caller granted nothing reads an empty `permissions` list rather than a refusal
 answer to what such a caller may do, and because a credential retired by narrowing its entry to nothing should be
 distinguishable from one that no longer works.
 
-**The mail-reading routes are a separate change.** A transport surface is where a misordered middleware, a scheme that
-authenticates the wrong caller, or a listener bound where it should not be fails silently and arrives as a working
-deployment answering the wrong way, so the surface is published with nothing on it but proof of life. There is no
-version segment in the path either: the major version is `0` and
-[ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
-permits breaking the contract outright, so `/v1` would be scaffolding for a promise this project has not made.
+It is the one route on this surface published under no permission, for the reason the administrative session route is:
+it reports the credential the caller already presented and the version this deployment already publishes, so putting it
+behind a permission would make that permission a component of every client grant.
+
+### The accounts route
+
+```http
+GET /api/client/accounts
+```
+
+It answers with the mail accounts the signed-in owner owns, and how current the local copy of each one is:
+
+```jsonc
+{
+  "synchronizationEnabled": true,
+  "accounts": [
+    {
+      "id": "work",
+      "displayName": "Work mail",
+      "synchronizationState": "Synchronized",
+      "lastSynchronizedAt": "2026-08-15T10:00:00+00:00"
+    },
+    {
+      "id": "private",
+      "displayName": "Private mail",
+      "synchronizationState": "Failing",
+      "lastSynchronizedAt": "2026-08-14T21:12:00+00:00"
+    }
+  ]
+}
+```
+
+`id` is the identifier the account was declared under and `displayName` is the name it is published under; each is
+unique within the owner rather than across the deployment, and both are MailFathom's own names for the mailbox. The mail
+server, the port, the user name, and every credential are deliberately absent, and so is everything of the mailbox
+itself — no message, no subject, no correspondent, no folder listing.
+
+**`synchronizationState` and `lastSynchronizedAt` answer different halves of one question**, which is why they are two
+fields rather than one:
+
+| `synchronizationState` | What it says |
+| --- | --- |
+| `Synchronized` | Progress has been committed and this deployment's most recent finished run of the account did not fail |
+| `Failing` | This deployment's most recent finished run of the account did not complete, whether or not it has ever synchronized |
+| `NeverSynchronized` | No run has ever durably committed progress for the account |
+
+`lastSynchronizedAt` is when any of the account's folders last durably took something in, and is `null` where none ever
+has. How *old* is too old is the reader's judgement rather than this deployment's, so nothing here calls an account
+stale — an account that has been failing since yesterday and one nobody has written to since yesterday carry the same
+instant and are not the same situation.
+
+The state describes what the running process has observed. A process that has just started reports an account it has not
+run yet by what its stored progress says rather than by how its runs were going before the restart, because the backoff
+that was failing is not one this process is applying.
+
+**`synchronizationEnabled` is the deployment's switch rather than the owner's**, and it is reported beside the accounts
+because no per-account value carries it: a copy that last moved a week ago means one thing where the deployment is still
+trying every few minutes and another where an operator switched synchronization off.
+
+**An owner with no mail account reads an empty `accounts` list**, which is a state to render rather than an error. A
+credential whose grant does not carry `mailfathom.mail.read` is answered `403` instead, naming the permission it lacks,
+so the two are never confused; naming it discloses nothing, since the session route already tells that same caller its
+whole grant. **An account another owner holds is absent exactly as an account this deployment does not serve is
+absent** — nothing in the response, its timing, or its failure modes separates the two.
+
+Nothing here contacts a mail server. The answer is composed from local state, so it is the same whether or not a mailbox
+is reachable at the moment it is asked, and asking cannot set the remote `\Seen` flag. It is bounded by how many
+accounts the owner has and by nothing else — not by their folders, their messages, or how many times synchronization has
+run.
 
 ## Credentials do not cross surfaces
 

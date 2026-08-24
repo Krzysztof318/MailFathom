@@ -9,20 +9,29 @@ using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace MailFathom.Host.Security.Endpoints;
 
-/// <summary>Serves each administrative route only to a caller whose grant carries the permission that route is published under.</summary>
+/// <summary>Serves each HTTP route only to a caller whose grant carries the permission that route is published under.</summary>
 /// <remarks>
 /// <para>
 /// Two halves, and they belong together because one is meaningless without the other.
 /// <see cref="RequirePermission" /> is how a route states its decision, next to the mapping that creates it, and
-/// <see cref="RefuseUnpermittedAsync" /> is the one filter the whole group carries, which reads that decision back per
+/// <see cref="RefusingUnpermitted" /> is the one filter a whole group carries, which reads that decision back per
 /// request. A route mapped into the group without stating anything is refused rather than served, so a route added
 /// later fails closed instead of inheriting whatever the group happened to allow.
 /// </para>
 /// <para>
+/// One mechanism serves both HTTP surfaces, and what it takes from each is which half of the published set that
+/// surface's grants are drawn from. A route bounded by a permission the other half owns is refused for every caller,
+/// exactly as a route that decided nothing is: no grant an operator could write on that surface carries the name, so
+/// the route reaches nobody either way and the remedy is a defect report rather than a wider grant.
+/// </para>
+/// <para>
 /// The refusal names the one permission that would have sufficed, and nothing else: no route inventory, no other
-/// credential, and nothing about how this deployment is configured. That is the opposite of what the MCP surface tells a
-/// refused caller, and ADR 0012 records why — the caller here is <c>mfctl</c> in the operator's own hands, so a refusal
-/// they can act on is worth more than a refusal that discloses nothing.
+/// credential, and nothing about how this deployment is configured. That is the opposite of what the MCP surface tells
+/// a refused caller, and ADR 0012 records why for the administrative one — the caller there is <c>mfctl</c> in the
+/// operator's own hands, so a refusal they can act on is worth more than a refusal that discloses nothing. The client
+/// surface answers the same way for a reason of its own: its caller is a page holding this person's own credential, and
+/// its session route already answers that same caller with the whole of its own grant, so naming what is missing from
+/// that list discloses nothing the caller cannot already read about itself.
 /// </para>
 /// <para>
 /// This refuses cheaply and is not the authority. The use case behind each route asks for the same permission on its
@@ -31,12 +40,13 @@ namespace MailFathom.Host.Security.Endpoints;
 /// caller as a fault in the deployment.
 /// </para>
 /// </remarks>
-internal static class AdminRouteAuthorization
+internal static class RouteAuthorization
 {
     /// <summary>The member of the problem document that carries the permission on its own, beside the sentence.</summary>
     /// <remarks>
-    /// Written for <c>mfctl</c>, which turns a refusal into what an operator has to grant. Reading the name back out of
-    /// the sentence would make the wording a contract, and the sentence is written for a person.
+    /// Written for the caller to act on — <c>mfctl</c> turns it into what an operator has to grant, and a client turns
+    /// it into whether to ask for a new token. Reading the name back out of the sentence would make the wording a
+    /// contract, and the sentence is written for a person.
     /// </remarks>
     internal const string PermissionExtension = "permission";
 
@@ -48,17 +58,17 @@ internal static class AdminRouteAuthorization
     /// <param name="permission">The capability a caller must hold to reach it.</param>
     /// <returns>The route, so a mapping reads as one expression.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="route" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when the permission names nothing published, or belongs to another surface.</exception>
+    /// <exception cref="ArgumentException">Thrown when the permission names nothing published.</exception>
     internal static RouteHandlerBuilder RequirePermission(
         this RouteHandlerBuilder route,
         MailFathomPermission permission)
     {
         ArgumentNullException.ThrowIfNull(route);
 
-        return route.WithMetadata(AdminRoutePermission.Requiring(permission));
+        return route.WithMetadata(RoutePermission.Requiring(permission));
     }
 
-    /// <summary>States that a route requires no permission, which on this surface is the session read and nothing else.</summary>
+    /// <summary>States that a route requires no permission, which on each surface is its session read and nothing else.</summary>
     /// <param name="route">The route being mapped.</param>
     /// <returns>The route, so a mapping reads as one expression.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="route" /> is <see langword="null" />.</exception>
@@ -67,12 +77,25 @@ internal static class AdminRouteAuthorization
     {
         ArgumentNullException.ThrowIfNull(route);
 
-        return route.WithMetadata(AdminRoutePermission.None);
+        return route.WithMetadata(RoutePermission.None);
     }
+
+    /// <summary>Builds the filter a route group carries, bound to the half of the published set that group's grants come from.</summary>
+    /// <param name="surface">The surface the group is served on.</param>
+    /// <returns>The filter, which refuses a request whose caller does not hold what the route it reached is published under.</returns>
+    /// <remarks>
+    /// The surface belongs to the group rather than to a route, so it is stated once where the group is composed. It
+    /// decides two things: which permissions a route on this group may legitimately be published under, and which
+    /// surface a refusal is recorded against.
+    /// </remarks>
+    internal static Func<EndpointFilterInvocationContext, EndpointFilterDelegate, ValueTask<object?>> RefusingUnpermitted(
+        ProtectedSurface surface) =>
+        (context, next) => RefuseUnpermittedAsync(context, next, surface);
 
     /// <summary>Refuses a request whose caller does not hold what the route it reached is published under.</summary>
     /// <param name="context">The request being served.</param>
     /// <param name="next">The rest of the route's pipeline.</param>
+    /// <param name="surface">The surface the route is served on, which bounds the permissions it may be published under.</param>
     /// <returns>What the route answered, or the refusal that stopped it.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="context" /> or <paramref name="next" /> is <see langword="null" />.</exception>
     /// <remarks>
@@ -83,22 +106,25 @@ internal static class AdminRouteAuthorization
     /// and the use case behind it cannot come to disagree about what holding a permission means.
     /// </para>
     /// <para>
-    /// A route is served only where it published exactly one decision. Reading the last of several would make a route
-    /// that decided twice take whichever declaration came last — which may be the one requiring nothing — so a route
-    /// deciding twice is refused for the same reason as one that decided not at all: nobody can say what reaching it
-    /// requires, and that is a defect in this repository rather than something a grant could resolve.
+    /// A route is served only where it published exactly one decision, and where that decision belongs to this surface.
+    /// Reading the last of several would make a route that decided twice take whichever declaration came last — which
+    /// may be the one requiring nothing — so a route deciding twice is refused for the same reason as one that decided
+    /// not at all: nobody can say what reaching it requires. A route publishing the other surface's permission is
+    /// refused beside them, because no credential this surface admits can carry that name.
     /// </para>
     /// </remarks>
     internal static async ValueTask<object?> RefuseUnpermittedAsync(
         EndpointFilterInvocationContext context,
-        EndpointFilterDelegate next)
+        EndpointFilterDelegate next,
+        ProtectedSurface surface)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(next);
 
-        if (context.HttpContext.GetEndpoint()?.Metadata.GetOrderedMetadata<AdminRoutePermission>() is not [{ } published])
+        if (context.HttpContext.GetEndpoint()?.Metadata.GetOrderedMetadata<RoutePermission>() is not [{ } published]
+            || (published.Permission.IsSpecified && published.Permission.Surface != surface))
         {
-            RecordRefusal(context.HttpContext, default);
+            RecordRefusal(context.HttpContext, surface, default);
 
             return Undeclared();
         }
@@ -106,7 +132,7 @@ internal static class AdminRouteAuthorization
         if (published.Permission.IsSpecified
             && !context.HttpContext.RequestServices.GetRequiredService<AccessAuthorization>().Permits(published.Permission))
         {
-            RecordRefusal(context.HttpContext, published.Permission);
+            RecordRefusal(context.HttpContext, surface, published.Permission);
 
             return Refused(published.Permission);
         }
@@ -117,7 +143,7 @@ internal static class AdminRouteAuthorization
         }
         catch (PrincipalNotAuthorizedException refusal)
         {
-            RecordRefusal(context.HttpContext, refusal.RequiredPermission);
+            RecordRefusal(context.HttpContext, surface, refusal.RequiredPermission);
 
             return Refused(refusal.RequiredPermission);
         }
@@ -137,17 +163,20 @@ internal static class AdminRouteAuthorization
     /// is a defect report rather than a wider grant, and a refusal nobody counted is the one nobody finds.
     /// </para>
     /// </remarks>
-    private static void RecordRefusal(HttpContext context, MailFathomPermission requiredPermission) =>
+    private static void RecordRefusal(
+        HttpContext context,
+        ProtectedSurface surface,
+        MailFathomPermission requiredPermission) =>
         context.RequestServices.GetRequiredService<IAuthorizationRefusalTelemetry>().RecordRefusal(
-            ProtectedSurface.Administration,
+            surface,
             OperationOf(context),
             requiredPermission,
             context.RequestServices.GetRequiredService<AccessAuthorization>().PrincipalIdentity);
 
     /// <summary>Names the route that was refused, as this repository wrote it.</summary>
     /// <remarks>
-    /// An endpoint that is not a routed one carries no pattern to name, which no mapped administrative route is; it is
-    /// recorded under a fixed name rather than left out, so the refusal is still counted and still says which
+    /// An endpoint that is not a routed one carries no pattern to name, which no mapped route on either surface is; it
+    /// is recorded under a fixed name rather than left out, so the refusal is still counted and still says which
     /// deployment produced it.
     /// </remarks>
     private static string OperationOf(HttpContext context) =>
@@ -157,7 +186,7 @@ internal static class AdminRouteAuthorization
 
     /// <summary>Writes the refusal a caller reads, which names the permission and nothing beside it.</summary>
     /// <remarks>
-    /// A refusal that named no permission would leave an operator with nothing to grant, so the one case that produces
+    /// A refusal that named no permission would leave a caller with nothing to act on, so the one case that produces
     /// one — a use case refusing over the kind of principal that reached it rather than over a grant — says that instead
     /// of naming something that would not have helped, and carries no <see cref="PermissionExtension" /> member either.
     /// </remarks>
@@ -170,12 +199,13 @@ internal static class AdminRouteAuthorization
             ? new Dictionary<string, object?>(StringComparer.Ordinal) { [PermissionExtension] = required.Name }
             : null);
 
-    /// <summary>Writes the answer a route that published no single decision is refused with.</summary>
+    /// <summary>Writes the answer a route that published no single decision this surface can carry is refused with.</summary>
     /// <remarks>
-    /// It names no permission, because there is none to name: either nobody decided what reaching this route requires or
-    /// two decisions were published and neither is the route's, so no grant an operator could write would make it
-    /// reachable. Refusing rather than serving is what makes such a route one that answers nobody instead of one that
-    /// answers everybody, and it is stated plainly because the remedy is a defect report rather than a wider grant.
+    /// It names no permission, because there is none to name: nobody decided what reaching this route requires, two
+    /// decisions were published and neither is the route's, or the one that was published belongs to the other surface.
+    /// In each case no grant an operator could write would make it reachable. Refusing rather than serving is what makes
+    /// such a route one that answers nobody instead of one that answers everybody, and it is stated plainly because the
+    /// remedy is a defect report rather than a wider grant.
     /// </remarks>
     private static ProblemHttpResult Undeclared() => TypedResults.Problem(
         "This deployment publishes no permission for that operation, so no credential reaches it.",

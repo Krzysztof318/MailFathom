@@ -116,11 +116,12 @@ reads it once while starting and refuses to come up on any other number.
 operator. When accounts, owners, and credentials move into the database together, the owner a request acts for comes
 from what admitted it and nothing above this line changes.
 
-**The client surface reaches the same adapter and asks it for nothing yet.** It is the third surface a request can
-arrive on, its grant is resolved exactly as the two above are — from the entry that admitted the caller, or from the
-whole of the mail half where it configures none — and today the one route it serves reports that grant rather than
-requiring anything of it. So nothing here is a third case: a mail-reading route added there reaches the use cases that
-already ask, under the permission they already name.
+**The client surface reaches the same adapter and is no third case.** It is the third surface a request can arrive on,
+and its grant is resolved exactly as the two above are — from the entry that admitted the caller, or from the whole of
+the mail half where it configures none. Its session route reports that grant rather than requiring anything of it, and
+its mail-reading routes reach the use cases that already ask, under the permissions they already name:
+`GET /api/client/accounts` is published under `mailfathom.mail.read` and calls the same account reader an agent's
+`list_accounts` reaches.
 
 ## What a refusal is, and what each boundary does with it
 
@@ -151,19 +152,22 @@ does not exist: the same error, the same code, and nothing about the caller, the
 refusal never reaches a client in a form it could read;
 [the MCP tools page](../features/mcp-tools.md#what-a-caller-is-offered) states which tool requires which permission.
 
-**The administrative surface answers it by naming the permission and nothing else.** Every route there publishes the one
+**The two HTTP surfaces answer it by naming the permission and nothing else.** Every route on either publishes the one
 permission it requires as endpoint metadata, decided beside the route rather than in a list a new route could be added
 without joining, and a group filter reads that metadata ahead of the handler: a caller the grant does not admit is
 refused `403` in the endpoint's ordinary problem shape, stating the permission that would have sufficed and carrying it
-as a `permission` member so `mfctl` can say what to grant. A route publishing no decision is refused to everyone, which
-is what makes the omission a visible failure rather than an open route. The use case behind the route asks the same
-question again and raises this refusal on its own, and the filter answers that exception in the same shape — so the
-transport is a cheap first reading rather than the authority. `GET /session` is the one route that requires no
-permission, because reporting what the credential is and what it may do is what a caller holding nothing needs in order
-to learn that it holds nothing.
-[The administrative endpoint page](../operations/admin-endpoint.md#what-the-endpoint-serves) carries the whole mapping.
+as a `permission` member so `mfctl` can say what to grant. A route publishing no decision is refused to everyone, and so
+is one published under the other half's permission, which makes either omission a visible failure rather than an open
+route. The use case behind the route asks the same question again and raises this refusal on its own, and the filter
+answers that exception in the same shape — so the transport is a cheap first reading rather than the authority.
+`GET /session` is the one route on each surface that requires no permission, because reporting what the credential is
+and what it may do is what a caller holding nothing needs in order to learn that it holds nothing. Which half a route
+may draw on is the group's decision rather than the route's, so the same filter serves both surfaces and each names its
+own.
+[The administrative endpoint page](../operations/admin-endpoint.md#what-the-endpoint-serves) and
+[the client endpoint page](../operations/client-endpoint.md#what-it-serves) carry the two mappings.
 
-**Both surfaces record every refusal, and neither surface's answer is the record.** A refusal is counted by
+**Every surface records its refusals, and no surface's answer is the record.** A refusal is counted by
 `mailfathom.authorization.refusals` — by surface, by the tool or route that was refused, and by the permission that
 would have sufficed — with a warning beside it naming the credential the work was admitted as, which the boundary reads
 from `AccessAuthorization` rather than from the refusal, since the failure itself is barred from carrying an identity. A
