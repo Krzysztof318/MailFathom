@@ -45,6 +45,15 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
     /// <summary>The mailbox of the second owner the fairness of the claim is judged against.</summary>
     private const string SecondOwnerAccount = "job-store-second-owner";
 
+    /// <summary>The one instant the fairness test queues everything at, so no turn it asserts depends on the clock.</summary>
+    /// <remarks>
+    /// Long past, so every job it writes is claimable the moment it exists. What the instant has to be is the same for
+    /// all of them: the turn an enqueue stamps is one spacing past its owner's latest, floored at this value, so a
+    /// shared floor makes the ladder a function of the order the jobs were queued in rather than of how long the
+    /// database took to answer.
+    /// </remarks>
+    private static readonly DateTimeOffset QueuedAt = DateTimeOffset.UnixEpoch;
+
     /// <summary>A lease long enough that nothing in a test expires underneath it.</summary>
     private static readonly TimeSpan HeldLease = TimeSpan.FromMinutes(10);
 
@@ -548,9 +557,19 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
     /// insert stamped, and a substitute would prove that the code meant to interleave rather than that PostgreSQL does.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The second owner is provisioned here and erased in the finally, because a deployment holding two owner records
     /// cannot attribute a configured mail account — so every folder binding this class arranges is committed before the
     /// second owner exists, and the deployment is left with the one record the classes after this one resolve against.
+    /// </para>
+    /// <para>
+    /// Every job here names the same available instant rather than taking the clock, so the turns the enqueue stamps
+    /// are decided by the order the jobs were queued in and by nothing else. Left to the clock, the second owner's job
+    /// would have to be written within one spacing of the backlog's first — a margin four commits against a shared
+    /// container have to fit inside — and the test would report a fair claim as unfair whenever the machine was busy.
+    /// A fixed instant is also what makes the expected ordering exact: the backlog holds the instant and the three
+    /// turns after it, the second owner holds the instant, and a claim of two can only be the two rows at it.
+    /// </para>
     /// </remarks>
     [Fact]
     public async Task ClaimAsync_ABacklogOfOneOwnerBesideAnotherOwnersDueJob_HandsBackOneOfEachWithinABoundedClaim()
@@ -563,7 +582,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         var backlog = new List<JobId>();
         for (uint uid = 1201; uid < 1205; uid++)
         {
-            backlog.Add(await EnqueueAsync(services, uid, cancellationToken));
+            backlog.Add(await EnqueueAtQueuedInstantAsync(services, uid, cancellationToken));
         }
 
         var secondOwnerId = Guid.CreateVersion7();
@@ -588,13 +607,17 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
                 cancellationToken);
 
             // Assert
-            Assert.Equal(
-                [SecondOwnerAccount, SyntheticMailAccount.AccountId.Value],
-                claimed.Select(job => job.AccountId?.Value).Order());
+            // One of each, asserted as a pair of memberships rather than as an ordered literal: which of the two
+            // account identifiers sorts first is not what this proves, and writing it as a sequence would tie the
+            // test to their spelling.
+            Assert.Equal(2, claimed.Count);
+            Assert.Single(claimed, job => job.AccountId?.Value == SecondOwnerAccount);
 
             // The backlog kept its own order: what fairness changed is whose turn comes between them, not whether an
             // owner's work is handed out in the order it was queued.
-            Assert.Equal(backlog[0], Assert.Single(claimed, job => job.AccountId?.Value == SyntheticMailAccount.AccountId.Value).JobId);
+            Assert.Equal(
+                backlog[0],
+                Assert.Single(claimed, job => job.AccountId?.Value == SyntheticMailAccount.AccountId.Value).JobId);
         }
         finally
         {
@@ -634,14 +657,38 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
     {
         var accountId = MailAccountId.Create(SecondOwnerAccount);
 
-        return JobEnqueueRequest.Create(
+        return JobEnqueueRequest.CreateAvailableAt(
             JobIdempotencyKey.Create($"{SecondOwnerAccount}/1"),
             ClassifyEmailSpamJobPayload.For(EmailOccurrenceId.Create(
                 accountId,
                 new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
                 ImapUidValidity.Create(90_002),
                 ImapUid.Create(1))),
-            accountId);
+            accountId,
+            QueuedAt);
+    }
+
+    /// <summary>Enqueues one job of this class's own at the fixed instant, and answers with its identifier.</summary>
+    /// <remarks>
+    /// The instant is named rather than taken from the clock, so what the enqueue stamps as a turn depends on the
+    /// order the jobs were written in and not on how long the writes took. An instant already past is claimable at
+    /// once, which is what keeps this an arrangement rather than a delay.
+    /// </remarks>
+    private static async Task<JobId> EnqueueAtQueuedInstantAsync(
+        OrchestratedMailFathomServices services,
+        uint uid,
+        CancellationToken cancellationToken)
+    {
+        var request = await RequestAsync(services, uid, cancellationToken);
+        var enqueued = await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IJobStore>().EnqueueAsync(
+                JobEnqueueRequest.CreateAvailableAt(request.Key, request.Payload, request.AccountId, QueuedAt),
+                token),
+            cancellationToken);
+
+        Assert.Equal(JobEnqueueOutcome.Created, enqueued.Outcome);
+
+        return JobIdOf(enqueued);
     }
 
     /// <summary>Enqueues one job about a synthetic occurrence this class owns, and answers with whatever the queue did.</summary>

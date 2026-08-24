@@ -65,9 +65,13 @@ internal sealed class JobEntity
     /// which is what lets somebody else's due job overtake it instead of queueing behind the whole backlog.
     /// </para>
     /// <para>
-    /// Never null, so the ordering never falls back to a second column, and never earlier than <see cref="AvailableAt" />
-    /// so a job scheduled for later does not hold a turn it cannot take. A retry moves it forward with the instant the
-    /// backoff names; a release does not, because the attempt gave the work back rather than failing at it.
+    /// Never null, so the ordering never falls back to a second column. Never earlier than <see cref="AvailableAt" />
+    /// <em>as written</em>: an enqueue floors the turn at the instant the job becomes claimable, and a retry and a
+    /// returned dead letter each carry it forward to the instant they name, so no write ever leaves a job holding a
+    /// turn it could not take. The two do diverge afterwards, and a release is where: it moves the available instant to
+    /// now and leaves the turn where it was, because the attempt gave the work back rather than failing at it, so a
+    /// released job resumes the place it already had instead of going to the end of its owner's queue. Nothing may
+    /// therefore assume <c>TurnAt &gt;= AvailableAt</c> of a row it reads.
     /// </para>
     /// </remarks>
     public DateTimeOffset TurnAt { get; set; }
