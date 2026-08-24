@@ -20,6 +20,11 @@ name: Build the desktop client
 # holds the verdict and frontend/src/AGENTS.md the four build properties this therefore never sets. The notices that
 # travel with the artifact are attached by the project file rather than by a step here, so a contributor's own publish
 # carries them too.
+#
+# That absence is also what keeps this job on a Linux runner. A Native AOT publish runs the native toolchain of the
+# platform it targets and cannot cross-compile, so enabling it would cost a `windows-latest` runner for `win-x64` and
+# leave `win-arm64` with no host at all — GitHub offers no Arm64 Windows runner. The publishes below are IL with a
+# runtime identifier, which crosses freely. docs/operations/client-publishing.md carries the whole posture.
 on:
   workflow_call:
     inputs:
@@ -100,6 +105,16 @@ jobs:
       # designer's and the App MCP's assets when `Optimize` is true, and those four packages may not be distributed.
       # The XML documentation files are dropped for the reason the container image drops them — nothing reads them at
       # run time, and they carry this repository's commentary about its own internal contracts.
+      #
+      # Uno's publishing page asks for one further parameter when a runtime identifier is given —
+      # `-p:TargetFrameworks=net10.0-desktop` — on the grounds that the restore in front of the publish evaluates every
+      # target framework the project declares. It is deliberately absent, because here it breaks the publish rather
+      # than fixing one. A `-p:` value is an MSBuild *global* property and flows into every project reference; `Client`
+      # references `Client.Backend`, which targets plain `net10.0` and is built by the .NET SDK rather than the Uno
+      # one, so it receives the value and fails with `NETSDK1139: The target platform identifier desktop was not
+      # recognized`. The command as written below succeeds for both runtime identifiers, and the heads it produces are
+      # PE32+ images for x86-64 and ARM64 rather than the runner's. Uno's page describes a single-project application,
+      # where there is no reference for the property to reach.
       - name: Publish every Windows head
         id: publish
         env:

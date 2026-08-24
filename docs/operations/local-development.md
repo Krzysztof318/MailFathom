@@ -863,6 +863,11 @@ The desktop head runs on Windows, Linux, and macOS from the one `net10.0-desktop
 machine starts the same application a Windows developer sees. The `net10.0` target in the same project builds no head
 and exists so the unit suite can reference the application.
 
+None of the three commands publishes a head, and neither does either verification gate. What a *published* head is
+trimmed and compiled with is decided per target framework in `frontend/src/Client/Client.csproj`, and
+[publishing the client](client-publishing.md) is the page that holds it — including why the desktop head is neither
+trimmed nor compiled ahead of time, and why Native AOT does not exist for the browser one at all.
+
 The commands above are for a client change worth running by itself. Both verification gates run the same three against
 this solution whenever the change reaches the client stack, decided from the changed paths rather than from whoever
 started the run, so an ordinary `bash scripts/verify-fast.sh` already builds and tests the client after a change under

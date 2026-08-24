@@ -59,6 +59,17 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <!-- XAML resource trimming, on the browser head and on no other. Uno's pass is not a second trimmer: it runs inside
+       the IL trimmer's own invocation, reads this application's XAML to decide which controls are never named, and
+       tells the trimmer that the styles reached through their TargetType need not be kept. So it does something only
+       where the IL trimmer already runs, which here is the browser head — a WebAssembly publish trims by default and
+       the desktop head deliberately does not trim at all, because its graph carries a library whose licence requires
+       it to stay unmodified. What that costs, what the desktop head refuses and why, and what to do when a control is
+       ever resolved at run time rather than named in XAML are all in docs/operations/client-publishing.md. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
+    <UnoXamlResourcesTrimming>true</UnoXamlResourcesTrimming>
+  </PropertyGroup>
+
   <!-- Where the service is, when whoever built this head knows and the head could not find out for itself. A browser
        head reads no process environment, so the orchestration that starts it cannot hand it an address the way it
        hands one to every other resource — but it does start the build, and what the build writes is what the browser
