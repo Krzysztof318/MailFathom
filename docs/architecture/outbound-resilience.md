@@ -19,11 +19,12 @@ them:
 | `DatabaseCommandExecution` | Commands and queries against the local PostgreSQL database — the one class that is a classification rather than a pipeline; see the EF Core entry under the single-layer rule |
 | `AiProviderInvocation` | Chat and embedding provider calls |
 | `MailAuthorizationServerInvocation` | Exchanging a configured OAuth grant for a mailbox access token |
+| `ObjectStorageInvocation` | Requests to the S3-compatible endpoint a deployment stores message payloads in |
 
 A class exists when its failure modes and its rules for safe repetition differ from every other class. Session
 establishment is separate from retrieval because a rejected credential must never be repeated — against a mail server
 that is how an account gets locked. Delivery is separate because a repeated submission is visible in the recipient's
-inbox, which is why its shipped budget is the smallest of the six — and why the class stops at the session: the
+inbox, which is why its shipped budget is the smallest of the seven — and why the class stops at the session: the
 transmission itself is deliberately outside every pipeline, for the reason the single-layer rule gives below.
 
 Token acquisition is separate from session establishment for the same kind of reason read the other way. A token
@@ -33,6 +34,12 @@ is also what keeps the token request a session establishment triggers from nesti
 which the executor refuses outright. Its budget is short on every axis, and its attempt timeout is deliberately well
 inside the establishment timeout enclosing it, so a hung authorization server surfaces as itself rather than as a
 mailbox timeout.
+
+Object storage is separate from `DatabaseCommandExecution` although both are storage, because they are two remote
+parties with two failure sets and two budgets. A bucket is reached over the network under a signed request, so it
+refuses a credential, sheds load with a `429`, and goes away entirely — none of which a local database does — while a
+database command competes for a connection pool this process owns. A shared class would also share a circuit breaker,
+and an endpoint outage would then open the circuit every metadata query is served through.
 
 The enumeration is half the pipeline key. A value that is not declared resolves no pipeline and raises
 `KeyNotFoundException`, so a typo cannot silently run an operation with no resilience at all.
@@ -114,6 +121,15 @@ without depending on Polly. `Infrastructure` implements it per protocol family:
   generation](../features/embedding-generation.md#what-a-failing-call-is-classified-as) and [chat
   generation](../features/chat-generation.md#what-a-failing-call-is-classified-as).
 
+- **Object storage** — the adapter has already classified the endpoint's own answer and this defers to its verdict, for
+  the reason the provider families do. Its own rule reads the endpoint's error code before the status, because S3
+  answers a wrong signature and an object under a policy granting no listing with the same `403`: a code naming the
+  credential is `authentication_failed` whatever the status, and `401` or `403` without one is the same classification.
+  A `408` is a timeout, a `429`, a `5xx`, and an answer that carries no status at all are worth repeating, and every
+  other answer the endpoint composed is terminal. The three cancellation shapes are separated by the tokens rather than
+  by the exception, because .NET gives a caller giving up, a host shutting down, and a budget coming due the same type,
+  and only the last of them is worth attempting again.
+
 A caller's own cancellation is never transient, in any family. Anything unrecognized is terminal, because an
 unrecognized rejection repeated against a mail server is exactly what locks a mailbox account.
 
@@ -137,7 +153,7 @@ is the layer rather than something MailFathom re-implements:
   pipeline. An adapter that wants the pipeline instead removes the handler from its own registration with
   `RemoveAllResilienceHandlers`; it may not have both.
 
-  Three clients do that today. The first is the transport a mailbox token request is sent over.
+  Four clients do that today. The first is the transport a mailbox token request is sent over.
   `MailOAuthAccessTokenSource` already runs the exchange under `MailAuthorizationServerInvocation`, keyed per account,
   so leaving the handler on would put three attempts inside three and send nine token requests to an authorization
   server that is refusing. The removal takes out what was registered before it, so it holds only while the host adds
@@ -176,7 +192,16 @@ is the layer rather than something MailFathom re-implements:
   pass](../features/mail-answering.md#an-optional-second-pass-the-model-decides-what-answers) states what a refused
   judgement costs there, which is filtering and never the lookup.
 
-  A fourth outbound client **replaces** the handler with one of its own, and it is worth naming because it is the one on a
+  The fourth is the transport a request to the object-storage endpoint is sent over. Every call already runs under
+  `ObjectStorageInvocation`, so keeping the handler would put three attempts inside three against an endpoint that is
+  already refusing. There is a third layer to switch off here as well, and for the same reason as the provider clients:
+  the AWS client library retries on its own, so its retry count is set to zero and its throttle retries are off at
+  construction — a layer beneath the pipeline would be invisible to the classification that decides what may be repeated
+  at all, and would repeat a refused signature the pipeline had already ruled terminal.
+  `ObjectStorageTransportTests` composes the service defaults around that registration and is what fails if the order is
+  ever swapped.
+
+  A fifth outbound client **replaces** the handler with one of its own, and it is worth naming because it is the one on a
   path that fails closed. The personal-data analyzer is reached under no `OutboundDependency` pipeline at all — there is no
   dependency class for it and no `IOutboundOperationRunner` in the adapter — so a standard handler is the only layer and
   the single-layer rule is satisfied by there being one. What that buys is exactly what a scanner on a fail-closed path
@@ -198,7 +223,7 @@ is the layer rather than something MailFathom re-implements:
   registration and asserts the outcome both calls exist for: the analyzer client is reached one handler's worth of
   attempts rather than their square, which is what deleting the removal costs. [Sensitive-content
   scanning](../features/sensitive-content-scanning.md#failing-closed) states what each failure refuses.
-- **The spam scanner.** A fifth outbound dependency is reached over no HTTP client at all, so none of the layering above
+- **The spam scanner.** A sixth outbound dependency is reached over no HTTP client at all, so none of the layering above
   applies to it: it speaks a line protocol over a socket the adapter opens per exchange, under no `OutboundDependency`
   pipeline and with no handler in front of it. What bounds it is its own, stated in one place and enforced around the
   whole exchange — a concurrency permit taken before a socket is opened, a timeout covering connect, write, and read
@@ -207,7 +232,7 @@ is the layer rather than something MailFathom re-implements:
   leaves the message with the verdict its headers reached and a second attempt would buy a better record at the cost of
   holding a classification run. [Spam classification](../features/spam-classification.md#the-apache-spamassassin-scanner)
   states what each failure leaves behind.
-- **The DKIM key resolver.** A sixth outbound dependency is a DNS query rather than a request: where a message's server
+- **The DKIM key resolver.** A seventh outbound dependency is a DNS query rather than a request: where a message's server
   wrote no `Authentication-Results` header, extraction asks for the TXT record at `<selector>._domainkey.<domain>` so a
   signature can be verified locally. It is under no `OutboundDependency` pipeline and no HTTP client, and what bounds it
   is stated in two places and covers both things a message can multiply — a per-query timeout, a single retry the DNS

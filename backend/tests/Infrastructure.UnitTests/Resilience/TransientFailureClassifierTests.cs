@@ -10,6 +10,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.OAuth;
+using MailFathom.Infrastructure.ObjectStorage;
 using MailFathom.Infrastructure.Resilience;
 using MailKit;
 using MailKit.Net.Imap;
@@ -32,6 +33,9 @@ public sealed class TransientFailureClassifierTests
     ];
 
     public static TheoryData<OutboundDependency> EveryDependency => [.. Enum.GetValues<OutboundDependency>()];
+
+    public static TheoryData<string> EveryObjectStorageClassification =>
+        [.. ObjectStorageFailure.All.Select(classification => classification.Name)];
 
     public static TheoryData<OutboundDependency> MailboxDependencies =>
     [
@@ -360,5 +364,43 @@ public sealed class TransientFailureClassifierTests
         Assert.False(this.classifier.IsTransientFailure(
             OutboundDependency.MailAuthorizationServerInvocation,
             failure));
+    }
+
+    /// <summary>
+    /// The object-storage adapter classifies the endpoint's own answer before the pipeline sees it, so deferring to that
+    /// verdict is what keeps one opinion about repetition rather than two that can disagree. A refused credential
+    /// repeated against a provider that counts refused signatures is what gets an access key disabled.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryObjectStorageClassification))]
+    public void IsTransientFailure_ClassifiedObjectStorageFailure_FollowsTheAdaptersVerdict(string classificationName)
+    {
+        // Arrange
+        Assert.True(ObjectStorageFailure.TryParse(classificationName, out var classification));
+
+        var failure = ObjectStorageUnavailableException.From(
+            classification,
+            new InvalidOperationException("the endpoint answered"));
+
+        // Act
+        var isTransient = this.classifier.IsTransientFailure(
+            OutboundDependency.ObjectStorageInvocation,
+            failure);
+
+        // Assert
+        Assert.Equal(classification.IsWorthRepeating, isTransient);
+    }
+
+    /// <summary>A failure that reached the pipeline before the adapter could classify it still follows the transport rules every family shares.</summary>
+    [Fact]
+    public void IsTransientFailure_UnclassifiedObjectStorageFailure_FollowsTheTransportRules()
+    {
+        // Act, Assert
+        Assert.True(this.classifier.IsTransientFailure(
+            OutboundDependency.ObjectStorageInvocation,
+            new SocketException((int)SocketError.ConnectionReset)));
+        Assert.False(this.classifier.IsTransientFailure(
+            OutboundDependency.ObjectStorageInvocation,
+            new InvalidOperationException("something else entirely")));
     }
 }

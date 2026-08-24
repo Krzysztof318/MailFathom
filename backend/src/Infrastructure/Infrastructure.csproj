@@ -4,6 +4,13 @@
          OpenTelemetry wiring onto a context this project registers itself, so it adds no dependency on an orchestrator
          being present at run time. -->
     <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <!-- The client the object-storage content backend reaches its S3-compatible endpoint over. Referenced by this
+         project alone, so every Amazon type stays inside the adapter under ObjectStorage/ and no application port, use
+         case, or domain type ever sees one. AWSSDK.Core beside it is the runtime that carries the credential, the
+         endpoint configuration, and the signer; it is named directly for the reason MimeKit is, so the version the code
+         compiles against is decided in Directory.Packages.props rather than inherited from a dependency range. -->
+    <PackageReference Include="AWSSDK.S3" />
+    <PackageReference Include="AWSSDK.Core" />
     <!-- The HTML sanitizer for message bodies. It is referenced by this project alone, so the AngleSharp stack it
          carries stays inside the adapter that owns sanitization and reaches no other boundary. -->
     <PackageReference Include="HtmlSanitizer" />

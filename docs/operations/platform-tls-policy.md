@@ -194,6 +194,7 @@ takes part in:
 - the IMAP connections it was set for, across every configured account rather than the one that needed it;
 - the PostgreSQL connection, whenever it is encrypted;
 - the cipher selection of the MCP endpoint's own HTTPS listeners, when this process terminates TLS;
+- the readiness connections to the S3-compatible endpoint, where a deployment selected the object-storage backend;
 - every further TLS session the process takes part in.
 
 A weakened level accepted for one legacy mail server therefore also accepts a weaker parameter from every other peer
@@ -212,6 +213,18 @@ lowered `MinProtocol` would lower what the probes accept as well — one more re
 security level only, which leaves every protocol floor where it was.
 
 **Certificate validation is untouched.** MailFathom cannot be configured to skip it, here or anywhere else.
+
+**A private authority is supported instead, and one rule serves every outbound peer.** Where a server's certificate was
+signed by an authority the platform's trust store does not carry, the deployment supplies that authority and the chain
+is rebuilt against it: the certificate must chain to it, must carry the server-authentication extended key usage, and
+must still match the name — a private authority is never a licence to accept a certificate issued for another host, and
+nothing downloads an intermediate or checks revocation during the rebuild. Which authority signed a certificate is not a
+question a mail server and an object store answer differently, so both reach the same rule: `MailSynchronization`'s own
+[trust anchor material](../features/imap-synchronization.md#trust-anchor-material) for a mailbox, and
+[`ContentStorage:ObjectStorage:TrustAnchor`](configuration-runtime.md#contentstorage) for the object-storage endpoint.
+The object-storage anchor is loaded once while the host starts rather than per handshake, because the decision is a
+synchronous callback inside a pooled TLS handler; replacing it is a restart, and a reference that cannot be loaded fails
+startup naming the key rather than failing a handshake per request afterwards.
 
 ## What the platform additionally permits, and why not to use it
 

@@ -11,6 +11,7 @@ using MailFathom.Application.Resilience;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.MailKit.Delivery;
 using MailFathom.Infrastructure.Mail.OAuth;
+using MailFathom.Infrastructure.ObjectStorage;
 using MailKit;
 using MailKit.Net.Smtp;
 
@@ -43,7 +44,8 @@ internal sealed class TransientFailureClassifier : ITransientFailureClassifier
             OutboundDependency.EmailDelivery => IsRepeatableDeliveryFailure,
             OutboundDependency.DatabaseCommandExecution => IsTransientDatabaseFailure,
             OutboundDependency.AiProviderInvocation => IsTransientProviderFailure,
-            OutboundDependency.MailAuthorizationServerInvocation => (Func<Exception, bool>)IsTransientAuthorizationServerFailure,
+            OutboundDependency.MailAuthorizationServerInvocation => IsTransientAuthorizationServerFailure,
+            OutboundDependency.ObjectStorageInvocation => (Func<Exception, bool>)IsTransientObjectStorageFailure,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(dependency),
                 dependency,
@@ -137,6 +139,26 @@ internal sealed class TransientFailureClassifier : ITransientFailureClassifier
             && tokenFailure.InnerException is { } acquisitionFailure
             && IsTransientAuthorizationServerFailure(acquisitionFailure),
         HttpRequestException requestFailure => IsTransientHttpStatus(requestFailure.StatusCode),
+        _ => IsTransientTransportFailure(failure),
+    };
+
+    /// <summary>Classifies an object-storage failure, where the adapter has already decided what ended the operation.</summary>
+    /// <remarks>
+    /// This defers to the adapter's own verdict for the reason the provider family does: the AWS client surfaces an
+    /// endpoint's refusal as its own exception type carrying a status and an error code, and re-deriving the question
+    /// here would produce a second opinion for the pipeline to disagree with. It also arrives before the pipeline's own
+    /// classification only inside the adapter's translation, so the classification a caller sees and the one the retry
+    /// acts on are the same value.
+    /// <para>
+    /// A failure that reaches this untranslated is one raised before the adapter classified anything, and it falls to
+    /// the same transport fallback every other family here ends on. So a socket, an I/O failure, or a timeout raised on
+    /// the way to the endpoint is still repeated, and everything else is terminal — a credential reference that could
+    /// not be resolved, for instance, because no repetition resolves a reference an operator has to repair.
+    /// </para>
+    /// </remarks>
+    private static bool IsTransientObjectStorageFailure(Exception failure) => failure switch
+    {
+        ObjectStorageUnavailableException classified => classified.Failure.IsWorthRepeating,
         _ => IsTransientTransportFailure(failure),
     };
 

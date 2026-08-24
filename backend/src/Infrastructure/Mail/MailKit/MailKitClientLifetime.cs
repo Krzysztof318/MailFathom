@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography.X509Certificates;
+using MailFathom.Infrastructure.Certificates;
 using MailKit;
 
 namespace MailFathom.Infrastructure.Mail.MailKit;
@@ -39,7 +40,7 @@ internal static class MailKitClientLifetime
         }
 
         client.ServerCertificateValidationCallback = (_, certificate, chain, sslPolicyErrors) =>
-            MailServerCertificateValidator.IsServerCertificateTrusted(
+            PrivateAuthorityServerCertificateValidator.IsServerCertificateTrusted(
                 trustedCertificateAuthority,
                 certificate,
                 chain,

@@ -346,6 +346,36 @@ internal sealed partial class SecretConfigurationValidator
         return errors;
     }
 
+    /// <summary>Finds everything an operator must fix before the object-storage endpoint's credentials can be used.</summary>
+    /// <param name="candidate">The bound content-storage settings, which are read once while the host is built.</param>
+    /// <param name="cancellationToken">Cancels the resolution.</param>
+    /// <returns>One message per unusable setting, empty when the section's secrets are all usable.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="candidate" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// A deployment storing content in the database configures no endpoint worth proving, and validating one anyway
+    /// would fail a host over a credential nothing was going to read. The structural rules of the section are its own
+    /// and run during options validation; this covers the secrets it carries, on exactly the terms every other section's
+    /// secrets are covered — which includes the trust anchor's reference. Whether that reference resolves to a
+    /// certificate is proven when the transport loads it, because that is the one place the anchor has to be a
+    /// certificate rather than material.
+    /// </remarks>
+    internal async Task<IReadOnlyList<string>> FindContentStorageConfigurationErrorsAsync(
+        ContentStorageOptions candidate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+
+        if (!candidate.IsObjectStorageSelected)
+        {
+            return [];
+        }
+
+        return await this.FindSecretReferenceErrorsAsync(
+            ContentStorageOptions.SectionName,
+            candidate,
+            cancellationToken);
+    }
+
     /// <summary>Reads every configured client public key and reports the material no assertion could be verified against.</summary>
     /// <remarks>
     /// <para>

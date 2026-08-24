@@ -25,6 +25,21 @@
           "OpenTelemetry.Extensions.Hosting": "1.15.3"
         }
       },
+      "AWSSDK.Core": {
+        "type": "Direct",
+        "requested": "[4.0.102, )",
+        "resolved": "4.0.102",
+        "contentHash": "sjkYreyNPlYTnAxdnqd3MBoeTNZHXOzV9lKULS5VAn+6MJIqu87aZLlm56KhDANOBXRxwDJIW668ZlsFhaB6Zw=="
+      },
+      "AWSSDK.S3": {
+        "type": "Direct",
+        "requested": "[4.0.102.3, )",
+        "resolved": "4.0.102.3",
+        "contentHash": "3UBPFahEW62lNqHutA94if/9YguOXswDkz+CMh8fo3qCl7PUdynwSEvE0rhHnRPok0rDkDEDpwddfk7h8Mg0gw==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102, 5.0.0)"
+        }
+      },
       "BouncyCastle.Cryptography": {
         "type": "Direct",
         "requested": "[2.6.2, )",

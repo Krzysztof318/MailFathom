@@ -167,6 +167,20 @@ Both provisioning shapes rotate: `Persistence:Password`, and `Persistence:Connec
 
 A rotated `Persistence:ConnectionString` is also parsed before it is published. Material that resolves but is not a valid connection string, or that no longer carries a password when it is what supplies the credential, is rejected as `ConnectionStringNotParsable` or `ConnectionStringCarriesNoPassword` — otherwise it would replace working settings and then fail every connection opened afterwards.
 
+## Rotating the object-storage access key
+
+Both halves are resolved before every request, so provisioning a new key under the same two references takes effect on
+the next operation with nothing to invalidate and no restart to schedule. Rotate them together: an identifier and a
+secret from different keys authenticate as neither, and the endpoint answers a signature it cannot verify by refusing
+it. Nothing here falls back — a reference that stops resolving refuses the operation rather than letting the S3 client's
+own chain sign as whatever identity the host carries — so provision the replacement before revoking the previous key at
+the endpoint.
+
+**The endpoint's trust anchor is the exception, and it is a restart.** `ContentStorage:ObjectStorage:TrustAnchor` is
+loaded once while the host starts, because the decision is a synchronous callback inside a pooled TLS handler with
+nowhere to await a secret from. Replacing the material behind the reference changes nothing until the process is
+restarted, and a reference that no longer loads fails that restart naming the key.
+
 ## Watching a reload
 
 A rejected candidate is logged at `Error` with the configuration path and a stable failure identity, and the previous configuration stays active:
