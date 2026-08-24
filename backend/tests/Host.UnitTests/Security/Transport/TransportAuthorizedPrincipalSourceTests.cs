@@ -163,7 +163,9 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         var principal = source.Current;
 
         // Assert
-        Assert.Equal(servesOneOwnersMail ? SyntheticMailOwner.Deployment : null, principal?.Owner);
+        Assert.NotNull(principal);
+        Assert.Equal(AuthorizedPrincipalKind.Caller, principal.Kind);
+        Assert.Equal(servesOneOwnersMail ? SyntheticMailOwner.Deployment : null, principal.Owner);
     }
 
     /// <summary>
@@ -185,7 +187,9 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         var principal = source.Current;
 
         // Assert
-        Assert.Equal(servesOneOwnersMail ? SyntheticMailOwner.Deployment : null, principal?.Owner);
+        Assert.NotNull(principal);
+        Assert.Equal(AuthorizedPrincipalKind.Caller, principal.Kind);
+        Assert.Equal(servesOneOwnersMail ? SyntheticMailOwner.Deployment : null, principal.Owner);
     }
 
     /// <summary>A path neither surface serves is nobody's, so the posture of either endpoint decides nothing about it.</summary>

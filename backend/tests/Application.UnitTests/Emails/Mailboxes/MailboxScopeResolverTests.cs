@@ -28,6 +28,17 @@ public sealed class MailboxScopeResolverTests
         MailAccountDisplayName.Create("Private mail"),
         MailSynchronizationMode.Push);
 
+    /// <summary>A mapping that admits a folder on both served accounts, so a scope resolved against nothing is visible as one.</summary>
+    /// <remarks>
+    /// The folder decisions a deployment holds are the deployment's rather than any owner's, so a resolver that
+    /// resolved an owner to no account and carried on would return this mapping's folders beside an empty account list.
+    /// Arranging a mapping that admits something is what makes an assertion about the empty scope an assertion at all.
+    /// </remarks>
+    private static readonly StubMailFolderParticipation MappingAnInboxOnEachServedAccount =
+        StubMailFolderParticipation.Mapping(
+            new MailFolderIdentity(Work.Id, MailFolderAlias.Create("INBOX")),
+            new MailFolderIdentity(Private.Id, MailFolderAlias.Create("INBOX")));
+
     [Fact]
     public void ReadableScope_AnAccountNamedByItsIdentifier_ResolvesToThatAccount()
     {
@@ -152,17 +163,34 @@ public sealed class MailboxScopeResolverTests
     /// The same claim about the owner axis rather than about configuration: what an owner owns is resolved before any
     /// folder decision is applied, so a caller who owns no account reads nothing whatever the deployment serves.
     /// </summary>
+    /// <remarks>
+    /// The mapping is what makes this an assertion. The deployment's folder decisions are the deployment's rather than
+    /// an owner's, so a resolver that dropped the empty-account guard would go on to apply them and return a scope
+    /// naming no account beside every mapped folder — which the persistence predicate reads as every account. The
+    /// control below resolves the same mapping for the owner who does own the accounts, so what the first assertion
+    /// records is the owner axis rather than a mapping that admitted nothing to begin with.
+    /// </remarks>
     [Fact]
     public void ReadableScope_AnOwnerWhoOwnsNoAccount_ReadsNothingRatherThanEverything()
     {
         // Arrange
-        var resolver = ResolverFor(SyntheticMailOwner.Another, Work, Private);
+        var resolver = ResolverFor(SyntheticMailOwner.Another, MappingAnInboxOnEachServedAccount, Work, Private);
 
         // Act
         var scope = resolver.ReadableScope([], [], JunkMailInclusion.Excluded);
 
         // Assert
         AssertNothingIsReadable(scope);
+
+        var forTheOwningOwner = ResolverFor(
+                SyntheticMailOwner.Deployment,
+                MappingAnInboxOnEachServedAccount,
+                Work,
+                Private)
+            .ReadableScope([], [], JunkMailInclusion.Excluded);
+
+        Assert.NotEmpty(forTheOwningOwner.AccountIds);
+        Assert.NotEmpty(forTheOwningOwner.ReadableFolders);
     }
 
     /// <summary>
@@ -178,7 +206,7 @@ public sealed class MailboxScopeResolverTests
         bool recorded)
     {
         // Arrange
-        var resolver = ResolverFor(SyntheticMailOwner.Another, Work, Private);
+        var resolver = ResolverFor(SyntheticMailOwner.Another, MappingAnInboxOnEachServedAccount, Work, Private);
 
         // Act
         var scope = resolver.ReadableScope([], [], junkMail);

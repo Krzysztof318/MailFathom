@@ -72,12 +72,12 @@ public sealed partial class StoredEmailTimelineReaderCommandTests
     }
 
     /// <summary>
-    /// The scope's own account list must not reach the command as a containment, because that is the predicate the
-    /// merge exists to avoid. The single-account query is what states the containment, over a list of one, where the
-    /// planner has an equality to work with anyway.
+    /// The scope's own account list must not reach the command as a containment, in either shape, because that is the
+    /// predicate the merge exists to avoid. A list of one is no more an ordered path than a longer one — the planner
+    /// still has an array scan key rather than an equality — so the single-account page names its one account too.
     /// </summary>
     [Fact]
-    public void Page_AScopeNamingSeveralAccounts_NamesNoContainmentOverTheAccountList()
+    public void Page_EitherShape_NamesTheAccountsByEqualityRatherThanContainment()
     {
         // Act
         var merged = CommandFor(AccountIdentifiers(3));
@@ -85,7 +85,8 @@ public sealed partial class StoredEmailTimelineReaderCommandTests
 
         // Assert
         Assert.DoesNotContain("@accountIds", merged, StringComparison.Ordinal);
-        Assert.Contains("@accountIds", single, StringComparison.Ordinal);
+        Assert.DoesNotContain("@accountIds", single, StringComparison.Ordinal);
+        Assert.Equal(1, Occurrences(single, $"\"{nameof(StoredEmailEntity.MailboxAccountId)}\" = @accountId"));
     }
 
     /// <summary>

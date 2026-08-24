@@ -15,10 +15,12 @@ namespace MailFathom.Host.Hosting.Startup;
 /// of every one of them to establish a value that cannot change while the process runs.
 /// </para>
 /// <para>
-/// Reading it before the gate has settled it is a composition defect rather than an operator's problem, so it fails as
-/// one. Nothing in the request pipeline can reach that state — the gate runs before the listener opens and refuses to
-/// let the host finish starting otherwise — which is what makes the refusal below a statement about wiring rather than
-/// about a deployment.
+/// Reading it before the gate has settled it fails rather than answering, because the alternative is a default owner
+/// nobody named and callers composed against one would read whichever mail a query matched. The window that reading
+/// belongs to is a real one rather than a wiring defect alone: <see cref="DeploymentMailOwnerStartupGate" /> is an
+/// ordinary <see cref="IHostedService" /> and the web host's own is registered while the builder runs, so the listener
+/// is already accepting connections while the gate runs. What holds traffic off that window is the startup probe,
+/// which reports the deployment unstarted until every gate in <see cref="HostStartupGates" /> has completed.
 /// </para>
 /// <para>
 /// The owner is written once from the startup path and read from every request thread afterwards, and both take the
@@ -51,8 +53,8 @@ internal sealed class DeploymentMailOwner : IDeploymentMailOwnerSource
                 return this.resolvedOwner
                     ?? throw new InvalidOperationException(
                         "The owner this deployment serves is read before the startup gate that establishes it has "
-                        + "run. Nothing served by this host reaches that state; a caller that does is composed "
-                        + "outside the host's own ordering.");
+                        + "run. Either the process is still starting, which the startup probe reports until every "
+                        + "gate has completed, or the caller is composed outside the host's own startup ordering.");
             }
         }
     }

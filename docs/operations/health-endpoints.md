@@ -160,9 +160,14 @@ Both are refusals rather than degraded readiness, and deliberately: the alternat
 it cannot say whose mail it is serving.
 
 The startup gates are reported rather than re-run. The probe reads a flag the gates set as they complete, so polling it
-opens no connection and costs nothing, and once it turns healthy it stays healthy. Under the host builder MailFathom
-composes with, those gates run before the listener opens, so an orchestrator ordinarily sees a refused connection
-during a slow start and counts it exactly as it counts a failed probe.
+opens no connection and costs nothing, and once it turns healthy it stays healthy.
+
+Only the secret-reference gate runs before the listener opens, because it is the one registered as a hosted *lifecycle*
+service and the host runs that stage ahead of every hosted service's start. The schema gate, the owner gate, and the
+spam-scanner gate are ordinary hosted services, and the web host registers its own while the builder runs, so it starts
+first and the port is already accepting connections while those three run. That window is exactly what the probe is
+for: hold traffic off an instance until `/started` succeeds rather than inferring readiness from the port answering.
+A gate that refuses still aborts startup, so the process exits rather than serving with a gate unmet.
 
 ## What a response carries
 

@@ -56,9 +56,13 @@ internal sealed class StoredEmailTimelineReader(MailFathomDbContext dbContext) :
     /// <param name="limit">How many rows the page holds at most.</param>
     /// <returns>The query, which PostgreSQL evaluates in full.</returns>
     /// <remarks>
-    /// A scope naming at most one account is one ordered walk, which is the query this read has always issued. Several
-    /// accounts are walked one at a time and merged, for the reason <see cref="MergedPage" /> gives; the single-account
-    /// query is what each walk is, so the two shapes are the same composition rather than two readings of a filter.
+    /// A scope naming at most one account is one ordered walk, which is the query this read has always issued. The one
+    /// account it names is passed to that walk rather than left to the scope's list, because the list would be composed
+    /// as <c>= ANY</c> and that is the shape <see cref="MergedPage" /> exists to avoid; a single-element array scan key
+    /// is no more an ordered path than a longer one. A scope naming no account at all admits nothing, so the walk it
+    /// composes returns nothing whichever way the narrowing is written. Several accounts are walked one at a time and
+    /// merged, for the reason <see cref="MergedPage" /> gives; each of those walks is this same single-account query,
+    /// so the two shapes are one composition rather than two readings of a filter.
     /// </remarks>
     internal static IQueryable<StoredEmailSummaryRow> Page(
         IQueryable<StoredEmailEntity> emails,
@@ -70,7 +74,12 @@ internal sealed class StoredEmailTimelineReader(MailFathomDbContext dbContext) :
 
         return accountsInScope.Count > 1
             ? MergedPage(emails, filter, continueAfter, limit, accountsInScope)
-            : PageOf(emails, filter, continueAfter, limit, withinAccount: null);
+            : PageOf(
+                emails,
+                filter,
+                continueAfter,
+                limit,
+                withinAccount: accountsInScope.Count is 1 ? accountsInScope[0] : null);
     }
 
     /// <summary>Orders the timeline the way the ordering contract defines, including where undated mail lands.</summary>
@@ -158,7 +167,7 @@ internal sealed class StoredEmailTimelineReader(MailFathomDbContext dbContext) :
     /// <para>
     /// So each account is walked on its own index, bounded to the page size, and the walks are appended and ordered
     /// together. What the outer ordering then sorts is at most one page per account rather than everything that matched,
-    /// which is bounded by the scope's own account limit however large the mailbox is. The ordering is the
+    /// so what it costs follows the number of accounts rather than the size of the mailbox. The ordering is the
     /// single-account one, expression for expression, so the page a merge returns is the page the same scope would have
     /// returned had one query been able to produce it, and a continuation cursor taken from its last row resumes
     /// contiguously.

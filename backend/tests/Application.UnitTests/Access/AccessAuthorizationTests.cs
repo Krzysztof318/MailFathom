@@ -266,6 +266,25 @@ public sealed class AccessAuthorizationTests
     }
 
     /// <summary>
+    /// A redeemed capability carries an owner as well, and this requirement admits it: an attachment download states a
+    /// signed-capability principal and then reads through the same owner-scoped catalog every mail read does, so
+    /// narrowing the requirement to the caller kind would refuse every download while this class stayed green.
+    /// </summary>
+    [Fact]
+    public void RequireOwner_ACapabilityRedeemedForAnOwnersAttachment_ReportsThatOwner()
+    {
+        // Arrange
+        var authorization = AuthorizationOver(
+            AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Another, "/attachments/an-object/0"));
+
+        // Act
+        var owner = authorization.RequireOwner();
+
+        // Assert
+        Assert.Equal(SyntheticMailOwner.Another, owner);
+    }
+
+    /// <summary>
     /// The second axis is not a permission, so holding every permission there is settles nothing about whose mail is
     /// being read. The deployment administrator and this process's own identity are each admitted to something, and
     /// neither of them is acting for anybody.

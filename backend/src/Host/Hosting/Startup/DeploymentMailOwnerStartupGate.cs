@@ -23,9 +23,12 @@ namespace MailFathom.Host.Hosting.Startup;
 /// unusable while accounts stay in configuration, rather than usable and wrong.
 /// </para>
 /// <para>
-/// It runs behind the schema gate, because it reads a table that migration creates, and ahead of the workers and the
-/// listener, because a request answered without it would be a request answered for nobody. It is one read of at most two
-/// rows, so the interval it adds to startup is the connection rather than the query.
+/// It runs behind the schema gate, because it reads a table that migration creates, and is registered ahead of the
+/// workers, so nothing synchronizes mail before the owner it belongs to is named. It is not ahead of the listener: the
+/// web host registers its own hosted service while the builder runs and therefore starts it first, so the port is
+/// already open while this gate runs, and the startup probe is what reports the deployment unstarted until it
+/// completes. It is one read of at most two rows, so the interval it adds to startup is the connection rather than the
+/// query.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]

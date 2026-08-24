@@ -109,7 +109,7 @@ public sealed class DeploymentMailOwnerStartupGateTests
     }
 
     [Fact]
-    public async Task StartAsync_CallerCancelled_PropagatesTheTokenToTheDirectory()
+    public async Task StartAsync_TheCallersToken_PropagatesItToTheDirectory()
     {
         // Arrange
         var owners = Substitute.For<IMailOwnerDirectory>();
