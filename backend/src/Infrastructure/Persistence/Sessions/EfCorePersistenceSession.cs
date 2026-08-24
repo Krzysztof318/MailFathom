@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
 using MailFathom.Application.Persistence;
@@ -139,7 +140,7 @@ internal sealed class EfCorePersistenceSession(
     {
         ArgumentNullException.ThrowIfNull(failure);
 
-        if (this.completed || !this.IsTransientCommitFailure(failure))
+        if (this.completed || !this.IsTransientStagingFailure(failure))
         {
             return false;
         }
@@ -232,7 +233,35 @@ internal sealed class EfCorePersistenceSession(
         this.PublishHeldMeasurements(sessionCommitted: false);
     }
 
-    /// <summary>Reports whether a write met a failure the database may not produce again.</summary>
+    /// <summary>Reports whether a failure a write raised while staging came from the database and may clear on its own.</summary>
+    /// <remarks>
+    /// A staged write is not only database work. It reaches whatever it has to reach before it joins the session —
+    /// an object store above all, which is the ordering the transaction opening lazily exists to allow — and a socket
+    /// that failed there looks exactly like a socket that failed to PostgreSQL. So provenance is required rather than
+    /// shape: the failure classified is the database exception inside the chain, and a failure carrying none is
+    /// somebody else's dependency, left to end the write rather than replayed against a database that was never asked
+    /// anything. The commit path below needs no such guard, because the call that raised it was this session's own.
+    /// </remarks>
+    private bool IsTransientStagingFailure(Exception failure) =>
+        failure is not OperationCanceledException
+        && DatabaseFailureWithin(failure) is { } databaseFailure
+        && resources.IsTransientFailure(databaseFailure);
+
+    /// <summary>Finds the database failure a raised exception carries, at any depth, or none.</summary>
+    private static DbException? DatabaseFailureWithin(Exception failure)
+    {
+        for (var candidate = failure; candidate is not null; candidate = candidate.InnerException)
+        {
+            if (candidate is DbException databaseFailure)
+            {
+                return databaseFailure;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Reports whether a commit met a failure the database may not produce again.</summary>
     /// <remarks>
     /// The cause is classified beside the failure itself, because EF Core wraps what the provider raised: a dropped
     /// connection reaches a save as a <see cref="DbUpdateException" /> whose inner exception is the only part that

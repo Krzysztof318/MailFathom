@@ -39,7 +39,8 @@ public interface IPersistenceSession : IAsyncDisposable
     /// update or a row lock has already reached the server long before anything is committed. The failure of one of
     /// those never passes through the commit, so this is where it is classified instead — by the session, which is the
     /// only side of this contract that knows what the provider raised, and for the caller above it, which is the only
-    /// side that holds the body a replay would run again. The session is invalid afterwards either way.
+    /// side that holds the body a replay would run again. What a staged write reached that was not the database is
+    /// somebody else's dependency and answers <see langword="false" />. The session is invalid afterwards either way.
     /// </para>
     /// <para>
     /// The default answers <see langword="false" />, because a session with no database beneath it has no provider

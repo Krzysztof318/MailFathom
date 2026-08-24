@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Persistence;
 using MailFathom.Infrastructure.Observability;
@@ -144,10 +145,10 @@ public sealed class EfCorePersistenceSessionTests
     /// reaches the commit. Ending the session on it is what lets the caller replay the whole unit of work.
     /// </summary>
     [Fact]
-    public async Task TryEndOnTransientFailure_AFailureThatCanClear_EndsTheSessionAndReportsItAsReplayable()
+    public async Task TryEndOnTransientFailure_ADatabaseFailureThatCanClear_EndsTheSessionAndReportsItAsReplayable()
     {
         // Arrange
-        var droppedConnection = new IOException("the connection was reset");
+        var droppedConnection = new ProviderFailure("the connection was reset");
         var (resources, session) = CreateSession(transientProviderFailure: droppedConnection);
 
         // Act
@@ -163,13 +164,34 @@ public sealed class EfCorePersistenceSessionTests
 
     /// <summary>A failure the database will raise again is a defect, and a defect is not something to stage twice.</summary>
     [Fact]
-    public async Task TryEndOnTransientFailure_AFailureThatWillNotClear_LeavesTheSessionToItsOrdinaryRollback()
+    public async Task TryEndOnTransientFailure_ADatabaseFailureThatWillNotClear_LeavesTheSessionToItsOrdinaryRollback()
     {
         // Arrange
         var (resources, session) = CreateSession();
 
         // Act
-        var ended = session.TryEndOnTransientFailure(new InvalidOperationException("the statement is malformed"));
+        var ended = session.TryEndOnTransientFailure(new ProviderFailure("the statement is malformed"));
+        await session.DisposeAsync();
+
+        // Assert
+        Assert.False(ended);
+        Assert.Equal(1, resources.RollbackCount);
+    }
+
+    /// <summary>
+    /// A staged write reaches an object store before it joins the session, and a socket that failed there is
+    /// indistinguishable in shape from one that failed to PostgreSQL. Replaying the unit of work over it would answer
+    /// somebody else's outage by writing again, and would count it as a database this deployment does not have.
+    /// </summary>
+    [Fact]
+    public async Task TryEndOnTransientFailure_AFailureFromSomewhereOtherThanTheDatabase_IsNotTheSessionsToClassify()
+    {
+        // Arrange
+        var droppedConnection = new IOException("the connection to the object store was reset");
+        var (resources, session) = CreateSession(transientProviderFailure: droppedConnection);
+
+        // Act
+        var ended = session.TryEndOnTransientFailure(droppedConnection);
         await session.DisposeAsync();
 
         // Assert
@@ -438,6 +460,9 @@ public sealed class EfCorePersistenceSessionTests
                 : ValueTask.FromException(this.DisposeException);
         }
     }
+
+    /// <summary>Stands in for what a database provider raises, which is the provenance a staged failure is judged by.</summary>
+    private sealed class ProviderFailure(string message) : DbException(message);
 
     /// <summary>Stands in for a measurement of staged work, and remembers every ending it was told about.</summary>
     private sealed class HeldMeasurement : ISessionScopedMeasurement

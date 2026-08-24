@@ -232,7 +232,10 @@ is the layer rather than something MailFathom re-implements:
   it, because the provider's exception is where the answer is; the policy acts on it, because the staging body is
   where the repeat is. That holds wherever the connection was lost *before* the write was offered: a statement a write
   issues while staging never reaches the commit at all, so the session is asked about it through
-  `TryEndOnTransientFailure` instead, and the save is classified where it is raised.
+  `TryEndOnTransientFailure` instead, and the save is classified where it is raised. A staged failure has to prove
+  where it came from, because a staged write reaches an object store before it joins the session and a socket that
+  failed there has the same shape as one that failed to PostgreSQL: what is classified is the `DbException` inside the
+  chain, and a failure carrying none belongs to another dependency and ends the write rather than replaying it.
 
   The `COMMIT` round trip is the one place it does not hold, and the reason is the one the outgoing send already
   records. A connection lost there leaves a server that may have made the write durable and a client that will never
