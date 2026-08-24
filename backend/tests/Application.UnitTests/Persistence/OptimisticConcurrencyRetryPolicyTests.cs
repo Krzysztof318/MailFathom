@@ -324,6 +324,40 @@ public sealed class OptimisticConcurrencyRetryPolicyTests
         await firstSession.DidNotReceive().CommitAsync(Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// A commit the server may already have applied is the one persistence failure a replay makes worse: an
+    /// accumulating spend total and a blindly inserted audit row would each be written twice. It leaves this policy as
+    /// it was raised, for a caller that knows whether its own write may be repeated.
+    /// </summary>
+    [Fact]
+    public async Task CommitAsync_CommitOutcomeUnknown_PropagatesItWithoutStagingTheWriteAgain()
+    {
+        // Arrange
+        var unanswered = new PersistenceCommitOutcomeUnknownException(
+            "the connection went away while committing",
+            new IOException("the connection was reset"));
+        var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
+        var session = Substitute.For<IPersistenceSession>();
+        sessionFactory.BeginSessionAsync(CancellationToken.None).Returns(session);
+        session.CommitAsync(CancellationToken.None).Returns<PersistenceCommitResult>(_ => throw unanswered);
+        var stagedAttemptCount = 0;
+        var policy = CreatePolicy(sessionFactory, maximumCommitAttempts: 3);
+
+        // Act
+        var thrown = await Assert.ThrowsAsync<PersistenceCommitOutcomeUnknownException>(() => policy.CommitAsync(
+            (_, _) =>
+            {
+                stagedAttemptCount++;
+                return Task.CompletedTask;
+            },
+            CancellationToken.None));
+
+        // Assert
+        Assert.Same(unanswered, thrown);
+        Assert.Equal(1, stagedAttemptCount);
+        await sessionFactory.Received(1).BeginSessionAsync(CancellationToken.None);
+    }
+
     [Fact]
     public void Constructor_NonPositiveMaximumAttempts_Throws()
     {

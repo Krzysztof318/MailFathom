@@ -115,11 +115,12 @@ public sealed class EfCorePersistenceSessionTests
     }
 
     /// <summary>
-    /// The commit is a round trip of its own and the last one a write makes, so it is where a blip is most likely to
-    /// land. Classifying only the save before it would leave that one failure raised as a defect and unreplayed.
+    /// A connection lost during the commit round trip leaves a server that may already have committed and a client
+    /// that will never hear so. It is a different fact from a save that provably did not commit, and it is raised as
+    /// a different failure so nothing above stages an accumulating write a second time.
     /// </summary>
     [Fact]
-    public async Task CommitAsync_CommitRoundTripFailedForACauseThatCanClear_RaisesATransientFailure()
+    public async Task CommitAsync_CommitRoundTripLostTheConnection_RaisesAnUnknownOutcomeRatherThanATransientFailure()
     {
         // Arrange
         var droppedConnection = new IOException("the connection was reset");
@@ -129,7 +130,7 @@ public sealed class EfCorePersistenceSessionTests
         await using var session = persistenceSession;
 
         // Act
-        var thrown = await Assert.ThrowsAsync<PersistenceTransientFailureException>(
+        var thrown = await Assert.ThrowsAsync<PersistenceCommitOutcomeUnknownException>(
             () => session.CommitAsync(CancellationToken.None));
 
         // Assert
@@ -252,6 +253,9 @@ public sealed class EfCorePersistenceSessionTests
         var (_, committingSession) = CreateSession();
         var (_, conflictingSession) = CreateSession(new DbUpdateConcurrencyException());
         var (_, droppedSession) = CreateSession(droppedConnection, transientProviderFailure: droppedConnection);
+        var (_, unansweredSession) = CreateSession(
+            transientProviderFailure: droppedConnection,
+            commitTransactionException: droppedConnection);
         using var measurements = new RecordedMailFathomMeasurements(CommitsInstrumentName);
 
         // Act
@@ -271,12 +275,19 @@ public sealed class EfCorePersistenceSessionTests
                 () => droppedSession.CommitAsync(CancellationToken.None));
         }
 
+        await using (unansweredSession)
+        {
+            await Assert.ThrowsAsync<PersistenceCommitOutcomeUnknownException>(
+                () => unansweredSession.CommitAsync(CancellationToken.None));
+        }
+
         // Assert
         var outcomes = measurements.DimensionOf(CommitsInstrumentName, OutcomeTagName);
 
         Assert.Contains("committed", outcomes);
         Assert.Contains("concurrency_conflict", outcomes);
         Assert.Contains("transient_failure", outcomes);
+        Assert.Contains("outcome_unknown", outcomes);
     }
 
     /// <summary>
@@ -379,7 +390,7 @@ public sealed class EfCorePersistenceSessionTests
 
         public int ClearTrackedStateCount { get; private set; }
 
-        public ValueTask<MailFathomDbContext> JoinAsync(CancellationToken cancellationToken) =>
+        public Task<MailFathomDbContext> JoinAsync(CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public Task SaveChangesAsync(CancellationToken cancellationToken)

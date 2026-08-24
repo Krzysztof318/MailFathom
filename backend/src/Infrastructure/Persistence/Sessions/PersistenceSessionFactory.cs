@@ -45,7 +45,7 @@ internal sealed class PersistenceSessionFactory(
     {
         private IDbContextTransaction? transaction;
 
-        public async ValueTask<MailFathomDbContext> JoinAsync(CancellationToken cancellationToken)
+        public async Task<MailFathomDbContext> JoinAsync(CancellationToken cancellationToken)
         {
             this.transaction ??= await dbContext.Database.BeginTransactionAsync(cancellationToken);
 

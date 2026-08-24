@@ -352,6 +352,15 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode PersistenceTransientFailure { get; } = new(35001);
 
+    /// <summary>Gets subcategory 5, connection loss: a local write lost its connection while committing, so whether it became durable is unknown.</summary>
+    /// <remarks>
+    /// It shares the subcategory with the code above because both are the same event — the connection went away — and
+    /// it is a code of its own because the answer differs. Above, the write provably did not happen and the unit of
+    /// work may be staged again; here the server may already have committed, so repeating it would apply the write a
+    /// second time. An operator meeting this one is being told the outcome is unknown rather than that a retry failed.
+    /// </remarks>
+    public static MailFathomErrorCode PersistenceCommitOutcomeUnknown { get; } = new(35002);
+
     #endregion
 
     #region Category 4 — Outbound resilience
@@ -826,6 +835,7 @@ public readonly record struct MailFathomErrorCode
         EmbeddingVectorIndexUnavailable,
         JobPayloadTooLarge,
         PersistenceTransientFailure,
+        PersistenceCommitOutcomeUnknown,
         OutboundDependencyUnavailable,
         MailboxQueryPageSizeOutOfRange,
         MailboxQueryFilterInvalid,

@@ -24,7 +24,7 @@ internal interface IEfCorePersistenceSessionResources : IAsyncDisposable
     /// <summary>Opens this session's transaction if it is not open yet, and answers with the context enlisted in it.</summary>
     /// <param name="cancellationToken">Cancels opening the transaction.</param>
     /// <returns>The context used by repositories participating in the session.</returns>
-    ValueTask<MailFathomDbContext> JoinAsync(CancellationToken cancellationToken);
+    Task<MailFathomDbContext> JoinAsync(CancellationToken cancellationToken);
 
     /// <summary>Persists tracked changes through EF Core.</summary>
     Task SaveChangesAsync(CancellationToken cancellationToken);
@@ -63,7 +63,7 @@ internal sealed class EfCorePersistenceSession(
     private bool endedOnTransientFailure;
 
     /// <inheritdoc />
-    public ValueTask<MailFathomDbContext> JoinAsync(CancellationToken cancellationToken) =>
+    public Task<MailFathomDbContext> JoinAsync(CancellationToken cancellationToken) =>
         resources.JoinAsync(cancellationToken);
 
     /// <inheritdoc />
@@ -76,9 +76,14 @@ internal sealed class EfCorePersistenceSession(
 
     /// <inheritdoc />
     /// <exception cref="PersistenceTransientFailureException">
-    /// Thrown when the commit met a failure the database may not produce again. The whole unit of work is what a
+    /// Thrown when the save met a failure the database may not produce again. The whole unit of work is what a
     /// caller repeats, so the failure is raised rather than reported as a result: nothing this session could repeat
     /// would help, because the transaction the statement belonged to is already gone.
+    /// </exception>
+    /// <exception cref="PersistenceCommitOutcomeUnknownException">
+    /// Thrown when the commit round trip itself lost the connection. It is a separate failure from the one above
+    /// because the save is provably uncommitted and this is not: the server may have committed before the client
+    /// stopped hearing from it, so a caller that staged a write which accumulates or inserts blind must not repeat it.
     /// </exception>
     public async Task<PersistenceCommitResult> CommitAsync(CancellationToken cancellationToken)
     {
@@ -87,12 +92,6 @@ internal sealed class EfCorePersistenceSession(
         try
         {
             await resources.SaveChangesAsync(cancellationToken);
-
-            // Committed inside the same classification as the save before it. The COMMIT is a round trip of its own
-            // and the last one the write makes, so a connection lost during it is at least as likely as one lost
-            // during the save — and an unclassified failure there would leave the caller with a write it cannot tell
-            // apart from a defect.
-            await resources.CommitTransactionAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -112,6 +111,19 @@ internal sealed class EfCorePersistenceSession(
 
             throw new PersistenceTransientFailureException(
                 "A local write did not commit because the database failed in a way that can clear on its own.",
+                exception);
+        }
+
+        try
+        {
+            await resources.CommitTransactionAsync(cancellationToken);
+        }
+        catch (Exception exception) when (this.IsTransientCommitFailure(exception))
+        {
+            this.EndOnUnknownOutcome();
+
+            throw new PersistenceCommitOutcomeUnknownException(
+                "A local write lost its connection while committing, so whether it became durable is unknown.",
                 exception);
         }
 
@@ -188,6 +200,20 @@ internal sealed class EfCorePersistenceSession(
 
         this.completed = true;
         telemetry.RecordConcurrencyConflict();
+        this.PublishHeldMeasurements(sessionCommitted: false);
+    }
+
+    /// <summary>Ends one session whose commit round trip went unanswered, leaving its outcome unread.</summary>
+    /// <remarks>
+    /// The same silence as below, and the same refusal to ask the connection anything further. What differs is the
+    /// count: a session ended here may have committed, so counting it as a failure a replay resolves would report a
+    /// write that possibly happened as one that provably did not.
+    /// </remarks>
+    private void EndOnUnknownOutcome()
+    {
+        this.completed = true;
+        this.endedOnTransientFailure = true;
+        telemetry.RecordCommitOutcomeUnknown();
         this.PublishHeldMeasurements(sessionCommitted: false);
     }
 

@@ -19,9 +19,14 @@ public interface IPersistenceSession : IAsyncDisposable
     /// <param name="cancellationToken">Cancels the commit or concurrency-conflict rollback.</param>
     /// <returns>The commit outcome. The session is invalid after any returned outcome.</returns>
     /// <exception cref="PersistenceTransientFailureException">
-    /// Thrown when the commit met a failure the database may not produce again. It is raised rather than reported as
-    /// an outcome because nothing this session could repeat would help: the transaction the statements belonged to is
+    /// Thrown when the save met a failure the database may not produce again. It is raised rather than reported as an
+    /// outcome because nothing this session could repeat would help: the transaction the statements belonged to is
     /// already gone, so the whole unit of work is what a caller repeats. The session is invalid afterwards.
+    /// </exception>
+    /// <exception cref="PersistenceCommitOutcomeUnknownException">
+    /// Thrown when the connection went away during the commit round trip itself, which is a different fact from the
+    /// one above: the server may have made the write durable and this process will never hear which. Staging the same
+    /// work again would apply it a second time, so a caller resolves it rather than repeating it.
     /// </exception>
     Task<PersistenceCommitResult> CommitAsync(CancellationToken cancellationToken);
 

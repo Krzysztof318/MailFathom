@@ -24,7 +24,7 @@ namespace MailFathom.Infrastructure.Observability;
 /// issues, including the ones no session and no retry policy own.
 /// </para>
 /// <para>
-/// The one dimension is the outcome, and it is three of this type's own words. What was being written, which entities it
+/// The one dimension is the outcome, and it is four of this type's own words. What was being written, which entities it
 /// touched, and which constraint the database refused are all deliberately absent — the first two would carry mail and
 /// the third is the provider's text rather than a set anybody chose.
 /// </para>
@@ -39,8 +39,11 @@ internal sealed class PersistenceCommitTelemetry
     /// <summary>Names a session a competing writer beat, which the caller's retry policy may resolve.</summary>
     internal const string ConcurrencyConflictOutcomeName = "concurrency_conflict";
 
-    /// <summary>Names a session the database dropped, which the caller's retry policy may resolve.</summary>
+    /// <summary>Names a session the database dropped before the commit, which the caller's retry policy may resolve.</summary>
     internal const string TransientFailureOutcomeName = "transient_failure";
+
+    /// <summary>Names a session whose commit round trip went unanswered, which nothing may resolve by repeating it.</summary>
+    internal const string CommitOutcomeUnknownOutcomeName = "outcome_unknown";
 
     private readonly Counter<long> commits;
 
@@ -49,7 +52,7 @@ internal sealed class PersistenceCommitTelemetry
         this.commits = Telemetry.Meter.CreateCounter<long>(
             "mailfathom.persistence.commits",
             unit: "{commit}",
-            description: "Local write transactions this process completed, by whether they committed, lost a race, or met a database failure that can clear on its own.");
+            description: "Local write transactions this process completed, by whether they committed, lost a race, met a database failure that can clear on its own, or lost the connection while committing.");
 
     /// <summary>Counts a session whose write became durable.</summary>
     public void RecordCommitted() => this.Record(CommittedOutcomeName);
@@ -59,6 +62,9 @@ internal sealed class PersistenceCommitTelemetry
 
     /// <summary>Counts a session the database ended by failing in a way that can clear on its own.</summary>
     public void RecordTransientFailure() => this.Record(TransientFailureOutcomeName);
+
+    /// <summary>Counts a session whose commit round trip went unanswered, leaving its outcome unread.</summary>
+    public void RecordCommitOutcomeUnknown() => this.Record(CommitOutcomeUnknownOutcomeName);
 
     private void Record(string outcome) => this.commits.Add(1, new TagList { { OutcomeTagName, outcome } });
 }

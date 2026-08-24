@@ -19,7 +19,7 @@ internal interface IEfCorePersistenceSession
     /// <summary>Joins this session, opening its transaction if this is the first write to reach it.</summary>
     /// <param name="cancellationToken">Cancels opening the transaction.</param>
     /// <returns>The context enlisted in this session's transaction.</returns>
-    ValueTask<MailFathomDbContext> JoinAsync(CancellationToken cancellationToken);
+    Task<MailFathomDbContext> JoinAsync(CancellationToken cancellationToken);
 
     /// <summary>Holds a measurement of work staged here until this session's ending is known.</summary>
     /// <param name="measurement">The measurement to publish once the session has committed or rolled back.</param>
@@ -45,7 +45,7 @@ internal static class EfCorePersistenceSessionAccessor
     /// it, so a caller that has other work to finish first — handing bytes to a content endpoint, computing a digest
     /// over them — does that work outside the transaction by doing it before this call.
     /// </remarks>
-    public static ValueTask<MailFathomDbContext> JoinAsync(
+    public static Task<MailFathomDbContext> JoinAsync(
         IPersistenceSession session,
         CancellationToken cancellationToken) => SessionOf(session).JoinAsync(cancellationToken);
 

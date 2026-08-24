@@ -230,10 +230,18 @@ is the layer rather than something MailFathom re-implements:
   So the policy replays it after a transient failure too, on the same attempt bound and the same jittered backoff, and
   the failure of the last allowed attempt leaves it as `PersistenceTransientFailureException`. The session classifies
   it, because the provider's exception is where the answer is; the policy acts on it, because the staging body is
-  where the repeat is. That holds wherever in the attempt the connection was lost. A statement a write issues while
-  staging never reaches the commit at all, so the session is asked about it through `TryEndOnTransientFailure`
-  instead, and the save and the `COMMIT` round trip after it are classified as one. A commit counts its ending either
-  way, so a deployment that is losing connections is readable as a rate rather than as a run that stopped.
+  where the repeat is. That holds wherever the connection was lost *before* the write was offered: a statement a write
+  issues while staging never reaches the commit at all, so the session is asked about it through
+  `TryEndOnTransientFailure` instead, and the save is classified where it is raised.
+
+  The `COMMIT` round trip is the one place it does not hold, and the reason is the one the outgoing send already
+  records. A connection lost there leaves a server that may have made the write durable and a client that will never
+  hear which, so staging the unit of work again would apply it a second time — the spend ledger accumulates into the
+  row it finds and the rule-execution store inserts without reading anything back, and neither would notice. That
+  ending is therefore `PersistenceCommitOutcomeUnknownException`, which the retry policy does not catch: it reaches the
+  caller, which is the only layer that knows whether its own write may be offered twice. A commit counts every one of
+  those endings, so a deployment that is losing connections is readable as a rate rather than as a run that stopped,
+  and the ambiguous ending is readable apart from the ones a replay resolved.
 
   EF Core's own retrying execution strategy would be the alternative shape of that, and it is refused for two reasons
   rather than one. It replays a `SaveChangesAsync` and a query but not the reads that produced the tracked state, so
