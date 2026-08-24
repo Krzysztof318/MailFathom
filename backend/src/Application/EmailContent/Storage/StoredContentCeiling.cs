@@ -74,12 +74,14 @@ public sealed class StoredContentCeiling
     /// <summary>Gets the mark to capture before taking a measurement, so what is claimed during it is not lost.</summary>
     /// <param name="owner">The owner whose measurement is about to be taken beside the deployment's.</param>
     /// <returns>The marks both levels held before the measurement.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
     public StoredContentMeasurementMark MarkBefore(MailOwnerId owner) =>
         new(this.deployment.ClaimMark, this.LevelOf(owner).ClaimMark);
 
     /// <summary>Gets how much of local storage one owner's stored content is currently believed to occupy.</summary>
     /// <param name="owner">The owner asked about.</param>
     /// <returns>The bytes that owner's payloads are believed to hold.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
     public long OccupiedBytesFor(MailOwnerId owner) => this.LevelOf(owner).OccupiedBytes;
 
     /// <summary>Adopts a fresh measurement of what storage holds, for the deployment and for one owner.</summary>
@@ -88,6 +90,7 @@ public sealed class StoredContentCeiling
     /// <param name="measuredOwnerBytes">What that owner's payloads were reported to hold.</param>
     /// <param name="mark">The value <see cref="MarkBefore" /> returned before the measurements were taken.</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when either measurement is negative.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
     /// <remarks>
     /// Bytes claimed after the measurement began are added on top of it, because the measurement cannot describe writes
     /// that had not happened when it was taken. A measurement older than one already adopted is discarded rather than
@@ -103,8 +106,12 @@ public sealed class StoredContentCeiling
         ArgumentOutOfRangeException.ThrowIfNegative(measuredBytes);
         ArgumentOutOfRangeException.ThrowIfNegative(measuredOwnerBytes);
 
+        // Resolved before either level is written, for the reason the claim resolves it first: a refused owner would
+        // otherwise leave the deployment holding a reading whose other half never arrived.
+        var ownerLevel = this.LevelOf(owner);
+
         this.deployment.Observe(measuredBytes, mark.DeploymentClaimMark);
-        this.LevelOf(owner).Observe(measuredOwnerBytes, mark.OwnerClaimMark);
+        ownerLevel.Observe(measuredOwnerBytes, mark.OwnerClaimMark);
     }
 
     /// <summary>Claims room for one payload of one owner, or reports which ceiling has none.</summary>
@@ -112,6 +119,7 @@ public sealed class StoredContentCeiling
     /// <param name="bytes">What the payload is expected to occupy.</param>
     /// <returns>The claim, or the bound that refused it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="bytes" /> is not positive.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
     /// <remarks>
     /// Both levels have to admit the payload, and the deployment's is taken first so that a refusal by it never leaves
     /// an owner charged for a payload nothing will fetch. The owner's refusal gives the deployment's claim straight
@@ -121,12 +129,16 @@ public sealed class StoredContentCeiling
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(bytes);
 
+        // Resolved before anything is taken, because the resolution is what refuses an owner naming nobody: taking the
+        // deployment's bytes first would leave them claimed by a call that then threw, and nothing releases a claim
+        // whose scope was never handed back.
+        var ownerLevel = this.LevelOf(owner);
+
         if (!this.deployment.TryTake(bytes))
         {
             return StoredContentClaimAttempt.Refused(StoredContentBound.Deployment);
         }
 
-        var ownerLevel = this.LevelOf(owner);
         if (!ownerLevel.TryTake(bytes))
         {
             this.deployment.Release(bytes);
@@ -137,8 +149,24 @@ public sealed class StoredContentCeiling
         return StoredContentClaimAttempt.Granted(new StoredContentClaim(this.deployment, ownerLevel, bytes));
     }
 
-    private ContentLevel LevelOf(MailOwnerId owner) =>
-        this.ownerLevels.GetOrAdd(owner, _ => new ContentLevel(this.ownerCeilingBytes));
+    /// <summary>Finds the level one owner is measured and bounded against, creating it on first mention.</summary>
+    /// <remarks>
+    /// The guard is the whole reason this is a method rather than an indexer. Every public member here routes through
+    /// it, and an owner naming nobody would otherwise be given a level of its own: bytes would be tracked and admitted
+    /// against a ceiling for "nobody", which reads as a working bound right up until somebody asks whose it was. The
+    /// spend gate refuses the same argument for the same reason, and this is the storage half of that rule.
+    /// </remarks>
+    private ContentLevel LevelOf(MailOwnerId owner)
+    {
+        if (!owner.IsSpecified)
+        {
+            throw new ArgumentException(
+                "A stored-content ceiling is measured and claimed for a named owner, so an owner naming nobody cannot be bounded.",
+                nameof(owner));
+        }
+
+        return this.ownerLevels.GetOrAdd(owner, _ => new ContentLevel(this.ownerCeilingBytes));
+    }
 
     /// <summary>One population's believed occupancy, and the room it still has.</summary>
     /// <remarks>

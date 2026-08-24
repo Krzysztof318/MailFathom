@@ -102,7 +102,10 @@ public sealed class StoredEmailEmbeddingGenerator
     /// <exception cref="InvalidOperationException">
     /// Thrown when no message is stored under <paramref name="storedEmailId" />, so the owner whose spend this turn
     /// would be charged against cannot be established. The caller holds an identifier it read from this deployment, so
-    /// what this reports is a message erased underneath the turn rather than an argument a caller can correct.
+    /// what this reports is a message erased underneath the turn rather than an argument a caller can correct. The
+    /// ordinary form of that race does not reach it: a message already gone has nothing outstanding, which ends the
+    /// turn as whole before an owner is ever asked for, and only one erased between that answer and the ownership
+    /// lookup behind it arrives here.
     /// </exception>
     /// <remarks>
     /// The generation is a parameter rather than something read here, because the live path and a reindex write into
@@ -127,9 +130,11 @@ public sealed class StoredEmailEmbeddingGenerator
         var embeddedChunkCount = 0;
         var sentCharacterCount = 0;
 
-        // Read once for the whole turn rather than before each call: whose mail a stored message is cannot change while
-        // it is being embedded, and the read is a lookup on an index beside calls that cross a network.
-        var owner = await this.ownership.ReadStoredEmailOwnerAsync(storedEmailId, cancellationToken);
+        // Resolved once for the whole turn, because whose mail a stored message is cannot change while it is being
+        // embedded, and resolved lazily rather than up front, because a message with nothing outstanding must not need
+        // an owner at all: one erased underneath this turn is an ordinary race that the empty answer below settles,
+        // and asking who owned it first would turn that into a refusal a caller would read as a defect.
+        MailOwnerId? owner = null;
 
         for (var call = 0; call < MaximumProviderCallsPerEmail; call++)
         {
@@ -146,9 +151,11 @@ public sealed class StoredEmailEmbeddingGenerator
                 return StoredEmailEmbeddingRun.Embedded(embeddedChunkCount, sentCharacterCount);
             }
 
+            owner ??= await this.ownership.ReadStoredEmailOwnerAsync(storedEmailId, cancellationToken);
+
             // Asked before every call rather than once per message, because a long message spends across many calls and
             // a ceiling consulted only at the start would be one a single message could walk straight through.
-            var period = await this.spendGate.ReadCurrentPeriodForAsync(owner, cancellationToken);
+            var period = await this.spendGate.ReadCurrentPeriodForAsync(owner.Value, cancellationToken);
             if (!period.AdmitsRequest)
             {
                 return StoredEmailEmbeddingRun.SpendCeilingReached(
@@ -177,7 +184,7 @@ public sealed class StoredEmailEmbeddingGenerator
                     sentCharacterCount);
             }
 
-            await this.CommitVectorsAsync(profile, owner, passages, vectors, billedCharacterCount, cancellationToken);
+            await this.CommitVectorsAsync(profile, owner.Value, passages, vectors, billedCharacterCount, cancellationToken);
 
             embeddedChunkCount += passages.Count;
             sentCharacterCount += billedCharacterCount;

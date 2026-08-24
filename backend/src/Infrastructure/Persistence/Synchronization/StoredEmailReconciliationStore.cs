@@ -167,7 +167,10 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
         if (erasedByAuthoredDelete.Count > 0)
         {
             // What these messages hold leaves storage with them, so their owner's figure gives it back inside the same
-            // transaction. It is issued before the removal because what it subtracts is read from the payloads.
+            // transaction. What it subtracts is read from the payloads, so the constraint is that it runs before this
+            // session commits rather than before the line below it: the removal below only stages a delete the change
+            // tracker applies at that commit. A later change making the removal set-based would execute immediately and
+            // turn that ordering into a real one.
             await OwnerStoredContentLedger.RemoveAsync(
                 sessionContext,
                 [.. erasedByAuthoredDelete.Select(email => email.Id)],
@@ -184,9 +187,10 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
 
         if (outcome.Disposition is RemotelyDeletedEmailDisposition.EraseLocalCopy)
         {
-            // The cascade takes the raw MIME with the row, so the owner's stored-content figure gives those bytes back
-            // first: nothing below the content store observes that cascade, and a figure left standing would go on
-            // bounding an owner against payloads that are gone.
+            // The cascade takes the raw MIME with the row, and nothing below the content store observes that cascade,
+            // so the owner's stored-content figure has to give those bytes back explicitly or it would go on bounding
+            // an owner against payloads that are gone. It reads the lengths itself, which is why it belongs before this
+            // session commits rather than at any particular point among the staged removals below.
             await OwnerStoredContentLedger.RemoveAsync(
                 sessionContext,
                 [.. disappeared.Select(email => email.Id)],

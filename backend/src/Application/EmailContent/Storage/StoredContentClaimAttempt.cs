@@ -2,13 +2,25 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
+
 namespace MailFathom.Application.EmailContent.Storage;
 
 /// <summary>What asking the ceilings for room produced: the claim, or the bound that refused it.</summary>
 /// <remarks>
+/// <para>
 /// The refusal names its bound rather than being an absent claim, because what a caller records about a deferred
 /// message and what an operator has to act on both depend on which of the two ceilings was met. A granted attempt names
 /// no bound, so the two states cannot both be read as true.
+/// </para>
+/// <para>
+/// Both factories refuse the arguments that would produce a nonsense attempt, and being a struct leaves one shape they
+/// cannot reach: <see langword="default" />, which holds no claim and names no bound. Nothing here produces it — this
+/// type is returned by <see cref="StoredContentCeiling.TryClaim" /> and read at the call site — and a reader who does
+/// reach one is holding an attempt that was never made rather than a granted or a refused one. It is documented rather
+/// than designed away, exactly as <see cref="MailOwnerId" /> documents its own, because the alternative is an
+/// allocation per stored message to describe a state no code path constructs.
+/// </para>
 /// </remarks>
 public readonly record struct StoredContentClaimAttempt
 {

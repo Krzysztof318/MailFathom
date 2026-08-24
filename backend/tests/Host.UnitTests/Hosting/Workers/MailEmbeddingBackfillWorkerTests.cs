@@ -322,6 +322,67 @@ public sealed class MailEmbeddingBackfillWorkerTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// One owner at their share stops that owner's mail and nobody else's, so the sweep steps past the message and
+    /// runs to its end rather than pausing for the period — and the count of what it stepped past is the only place an
+    /// operator reads that a bound was reached at all, since no wait follows to announce it.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_AnOwnerHasSpentTheirShare_StepsPastTheirMailAndReportsHowMuch()
+    {
+        // Arrange
+        using var world = CreateWorld(
+            new EmbeddingBackfillOptions { BatchSize = 1, MaxBatchesPerRun = 1 },
+            EmbeddingSpendBudget.Create(
+                maxInputCharactersPerPeriod: 1_000,
+                maxInputCharactersPerPeriodPerOwner: 10,
+                TimeSpan.FromDays(1)),
+            consumedInputCharacterCount: 10,
+            deploymentConsumedInputCharacterCount: 10);
+        var message = StoredEmailId.Create(Guid.CreateVersion7());
+
+        world.BackfillStore
+            .GetEmailsAwaitingEmbeddingAsync(
+                Arg.Any<StoredEmailId?>(),
+                Arg.Any<EmbeddingProfileId>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingEmbedding>>(
+                [new StoredEmailAwaitingEmbedding(message, RequiresChunking: false)]));
+        world.EmbeddingStore
+            .GetChunksAwaitingEmbeddingAsync(
+                Arg.Any<StoredEmailId>(),
+                Arg.Any<EmbeddingProfileId>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<EmailChunkAwaitingEmbedding>>(
+                [new EmailChunkAwaitingEmbedding(EmailChunkId.Create(Guid.CreateVersion7()), "a passage")]));
+
+        // Act
+        await world.Worker.StartAsync(CancellationToken.None);
+        await world.Logger.WaitForOccurrences(
+            "has spent what one period admits for them",
+            occurrences: 1,
+            TestContext.Current.CancellationToken);
+        await world.Worker.StopAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Contains(
+            world.Logger.Messages,
+            line => line.Contains("MaxInputCharactersPerPeriodPerOwner", StringComparison.Ordinal));
+
+        // The deployment still had room, so nothing announced a wait: reporting the instance's ceiling here would send
+        // an operator after disk when what is full is one person's share.
+        Assert.DoesNotContain(
+            world.Logger.Messages,
+            line => line.Contains("the backfill is paused for", StringComparison.Ordinal));
+        await world.EmbeddingStore.DidNotReceiveWithAnyArgs().SaveEmbeddingsAsync(
+            Arg.Any<IPersistenceSession>(),
+            Arg.Any<RegisteredEmbeddingProfile>(),
+            Arg.Any<IReadOnlyList<GeneratedChunkEmbedding>>(),
+            Arg.Any<CancellationToken>());
+    }
+
     private static EmbeddingProfileIdentity CreateIdentity() =>
         EmbeddingProfileIdentity.Create(
             "a-provider",
@@ -336,14 +397,18 @@ public sealed class MailEmbeddingBackfillWorkerTests
     /// Substituted rather than kept in a fake ledger, because these tests are about how the worker paces itself after a
     /// run reports the ceiling; that the ledger adds up is proved where the ledger's own arithmetic lives.
     /// </remarks>
-    private static IEmbeddingSpendLedger CreateLedgerReporting(long consumedInputCharacterCount)
+    private static IEmbeddingSpendLedger CreateLedgerReporting(
+        long consumedInputCharacterCount,
+        long? deploymentConsumedInputCharacterCount)
     {
         var ledger = Substitute.For<IEmbeddingSpendLedger>();
         ledger.ReadConsumedInputCharactersAsync(
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<MailOwnerId>(),
                 Arg.Any<CancellationToken>())
-            .Returns(new EmbeddingSpendTotals(consumedInputCharacterCount, consumedInputCharacterCount));
+            .Returns(new EmbeddingSpendTotals(
+                consumedInputCharacterCount,
+                deploymentConsumedInputCharacterCount ?? consumedInputCharacterCount));
 
         return ledger;
     }
@@ -351,18 +416,21 @@ public sealed class MailEmbeddingBackfillWorkerTests
     private static WorkerWorld CreateWorld(
         EmbeddingBackfillOptions settings,
         EmbeddingSpendBudget? spendBudget = null,
-        long consumedInputCharacterCount = 0) =>
+        long consumedInputCharacterCount = 0,
+        long? deploymentConsumedInputCharacterCount = null) =>
         CreateWorld(
             settings,
             new RegisteredEmbeddingProfile(EmbeddingProfileId.Create(Guid.CreateVersion7()), CreateIdentity()),
             spendBudget,
-            consumedInputCharacterCount);
+            consumedInputCharacterCount,
+            deploymentConsumedInputCharacterCount);
 
     private static WorkerWorld CreateWorld(
         EmbeddingBackfillOptions settings,
         RegisteredEmbeddingProfile? activeProfile,
         EmbeddingSpendBudget? spendBudget = null,
-        long consumedInputCharacterCount = 0)
+        long consumedInputCharacterCount = 0,
+        long? deploymentConsumedInputCharacterCount = null)
     {
         settings.IdleSweepInterval = IdleSweepInterval;
 
@@ -400,7 +468,8 @@ public sealed class MailEmbeddingBackfillWorkerTests
             MaxBatchesPerRun = settings.MaxBatchesPerRun,
         });
         services.AddSingleton(spendBudget ?? EmbeddingSpendBudget.Unbounded);
-        services.AddSingleton(CreateLedgerReporting(consumedInputCharacterCount));
+        services.AddSingleton(
+            CreateLedgerReporting(consumedInputCharacterCount, deploymentConsumedInputCharacterCount));
         services.AddSingleton(EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, world.TimeProvider));
         services.AddSingleton<IDerivedWorkGateTelemetry>(new RecordingDerivedWorkGateTelemetry());
         services.AddScoped<EmbeddingSpendGate>();

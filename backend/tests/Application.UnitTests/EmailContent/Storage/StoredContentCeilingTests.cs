@@ -254,6 +254,40 @@ public sealed class StoredContentCeilingTests
         Assert.NotNull(claim);
     }
 
+    /// <summary>A ceiling is measured and claimed for a named owner, so every member refuses one naming nobody.</summary>
+    /// <remarks>
+    /// Without the refusal an unnamed owner would be given a level of its own, and bytes would be admitted against a
+    /// ceiling for "nobody" — which reads as a working bound until somebody asks whose share it was.
+    /// </remarks>
+    [Fact]
+    public void EveryMember_AnOwnerNamingNobody_IsRefused()
+    {
+        // Arrange
+        var ceiling = new StoredContentCeiling(1000, 800);
+        var nobody = default(MailOwnerId);
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => ceiling.MarkBefore(nobody));
+        Assert.Throws<ArgumentException>(() => ceiling.OccupiedBytesFor(nobody));
+        Assert.Throws<ArgumentException>(() => ceiling.Observe(nobody, 100, 100, default));
+        Assert.Throws<ArgumentException>(() => ceiling.TryClaim(nobody, 100));
+    }
+
+    /// <summary>The refusal leaves nothing claimed, because a claim whose scope was never handed back is never released.</summary>
+    [Fact]
+    public void TryClaim_AnOwnerNamingNobody_LeavesTheDeploymentLevelUntouched()
+    {
+        // Arrange
+        var ceiling = new StoredContentCeiling(1000, 800);
+        Measure(ceiling, SyntheticMailOwner.Deployment, measuredBytes: 200, measuredOwnerBytes: 200);
+
+        // Act
+        Assert.Throws<ArgumentException>(() => ceiling.TryClaim(default, 300));
+
+        // Assert
+        Assert.Equal(200, ceiling.OccupiedBytes);
+    }
+
     [Fact]
     public void Constructor_ACeilingThatIsNotPositive_IsRefused()
     {
