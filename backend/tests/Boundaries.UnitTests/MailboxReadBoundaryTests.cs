@@ -79,7 +79,7 @@ public sealed class MailboxReadBoundaryTests
     /// assertable once the send resolves through the caller-scoped port.
     /// </remarks>
     [Fact]
-    public void DeploymentWideAccountCatalog_InTheProtocolAssemblysOwnDependencies_IsAbsent()
+    public void DeploymentWideAccountCatalog_InWhatTheProtocolAssemblyItselfDependsOn_IsAbsent()
     {
         // Arrange
         IArchRule theProtocolBoundaryNamesOnlyTheCallerScopedCatalog = Types()
