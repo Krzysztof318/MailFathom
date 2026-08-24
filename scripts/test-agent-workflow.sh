@@ -6700,13 +6700,18 @@ no_channel_builds_an_artifact_before_the_commit_has_verified() {
   nightly_consumers=" $(extract_workflow_jobs_consuming_the_commit "$workflow_directory/nightly.yml" | tr '\n' ' ')"
 
   # A gate is what the rest waits for, so it is what the rest is measured against rather than
-  # something to measure. There are three, one per stack plus the suite that starts a container, and
-  # `verify-client` is a gate rather than an artifact for a reason worth stating: making it wait for
-  # the server's would leave a commit that breaks both reporting only the server's, and would put a
-  # two-minute client build behind an integration suite it shares nothing with. Everything else that
-  # reads the commit is checked below whatever it is named.
+  # something to measure. There are four, one per stack plus the suite that starts a container and the
+  # contracts neither stack's build can see, and `verify-client` is a gate rather than an artifact for
+  # a reason worth stating: making it wait for the server's would leave a commit that breaks both
+  # reporting only the server's, and would put a two-minute client build behind an integration suite it
+  # shares nothing with. `verify-contracts` is beside them on the same argument, and more plainly: it
+  # is twenty seconds that install nothing, and behind any of the other three it would report minutes
+  # after it had the answer. Everything else that reads the commit is checked below whatever it is
+  # named.
+  local verification_jobs=' verify verify-client verify-contracts integration-tests '
+
   for job in $release_consumers; do
-    [[ "$job" == 'verify' || "$job" == 'verify-client' || "$job" == 'integration-tests' ]] && continue
+    [[ "$verification_jobs" == *" $job "* ]] && continue
 
     workflow_job_waits_for "$release_dependencies" "$job" verify ||
       failures+="release.yml: ${job} does not wait for verify. "
@@ -6715,7 +6720,7 @@ no_channel_builds_an_artifact_before_the_commit_has_verified() {
   done
 
   for job in $nightly_consumers; do
-    [[ "$job" == 'verify' || "$job" == 'verify-client' ]] && continue
+    [[ "$verification_jobs" == *" $job "* ]] && continue
 
     workflow_job_waits_for "$nightly_dependencies" "$job" verify ||
       failures+="nightly.yml: ${job} does not wait for verify. "
@@ -6745,6 +6750,25 @@ no_channel_builds_an_artifact_before_the_commit_has_verified() {
     failures+='release.yml: verify-client does not call build-test-frontend.yml. '
   [[ "$(extract_workflow_job_uses "$workflow_directory/nightly.yml" verify-client)" == './.github/workflows/build-test-frontend.yml' ]] ||
     failures+='nightly.yml: verify-client does not call build-test-frontend.yml. '
+
+  # The same reasoning for the contract gate, which is exempted by name above like the two before it.
+  [[ "$(extract_workflow_job_uses "$workflow_directory/release.yml" verify-contracts)" == './.github/workflows/repository-contracts.yml' ]] ||
+    failures+='release.yml: verify-contracts does not call repository-contracts.yml. '
+  [[ "$(extract_workflow_job_uses "$workflow_directory/nightly.yml" verify-contracts)" == './.github/workflows/repository-contracts.yml' ]] ||
+    failures+='nightly.yml: verify-contracts does not call repository-contracts.yml. '
+
+  # A gate producing no artifact is reached by nothing above: the loops measure the jobs that consume the commit, and a
+  # publishing job inherits a dependency by waiting for what it builds from. So what a release blocks on is asserted
+  # here instead. The two channels differ, and deliberately: a nightly publishes a server image and holds neither the
+  # client nor the chart in it, so it runs both gates and blocks on the one whose stack the image carries, while a
+  # release is one claim about one commit and blocks on both.
+  for job in verify-client verify-contracts; do
+    workflow_job_waits_for "$release_dependencies" publish "$job" ||
+      failures+="release.yml: publish does not wait for ${job}. "
+  done
+
+  workflow_job_waits_for "$nightly_dependencies" publish verify-client ||
+    failures+='nightly.yml: publish does not wait for verify-client. '
 
   # The gate has one home. A copy of it back inside the publishing workflow would run the whole thing
   # twice per publication while gating one artifact of the three.

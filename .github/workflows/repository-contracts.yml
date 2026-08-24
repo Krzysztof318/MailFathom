@@ -1,0 +1,87 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+name: Repository contracts
+
+# The two checks that read the half of the repository no build reads: the workflow contract suite, which asserts the
+# licensing headers, the `describes:` markers, the table of contents, and every rule `scripts/test-agent-workflow.sh`
+# holds, and the chart rendering, which is the deployment contract ADR 0004 names. Defined once, like the two build
+# workflows beside it, because `CI` is no longer the only caller: a nightly and a release publish a tree, and a tree
+# whose contracts nobody asserted is exactly the tree those two channels hand to an operator.
+#
+# Both cost seconds and install nothing — the suite fakes `dotnet` with a symlink to itself and reaches no network, and
+# Helm is the runner image's preinstalled copy — which is why neither has ever been worth deferring past a draft and
+# why adding both to a publication costs nothing worth measuring.
+#
+# What is not here is the decision about whether to run, for the reason the build workflows state: that needs the pull
+# request the caller has and this workflow does not. It arrives as `run-helm` below. The suite takes no such switch,
+# because it reads the whole tree at once rather than the changed files — narrowing it would report green on contracts
+# it never evaluated — so there is nothing a caller could tell it that it does not already know.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Branch, tag, or SHA to check. Empty checks out whatever the caller''s event points at, which is what a pull request wants.'
+        required: false
+        type: string
+        default: ''
+      run-helm:
+        description: 'Whether to lint the chart and render it against the committed manifests.'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  workflow-contracts:
+    name: Workflow contracts
+    runs-on: ubuntu-latest
+    steps:
+      # The default shallow fetch is enough. Every contract that reads this repository rather than a
+      # fixture reads its index through `git ls-files` or the file mode git recorded, never its history;
+      # the suite builds the repositories whose history it tests under a temporary directory of its own.
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      # Fifteen seconds on a GitHub-hosted runner, and nothing else is provisioned for it: the suite fakes
+      # `dotnet` with a symlink to itself, so no SDK, no restore, and no NuGet cache, and it reaches no
+      # network. `jq` is the one tool it needs beyond git and bash, and the runner image carries it. The
+      # suite takes rather longer than this on a developer machine, where it is one step of the full gate
+      # and competes with everything else running there; the figure above is what the job costs a run,
+      # which is the only cost this file is about.
+      - name: Run the workflow contracts
+        run: bash scripts/test-agent-workflow.sh
+
+  # The deployment contract, which is one of the four public surfaces ADR 0004 names and the one no build here can see.
+  # Until this existed `helm lint` and `helm template` ran for the first time inside `Publish Helm chart` — after the
+  # image had been published and with re-tagging a release meaning a registry deletion first — so a chart that stopped
+  # rendering was found at the worst moment there is. `Publish Helm chart` keeps its own lint and render, because a
+  # release gate that trusts an earlier run is not a gate; what this adds is the comparison against the manifests
+  # committed under `ci/golden/`, which is a stronger claim than *it rendered* and which nothing on the publication
+  # channels made before.
+  #
+  # Helm is the runner image's preinstalled copy, which is what the release run uses as well; the rendering the golden
+  # files are compared against is normalized so that the Helm version deciding the whitespace between documents cannot
+  # decide the verdict.
+  helm-chart:
+    name: Helm chart
+    if: inputs.run-helm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Record the Helm version this run used
+        run: helm version --template '{{ printf "Helm %s\n" .Version }}'
+
+      - name: Lint the chart and render it against the committed manifests
+        run: bash scripts/render-helm-manifests.sh
