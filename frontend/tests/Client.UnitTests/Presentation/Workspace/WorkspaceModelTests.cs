@@ -82,6 +82,26 @@ public sealed class WorkspaceModelTests
         Assert.Equal("work@example.test · Inbox", await model.ScopeDescription);
     }
 
+    /// <summary>
+    /// A folder named without an account is not a scope anything here builds and is not one the type refuses either,
+    /// so the indicator names it rather than reading as everything, which would say the opposite of what is in force.
+    /// </summary>
+    [Fact]
+    public async Task ScopeDescription_AFolderWithoutAnAccount_IsNamedRatherThanDropped()
+    {
+        // Arrange
+        var workspace = new SharedWorkspace();
+        var model = ModelOver(workspace);
+
+        // Act
+        await workspace.Scope.UpdateAsync(
+            _ => WorkspaceScope.Everything with { Folder = "Inbox" },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("Inbox", await model.ScopeDescription);
+    }
+
     /// <summary>A selection narrows the scope further, so the indicator says how much of it is in hand.</summary>
     [Fact]
     public async Task ScopeDescription_ASelectionWithinAFolder_CountsIt()

@@ -27,16 +27,21 @@ public sealed class WorkspaceScopeTests
         Assert.False(scope.NarrowsAnything);
     }
 
-    /// <summary>An account in scope is a narrowing, whether or not anything within it is selected.</summary>
+    /// <summary>
+    /// An account in scope is a narrowing, whether or not anything within it is selected — and so is a folder named
+    /// without one, which nothing here refuses and which therefore must not read as everything.
+    /// </summary>
     [Fact]
-    public void NarrowsAnything_AnAccountOrASelection_IsANarrowing()
+    public void NarrowsAnything_AnAccountAFolderOrASelection_IsANarrowing()
     {
         // Act
         var account = WorkspaceScope.Everything with { Account = "work" };
+        var folder = WorkspaceScope.Everything with { Folder = "Inbox" };
         var selection = WorkspaceScope.Everything with { Selection = ImmutableArray.Create("1") };
 
         // Assert
         Assert.True(account.NarrowsAnything);
+        Assert.True(folder.NarrowsAnything);
         Assert.True(selection.NarrowsAnything);
     }
 

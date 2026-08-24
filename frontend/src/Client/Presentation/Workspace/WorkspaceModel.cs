@@ -65,6 +65,10 @@ public partial record WorkspaceModel
         {
             { Account: { } account, Folder: { } folder } => this.localizer[AccountFolderKey, account, folder].Value,
             { Account: { } account } => account,
+
+            // A folder without an account is not a scope anything here builds, and the type refuses nothing, so it is
+            // named rather than dropped: falling through to "everything" would say the opposite of what is in force.
+            { Folder: { } folder } => folder,
             _ => this.localizer[EverythingKey].Value,
         };
 

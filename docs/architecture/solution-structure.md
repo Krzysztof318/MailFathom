@@ -196,9 +196,11 @@ project here and neither build reads the other's files.
   has taken rather than a licence. [Publishing the client](../operations/client-publishing.md) carries the whole
   posture.
 - `src/Client/Presentation/` holds the shell, the frame the product's three spaces are shown inside, those spaces, and
-  the settings screen, each in a directory of its own with the MVUX model behind it. Every screen is a route rather than
-  content something swaps by hand, which is what makes the system back gesture and the browser's history move through
-  the client's own screens; [the client sources](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/src/README.md)
+  the settings screen. The shell sits directly under it, and `Workspace/`, `Spaces/`, and `Settings/` hold the rest, one
+  directory each. Two of them carry an MVUX model — the frame and settings — while the three spaces are pages with no
+  model yet, because each is filled in by the parent that owns it. Every screen is a route rather than content something
+  swaps by hand, which is what makes the system back gesture and the browser's history move through the client's own
+  screens; [the client sources](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/src/README.md)
   carries the composition and what travels between spaces.
 - `src/Client/Strings/` holds one string table per language the application is readable in, one directory per neutral
   culture. Which of them are offered is `LocalizationConfiguration:Cultures` in the embedded `appsettings.json`, so a

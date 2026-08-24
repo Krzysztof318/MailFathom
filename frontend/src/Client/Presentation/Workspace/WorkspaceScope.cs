@@ -36,7 +36,13 @@ public sealed record WorkspaceScope
     public IImmutableList<string> Selection { get; init; } = ImmutableArray<string>.Empty;
 
     /// <summary>Whether this scope narrows to anything at all.</summary>
-    public bool NarrowsAnything => this.Account is not null || this.Selection.Count > 0;
+    /// <remarks>
+    /// Each of the three is asked about rather than only the account, because nothing here refuses a folder named
+    /// without one: the property above says a folder is read within its account, and a reader that assumed the type
+    /// enforced it would answer <see langword="false" /> for a scope that plainly narrows.
+    /// </remarks>
+    public bool NarrowsAnything =>
+        this.Account is not null || this.Folder is not null || this.Selection.Count > 0;
 
     /// <summary>Holds two scopes equal when they name the same thing, rather than when they are the same object.</summary>
     /// <param name="other">The scope to compare against.</param>
