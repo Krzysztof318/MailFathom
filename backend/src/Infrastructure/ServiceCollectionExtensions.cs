@@ -105,6 +105,7 @@ using MailFathom.Infrastructure.Persistence.Emails.Threads;
 using MailFathom.Infrastructure.Persistence.Embeddings;
 using MailFathom.Infrastructure.Persistence.Jobs;
 using MailFathom.Infrastructure.Persistence.Mutations;
+using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.Infrastructure.Persistence.Rules;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using MailFathom.Infrastructure.Persistence.Spam;
@@ -419,6 +420,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IEmailThreadStore, EmailThreadStore>();
         services.AddScoped<EmailThreadAssembly>();
         services.AddScoped<IDatabaseSchemaInspector, EfCoreDatabaseSchemaInspector>();
+        // Who this deployment holds owner records for. Read once while the host comes up rather than per request, which
+        // is why nothing scoped to a request depends on it and why it is registered beside the schema inspector the same
+        // startup step already resolves.
+        services.AddScoped<IMailOwnerDirectory, PersistedMailOwnerDirectory>();
         services.AddScoped<IEmailContentStore, EmailContentStore>();
         services.AddScoped<IStoredEmailContentInventory, StoredEmailContentInventory>();
         services.AddScoped<IStoredEmailExtractionBackfillStore, StoredEmailExtractionBackfillStore>();
@@ -632,6 +637,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailboxSynchronizer>();
         services.AddScoped<MailboxReconciler>();
         services.AddScoped<StoredEmailExtractionBackfill>();
+        // The caller-scoped half of the account catalog, registered beside the resolution that is its first reader. The
+        // deployment-wide half is registered by the composition root, because configuration is what declares the
+        // accounts; this half is application reasoning over that answer, so it is composed here and the two are
+        // separate registrations rather than one service resolved two ways.
+        services.AddScoped<ICallerMailAccountCatalog, OwnedMailAccountCatalog>();
         services.AddScoped<MailboxScopeResolver>();
     }
 

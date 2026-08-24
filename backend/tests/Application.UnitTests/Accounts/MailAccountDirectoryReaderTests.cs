@@ -203,9 +203,9 @@ public sealed class MailAccountDirectoryReaderTests
     /// <summary>Builds a reader whose collaborators would all answer, so a refusal can only have come from the grant.</summary>
     private static MailAccountDirectoryReader ReaderAuthorizedBy(AccessAuthorization authorization)
     {
-        var catalog = Substitute.For<IMailAccountCatalog>();
+        var catalog = Substitute.For<ICallerMailAccountCatalog>();
         catalog.SynchronizationEnabled.Returns(true);
-        catalog.ServedAccounts.Returns([SyntheticServedAccount.Of("personal")]);
+        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of("personal")]);
 
         return new MailAccountDirectoryReader(
             catalog,
@@ -236,9 +236,9 @@ public sealed class MailAccountDirectoryReaderTests
         bool synchronizationEnabled,
         params ServedMailAccount[] servedAccounts)
     {
-        var catalog = Substitute.For<IMailAccountCatalog>();
+        var catalog = Substitute.For<ICallerMailAccountCatalog>();
         catalog.SynchronizationEnabled.Returns(synchronizationEnabled);
-        catalog.ServedAccounts.Returns([.. servedAccounts]);
+        catalog.OwnedAccounts.Returns([.. servedAccounts]);
 
         return new MailAccountDirectoryReader(
             catalog,

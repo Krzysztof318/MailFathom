@@ -1,6 +1,6 @@
 # Mailbox queries
 
-<!-- describes: backend/src/Application/Emails/ListEmails/**, backend/src/Application/Emails/Mailboxes/**, backend/src/Application/Emails/Summaries/**, backend/src/Application/Folders/**, backend/src/Application/Synchronization/Checkpoints/**, backend/src/Infrastructure/Persistence/Emails/**, backend/src/Infrastructure/Persistence/Synchronization/** -->
+<!-- describes: backend/src/Application/Accounts/**, backend/src/Application/Emails/ListEmails/**, backend/src/Application/Emails/Mailboxes/**, backend/src/Application/Emails/Summaries/**, backend/src/Application/Folders/**, backend/src/Application/Synchronization/Checkpoints/**, backend/src/Infrastructure/Persistence/Emails/**, backend/src/Infrastructure/Persistence/Synchronization/** -->
 
 MailFathom answers a mailbox listing from its local copy. `ListEmails` is the first read use case: it takes structured
 filters, returns a bounded page of email summaries, issues the cursor that continues the walk, and reports how current
@@ -315,6 +315,15 @@ ordering key. Whether PostgreSQL can then serve that expression from the timelin
 query-plan question the integration suite answers, and the answer there is a matching expression index rather than a different
 order here.
 
+**A scope naming several accounts is read as a walk per account, appended.** The timeline index leads with the account,
+so it serves one account as an ordered walk and a keyset page costs the page. Across several accounts that ordering is
+not something a containment over the account list preserves, so one predicate over the list is planned as a read of
+everything that matched followed by a sort of all of it — which is what a mailbox of tens of thousands of messages per
+account turns a bounded page into. So each account is walked on its own index, bounded to the page size, and the walks
+are appended and ordered together: what the outer ordering sorts is at most one page per account rather than everything
+that matched. Each walk takes the whole page rather than a share of it, because the page may come entirely from one
+account. A scope naming one account composes no merge at all and issues the query it always has.
+
 ### The cursor
 
 Pagination is keyset-based, never offset-based: the next page asks for rows beyond a known boundary, so mail arriving
@@ -372,10 +381,14 @@ configuration bounds.
   identically.
 - `MailFathom.Application.Emails.Summaries` — the summary a read model publishes and the two reader ports that produce
   it.
-- `MailFathom.Application.Accounts` — `IMailAccountCatalog`, the port that describes which accounts this deployment serves, and `MailAccountDirectoryReader`, the one use case that publishes that set rather than bounding a read with it. One
-  member answers both questions asked of it: whether the account a request named is accepted, and which accounts an
-  unscoped request is narrowed to. `ConfiguredMailAccountCatalog` implements it over the bound mail section, so the
-  answer comes from the configuration that defines the accounts.
+- `MailFathom.Application.Accounts` — the two account catalogs and `MailAccountDirectoryReader`, the one use case that
+  publishes an account set rather than bounding a read with it. `IDeploymentMailAccountCatalog` describes every account
+  this deployment serves, and `ConfiguredMailAccountCatalog` implements it over the bound mail section, so that answer
+  comes from the configuration that defines the accounts. `ICallerMailAccountCatalog` describes the accounts the caller
+  in hand *owns*, and it is the one every caller-facing read resolves through: its single member answers both questions
+  asked of it, whether the account a request named is accepted and which accounts an unscoped request is narrowed to.
+  The two are told apart by the members they publish rather than by a flag, so a read model reaching the wrong one names
+  something the right one does not have.
 - `MailFathom.Application.Synchronization.Checkpoints` — the freshness port and its read model, kept separate from the
   readers that return mail because every read model attaches freshness.
 - `MailFathom.Infrastructure.Persistence.Emails` — `StoredEmailTimelineReader`, which evaluates every filter, the keyset

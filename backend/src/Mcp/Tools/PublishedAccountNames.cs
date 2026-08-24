@@ -15,9 +15,10 @@ namespace MailFathom.Mcp.Tools;
 /// than in each tool is what stops two tools from publishing an account under two different names.
 /// </para>
 /// <para>
-/// The lookup is built per tool call, from the same catalog the use case bounded the read with, so a configuration
-/// reload is observed rather than cached past. An ordinary dictionary rather than a frozen one for that reason: it is
-/// built once and read a few times per call, which is the shape a frozen collection's construction cost is wrong for.
+/// The lookup is built per tool call, from the same catalog the use case bounded the read with — the caller-scoped one,
+/// so the names a result carries are the names of the caller's own accounts and a reload is observed rather than cached
+/// past. An ordinary dictionary rather than a frozen one for that reason: it is built once and read a few times per
+/// call, which is the shape a frozen collection's construction cost is wrong for.
 /// </para>
 /// </remarks>
 internal sealed class PublishedAccountNames
@@ -27,16 +28,16 @@ internal sealed class PublishedAccountNames
     private PublishedAccountNames(Dictionary<string, string> displayNamesByAccountId) =>
         this.displayNamesByAccountId = displayNamesByAccountId;
 
-    /// <summary>Reads the published names of the accounts a deployment serves.</summary>
-    /// <param name="accountCatalog">Describes the accounts this deployment serves.</param>
+    /// <summary>Reads the published names of the accounts the caller's owner owns.</summary>
+    /// <param name="accountCatalog">Describes the accounts the caller's owner owns.</param>
     /// <returns>The lookup a result mapping reads names from.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="accountCatalog" /> is <see langword="null" />.</exception>
-    public static PublishedAccountNames From(IMailAccountCatalog accountCatalog)
+    public static PublishedAccountNames From(ICallerMailAccountCatalog accountCatalog)
     {
         ArgumentNullException.ThrowIfNull(accountCatalog);
 
         return new PublishedAccountNames(
-            accountCatalog.ServedAccounts.ToDictionary(
+            accountCatalog.OwnedAccounts.ToDictionary(
                 static account => account.Id.Value,
                 static account => account.DisplayName.Value,
                 StringComparer.Ordinal));
@@ -44,12 +45,12 @@ internal sealed class PublishedAccountNames
 
     /// <summary>Reads the name one account is published under.</summary>
     /// <param name="accountId">The account a result names.</param>
-    /// <returns>The account's display name, or its identifier when this deployment no longer serves it.</returns>
+    /// <returns>The account's display name, or its identifier when the caller's owner no longer owns it.</returns>
     /// <remarks>
     /// Every account a result can name is one the read was bounded to, so the fallback is reachable only when
-    /// configuration was reloaded between the query and the mapping of its answer. The identifier is what is published
-    /// then, because MailFathom's own name for the account is a truthful answer and failing a read that already
-    /// succeeded is not.
+    /// configuration was reloaded, or what the owner owns changed, between the query and the mapping of its answer. The
+    /// identifier is what is published then, because MailFathom's own name for the account is a truthful answer and
+    /// failing a read that already succeeded is not.
     /// </remarks>
     public string For(MailAccountId accountId) =>
         this.displayNamesByAccountId.TryGetValue(accountId.Value, out var displayName) ? displayName : accountId.Value;

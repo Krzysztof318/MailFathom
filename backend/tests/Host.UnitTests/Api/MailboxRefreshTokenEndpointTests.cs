@@ -178,7 +178,7 @@ public sealed class MailboxRefreshTokenEndpointTests
 
     private MailboxRefreshTokenRecorder RecorderServing(params MailAccountId[] servedAccountIds)
     {
-        var catalog = Substitute.For<IMailAccountCatalog>();
+        var catalog = Substitute.For<IDeploymentMailAccountCatalog>();
         catalog.ServedAccounts.Returns([.. servedAccountIds.Select(SyntheticServedAccount.Of)]);
 
         return new MailboxRefreshTokenRecorder(catalog, this.store, AdministrativeGrant.WholeSurface);

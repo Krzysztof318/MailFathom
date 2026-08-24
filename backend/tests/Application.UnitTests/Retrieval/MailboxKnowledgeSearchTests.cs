@@ -539,10 +539,10 @@ public sealed class MailboxKnowledgeSearchTests
         return reader;
     }
 
-    private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
+    private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
-        var catalog = Substitute.For<IMailAccountCatalog>();
-        catalog.ServedAccounts.Returns(
+        var catalog = Substitute.For<ICallerMailAccountCatalog>();
+        catalog.OwnedAccounts.Returns(
         [
             .. servedAccountIds
                 .OrderBy(accountId => accountId.Value, StringComparer.Ordinal)

@@ -37,13 +37,13 @@ public sealed class MailRuleScheduleSource : IScheduledJobSource
     private const string IdentityPrefix = "mail-rules";
 
     private readonly IMailRuleSetSource ruleSetSource;
-    private readonly IMailAccountCatalog accounts;
+    private readonly IDeploymentMailAccountCatalog accounts;
 
     /// <summary>Initializes the source over the rules in force and the accounts they may reach.</summary>
     /// <param name="ruleSetSource">Hands out the rule set the schedules are read from.</param>
     /// <param name="accounts">Names the accounts this deployment serves, which is what an unscoped rule reaches.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    public MailRuleScheduleSource(IMailRuleSetSource ruleSetSource, IMailAccountCatalog accounts)
+    public MailRuleScheduleSource(IMailRuleSetSource ruleSetSource, IDeploymentMailAccountCatalog accounts)
     {
         ArgumentNullException.ThrowIfNull(ruleSetSource);
         ArgumentNullException.ThrowIfNull(accounts);

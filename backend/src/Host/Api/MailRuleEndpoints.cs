@@ -134,7 +134,7 @@ internal static class MailRuleEndpoints
     /// </remarks>
     internal static async Task<Results<Ok<MailRuleRunStartResponse>, ProblemHttpResult>> StartRunAsync(
         [FromBody] MailRuleRunRequest? request,
-        [FromServices] IMailAccountCatalog accounts,
+        [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailRuleEvaluationRunRequests requests,
         CancellationToken cancellationToken)
     {
@@ -166,7 +166,7 @@ internal static class MailRuleEndpoints
     /// </remarks>
     internal static async Task<Results<Ok<MailRuleRunStateResponse>, ProblemHttpResult>> ReadRunAsync(
         [FromQuery] string? account,
-        [FromServices] IMailAccountCatalog accounts,
+        [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailRuleEvaluationRunReader runs,
         CancellationToken cancellationToken)
     {
@@ -210,7 +210,7 @@ internal static class MailRuleEndpoints
         [FromQuery] DateTimeOffset? before,
         [FromQuery] int? pageSize,
         [FromQuery] string? cursor,
-        [FromServices] IMailAccountCatalog accounts,
+        [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailRuleHistory history,
         CancellationToken cancellationToken)
     {

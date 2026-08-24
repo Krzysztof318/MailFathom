@@ -59,7 +59,7 @@ internal sealed class SyntheticMailAccount(
     IAuthoredDeleteEmailDispositionReader,
     IMailboxMutationAuditSettingsReader,
     IMailAnsweringAuditSettingsReader,
-    IMailAccountCatalog,
+    IDeploymentMailAccountCatalog,
     IMailFolderParticipationReader,
     IMailFolderMappingReader,
     IJunkMailFolderCatalog,

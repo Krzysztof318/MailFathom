@@ -4,22 +4,29 @@
 
 namespace MailFathom.Application.Accounts;
 
-/// <summary>Describes the mail accounts this deployment serves.</summary>
+/// <summary>Describes every mail account this deployment serves, whoever owns it.</summary>
 /// <remarks>
 /// <para>
-/// A query use case asks this before it reads anything, and it asks for two reasons. An account nobody configured is
-/// refused rather than answered with an empty page, because at a boundary a client reaches an empty page tells the
-/// client the name exists and holds no mail, which turns a list operation into a way to enumerate accounts. A request
-/// that names no account is then narrowed to this set rather than left unrestricted, because removing an account from
-/// configuration must stop its stored mail from being readable even though its rows remain.
+/// This is the deployment's own answer and it belongs to work the deployment does for itself: the synchronization
+/// coordinator that starts a run per account, the schedule that evaluates rules against each of them, the status an
+/// operator reads, and the administrative operations an operator performs on an account they name. None of those acts
+/// for one owner, and each of them would be wrong if it saw one owner's half of the deployment.
 /// </para>
 /// <para>
-/// The set is published to a caller in one place and one only: the tool that exists to say which accounts a deployment
-/// serves, so that a client can name one. Every other use of it is a bound on a query rather than an answer, and what a
-/// caller learns there is still only whether the account it named was accepted.
+/// It is deliberately not what a caller-facing use case reads. A read that answers a person about their own mail asks
+/// <see cref="ICallerMailAccountCatalog" /> instead, and the two are separate ports with differently named members so a
+/// read model that reaches for the wrong one names the wrong member rather than compiling and answering across owners.
+/// The rule is on the operation rather than on the surface: an administrative operation reaches this one, and an
+/// operation a person performs about their own accounts reaches the other, and an operation that is both is two
+/// operations.
+/// </para>
+/// <para>
+/// An account nobody configured is refused rather than answered with an empty page, because at a boundary a client
+/// reaches, an empty page tells the client the name exists and holds no mail, which turns a list operation into a way to
+/// enumerate accounts.
 /// </para>
 /// </remarks>
-public interface IMailAccountCatalog
+public interface IDeploymentMailAccountCatalog
 {
     /// <summary>Gets whether this deployment refreshes the local copy of these accounts at all.</summary>
     /// <remarks>

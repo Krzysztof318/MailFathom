@@ -271,7 +271,12 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // so it is here because the outbox writes to it, and its depth is what a test reads to see that the write
         // announced anything at all.
         builder.Services.AddSingleton(new MailOutboxSignal(capacity: 16));
-        builder.Services.AddSingleton<IMailAccountCatalog>(account);
+        builder.Services.AddSingleton<IDeploymentMailAccountCatalog>(account);
+        // Whose accounts those are. A composed host settles this from its owner records while it starts and nothing here
+        // starts one, so the harness states it; the caller-scoped catalog the infrastructure registers compares it
+        // against the owner a caller is admitted for, which is what makes a mailbox read here run through the same
+        // narrowing a deployment's does.
+        builder.Services.AddSingleton<IDeploymentMailOwnerSource>(new OrchestratedDeploymentOwner());
         // The port every folder decision is read through, registered by the composition root from the same options
         // section the account above comes from. Chunking and every mailbox read resolve it, so a harness without it
         // would fail to compose rather than behave like a deployment that configured no folder switch.
@@ -484,7 +489,10 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             (scope, token) =>
             {
                 scope.GetRequiredService<StatedAuthorizedPrincipalSource>()
-                    .Assume(AuthorizedPrincipal.Caller("orchestrated-caller", grantedPermissions));
+                    .Assume(AuthorizedPrincipal.CallerActingFor(
+                        OrchestratedDeploymentOwner.ServedOwner,
+                        "orchestrated-caller",
+                        grantedPermissions));
 
                 return work(scope, token);
             },

@@ -56,6 +56,17 @@ public sealed class PrincipalNotAuthorizedException : MailFathomException
     internal static PrincipalNotAuthorizedException WrongPrincipalKind(AuthorizedPrincipalKind admittedKind) =>
         new($"The operation is reached under {Describe(admittedKind)}, and what reached it is not one.", default);
 
+    /// <summary>Reports an operation scoped to an owner's mail reached by a principal acting for no owner.</summary>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// It names no permission, because no permission would have helped: the deployment administrator and this process's
+    /// own identity are refused here however broad their grant, and widening one is the remedy an operator must not be
+    /// pointed at. The message says the operation is one owner's rather than the deployment's, which is the distinction
+    /// an operator reading a log has to make.
+    /// </remarks>
+    internal static PrincipalNotAuthorizedException NoOwner() =>
+        new("The operation acts on one owner's mail, and what reached it is acting for no owner.", default);
+
     /// <summary>Reports an operation reached under no principal at all.</summary>
     /// <returns>The failure to raise.</returns>
     /// <remarks>This is the entrypoint that never stated what admitted it, so the refusal names nothing to grant: an operator's remedy is the missing adapter rather than a wider grant.</remarks>

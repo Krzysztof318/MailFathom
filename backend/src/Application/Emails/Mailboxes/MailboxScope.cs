@@ -11,9 +11,9 @@ namespace MailFathom.Application.Emails.Mailboxes;
 /// <remarks>
 /// <para>
 /// This is what a query runs with rather than what a request asked for. Both differences are settled before the scope is
-/// built: an unnamed account list becomes the accounts this deployment serves, because a store holds rows for accounts
-/// an operator has since removed, and every folder a request named — by its alias or by the role it plays — becomes the
-/// folder of the account it means. A folder is therefore named here as an account and an alias together, never as an
+/// built: an unnamed account list becomes the accounts the caller's owner owns, because a store holds rows for accounts
+/// an operator has since removed and rows belonging to every other owner, and every folder a request named — by its
+/// alias or by the role it plays — becomes the folder of the account it means. A folder is therefore named here as an account and an alias together, never as an
 /// alias alone, so one account's junk folder cannot admit another account's folder that happens to share the name.
 /// </para>
 /// <para>
@@ -44,8 +44,8 @@ public sealed record MailboxScope
     /// It counts what the caller wrote rather than folders, which is the same distinction the bound above makes and one
     /// a role sharpens: <c>role:Junk</c> is one name however many accounts answer it. Both bounds are enforced where the
     /// caller's own list is read, in <see cref="MailboxScopeResolver" />, rather than over the resolved lists this type
-    /// holds. Resolution can only produce more: a request naming no account resolves to every served account, and one
-    /// role a request named resolves to a folder on each of them.
+    /// holds. Resolution can only produce more: a request naming no account resolves to every account its owner owns,
+    /// and one role a request named resolves to a folder on each of them.
     /// </remarks>
     public const int MaximumFolders = 64;
 
@@ -55,11 +55,20 @@ public sealed record MailboxScope
         this.SelectedFolders = selectedFolders;
     }
 
-    /// <summary>Gets the scope that names no account, no folder, and nothing readable, which is what a deployment serving no account resolves to.</summary>
+    /// <summary>Gets the scope that names no account, no folder, and nothing readable.</summary>
     /// <remarks>
-    /// A read never runs against it in a deployment that serves accounts, because resolution replaces an unnamed account
-    /// list with the served ones and names every readable folder before the scope is built. A use case handed it
-    /// answers with nothing, which is what a deployment holding no mapping has to mean: there is no folder to read.
+    /// <para>
+    /// Two callers resolve to it. A deployment serving no account is the first and the older one. The second is a
+    /// caller acting for an owner who owns none of the accounts the deployment does serve, which is a real read on a
+    /// populated deployment rather than a degenerate configuration — <see cref="MailboxScopeResolver" /> answers it
+    /// with this scope before any folder decision is applied, because those decisions are the deployment's and would
+    /// otherwise admit every other owner's folders beside an account list that names nobody.
+    /// </para>
+    /// <para>
+    /// A use case handed it answers with nothing, which is what both cases have to mean: there is no folder this caller
+    /// may read. What it must never become is an unrestricted query, and that is why it names no folder as well as no
+    /// account — an empty account list alone is read as every account by the persistence predicate.
+    /// </para>
     /// </remarks>
     public static MailboxScope NothingReadable { get; } = new([], []);
 
@@ -122,7 +131,7 @@ public sealed record MailboxScope
     public bool IncludesJunkMail { get; private init; }
 
     /// <summary>Creates the scope a query runs with, from identities already resolved against configuration.</summary>
-    /// <param name="accountIds">The accounts the query runs against, which are the served ones when a request named none.</param>
+    /// <param name="accountIds">The accounts the query runs against, which are the ones the caller's owner owns when a request named none.</param>
     /// <param name="selectedFolders">The folders the query runs against, one pair per account, with every role a request named already turned into the folder it means on that account, or <see langword="null" /> to name none.</param>
     /// <returns>The scope, with both lists deduplicated and ordered.</returns>
     /// <remarks>

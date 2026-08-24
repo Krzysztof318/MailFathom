@@ -152,7 +152,7 @@ public sealed class MailboxRefreshTokenRecorderTests
         AccessAuthorization authorization,
         params MailAccountId[] servedAccountIds)
     {
-        var catalog = Substitute.For<IMailAccountCatalog>();
+        var catalog = Substitute.For<IDeploymentMailAccountCatalog>();
         catalog.ServedAccounts.Returns([.. servedAccountIds.Select(SyntheticServedAccount.Of)]);
 
         return new MailboxRefreshTokenRecorder(catalog, this.store, authorization);

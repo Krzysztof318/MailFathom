@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Access;
@@ -67,11 +68,33 @@ public sealed class AuthorizedPrincipalTests
     public void SignedCapability_AVerifiedTicket_NamesItsObjectAndHoldsNothing()
     {
         // Arrange & Act
-        var capability = AuthorizedPrincipal.SignedCapability("/attachments/an-object/0");
+        var capability = AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Deployment, "/attachments/an-object/0");
 
         // Assert
         Assert.Equal(AuthorizedPrincipalKind.SignedCapability, capability.Kind);
         Assert.Equal("/attachments/an-object/0", capability.Identity);
         Assert.Empty(capability.Permissions);
+    }
+
+    /// <summary>
+    /// Both factories that carry an owner refuse one that names nobody, and the guard is what stops the struct default
+    /// from being minted into a principal: a use case reading such a principal's owner would scope a mail query to an
+    /// owner no row belongs to, which is a query that answers rather than one that refuses.
+    /// </summary>
+    [Fact]
+    public void EveryFactoryCarryingAnOwner_AnOwnerThatNamesNobody_IsRejected()
+    {
+        // Arrange
+        Action[] factories =
+        [
+            () => AuthorizedPrincipal.CallerActingFor(default, "mcp-key", [MailFathomPermission.MailRead]),
+            () => AuthorizedPrincipal.SignedCapability(default, "/attachments/an-object/0"),
+        ];
+
+        // Act
+        Exception?[] refusals = [.. factories.Select(Record.Exception)];
+
+        // Assert
+        Assert.All(refusals, refusal => Assert.IsType<ArgumentException>(refusal));
     }
 }

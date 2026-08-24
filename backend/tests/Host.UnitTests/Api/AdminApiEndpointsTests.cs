@@ -366,10 +366,10 @@ public sealed class AdminApiEndpointsTests
         services.AddLogging();
         services.AddScoped(_ => authorization ?? Authorization);
         services.AddScoped(_ => new MailboxRefreshTokenRecorder(
-            Substitute.For<IMailAccountCatalog>(),
+            Substitute.For<IDeploymentMailAccountCatalog>(),
             Substitute.For<IMailboxRefreshTokenStore>(),
             Authorization));
-        services.AddScoped(_ => Substitute.For<IMailAccountCatalog>());
+        services.AddScoped(_ => Substitute.For<IDeploymentMailAccountCatalog>());
         services.AddScoped(_ => Substitute.For<IMailboxMutationAuditEntryStore>());
         services.AddScoped(_ => Substitute.For<IAuthorizedPrincipalSource>());
         services.AddSingleton(Substitute.For<IAuthorizationRefusalTelemetry>());

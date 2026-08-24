@@ -73,7 +73,7 @@ internal static class MailboxMutationAuditEndpoint
         [FromQuery] DateTimeOffset? before,
         [FromQuery] int? pageSize,
         [FromQuery] string? cursor,
-        [FromServices] IMailAccountCatalog accounts,
+        [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailboxMutationAuditTrailReader trail,
         CancellationToken cancellationToken)
     {

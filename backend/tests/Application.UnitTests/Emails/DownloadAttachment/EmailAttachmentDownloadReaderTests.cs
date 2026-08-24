@@ -41,7 +41,7 @@ public sealed class EmailAttachmentDownloadReaderTests
 
     /// <summary>The principal the download route states once it has verified a link, which is what this use case admits.</summary>
     private static readonly AuthorizedPrincipal RedeemedCapability =
-        AuthorizedPrincipal.SignedCapability("/attachments/0198f0aa-0000-7000-8000-000000000000/0");
+        AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Deployment, "/attachments/0198f0aa-0000-7000-8000-000000000000/0");
 
     [Fact]
     public async Task OpenAsync_AttachmentOfAServedEmail_OpensItThroughTheStoredCopy()
@@ -311,7 +311,7 @@ public sealed class EmailAttachmentDownloadReaderTests
         IEmailContentStore? contentStore = null,
         IEmailAttachmentContentReader? contentReader = null,
         IEmailContentRepairRequestStore? repairRequestStore = null,
-        IMailAccountCatalog? accountCatalog = null,
+        ICallerMailAccountCatalog? accountCatalog = null,
         IMailFolderParticipationReader? folderParticipation = null,
         AccessAuthorization? authorization = null) => new(
         SummaryReaderReturning(summary),
@@ -377,10 +377,10 @@ public sealed class EmailAttachmentDownloadReaderTests
         return contentReader;
     }
 
-    private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
+    private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
-        var catalog = Substitute.For<IMailAccountCatalog>();
-        catalog.ServedAccounts.Returns([.. servedAccountIds.Select(SyntheticServedAccount.Of)]);
+        var catalog = Substitute.For<ICallerMailAccountCatalog>();
+        catalog.OwnedAccounts.Returns([.. servedAccountIds.Select(SyntheticServedAccount.Of)]);
 
         return catalog;
     }

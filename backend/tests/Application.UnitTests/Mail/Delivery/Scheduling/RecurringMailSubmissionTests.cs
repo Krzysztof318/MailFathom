@@ -281,7 +281,7 @@ public sealed class RecurringMailSubmissionTests
     {
         contentStore = Substitute.For<IEmailContentStore>();
 
-        var accountCatalog = Substitute.For<IMailAccountCatalog>();
+        var accountCatalog = Substitute.For<IDeploymentMailAccountCatalog>();
         accountCatalog.ServedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();

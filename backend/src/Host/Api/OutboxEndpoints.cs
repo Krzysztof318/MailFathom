@@ -105,7 +105,7 @@ internal static class OutboxEndpoints
     /// <returns><c>200</c> with the counts, or <c>400</c> naming what was wrong with the request.</returns>
     internal static async Task<Results<Ok<OutboxSummaryResponse>, ProblemHttpResult>> ReadSummaryAsync(
         [FromQuery] string? account,
-        [FromServices] IMailAccountCatalog accounts,
+        [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] OutboxOperations outbox,
         CancellationToken cancellationToken)
     {
@@ -141,7 +141,7 @@ internal static class OutboxEndpoints
         [FromQuery] string? stage,
         [FromQuery] int? pageSize,
         [FromQuery] string? cursor,
-        [FromServices] IMailAccountCatalog accounts,
+        [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] OutboxOperations outbox,
         CancellationToken cancellationToken)
     {

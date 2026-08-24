@@ -44,16 +44,9 @@ internal sealed class StoredEmailThreadReader(MailFathomDbContext dbContext) : I
             return [];
         }
 
-        var readable = Readable(
-            dbContext.StoredEmails
-                .AsNoTracking()
-                .Where(email => email.EmailThreadId == surviving)
-                .Where(StoredEmailTombstone.IsNotTombstoned),
-            scope);
-
         // One row past the bound, because the count alone cannot tell a conversation that ends at the bound from one
         // that was cut there, and the caller states which of the two it is to whoever reads the thread.
-        var rows = await readable
+        var rows = await this.Readable(surviving, scope)
             .OrderBy(email => email.Id)
             .Take(IEmailThreadReader.MaximumAssembledEmails + 1)
             .Select(email => new
@@ -85,24 +78,31 @@ internal sealed class StoredEmailThreadReader(MailFathomDbContext dbContext) : I
         ];
     }
 
-    /// <summary>Narrows a conversation to the mail configuration admits to tools.</summary>
+    /// <summary>Narrows one conversation's messages to the mail the scope admits.</summary>
     /// <remarks>
-    /// The same three narrowings every mailbox read applies, and applied here rather than after the rows arrive because
-    /// the bound is on this query: a withheld message that consumed one of the bounded rows would push a readable one
-    /// out of a conversation the caller is entitled to all of.
+    /// <para>
+    /// The scope is applied to the query rather than to the rows it returned, because the bound is on that query: a
+    /// withheld message that consumed one of the bounded rows would push a readable one out of a conversation the
+    /// caller is entitled to all of.
+    /// </para>
+    /// <para>
+    /// It composes the narrowing every mail-returning read composes and states none of its own, which is what stops a
+    /// caller's entitlement being read twice and read differently. What it does not compose is
+    /// <see cref="StoredEmailSelectionPredicate.Matching" />: a conversation is read by membership rather than by
+    /// filters, so narrowing it by the folder somebody happened to be listing would cut the thread.
+    /// </para>
+    /// <para>
+    /// It is a member of this class rather than an expression inside the asynchronous read above, and that is
+    /// load-bearing: a call made only inside an async method body belongs to the compiler-generated state machine, and
+    /// the architecture rule holding every mail-returning read to this narrowing reads the class.
+    /// </para>
     /// </remarks>
-    private static IQueryable<StoredEmailEntity> Readable(IQueryable<StoredEmailEntity> emails, MailboxScope scope)
-    {
-        if (scope.AccountIds.Count > 0)
-        {
-            var accountIds = scope.AccountIds.Select(static accountId => accountId.Value).ToArray();
-            emails = emails.Where(email => accountIds.Contains(email.MailboxAccountId));
-        }
-
-        return AccountScopedMailFolders.Excluding(
-            AccountScopedMailFolders.Admitting(emails, scope.ReadableFolders),
-            scope.WithheldJunkFolders);
-    }
+    private IQueryable<StoredEmailEntity> Readable(Guid survivingThreadId, MailboxScope scope) =>
+        StoredEmailSelectionPredicate.WithinScope(
+            dbContext.StoredEmails
+                .AsNoTracking()
+                .Where(email => email.EmailThreadId == survivingThreadId),
+            scope);
 
     /// <summary>Follows a merged conversation to the one it was folded into, or reports that nothing holds it.</summary>
     /// <remarks>

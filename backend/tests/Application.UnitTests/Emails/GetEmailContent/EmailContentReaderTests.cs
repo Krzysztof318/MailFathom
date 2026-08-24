@@ -1574,7 +1574,7 @@ public sealed class EmailContentReaderTests
         IEmailContentRenderer renderer,
         IEmailContentRepairRequestStore? repairRequestStore = null,
         IEmailContentStore? contentStore = null,
-        IMailAccountCatalog? accountCatalog = null,
+        ICallerMailAccountCatalog? accountCatalog = null,
         IAttachmentDownloadLinkIssuer? linkIssuer = null,
         EmailContentReadOptions? readOptions = null,
         IMailFolderParticipationReader? folderParticipation = null,
@@ -1603,7 +1603,7 @@ public sealed class EmailContentReaderTests
         IEmailContentRenderer renderer,
         IEmailContentRepairRequestStore? repairRequestStore = null,
         IEmailContentStore? contentStore = null,
-        IMailAccountCatalog? accountCatalog = null,
+        ICallerMailAccountCatalog? accountCatalog = null,
         IAttachmentDownloadLinkIssuer? linkIssuer = null,
         EmailContentReadOptions? readOptions = null,
         SensitiveContentEgressGuard? egressGuard = null,
@@ -1691,10 +1691,10 @@ public sealed class EmailContentReaderTests
         return renderer;
     }
 
-    private static IMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
+    private static ICallerMailAccountCatalog CatalogServing(params MailAccountId[] servedAccountIds)
     {
-        var catalog = Substitute.For<IMailAccountCatalog>();
-        catalog.ServedAccounts.Returns([.. servedAccountIds.Select(SyntheticServedAccount.Of)]);
+        var catalog = Substitute.For<ICallerMailAccountCatalog>();
+        catalog.OwnedAccounts.Returns([.. servedAccountIds.Select(SyntheticServedAccount.Of)]);
 
         return catalog;
     }

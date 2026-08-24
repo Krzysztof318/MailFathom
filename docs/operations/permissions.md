@@ -336,6 +336,15 @@ anything outside them, whichever credential got the caller in, and no setting na
 the same mailboxes — which is exactly why a token has to name an authorized subject, since admitting a colleague of the
 same tenant would admit them to the owner's mail rather than to their own.
 
+**Whose mail a caller is acting on.** That is a second axis, and no name in the table above is on it. A caller admitted on the MCP
+surface or the client surface is admitted to act for one owner, and every mailbox read is resolved against the accounts
+that owner owns before any grant is consulted; a caller admitted on the administrative surface acts for no owner at all,
+so an owner-scoped use case refuses it however broad its grant. That is why no permission names an account and adding
+one would be the wrong repair: a grant says what may be done, and whose mail it may be done to is decided by what
+admitted the caller. While mail accounts are declared in configuration a deployment holds exactly one owner and every
+configured account belongs to them, so the two axes have one visible consequence today — the administrative surface
+cannot read a mailbox. [Who a use case is running for](../architecture/authorized-principal.md) records the whole of it.
+
 **Whether a capability exists.** A grant composes with availability rather than replacing it: a tool may be
 unavailable, unauthorized, or both, and no grant makes a capability this deployment does not have appear. An endpoint
 whose chat provider is unconfigured withholds `ask_mail` from a caller granted `mailfathom.mail.ask` exactly as it does

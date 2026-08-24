@@ -105,7 +105,7 @@ internal static class MailboxMaintenanceEndpoints
     internal static async Task<Results<Ok<MailboxRewindAssessmentResponse>, ProblemHttpResult>> AssessRewindAsync(
         [FromQuery] string? account,
         [FromQuery] string? folder,
-        [FromServices] IMailAccountCatalog accounts,
+        [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailSynchronizationRewind rewind,
         CancellationToken cancellationToken)
     {
@@ -139,7 +139,7 @@ internal static class MailboxMaintenanceEndpoints
     /// </remarks>
     internal static async Task<Results<Ok<MailboxRewindResponse>, ProblemHttpResult>> RewindAsync(
         [FromBody] MailboxMaintenanceRequest? request,
-        [FromServices] IMailAccountCatalog accounts,
+        [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] MailSynchronizationRewind rewind,
         CancellationToken cancellationToken)
     {
@@ -176,7 +176,7 @@ internal static class MailboxMaintenanceEndpoints
     /// </remarks>
     internal static async Task<Results<Ok<MailboxRederivationStartResponse>, ProblemHttpResult>> RederiveAsync(
         [FromBody] MailboxMaintenanceRequest? request,
-        [FromServices] IMailAccountCatalog accounts,
+        [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] StoredMailRederivationRequests requests,
         CancellationToken cancellationToken)
     {
@@ -208,7 +208,7 @@ internal static class MailboxMaintenanceEndpoints
     internal static async Task<Results<Ok<MailboxRederivationStateResponse>, ProblemHttpResult>> ReadRederivationAsync(
         [FromQuery] string? account,
         [FromQuery] string? folder,
-        [FromServices] IMailAccountCatalog accounts,
+        [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] StoredMailRederivationRunReader runs,
         CancellationToken cancellationToken)
     {
@@ -234,7 +234,7 @@ internal static class MailboxMaintenanceEndpoints
     /// an operator names none. Blank text is treated as absent for the same reason a query string omitting the
     /// parameter is: the two are indistinguishable to a caller writing a URL by hand.
     /// </remarks>
-    private static StoredMailScope? ResolveScope(string? account, string? folder, IMailAccountCatalog accounts)
+    private static StoredMailScope? ResolveScope(string? account, string? folder, IDeploymentMailAccountCatalog accounts)
     {
         if (AdminAccountRequest.Resolve(account, accounts) is not { } accountId)
         {
@@ -256,7 +256,7 @@ internal static class MailboxMaintenanceEndpoints
     /// The folder is not a parameter because it is not read: a scope that failed to resolve with an account this
     /// deployment serves failed on its folder, and naming the text back would echo whatever a caller sent.
     /// </remarks>
-    private static ProblemHttpResult Refusal(string? account, IMailAccountCatalog accounts)
+    private static ProblemHttpResult Refusal(string? account, IDeploymentMailAccountCatalog accounts)
     {
         if (AdminAccountRequest.Resolve(account, accounts) is not null)
         {

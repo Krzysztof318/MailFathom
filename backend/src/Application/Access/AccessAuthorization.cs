@@ -25,6 +25,11 @@ namespace MailFathom.Application.Access;
 /// it fails rather than defaulting to permitted.
 /// </para>
 /// <para>
+/// <see cref="RequireOwner" /> is the one method about whose mail rather than about what may be done to it. It is asked
+/// beside a permission rather than instead of one, because the two axes are independent: no permission names an owner,
+/// and a grant however broad still reaches the mail of the one owner the work was admitted for.
+/// </para>
+/// <para>
 /// <see cref="Permits" /> is the one member that reports instead of refusing, for a boundary composing an answer per
 /// caller rather than performing an operation for one. It decides nothing of its own: it answers exactly what
 /// <see cref="RequirePermission" /> would have refused, so the transport and the use case cannot come to disagree about
@@ -157,6 +162,26 @@ public sealed class AccessAuthorization
         permission.IsSpecified
         && this.principals.Current is { Kind: AuthorizedPrincipalKind.Caller } caller
         && caller.Holds(permission);
+
+    /// <summary>Requires that the work in hand is being done for one owner, and answers which.</summary>
+    /// <returns>The owner whose mail this unit of work may act on.</returns>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work was reached under no principal, or under one acting for no owner.</exception>
+    /// <remarks>
+    /// <para>
+    /// This is the second axis of an access decision and it is asked separately from the first, because the two answer
+    /// different questions: a permission says what the work may do and this says whose mail it may do it to. A use case
+    /// that reads or writes somebody's mail asks both, and asking this one is what turns "acting for nobody" into a
+    /// refusal rather than into an unbounded read.
+    /// </para>
+    /// <para>
+    /// It admits every kind of principal that carries an owner rather than naming one kind, because a capability
+    /// redeemed for an owner's own attachment is acting for that owner exactly as the caller who minted it was. What is
+    /// refused is a principal with no owner at all: this process's own identity, and the deployment administrator whose
+    /// acts are the deployment's rather than one person's.
+    /// </para>
+    /// </remarks>
+    public MailOwnerId RequireOwner() =>
+        this.RequirePrincipal().Owner ?? throw PrincipalNotAuthorizedException.NoOwner();
 
     /// <summary>Requires that this use case was reached as work no caller requested.</summary>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work was reached under no principal, or under one that is not MailFathom's own identity.</exception>

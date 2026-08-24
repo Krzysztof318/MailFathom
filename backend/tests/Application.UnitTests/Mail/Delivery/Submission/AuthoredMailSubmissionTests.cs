@@ -595,7 +595,7 @@ public sealed class AuthoredMailSubmissionTests
         composer = ComposingAuthoredEmails.ThatComposes(ComposedMime);
         signal = new MailOutboxSignal(capacity: 8);
 
-        var accountCatalog = Substitute.For<IMailAccountCatalog>();
+        var accountCatalog = Substitute.For<IDeploymentMailAccountCatalog>();
         accountCatalog.ServedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();

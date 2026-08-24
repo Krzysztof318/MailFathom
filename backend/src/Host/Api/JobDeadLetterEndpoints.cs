@@ -92,7 +92,7 @@ internal static class JobDeadLetterEndpoints
         [FromQuery] string? account,
         [FromQuery] int? pageSize,
         [FromQuery] string? cursor,
-        [FromServices] IMailAccountCatalog accounts,
+        [FromServices] IDeploymentMailAccountCatalog accounts,
         [FromServices] DeadLetteredJobs deadLetters,
         CancellationToken cancellationToken)
     {

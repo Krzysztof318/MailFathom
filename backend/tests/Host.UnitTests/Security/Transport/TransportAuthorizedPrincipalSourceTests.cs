@@ -11,6 +11,7 @@ using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.ApiKeys;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Mcp;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -138,6 +139,59 @@ public sealed class TransportAuthorizedPrincipalSourceTests
             principal?.Permissions);
     }
 
+    /// <summary>
+    /// A surface that serves one owner's mail admits its caller for that owner, and the administrative surface does
+    /// not. That is the whole of the second axis at the transport boundary: the deployment administrator is admitted
+    /// to a deployment rather than to somebody's mailbox, so a caller-scoped read refuses them instead of answering.
+    /// </summary>
+    [Theory]
+    [InlineData(McpEndpointRoute.Path, true)]
+    [InlineData(ClientEndpointOptions.RoutePrefix + "/session", true)]
+    [InlineData(AdminEndpointOptions.RoutePrefix + "/session", false)]
+    public void Current_AnAuthenticatedRequest_CarriesAnOwnerOnlyOnASurfaceServingOneOwnersMail(
+        string path,
+        bool servesOneOwnersMail)
+    {
+        // Arrange
+        var source = SourceOver(
+            RequestBy(AuthenticatedCallerHolding(MailFathomPermission.MailRead), path),
+            mcpConfiguresACredential: true,
+            adminConfiguresACredential: true,
+            clientConfiguresACredential: true);
+
+        // Act
+        var principal = source.Current;
+
+        // Assert
+        Assert.NotNull(principal);
+        Assert.Equal(AuthorizedPrincipalKind.Caller, principal.Kind);
+        Assert.Equal(servesOneOwnersMail ? SyntheticMailOwner.Deployment : null, principal.Owner);
+    }
+
+    /// <summary>
+    /// The same split holds for the surface an operator left open, which is the posture a first run is served under.
+    /// A caller admitted by the absence of a credential is still admitted to one owner's mail and to no other's.
+    /// </summary>
+    [Theory]
+    [InlineData(McpEndpointRoute.Path, true)]
+    [InlineData(ClientEndpointOptions.RoutePrefix + "/session", true)]
+    [InlineData(AdminEndpointOptions.RoutePrefix + "/session", false)]
+    public void Current_ARequestOnASurfaceConfiguringNoCredential_CarriesAnOwnerOnlyOnASurfaceServingOneOwnersMail(
+        string path,
+        bool servesOneOwnersMail)
+    {
+        // Arrange
+        var source = SourceOver(RequestTo(path));
+
+        // Act
+        var principal = source.Current;
+
+        // Assert
+        Assert.NotNull(principal);
+        Assert.Equal(AuthorizedPrincipalKind.Caller, principal.Kind);
+        Assert.Equal(servesOneOwnersMail ? SyntheticMailOwner.Deployment : null, principal.Owner);
+    }
+
     /// <summary>A path neither surface serves is nobody's, so the posture of either endpoint decides nothing about it.</summary>
     [Fact]
     public void Current_ARequestToAPathNeitherSurfaceServes_ReportsNoPrincipal()
@@ -169,7 +223,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
     {
         // Arrange
         var source = SourceOver(RequestBy(AuthenticatedCallerHolding(MailFathomPermission.MailRead)));
-        var capability = AuthorizedPrincipal.SignedCapability("/attachments/an-object/0");
+        var capability = AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Deployment, "/attachments/an-object/0");
 
         // Act
         source.Assume(capability);
@@ -207,14 +261,21 @@ public sealed class TransportAuthorizedPrincipalSourceTests
             clientEndpoint.Authentication.Add(new TransportAuthenticationOptions());
         }
 
+        var deploymentOwner = Substitute.For<IDeploymentMailOwnerSource>();
+        deploymentOwner.Owner.Returns(SyntheticMailOwner.Deployment);
+
         return new TransportAuthorizedPrincipalSource(
             httpContextAccessor,
+            deploymentOwner,
             Options.Create(mcpEndpoint),
             Options.Create(adminEndpoint),
             Options.Create(clientEndpoint));
     }
 
     private static DefaultHttpContext RequestBy(ClaimsPrincipal caller) => new() { User = caller };
+
+    private static DefaultHttpContext RequestBy(ClaimsPrincipal caller, string path) =>
+        new() { User = caller, Request = { Path = path } };
 
     private static DefaultHttpContext RequestTo(string path) => new() { Request = { Path = path } };
 

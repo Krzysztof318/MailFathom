@@ -623,12 +623,13 @@ but no run has ever reached is reported with no timestamp rather than omitted.
 
 ### Authorization
 
-The use case resolves the accounts this deployment serves and refuses anything outside them before it reads, so a second
-entrypoint cannot reach the query without the same check. Ownership is the configured account list today, read through the
-`IMailAccountCatalog` application port. OAuth 2.1 decides *who* reaches a tool at all — a token has to name a subject the
-deployment authorized — and leaves that port unchanged, so every admitted caller still resolves the same configured
-accounts. Deriving the account set from the authenticated identity is the later step, and it replaces the implementation
-behind that port rather than introducing authorization for the first time.
+The use case resolves the accounts the caller owns and refuses anything outside them before it reads, so a second
+entrypoint cannot reach the query without the same check. That resolution runs through the `ICallerMailAccountCatalog`
+application port, and every caller a mail-serving surface admits is admitted to act for one named owner; the
+deployment-wide catalog beside it is what the workers and the administrative operations read, and no tool can reach it.
+A deployment holds one owner while its accounts are declared in configuration, so today every admitted caller resolves
+every configured account — what has moved is where that answer comes from, not yet what it says. OAuth 2.1 decides *who*
+reaches a tool at all, a token having to name a subject the deployment authorized, and leaves that port unchanged.
 
 A name no served account answers to is refused with `53001` rather than answered with an empty page; "no such account"
 and "not yours" are deliberately one answer, and so is "that is not a name of anything". A request that names no account

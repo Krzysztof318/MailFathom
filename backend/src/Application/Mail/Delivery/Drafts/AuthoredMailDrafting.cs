@@ -38,7 +38,7 @@ namespace MailFathom.Application.Mail.Delivery.Drafts;
 /// <param name="drafts">Writes the record and the message down together, and brings the drafts folder into step.</param>
 /// <param name="authorization">Answers whether the caller that reached this holds the grant that lets it draft.</param>
 public sealed class AuthoredMailDrafting(
-    IMailAccountCatalog accountCatalog,
+    IDeploymentMailAccountCatalog accountCatalog,
     NamedRecipientResolver recipientResolver,
     IAuthoredEmailComposer composer,
     MailDraftBook drafts,

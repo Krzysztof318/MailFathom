@@ -427,6 +427,7 @@ public sealed class HostCompositionTests
         // Act
         startupGates.MarkCompleted(HostStartupGate.SecretConfiguration);
         startupGates.MarkCompleted(HostStartupGate.DatabaseSchema);
+        startupGates.MarkCompleted(HostStartupGate.DeploymentMailOwner);
 
         // Assert
         Assert.True(startupGates.Completed);

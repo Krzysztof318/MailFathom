@@ -64,6 +64,15 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode PrincipalNotAuthorized { get; } = new(14001);
 
+    /// <summary>Gets subcategory 4, principal authorization: this deployment does not hold the single owner its configured mail accounts belong to.</summary>
+    /// <remarks>
+    /// It sits beside the refusal above because it is the same axis asked before any request arrives: a configured mail
+    /// account names no owner, so a deployment holding none or several cannot say whose mail it is serving and refuses
+    /// to serve any. An operator resolves it in the owner records rather than in a grant, which is what separates it
+    /// from the code above.
+    /// </remarks>
+    public static MailFathomErrorCode DeploymentMailOwnerUnresolved { get; } = new(14002);
+
     #endregion
 
     #region Category 2 — Mail protocol
@@ -834,6 +843,7 @@ public readonly record struct MailFathomErrorCode
         MailAccessTokenUnavailable,
         MailboxAuthorizationFailed,
         PrincipalNotAuthorized,
+        DeploymentMailOwnerUnresolved,
         MailAuthenticationMechanismUnavailable,
         MailboxUnavailable,
         MailboxFolderRecreated,

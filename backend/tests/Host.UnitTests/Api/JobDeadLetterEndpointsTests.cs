@@ -272,9 +272,9 @@ public sealed class JobDeadLetterEndpointsTests
     /// <summary>The use case the routes reach, over the store this suite arranges and with the grant granted.</summary>
     private DeadLetteredJobs DeadLetterOperations() => new(this.deadLetters, AdministrativeGrant.WholeSurface);
 
-    private static IMailAccountCatalog CatalogServing(params MailAccountId[] accounts)
+    private static IDeploymentMailAccountCatalog CatalogServing(params MailAccountId[] accounts)
     {
-        var catalog = Substitute.For<IMailAccountCatalog>();
+        var catalog = Substitute.For<IDeploymentMailAccountCatalog>();
         catalog.ServedAccounts.Returns(
         [
             .. accounts.Select(account => new ServedMailAccount(
