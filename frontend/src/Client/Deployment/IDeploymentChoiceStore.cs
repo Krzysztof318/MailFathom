@@ -27,5 +27,6 @@ internal interface IDeploymentChoiceStore
 
     /// <summary>Keeps a deployment as the one this installation reaches from now on.</summary>
     /// <param name="address">The chosen deployment's base address.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="address" /> is <see langword="null" />.</exception>
     void Write(Uri address);
 }

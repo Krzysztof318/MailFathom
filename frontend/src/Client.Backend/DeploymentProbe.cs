@@ -84,7 +84,8 @@ public sealed class DeploymentProbe
         if (refusal != DeploymentAddressRefusal.None)
         {
             throw new ArgumentException(
-                $"'{candidate}' is not an address this client may be pointed at ({refusal}).",
+                $"{DeploymentAddressRule.Describe(candidate)} is not an address this client may be pointed at "
+                + $"({refusal}).",
                 nameof(candidate));
         }
 

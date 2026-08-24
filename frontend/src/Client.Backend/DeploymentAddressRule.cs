@@ -76,6 +76,40 @@ public static class DeploymentAddressRule
                 : DeploymentAddressRefusal.None;
     }
 
+    /// <summary>Names an address in the one form that is safe to put in a message.</summary>
+    /// <param name="address">The address a message is about to be written about.</param>
+    /// <returns>A phrase naming it, which is the whole subject of the sentence rather than a value to quote again.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="address" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Every refusal this rule produces is raised as an exception by somebody, and an exception message is read into a
+    /// log. <see cref="DeploymentAddressRefusal.MoreThanAnOrigin" /> exists partly to catch an address carrying
+    /// embedded credentials, so the one message most likely to name a secret is the one that refuses an address for
+    /// carrying one — which is why naming an address is a decision taken here rather than at each place that writes a
+    /// sentence about one.
+    /// </para>
+    /// <para>
+    /// The scheme and the authority, composed rather than taken from
+    /// <see cref="Uri.GetLeftPart(UriPartial)" />: measured on .NET 10, <c>UriPartial.Authority</c> keeps the user
+    /// information, so <c>https://user:secret@mail.example/</c> comes back from it with the secret still in it.
+    /// <see cref="Uri.Authority" /> is the part that does not, and the scheme is written in front of it because the
+    /// scheme is exactly what one of these refusals is about.
+    /// </para>
+    /// <para>
+    /// An address that is not absolute has no scheme or authority to read, and its original text could be anything at
+    /// all, so it is not named. Nothing is lost by that: the only refusal it can carry is
+    /// <see cref="DeploymentAddressRefusal.NotAWebAddress" />, which is the whole of what a reader needs.
+    /// </para>
+    /// </remarks>
+    public static string Describe(Uri address)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+
+        return address.IsAbsoluteUri
+            ? $"'{address.Scheme}://{address.Authority}'"
+            : "That value";
+    }
+
     /// <summary>Decides whether an address names this machine, which is where clear text is a posture rather than an exposure.</summary>
     /// <remarks>
     /// <see cref="Uri.IsLoopback" /> answers for an address literal and for the reserved name; a host that resolves to

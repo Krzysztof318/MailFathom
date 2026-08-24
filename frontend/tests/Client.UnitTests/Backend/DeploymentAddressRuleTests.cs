@@ -92,4 +92,52 @@ public sealed class DeploymentAddressRuleTests
         // Assert
         Assert.Equal(DeploymentAddressRefusal.MoreThanAnOrigin, refusal);
     }
+
+    /// <summary>The one message most likely to name a secret is the one refusing an address for carrying one.</summary>
+    /// <remarks>
+    /// <c>GetLeftPart(UriPartial.Authority)</c> is the obvious way to write this and it keeps the user information, so
+    /// the assertion is on the secret's absence rather than on the shape of the answer.
+    /// </remarks>
+    [Theory]
+    [InlineData("https://user:secret@mail.example/", "'https://mail.example'")]
+    [InlineData("http://user:secret@mail.example:8443/path?q=1#f", "'http://mail.example:8443'")]
+    [InlineData("https://user@mail.example/", "'https://mail.example'")]
+    public void Describe_AnAddressCarryingEmbeddedCredentials_NamesNeitherTheUserNorTheSecret(
+        string address,
+        string expected)
+    {
+        // Act
+        var described = DeploymentAddressRule.Describe(new Uri(address));
+
+        // Assert
+        Assert.Equal(expected, described);
+        Assert.DoesNotContain("secret", described, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("user", described, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Describe_AnOrigin_NamesIt()
+    {
+        // Act, Assert
+        Assert.Equal("'https://mail.example:8443'", DeploymentAddressRule.Describe(new Uri("https://mail.example:8443/")));
+    }
+
+    /// <summary>Its original text could be anything at all, and the refusal it can carry says the whole of what a reader needs.</summary>
+    [Fact]
+    public void Describe_SomethingThatIsNotAnAbsoluteAddress_NamesNothingOfIt()
+    {
+        // Act
+        var described = DeploymentAddressRule.Describe(new Uri("/api/client?token=secret", UriKind.Relative));
+
+        // Assert
+        Assert.Equal("That value", described);
+        Assert.DoesNotContain("secret", described, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Describe_NoAddressAtAll_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(() => DeploymentAddressRule.Describe(null!));
+    }
 }

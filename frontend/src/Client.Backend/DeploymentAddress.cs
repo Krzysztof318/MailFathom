@@ -73,7 +73,8 @@ public sealed class DeploymentAddress
         if (refusal != DeploymentAddressRefusal.None)
         {
             throw new ArgumentException(
-                $"'{address}' is not an address this client may be pointed at ({refusal}).",
+                $"{DeploymentAddressRule.Describe(address)} is not an address this client may be pointed at "
+                + $"({refusal}).",
                 nameof(address));
         }
 

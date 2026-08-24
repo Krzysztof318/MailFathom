@@ -130,6 +130,24 @@ public sealed class DeploymentAddressTests
         Assert.True(tokens.IsSignedIn);
     }
 
+    /// <summary>An exception message is read into a log, and the refusal most likely to carry a secret is the one for an address carrying one.</summary>
+    [Fact]
+    public void PointAt_AnAddressCarryingEmbeddedCredentials_RefusesItWithoutNamingTheSecret()
+    {
+        // Arrange
+        var address = new DeploymentAddress(new AccessTokenStore());
+
+        // Act
+        var failure = Assert.Throws<ArgumentException>(
+            "address",
+            () => address.PointAt(new Uri("https://somebody:secret@mail.example/")));
+
+        // Assert
+        Assert.DoesNotContain("secret", failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("somebody", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("https://mail.example", failure.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Construct_NoCredentialStore_IsRefused()
     {

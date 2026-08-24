@@ -288,6 +288,11 @@ an address is stored, before one is probed, and again when the client is pointed
 address, an origin and nothing beneath it, and clear text only to this machine, because every request carries the
 signed-in credential. A value written with no scheme is read as HTTPS by `DeploymentAddressText`, which the screen and
 the configuration reader share, since the alternative would turn an omission into a credential on the wire.
+`DeploymentAddressRule.Describe` is the other half of owning the rule: every refusal is raised as an exception by
+somebody and an exception message is read into a log, so the message that refuses an address for carrying embedded
+credentials is exactly the one most likely to name a secret. It names the scheme and the authority and nothing else —
+composed rather than taken from `GetLeftPart(UriPartial.Authority)`, which keeps the user information — and names
+nothing at all of a value that is not an absolute address.
 
 **Nothing is kept until something has answered.** `DeploymentProbe` asks the candidate for `/api/client/session` on a
 transport carrying no credential — the address is a machine nobody has vouched for yet — and believes it only when the

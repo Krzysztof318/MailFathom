@@ -171,6 +171,23 @@ public sealed class DeploymentProbeTests : IDisposable
         Assert.Empty(this.answers.Requests);
     }
 
+    /// <summary>Nothing is sent and nothing is said: the candidate is refused before contact, and the message names no credential written into it.</summary>
+    [Fact]
+    public async Task ReachAsync_ACandidateCarryingEmbeddedCredentials_RefusesItWithoutNamingTheSecret()
+    {
+        // Act
+        var failure = await Assert.ThrowsAsync<ArgumentException>(
+            "candidate",
+            () => this.probe.ReachAsync(
+                new Uri("https://somebody:secret@mail.example/"),
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.DoesNotContain("secret", failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("somebody", failure.Message, StringComparison.Ordinal);
+        Assert.Empty(this.answers.Requests);
+    }
+
     [Fact]
     public async Task ReachAsync_NoCandidate_IsRefused()
     {

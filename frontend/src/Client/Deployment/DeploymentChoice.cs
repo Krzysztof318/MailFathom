@@ -121,9 +121,10 @@ internal sealed class DeploymentChoice
         if (refusal != DeploymentAddressRefusal.None)
         {
             throw new InvalidOperationException(
-                $"'{stated}' was stated as the MailFathom deployment this head reaches, and is not one this client may "
-                + $"be pointed at ({refusal}). Every request carries the signed-in credential, so the address has to be "
-                + "an origin — the scheme, host, and port and nothing else — and https to anything but this machine.");
+                $"{DeploymentAddressRule.Describe(stated)} was stated as the MailFathom deployment this head reaches, "
+                + $"and is not one this client may be pointed at ({refusal}). Every request carries the signed-in "
+                + "credential, so the address has to be an origin — the scheme, host, and port and nothing else — and "
+                + "https to anything but this machine.");
         }
 
         this.address.PointAt(stated);

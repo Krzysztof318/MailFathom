@@ -119,7 +119,27 @@ public sealed class DeploymentChoiceTests : IDisposable
         var failure = Assert.Throws<InvalidOperationException>(() => choice.Restore());
 
         // Assert
-        Assert.Contains("http://mail.example/", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("http://mail.example", failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A stated address fails loudly, and loudly is into a log — so what it names is the origin and never a credential written into it.</summary>
+    [Fact]
+    public void Restore_AStatedAddressCarryingEmbeddedCredentials_FailsWithoutNamingTheSecret()
+    {
+        // Arrange
+        var address = new DeploymentAddress(new AccessTokenStore());
+        var choice = this.ChoiceOver(
+            new StubDeploymentChoiceStore(),
+            new StubDeploymentAddressSource(new Uri("https://somebody:secret@mail.example/")),
+            address);
+
+        // Act
+        var failure = Assert.Throws<InvalidOperationException>(() => choice.Restore());
+
+        // Assert
+        Assert.DoesNotContain("secret", failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("somebody", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("https://mail.example", failure.Message, StringComparison.Ordinal);
     }
 
     /// <summary>A kept choice is not a statement anybody can go and read, so one that no longer passes is forgotten rather than fatal.</summary>
