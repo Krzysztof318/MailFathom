@@ -63,6 +63,10 @@ public partial class App : Application
                 .UseConfiguration(configure: configuration => configuration.EmbeddedSource<App>())
                 .ConfigureServices((context, services) => services.AddMailFathomDeployment(
                     this.ComposeDeployment(context.Configuration)))
+                // Light, dark, and follow-the-system, with the choice written to the platform's own settings store so
+                // the application starts the way it was left. Nothing here decides which one: AppTheme.System is the
+                // default the service reads back when nothing was ever chosen.
+                .UseThemeSwitching()
                 .UseLogging(configure: (context, logBuilder) =>
                     logBuilder
                         .SetMinimumLevel(

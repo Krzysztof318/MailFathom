@@ -3,67 +3,149 @@ Copyright © 2026 Krzysztof Kasprowicz
 Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 Project repository: https://github.com/Krzysztof318/MailFathom
 -->
+<!--
+  MailFathom's palette. Every colour value in this application is here and nowhere else, and every brush a screen
+  reaches resolves from one of these keys through Uno Material's own resources.
+
+  Where the numbers come from. Four colours are sampled from the product mark in assets/icon-900.png: the navy ground
+  #010D33, the blue #0048E0 that carries the envelope and the circuit traces, the envelope's pale blue #A8C8F8, and
+  the star's gold #F8D848. Each becomes a Material Design 3 tonal palette — its hue and chroma in the HCT colour
+  space, sampled at the tone each semantic role is defined at — so the ramps below are generated from those four
+  rather than chosen one key at a time. Every key Uno's palette declares is redeclared here, in both themes, because a
+  key left out falls back to the template's violet.
+
+  Every pair a reader or a control depends on is measured rather than asserted, and the measurements are in
+  frontend/tests/Client.UnitTests/Styles/ColorPaletteOverrideTests.cs, which reads this file and fails the build below
+  WCAG AA — 4.5:1 for text and 3:1 for an outline or a control state.
+-->
 <ResourceDictionary xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
   <ResourceDictionary.ThemeDictionaries>
     <ResourceDictionary x:Key="Light">
-      <Color x:Key="PrimaryColor">#5946D2</Color>
+      <!-- Primary — the blue that carries the envelope and the traces in the logo. Tone 40 in light and tone 80 in
+           dark, which is Material's own placement for the role a screen's principal action is drawn in. -->
+      <Color x:Key="PrimaryColor">#124EE5</Color>
       <Color x:Key="OnPrimaryColor">#FFFFFF</Color>
-      <Color x:Key="PrimaryContainerColor">#E5DEFF</Color>
-      <Color x:Key="OnPrimaryContainerColor">#170065</Color>
-      <Color x:Key="SecondaryColor">#6B4EA2</Color>
+      <Color x:Key="PrimaryContainerColor">#DBE1FF</Color>
+      <Color x:Key="OnPrimaryContainerColor">#001454</Color>
+      <Color x:Key="PrimaryInverseColor">#B5C4FF</Color>
+
+      <!-- The two legacy Material 2 variants. Nothing this application writes reaches them; they are here because
+           Uno's palette declares them, and a key left undeclared would resolve to the template's violet. -->
+      <Color x:Key="PrimaryVariantDarkColor">#0037BA</Color>
+      <Color x:Key="PrimaryVariantLightColor">#B5C4FF</Color>
+
+      <!-- Secondary — the envelope's own pale blue. Its tone 80 is that colour exactly, which is why the role reads
+           as the logo in dark and as a quieter version of the primary in light. -->
+      <Color x:Key="SecondaryColor">#40608A</Color>
       <Color x:Key="OnSecondaryColor">#FFFFFF</Color>
-      <Color x:Key="SecondaryContainerColor">#EBDDFF</Color>
-      <Color x:Key="OnSecondaryContainerColor">#220555</Color>
-      <Color x:Key="TertiaryColor">#0061A4</Color>
+      <Color x:Key="SecondaryContainerColor">#D3E4FF</Color>
+      <Color x:Key="OnSecondaryContainerColor">#001C3B</Color>
+
+      <!-- The same two legacy variants for the secondary role. -->
+      <Color x:Key="SecondaryVariantDarkColor">#264871</Color>
+      <Color x:Key="SecondaryVariantLightColor">#A8C8F8</Color>
+
+      <!-- Tertiary — the star's gold, and the one role in this palette that is reserved rather than general. It marks
+           what the model contributed: a generated draft, a suggested answer, a classification the model made.
+           Nothing else takes it. A highlight that is not the model's is drawn in the primary or in a surface
+           variant, because a gold that appears wherever emphasis is wanted stops saying anything at all. -->
+      <Color x:Key="TertiaryColor">#705D00</Color>
       <Color x:Key="OnTertiaryColor">#FFFFFF</Color>
-      <Color x:Key="TertiaryContainerColor">#CFE4FF</Color>
-      <Color x:Key="OnTertiaryContainerColor">#001D36</Color>
-      <Color x:Key="ErrorColor">#B3261E</Color>
-      <Color x:Key="ErrorContainerColor">#F9DEDC</Color>
+      <Color x:Key="TertiaryContainerColor">#FFE258</Color>
+      <Color x:Key="OnTertiaryContainerColor">#221B00</Color>
+
+      <!-- Error — Material's own error hue rather than a brand colour. What a failure looks like is a convention a
+           reader already knows, and spending the brand on it would cost that recognition for nothing. -->
+      <Color x:Key="ErrorColor">#B4261E</Color>
       <Color x:Key="OnErrorColor">#FFFFFF</Color>
-      <Color x:Key="OnErrorContainerColor">#410E0B</Color>
-      <Color x:Key="BackgroundColor">#FCFBFF</Color>
-      <Color x:Key="OnBackgroundColor">#1C1B1F</Color>
+      <Color x:Key="ErrorContainerColor">#FFDAD3</Color>
+      <Color x:Key="OnErrorContainerColor">#410001</Color>
+
+      <!-- Background and surface. The dark ground is the logo's own navy: the neutral ramp is built at the navy's hue
+           with enough chroma that its tone 6 lands there, so the application sits on the colour the mark sits on
+           rather than on grey. In light the same ramp is almost white, because chroma barely shows at tone 99. -->
+      <Color x:Key="BackgroundColor">#FDFBFF</Color>
+      <Color x:Key="OnBackgroundColor">#111A37</Color>
       <Color x:Key="SurfaceColor">#FFFFFF</Color>
-      <Color x:Key="OnSurfaceColor">#1C1B1F</Color>
-      <Color x:Key="SurfaceVariantColor">#F2EFF5</Color>
-      <Color x:Key="OnSurfaceVariantColor">#8B8494</Color>
-      <Color x:Key="OutlineColor">#79747E</Color>
-      <Color x:Key="OnSurfaceInverseColor">#F4EFF4</Color>
-      <Color x:Key="SurfaceInverseColor">#313033</Color>
-      <Color x:Key="PrimaryInverseColor">#C8BFFF</Color>
-      <Color x:Key="SurfaceTintColor">#5946D2</Color>
-      <Color x:Key="OutlineVariantColor">#C9C5D0</Color>
+      <Color x:Key="OnSurfaceColor">#111A37</Color>
+      <Color x:Key="SurfaceVariantColor">#EAEDFF</Color>
+      <Color x:Key="OnSurfaceVariantColor">#414659</Color>
+      <Color x:Key="SurfaceInverseColor">#262F4D</Color>
+      <Color x:Key="OnSurfaceInverseColor">#EEF0FF</Color>
+      <Color x:Key="SurfaceTintColor">#124EE5</Color>
+
+      <!-- Outlines, from a quieter ramp at the same hue, so a border separates from the ground without competing with
+           the blue that carries the brand. -->
+      <Color x:Key="OutlineColor">#71768B</Color>
+      <Color x:Key="OutlineVariantColor">#C1C5DC</Color>
+
+      <!-- The shadow is the brand navy rather than black, and it is heavier in dark, where a shadow has less contrast
+           to work with. -->
+      <Color x:Key="ShadowColor">#33010D33</Color>
     </ResourceDictionary>
+
     <ResourceDictionary x:Key="Dark">
-      <Color x:Key="PrimaryColor">#C7BFFF</Color>
-      <Color x:Key="OnPrimaryColor">#2A009F</Color>
-      <Color x:Key="PrimaryContainerColor">#4129BA</Color>
-      <Color x:Key="OnPrimaryContainerColor">#E4DFFF</Color>
-      <Color x:Key="SecondaryColor">#CDC2DC</Color>
-      <Color x:Key="OnSecondaryColor">#332D41</Color>
-      <Color x:Key="SecondaryContainerColor">#433C52</Color>
-      <Color x:Key="OnSecondaryContainerColor">#EDDFFF</Color>
-      <Color x:Key="TertiaryColor">#9FCAFF</Color>
-      <Color x:Key="OnTertiaryColor">#003258</Color>
-      <Color x:Key="TertiaryContainerColor">#00497D</Color>
-      <Color x:Key="OnTertiaryContainerColor">#D1E4FF</Color>
-      <Color x:Key="ErrorColor">#FFB4AB</Color>
-      <Color x:Key="ErrorContainerColor">#93000A</Color>
-      <Color x:Key="OnErrorColor">#690005</Color>
-      <Color x:Key="OnErrorContainerColor">#FFDAD6</Color>
-      <Color x:Key="BackgroundColor">#1C1B1F</Color>
-      <Color x:Key="OnBackgroundColor">#E5E1E6</Color>
-      <Color x:Key="SurfaceColor">#302D37</Color>
-      <Color x:Key="OnSurfaceColor">#E6E1E5</Color>
-      <Color x:Key="SurfaceVariantColor">#47464F</Color>
-      <Color x:Key="OnSurfaceVariantColor">#C9C5D0</Color>
-      <Color x:Key="OutlineColor">#928F99</Color>
-      <Color x:Key="OnSurfaceInverseColor">#1C1B1F</Color>
-      <Color x:Key="SurfaceInverseColor">#E6E1E5</Color>
-      <Color x:Key="PrimaryInverseColor">#2A009F</Color>
-      <Color x:Key="SurfaceTintColor">#C7BFFF</Color>
-      <Color x:Key="OutlineVariantColor">#57545D</Color>
+      <!-- Primary — the blue that carries the envelope and the traces in the logo. Tone 40 in light and tone 80 in
+           dark, which is Material's own placement for the role a screen's principal action is drawn in. -->
+      <Color x:Key="PrimaryColor">#B5C4FF</Color>
+      <Color x:Key="OnPrimaryColor">#002485</Color>
+      <Color x:Key="PrimaryContainerColor">#0037BA</Color>
+      <Color x:Key="OnPrimaryContainerColor">#DBE1FF</Color>
+      <Color x:Key="PrimaryInverseColor">#124EE5</Color>
+
+      <!-- The two legacy Material 2 variants. Nothing this application writes reaches them; they are here because
+           Uno's palette declares them, and a key left undeclared would resolve to the template's violet. -->
+      <Color x:Key="PrimaryVariantDarkColor">#0037BA</Color>
+      <Color x:Key="PrimaryVariantLightColor">#B5C4FF</Color>
+
+      <!-- Secondary — the envelope's own pale blue. Its tone 80 is that colour exactly, which is why the role reads
+           as the logo in dark and as a quieter version of the primary in light. -->
+      <Color x:Key="SecondaryColor">#A8C8F8</Color>
+      <Color x:Key="OnSecondaryColor">#093159</Color>
+      <Color x:Key="SecondaryContainerColor">#264871</Color>
+      <Color x:Key="OnSecondaryContainerColor">#D3E4FF</Color>
+
+      <!-- The same two legacy variants for the secondary role. -->
+      <Color x:Key="SecondaryVariantDarkColor">#264871</Color>
+      <Color x:Key="SecondaryVariantLightColor">#A8C8F8</Color>
+
+      <!-- Tertiary — the star's gold, and the one role in this palette that is reserved rather than general. It marks
+           what the model contributed: a generated draft, a suggested answer, a classification the model made.
+           Nothing else takes it. A highlight that is not the model's is drawn in the primary or in a surface
+           variant, because a gold that appears wherever emphasis is wanted stops saying anything at all. -->
+      <Color x:Key="TertiaryColor">#E4C535</Color>
+      <Color x:Key="OnTertiaryColor">#3A3000</Color>
+      <Color x:Key="TertiaryContainerColor">#554600</Color>
+      <Color x:Key="OnTertiaryContainerColor">#FFE258</Color>
+
+      <!-- Error — Material's own error hue rather than a brand colour. What a failure looks like is a convention a
+           reader already knows, and spending the brand on it would cost that recognition for nothing. -->
+      <Color x:Key="ErrorColor">#FFB4A8</Color>
+      <Color x:Key="OnErrorColor">#690001</Color>
+      <Color x:Key="ErrorContainerColor">#910809</Color>
+      <Color x:Key="OnErrorContainerColor">#FFDAD3</Color>
+
+      <!-- Background and surface. The dark ground is the logo's own navy: the neutral ramp is built at the navy's hue
+           with enough chroma that its tone 6 lands there, so the application sits on the colour the mark sits on
+           rather than on grey. In light the same ramp is almost white, because chroma barely shows at tone 99. -->
+      <Color x:Key="BackgroundColor">#08122E</Color>
+      <Color x:Key="OnBackgroundColor">#DAE1FF</Color>
+      <Color x:Key="SurfaceColor">#151E3B</Color>
+      <Color x:Key="OnSurfaceColor">#DAE1FF</Color>
+      <Color x:Key="SurfaceVariantColor">#414659</Color>
+      <Color x:Key="OnSurfaceVariantColor">#C1C5DC</Color>
+      <Color x:Key="SurfaceInverseColor">#DAE1FF</Color>
+      <Color x:Key="OnSurfaceInverseColor">#262F4D</Color>
+      <Color x:Key="SurfaceTintColor">#B5C4FF</Color>
+
+      <!-- Outlines, from a quieter ramp at the same hue, so a border separates from the ground without competing with
+           the blue that carries the brand. -->
+      <Color x:Key="OutlineColor">#8C90A6</Color>
+      <Color x:Key="OutlineVariantColor">#414659</Color>
+
+      <!-- The shadow is the brand navy rather than black, and it is heavier in dark, where a shadow has less contrast
+           to work with. -->
+      <Color x:Key="ShadowColor">#8C010D33</Color>
     </ResourceDictionary>
   </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>

@@ -18,6 +18,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />
         <RowDefinition />
+        <RowDefinition Height="Auto" />
       </Grid.RowDefinitions>
 
       <utu:NavigationBar Content="MailFathom" />
@@ -39,6 +40,16 @@ Project repository: https://github.com/Krzysztof318/MailFathom
           </StackPanel>
         </DataTemplate>
       </mvux:FeedView>
+
+      <!-- Theme selection sits outside the FeedView deliberately: it is the application's own state rather than
+           anything the build feed carries, so it stays reachable while that feed is loading or has failed. -->
+      <ComboBox Grid.Row="2"
+                Margin="16"
+                HorizontalAlignment="Center"
+                Header="Theme"
+                AutomationProperties.Name="Theme"
+                ItemsSource="{Binding ThemeOptions}"
+                SelectedItem="{Binding Theme, Mode=TwoWay}" />
     </Grid>
   </ScrollViewer>
 </Page>
