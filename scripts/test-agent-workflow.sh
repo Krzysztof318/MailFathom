@@ -7482,6 +7482,75 @@ the_editor_workspace_opens_the_client_first() {
   return 0
 }
 
+# What a published client head is optimized with. Three parts of one posture, each of which fails
+# silently rather than loudly, and `docs/operations/client-publishing.md` carries the reasoning.
+#
+# The browser head publishes trimmed, and `UnoXamlResourcesTrimming` is what lets Uno's pass drop the
+# styles of controls the application never names. Removing it costs payload and reports nothing, so the
+# property is asserted where it belongs: inside a property group conditioned on that one head.
+#
+# The desktop head is neither trimmed nor compiled ahead of time, and that is a licence condition rather
+# than a preference. `LibVLCSharp.dll` is in its graph, is LGPL-2.1-or-later, and has to stay unmodified
+# and separately replaceable — which `PublishTrimmed`, `PublishAot`, `PublishReadyToRun`, and a
+# single-file bundle each take away. THIRD_PARTY_LICENSES.md carries the verdict and ADR 0016 the rule.
+# None of the four is set in either of the client's build files or passed by either build that produces
+# an artifact, and a fifth reader of them is what this refuses: an artifact shipping a rewritten library
+# is a licence breach nothing else here would notice. A change that genuinely wants one of them for the
+# browser head alone is a change to this contract with its reason, not a property added quietly beside it.
+#
+# And none of it runs in front of a pull request. Both gates and the client's own required job build and
+# test the client solution and publish no head, because an ahead-of-time or trimmed publish is minutes a
+# required check may not spend.
+the_client_publishes_what_its_licences_allow() {
+  local project="$source_repository_root/frontend/src/Client/Client.csproj"
+  local failures='' trimming offenders file
+
+  # The property, and the head it is conditioned on. A property group whose condition does not name the
+  # browser head would apply it to the desktop one too, which is the case the licence above refuses.
+  trimming="$(awk '
+    /<PropertyGroup/ { inside = index($0, "net10.0-browserwasm") > 0; next }
+    /<\/PropertyGroup>/ { inside = 0; next }
+    /<UnoXamlResourcesTrimming>true<\/UnoXamlResourcesTrimming>/ { print inside ? "scoped" : "unscoped" }
+  ' "$project")"
+
+  if [[ "$trimming" != 'scoped' ]]; then
+    failures+="Client.csproj does not enable UnoXamlResourcesTrimming for net10.0-browserwasm alone (found: ${trimming:-nothing}). "
+  fi
+
+  # The four properties, in the two build files a client project reads and in the two builds that produce
+  # an artifact. A comment naming one is not a setting, and every file here argues its own posture at length.
+  for file in \
+    'frontend/src/Client/Client.csproj' \
+    'frontend/Directory.Build.props' \
+    '.github/workflows/build-desktop-client.yml' \
+    'deploy/docker/Dockerfile'; do
+    offenders="$(grep -nE '(<|-p:)(PublishAot|PublishTrimmed|PublishReadyToRun|PublishSingleFile)' \
+      "$source_repository_root/$file" | grep -vE '^[0-9]+:[[:space:]]*#' || true)"
+
+    if [[ -n "$offenders" ]]; then
+      failures+="$file sets a publish property the desktop head's licence leaves unset: $(tr '\n' ' ' <<< "$offenders"). "
+    fi
+  done
+
+  # No publish in front of a pull request. The client's heads are published by the container image build
+  # and by build-desktop-client.yml, and by nothing a required check waits for.
+  for file in \
+    'scripts/verify-fast.sh' \
+    'scripts/verify-full.sh' \
+    '.github/workflows/build-test-frontend.yml'; do
+    offenders="$(grep -nE 'dotnet[[:space:]]+publish' "$source_repository_root/$file" || true)"
+
+    if [[ -n "$offenders" ]]; then
+      failures+="$file publishes a head, which a required check may not spend the time on: $(tr '\n' ' ' <<< "$offenders"). "
+    fi
+  done
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
 # The Podman Quadlet sources under deploy/quadlet/. A systemd unit file is an INI document whose
 # comment character is `#`, so it carries the same three lines a workflow does rather than a form of
 # its own — but no glob above reaches it, and Quadlet reads the extension rather than the content, so
@@ -7882,6 +7951,7 @@ run_test every_browser_asset_carries_the_license_header
 run_test every_container_unit_carries_the_license_header
 run_test every_xaml_file_carries_the_license_header
 run_test the_editor_workspace_opens_the_client_first
+run_test the_client_publishes_what_its_licences_allow
 run_test every_shell_script_carries_the_license_header
 run_test every_skill_declares_its_license
 run_test no_tracked_text_file_carries_a_nul_byte

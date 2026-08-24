@@ -188,6 +188,10 @@ project here and neither build reads the other's files.
   naming the one component in that head's graph whose licence obliges them. The project file attaches them to every
   `net10.0-desktop` publish and fails the build when one is missing, so the obligation travels with the artifact rather
   than with the workflow that happens to produce it.
+- What a published head is optimized with is conditioned per target framework in that same project file. The browser
+  head publishes trimmed and enables Uno's XAML resource trimming with it; the desktop head is neither trimmed nor
+  compiled ahead of time, because the component that puts the notices above beside it has to stay unmodified and
+  separately replaceable. [Publishing the client](../operations/client-publishing.md) carries the whole posture.
 - `src/Client/Strings/` holds one string table per language the application is readable in, one directory per neutral
   culture. Which of them are offered is `LocalizationConfiguration:Cultures` in the embedded `appsettings.json`, so a
   language reaches a reader only where both the table and that list name it.

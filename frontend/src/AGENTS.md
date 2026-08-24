@@ -157,6 +157,13 @@ frontend/
   the installed SDK, which `global.json` deliberately lets roll forward, so a lock file naming them records the machine
   that wrote it and fails the next locked restore. `frontend/Directory.Build.props` carries the whole reasoning, and
   `backend/Directory.Build.props` carries the same decision for the two projects holding the Aspire graph.
+- **What a published head is optimized with is decided per target framework**, in `Client.csproj`, and never for the
+  project as a whole. The browser head publishes trimmed and enables Uno's XAML resource trimming with it, so a control
+  the XAML never names loses its style and fails when the screen loads — the answer is an IL Linker descriptor keeping
+  it, never turning the pass off. The desktop head is neither trimmed nor compiled ahead of time, which is the licence
+  condition below rather than a preference; and Native AOT for the browser head does not exist at all, because that
+  head is Mono. [Publishing the client](../../docs/operations/client-publishing.md) is the page, and none of
+  `PublishTrimmed`, `PublishAot`, `PublishReadyToRun`, or `PublishSingleFile` is a property to add without reading it.
 - **Nothing under `frontend/` reaches into `backend/`**, and `backend/MailFathom.slnx` names no project here. What the
   two stacks share is the required check and the two gates that decide from the changed paths which of them to run;
   `scripts/verify-fast.sh` and `scripts/verify-full.sh` restore, build, and test this solution when the change reaches
