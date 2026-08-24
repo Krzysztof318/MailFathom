@@ -26,11 +26,11 @@ Nothing on this page applies to it.
 
 | | `net10.0-browserwasm` | `net10.0-desktop` |
 |---|---|---|
-| IL trimming (`PublishTrimmed`) | **on** — the WebAssembly SDK publishes trimmed by default | **off**, and refused rather than merely unset |
+| IL trimming (`PublishTrimmed`) | **on** — the WebAssembly SDK publishes trimmed by default | **off**, and unmeasured rather than refused |
 | XAML resource trimming (`UnoXamlResourcesTrimming`) | **on** | **off**, because it is a pass of the trimmer above |
 | Native AOT (`PublishAot`) | **impossible** | **off**, and declined |
 | Ahead-of-time compilation of any kind | **off** — the head is interpreted | **off** |
-| Single-file publish, assembly merging | off | off, and refused |
+| Single-file publish, assembly merging | off | off, and undecided |
 
 Every one of those is a property of a *publish*, so none of them runs in a verification script or in a pull-request
 workflow — see [Where an optimization is allowed to cost time](#where-an-optimization-is-allowed-to-cost-time).
@@ -80,21 +80,29 @@ says Native AOT is unsupported on Windows because WPF does not support it. **The
 the pinned version and carries evidence, and the older one is describing a constraint that no longer applies to the
 Skia head.
 
-It is still declined here, for two reasons that stack.
+It is still declined here, and one of the two reasons that used to settle it no longer applies.
 
-**A licence condition forbids it, and that alone settles it.** `LibVLCSharp.dll` is in the `net10.0-desktop` graph —
-`Uno.WinUI.Runtime.Skia.X11` declares it unconditionally, and a `win-x64` publish carries it beside the application
-like any other assembly. It is LGPL-2.1-or-later, and
+**The licence condition is gone.** `LibVLCSharp.dll` used to sit in every `net10.0-desktop` publish —
+`Uno.WinUI.Runtime.Skia.X11` declares it unconditionally — and it is LGPL-2.1-or-later, so
 [ADR 0016](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0016-third-party-licence-obligations-per-artifact.md)
-holds what a shipped artifact then owes: the library stays unmodified and separately replaceable. Native AOT compiles
-the whole managed graph into one native image, which is the opposite of a file a recipient can swap. The same clause is
-what keeps `PublishTrimmed` off that head, and with it the XAML resource trimming above, which Uno measures as a
-Win32 desktop app going from 200 MB to 52 MB — a real loss, taken deliberately.
-[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) carries the
-verdict and `frontend/src/AGENTS.md` the properties it leaves unset. Reopening any of it is a fresh licence review
-rather than a build flag.
+obliged a shipped artifact to keep it unmodified and separately replaceable, which Native AOT, IL trimming, and a
+single-file bundle each take away. Nothing in the head calls it: the assembly belongs to `MediaPlayerElement`'s own
+package, which this project does not take. `Client.csproj` therefore names `LibVLCSharp` directly with
+`ExcludeAssets="all"` on that target framework, and the publish carries neither the file nor an entry for it in
+`MailFathom.Client.deps.json`.
+[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) carries that
+verdict and `frontend/src/AGENTS.md` what turning `MediaPlayerElement` on would bring back with it, which is the one
+thing that makes the paragraph above live again.
 
-**And it could not be built where the desktop head is built.** A Native AOT publish runs the native toolchain of the
+**So what keeps `PublishTrimmed` and the XAML resource trimming above off that head is now a measurement nobody has
+taken**, rather than a rule. Uno measures the pass as a Win32 desktop app going from 200 MB to 52 MB, and a `win-x64`
+publish of this application is 235 MB, so the saving is worth measuring rather than assuming — and trimming breaks
+reflection, which fails at run time rather than in the build.
+[#1226](https://github.com/Krzysztof318/MailFathom/issues/1226) owns that decision and this page states the outcome
+once it is taken.
+
+**Native AOT is declined for a second reason, which survives all of that: it could not be built where the desktop head
+is built.** A Native AOT publish runs the native toolchain of the
 platform it targets, so it does not cross-compile. `build-desktop-client.yml` publishes both Windows heads from
 `ubuntu-latest`, which works precisely because those publishes are IL with a runtime identifier — verified by
 publishing both from Linux, where the apphost, `coreclr.dll`, and `libSkiaSharp.dll` come out as PE32+ images for

@@ -327,10 +327,10 @@ jobs:
           name: ${{ needs.cli-binaries.outputs.artifact }}
           path: artifacts/cli
 
-      # Conditional for the same reason, and carrying its own notices: each archive holds the application, the licence
-      # and attribution beside it, and the statement that LibVLCSharp travels inside it under the LGPL. The section in
-      # the notes below is where the corresponding source is offered from the same place the archive is downloaded
-      # from, which is the other half of what that licence asks of a distribution.
+      # Conditional for the same reason, and carrying its own notices: each archive holds the application with
+      # MailFathom's own licence and attribution beside it. Nothing else is owed — every component that head
+      # redistributes is permissive, and the one copyleft package its restore graph resolves is excluded from the
+      # publish rather than shipped under conditions. THIRD_PARTY_LICENSES.md carries that verdict.
       - name: Download the desktop client
         if: needs.desktop-client.result == 'success'
         uses: actions/download-artifact@v8
@@ -427,10 +427,9 @@ jobs:
               "$VERSION" "$VERSION"
             printf '`MailFathom.Client.exe`. Verify a download against `mailfathom-client-%s.sha256`, which is the ' "$VERSION"
             printf 'only thing that verifies it: no artifact here is code-signed either.\n\n'
-            printf 'Each archive carries `THIRD-PARTY-NOTICES.md` and `LGPL-2.1.txt` beside the application. '
-            printf '`LibVLCSharp.dll` inside it is licensed under the GNU Lesser General Public License, version 2.1 '
-            printf 'or later, and is unmodified and replaceable as its own file; its corresponding source is offered '
-            printf 'from this release page at <https://github.com/videolan/libvlcsharp>.\n'
+            printf 'Each archive carries `LICENSE` and `NOTICE` beside the application, which are the terms '
+            printf 'MailFathom itself is under: everything else inside it is permissively licensed and owes no '
+            printf 'notice of its own.\n'
           } > "$notes_file"
 
           # Idempotent, because a re-run of a release must not fail on the release it already created.

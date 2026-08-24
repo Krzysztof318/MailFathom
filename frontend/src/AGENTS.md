@@ -180,46 +180,42 @@ frontend/
   step of `CI`'s `Frontend` job run the verifying pass over the whole solution. Never invoke `dotnet format` by hand,
   for the reason the repository never does: both halves already run where they belong.
 
-## `MediaPlayerElement` is available, and the desktop head pays for it at packaging time
+## `MediaPlayerElement` is available, and turning it on is a licence decision rather than a flag
 
-**`MediaPlayerElement` may be used.** It needs `MediaPlayerElement;` added to `UnoFeatures` in the project file, which
-is not there today, and nothing else in this stack changes for it. Reach for it when a screen genuinely plays media —
-a video or audio attachment is the obvious case — rather than as a general-purpose surface.
+**The desktop head carries no copyleft component.** `Uno.WinUI.Runtime.Skia.X11` declares `LibVLCSharp` —
+LGPL-2.1-or-later — as an unconditional dependency in its own package metadata, and it used to reach every
+`net10.0-desktop` publish as `LibVLCSharp.dll` beside the application. Nothing in that package uses it:
+`Uno.UI.Runtime.Skia.X11.dll` names the assembly in none of its references, because the control it belongs to lives in
+a package of its own. So `Client.csproj` names `LibVLCSharp` directly with `ExcludeAssets="all"` on the desktop target
+framework, which drops it from the publish and from `MailFathom.Client.deps.json` without removing anything the
+application can reach. `THIRD_PARTY_LICENSES.md` carries the verdict and what was measured to reach it, and
+[ADR 0016](../../docs/decisions/0016-third-party-licence-obligations-per-artifact.md) the rule that decides what an
+artifact owes for what it ships.
 
-What it costs is not paid in this repository and is not paid by the feature flag. On Linux the control is implemented
-over `LibVLCSharp`, which is LGPL-2.1-or-later and is the one copyleft component anywhere in either stack's graph. It
-is already in the `net10.0-desktop` graph whether or not the feature is on: `Uno.WinUI.Runtime.Skia.X11` declares it
-unconditionally, and a `net10.0-desktop` build copies `LibVLCSharp.dll` into the output today. The browser head's
-graph resolves none of it. `THIRD_PARTY_LICENSES.md` carries the verdict — it stays — and
-[ADR 0016](../../docs/decisions/0016-third-party-licence-obligations-per-artifact.md) the rule behind it, which is
-that a component carrying a licence condition stays separately replaceable in every artifact that ships it.
+**`MediaPlayerElement` may still be used**, and it now costs a review rather than a line. It needs
+`MediaPlayerElement;` added to `UnoFeatures`, which is not there today. Reach for it when a screen genuinely plays
+media — a video or audio attachment is the obvious case — rather than as a general-purpose surface. What arrives with
+it is not one package:
 
-**That bill is now paid, and it stays paid by not being undone.** A release publishes the Windows desktop heads —
-`.github/workflows/build-desktop-client.yml` builds them and `release.yml` attaches them — so the four properties below
-are conditions on every publish of this head rather than a warning to whoever gets there first, and each one is never
-set on a head whose graph carries that assembly, because each takes replaceability away:
+- **`Uno.WinUI.MediaPlayer.Skia.X11`, which needs `LibVLCSharp`** and declares it for itself. The exclusion above
+  therefore has to come out in the same change: leaving it in place publishes the control's own assembly without the
+  library it calls, and the failure arrives at run time as
+  `FileNotFoundException: Could not load file or assembly 'LibVLCSharp'` when playback is first reached, rather than as
+  anything the build said. The LGPL section 6 obligations come back with it — the notice, the licence text, the source
+  offer in the release notes, and the packaging properties that keep the assembly separately replaceable.
+- **`VideoLAN.LibVLC.Windows`, which is the native VLC plugin set** and which the feature adds unconditionally, Linux
+  publishes included. It is a **separate licence review** and is not covered by the one that admitted the managed
+  binding: VideoLAN publishes its software under GNU GPL v2 *or* LGPL rather than under one licence, so what a native
+  bundle carries has to be read before it is added, not after. It is also most of the size — a `linux-x64` publish goes
+  from 154 MB to 436 MB with the feature on.
 
-- **No assembly merging.** Nothing folds `LibVLCSharp.dll` into another assembly — not ILMerge, not ILRepack, not a
-  packaging step that produces one assembly out of several.
-- **No trimming of it.** `PublishTrimmed` rewrites the assemblies it keeps, and a rewritten library is a modified one,
-  which is a different clause of the licence and a different review.
-- **No Native AOT for that head.** It compiles the graph into one image, which is the opposite of a separate unit a
-  recipient can swap.
-- **`PublishSingleFile` only with the assembly kept out of the bundle**, through `ExcludeFromSingleFile`, so it stays a
-  file beside the application rather than one a recipient cannot reach.
-
-And one thing that must be present rather than absent: the notices travelling with that artifact carry the LGPL-2.1
-text, the statement that the Library is used and is covered by it, and access to LibVLCSharp's corresponding source
-from the same place the artifact is downloaded from. Those travel with the *publish* rather than with the workflow that
-runs one — `Client.csproj` copies the repository's `LICENSE` and `NOTICE` and this project's `Notices/` beside the head
-on every `net10.0-desktop` publish, and a target that runs after it fails the build when any of the four is missing, so
-a contributor publishing the head by hand carries them too. The source offer is the release notes' half, because that
-is the page somebody downloads the archive from. `THIRD_PARTY_LICENSES.md` records the verdict and what else it has to
-satisfy.
-
-Bundling the native VLC libraries — the `VideoLAN.LibVLC.*` packages, which nothing restores today — is a **separate
-licence review** and is not covered by the one above. VideoLAN publishes its software under GNU GPL v2 *or* LGPL
-rather than under one licence, so what a native bundle carries has to be read before it is added, not after.
+**The four packaging properties stay unset, and no longer for a licence reason.** `PublishTrimmed`, `PublishAot`,
+`PublishReadyToRun`, and `PublishSingleFile` are set nowhere in this stack. What used to forbid them was
+`LibVLCSharp.dll`'s replaceability; with the assembly gone, whether they are worth enabling is an open measurement
+that [#1226](https://github.com/Krzysztof318/MailFathom/issues/1226) owns and
+[publishing the client](../../docs/operations/client-publishing.md) records — this file states neither, because the
+posture lives on that page. What this file owns is the one thing that makes them licence conditions again, which is
+turning `MediaPlayerElement` on.
 
 ## Uno Platform Studio's tooling is in this graph, and no artifact may carry it
 

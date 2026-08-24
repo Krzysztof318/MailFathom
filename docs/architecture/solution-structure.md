@@ -184,14 +184,15 @@ project here and neither build reads the other's files.
   the desktop head uses ships in `Client.Backend`; the browser head's lives under `src/Client/Platforms/WebAssembly/`,
   because it needs the JavaScript interop only that target framework compiles — and that interop is why the browser
   head is the one place the application project sets `AllowUnsafeBlocks`, which the `[JSImport]` generator requires.
-- `src/Client/Notices/` is what a published desktop head has to carry beside it: the LGPL-2.1 text and the notice
-  naming the one component in that head's graph whose licence obliges them. The project file attaches them to every
-  `net10.0-desktop` publish and fails the build when one is missing, so the obligation travels with the artifact rather
-  than with the workflow that happens to produce it.
+- A published desktop head carries the repository's own `LICENSE` and `NOTICE` beside it and nothing further, because
+  no component in that head's graph obliges a notice of its own. The project file attaches both to every
+  `net10.0-desktop` publish and fails the build when one is missing, so the attribution travels with the artifact
+  rather than with the workflow that happens to produce it.
 - What a published head is optimized with is conditioned per target framework in that same project file. The browser
-  head publishes trimmed and enables Uno's XAML resource trimming with it; the desktop head is neither trimmed nor
-  compiled ahead of time, because the component that puts the notices above beside it has to stay unmodified and
-  separately replaceable. [Publishing the client](../operations/client-publishing.md) carries the whole posture.
+  head publishes trimmed and enables Uno's XAML resource trimming with it; the desktop head does neither, and since
+  the one copyleft component in its graph is excluded from the publish, what keeps it that way is a measurement nobody
+  has taken rather than a licence. [Publishing the client](../operations/client-publishing.md) carries the whole
+  posture.
 - `src/Client/Strings/` holds one string table per language the application is readable in, one directory per neutral
   culture. Which of them are offered is `LocalizationConfiguration:Cultures` in the embedded `appsettings.json`, so a
   language reaches a reader only where both the table and that list name it.

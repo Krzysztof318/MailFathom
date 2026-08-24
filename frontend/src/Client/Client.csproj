@@ -88,9 +88,10 @@
        the IL trimmer's own invocation, reads this application's XAML to decide which controls are never named, and
        tells the trimmer that the styles reached through their TargetType need not be kept. So it does something only
        where the IL trimmer already runs, which here is the browser head — a WebAssembly publish trims by default and
-       the desktop head deliberately does not trim at all, because its graph carries a library whose licence requires
-       it to stay unmodified. What that costs, what the desktop head refuses and why, and what to do when a control is
-       ever resolved at run time rather than named in XAML are all in docs/operations/client-publishing.md. -->
+       the desktop head does not trim at all. That used to be a licence condition and is now an open measurement, since
+       the assembly that obliged it is excluded below. What the desktop head is missing, what it would cost to measure,
+       and what to do when a control is ever resolved at run time rather than named in XAML are all in
+       docs/operations/client-publishing.md. -->
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
     <UnoXamlResourcesTrimming>true</UnoXamlResourcesTrimming>
   </PropertyGroup>
@@ -127,6 +128,24 @@
                       Exclude="Platforms/WebAssembly/WasmScripts/AppManifest.js" />
   </ItemGroup>
 
+  <!-- The one component in either stack's graph that carried a copyleft licence, kept out of the artifact rather than
+       shipped under it. `Uno.WinUI.Runtime.Skia.X11` declares `LibVLCSharp` — LGPL-2.1-or-later — as an unconditional
+       dependency in its own package metadata, and nothing in that package uses it: `Uno.UI.Runtime.Skia.X11.dll`
+       names the assembly nowhere. What implements `MediaPlayerElement` on X11 is `Uno.WinUI.MediaPlayer.Skia.X11`,
+       which the `MediaPlayerElement` UnoFeature adds and which declares `LibVLCSharp` for itself. So the dependency
+       here is a packaging floor with no consumer, and naming it directly with every asset excluded drops
+       `LibVLCSharp.dll` from the publish without removing anything the application can reach.
+
+       Scoped to the desktop head because it is the only one that resolves the package at all — the browser head's
+       graph never sees it, and a reference stated for the project would put it into that restore for nothing.
+
+       **Adding `MediaPlayerElement;` to UnoFeatures means removing this item**, with THIRD_PARTY_LICENSES.md and the
+       notices that travel with the artifact restored beside it: that feature's own package needs the assembly this
+       excludes, and the exclusion would leave the control broken at run time rather than merely unused. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">
+    <PackageReference Include="LibVLCSharp" ExcludeAssets="all" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- Everything that talks to the service, in an assembly that cannot reference a XAML type. The reference goes
          this way and only this way: Client.Backend knows nothing about a view, and the compiler is what says so. -->
@@ -140,31 +159,23 @@
   </ItemGroup>
 
   <!-- What a distributed desktop head has to carry, attached to the publish rather than to the workflow that
-       publishes: the project's own Apache-2.0 grant and attribution, and the notices for the one component here whose
-       licence obliges them. A `net10.0-desktop` graph carries LibVLCSharp.dll, which is LGPL-2.1-or-later — see
-       THIRD_PARTY_LICENSES.md and the four build properties frontend/src/AGENTS.md leaves unset for it — and section 6
-       of that licence wants the statement, the licence text, and access to the corresponding source travelling with
-       the artifact. Written here so that every publish of this head satisfies it, including one a contributor runs.
-       The browser head resolves none of that graph and is served from the container image, whose own LICENSE and
-       NOTICE the service publishes beside its assemblies. -->
+       publishes: the project's own Apache-2.0 grant and attribution. Nothing else in this head's graph obliges a
+       notice — every package it resolves is permissive, and the one that was not is excluded above — so these two
+       files are MailFathom's own terms rather than somebody else's. Written here so that every publish of this head
+       carries them, including one a contributor runs. The browser head is served from the container image, whose own
+       LICENSE and NOTICE the service publishes beside its assemblies. -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">
     <None Include="$(RepositoryRoot)LICENSE" Link="LICENSE" CopyToPublishDirectory="PreserveNewest" />
     <None Include="$(RepositoryRoot)NOTICE" Link="NOTICE" CopyToPublishDirectory="PreserveNewest" />
-    <None Include="Notices/THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToPublishDirectory="PreserveNewest" />
-    <None Include="Notices/LGPL-2.1.txt" Link="LGPL-2.1.txt" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- A missing source file makes the items above resolve to nothing and the publish silently succeeds, which is the
-       one failure this has to rule out: an artifact that ships without the notices it owes is the defect, not a build
-       that stops. The same target `Host` carries, over four files rather than two. -->
+       one failure this has to rule out: an artifact that ships without the attribution it owes is the defect, not a
+       build that stops. The same target `Host` carries, over four files rather than two. -->
   <Target Name="VerifyPublishedDesktopNotices" AfterTargets="Publish" Condition="'$(TargetFramework)' == 'net10.0-desktop'">
     <Error Condition="!Exists('$(PublishDir)LICENSE')"
            Text="The published desktop head has no LICENSE. Restore the repository root LICENSE before publishing." />
     <Error Condition="!Exists('$(PublishDir)NOTICE')"
            Text="The published desktop head has no NOTICE. Restore the repository root NOTICE before publishing." />
-    <Error Condition="!Exists('$(PublishDir)THIRD-PARTY-NOTICES.md')"
-           Text="The published desktop head has no THIRD-PARTY-NOTICES.md, which is what states that LibVLCSharp is used under the LGPL and where its source is." />
-    <Error Condition="!Exists('$(PublishDir)LGPL-2.1.txt')"
-           Text="The published desktop head has no LGPL-2.1.txt, which section 6 of that licence requires the artifact to carry." />
   </Target>
 </Project>
