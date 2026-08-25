@@ -88,7 +88,7 @@ public sealed class MailFolderDirectoryReaderTests
             OwningAccounts(Work),
             StoredFolders(
                 Stored(Work.Id, "2024", "Archiwum.2024", storedEmailCount: 0, unreadEmailCount: 0, delimiter: '.'),
-                Stored(Work.Id, "sent", "Wys&AUI-ane", storedEmailCount: 2, unreadEmailCount: 0)),
+                Stored(Work.Id, "sent", "Gesendete Objekte", storedEmailCount: 2, unreadEmailCount: 0)),
             mappings);
 
         // Act
