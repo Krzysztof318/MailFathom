@@ -55,6 +55,7 @@ using MailFathom.Host.Configuration.Jobs;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Host.Configuration.Providers;
+using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.Spam;
@@ -121,6 +122,7 @@ internal static class HostComposition
         ArgumentNullException.ThrowIfNull(builder);
 
         AddPlatformDefaults(builder);
+        AddPersistedConfiguration(builder);
         AddBoundSettings(builder);
 
         var declaredSensitiveContent = AddSensitiveContentScanning(builder);
@@ -142,6 +144,24 @@ internal static class HostComposition
         builder.Services.AddApiDocumentation(builder.Environment);
 
         return AddNetworkSurfaces(builder);
+    }
+
+    /// <summary>Registers the seam a committed configuration write republishes the persisted layer through.</summary>
+    /// <remarks>
+    /// The provider is found among the sources rather than handed in, because the layer is composed while the builder
+    /// is being made and the composition root is called after that. A host built without the layer — the graph a unit
+    /// test composes from files alone — registers neither service, so nothing resolves a reloader over a layer that is
+    /// not there.
+    /// </remarks>
+    private static void AddPersistedConfiguration(WebApplicationBuilder builder)
+    {
+        if (builder.Configuration.Sources.OfType<RootSettingsConfigurationSource>().LastOrDefault() is not { } layer)
+        {
+            return;
+        }
+
+        builder.Services.AddSingleton(layer.Provider);
+        builder.Services.AddSingleton<RootSettingsReloader>();
     }
 
     /// <summary>Registers the telemetry, resilience, clock, and secret resolution every other stage assumes.</summary>

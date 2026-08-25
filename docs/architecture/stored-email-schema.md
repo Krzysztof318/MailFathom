@@ -177,6 +177,19 @@ The row keeps the indexable part of what the MIME reader found and only that: `a
 
 **The per-attachment list of file names, media types, and sizes is deliberately not persisted.** The same reasoning as for recipient display names applies, and one more: a second representation of the attachment list can drift from the raw MIME it was derived from, and re-deriving it costs nothing in a pass a body reader is already making. [Email content](../features/email-content.md#the-descriptions-are-re-derived-never-stored) is the read that makes it. The signature marker is named for presence rather than verification because nothing here verifies anything; a column called "signed" would be read as an authenticity result by every query that later touched it.
 
+## The deployment's persisted configuration
+
+`settings_root` holds exactly one row, and that row is the configuration layer the host composes between the files a deployment provisioned and the overrides an operator supplies. The singleton is enforced by the schema — the primary key carries a check constraint admitting only the identifier `1` — because "the effective configuration" would otherwise be a question about row ordering that no reader could answer or report on. The migration that creates the table provisions the row with an empty document, so the layer exists on every database this build runs against.
+
+| Column of `settings_root` | What it records |
+|---|---|
+| `Id` | The singleton key, always `1`, stated rather than generated |
+| `Document` | The persisted settings, as one sparse `jsonb` document. It is flattened into ordinary colon-delimited .NET configuration keys by the host, so nothing here queries into it and its shape is whatever the sections it carries define. A key it does not carry is inherited from the source beneath rather than read as an empty value, and an array element is written as an object keyed by its index — `{ "Rules": { "1": … } }` — because the parser renumbers a JSON array's elements from `0` |
+| `Version` | The version a write is accepted against, for the reason the owner record's is: a rejected write reports the version it was refused against, which a token the database generates behind the write cannot be quoted back |
+| `CreatedAt`, `UpdatedAt` | When the row was provisioned, and when the document last changed — which is the provisioning instant until it does |
+
+Nothing keys onto this row and nothing cascades from it. It describes the deployment rather than any person's mail, so erasing an owner leaves it exactly where it was. [Configuration sources](../operations/configuration-sources.md) states where the layer sits and which settings are read before it and therefore never from it.
+
 ## The owner a mailbox belongs to
 
 `settings_accounts` holds one row per owner, and `mailbox_accounts` gains the owner every mailbox belongs to. This is the axis the whole graph above hangs on: a folder cascades from the account, a message from the folder, and everything derived from a message from the message, so an owner on the account row is an owner on all of it. [ADR 0014](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md) is the decision. Both tables of the [contact book](#the-contact-book) carry an owner of their own, for two different reasons: it is an assembled record rather than mail an account brought in, so `contacts` hangs on nothing that could carry an owner and names one directly, and `contact_addresses` repeats it despite hanging on `contacts` through `(ContactId, OwnerId)`, because the reads it answers lead with the owner in an index and an index cannot reach through the contact to find one.

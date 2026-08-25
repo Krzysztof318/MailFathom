@@ -2,8 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using Microsoft.Extensions.Configuration.Json;
-
 namespace MailFathom.Host.Configuration.Provisioning;
 
 /// <summary>Layers deployment-provisioned JSON configuration into the sources the host builder has already composed.</summary>
@@ -52,9 +50,9 @@ internal static class ProvisionedConfigurationExtensions
         return files.Count;
     }
 
-    private static JsonConfigurationSource CreateJsonSource(string filePath)
+    private static ProvisionedJsonConfigurationSource CreateJsonSource(string filePath)
     {
-        var source = new JsonConfigurationSource
+        var source = new ProvisionedJsonConfigurationSource
         {
             Path = filePath,
 

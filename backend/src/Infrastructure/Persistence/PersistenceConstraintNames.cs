@@ -405,4 +405,12 @@ internal static class PersistenceConstraintNames
     /// one.
     /// </remarks>
     internal const string ContentMoveRunSingletonCheckConstraintName = "ck_content_move_runs_singleton";
+
+    /// <summary>The constraint that admits the one row the deployment's persisted configuration is written on.</summary>
+    /// <remarks>
+    /// The host reads that row before it composes anything, by key rather than by query, so a second row would be
+    /// configuration nothing ever reads and an operator would have no way to tell which of the two the running process
+    /// took its settings from.
+    /// </remarks>
+    internal const string RootSettingsSingletonCheckConstraintName = "ck_settings_root_singleton";
 }

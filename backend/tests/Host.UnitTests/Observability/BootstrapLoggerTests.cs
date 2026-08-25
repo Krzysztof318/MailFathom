@@ -97,6 +97,32 @@ public sealed class BootstrapLoggerTests
             record.Properties);
     }
 
+    /// <summary>
+    /// The version is the only record of which persisted document the process composed itself over, and it is a number
+    /// rather than a key or a value: the layer holds settings, not diagnostics.
+    /// </summary>
+    [Fact]
+    public void RecordRootSettingsVersion_Always_ReportsTheVersionAndNothingFromTheDocument()
+    {
+        // Arrange
+        using var loggerFactory = new RecordingLoggerFactory();
+        using var bootstrapLogger = new BootstrapLogger(loggerFactory, Settings);
+
+        // Act
+        bootstrapLogger.RecordRootSettingsVersion(4);
+
+        // Assert
+        var record = Assert.Single(loggerFactory.Records);
+        Assert.Equal(LogLevel.Information, record.Level);
+        Assert.Null(record.Failure);
+        Assert.Equal(
+            [
+                KeyValuePair.Create("ServiceName", (object?)"mailfathom-host"),
+                KeyValuePair.Create("Version", (object?)4L),
+            ],
+            record.Properties.OrderBy(property => property.Key, StringComparer.Ordinal).ToArray());
+    }
+
     [Fact]
     public void Constructor_Always_WritesUnderTheStartupCategory()
     {

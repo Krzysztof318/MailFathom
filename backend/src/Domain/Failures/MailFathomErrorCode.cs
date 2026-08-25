@@ -49,6 +49,26 @@ public readonly record struct MailFathomErrorCode
     /// <summary>Gets subcategory 2, configuration sources: a setting only the process environment can deliver carries a value that came from somewhere else.</summary>
     public static MailFathomErrorCode EnvironmentOnlySettingMisplaced { get; } = new(12002);
 
+    /// <summary>Gets subcategory 2, configuration sources: the persisted configuration layer could not be read, parsed, or applied.</summary>
+    /// <remarks>
+    /// It sits beside the two above because all three answer the same question — whether the sources a deployment
+    /// believes it composed are the sources the host actually read. A database that cannot be reached, a schema
+    /// missing the row, and a document that is not a configuration object are one failure to every caller: the layer
+    /// between the deployment's files and the operator's overrides contributes nothing, and nothing else would say so.
+    /// </remarks>
+    public static MailFathomErrorCode RootSettingsUnreadable { get; } = new(12003);
+
+    /// <summary>Gets subcategory 2, configuration sources: the persisted configuration layer carries a setting only the sources beneath it may supply.</summary>
+    /// <remarks>
+    /// It is the counterpart of <see cref="EnvironmentOnlySettingMisplaced" /> for the other end of the source list.
+    /// The settings that decide where the database is, how a secret reference is read, and which configuration sources
+    /// exist are read before the persisted layer is composed, so a persisted value for one of them would reach every
+    /// reader that runs afterwards and none that ran before — one credential authenticating the bootstrap read and
+    /// another the connection pool, with nothing in the process reporting the split. Refusing the document is what
+    /// keeps that from being a way to change the settings the layer itself is trusted under.
+    /// </remarks>
+    public static MailFathomErrorCode BootstrapOnlySettingPersisted { get; } = new(12004);
+
     /// <summary>Gets subcategory 3, mailbox access tokens: an account's authorization server did not issue an access token its OAuth mechanisms require.</summary>
     public static MailFathomErrorCode MailAccessTokenUnavailable { get; } = new(13001);
 
@@ -833,6 +853,8 @@ public readonly record struct MailFathomErrorCode
         MailTransportSecurityPolicyViolated,
         ProvisionedConfigurationSourceInvalid,
         EnvironmentOnlySettingMisplaced,
+        RootSettingsUnreadable,
+        BootstrapOnlySettingPersisted,
         MailAccessTokenUnavailable,
         MailboxAuthorizationFailed,
         PrincipalNotAuthorized,

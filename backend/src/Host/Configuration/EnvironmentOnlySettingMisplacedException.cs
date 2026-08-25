@@ -10,7 +10,8 @@ namespace MailFathom.Host.Configuration;
 /// <remarks>
 /// <para>
 /// The failure exists because the mistake it names is otherwise invisible. A value written into an <c>appsettings.json</c>
-/// file, a provisioned configuration file, or a command-line argument is accepted by the configuration pipeline and can
+/// file, a provisioned configuration file, the persisted configuration document, or a command-line argument is
+/// accepted by the configuration pipeline and can
 /// be read back out of it, so nothing about the deployment looks wrong; the reader that needed it had already taken its
 /// value from the environment, or reads only the environment and never consults configuration at all. The result is a
 /// setting an operator can point at in their own file while the process behaves as though it were unset.

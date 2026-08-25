@@ -110,6 +110,7 @@ using MailFathom.Infrastructure.Persistence.Mutations;
 using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.Infrastructure.Persistence.Rules;
 using MailFathom.Infrastructure.Persistence.Sessions;
+using MailFathom.Infrastructure.Persistence.Settings;
 using MailFathom.Infrastructure.Persistence.Spam;
 using MailFathom.Infrastructure.Persistence.Synchronization;
 using MailFathom.Infrastructure.Resilience;
@@ -335,6 +336,10 @@ public static class ServiceCollectionExtensions
         services.AddDbContext<MailFathomDbContext>((provider, options) => options
             .UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>(), npgsql => npgsql.UseVector())
             .ConfigureWarnings(warnings => warnings.Log((RelationalEventId.CommandExecuted, LogLevel.Debug))));
+        // Reads the persisted configuration layer once the process is running, which is what a reload asks. The
+        // bootstrap read that composed the configuration happened before this container existed and built its own
+        // data source for it; this registration is the same statement over the pool everything else uses.
+        services.AddSingleton<IRootSettingsDocumentReader, RootSettingsDocumentReader>();
         // The counter every session reports its ending to is a singleton, because the instrument it holds belongs to the
         // process rather than to a scope: one per request would create the same instrument again on every call.
         services.AddSingleton<PersistenceCommitTelemetry>();

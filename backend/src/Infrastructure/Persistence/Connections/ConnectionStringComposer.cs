@@ -82,6 +82,49 @@ internal static class ConnectionStringComposer
         return new ComposedConnectionSettings(connectionSettings, DatabasePasswordSource.None);
     }
 
+    /// <summary>Points a data source builder at the configured credential source instead of baking a password into it.</summary>
+    /// <param name="dataSourceBuilder">The builder the data source is built from.</param>
+    /// <param name="passwordSource">Which configured setting supplies the credential, if any.</param>
+    /// <param name="resolveCurrentPassword">Retrieves the credential for the connection being opened.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="dataSourceBuilder" /> or <paramref name="resolveCurrentPassword" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// Attaching the provider is what keeps the credential out of the connection string, so it is one decision here
+    /// rather than one per data source built: the pool the container holds for the process's whole life and the single
+    /// connection the configuration bootstrap opens both attach it the same way. A change to how the credential is
+    /// supplied — another password source, a bound on retrieval, a redaction — then reaches both.
+    /// </para>
+    /// <para>
+    /// A deployment whose password is written into ordinary configuration supplies
+    /// <see cref="DatabasePasswordSource.None" /> and gets no provider: the connection string already carries the
+    /// credential, and there is nothing to retrieve per connection.
+    /// </para>
+    /// <para>
+    /// The synchronous provider deliberately throws, as Npgsql's own documentation recommends. Retrieval is
+    /// asynchronous by contract and can reach a file or one day a managed store, and satisfying a synchronous callback
+    /// would mean blocking a thread on it. Every MailFathom database access opens its connection asynchronously, so
+    /// the synchronous path is unreachable rather than merely discouraged.
+    /// </para>
+    /// </remarks>
+    internal static void SupplyThePasswordPerConnection(
+        NpgsqlDataSourceBuilder dataSourceBuilder,
+        DatabasePasswordSource passwordSource,
+        Func<CancellationToken, Task<string>> resolveCurrentPassword)
+    {
+        ArgumentNullException.ThrowIfNull(dataSourceBuilder);
+        ArgumentNullException.ThrowIfNull(resolveCurrentPassword);
+
+        if (passwordSource == DatabasePasswordSource.None)
+        {
+            return;
+        }
+
+        dataSourceBuilder.UsePasswordProvider(
+            _ => throw new NotSupportedException(
+                "The PostgreSQL password is retrieved asynchronously. Open the connection with OpenAsync."),
+            async (_, cancellationToken) => await resolveCurrentPassword(cancellationToken));
+    }
+
     /// <summary>Retrieves the current database password from the configured source.</summary>
     /// <param name="passwordSource">Which configured setting supplies it.</param>
     /// <param name="connectionStringSecret">The block referencing a complete connection string, when that is the source.</param>

@@ -28,10 +28,13 @@ database that already carries some of them takes only what it is missing. You do
 given installation holds in order to know which file to apply — there is one file, and applying it twice is applying it
 once.
 
-It writes one row as well as creating tables. The chain provisions the **owner** every mailbox is bound to — one
-record, with the mail accounts this deployment already holds carried onto it — because a mailbox belongs to somebody
-from the moment its row exists. It is written on the apply that introduces it and left alone by every apply after that,
-so applying the file twice still provisions one owner.
+It writes two rows as well as creating tables, and each is written once and left alone afterwards. The chain provisions
+the **owner** every mailbox is bound to — one record, with the mail accounts this deployment already holds carried onto
+it — because a mailbox belongs to somebody from the moment its row exists. It also provisions the singleton row of
+`settings_root`, the deployment's **persisted configuration** document, as an empty document at version 1, because the
+host reads that row before it opens any endpoint and a deployment that has configured nothing still has to start. Both
+inserts are guarded against a row already being there, so applying the file twice still provisions one owner and one
+configuration document, and neither apply writes over what a running deployment has since put in them.
 
 Some migrations in the chain carry existing data onto a new shape as well, and one of them reads a table rather than
 only rewriting a column: the per-owner stored-content counter is seeded from what the message payloads already hold, so
@@ -254,21 +257,33 @@ and do not treat a previous image as something that can be left running against 
 
 ## When the host refuses to start
 
-Three failures are about the schema, and each names a different problem. They are distinguishable from an ordinary
-startup failure by the code: everything in the `32xxx` range is persistence.
+Three failures are raised by the schema gate itself, and each names a different problem. They are distinguishable from
+an ordinary startup failure by the code: everything in the `32xxx` range is persistence. A fourth, `12003`, is raised
+before the gate runs at all and is described below the table.
 
 | Code | Failure | What it means | What to do |
 | --- | --- | --- | --- |
 | `32001` | `DatabaseSchemaOutOfDateException` | The database has not applied migrations this build defines, and the message names them | Apply the schema artifact for this version, then start the host again |
-| `32002` | `DatabaseSchemaStateUnreadableException` | The schema state could not be established at all — an unreachable server, a database that was never created, or a role without rights on the migration history | Fix the connection, the database, or the grant. The message names the reason class only; the provider's own text is the inner exception, because it can carry a host, user, and database name |
+| `32002` | `DatabaseSchemaStateUnreadableException` | The schema state could not be established at all — an unreachable server, a database that was never created, or a role without rights on the migration history | Fix the connection, the database, or the grant. The message names the reason class only; the provider's own text is the inner exception, because it can carry a host, user, and database name. Two of those three reach an operator as `12003` first, from the read the subsection below describes, which names the uncreated database and the missing grant apart rather than as one class |
 | `32003` | `DatabaseSchemaTextSearchConfigurationMismatchException` | The lexical index was built with one PostgreSQL text search configuration and this host is configured for another, so searching would stem queries one way and read lexemes built another | Set `Persistence:TextSearchConfiguration` to the value the message reports the schema holds, or rebuild the index under the configured one |
 
-`32001` is the expected state of a first install and of an upgrade whose schema step has not run yet. It is not a
-defect, and the log line names exactly which migrations are missing.
+### The schema is read once before this gate, and reports its own code
+
+`12003` reaches an operator first on a database this release's migrations have not been applied to, and it is a schema
+problem despite not being a `32xxx` one. MailFathom composes its settings over
+[the persisted configuration layer](configuration-sources.md#the-persisted-layer) before it builds the host at all, so
+a server carrying no database of the configured name, a missing `settings_root` table, a role holding no privilege on
+it, a refused credential, and a server whose authorization rules admit no such connection are all met by that read
+rather than by the gate below — under `RootSettingsUnreadableException`, whose message names which of them it was. The
+correction is the same one this page gives for `32001` and `32002`: create the database, apply this version's schema
+artifact, or fix the grant.
+
+So on a first install `12003` is the expected refusal and `32001` is what an operator would have seen had the layer
+already existed. Both name the same missing schema step, and each log line names exactly what it found missing.
 
 Anything else that stops the host is not a schema problem: a secret reference that did not resolve, a configuration
-value the options validation refused, or a port already taken all fail before or beside this gate and report their own
-codes.
+value the options validation refused, a persisted configuration document carrying a setting MailFathom reads before
+that layer exists (`12004`), or a port already taken all fail before or beside this gate and report their own codes.
 
 ## Rolling back
 
