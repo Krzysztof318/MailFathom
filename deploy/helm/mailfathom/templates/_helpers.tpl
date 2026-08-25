@@ -201,9 +201,34 @@ root, where a name is required to be unique — two of them naming one key is re
 the identifier and the secret are the same file.
 */}}
 {{- $objectStorage := .Values.contentStorage.objectStorage -}}
+{{- $objectStore := $objectStorage.deploy -}}
 {{- if eq .Values.contentStorage.backend "objectStorage" -}}
-  {{- if not $objectStorage.endpoint -}}
-    {{- fail "contentStorage.objectStorage.endpoint is not set while contentStorage.backend is 'objectStorage'. MailFathom reaches the endpoint at an address the deployment states and resolves none from the node, so name the absolute https address of the S3-compatible service holding your mail." -}}
+  {{- if $objectStore.enabled -}}
+    {{- if $objectStorage.endpoint -}}
+      {{- fail (printf "contentStorage.objectStorage.endpoint is %q while contentStorage.objectStorage.deploy.enabled is true. The chart is running the object store and derives its address from the release name, so a second address here would write mail into a bucket the release did not install. Clear it, or turn deploy off to use an endpoint you already operate." $objectStorage.endpoint) -}}
+    {{- end -}}
+    {{- if not $objectStore.tls.existingSecret -}}
+      {{- fail "contentStorage.objectStorage.deploy.tls.existingSecret is not set while the chart is running the object store. MailFathom refuses a plain http endpoint, because a request carries a signature and, on a write, the message itself — so the store terminates TLS itself and needs a certificate covering the Service name the endpoint is derived from. The chart issues none: name a Secret the cluster already holds." -}}
+    {{- end -}}
+    {{- if not $objectStorage.trustAnchorSecretKey -}}
+      {{- fail "contentStorage.objectStorage.trustAnchorSecretKey is not set while the chart is running the object store. The endpoint is then a Service name inside the cluster, which no public authority issues a certificate for, so nothing in MailFathom's own trust store answers for the one the store presents. Name the key inside secrets.existingSecret holding the authority that signed it; there is no setting anywhere that turns validation off instead." -}}
+    {{- end -}}
+    {{- if not $objectStorage.usePathStyleAddressing -}}
+      {{- fail "contentStorage.objectStorage.usePathStyleAddressing is false while the chart is running the object store. Virtual-hosted addressing puts the bucket in the host name, which needs a wildcard DNS record and a certificate to match it, and a Service has neither." -}}
+    {{- end -}}
+    {{- if not $objectStore.rootCredentialSecret -}}
+      {{- fail "contentStorage.objectStorage.deploy.rootCredentialSecret is not set while the chart is running the object store. The root credential administers the whole server — it creates buckets, issues access keys, and reads every object — and belongs in a Secret of its own: secrets.existingSecret is mounted whole into the application pod, because the keys MailFathom reads are named by your configuration rather than by this chart, so a root credential in it would be readable from the process that parses untrusted mail." -}}
+    {{- end -}}
+    {{- if eq $objectStore.rootCredentialSecret .Values.secrets.existingSecret -}}
+      {{- fail (printf "contentStorage.objectStorage.deploy.rootCredentialSecret and secrets.existingSecret both name %q. The application pod mounts that Secret whole, so the object store's root credential would reach the process that parses untrusted mail — which is the boundary the bucket-scoped access key exists to draw. Name a second Secret holding this credential alone." .Values.secrets.existingSecret) -}}
+    {{- end -}}
+    {{- if eq $objectStore.rootAccessKeyIdSecretKey $objectStore.rootSecretAccessKeySecretKey -}}
+      {{- fail "contentStorage.objectStorage.deploy.rootAccessKeyIdSecretKey and rootSecretAccessKeySecretKey name one key, which would make the identifier and its secret the same file." -}}
+    {{- end -}}
+  {{- else -}}
+    {{- if not $objectStorage.endpoint -}}
+      {{- fail "contentStorage.objectStorage.endpoint is not set while contentStorage.backend is 'objectStorage'. MailFathom reaches the endpoint at an address the deployment states and resolves none from the node, so name the absolute https address of the S3-compatible service holding your mail — or turn contentStorage.objectStorage.deploy.enabled on and let the chart run one beside it." -}}
+    {{- end -}}
   {{- end -}}
   {{- if not $objectStorage.bucket -}}
     {{- fail "contentStorage.objectStorage.bucket is not set while contentStorage.backend is 'objectStorage'. Every payload is written into one bucket, which the deployment names and the chart does not create." -}}
@@ -222,6 +247,9 @@ the identifier and the secret are the same file.
     {{- fail (printf "The content-storage secret keys are not distinct: %s. Each becomes a credential of its own inside one configuration root, where MailFathom requires a unique name — and two of them naming one key would make the access key identifier and its secret the same file." (join ", " $secretKeys)) -}}
   {{- end -}}
 {{- else -}}
+  {{- if $objectStore.enabled -}}
+    {{- fail "contentStorage.objectStorage.deploy.enabled is true while contentStorage.backend is 'database'. The release would run an object store and hold a volume for it while every payload went into PostgreSQL, so nothing would ever be written there. Select the object-storage backend, or turn the store off." -}}
+  {{- end -}}
   {{- if or $objectStorage.endpoint $objectStorage.bucket -}}
     {{- fail "contentStorage.objectStorage names an endpoint or a bucket while contentStorage.backend is 'database'. Nothing would read it, so this deployment writes every payload into PostgreSQL while its values file reads as though mail were going to a bucket. Select the object-storage backend, or remove the endpoint and the bucket." -}}
   {{- end -}}
@@ -441,6 +469,64 @@ two derivations because the daemon speaks a line protocol on a TCP port — ther
 {{- .Values.spamScanning.scanner.port -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+The object store's objects, named after the release with `-silo` appended. The suffix names the server rather than the
+feature, for the reason the analyzer's and the scanner's do: what a listing has to distinguish is which image is in the
+pod.
+*/}}
+{{- define "mailfathom.objectStoreFullname" -}}
+{{- printf "%s-silo" (include "mailfathom.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "mailfathom.objectStoreSelectorLabels" -}}
+app.kubernetes.io/name: {{ printf "%s-silo" (include "mailfathom.name" .) | trunc 63 | trimSuffix "-" }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{- define "mailfathom.objectStoreLabels" -}}
+helm.sh/chart: {{ include "mailfathom.chart" . }}
+{{ include "mailfathom.objectStoreSelectorLabels" . }}
+app.kubernetes.io/version: {{ .Values.contentStorage.objectStorage.deploy.image.tag | trunc 63 | trimSuffix "-" | quote }}
+app.kubernetes.io/component: object-store
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: mailfathom
+{{- end -}}
+
+{{/*
+The object store's image, written like the database's and the analyzer's: the registry is part of the reference because
+this pin is the chart's own choice rather than a deployment's.
+*/}}
+{{- define "mailfathom.objectStoreImage" -}}
+{{- $image := .Values.contentStorage.objectStorage.deploy.image -}}
+{{- if $image.registry -}}
+{{- printf "%s/%s:%s" $image.registry $image.repository $image.tag -}}
+{{- else -}}
+{{- printf "%s:%s" $image.repository $image.tag -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Where MailFathom writes payloads. A store the chart runs is reached by the name of its own Service over https, which is
+what keeps the address one derivation rather than a value an operator has to keep in step with the release name — and
+what decides which name the certificate has to carry. An external endpoint is whatever was named;
+`mailfathom.validate` has already refused the combinations where both or neither exist.
+*/}}
+{{- define "mailfathom.objectStorageEndpoint" -}}
+{{- if .Values.contentStorage.objectStorage.deploy.enabled -}}
+{{- printf "https://%s:%d" (include "mailfathom.objectStoreFullname" .) (int .Values.contentStorage.objectStorage.deploy.service.port) -}}
+{{- else -}}
+{{- .Values.contentStorage.objectStorage.endpoint -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Where the server reads its certificate and its root credential. Two constants rather than values: they are paths inside
+a container this chart composes whole, so an operator changing one would be renaming something only these templates
+read.
+*/}}
+{{- define "mailfathom.objectStoreCertificatesDirectory" -}}/etc/silo/certs{{- end -}}
+{{- define "mailfathom.objectStoreCredentialsDirectory" -}}/etc/silo/credentials{{- end -}}
 
 {{/*
 The connection string, without the password. The password reaches MailFathom as a mounted file named by

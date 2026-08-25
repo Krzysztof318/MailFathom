@@ -53,7 +53,7 @@ readonly usage='Usage: scripts/update-dependencies.sh [--apply] [--verify] [--on
 # `Apache-2.0` in a register row reads as no match at all and `BSD-3-Clause` reads as `BSD`. `PostgreSQL License` sits
 # ahead of the bare `PostgreSQL` for the same reason — the register writes the licence's full name where a package's own
 # metadata declares the SPDX identifier, and both have to resolve to the same thing.
-readonly licence_pattern='Apache-2\.0|BSD-3-Clause|BSD-2-Clause|PostgreSQL License|LGPL-[0-9.]+(-or-later|-only)?|NOASSERTION|PostgreSQL|MPL-2\.0|CC-BY-[0-9.]+|Unicode|MS-PL|MIT|ISC|CC0'
+readonly licence_pattern='Apache-2\.0|BSD-3-Clause|BSD-2-Clause|PostgreSQL License|AGPL-[0-9.]+(-or-later|-only)?|LGPL-[0-9.]+(-or-later|-only)?|NOASSERTION|PostgreSQL|MPL-2\.0|CC-BY-[0-9.]+|Unicode|MS-PL|MIT|ISC|CC0'
 
 readonly register_file='THIRD_PARTY_LICENSES.md'
 readonly global_json='global.json'

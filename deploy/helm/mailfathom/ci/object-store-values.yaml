@@ -1,0 +1,39 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# The object store the chart runs itself, which is the half of the content-storage choice `content-storage-values.yaml`
+# does not render: there the endpoint is an address somebody else operates and nothing of a workload is produced, and
+# here the StatefulSet, its claim, and its Service are, with the endpoint derived from the Service name rather than
+# stated. Between the two files both branches of `contentStorage.objectStorage.deploy.enabled` are rendered by the
+# repository's own verification, exactly as the release and nightly documents do for `database.deploy.enabled`.
+#
+# Everything else is the smallest values document the chart installs from, so what the golden manifest shows against
+# `content-storage.yaml` is the object store and nothing else.
+image:
+  repository: example/mailfathom
+  tag: 0.1.0-verification
+  allowVersionMismatch: true
+
+secrets:
+  existingSecret: mailfathom-secrets
+
+database:
+  deploy:
+    superuserPasswordSecret: mailfathom-postgres-superuser
+
+# The console is deliberately left off, because that is the default rendering the acceptance is about: the golden
+# manifest beside this file is the record that no listener and no Service port for it are produced.
+#
+# The trust anchor is not an option here the way it is for a hosted endpoint. The store answers on a Service name, which
+# no public authority issues a certificate for, so the chart refuses this shape without one.
+contentStorage:
+  backend: objectStorage
+  objectStorage:
+    bucket: mailfathom-content
+    trustAnchorSecretKey: mailfathom-object-storage-trust-anchor
+    deploy:
+      enabled: true
+      tls:
+        existingSecret: mailfathom-silo-tls
+      rootCredentialSecret: mailfathom-silo-root

@@ -345,6 +345,105 @@ services:
           # it is killed while compiling rules, which reaches MailFathom as a scanner that never answered.
           memory: ${MAILFATHOM_SPAMASSASSIN_MEMORY_LIMIT:-512m}
 
+  silo:
+    # Started only under its profile, for the reason the two services above are: an opt-in nobody took pulls no image,
+    # runs no container, and holds none of the disk below. A deployment that leaves MAILFATHOM_CONTENT_STORAGE at
+    # Database brings up exactly the two services it always did.
+    profiles:
+      - object-storage
+    # An immutable tag, and the same pin the Helm chart, the Quadlet units, and the integration suite carry — so the
+    # server the suite verified the S3 adapter against is the server this starts. Silo is PGSTY's maintained fork of the
+    # open-source MinIO server, keeping one release line alive after upstream ended community distribution. It is
+    # AGPL-3.0-or-later: this file names an image your host pulls from PGSTY's own registry and carries no part of it,
+    # which is the reading THIRD_PARTY_LICENSES.md records.
+    image: ${MAILFATHOM_SILO_IMAGE:-docker.io/pgsty/silo:RELEASE.2026-08-06T00-00-00Z}
+    restart: unless-stopped
+    # The server's own start command, which every MinIO-derived image takes as arguments rather than as configuration;
+    # the image's entrypoint puts the executable in front of them. One directory, because a single-node single-drive
+    # pool is the only topology one volume could hold and the only one this deployment supports.
+    #
+    # `--console-address` is stated unconditionally and costs nothing while the console is off: the server reads it only
+    # when the browser is enabled, and with MINIO_BROWSER=off below there is no administrative listener at all. Naming
+    # it is what keeps the console on a port an operator chose rather than on the free one the server would otherwise
+    # pick for itself the moment somebody turns it on.
+    command:
+      - server
+      - /data
+      - --certs-dir
+      - /etc/silo/certs
+      - --address
+      - ":9000"
+      - --console-address
+      - ":9001"
+    environment:
+      # Both halves of the root credential as files rather than as values, like every other credential here. The server
+      # reads each path itself; these are the paths the secrets below are mounted at.
+      MINIO_ROOT_USER_FILE: /run/secrets/silo-root-access-key-id
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/silo-root-secret-access-key
+      # **The administrative console, and it is off.** It is a management interface over every object the store holds —
+      # bucket contents, access keys, the server's own configuration — so it is a second surface onto the mail rather
+      # than a convenience, and with it off the server never starts that listener. Turning it on also means publishing
+      # the port below, which this file binds to loopback. It authenticates with the root credential, which administers
+      # the whole server rather than the one bucket.
+      MINIO_BROWSER: ${MAILFATHOM_SILO_CONSOLE:-off}
+    secrets:
+      - silo-root-access-key-id
+      - silo-root-secret-access-key
+      # The certificate the store answers with, under the two names the server reads, because MailFathom refuses a plain
+      # http endpoint: a request carries a signature and, on a write, the message itself. Both are secrets rather than a
+      # mounted directory so that a missing file fails the container rather than starting a server that quietly serves
+      # plain HTTP — and the certificate has to name `silo`, which is the host MailFathom reaches it at and therefore
+      # the name it validates. The authority that signed it is a third file, in ./secrets/mailfathom/, because it is
+      # MailFathom that has to trust it.
+      - source: silo-public-crt
+        target: /etc/silo/certs/public.crt
+      - source: silo-private-key
+        target: /etc/silo/certs/private.key
+    volumes:
+      - silo-data:/data
+    healthcheck:
+      # The server's own liveness route, which answers before any bucket exists — every other route on this port is a
+      # request about a bucket, and the root answers 403 to an unsigned one. `--insecure` because the call is to the
+      # container's own loopback address, which the certificate names nowhere: what it names is `silo`, and that is what
+      # MailFathom validates. The image carries a static curl for exactly this.
+      test: ["CMD-SHELL", "curl --fail --silent --insecure --output /dev/null https://127.0.0.1:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    # No `depends_on` in either direction, for the reason the two services above have none. MailFathom starts whether or
+    # not the store answers, reports itself unready on `/health` while it does not, and becomes ready by itself.
+    ports:
+      # The console, and nothing else: the S3 API is reachable from MailFathom over the internal network and from
+      # nothing outside the host, exactly as the database is. This port is bound to loopback and answers only once
+      # MAILFATHOM_SILO_CONSOLE is on — until then the mapping routes to a listener the server never started.
+      - "${MAILFATHOM_SILO_CONSOLE_BIND:-127.0.0.1}:${MAILFATHOM_SILO_CONSOLE_PORT:-9001}:9001"
+    read_only: true
+    tmpfs:
+      # The one path outside the volume the server writes to: the image points HOME here, and the server probes its own
+      # configuration directory beneath it while starting. The management client the provisioning commands use keeps its
+      # alias file here too, which is why that file does not outlive the container.
+      - /tmp:mode=1777,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      # The internal network only. What answers here is the raw MIME of every message this deployment has stored, so it
+      # has no route out of the host and nothing outside reaches it.
+      - backend
+    logging:
+      driver: json-file
+      options:
+        max-size: ${MAILFATHOM_LOG_MAX_SIZE:-10m}
+        max-file: ${MAILFATHOM_LOG_MAX_FILES:-3}
+    deploy:
+      resources:
+        limits:
+          cpus: ${MAILFATHOM_SILO_CPU_LIMIT:-2}
+          # Modest: the server holds no index in memory and streams what it serves. What it wants is disk.
+          memory: ${MAILFATHOM_SILO_MEMORY_LIMIT:-1g}
+
 networks:
   # What the database is reachable on, and nothing that is not on it can reach the database. `internal` keeps this
   # network without a route out of the host.
@@ -359,8 +458,27 @@ volumes:
     # it. Synchronized mail is expensive to rebuild: a lost volume costs a full IMAP resynchronization.
     name: ${MAILFATHOM_POSTGRES_VOLUME:-mailfathom-postgres-data}
 
+  silo-data:
+    # Named for the reason the database's is, and it holds the other half of what a backup covers once the object
+    # backend is selected: the payload of every message written since. A lost volume here is not a resynchronization —
+    # the database still holds a row for every object, and each of those reads as content unavailable.
+    name: ${MAILFATHOM_SILO_VOLUME:-mailfathom-silo-data}
+
 secrets:
   postgres-superuser-password:
     file: ./secrets/postgres-superuser-password
   mailfathom-database-password:
     file: ./secrets/mailfathom-database-password
+  # The object store's own, read by the `silo` service alone and never on a path the MailFathom container can see —
+  # the line the database superuser password is on the other side of, and for the same reason. The root credential
+  # administers the whole server; what MailFathom presents is an access key scoped to the one bucket, provisioned into
+  # ./secrets/mailfathom/ like every other credential it reads. None of these four files exists until an operator
+  # creates it, and a missing one fails the container rather than starting a server with whatever it would default to.
+  silo-root-access-key-id:
+    file: ./secrets/silo-root-access-key-id
+  silo-root-secret-access-key:
+    file: ./secrets/silo-root-secret-access-key
+  silo-public-crt:
+    file: ./secrets/silo-public.crt
+  silo-private-key:
+    file: ./secrets/silo-private.key

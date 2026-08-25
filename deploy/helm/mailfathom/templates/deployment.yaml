@@ -131,7 +131,7 @@ spec:
             - name: ContentStorage__Backend
               value: ObjectStorage
             - name: ContentStorage__ObjectStorage__Endpoint
-              value: {{ $objectStorage.endpoint | quote }}
+              value: {{ include "mailfathom.objectStorageEndpoint" . | quote }}
             - name: ContentStorage__ObjectStorage__Bucket
               value: {{ $objectStorage.bucket | quote }}
             - name: ContentStorage__ObjectStorage__KeyPrefix

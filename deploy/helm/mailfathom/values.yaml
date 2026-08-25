@@ -143,8 +143,9 @@ database:
 #
 # The raw MIME of every message this deployment stores next: in PostgreSQL beside the metadata, which is the default and
 # what every deployment that has never heard of this setting is already running, or in an S3-compatible bucket you
-# operate or rent. Selecting the bucket changes nothing else — the metadata, the indexes, and every job still run
-# through PostgreSQL — so this is a decision about payload bytes rather than about the database.
+# operate, rent, or have the chart run for you under `objectStorage.deploy` below. Selecting the bucket changes nothing
+# else — the metadata, the indexes, and every job still run through PostgreSQL — so this is a decision about payload
+# bytes rather than about the database.
 #
 # **It decides only where the next write goes.** Every content row names the store holding its own payload, so turning
 # this on moves nothing already stored and turning it back off re-encodes nothing. Getting content out of one store and
@@ -201,7 +202,127 @@ contentStorage:
     # The certificate authority that signed the endpoint's certificate, as a key inside the same Secret. Leave it empty
     # for an endpoint the cluster's own trust store already answers for, which is every hosted provider; name a key for
     # an endpoint you run yourself. It is the only supported way to reach one — no setting anywhere turns validation off.
+    #
+    # Required with `deploy.enabled` below: the endpoint is then a Service name inside the cluster, which no public
+    # authority issues for, so the certificate that answers there is one you signed.
     trustAnchorSecretKey: ""
+
+    # An object store the chart runs beside MailFathom, for a deployment that wants payload bytes out of PostgreSQL and
+    # does not already operate one. Off, and with it off the chart renders no object-store workload, no volume for one,
+    # and no Service: an opt-in you did not take pulls no image and holds no disk. The endpoint above is then yours to
+    # name, which is the ordinary shape — a bucket you rent, or a store you already run.
+    #
+    # **One node, one volume, and that is the whole of it.** No erasure coding, no second node, no replication: what
+    # this protects against is a container being replaced, and nothing else. A disk that fails takes the payloads with
+    # it, so the backup order in docs/operations/deployment-kubernetes.md is what stands between this and losing them.
+    #
+    # Silo is PGSTY's maintained fork of the open-source MinIO server, keeping one release line alive after upstream
+    # ended community distribution. It is AGPL-3.0-or-later; the chart names an image your cluster pulls from PGSTY's
+    # own registry and carries no part of it, which THIRD_PARTY_LICENSES.md records as the reading it is used under.
+    deploy:
+      enabled: false
+
+      # An immutable tag, like every dependency the deployment operates rather than a version it chooses. It is the same
+      # pin the Compose deployment, the Quadlet units, and the integration suite carry, so a server the suite verified
+      # the S3 adapter against is the server this renders.
+      image:
+        registry: docker.io
+        repository: pgsty/silo
+        tag: RELEASE.2026-08-06T00-00-00Z
+        pullPolicy: IfNotPresent
+        pullSecrets: []
+
+      # **The certificate the object store answers with, and there is no way to run it without one.** MailFathom refuses
+      # a plain `http` endpoint — a request carries a signature and, on a write, the message itself — so the store this
+      # chart runs terminates TLS itself. Name a Secret the cluster already holds, whose certificate covers the Service
+      # name the chart derives the endpoint from:
+      #
+      #   <release>-silo, <release>-silo.<namespace>, and <release>-silo.<namespace>.svc
+      #
+      # A `kubernetes.io/tls` Secret is the ordinary shape and needs no key names changed; cert-manager issues one from
+      # a private issuer with those names in a `Certificate`. The chart templates no certificate and issues none. The
+      # authority that signed it is what `trustAnchorSecretKey` above names, as a key inside `secrets.existingSecret`,
+      # because that is the Secret MailFathom's own process mounts.
+      tls:
+        existingSecret: ""
+        certificateSecretKey: tls.crt
+        privateKeySecretKey: tls.key
+
+      # **The store's root credential, in a Secret of its own that the application never mounts** — the line the
+      # database's superuser password is on the other side of, and for the same reason. `secrets.existingSecret` is
+      # mounted whole into the application pod, because the keys MailFathom reads are named by your configuration rather
+      # than by this chart, so a credential placed there is readable by the process that parses untrusted mail. The root
+      # credential administers the whole server: it creates buckets, issues access keys, and reads every object.
+      #
+      # What MailFathom itself presents is a different credential entirely — an access key scoped to the one bucket,
+      # which you create with the root credential once and put into `secrets.existingSecret` under the two
+      # `...SecretKey` names above. docs/operations/deployment-kubernetes.md has the commands.
+      #
+      # Both halves arrive as files rather than as environment entries, read by the server's own `MINIO_ROOT_USER_FILE`
+      # and `MINIO_ROOT_PASSWORD_FILE`.
+      rootCredentialSecret: ""
+      rootAccessKeyIdSecretKey: silo-root-access-key-id
+      rootSecretAccessKeySecretKey: silo-root-secret-access-key
+
+      # Where the payloads land. The claim outlives the release, like the database's: `helm uninstall` deletes neither,
+      # so removing the release does not remove the mail. Size it against what the mailboxes hold — this is the raw MIME
+      # of every message written while the object backend is selected, and it is the same volume of bytes PostgreSQL
+      # would otherwise have carried.
+      persistence:
+        size: 20Gi
+        accessMode: ReadWriteOnce
+        storageClassName: ""
+
+      # The S3 API, and the only port anything is routed to by default. ClusterIP, and no value makes it anything else:
+      # what answers here holds every message this deployment has stored.
+      service:
+        port: 9000
+
+      # **The administrative console, and it is off.** It is a full management interface over every object the store
+      # holds — bucket contents, access keys, the server's own configuration — so it is a second surface onto the mail
+      # rather than a convenience. With it off the server does not listen for it at all, and no port on the Service
+      # routes to one.
+      #
+      # Turning it on starts that listener and adds the port below to the Service. It is still a ClusterIP port and the
+      # chart publishes no ingress for it, so reaching it is a deliberate `kubectl port-forward` — and anything you put
+      # in front of it is yours to authenticate. It authenticates with the root credential above, which is the whole
+      # server rather than the one bucket.
+      console:
+        enabled: false
+        port: 9001
+
+      # Modest. The server holds no index in memory and streams what it serves; what it wants is disk and file
+      # descriptors rather than heap.
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: "2"
+          memory: 1Gi
+
+      # Restricted Pod Security Standard, and unlike the spam scanner this workload meets it: the server binds its port
+      # as whatever account it was started as and drops no privilege of its own, so nothing has to begin as root. The
+      # account is stated here rather than left to the image, which declares none and would otherwise run as root.
+      podSecurityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        # What makes the mounted claim writable by that account without an entrypoint needing to be root to chown it.
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+
+      nodeSelector: {}
+      tolerations: []
+      affinity: {}
 
 ### Secrets
 #

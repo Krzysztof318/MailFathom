@@ -93,10 +93,12 @@ downloads the desktop client from the release instead.
   (`pgvector/pgvector`, PostgreSQL 18); a native process expects yours, and the chart uses yours when you ask it to.
 - **An S3-compatible bucket, only if you want the message payloads out of the database.** It is off, and a deployment
   that never mentions it is the ordinary one. What it changes is where the raw MIME of each message is written; the
-  metadata, the indexes, the embeddings, and every job still run through PostgreSQL either way. MailFathom runs no
-  object store and no deployment shape here starts one, so the endpoint and its bucket exist before the first start,
-  and it needs an `https` address and a credential of its own — an access key identifier and its secret, both
-  provisioned as [secret references](../operations/secret-provisioning.md) like every other credential.
+  metadata, the indexes, the embeddings, and every job still run through PostgreSQL either way. MailFathom's own process
+  runs no object store, and the endpoint needs an `https` address and a credential of its own — an access key identifier
+  and its secret, both provisioned as [secret references](../operations/secret-provisioning.md) like every other
+  credential. The endpoint can be one you rent, one you already run, or one the deployment starts beside MailFathom:
+  each of the three shapes can run a single-node store for you, off unless you ask. Its bucket exists before the first
+  start either way; nothing here creates one.
   [Choosing where message content lives](#choosing-where-message-content-lives) is the rest of it.
 - **An IMAP account to synchronize** and its password or app password, provisioned as a
   [secret reference](../operations/secret-provisioning.md) rather than written into configuration.
@@ -210,6 +212,16 @@ Each shape carries the setting in its own idiom: `contentStorage` in the Helm ch
 `MAILFATHOM_CONTENT_STORAGE` and the variables beside it in Compose's `.env`, and the `ContentStorage` lines in the
 Quadlet unit.
 [`ContentStorage`](../operations/configuration-runtime.md#contentstorage) is the reference for every key and its bounds.
+
+**And each shape can run the store as well as point at one.** An operator who wants payload bytes out of PostgreSQL and
+does not already run object storage would otherwise have nothing to name, so every shape carries a single-node
+[Silo](https://github.com/pgsty/silo) beside the product — a switch in the chart's values, a Compose profile, an extra
+Quadlet unit — off in every default, and one node on one volume rather than anything replicated. It answers over TLS
+with a certificate you supply, its administrative console is not served, and the bucket and the access key MailFathom
+presents are created once by you rather than by any of it.
+[Kubernetes](../operations/deployment-kubernetes.md#running-the-object-store-beside-mailfathom),
+[Compose](../operations/deployment-compose.md#running-an-object-store-beside-mailfathom), and
+[Quadlet](../operations/deployment-quadlet.md#running-an-object-store-beside-mailfathom) each state what that takes.
 
 Two things about it are worth knowing before you choose rather than after.
 

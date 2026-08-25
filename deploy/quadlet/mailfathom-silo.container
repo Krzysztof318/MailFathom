@@ -1,0 +1,150 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# An object store beside MailFathom, for a deployment that has selected the object-storage backend and does not already
+# operate one. It is optional in the way the analyzer and the scanner units are: Quadlet has no equivalent of Compose's
+# profiles, so an operator who wants none of this copies the other files and never this one — and then no image is
+# pulled, no container exists, and no volume is held. Installing it is half of the arrangement; the other half is the
+# ContentStorage lines in mailfathom.container, and either one alone is a deployment that does not work.
+# docs/operations/deployment-quadlet.md states the order and the provisioning that goes between the two.
+#
+# Install mailfathom-silo.volume beside it. Rootless, like every unit here, under ~/.config/containers/systemd/.
+#
+# **One node, one volume, and that is the whole of it.** No erasure coding, no replication, no failover: what this
+# protects against is a container being replaced, and nothing else. A disk that fails takes the payloads with it.
+
+[Unit]
+Description=Object store for MailFathom
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+# An immutable tag, like the database image and unlike MailFathom's own: this is a dependency the deployment operates
+# rather than a version it chooses. It is the same pin the Compose deployment, the Helm chart, and the integration suite
+# use, so the server the suite verified the S3 adapter against is the server this starts. Silo is PGSTY's maintained
+# fork of the open-source MinIO server, keeping one release line alive after upstream ended community distribution. It
+# is AGPL-3.0-or-later; this file names an image your host pulls from PGSTY's own registry and carries no part of it,
+# which is the reading THIRD_PARTY_LICENSES.md records.
+Image=docker.io/pgsty/silo:RELEASE.2026-08-06T00-00-00Z
+ContainerName=mailfathom-silo
+
+# Only the internal network, and no PublishPort= for the S3 API at all. What answers there is the raw MIME of every
+# message this deployment has stored, so it is reachable from MailFathom and from whatever else is attached to that
+# network — a backup container — and from nothing else.
+Network=mailfathom-backend.network
+
+# Where the payloads land, and the other half of what a backup covers once the object backend is selected.
+Volume=mailfathom-silo.volume:/data
+
+# The credentials systemd decrypted for this unit. `%d` is $CREDENTIALS_DIRECTORY, which exists only because the
+# [Service] section below asked for credentials; the `Z` is what gives the files an SELinux label a container may read,
+# and docs/operations/deployment-quadlet.md states what happens on a host where that relabel is refused.
+#
+# Two mounts of the same directory, because the server reads two unrelated things out of it. The certificate and its
+# key have to appear under the names the server looks for inside its certificates directory, so each is bind-mounted as
+# one file; the root credential is read from a path this unit names, so the directory is enough.
+Volume=%d:/etc/silo/credentials:ro,Z
+Volume=%d/silo-public.crt:/etc/silo/certs/public.crt:ro,Z
+Volume=%d/silo-private.key:/etc/silo/certs/private.key:ro,Z
+
+# No UserNS= line, unlike the database and MailFathom units. This image declares no account of its own, so the process
+# runs as the container's root — which under the default rootless mapping *is* the invoking user on the host, and is
+# therefore already the account the credentials directory is readable by. The other two units need the mapping stated
+# because they run as an account inside the container that would otherwise be a subordinate uid belonging to nobody.
+
+# Both halves of the root credential as files rather than as values, so no credential is in this unit. The server reads
+# each path itself; a name with no slash would be looked for under /run/secrets instead, which is why these are
+# absolute. The root credential administers the whole server — it creates buckets, issues access keys, and reads every
+# object — which is why it is not among the credentials mailfathom.container is granted: what MailFathom presents is an
+# access key scoped to the one bucket.
+Environment=MINIO_ROOT_USER_FILE=/etc/silo/credentials/silo-root-access-key-id
+Environment=MINIO_ROOT_PASSWORD_FILE=/etc/silo/credentials/silo-root-secret-access-key
+
+# **The administrative console, and it is off.** It is a management interface over every object the store holds — bucket
+# contents, access keys, the server's own configuration — so it is a second surface onto the mail rather than a
+# convenience, and with it off the server never starts that listener. Turning it on means setting this to `on` and
+# publishing the port, which nothing here does: uncomment the line below it, keep the address on loopback, and know that
+# what authenticates there is the root credential rather than the bucket-scoped one.
+Environment=MINIO_BROWSER=off
+#PublishPort=127.0.0.1:9001:9001
+
+# The server's own start command, which every MinIO-derived image takes as arguments rather than as configuration; the
+# image's entrypoint puts the executable in front of them. One directory, because a single-node single-drive pool is the
+# only topology one volume could hold.
+#
+# `--console-address` is stated unconditionally and costs nothing while the console is off: the server reads it only
+# when the browser is enabled. Naming it is what keeps the console on a port an operator chose rather than on the free
+# one the server would otherwise pick for itself the moment somebody turns it on.
+Exec=server /data --certs-dir /etc/silo/certs --address :9000 --console-address :9001
+
+# The server's own liveness route, which answers before any bucket exists — every other route on that port is a request
+# about a bucket, and the root answers 403 to an unsigned one. `--insecure` because the call is to the container's own
+# loopback address, which the certificate names nowhere: what it names is `mailfathom-silo`, and that is what MailFathom
+# validates. The image carries a static curl for exactly this.
+HealthCmd=curl --fail --silent --insecure --output /dev/null https://127.0.0.1:9000/minio/health/live
+HealthInterval=10s
+HealthTimeout=5s
+HealthRetries=12
+HealthStartPeriod=30s
+
+# What makes the ordering in mailfathom.container real rather than an approximation of one, exactly as the database unit
+# does it: this unit is not considered started until the health check passes, so an `After=` there waits for a store
+# that answers instead of for a container that exists.
+Notify=healthy
+
+# Nothing writable but the volume and one bounded tmpfs, no capabilities, and no way to gain a privilege. /tmp is where
+# the image points HOME and where the server probes its own configuration directory while starting; the management
+# client the provisioning commands use keeps its alias file there too, which is why that file does not outlive the
+# container.
+ReadOnly=true
+Tmpfs=/tmp:mode=1777,size=64m
+DropCapability=all
+NoNewPrivileges=true
+
+LogDriver=journald
+
+# Core dumps off, like every other container here. This one holds the root credential and the endpoint's private key in
+# memory, which is the same reason docs/operations/secret-provisioning.md gives for the units that hold credentials.
+Ulimit=core=0
+
+# Longer than the default, so the server finishes the writes in flight rather than being killed over an object the
+# database already has a row for.
+StopTimeout=60
+
+# No AutoUpdate=. The image is pinned to an exact tag, and moving it is an upgrade of the store holding every payload;
+# docs/operations/deployment-quadlet.md states the order that takes.
+
+[Service]
+# Decrypted by systemd as the unit starts, from files that are ciphertext at rest and bound to this machine, produced
+# with `systemd-creds --user encrypt` — which per-user service managers can decrypt only since systemd 258.
+#
+# Each names an absolute path rather than a bare credential name. A bare name is looked up in the credential store and a
+# miss is *not* fatal, which here would be worse than elsewhere: the server would start with neither root credential
+# set, on whatever it falls back to. An absolute path that does not exist fails the unit instead.
+#
+# The certificate is encrypted like the rest, not because it is secret but because a certificate and the key it belongs
+# to are one thing to provision, rotate, and lose together.
+LoadCredentialEncrypted=silo-root-access-key-id:%h/.config/credstore.encrypted/silo-root-access-key-id
+LoadCredentialEncrypted=silo-root-secret-access-key:%h/.config/credstore.encrypted/silo-root-secret-access-key
+LoadCredentialEncrypted=silo-public.crt:%h/.config/credstore.encrypted/silo-public.crt
+LoadCredentialEncrypted=silo-private.key:%h/.config/credstore.encrypted/silo-private.key
+
+# Bound the in-memory exposure that no code-level measure addresses, for the process that decrypts the root credential
+# and the private key before handing them on.
+LimitCORE=0
+
+# The unit-level bounds. Modest, because the server holds no index in memory and streams what it serves: what it wants
+# is disk, and that is the volume rather than a limit here.
+MemoryMax=1G
+CPUQuota=200%
+
+Restart=always
+# Long enough for the health check to pass on a first start, which formats the pool before the server answers:
+# HealthStartPeriod plus HealthRetries times HealthInterval, with room to spare.
+TimeoutStartSec=300
+# Above StopTimeout, so podman is the one that stops the container rather than systemd killing podman while it tries.
+TimeoutStopSec=90
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,16 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# The object store's volume, installed only where mailfathom-silo.container is. Named the same thing the Compose
+# deployment names it, so what holds the message payloads is identifiable with `podman volume ls` and survives
+# `systemctl --user stop mailfathom-silo.service` and every restart after it. Nothing in this directory removes it:
+# destroying it is `podman volume rm`, an explicit act — and a costlier one than the database volume, because a lost
+# payload is not a resynchronization. The database still holds a row for every object, and each of those then reads as
+# content unavailable.
+
+[Unit]
+Description=The MailFathom object-store volume
+
+[Volume]
+VolumeName=mailfathom-silo-data

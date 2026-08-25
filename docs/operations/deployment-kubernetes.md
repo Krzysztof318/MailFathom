@@ -11,6 +11,7 @@ operates the cluster, and the chart is written so that it cannot pretend otherwi
 | Deployment, Service, ConfigMap, ServiceAccount | Any `Secret` |
 | A PostgreSQL StatefulSet, its Service, and its initialization script, unless `database.deploy.enabled` is false | Any certificate material |
 | A personal-data analyzer Deployment and Service, and a SpamAssassin Deployment and Service, only when the section that owns each is enabled and left to deploy its own | Any schema step |
+| A Silo object-store StatefulSet, its claim, and its Service, only when `contentStorage.objectStorage.deploy.enabled` is true | Any bucket, or any access key inside one |
 | An optional Ingress | |
 
 ## What you supply
@@ -516,7 +517,9 @@ application pod may restart a few times before the scanner is ready. `resources`
 The raw MIME of every message lives in PostgreSQL beside the metadata unless `contentStorage.backend` says otherwise.
 Setting it to `objectStorage` writes new payloads into an S3-compatible bucket instead; the metadata, the indexes, the
 embeddings, and every job still run through PostgreSQL, so this is a decision about payload bytes and about nothing
-else. The chart runs no object store and installs none: the endpoint and its bucket exist before the install.
+else. The endpoint is one you operate or rent, or — since the chart can run one beside MailFathom — the one
+[the next section](#running-the-object-store-beside-mailfathom) installs. Either way the bucket exists before
+MailFathom writes to it: nothing in the chart creates one.
 
 Off is the default, and the chart writes nothing at all on it — a rendering that sets none of this is byte for byte a
 rendering from a chart that never carried the block, which `deploy/helm/mailfathom/ci/golden/` records.
@@ -561,6 +564,141 @@ run, and after a partial run, the deployment reads from both stores and keeps ne
 longer names leaves the pod unready rather than the mail unreadable, which is the honest outcome and what
 [health endpoints](health-endpoints.md) reports.
 
+### Running the object store beside MailFathom
+
+An operator who wants payload bytes out of PostgreSQL and does not already run object storage has nothing to point the
+setting above at. `contentStorage.objectStorage.deploy.enabled` is that answer: the chart installs one
+[Silo](https://github.com/pgsty/silo) node on a retained claim, with a Service of its own, and derives the endpoint from
+it. Silo is PGSTY's maintained fork of the open-source MinIO server, keeping one release line alive after upstream ended
+community distribution — the same image, at the same pin, that the Compose deployment, the Quadlet units, and the
+[integration suite](local-development.md#the-object-storage-endpoint) use, so what runs here is the server the S3
+adapter was verified against.
+
+**One node, one volume, and that is the whole of it.** No erasure coding, no second node, no replication, no failover.
+What it protects against is a pod being replaced; a disk that fails takes the payloads with it, which is what makes
+[the backup order below](#what-you-now-back-up-and-in-which-order) the thing standing between this and losing them. Once
+durability, replication, or a growth path past one volume is somebody's job, this is the arrangement to leave behind —
+exactly as `database.deploy.enabled` is for PostgreSQL.
+
+```yaml
+contentStorage:
+  backend: objectStorage
+  objectStorage:
+    bucket: mailfathom-content
+    trustAnchorSecretKey: mailfathom-object-storage-trust-anchor
+    deploy:
+      enabled: true
+      tls:
+        existingSecret: mailfathom-silo-tls
+      rootCredentialSecret: mailfathom-silo-root
+      persistence:
+        size: 200Gi
+```
+
+`endpoint` is left unset and refused if it is not: the chart derives `https://<release>-silo:<service.port>` from the
+Service it installs, for the reason `database.host` is derived from the release name. `usePathStyleAddressing` has to
+stay on, because virtual-hosted addressing puts the bucket in the host name and a Service has neither a wildcard DNS
+record nor a certificate that would match one.
+
+**It answers over TLS, and there is no way to run it otherwise.** MailFathom refuses a plain `http` endpoint — a request
+carries a signature and, on a write, the message itself — and it validates what it is presented, with no setting
+anywhere that turns that off. So the store terminates TLS with a certificate you supply, covering the name the endpoint
+is derived from:
+
+| Name | Reached from |
+| --- | --- |
+| `<release>-silo` | The release's own namespace, which is where MailFathom is |
+| `<release>-silo.<namespace>` and `<release>-silo.<namespace>.svc` | Anywhere else in the cluster |
+
+No public authority issues a certificate for a cluster-internal name, so this one is signed by an authority of your own
+— cert-manager with a private issuer is the ordinary arrangement, and a `Certificate` naming those three
+`dnsNames` produces a `kubernetes.io/tls` Secret the chart mounts with no key names changed. That same authority is what
+`trustAnchorSecretKey` names, as a key inside `secrets.existingSecret`, which is why the chart requires it here and
+leaves it optional for a hosted endpoint. The chart issues, templates, and stores no certificate material of its own.
+
+**The store's root credential lives in a Secret of its own, and MailFathom never holds it** — the line the PostgreSQL
+superuser password is on the other side of, for the same reason. `secrets.existingSecret` is mounted whole into the
+application pod, because the keys MailFathom reads are named by your configuration rather than by the chart, so a
+credential placed there is readable by the process that parses untrusted mail. The root credential creates buckets,
+issues access keys, and reads every object; what MailFathom presents is an access key scoped to the one bucket. The
+chart refuses a values document naming one Secret for both.
+
+```bash
+# The store's own, mounted by the store alone. The secret half must be at least eight characters, which is the
+# server's own rule.
+kubectl --namespace mailfathom create secret generic mailfathom-silo-root \
+  --from-literal=silo-root-access-key-id="$(openssl rand -hex 12)" \
+  --from-literal=silo-root-secret-access-key="$(openssl rand -base64 32)"
+```
+
+**Neither the bucket nor that scoped access key is created by the chart**, so both are provisioned once after the store
+becomes ready, with the management client the image already carries. Until they exist MailFathom reports itself unready
+rather than storing mail: its startup probe writes and deletes one object of its own, so read permission alone is not
+enough to become ready.
+
+```bash
+access_key_id="$(openssl rand -hex 12)"
+secret_access_key="$(openssl rand -base64 32)"
+
+kubectl --namespace mailfathom exec -i statefulset/mailfathom-silo -- sh -s "$access_key_id" "$secret_access_key" <<'PROVISION'
+set -eu
+
+# --insecure throughout: the call is to this pod's own loopback address, which the certificate names nowhere. What it
+# names is the Service, and that is the name MailFathom validates.
+mcli --insecure alias set store https://127.0.0.1:9000 \
+  "$(cat /etc/silo/credentials/silo-root-access-key-id)" \
+  "$(cat /etc/silo/credentials/silo-root-secret-access-key)"
+
+mcli --insecure mb --ignore-existing store/mailfathom-content
+
+# The four operations the adapter performs and nothing else: it lists beneath its prefix to reclaim released objects,
+# and it gets, puts, and deletes one object at a time. It never creates a bucket and never touches another one.
+cat > /tmp/mailfathom-content.json <<'POLICY'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    { "Effect": "Allow", "Action": [ "s3:ListBucket" ], "Resource": [ "arn:aws:s3:::mailfathom-content" ] },
+    { "Effect": "Allow", "Action": [ "s3:GetObject", "s3:PutObject", "s3:DeleteObject" ], "Resource": [ "arn:aws:s3:::mailfathom-content/*" ] }
+  ]
+}
+POLICY
+
+mcli --insecure admin policy create store mailfathom-content /tmp/mailfathom-content.json
+mcli --insecure admin user add store "$1" "$2"
+mcli --insecure admin policy attach store mailfathom-content --user "$1"
+PROVISION
+
+kubectl --namespace mailfathom patch secret mailfathom-secrets --type merge --patch "$(
+  printf '{"stringData":{"mailfathom-object-storage-access-key-id":"%s","mailfathom-object-storage-secret-access-key":"%s"}}' \
+    "$access_key_id" "$secret_access_key"
+)"
+```
+
+Both halves reach MailFathom as files under the mounted Secret and are read before every request, so rotating the key
+in the store and replacing the two values takes effect on the next call with no restart to schedule.
+
+**The console is not served.** It is a management interface over every object the store holds — bucket contents, access
+keys, the server's own configuration — so it is a second surface onto the mail rather than a convenience, and by default
+the server never starts that listener and no Service port routes to one.
+`contentStorage.objectStorage.deploy.console.enabled` starts it and adds a port to the same ClusterIP Service. It is
+still not published: the chart renders no ingress for it, so reaching it is a deliberate
+`kubectl port-forward service/<release>-silo 9001:9001`, and anything you put in front of it instead is yours to
+authenticate. What it authenticates with is the root credential above, which is the whole server rather than the one
+bucket.
+
+**The pod meets the restricted Pod Security Standard**, unlike the spam scanner: `runAsNonRoot`, `readOnlyRootFilesystem`,
+`allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]` with nothing added, and `seccompProfile: RuntimeDefault`,
+with the schema keeping the load-bearing ones from being switched off. The image declares no account of its own, so the
+chart states one — uid and gid `1000`, with `fsGroup` making the claim writable by it. No service-account token is
+mounted; the store calls no Kubernetes API. Its only writable paths are the claim and an `emptyDir` at `/tmp`, which is
+where the image points `HOME`.
+
+**Nothing of Silo is in this chart, in any MailFathom image, or in this repository.** The chart names an image your
+cluster pulls from PGSTY's own registry. Silo is AGPL-3.0-or-later, which
+[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) records
+together with the reading it is used under. Its own lifecycle — upgrades, its configuration, its users beyond the one
+above — is yours; MailFathom manages none of it and the chart runs no job against it.
+
 ### What you now back up, and in which order
 
 **A `pg_dump` stops being a complete backup the moment the object backend is on.** The rows point at objects in the
@@ -574,6 +712,26 @@ brings back both.
    objects not back yet, which reads as content temporarily unavailable. The other order leaves objects nothing points
    at, which the reclamation sweep is entitled to delete once they are older than `MinimumObjectAge` — so restoring the
    bucket first can destroy part of what you are restoring.
+
+A store the chart runs is no different in that order, and the second step is a copy out of it rather than a provider's
+console. It is the S3 API that answers, so the same client does both directions, and copying the claim's files
+underneath a running server is not a backup — the pool has its own metadata in `.minio.sys` and a copy taken while the
+server is writing is a copy of neither state:
+
+```bash
+kubectl --namespace mailfathom port-forward service/mailfathom-silo 9000:9000 &
+
+mc --insecure alias set backup https://127.0.0.1:9000 "$access_key_id" "$secret_access_key"
+mc --insecure mirror --remove backup/mailfathom-content ./mailfathom-content-backup   # out
+mc --insecure mirror ./mailfathom-content-backup backup/mailfathom-content            # back in
+```
+
+Any S3 client does this — `mc`, `rclone`, `aws s3` — and it runs on the machine the backup lands on rather than inside
+the cluster, which is what the forwarded port is for. `--insecure` for the reason the provisioning commands need it: the
+certificate names the Service, and a forwarded port answers on `127.0.0.1`. The scoped access key is enough for both
+directions, which is why the root credential does not appear here. `--remove` on the way out makes the copy match the
+bucket rather than accumulate objects the sweep has already reclaimed; deliberately not on the way back in, where it
+would delete from the store instead.
 
 Take both from the same moment where you can. A row whose object is missing is not a corrupt deployment and not a
 mystery: the read reports that message's content as unavailable and names it, every other message keeps working, and
@@ -609,8 +767,37 @@ forward, so returning to the earlier schema means restoring the database from th
 [rolling back](database-schema.md#rolling-back) states when that is necessary and when rolling only the image back is
 enough.
 
-Uninstalling removes every object the chart owns. It removes **no** data: the database is not the chart's, and the
-Secret was created outside it and stays.
+Uninstalling removes every object the chart owns. It removes **no** data: `helm uninstall` deletes no StatefulSet claim,
+so a deployed database's volume and a deployed object store's volume both survive it, and every Secret was created
+outside the release and stays. Deleting either store is a deliberate `kubectl delete pvc` afterwards — and deleting only
+one of them leaves the other holding half of what a message is.
+
+### Upgrading the object store beneath a running deployment
+
+A store the chart runs is a dependency the deployment operates, so its version moves when you move it and never on its
+own: the image is pinned to an exact tag, the pod carries no update mechanism, and nothing here follows a moving one.
+Moving it is one values change and one rollout, and it is deliberately not part of a MailFathom upgrade — the two have
+no version relationship, and doing both at once makes a failure ambiguous.
+
+```yaml
+contentStorage:
+  objectStorage:
+    deploy:
+      image:
+        tag: RELEASE.<newer>
+```
+
+Three things are worth knowing before the rollout. **It is a StatefulSet with one replica on a ReadWriteOnce claim**, so
+the old pod is terminated before the new one starts: the store is unreachable for the length of that, and MailFathom
+reports itself unready and stores nothing new for the same window rather than failing a read of what is already in
+PostgreSQL. **Back the bucket up first**, for the reason any upgrade of a store holding data is preceded by a backup —
+the on-disk format is the server's, and a version that will not start against it leaves the payloads reachable only by
+going back. And **going back is a values change and a rollback of the same shape**, which works because nothing in the
+release ties the store's version to MailFathom's; what would not work is going back after a newer server has rewritten
+the pool's own metadata, which is what the backup covers.
+
+Read the upstream release notes between the two tags before moving one. Silo's release line is a MinIO one, named by
+timestamp rather than by version, and what a given release changes is stated there and nowhere here.
 
 ### Chart version and application version
 
@@ -669,15 +856,19 @@ and exist so that a change in what the chart produces appears in a diff rather t
 anything. A rendering is normalized before it is compared — trailing whitespace and the blank lines Helm leaves between
 documents go — so the Helm version a machine happens to carry does not decide the verdict.
 
-Three values documents are what the chart is held against, and each renders a shape the other two do not.
+Five values documents are what the chart is held against, and each renders a shape the others do not.
 `release-values.yaml` names an external database, an external analyzer, and an external spam scanner, and turns the
 ingress on. `nightly-values.yaml` selects the unsupported channel with its acknowledgement and renders the analyzer and
-the scanner the chart deploys itself. `defaults-values.yaml` is `values.yaml` plus only what the chart refuses to
-default — an image reference, the Secret the pod mounts, and the Secret holding the database superuser password, which
-the chart requires whenever it deploys the database itself and so by default — meaning it renders the shape an operator
-following the quick start gets. That third one is also what keeps the chart's own defaults inside schema validation: Helm validates each
-values document coalesced with `values.yaml` against `values.schema.json` during both the lint and the render, and a
-default the schema would reject is overridden by the other two.
+the scanner the chart deploys itself. `content-storage-values.yaml` selects the object backend against an endpoint
+somebody else operates, and `object-store-values.yaml` selects it against the store the chart runs itself — between them
+both branches of `contentStorage.objectStorage.deploy.enabled`, with the console off in the second, which is what makes
+the committed manifest the record that no console listener is produced by default. `defaults-values.yaml` is
+`values.yaml` plus only what the chart refuses to default — an image reference, the Secret the pod mounts, and the
+Secret holding the database superuser password, which the chart requires whenever it deploys the database itself and so
+by default — meaning it renders the shape an operator following the quick start gets. That last one is also what keeps
+the chart's own defaults inside schema validation: Helm validates each values document coalesced with `values.yaml`
+against `values.schema.json` during both the lint and the render, and a default the schema would reject is overridden by
+the others.
 
 The `Helm chart` job of `CI` runs the same script on every pull request that touches `deploy/helm/`, which is where a
 chart that stopped rendering is now found. The release run lints and renders again before it publishes anything, so a
