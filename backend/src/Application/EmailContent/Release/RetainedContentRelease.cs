@@ -126,11 +126,6 @@ public sealed class RetainedContentRelease
 
         var released = await this.ReleaseBatchAsync(cancellationToken);
 
-        if (released.PayloadCount > 0)
-        {
-            this.telemetry.Released(released.PayloadCount, released.ByteCount);
-        }
-
         return new RetainedContentReleaseResult(
             released,
             await this.releaseStore.CountRetainedPayloadsAsync(cancellationToken),
@@ -139,8 +134,16 @@ public sealed class RetainedContentRelease
 
     /// <summary>Spends one batch's bound across the payload kinds, in the order they are declared.</summary>
     /// <remarks>
+    /// <para>
     /// The declared order rather than a list of its own, so a payload kind added later is released without anything here
     /// being told about it. Which kind is first decides nothing but the order an operator watches the figures move in.
+    /// </para>
+    /// <para>
+    /// Each kind is published as it is freed rather than the batch being published at the end, because the removal is
+    /// already durable by then and a cancellation between two kinds must not be the reason a deployment has no record of
+    /// what it disposed of. Both instruments are counters, so a batch spanning three kinds sums to exactly what one
+    /// measurement would have said.
+    /// </para>
     /// </remarks>
     private async Task<ReleasedContentPayloads> ReleaseBatchAsync(CancellationToken cancellationToken)
     {
@@ -156,6 +159,11 @@ public sealed class RetainedContentRelease
             }
 
             var freed = await this.releaseStore.ReleaseAsync(kind, cutoff, remainingBound, cancellationToken);
+
+            if (freed.PayloadCount > 0)
+            {
+                this.telemetry.Released(freed.PayloadCount, freed.ByteCount);
+            }
 
             released = released.Add(freed);
             remainingBound -= (int)freed.PayloadCount;

@@ -19,8 +19,14 @@ internal sealed class InMemoryRetainedContentReleaseStore : IRetainedContentRele
     private readonly List<RetainedRow> rows = [];
     private readonly List<Batch> batches = [];
 
+    private EmailContentKind? cancelledKind;
+
     /// <summary>Gets every batch the release asked for, in the order it asked.</summary>
     internal IReadOnlyList<Batch> Batches => this.batches;
+
+    /// <summary>Cancels the request when it reaches one payload kind, leaving whatever the kinds before it freed.</summary>
+    /// <param name="kind">The kind whose batch is cancelled instead of being freed.</param>
+    internal void CancelOnReaching(EmailContentKind kind) => this.cancelledKind = kind;
 
     /// <summary>Records one copy the database is holding beside an object the move verified.</summary>
     /// <param name="kind">The payload kind.</param>
@@ -41,6 +47,11 @@ internal sealed class InMemoryRetainedContentReleaseStore : IRetainedContentRele
         int batchSize,
         CancellationToken cancellationToken)
     {
+        if (this.cancelledKind == kind)
+        {
+            throw new OperationCanceledException();
+        }
+
         this.batches.Add(new Batch(kind, verifiedOnOrBefore, batchSize));
 
         List<RetainedRow> freed =

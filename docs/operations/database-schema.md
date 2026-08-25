@@ -226,8 +226,9 @@ already serving:
   own key. `RetainDatabaseCopyUntilReleased` replaces those four `CHECK` constraints once more, relaxing them so that an
   object-backed row may hold the payload the move left beside its object, and adds a nullable
   `ObjectVerifiedAt` column to each table. Each table is therefore scanned under `ACCESS EXCLUSIVE` once more, on the
-  same terms as before — the predicate reads two columns and a null test and dereferences no payload — and the column is
-  added without a rewrite, since a nullable column with no default is a catalog change.
+  same terms as before — the predicate compares the backend name and null-tests the locator, the payload, and the new
+  column, none of which dereferences a payload PostgreSQL stored out of line — and the column is added without a
+  rewrite, since a nullable column with no default is a catalog change.
 
 The first release's script creates a schema from nothing, so none of these applies to an empty database.
 

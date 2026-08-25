@@ -686,6 +686,28 @@ public sealed class StoredEmailResponseAuthoringTests
         Assert.Equal(EmailContentDefect.ByteLengthMismatch, Assert.Single(repairRequests.Recorded).Defect);
     }
 
+    /// <summary>
+    /// Quoting a message whose object could not be vouched for succeeds from the copy the database kept, and records the
+    /// same note a read of it would: which door reached the mail decides nothing about what was found wrong behind it.
+    /// </summary>
+    [Fact]
+    public async Task AuthorAsync_ContentServedFromTheRetainedCopy_AnswersAndRecordsARepairRequest()
+    {
+        // Arrange
+        var repairRequests = new RecordingEmailContentRepairRequestStore();
+        var authoring = AuthoringOver(
+            Rendering(),
+            contentStore: ContentStoreReturning(IntactContent() with { WasServedFromRetainedCopy = true }),
+            repairRequestStore: repairRequests);
+
+        // Act
+        var response = await authoring.AuthorAsync(Request(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(response.Email);
+        Assert.Equal(EmailContentDefect.ObjectUnreadable, Assert.Single(repairRequests.Recorded).Defect);
+    }
+
     /// <summary>Bytes that arrived intact and no longer parse are a different defect, and one a second fetch may not repair.</summary>
     [Fact]
     public async Task AuthorAsync_EmailWhoseStoredBytesNoLongerParse_IsRefusedAndRecordsARepairRequest()

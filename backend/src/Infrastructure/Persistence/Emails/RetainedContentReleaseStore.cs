@@ -56,10 +56,21 @@ internal sealed class RetainedContentReleaseStore(MailFathomDbContext dbContext)
 
     /// <inheritdoc />
     /// <remarks>
+    /// <para>
     /// Two statements rather than one, because <c>ExecuteUpdate</c> takes no bound of its own: the batch is read first,
     /// which is also what lets the volume be reported at all, and the freeing statement then names exactly the rows that
     /// read returned. Its predicate carries the backend and the payload again, so a row a concurrent write replaced
     /// between the two is left alone rather than emptied on a message it no longer describes.
+    /// </para>
+    /// <para>
+    /// Two releases running at once is therefore exact in the count and approximate in the volume: the update reports
+    /// how many rows it matched, so a row the other request freed first is not counted twice, while the byte total is
+    /// summed over the batch that was read and does include it. Reporting both exactly would mean returning each freed
+    /// row's length from the update itself, which no LINQ translation expresses and which would put four hand-written
+    /// <c>UPDATE</c> statements in the one path whose defect is the loss of mail. A typed statement that cannot name the
+    /// wrong table is worth more than a counter that is exact while two operators are disposing of the same copies at
+    /// the same moment, so the volume is read as what a release covered rather than as an accountant's figure.
+    /// </para>
     /// </remarks>
     public async Task<ReleasedContentPayloads> ReleaseAsync(
         EmailContentKind kind,

@@ -556,7 +556,9 @@ internal sealed class EmailContentStore(
     /// <para>
     /// The object is the authoritative store for an object-backed row, so it is asked first and its answer is checked
     /// against the length and digest the row records — which is the same check the caller performs, run here for the one
-    /// decision only this method can take: whether to reach for the copy beside it.
+    /// decision only this method can take: whether to reach for the copy beside it. An object that passes is handed over
+    /// carrying <see cref="StoredEmailContent.WasVerifiedIntact" />, so the caller reads that answer instead of hashing
+    /// the message a second time.
     /// </para>
     /// <para>
     /// It reaches for that copy only where there is one and the object failed, which is what keeps the second read off
@@ -605,7 +607,12 @@ internal sealed class EmailContentStore(
 
         var fromObject = row.ToStoredContent(objectPayload);
 
-        if (!row.CarriesDatabasePayload || fromObject.FindIntegrityDefect() is null)
+        if (fromObject.FindIntegrityDefect() is null)
+        {
+            return fromObject with { WasVerifiedIntact = true };
+        }
+
+        if (!row.CarriesDatabasePayload)
         {
             return fromObject;
         }

@@ -119,7 +119,24 @@ public sealed class RetainedContentReleaseTests
         await this.Release().ReleaseAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal([(2L, 1000L)], this.telemetry.Releases);
+        Assert.Equal([(1L, 700L), (1L, 300L)], this.telemetry.Releases);
+    }
+
+    /// <summary>A copy freed is gone whether or not the request finished, so what the earlier kinds freed is published anyway.</summary>
+    [Fact]
+    public async Task ReleaseAsync_CancelledAtALaterPayloadKind_PublishesWhatWasAlreadyFreed()
+    {
+        // Arrange
+        this.Retain(EmailContentKind.IncomingMessage, 1, byteLength: 700);
+        this.Retain(EmailContentKind.OutgoingMessage, 2, byteLength: 300);
+        this.retained.CancelOnReaching(EmailContentKind.OutgoingMessage);
+
+        // Act
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            this.Release().ReleaseAsync(TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal([(1L, 700L)], this.telemetry.Releases);
     }
 
     /// <summary>Disposing of the last copy of a message is the erasing grant's, and the grant that asked for the move will not do.</summary>

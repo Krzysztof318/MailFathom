@@ -245,6 +245,33 @@ public sealed class EmailAttachmentDownloadReaderTests
     }
 
     /// <summary>
+    /// An object that could not be vouched for is recorded through every door onto the same mail, so a message reached
+    /// only by downloading its files says so as loudly as one somebody read.
+    /// </summary>
+    [Fact]
+    public async Task OpenAsync_ContentServedFromTheRetainedCopy_OpensTheAttachmentAndRecordsARepairRequest()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
+        var repairRequests = new RecordingEmailContentRepairRequestStore();
+        var reader = ReaderOver(
+            summary,
+            contentStore: ContentStoreReturning(IntactContent() with { WasServedFromRetainedCopy = true }),
+            repairRequestStore: repairRequests);
+
+        // Act
+        await using var attachment = await reader.OpenAsync(
+            new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(attachment);
+        var recorded = Assert.Single(repairRequests.Recorded);
+        Assert.Equal(summary.StoredEmailId, recorded.StoredEmailId);
+        Assert.Equal(EmailContentDefect.ObjectUnreadable, recorded.Defect);
+    }
+
+    /// <summary>
     /// A position the message does not carry is an ordinary refusal rather than a damaged copy, so it must not put a
     /// healthy message into the queue of copies waiting to be fetched again.
     /// </summary>

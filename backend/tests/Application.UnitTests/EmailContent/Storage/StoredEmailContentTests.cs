@@ -64,6 +64,26 @@ public sealed class StoredEmailContentTests
         Assert.Equal(EmailContentDefect.HashMismatch, defect);
     }
 
+    /// <summary>
+    /// A payload the store already checked answers from that answer rather than hashing the whole message again, which
+    /// is what keeps a mailbox read paying for one digest instead of one per reader.
+    /// </summary>
+    [Fact]
+    public void FindIntegrityDefect_PayloadTheStoreAlreadyVerified_AnswersWithoutCheckingItAgain()
+    {
+        // Arrange: a length nothing could match, so anything but the recorded answer is a check that ran.
+        var content = new StoredEmailContent(RawMime, RawMime.Length + 1, SHA256.HashData(RawMime))
+        {
+            WasVerifiedIntact = true,
+        };
+
+        // Act
+        var defect = content.FindIntegrityDefect();
+
+        // Assert
+        Assert.Null(defect);
+    }
+
     /// <summary>A digest of the wrong size is a mismatch rather than a comparison that throws.</summary>
     [Fact]
     public void FindIntegrityDefect_RecordedDigestOfTheWrongLength_ReportsTheHashMismatch()

@@ -51,6 +51,13 @@ namespace MailFathom.Host.Api;
 /// anything a model reasons over.
 /// </para>
 /// <para>
+/// The pair after those ends the duplication that move leaves behind, which <see cref="ContentReleaseEndpoints" />
+/// describes: reading how much of the database is a copy of the bucket, and freeing a bounded batch of it. They are
+/// here for the reason the move is, and one of their own — freeing a copy removes the last one this deployment holds
+/// outside its endpoint, so it is asked for under the grant this surface allocates to disposing of what it holds rather
+/// than under the one that started the move.
+/// </para>
+/// <para>
 /// The next reads one account's record of the changes MailFathom made to its mailbox, which
 /// <see cref="MailboxMutationAuditEndpoint" /> describes. It is here rather than on the MCP surface because its answer
 /// is an operator's accountability evidence rather than anything a model reasons over, and because the credential that

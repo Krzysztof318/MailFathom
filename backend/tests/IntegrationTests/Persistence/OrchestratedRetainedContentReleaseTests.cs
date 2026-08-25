@@ -39,8 +39,14 @@ public sealed class OrchestratedRetainedContentReleaseTests(MailFathomOrchestrat
 
     private const uint ReleasedUid = 52;
 
-    /// <summary>A locator no object was ever written under, which is what a read has to survive rather than refuse over.</summary>
-    private const string MissingObjectLocator = "mailfathom/incoming/0000-missing-object";
+    /// <summary>
+    /// Locators no object was ever written under, which is what a read has to survive rather than refuse over. One per
+    /// test, because the locator column is uniquely indexed across the whole table: a key names one row, so two rows
+    /// pointing at the same absent object is a state no deployment could reach and this database refuses to hold.
+    /// </summary>
+    private const string FallbackObjectLocator = "mailfathom/incoming/0000-missing-object-fallback";
+
+    private const string ReleasedObjectLocator = "mailfathom/incoming/0000-missing-object-released";
 
     /// <summary>
     /// The whole of the retained window in one: the row is object-backed and still holds its payload, and a read the
@@ -59,7 +65,7 @@ public sealed class OrchestratedRetainedContentReleaseTests(MailFathomOrchestrat
         var storedEmailId = await StoreInDatabaseAsync(services, FallbackUid, "retained-fallback", rawMime, cancellationToken);
 
         // Act
-        var repointed = await RepointAsync(services, storedEmailId, cancellationToken);
+        var repointed = await RepointAsync(services, storedEmailId, FallbackObjectLocator, cancellationToken);
         var readBack = await ReadContentAsync(services, storedEmailId, cancellationToken);
 
         // Assert
@@ -94,7 +100,7 @@ public sealed class OrchestratedRetainedContentReleaseTests(MailFathomOrchestrat
             storesContentInObjectStorage: true);
         var rawMime = SyntheticEmail.RawMimeOf("retained-release", 4_096);
         var storedEmailId = await StoreInDatabaseAsync(services, ReleasedUid, "retained-release", rawMime, cancellationToken);
-        await RepointAsync(services, storedEmailId, cancellationToken);
+        await RepointAsync(services, storedEmailId, ReleasedObjectLocator, cancellationToken);
 
         var before = await ReadRowAsync(services, storedEmailId, cancellationToken);
 
@@ -166,11 +172,12 @@ public sealed class OrchestratedRetainedContentReleaseTests(MailFathomOrchestrat
     private static Task<bool> RepointAsync(
         OrchestratedMailFathomServices services,
         StoredEmailId storedEmailId,
+        string objectLocator,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IStoredContentMoveStore>().RepointAtObjectAsync(
                 EmailContentKind.IncomingMessage,
                 storedEmailId.Value,
-                MissingObjectLocator,
+                objectLocator,
                 scope.GetRequiredService<TimeProvider>().GetUtcNow(),
                 token),
             cancellationToken);

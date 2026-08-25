@@ -161,6 +161,11 @@ public sealed class StoredEmailResponseAuthoring
             return await this.RefuseAndRequestRepairAsync(summary, integrityDefect, cancellationToken);
         }
 
+        await this.repairRequestStore.NoteIfServedFromRetainedCopyAsync(
+            content,
+            summary.StoredEmailId,
+            cancellationToken);
+
         var rendered = await this.renderer.RenderAsync(
             content,
             this.QuotationBounds(request),

@@ -641,6 +641,11 @@ and what the deployment has freed since it started is what an operator weighs ag
 volume is the point rather than a decoration, since this is the one step of the move that actually takes weight off a
 database. Neither carries a dimension of any kind — which payloads were freed is a list of mail.
 
+Both move as each payload kind is freed rather than once per request, so a request cancelled part way through still
+counts what it had already disposed of. Read the volume as what the releases covered rather than as an exact ledger:
+two releases running at the same moment agree on the count, and each attributes to itself the bytes of a copy the other
+freed first.
+
 ### Durable background work
 
 Every attempt at a job opens **`run_job`**, and that span is what makes durable work readable as work at all. A job is

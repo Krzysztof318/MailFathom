@@ -268,16 +268,10 @@ public sealed class EmailContentReader
             return await this.RequestRepairAsync(summary, integrityDefect, cancellationToken);
         }
 
-        // The object this payload was moved into could not be vouched for and the copy the database still holds answered
-        // instead. The read succeeds, because refusing over bytes the deployment has would be a self-inflicted outage,
-        // and the note is what makes the endpoint's failure visible while releasing that copy is still a decision an
-        // operator has not yet taken. After the release the same situation is EmailContentDefect.Missing above.
-        if (content.WasServedFromRetainedCopy)
-        {
-            await this.repairRequestStore.RecordAsync(
-                new EmailContentRepairRequest(summary.StoredEmailId, EmailContentDefect.ObjectUnreadable),
-                cancellationToken);
-        }
+        await this.repairRequestStore.NoteIfServedFromRetainedCopyAsync(
+            content,
+            summary.StoredEmailId,
+            cancellationToken);
 
         var rendering = await this.renderer.RenderAsync(
             content,

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.CommandLine;
+using System.Globalization;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Administration.Content;
 using MailFathom.Cli.Output;
@@ -76,8 +77,9 @@ internal static class ContentMoveStatusCommand
 
         if (retained.PayloadsRemain && report.RemainingPayloadCount == 0)
         {
-            context.Console.WriteLine(
-                $"The database still holds a copy of everything the move carried, which is what a read falls back to while the object backend is being trusted. Free them with '{CliRootCommand.CommandName} content release' once you are satisfied it can be — that step cannot be undone.");
+            context.Console.WriteLine(string.Create(
+                CultureInfo.InvariantCulture,
+                $"The database still holds a copy of {retained.RetainedPayloadCount:N0} of the payloads the move carried, which is what a read falls back to while the object backend is being trusted. Free them with '{CliRootCommand.CommandName} content release' once you are satisfied it can be — that step cannot be undone."));
         }
 
         return CliExitCode.Success;

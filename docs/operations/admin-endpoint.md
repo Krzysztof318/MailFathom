@@ -847,7 +847,7 @@ budget an operator has not asked to spend.
 
 ### Carrying stored content into the object backend
 
-Four of the five routes beneath `/api/admin/content`, and what they are for is the half of the object backend a setting cannot
+Four of the six routes beneath `/api/admin/content`, and what they are for is the half of the object backend a setting cannot
 decide. Selecting `ContentStorage:ObjectStorage` writes the *next* payload to the bucket and leaves everything already
 stored in PostgreSQL, so a deployment that has been synchronizing a mailbox for a year has all of it in the database
 still. [Moving stored content into the bucket](moving-stored-content.md) is what one pass does and what it costs; this
@@ -903,11 +903,11 @@ figure an operator acts on and it would say which message the move is at.
 
 ### Freeing the copies the move left behind
 
-The fifth route, and the one that removes mail. The move copies and never removes, so a deployment part way through one
-holds its content twice: the object it now reads from, and the payload the database went on holding so that a read still
-works while the bucket is being trusted for the first time. Reads use it — where an object is absent or is not what its
-row records, the retained copy answers and the fallback is counted — and ending that duplication is a request of its
-own.
+The remaining two routes, and the write among them is the only thing beneath this prefix that removes mail. The move
+copies and never removes, so a deployment part way through one holds its content twice: the object it now reads from,
+and the payload the database went on holding so that a read still works while the bucket is being trusted for the first
+time. Reads use it — where an object is absent or is not what its row records, the retained copy answers and the
+fallback is counted — and ending that duplication is a request of its own.
 
 **One path, two verbs, two grants.** `GET` reports what is duplicated under `mailfathom.admin.read`, because how much of
 a database is a copy is a question about what a deployment holds. `POST` frees a batch under `mailfathom.admin.erase`,
