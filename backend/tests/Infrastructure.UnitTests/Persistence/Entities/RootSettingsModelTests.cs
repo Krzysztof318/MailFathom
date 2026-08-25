@@ -36,7 +36,7 @@ public sealed class RootSettingsModelTests
         Assert.NotNull(key);
         Assert.Equal(["Id"], key.Properties.Select(property => property.Name));
         Assert.Equal(ValueGenerated.Never, key.Properties[0].ValueGenerated);
-        Assert.Equal("ck_settings_root_singleton", singleton.Name);
+        Assert.Equal(PersistenceConstraintNames.RootSettingsSingletonCheckConstraintName, singleton.Name);
         Assert.Equal($"\"Id\" = {RootSettingsEntity.SingletonId}", singleton.Sql);
     }
 

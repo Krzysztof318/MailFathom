@@ -35,6 +35,9 @@ internal sealed class RootSettingsDocumentReader(NpgsqlDataSource dataSource) : 
     /// <summary>The PostgreSQL code for a relation that does not exist, which is how a database missing the migration answers.</summary>
     private const string UndefinedTableSqlState = "42P01";
 
+    /// <summary>The PostgreSQL code for a rejected password, which is how a wrong or rotated credential answers.</summary>
+    private const string InvalidPasswordSqlState = "28P01";
+
     /// <inheritdoc />
     public async Task<RootSettingsDocument> ReadAsync(CancellationToken cancellationToken)
     {
@@ -57,6 +60,12 @@ internal sealed class RootSettingsDocumentReader(NpgsqlDataSource dataSource) : 
         {
             throw new RootSettingsUnreadableException(
                 "The database does not carry the settings_root table this build reads its persisted configuration from. Apply the migrations this build defines and start the host again.",
+                exception);
+        }
+        catch (PostgresException exception) when (exception.SqlState == InvalidPasswordSqlState)
+        {
+            throw new RootSettingsUnreadableException(
+                "The database holding the persisted configuration refused the configured credential. Check the Persistence secret block rather than the network: the server answered, and what it rejected is the password MailFathom composed for it.",
                 exception);
         }
         catch (NpgsqlException exception)

@@ -63,6 +63,30 @@ public sealed class RootSettingsReloaderTests
                 && message.Contains("Version 3", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A candidate nested deeper than the JSON reader accepts reaches the parser as a different exception type than a
+    /// document of the wrong shape does, and <c>jsonb</c> stores one happily. It is the same outcome for the
+    /// deployment, so it is the same outcome here rather than an exception escaping the reload.
+    /// </summary>
+    [Fact]
+    public async Task ReloadAsync_CandidateNestedDeeperThanTheReaderAccepts_KeepsTheVersionInForce()
+    {
+        // Arrange
+        var provider = LoadedProvider();
+        var reader = ReaderReturning(new RootSettingsDocument(NestedDocument(depth: 96), Version: 11));
+        var logger = new RecordingLogger<RootSettingsReloader>();
+
+        // Act
+        var published = await new RootSettingsReloader(provider, reader, logger).ReloadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(published);
+        Assert.Equal(3, provider.Version);
+        provider.TryGet("Layered:Setting", out var effective);
+        Assert.Equal("inForce", effective);
+        Assert.Contains(logger.Messages, message => message.Contains("version 11", StringComparison.Ordinal));
+    }
+
     /// <summary>A database that cannot be read leaves the deployment exactly as it was, and says so.</summary>
     [Fact]
     public async Task ReloadAsync_PersistedConfigurationUnreadable_KeepsTheVersionInForce()
@@ -85,6 +109,12 @@ public sealed class RootSettingsReloaderTests
         Assert.Equal("inForce", effective);
         Assert.Contains(logger.Messages, message => message.Contains("could not be re-read", StringComparison.Ordinal));
     }
+
+    /// <summary>Composes an object nested to the given depth, which PostgreSQL accepts and the JSON reader stops at.</summary>
+    private static string NestedDocument(int depth) =>
+        string.Concat(Enumerable.Repeat("""{ "Nested": """, depth))
+        + "\"leaf\""
+        + new string('}', depth);
 
     private static IRootSettingsDocumentReader ReaderReturning(RootSettingsDocument document)
     {

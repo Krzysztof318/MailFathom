@@ -20,10 +20,14 @@ namespace MailFathom.Infrastructure.Persistence.Settings;
 /// credentials, and one data source that opens a single connection.
 /// </para>
 /// <para>
-/// The credential never reaches the connection string. The password is supplied per physical connection through the
-/// provider's own callback, exactly as the long-lived pool supplies it, so bootstrap keeps no credential in memory
-/// after the connection it authenticated. The data source is disposed before this returns, so no pool outlives the one
-/// read it existed for.
+/// Where a secret block supplies the credential — a password block, or a block referencing a whole connection string —
+/// it is supplied per physical connection through Npgsql's own callback rather than baked into the connection string,
+/// exactly as the long-lived pool supplies it, so bootstrap keeps no credential in memory after the connection it
+/// authenticated. A deployment that instead writes the password into <c>Persistence:ConnectionString</c> or
+/// <c>ConnectionStrings:mailfathom</c> as ordinary configuration is passed through unchanged, and the credential is in
+/// the connection string here exactly as it is in the pool's; <c>PostgresConnectionStringProvider</c> reports that
+/// shape as a configuration diagnostic and this read makes no attempt to improve on it. The data source is disposed
+/// before this returns either way, so no pool outlives the one read it existed for.
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
@@ -64,18 +68,15 @@ public static class RootSettingsBootstrap
 
         var dataSourceBuilder = new NpgsqlDataSourceBuilder(composed.ConnectionSettings.ConnectionString);
 
-        if (composed.PasswordSource != DatabasePasswordSource.None)
-        {
-            dataSourceBuilder.UsePasswordProvider(
-                _ => throw new NotSupportedException(
-                    "The PostgreSQL password is retrieved asynchronously. Open the connection with OpenAsync."),
-                async (_, token) => await ConnectionStringComposer.ResolveCurrentPasswordAsync(
-                    composed.PasswordSource,
-                    connectionSettings.ConnectionStringSecret,
-                    connectionSettings.Password,
-                    resolver,
-                    token));
-        }
+        ConnectionStringComposer.SupplyThePasswordPerConnection(
+            dataSourceBuilder,
+            composed.PasswordSource,
+            token => ConnectionStringComposer.ResolveCurrentPasswordAsync(
+                composed.PasswordSource,
+                connectionSettings.ConnectionStringSecret,
+                connectionSettings.Password,
+                resolver,
+                token));
 
         await using var dataSource = dataSourceBuilder.Build();
 

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.Provisioning;
 using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -11,7 +12,6 @@ using Microsoft.Extensions.Configuration.CommandLine;
 using Microsoft.Extensions.Configuration.EnvironmentVariables;
 using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.Configuration.Memory;
-using Microsoft.Extensions.FileProviders;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.RootSettings;
@@ -20,17 +20,16 @@ namespace MailFathom.Host.UnitTests.Configuration.RootSettings;
 /// Covers where the persisted configuration layer sits among the sources a real host composes, and therefore which
 /// value an operator actually gets. The sources are the framework's own provider types rather than stand-ins, and the
 /// assertions read the effective value and the composed order rather than an index the composition happens to produce.
+/// Every file is served from memory, so what decides a value here is the layering and nothing a directory on disk did.
 /// </summary>
-public sealed class RootSettingsLayerPrecedenceTests : IDisposable
+public sealed class RootSettingsLayerPrecedenceTests
 {
     private const string SettingKey = "Layered:Setting";
+    private const string ApplicationFileName = "appsettings.json";
+    private const string UserSecretsFileName = "secrets.json";
+    private const string ProvisionedFileName = "10-provisioned.json";
 
-    private readonly DirectoryInfo contentRoot = Directory.CreateTempSubdirectory("mailfathom-root-settings-");
-    private readonly PhysicalFileProvider secretStore;
-
-    /// <summary>Creates the temporary content root the composed sources read their files from.</summary>
-    public RootSettingsLayerPrecedenceTests() =>
-        this.secretStore = new PhysicalFileProvider(this.contentRoot.FullName);
+    private readonly InMemoryConfigurationFileProvider files = new();
 
     /// <summary>The persisted layer beats the application's own files, which is what makes a persisted setting take effect.</summary>
     [Fact]
@@ -57,6 +56,27 @@ public sealed class RootSettingsLayerPrecedenceTests : IDisposable
         using var configuration = this.ComposeHostSources(
             persisted: """{ "Layered": { "Setting": "fromDatabase" } }""",
             provisioned: """{ "Layered": { "Setting": "fromMountedFile" } }""");
+
+        // Act
+        var effective = configuration[SettingKey];
+
+        // Assert
+        Assert.Equal("fromDatabase", effective);
+    }
+
+    /// <summary>
+    /// A provisioned file the deployment happened to name after the user-secrets store is still the deployment's, so
+    /// the persisted layer stays above it. The file name is a deployment's to choose and cannot be what decides where
+    /// the boundary between the two sides falls.
+    /// </summary>
+    [Fact]
+    public void RootSettingsLayer_ProvisionedFileNamedLikeTheSecretStore_StillOverridesIt()
+    {
+        // Arrange
+        using var configuration = this.ComposeHostSources(
+            persisted: """{ "Layered": { "Setting": "fromDatabase" } }""",
+            provisioned: """{ "Layered": { "Setting": "fromMountedFile" } }""",
+            provisionedFileName: UserSecretsFileName);
 
         // Act
         var effective = configuration[SettingKey];
@@ -155,7 +175,7 @@ public sealed class RootSettingsLayerPrecedenceTests : IDisposable
                 "memory",
                 "environment:DOTNET_",
                 "json:appsettings.json",
-                "json:10-provisioned.json",
+                "provisioned:10-provisioned.json",
                 "root-settings",
                 "json:secrets.json",
                 "environment:",
@@ -164,11 +184,26 @@ public sealed class RootSettingsLayerPrecedenceTests : IDisposable
             order);
     }
 
-    /// <inheritdoc />
-    public void Dispose()
+    /// <summary>
+    /// A persisted document the parser refuses stops startup under the code every other unreadable-layer condition
+    /// carries, so an operator greps one number rather than finding that this one condition reports none.
+    /// </summary>
+    [Theory]
+    [InlineData("[1, 2]")]
+    [InlineData("\"not settings\"")]
+    public void AddRootSettings_DocumentThatIsNotAConfigurationObject_FailsUnderTheLayersOwnCode(string persisted)
     {
-        this.secretStore.Dispose();
-        this.contentRoot.Delete(recursive: true);
+        // Arrange
+        using var configuration = new ConfigurationManager();
+
+        // Act
+        var refusal = Record.Exception(
+            () => configuration.AddRootSettings(new RootSettingsDocument(persisted, Version: 12)));
+
+        // Assert
+        var unreadable = Assert.IsType<RootSettingsUnreadableException>(refusal);
+        Assert.Equal(MailFathomErrorCode.RootSettingsUnreadable, unreadable.ErrorCode);
+        Assert.Contains("version 12", unreadable.Message, StringComparison.Ordinal);
     }
 
     private static string DescribeSource(IConfigurationSource source) => source switch
@@ -177,13 +212,15 @@ public sealed class RootSettingsLayerPrecedenceTests : IDisposable
         CommandLineConfigurationSource => "command-line",
         MemoryConfigurationSource => "memory",
         EnvironmentVariablesConfigurationSource environment => $"environment:{environment.Prefix}",
-        JsonConfigurationSource json => $"json:{Path.GetFileName(json.Path)}",
+        ProvisionedJsonConfigurationSource provisioned => $"provisioned:{provisioned.Path}",
+        JsonConfigurationSource json => $"json:{json.Path}",
         _ => source.GetType().Name,
     };
 
     private ConfigurationManager ComposeHostSources(
         string persisted,
         string? provisioned = null,
+        string? provisionedFileName = null,
         string? userSecrets = null,
         string? commandLine = null)
     {
@@ -193,21 +230,12 @@ public sealed class RootSettingsLayerPrecedenceTests : IDisposable
         // settings, the application's files, the developer's secret store, the process environment, and the command
         // line. The provisioned and persisted layers are then inserted into it exactly as the host inserts them.
         configuration.AddEnvironmentVariables("DOTNET_");
-        configuration.AddJsonFile(this.WriteFile(
-            "appsettings.json",
-            $$"""
-              {
-                "ConfigurationSources": { "Directory": "{{this.contentRoot.FullName}}" },
-                "Layered": { "Setting": "fromApplicationFile" }
-              }
-              """));
+        this.AddJsonFile(configuration, ApplicationFileName, """{ "Layered": { "Setting": "fromApplicationFile" } }""");
 
         if (userSecrets is not null)
         {
-            this.WriteFile("secrets.json", $$"""{ "Layered": { "Setting": "{{userSecrets}}" } }""");
-
             // The file name is what identifies the secret store, because that is how the framework layers it in.
-            configuration.AddJsonFile(this.secretStore, "secrets.json", optional: true, reloadOnChange: false);
+            this.AddJsonFile(configuration, UserSecretsFileName, $$"""{ "Layered": { "Setting": "{{userSecrets}}" } }""");
         }
 
         configuration.AddEnvironmentVariables();
@@ -219,10 +247,7 @@ public sealed class RootSettingsLayerPrecedenceTests : IDisposable
 
         if (provisioned is not null)
         {
-            this.WriteFile("10-provisioned.json", provisioned);
-            configuration.AddProvisionedConfiguration(
-                new FakeProvisionedConfigurationFileSystem()
-                    .WithDirectory(this.contentRoot.FullName, "10-provisioned.json"));
+            this.AddProvisionedFile(configuration, provisionedFileName ?? ProvisionedFileName, provisioned);
         }
 
         configuration.AddRootSettings(new RootSettingsDocument(persisted, Version: 1));
@@ -230,12 +255,32 @@ public sealed class RootSettingsLayerPrecedenceTests : IDisposable
         return configuration;
     }
 
-    private string WriteFile(string fileName, string content)
+    private void AddJsonFile(IConfigurationBuilder configuration, string fileName, string content)
     {
-        var path = Path.Combine(this.contentRoot.FullName, fileName);
+        this.files.WithFile(fileName, content);
 
-        File.WriteAllText(path, content);
+        configuration.AddJsonFile(this.files, fileName, optional: false, reloadOnChange: false);
+    }
 
-        return path;
+    /// <summary>
+    /// Inserts one provisioned file the way the provisioned layer does: the source type that layer constructs, at the
+    /// index that layer computes. Which files a deployment mounted is the registration's decision and is covered by
+    /// <c>ProvisionedConfigurationLayerTests</c>; what is under test here is only where the resulting source lands.
+    /// </summary>
+    private void AddProvisionedFile(ConfigurationManager configuration, string fileName, string content)
+    {
+        this.files.WithFile(fileName, content);
+
+        var source = new ProvisionedJsonConfigurationSource
+        {
+            Path = fileName,
+            FileProvider = this.files,
+            Optional = false,
+            ReloadOnChange = false,
+        };
+
+        configuration.Sources.Insert(
+            ProvisionedConfigurationLayer.FindInsertionIndex([.. configuration.Sources]),
+            source);
     }
 }

@@ -22,7 +22,7 @@ internal sealed class RootSettingsConfiguration : IEntityTypeConfiguration<RootS
         entity.ToTable(
             "settings_root",
             table => table.HasCheckConstraint(
-                "ck_settings_root_singleton",
+                PersistenceConstraintNames.RootSettingsSingletonCheckConstraintName,
                 $"\"Id\" = {RootSettingsEntity.SingletonId}"));
         entity.HasKey(settings => settings.Id);
 

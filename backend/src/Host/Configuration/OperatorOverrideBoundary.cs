@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Host.Configuration.Provisioning;
 using Microsoft.Extensions.Configuration.EnvironmentVariables;
 using Microsoft.Extensions.Configuration.Json;
 
@@ -24,7 +25,11 @@ namespace MailFathom.Host.Configuration;
 /// </para>
 /// <para>
 /// User Secrets is recognized by the file name the framework adds it under, which is the only thing that distinguishes
-/// it: it is an ordinary JSON source, and the deployment's own JSON sources are named for the file each one reads.
+/// it: it is an ordinary JSON source, and the deployment's own JSON sources are named for the file each one reads. A
+/// file name is something a deployment chooses, so the name alone would not settle it — a provisioned file called
+/// <c>secrets.json</c> resolves to that same bare name and would be read as an override, placing both MailFathom
+/// layers below it. What settles it is the type: the provisioned layer constructs
+/// <see cref="ProvisionedJsonConfigurationSource" />, which this recognizes as the deployment's however it is named.
 /// </para>
 /// </remarks>
 internal static class OperatorOverrideBoundary
@@ -55,6 +60,10 @@ internal static class OperatorOverrideBoundary
     private static bool IsAnOperatorOverride(IConfigurationSource source) => source switch
     {
         EnvironmentVariablesConfigurationSource { Prefix: null or "" } => true,
+
+        // Ahead of the JSON arm below, which it would otherwise match: a provisioned file is the deployment's
+        // whatever the deployment named it.
+        ProvisionedJsonConfigurationSource => false,
         JsonConfigurationSource json => string.Equals(json.Path, UserSecretsFileName, StringComparison.Ordinal),
         _ => false,
     };

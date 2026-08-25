@@ -123,34 +123,19 @@ internal sealed partial class PostgresConnectionStringProvider : IHostedLifecycl
     /// <param name="dataSourceBuilder">The builder the container builds the data source from.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="dataSourceBuilder" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// <para>
-    /// The provider invokes this when it opens a physical connection, so a credential rotated behind an unchanged
-    /// reference authenticates the next connection with no restart and no rebuilt data source. Connections already
-    /// open are untouched and finish with the credential they authenticated with, which is what makes a rotation safe
-    /// for work in flight. Pooled logical connections that reuse an open physical one likewise keep it; the rotated
-    /// credential applies from the next physical connect.
-    /// </para>
-    /// <para>
-    /// The synchronous provider deliberately throws, as the provider's own documentation recommends. Retrieval is
-    /// asynchronous by contract and can reach a file or one day a managed store, and satisfying a synchronous callback
-    /// would mean blocking a thread on it. Every MailFathom database access opens its connection asynchronously, so the
-    /// synchronous path is unreachable rather than merely discouraged.
-    /// </para>
+    /// The provider invokes the attached callback when it opens a physical connection, so a credential rotated behind
+    /// an unchanged reference authenticates the next connection with no restart and no rebuilt data source.
+    /// Connections already open are untouched and finish with the credential they authenticated with, which is what
+    /// makes a rotation safe for work in flight. Pooled logical connections that reuse an open physical one likewise
+    /// keep it; the rotated credential applies from the next physical connect.
+    /// <see cref="ConnectionStringComposer.SupplyThePasswordPerConnection" /> holds the wiring itself, so the pool this
+    /// registers and the single connection the configuration bootstrap opens attach it identically.
     /// </remarks>
-    internal void SupplyThePasswordPerConnection(NpgsqlDataSourceBuilder dataSourceBuilder)
-    {
-        ArgumentNullException.ThrowIfNull(dataSourceBuilder);
-
-        if (this.PasswordSource == DatabasePasswordSource.None)
-        {
-            return;
-        }
-
-        dataSourceBuilder.UsePasswordProvider(
-            _ => throw new NotSupportedException(
-                "The PostgreSQL password is retrieved asynchronously. Open the connection with OpenAsync."),
-            async (_, cancellationToken) => await this.RetrieveCurrentPasswordAsync(cancellationToken));
-    }
+    internal void SupplyThePasswordPerConnection(NpgsqlDataSourceBuilder dataSourceBuilder) =>
+        ConnectionStringComposer.SupplyThePasswordPerConnection(
+            dataSourceBuilder,
+            this.PasswordSource,
+            this.RetrieveCurrentPasswordAsync);
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<DatabaseConnectionConfigurationFailure>> FindConfigurationFailuresAsync(

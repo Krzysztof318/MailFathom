@@ -146,7 +146,6 @@ internal static class HostComposition
         return AddNetworkSurfaces(builder);
     }
 
-    /// <summary>Registers the telemetry, resilience, clock, and secret resolution every other stage assumes.</summary>
     /// <summary>Registers the seam a committed configuration write republishes the persisted layer through.</summary>
     /// <remarks>
     /// The provider is found among the sources rather than handed in, because the layer is composed while the builder
@@ -165,6 +164,7 @@ internal static class HostComposition
         builder.Services.AddSingleton<RootSettingsReloader>();
     }
 
+    /// <summary>Registers the telemetry, resilience, clock, and secret resolution every other stage assumes.</summary>
     private static void AddPlatformDefaults(WebApplicationBuilder builder)
     {
         builder.AddServiceDefaults();

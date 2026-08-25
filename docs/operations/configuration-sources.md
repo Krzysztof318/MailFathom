@@ -59,11 +59,13 @@ An existing but empty directory is permitted and contributes nothing. A ConfigMa
 
 ## The persisted layer
 
-`settings_root` in PostgreSQL holds one row, and that row's `jsonb` document is this layer. It is read once while the host composes its configuration, flattened into ordinary colon-delimited keys by the framework's own JSON parser, and inserted at the position the table above gives. Nothing about it is a second configuration system: a persisted `MailboxSearch:SnippetsPerEmail` is the same key, bound by the same options class, validated by the same validator, and watched through the same reload token as one written into a file.
+`settings_root` in PostgreSQL holds one row, and that row's `jsonb` document is this layer. It is read once while the host composes its configuration, flattened into ordinary colon-delimited keys by the framework's own JSON parser, and inserted at the position the table above gives. Nothing about it is a second configuration system: a persisted `MailboxSearch:SnippetsPerEmail` is the same key, bound by the same options class, and validated by the same validator as one written into a file.
 
 **The document is sparse, and a key it does not carry is inherited rather than blank.** Persisting one setting therefore does not mean restating everything the deployment provisioned beside it. Objects compose by child key and array elements override by their own numeric index, which is the ordinary .NET provider behaviour and not a merge rule of this layer's own: a persisted value at index `1` replaces index `1`, and the indexes the document omits stay visible from the file underneath.
 
-**One read, not one query per setting.** The row is loaded as a single document snapshot, so reading a configuration property costs nothing at the database. A reload replaces that snapshot whole rather than re-reading per key.
+**One read, not one query per setting.** The row is loaded as a single document snapshot, so reading a configuration property costs nothing at the database.
+
+**The document is read at startup, and editing the row takes effect at the next start.** Nothing watches `settings_root` and nothing polls it, so a row edited directly in the database — with `psql`, or by anything other than MailFathom — changes no setting in the running process. Restart the host to compose over it.
 
 ### What is never read from it
 
@@ -77,7 +79,7 @@ Secret material is not read from it either, and for a different reason: a secret
 
 ### Startup, and a reload that fails
 
-**The host fails to start when this layer cannot be read.** A database that cannot be reached, a schema that does not carry the table, a row that is not there, and a document that is not a JSON object of configuration keys are one failure to the process: the layer between the deployment's files and the operator's overrides cannot say what it contributes, and starting anyway would serve whichever values the files beneath it happen to carry with nothing saying that a layer was missing. The failure carries error code `12003` and stops the process before any endpoint opens. A database that has not had this release's migrations applied is the ordinary cause, and the message says so; [the database schema](database-schema.md) states the order a deployment applies them in.
+**The host fails to start when this layer cannot be read.** A database that cannot be reached, a database that refuses the configured credential, a schema that does not carry the table, a row that is not there, and a document that is not a JSON object of configuration keys are one failure to the process: the layer between the deployment's files and the operator's overrides cannot say what it contributes, and starting anyway would serve whichever values the files beneath it happen to carry with nothing saying that a layer was missing. All five carry error code `12003` and stop the process before any endpoint opens, and each message names which of them happened — a rejected credential sends the operator to the secret block rather than to the network. A database that has not had this release's migrations applied is the ordinary cause, and the message says so; [the database schema](database-schema.md) states the order a deployment applies them in.
 
 Every start records the version it composed itself over, at `Information`:
 
@@ -87,7 +89,7 @@ Host MailFathom.Host composed its settings over persisted configuration version 
 
 That number is the only record of which document the process actually read — the files are in the repository and the environment is in the manifest, and what the row held at that moment is otherwise unrecoverable from the running process.
 
-**A reload that fails keeps the version already in force.** A candidate that cannot be read leaves the deployment exactly as it was; one that reads but is not a configuration document is rejected *by version*, and the record names both the version that did not take and the version still serving. What never happens is a fall back to the files beneath this layer: those never carried the persisted values, so reverting to them would quietly change settings the deployment had already adopted.
+**The host carries a republish path, and nothing in this release drives it.** Republishing a later document to everything bound to it is what a committed configuration write ends with, and the write itself is not part of this release. What the path guarantees when something does drive it: a candidate that cannot be read leaves the deployment exactly as it was, one that reads but is not a configuration document is rejected *by version* with the record naming both the version that did not take and the version still serving, and a fall back to the files beneath this layer never happens — those never carried the persisted values, so reverting to them would quietly change settings the deployment had already adopted.
 
 ## Failure and startup behavior
 
@@ -115,7 +117,7 @@ A `0` on a deployment that mounts a ConfigMap means the mount is empty or did no
 
 ## Reload
 
-This section is about the files. The persisted layer reloads on its own terms, which [the persisted layer](#the-persisted-layer) above states: it is republished when the document changes rather than watched, and nothing on the read path triggers it.
+This section is about the files. The persisted layer is not reloaded at all in this release: it is composed once at startup, as [the persisted layer](#the-persisted-layer) above states, and a row edited directly takes effect at the next start.
 
 What reloads is the **content of the files that existed when the host started**. Each of those gets a watched provider, so a setting group classified reloadable in [ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md) picks up an edited ConfigMap key without a restart, through the same validated-snapshot path every other source uses. A candidate snapshot that fails validation is rejected and the last known good one stays active.
 

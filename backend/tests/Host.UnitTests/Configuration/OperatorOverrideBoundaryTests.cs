@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Host.Configuration;
+using MailFathom.Host.Configuration.Provisioning;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.CommandLine;
 using Microsoft.Extensions.Configuration.EnvironmentVariables;
@@ -99,5 +100,28 @@ public sealed class OperatorOverrideBoundaryTests
 
         // Assert
         Assert.Equal(3, boundary);
+    }
+
+    /// <summary>
+    /// A provisioned file resolves to a bare file name, so a deployment that named one <c>secrets.json</c> would reach
+    /// the name comparison looking exactly like the secret store. The layer that inserted it is what settles it, and
+    /// the persisted layer therefore still lands above the file rather than below it.
+    /// </summary>
+    [Fact]
+    public void FindIn_ProvisionedFileNamedLikeTheSecretStore_IsStillTheDeploymentsOwn()
+    {
+        // Arrange
+        IReadOnlyList<IConfigurationSource> sources =
+        [
+            new JsonConfigurationSource { Path = "appsettings.json" },
+            new ProvisionedJsonConfigurationSource { Path = "secrets.json" },
+            new EnvironmentVariablesConfigurationSource(),
+        ];
+
+        // Act
+        var boundary = OperatorOverrideBoundary.FindIn(sources);
+
+        // Assert
+        Assert.Equal(2, boundary);
     }
 }

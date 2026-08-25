@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using MailFathom.Infrastructure.Persistence.Settings;
 
 namespace MailFathom.Host.Configuration.RootSettings;
@@ -48,7 +49,10 @@ internal sealed partial class RootSettingsReloader(
         {
             provider.Apply(candidate);
         }
-        catch (FormatException exception)
+        // Two exception types for one condition: the framework's parser reports a document that is not an
+        // object of configuration keys as a FormatException, and leaves a JsonException — a document nested deeper
+        // than the reader's maximum, which jsonb stores happily — to propagate as it came.
+        catch (Exception exception) when (exception is FormatException or JsonException)
         {
             this.LogCandidateRejected(candidate.Version, provider.Version, exception);
 

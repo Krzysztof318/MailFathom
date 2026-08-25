@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
+using System.Text.Json;
 using MailFathom.Infrastructure.Persistence.Settings;
 using Microsoft.Extensions.Configuration.Json;
 
@@ -48,12 +49,14 @@ internal sealed class RootSettingsConfigurationProvider : JsonStreamConfiguratio
 
     /// <inheritdoc />
     /// <exception cref="FormatException">Thrown when the persisted document is not a JSON object of configuration keys.</exception>
+    /// <exception cref="JsonException">Thrown when the persisted document cannot be read as JSON at all, which for a <c>jsonb</c> column means one nested deeper than the reader's maximum.</exception>
     public override void Load() => this.Parse(this.document);
 
     /// <summary>Replaces the published snapshot with a document read after startup.</summary>
     /// <param name="candidate">The document to publish, and the version it was read at.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="candidate" /> is <see langword="null" />.</exception>
     /// <exception cref="FormatException">Thrown when the candidate is not a JSON object of configuration keys, in which case the snapshot in force is unchanged.</exception>
+    /// <exception cref="JsonException">Thrown when the candidate cannot be read as JSON at all, in which case the snapshot in force is likewise unchanged.</exception>
     /// <remarks>
     /// <para>
     /// The change token is raised only once the candidate has been published, so a rejected candidate reloads nothing
