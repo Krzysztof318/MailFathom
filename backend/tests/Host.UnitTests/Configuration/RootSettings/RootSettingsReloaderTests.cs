@@ -1,0 +1,106 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Host.Configuration.RootSettings;
+using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Persistence.Settings;
+using NSubstitute;
+using Xunit;
+
+namespace MailFathom.Host.UnitTests.Configuration.RootSettings;
+
+/// <summary>
+/// Covers what a reload does to the version in force. A failed reload is the case the contract is written for: the
+/// deployment keeps serving the settings it had, and the operator is told which version did not take.
+/// </summary>
+public sealed class RootSettingsReloaderTests
+{
+    private const string InForce = """{ "Layered": { "Setting": "inForce" } }""";
+
+    /// <summary>A usable candidate is published, and the version it carried becomes the version in force.</summary>
+    [Fact]
+    public async Task ReloadAsync_UsableCandidate_PublishesIt()
+    {
+        // Arrange
+        var provider = LoadedProvider();
+        var reader = ReaderReturning(new RootSettingsDocument("""{ "Layered": { "Setting": "reloaded" } }""", Version: 7));
+        var logger = new RecordingLogger<RootSettingsReloader>();
+
+        // Act
+        var published = await new RootSettingsReloader(provider, reader, logger).ReloadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(published);
+        Assert.Equal(7, provider.Version);
+        provider.TryGet("Layered:Setting", out var effective);
+        Assert.Equal("reloaded", effective);
+    }
+
+    /// <summary>
+    /// A candidate that is not a configuration document is rejected by version, and the version already in force stays
+    /// in force rather than the layer emptying onto the files beneath it.
+    /// </summary>
+    [Fact]
+    public async Task ReloadAsync_CandidateThatIsNotAConfigurationDocument_KeepsTheVersionInForceAndReportsTheRejectedOne()
+    {
+        // Arrange
+        var provider = LoadedProvider();
+        var reader = ReaderReturning(new RootSettingsDocument("\"not settings\"", Version: 9));
+        var logger = new RecordingLogger<RootSettingsReloader>();
+
+        // Act
+        var published = await new RootSettingsReloader(provider, reader, logger).ReloadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(published);
+        Assert.Equal(3, provider.Version);
+        provider.TryGet("Layered:Setting", out var effective);
+        Assert.Equal("inForce", effective);
+        Assert.Contains(
+            logger.Messages,
+            message => message.Contains("version 9", StringComparison.Ordinal)
+                && message.Contains("Version 3", StringComparison.Ordinal));
+    }
+
+    /// <summary>A database that cannot be read leaves the deployment exactly as it was, and says so.</summary>
+    [Fact]
+    public async Task ReloadAsync_PersistedConfigurationUnreadable_KeepsTheVersionInForce()
+    {
+        // Arrange
+        var provider = LoadedProvider();
+        var reader = Substitute.For<IRootSettingsDocumentReader>();
+        var logger = new RecordingLogger<RootSettingsReloader>();
+
+        reader.ReadAsync(Arg.Any<CancellationToken>())
+            .Returns<Task<RootSettingsDocument>>(_ => throw new RootSettingsUnreadableException("unreachable"));
+
+        // Act
+        var published = await new RootSettingsReloader(provider, reader, logger).ReloadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(published);
+        Assert.Equal(3, provider.Version);
+        provider.TryGet("Layered:Setting", out var effective);
+        Assert.Equal("inForce", effective);
+        Assert.Contains(logger.Messages, message => message.Contains("could not be re-read", StringComparison.Ordinal));
+    }
+
+    private static IRootSettingsDocumentReader ReaderReturning(RootSettingsDocument document)
+    {
+        var reader = Substitute.For<IRootSettingsDocumentReader>();
+
+        reader.ReadAsync(Arg.Any<CancellationToken>()).Returns(document);
+
+        return reader;
+    }
+
+    private static RootSettingsConfigurationProvider LoadedProvider()
+    {
+        var provider = new RootSettingsConfigurationProvider(new RootSettingsDocument(InForce, Version: 3));
+
+        provider.Load();
+
+        return provider;
+    }
+}

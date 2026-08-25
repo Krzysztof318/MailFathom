@@ -133,10 +133,32 @@ A credential or trust anchor reached through a secret reference is therefore cla
 
 A secret that is *not* reached through a reference — a password written into a connection string in ordinary configuration — keeps the original classification, because nothing re-reads it and no validation step precedes its use.
 
+### Amendment 2: a PostgreSQL source is read between the deployment's files and the operator's overrides
+
+*Approved by the owner on 2026-08-25, in issue 1119, for the persisted-configuration work of the 0.8.0 milestone.*
+
+The section above closes the write path and says where mutable state lives: in PostgreSQL. What it did not say is how a value that lives there reaches a setting, and the first design built against it — the trusted-sender list, where configuration supplies one half, PostgreSQL supplies another, and a dedicated reader unions them — answered that by growing a second configuration system beside this one. Repeating that per editable setting is what this amendment refuses.
+
+One read-only `IConfigurationSource` backed by PostgreSQL is therefore composed into the ordinary source list. It is a source and not an exception to the section above: MailFathom still writes no file, no environment variable, no provider dictionary, and no options cache, and the document it reads is state in the database exactly as that section requires. Its precedence, lowest to highest, is application defaults and `appsettings.json`; `appsettings.{Environment}.json` and the deployment-provisioned JSON files; **this layer**; .NET User Secrets; environment variables; command-line arguments. `docs/operations/configuration-sources.md` is the operator's statement of it.
+
+What that buys is that binding, object composition, indexed arrays, validation, and reload tokens stay one mechanism. A persisted setting is the same key, bound by the same options class, validated by the same validator, and classified by the same reload policy as one from a file, so nothing above this boundary learns which source supplied a value.
+
+The terms it holds on:
+
+- **The layer sits below every source an operator supplies.** A bad persisted value is repaired without first reaching the database that holds it, which is why User Secrets, environment variables, and command-line arguments all outrank it. The deployment-provisioned files move below User Secrets with it, so the whole of what a deployment configured sits below the whole of what an operator injects; nothing else about those files changes.
+- **A key the document does not carry is inherited from below.** The document is sparse, and the merge is the .NET provider merge and no other: objects compose by child key and an array element overrides by its own numeric index. No second merge vocabulary is introduced, and no whole-array replacement rule.
+- **Nothing needed to open the layer is read from it.** Connection details, the secret interpretation mode, and configuration-source discovery are bootstrap settings, read from the sources beneath and refused as persisted paths. The list is short and stated in the operations page rather than inferred.
+- **The document carries no secret material**, for the reason ordinary configuration does not: a secret-bearing setting holds a reference whichever source supplied it, and [ADR 0005](0005-data-encryption-key-ring-and-provisioning.md) owns the sealing of anything stored beneath this one.
+- **Startup fails before any endpoint opens when the layer cannot be read, parsed, or bound**, rather than starting on the sources beneath it. A reload that fails keeps the last valid snapshot and reports the version it rejected; it never falls back to those sources, which never carried the persisted values.
+- **The row is one document snapshot.** No configuration property costs a query, and a reload replaces the snapshot rather than merging into it.
+
+What stays refused is what the section above refused: a configuration writer port over the operator's files, an approval workflow over configuration, a configuration history built over it, a multi-tenant configuration lifecycle, and an owner-scoped configuration layer. The last of those was proposed as issue 1118 and closed as not planned, for a reason this amendment depends on: a layer whose absent key means *inherit from below* cannot carry what belongs to one person, because the inheritance is silent and no reader can tell a value somebody chose from a value nobody did. An owner's settings are typed content of the owner document, which this layer stores nothing of.
+
 ## Validation
 
 - Code review verifies that `Domain` never references `Microsoft.Extensions.Configuration`, `Microsoft.Extensions.Options`, provider SDK types, configuration section names, or raw setting keys.
 - Code review verifies that `Application` use cases depend on focused configuration reader contracts or immutable settings, not raw `IConfiguration` or framework options types.
+- Unit tests cover the persisted layer's position among the composed sources, asserted by provider type and by effective value rather than by a source index; that a key its document omits is inherited from the source beneath; that objects and indexed array elements compose by the ordinary .NET provider rules; and that a reload which fails keeps the last valid snapshot and reports the version it rejected.
 - Unit tests cover source validation, strict binding behavior where configured, mapping from options DTOs to business settings, startup validation failures, reload success, rejected reload with last-known-good preservation, and privacy-safe diagnostics for invalid reloads.
 - Documentation for each setting group states its source shape, required keys, safe diagnostics, mutability classification, and whether it is restart-required, reloadable for new operations, or reloadable during running operations.
 - Pull-request review rejects reloadable settings without an explicit consistency, security, privacy, and operational rationale.

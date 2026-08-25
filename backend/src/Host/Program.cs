@@ -5,6 +5,7 @@
 using MailFathom.Host;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Provisioning;
+using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Host.Observability;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
@@ -24,6 +25,17 @@ try
     // keeps an environment variable an override of a mounted file rather than something a stale mount can beat.
     var provisionedConfigurationFileCount = builder.Configuration.AddProvisionedConfiguration();
     bootstrapLogger.RecordProvisionedConfigurationFiles(provisionedConfigurationFileCount);
+
+    // Above the files and below every override an operator reaches for, so a persisted setting binds exactly as one
+    // from a file while a bad persisted value stays repairable without first reaching the database that holds it. It
+    // is read here rather than by the provider it feeds because resolving the credential that opens that database is
+    // asynchronous, and a configuration provider's own load is not.
+    //
+    // No token, because the host whose lifetime would supply one does not exist until Build has returned. Every leg of
+    // the read carries a bound of its own instead — the credential retrieval, the connection, and the command — so a
+    // credential source or a database that never answers fails startup rather than hanging it.
+    var rootSettings = await builder.Configuration.AddRootSettingsAsync(CancellationToken.None);
+    bootstrapLogger.RecordRootSettingsVersion(rootSettings.Version);
 
     // Once every source exists and before anything binds one, because this asks whether a value can reach its reader at
     // all rather than what the value says. The few settings only the environment can deliver were read before this line

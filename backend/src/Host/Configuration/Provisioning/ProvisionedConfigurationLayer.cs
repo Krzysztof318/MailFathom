@@ -2,8 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using Microsoft.Extensions.Configuration.EnvironmentVariables;
-
 namespace MailFathom.Host.Configuration.Provisioning;
 
 /// <summary>Decides which provisioned configuration files are layered in, and where among the host's own sources.</summary>
@@ -61,30 +59,13 @@ internal static class ProvisionedConfigurationLayer
     /// <returns>The index to insert the first provisioned source at.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="sources" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// <para>
-    /// Provisioned files sit immediately below the environment-variable provider, which puts them above
-    /// <c>appsettings.json</c> and its environment overlay and below environment variables and command-line arguments.
-    /// That is the precedence the .NET provider order already promises an operator: a file states the deployment's
-    /// configuration, and an environment variable overrides it. Layering them on top instead would let a stale mounted
-    /// file silently beat a value injected per pod, which is the direction that cannot be diagnosed from the outside.
-    /// </para>
-    /// <para>
-    /// Only the unprefixed provider is the boundary. The prefixed ones carry <c>DOTNET_</c> and <c>ASPNETCORE_</c>
-    /// host settings and are composed before the application's own files, so inserting ahead of those would place
-    /// provisioned configuration below <c>appsettings.json</c> and invert the whole point of mounting it.
-    /// </para>
+    /// Provisioned files sit directly below the operator's overrides, which puts them above <c>appsettings.json</c> and
+    /// its environment overlay and below User Secrets, environment variables, and command-line arguments.
+    /// <see cref="OperatorOverrideBoundary" /> holds why that direction is the one an operator can act on, and the
+    /// persisted settings layer is inserted at the same boundary afterwards, which is what places it above these files.
     /// </remarks>
-    public static int FindInsertionIndex(IReadOnlyList<IConfigurationSource> sources)
-    {
-        ArgumentNullException.ThrowIfNull(sources);
-
-        return sources
-            .Index()
-            .Where(source => source.Item is EnvironmentVariablesConfigurationSource { Prefix: null or "" })
-            .Select(source => source.Index)
-            .DefaultIfEmpty(sources.Count)
-            .First();
-    }
+    public static int FindInsertionIndex(IReadOnlyList<IConfigurationSource> sources) =>
+        OperatorOverrideBoundary.FindIn(sources);
 
     private static IReadOnlyList<string> FindDirectoryFiles(
         string directoryPath,

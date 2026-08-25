@@ -15,16 +15,19 @@ The bootstrap pipeline closes both gaps: it is composed before `CreateBuilder`, 
 
 ## What it emits
 
-Four records, all under the category `MailFathom.Host.Startup`:
+Five records, all under the category `MailFathom.Host.Startup`:
 
 | Record | Level | Named properties |
 | --- | --- | --- |
 | Host is starting | `Information` | `ServiceName`, `EnvironmentName`, `ServiceVersion`, `ServiceRevision` |
 | Host layered provisioned configuration files | `Information` | `ServiceName`, `FileCount` |
+| Host composed its settings over a persisted configuration version | `Information` | `ServiceName`, `Version` |
 | Host ended with an unhandled exception | `Critical` | `ServiceName`, plus the exception |
 | Host stopped | `Information` | `ServiceName` |
 
-The configuration record is a count and never a path, and it is written here rather than through the container pipeline for the same reason the others are: it describes what the host read before a container existed to log it. A `0` against a deployment that mounts a ConfigMap is how an empty or misplaced mount becomes visible; [configuration sources](configuration-sources.md) states what is counted.
+The persisted-configuration record is a version number and never a key or a value. It is the only record of which document the process actually composed itself over: the files are in the repository and the environment is in the manifest, and what the database held at that moment is otherwise unrecoverable from the running process. [Configuration sources](configuration-sources.md) states what the layer is.
+
+The provisioned-file record is a count and never a path, and it is written here rather than through the container pipeline for the same reason the others are: it describes what the host read before a container existed to log it. A `0` against a deployment that mounts a ConfigMap is how an empty or misplaced mount becomes visible; [configuration sources](configuration-sources.md) states what is counted.
 
 `ServiceVersion` and `ServiceRevision` are read from the host assembly's own build-time metadata and are not configurable, so a deployment cannot make the process claim a build it is not running. They answer different questions and are therefore reported apart: the version is the compatibility statement [ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md) defines over MailFathom's four public surfaces, and the revision is the commit the assemblies were built from, which is what makes a report from a deployment the reader did not build reproducible. A build inside a Git worktree resolves that revision on its own; one with no repository beside it, such as the container build, carries whatever its caller supplied and reports `unknown` otherwise, which is a legitimate state rather than a fault. `ServiceRevision` is reported as the first seven characters of the object name, the same abbreviation the nightly identifier carries, and the whole name stays on the image's `org.opencontainers.image.revision` label. The same version, without the revision, is what the MCP surface reports to a client during `initialize`, and both properties are what every exported record carries on its resource as `service.version` and `vcs.ref.head.revision`.
 

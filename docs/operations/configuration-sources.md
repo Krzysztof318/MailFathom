@@ -2,29 +2,34 @@
 
 <!-- describes: backend/src/Host/Configuration/** -->
 
-MailFathom reads its settings through the ordinary .NET configuration pipeline, plus one addition: a deployment may name a directory or a file of JSON configuration that it provisioned outside the application's own content root. That addition is what makes a Kubernetes ConfigMap mounted as a volume ordinary configuration rather than a shape the host cannot see.
+MailFathom reads its settings through the ordinary .NET configuration pipeline, plus two additions. A deployment may name a directory or a file of JSON configuration that it provisioned outside the application's own content root, which is what makes a Kubernetes ConfigMap mounted as a volume ordinary configuration rather than a shape the host cannot see. And the deployment's own persisted settings — one document in PostgreSQL — are layered in above those files, so a setting that was changed while the deployment was running binds and validates exactly as one that came from a file.
 
 Secrets are a separate contract and stay one. A secret-bearing setting holds a reference rather than material, whichever source the setting itself arrived from; [secret provisioning](secret-provisioning.md) is that contract, and the [Kubernetes mapping](#kubernetes) below states how the two meet.
 
-**Every source below is read-only, and that is permanent.** MailFathom reads its configuration and never writes it: no file it was pointed at is edited, no value is written back, and no administrative call, command, or MCP tool changes a setting. The file you provisioned is therefore the file in force, so it can be reviewed, diffed, and restored as the whole truth about how an instance is configured, and changing a setting is always an edit followed by a restart or a reload. What the service itself has to modify is state in PostgreSQL rather than a setting, and it stays out of your configuration entirely: a mailbox refresh token sent to the deployment is stored sealed in the database, not written back into the secret reference it arrived through. [ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md) records the decision and what it costs.
+**No file MailFathom reads is ever written back.** The file you provisioned is the file in force: it can be reviewed, diffed, and restored as the truth about what the *deployment* configured, and nothing in the process edits it, writes a value into it, or rewrites an environment variable. What the service itself has to modify lives in PostgreSQL instead, which is where the **root settings layer** below comes from — one persisted document, read as an ordinary configuration source between the deployment's files and the operator's overrides. A mailbox refresh token is the older example of the same rule: it is stored sealed in the database rather than written back into the secret reference it arrived through. [ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md) records the decision, and its second amendment records the layer.
+
+Reading a setting from the database does not make your files editable by the process, and it does not make the persisted layer a second configuration system: it is one more source in the ordinary .NET order, so binding, object composition, indexed arrays, validation, and reload tokens stay one mechanism rather than acquiring a parallel one.
 
 ## Precedence
 
-Highest precedence first. Everything except the provisioned layer is the default .NET order.
+Highest precedence first. Everything except the provisioned and persisted layers is the default .NET order.
 
 | # | Source | Set by |
 | --- | --- | --- |
 | 1 | Command-line arguments | `--MailboxSearch:SnippetsPerEmail=3` |
 | 2 | Environment variables | `MailboxSearch__SnippetsPerEmail=3` |
-| 3 | **Provisioned file**, when `ConfigurationSources:File` names one | A mounted file, a systemd drop-in |
-| 4 | **Provisioned directory**, when `ConfigurationSources:Directory` names one | A ConfigMap mounted as a volume |
-| 5 | User secrets, in the `Development` environment only | `dotnet user-secrets` |
-| 6 | `appsettings.{Environment}.json` | The image or the checkout |
-| 7 | `appsettings.json` | The image or the checkout |
+| 3 | User secrets, in the `Development` environment only | `dotnet user-secrets` |
+| 4 | **Root settings**, the persisted configuration document | The `settings_root` row in PostgreSQL |
+| 5 | **Provisioned file**, when `ConfigurationSources:File` names one | A mounted file, a systemd drop-in |
+| 6 | **Provisioned directory**, when `ConfigurationSources:Directory` names one | A ConfigMap mounted as a volume |
+| 7 | `appsettings.{Environment}.json` | The image or the checkout |
+| 8 | `appsettings.json` | The image or the checkout |
 
-The provisioned layer sits below the environment block on purpose. A file states what the deployment configured and an environment variable overrides it, which is the direction an operator can act on: injecting one variable changes one setting for one pod without editing a shared object. Layering the files on top instead would let a ConfigMap that nobody remembered to update silently beat a value injected beside it, and nothing about the running process would show which of the two won.
+Everything MailFathom adds sits below the three sources an operator reaches for when a deployment is wrong. That direction is the one an operator can act on: injecting one variable changes one setting for one process without editing a shared object and without first reaching the database, which is what makes a bad persisted value repairable. Layering either of them on top instead would let a ConfigMap nobody remembered to update, or a row somebody wrote months ago, silently beat a value injected beside it, and nothing about the running process would show which of the two won.
 
 Within the provisioned layer, the single file wins over the directory, so a deployment that mounts a shared ConfigMap and then names one file of its own gets the specific value rather than an order decided by how the two happen to sort.
+
+The persisted layer sits above both of them, because it is the later decision: the files state what the deployment provisioned, and a persisted value is what was chosen against that afterwards.
 
 This order governs every MailFathom setting. A short list of platform variables sits outside it entirely — the OpenTelemetry exporter's `OTEL_*` family, the host's `ASPNETCORE_*` and `DOTNET_*` names, and `OPENSSL_CONF` — because each is read before this composition exists or by a library that never consults it. Writing one of them into a file or a command-line argument fails startup rather than being accepted and ignored; [environment-only settings](configuration-reference.md#environment-only-settings) is the list and the reasoning.
 
@@ -52,6 +57,38 @@ Both settings are **restart-required**. They decide which sources exist, which i
 
 An existing but empty directory is permitted and contributes nothing. A ConfigMap with no keys is a legitimate state during a rollout, and the startup record below reports the count so the case is visible rather than silent.
 
+## The persisted layer
+
+`settings_root` in PostgreSQL holds one row, and that row's `jsonb` document is this layer. It is read once while the host composes its configuration, flattened into ordinary colon-delimited keys by the framework's own JSON parser, and inserted at the position the table above gives. Nothing about it is a second configuration system: a persisted `MailboxSearch:SnippetsPerEmail` is the same key, bound by the same options class, validated by the same validator, and watched through the same reload token as one written into a file.
+
+**The document is sparse, and a key it does not carry is inherited rather than blank.** Persisting one setting therefore does not mean restating everything the deployment provisioned beside it. Objects compose by child key and array elements override by their own numeric index, which is the ordinary .NET provider behaviour and not a merge rule of this layer's own: a persisted value at index `1` replaces index `1`, and the indexes the document omits stay visible from the file underneath.
+
+**One read, not one query per setting.** The row is loaded as a single document snapshot, so reading a configuration property costs nothing at the database. A reload replaces that snapshot whole rather than re-reading per key.
+
+### What is never read from it
+
+Everything needed to open the database is read from the sources beneath this layer and never from the layer itself, because a persisted value for one of them could not be read without first reading it. That is the whole of the list:
+
+- `ConnectionStrings:mailfathom`, `Persistence:ConnectionString`, and `Persistence:Password` — where the database is and how to authenticate to it.
+- `Secrets:Interpretation` — how the secret reference carrying that credential is read.
+- `ConfigurationSources:Directory` and `ConfigurationSources:File` — which sources exist at all, which is settled before this one is composed.
+
+Secret material is not read from it either, and for a different reason: a secret-bearing setting holds a *reference* rather than material whichever source supplied it, so the persisted document carries the same references a file would and the material stays wherever [secret provisioning](secret-provisioning.md) puts it.
+
+### Startup, and a reload that fails
+
+**The host fails to start when this layer cannot be read.** A database that cannot be reached, a schema that does not carry the table, a row that is not there, and a document that is not a JSON object of configuration keys are one failure to the process: the layer between the deployment's files and the operator's overrides cannot say what it contributes, and starting anyway would serve whichever values the files beneath it happen to carry with nothing saying that a layer was missing. The failure carries error code `12003` and stops the process before any endpoint opens. A database that has not had this release's migrations applied is the ordinary cause, and the message says so; [the database schema](database-schema.md) states the order a deployment applies them in.
+
+Every start records the version it composed itself over, at `Information`:
+
+```
+Host MailFathom.Host composed its settings over persisted configuration version 4.
+```
+
+That number is the only record of which document the process actually read — the files are in the repository and the environment is in the manifest, and what the row held at that moment is otherwise unrecoverable from the running process.
+
+**A reload that fails keeps the version already in force.** A candidate that cannot be read leaves the deployment exactly as it was; one that reads but is not a configuration document is rejected *by version*, and the record names both the version that did not take and the version still serving. What never happens is a fall back to the files beneath this layer: those never carried the persisted values, so reverting to them would quietly change settings the deployment had already adopted.
+
 ## Failure and startup behavior
 
 A configured path that does not exist fails startup, naming the configuration key and the path:
@@ -77,6 +114,8 @@ Host MailFathom.Host layered 3 deployment-provisioned configuration files below 
 A `0` on a deployment that mounts a ConfigMap means the mount is empty or did not arrive where the key says it did.
 
 ## Reload
+
+This section is about the files. The persisted layer reloads on its own terms, which [the persisted layer](#the-persisted-layer) above states: it is republished when the document changes rather than watched, and nothing on the read path triggers it.
 
 What reloads is the **content of the files that existed when the host started**. Each of those gets a watched provider, so a setting group classified reloadable in [ADR 0002](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0002-configuration-reading-mapping-and-reload-boundary.md) picks up an edited ConfigMap key without a restart, through the same validated-snapshot path every other source uses. A candidate snapshot that fails validation is rejected and the last known good one stays active.
 

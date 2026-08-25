@@ -186,5 +186,29 @@ public sealed class ProvisionedConfigurationLayerTests
         Assert.Equal(2, insertionIndex);
     }
 
+    /// <summary>
+    /// The developer's secret store is one of the operator's overrides, so a provisioned file sits below it rather
+    /// than above. That is the direction the persisted settings layer is inserted into as well: it lands between these
+    /// files and that store.
+    /// </summary>
+    [Fact]
+    public void FindInsertionIndex_UserSecretsComposed_LandsBelowIt()
+    {
+        // Arrange
+        IReadOnlyList<IConfigurationSource> sources =
+        [
+            new JsonConfigurationSource { Path = "appsettings.json" },
+            new JsonConfigurationSource { Path = "appsettings.Development.json" },
+            new JsonConfigurationSource { Path = "secrets.json" },
+            new EnvironmentVariablesConfigurationSource(),
+        ];
+
+        // Act
+        var insertionIndex = ProvisionedConfigurationLayer.FindInsertionIndex(sources);
+
+        // Assert
+        Assert.Equal(2, insertionIndex);
+    }
+
     private static string MountedFile(string fileName) => Path.Combine(MountPath, fileName);
 }

@@ -91,6 +91,16 @@ internal sealed partial class BootstrapLogger : IDisposable
     public void RecordProvisionedConfigurationFiles(int fileCount) =>
         this.LogProvisionedConfigurationFiles(this.settings.ServiceName, fileCount);
 
+    /// <summary>Reports the version of the persisted configuration the host composed itself from.</summary>
+    /// <param name="version">The version of the document read from the persisted configuration layer.</param>
+    /// <remarks>
+    /// The version is what makes the persisted half of a deployment's configuration reproducible: the files are in the
+    /// repository and the environment is in the manifest, and this number is the only record of which document the
+    /// process actually read. It carries no key and no value, because the layer holds settings rather than diagnostics.
+    /// </remarks>
+    public void RecordRootSettingsVersion(long version) =>
+        this.LogRootSettingsVersion(this.settings.ServiceName, version);
+
     /// <summary>Reports that the host process is ending because of an exception that escaped composition or the run.</summary>
     /// <param name="exception">The exception that ended the process.</param>
     public void RecordHostFailed(Exception exception) => this.LogHostFailed(exception, this.settings.ServiceName);
@@ -162,6 +172,11 @@ internal sealed partial class BootstrapLogger : IDisposable
         Level = LogLevel.Information,
         Message = "Host {ServiceName} layered {FileCount} deployment-provisioned configuration files below the environment.")]
     private partial void LogProvisionedConfigurationFiles(string serviceName, int fileCount);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Host {ServiceName} composed its settings over persisted configuration version {Version}.")]
+    private partial void LogRootSettingsVersion(string serviceName, long version);
 
     [LoggerMessage(
         Level = LogLevel.Critical,

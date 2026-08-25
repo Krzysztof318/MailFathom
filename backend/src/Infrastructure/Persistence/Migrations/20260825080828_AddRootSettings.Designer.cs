@@ -3,6 +3,7 @@ using System;
 using MailFathom.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace MailFathom.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(MailFathomDbContext))]
-    partial class MailFathomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260825080828_AddRootSettings")]
+    partial class AddRootSettings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -65,16 +68,13 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(320)
                         .HasColumnType("character varying(320)");
 
-                    b.Property<Guid>("OwnerId")
-                        .HasColumnType("uuid");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("ContactId", "OwnerId");
+                    b.HasIndex("ContactId");
 
-                    b.HasIndex("OwnerId", "NormalizedAddress")
+                    b.HasIndex("NormalizedAddress")
                         .IsUnique()
-                        .HasDatabaseName("ix_contact_addresses_owner_normalized_address");
+                        .HasDatabaseName("ix_contact_addresses_normalized_address");
 
                     b.ToTable("contact_addresses", (string)null);
                 });
@@ -113,9 +113,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
-                    b.Property<Guid>("OwnerId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("PreferredNormalizedAddress")
                         .IsRequired()
                         .HasMaxLength(320)
@@ -126,59 +123,10 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OwnerId", "DisplayNameSortKey", "Id")
-                        .HasDatabaseName("ix_contacts_owner_display_name_sort_key_id");
+                    b.HasIndex("DisplayNameSortKey", "Id")
+                        .HasDatabaseName("ix_contacts_display_name_sort_key_id");
 
                     b.ToTable("contacts", (string)null);
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.ContentMoveRunEntity", b =>
-                {
-                    b.Property<string>("Name")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<uint>("ConcurrencyVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
-                    b.Property<long>("CopiedPayloadCount")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTimeOffset?>("EndedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<long>("FailedPayloadCount")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<long>("MovedByteCount")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTimeOffset>("RequestedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("ResumeAfter")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("State")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.HasKey("Name")
-                        .HasName("pk_content_move_runs");
-
-                    b.ToTable("content_move_runs", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_content_move_runs_singleton", "\"Name\" = 'stored-content'");
-                        });
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.EmailChunkEntity", b =>
@@ -296,9 +244,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
-                    b.Property<DateTimeOffset?>("ObjectVerifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<byte[]>("RawMime")
                         .HasColumnType("bytea");
 
@@ -318,7 +263,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.ToTable("email_message_contents", null, t =>
                         {
-                            t.HasCheckConstraint("ck_email_message_contents_backend_payload", "(\"Backend\" = 'Database' AND \"RawMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL AND \"ObjectVerifiedAt\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL\n    AND (\"RawMime\" IS NULL OR \"ObjectVerifiedAt\" IS NOT NULL))");
+                            t.HasCheckConstraint("ck_email_message_contents_backend_payload", "(\"Backend\" = 'Database' AND \"RawMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL AND \"RawMime\" IS NULL)");
                         });
                 });
 
@@ -809,9 +754,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
-                    b.Property<DateTimeOffset?>("ObjectVerifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<byte[]>("RawMime")
                         .HasColumnType("bytea");
 
@@ -832,7 +774,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.ToTable("mail_draft_contents", null, t =>
                         {
-                            t.HasCheckConstraint("ck_mail_draft_contents_backend_payload", "(\"Backend\" = 'Database' AND \"RawMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL AND \"ObjectVerifiedAt\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL\n    AND (\"RawMime\" IS NULL OR \"ObjectVerifiedAt\" IS NOT NULL))");
+                            t.HasCheckConstraint("ck_mail_draft_contents_backend_payload", "(\"Backend\" = 'Database' AND \"RawMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL AND \"RawMime\" IS NULL)");
                         });
                 });
 
@@ -1513,9 +1455,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
-                    b.Property<DateTimeOffset?>("ObjectVerifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<byte[]>("RawMime")
                         .HasColumnType("bytea");
 
@@ -1536,7 +1475,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.ToTable("outgoing_email_contents", null, t =>
                         {
-                            t.HasCheckConstraint("ck_outgoing_email_contents_backend_payload", "(\"Backend\" = 'Database' AND \"RawMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL AND \"ObjectVerifiedAt\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL\n    AND (\"RawMime\" IS NULL OR \"ObjectVerifiedAt\" IS NOT NULL))");
+                            t.HasCheckConstraint("ck_outgoing_email_contents_backend_payload", "(\"Backend\" = 'Database' AND \"RawMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL AND \"RawMime\" IS NULL)");
                         });
                 });
 
@@ -1804,9 +1743,6 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
-                    b.Property<DateTimeOffset?>("ObjectVerifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<byte[]>("Sha256Hash")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1824,7 +1760,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.ToTable("recurring_send_drafts", null, t =>
                         {
-                            t.HasCheckConstraint("ck_recurring_send_drafts_backend_payload", "(\"Backend\" = 'Database' AND \"DraftMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL AND \"ObjectVerifiedAt\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL\n    AND (\"DraftMime\" IS NULL OR \"ObjectVerifiedAt\" IS NOT NULL))");
+                            t.HasCheckConstraint("ck_recurring_send_drafts_backend_payload", "(\"Backend\" = 'Database' AND \"DraftMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL AND \"DraftMime\" IS NULL)");
                         });
                 });
 
@@ -2344,17 +2280,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.ContactEntity", null)
                         .WithMany("Addresses")
-                        .HasForeignKey("ContactId", "OwnerId")
-                        .HasPrincipalKey("Id", "OwnerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.ContactEntity", b =>
-                {
-                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.OwnerAccountEntity", null)
-                        .WithMany()
-                        .HasForeignKey("OwnerId")
+                        .HasForeignKey("ContactId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
