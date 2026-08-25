@@ -39,8 +39,8 @@ most likely to be lost by accident:
   `VisualStateManager` breakpoints or the Toolkit's responsive markup, never by branching on the running platform.
 - Content stays clear of a notch, a rounded corner, a system bar, and a soft keyboard. `utu:SafeArea.Insets` is what
   says so; a hard-coded margin is what breaks on the next device.
-- Nothing blocks the thread that draws. A `.Result`, a `.Wait()`, or a `Thread.Sleep` in a handler is a frozen window
-  on desktop and a frozen tab in the browser, and `.config/BannedSymbols.txt` refuses the last of those outright.
+- Nothing the person waits on is allowed to look like nothing happening. That is the obligation with the most ways to
+  fail, so it has a section of its own below rather than a line here.
 
 ## MVUX is the state model
 
@@ -63,6 +63,61 @@ framework beside it.
   what makes a loading state and an error state the default rather than something each screen remembers to add.
 - **Awaiting a feed inside a model is normal** (`var value = await SomeState;`); awaiting one inside a view is a sign
   the work belongs in the model.
+
+## Nothing waits in silence, and nothing waits without a way out
+
+A screen that has asked for something and says nothing about it is indistinguishable from one that has stopped working,
+and this is the application where that is hardest to avoid: the mailbox it reads is on somebody else's machine and so is
+the model that leads a person through it, so nearly everything worth showing arrives over a network whose latency
+nothing here controls. Waiting is therefore something a screen *renders* rather than something it *does* — a state with
+a name, a place on the screen, and a way out of it — and it is designed in when the screen is. A loading state added
+after somebody reported the application looking frozen is this rule having been missed rather than followed late.
+
+- **Nothing blocks the thread that draws.** A `.Result`, a `.Wait()`, a `GetAwaiter().GetResult()`, or a `Thread.Sleep`
+  in a handler is a frozen window on desktop and a frozen tab in the browser; `.config/BannedSymbols.txt` refuses the
+  last of those outright and the rest are refused by reading. A long synchronous loop is the same defect with no name to
+  grep for, and the browser head is where it is worst — the section on awaiting below reads the same fact the other way
+  round: that head is single-threaded, so there is no other thread for the work to be on and `ConfigureAwait(false)`
+  moves nothing off it. Work that cannot be broken into awaited steps belongs on the service rather than in a head.
+- **Below about a second, the control that was pressed is the whole of the feedback**, and MVUX gives that away for
+  nothing: a generated command is an `IAsyncCommand`, and the control bound to it is disabled for as long as the method
+  runs, so a press being acted on never reads as a press that was ignored.
+- **A pointer head may add a busy cursor; no head may rely on one.** `ProtectedCursor` is the property that changes it,
+  it is `protected` — so it costs a `UIElement` subclass — it has to be set on the thread that draws, and Uno honours it
+  on WebAssembly, macOS, and Skia desktop. A touch head has no pointer to change at all, and the mobile heads here are
+  absent rather than impossible, so a wait whose only statement is the cursor is a wait that says nothing on a phone.
+- **Past that, the screen shows progress where the work is**, and which control says so follows what is being waited for
+  rather than how long it takes. A screen waiting for what it displays says so through `FeedView`'s `ProgressTemplate`,
+  because a feed already carries the progress axis and `SettingsPage` and `WorkspacePage` already render it. An action
+  somebody took says so through the Toolkit's `LoadingView`, whose `Source` takes the generated command with no adapter
+  in between — `IAsyncCommand` implements `Uno.Toolkit.ILoadable`, so binding the command is the whole of the wiring —
+  with `CompositeLoadableSource` where one region is fed by several commands, and `utu:ProgressExtensions.IsActive`
+  where one answer drives every progress control in a subtree.
+- **A command that carries a `CommandParameter` is the exception, and a silent one.** Such a command runs in parallel
+  for different parameter values, and its `IsExecuting` stays `false` throughout — so a per-item action puts its
+  progress on the item it belongs to, and a `LoadingView` over the list would show nothing at all.
+- **A wait that outgrows what it was expected to take escalates rather than going quiet.** How long something takes is a
+  fact about somebody else's machine, so nothing is classified as short and left there: the progress surface is raised
+  by the wait passing the threshold rather than by the operation having been thought slow, which is also what keeps a
+  fast answer from flashing a spinner on its way past. Escalating arrives at the same place a long operation starts —
+  that surface, and the cancellation below it — rather than at a second, quieter state invented for the case.
+- **Cancellation is offered wherever the work can be abandoned, and the framework's token is not that offer.** MVUX
+  hands a model method one `CancellationToken` and cancels it when the ViewModel is disposed, which is the screen going
+  away rather than a person changing their mind. A Cancel somebody can press is the model's own: a source linked to the
+  token it was handed, that source's token given to the work, and cancelling it exposed as an ordinary method the
+  generator turns into a command like any other. Every call `Client.Backend` makes over the wire takes a token and
+  honours it, so *this cannot be cancelled* is a claim to check in the code rather than a reason to leave the button
+  off.
+- **Preventing interaction is scoped to what must not be touched, and never achieved by freezing.** An overlay covers
+  the region whose controls would be wrong to press while the work runs — `WithheldOverlay` is the precedent for the
+  scope rather than for the look, since it stands over a space for good and so is opaque, where a wait has to leave what
+  it covers legible — and the window around it goes on scrolling, resizing, redrawing, and answering the Cancel. A
+  `ContentDialog` opened in order to stop somebody interacting is what this refuses: it takes the whole window, it
+  carries no progress of its own, and it makes an application that is working look like one that is stuck. A dialog is
+  right when the *question* is modal, never when the *wait* is.
+
+What reads all of this at once is one question, asked of every `await` a screen starts: what does the person see while
+this runs, and what may they do about it. A screen with no answer for one of its awaits is not finished.
 
 ## XAML first
 
