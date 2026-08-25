@@ -37,7 +37,7 @@ public sealed class ObjectStorageContentReclamationTests
         var reclamation = ReclamationOver(objectStore, referenced: []);
 
         // Act
-        var run = await reclamation.ReclaimAsync(resumeFrom: null, TestContext.Current.CancellationToken);
+        var run = await reclamation.ReclaimAsync(resumeFrom: null, TimeSpan.Zero, TestContext.Current.CancellationToken);
 
         // Assert
         await objectStore.Received(1).DeleteAsync("mailfathom/incoming/orphan", Arg.Any<CancellationToken>());
@@ -56,7 +56,7 @@ public sealed class ObjectStorageContentReclamationTests
         var reclamation = ReclamationOver(objectStore, referenced: ["mailfathom/incoming/stored"]);
 
         // Act
-        var run = await reclamation.ReclaimAsync(resumeFrom: null, TestContext.Current.CancellationToken);
+        var run = await reclamation.ReclaimAsync(resumeFrom: null, TimeSpan.Zero, TestContext.Current.CancellationToken);
 
         // Assert
         await objectStore.DidNotReceive().DeleteAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -76,7 +76,7 @@ public sealed class ObjectStorageContentReclamationTests
         var reclamation = ReclamationOver(objectStore, references);
 
         // Act
-        var run = await reclamation.ReclaimAsync(resumeFrom: null, TestContext.Current.CancellationToken);
+        var run = await reclamation.ReclaimAsync(resumeFrom: null, TimeSpan.Zero, TestContext.Current.CancellationToken);
 
         // Assert
         await objectStore.DidNotReceive().DeleteAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -104,7 +104,7 @@ public sealed class ObjectStorageContentReclamationTests
             ContentObjectReclamationBounds.Create(TimeSpan.FromHours(24), maximumObjectsPerRun: 1000));
 
         // Act
-        var run = await reclamation.ReclaimAsync(resumeFrom: null, TestContext.Current.CancellationToken);
+        var run = await reclamation.ReclaimAsync(resumeFrom: null, TimeSpan.Zero, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal("next-page", run.ResumeFrom);
@@ -121,7 +121,7 @@ public sealed class ObjectStorageContentReclamationTests
         var reclamation = ReclamationOver(objectStore, referenced: []);
 
         // Act
-        await reclamation.ReclaimAsync("where-the-last-one-stopped", TestContext.Current.CancellationToken);
+        await reclamation.ReclaimAsync("where-the-last-one-stopped", TimeSpan.Zero, TestContext.Current.CancellationToken);
 
         // Assert
         await objectStore.Received(1).ListAsync(
@@ -151,7 +151,7 @@ public sealed class ObjectStorageContentReclamationTests
         var reclamation = ReclamationOver(objectStore, referenced: []);
 
         // Act
-        var run = await reclamation.ReclaimAsync(resumeFrom: null, stopping.Token);
+        var run = await reclamation.ReclaimAsync(resumeFrom: null, TimeSpan.Zero, stopping.Token);
 
         // Assert
         Assert.Equal("next-page", run.ResumeFrom);
@@ -173,7 +173,7 @@ public sealed class ObjectStorageContentReclamationTests
         var reclamation = ReclamationOver(objectStore, referenced: []);
 
         // Act
-        var run = await reclamation.ReclaimAsync(resumeFrom: null, TestContext.Current.CancellationToken);
+        var run = await reclamation.ReclaimAsync(resumeFrom: null, TimeSpan.Zero, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(1, run.FailedCount);
@@ -193,10 +193,28 @@ public sealed class ObjectStorageContentReclamationTests
         var reclamation = ReclamationOver(objectStore, referenced: []);
 
         // Act
-        var run = await reclamation.ReclaimAsync(resumeFrom: null, TestContext.Current.CancellationToken);
+        var run = await reclamation.ReclaimAsync(resumeFrom: null, TimeSpan.Zero, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(TimeSpan.FromDays(9), run.OldestOrphanAge);
+    }
+
+    /// <summary>A bucket larger than one run is swept by a chain of them, so the figure has to survive the hand-on.</summary>
+    [Fact]
+    public async Task ReclaimAsync_ARunResumingWithAnOlderOrphanThanItsOwnPageHolds_ReportsTheOneItWasHanded()
+    {
+        // Arrange
+        var objectStore = ObjectStoreListing(Aged("mailfathom/incoming/recent", TimeSpan.FromDays(2), byteLength: 100));
+        var reclamation = ReclamationOver(objectStore, referenced: []);
+
+        // Act
+        var run = await reclamation.ReclaimAsync(
+            resumeFrom: "mailfathom/incoming/half-way",
+            TimeSpan.FromDays(11),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(TimeSpan.FromDays(11), run.OldestOrphanAge);
     }
 
     /// <summary>Sweeping the same object twice is what makes two overlapping runs safe, and removal answers either way.</summary>
@@ -208,8 +226,8 @@ public sealed class ObjectStorageContentReclamationTests
         var reclamation = ReclamationOver(objectStore, referenced: []);
 
         // Act
-        await reclamation.ReclaimAsync(resumeFrom: null, TestContext.Current.CancellationToken);
-        await reclamation.ReclaimAsync(resumeFrom: null, TestContext.Current.CancellationToken);
+        await reclamation.ReclaimAsync(resumeFrom: null, TimeSpan.Zero, TestContext.Current.CancellationToken);
+        await reclamation.ReclaimAsync(resumeFrom: null, TimeSpan.Zero, TestContext.Current.CancellationToken);
 
         // Assert
         await objectStore.Received(2).DeleteAsync("mailfathom/incoming/orphan", Arg.Any<CancellationToken>());
@@ -254,7 +272,7 @@ public sealed class ObjectStorageContentReclamationTests
         var reclamation = ReclamationOver(objectStore, references);
 
         // Act
-        var run = await reclamation.ReclaimAsync(resumeFrom: null, TestContext.Current.CancellationToken);
+        var run = await reclamation.ReclaimAsync(resumeFrom: null, TimeSpan.Zero, TestContext.Current.CancellationToken);
 
         // Assert
         await objectStore.DidNotReceive().DeleteAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());

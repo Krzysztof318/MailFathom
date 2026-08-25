@@ -580,10 +580,12 @@ size; a deletion that follows an erasure knows the key and not the length. Each 
 so an interval that reclaimed nothing publishes nothing rather than a stream of zeroes.
 
 **`mailfathom.content_object_reclamation.oldest_orphan.age` is the number that says whether reclamation is keeping
-up.** It is a gauge in seconds, read from the most recent sweep that reached the end of the listing — a sweep that
-stopped part-way saw part of the bucket, and the oldest orphan in part of one says nothing about the whole. A value
-that stays near the configured age floor is a bucket in step with the database; a value that grows across intervals is
-a backlog, and the interval or the object ceiling is what to move.
+up.** It is a gauge in seconds, read from the most recent sweep that reached the end of its listing — a run that
+stopped part-way saw part of the bucket, and the oldest orphan in part of one says nothing about the whole. A bucket
+too large for one run is swept by a chain of them, and each hands what it met on to the next alongside its listing
+position, so the figure covers the whole sweep rather than its last segment. A value that stays near the configured age
+floor is a bucket in step with the database; a value that grows across intervals is a backlog, and the interval or the
+object ceiling is what to move.
 
 Nothing here carries an object key, a bucket, or any part of a payload. A key names one message, so what is published
 is counts, volumes, and MailFathom's own two words for the two mechanisms.

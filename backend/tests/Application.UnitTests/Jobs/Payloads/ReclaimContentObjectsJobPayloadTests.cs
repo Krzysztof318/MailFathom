@@ -18,7 +18,7 @@ public sealed class ReclaimContentObjectsJobPayloadTests
 {
     /// <summary>The first segment begins at the start of the listing and belongs to no chain yet.</summary>
     [Fact]
-    public void FromTheStart_TheSegmentASchedulDispatches_BeginsTheListingAndNamesNoSweep()
+    public void FromTheStart_TheSegmentAScheduleDispatches_BeginsTheListingAndNamesNoSweep()
     {
         // Act
         var payload = ReclaimContentObjectsJobPayload.FromTheStart();
@@ -38,7 +38,7 @@ public sealed class ReclaimContentObjectsJobPayloadTests
         var first = ReclaimContentObjectsJobPayload.FromTheStart();
 
         // Act
-        var second = first.ContinuingFrom("half-way");
+        var second = first.ContinuingFrom("half-way", TimeSpan.Zero);
 
         // Assert
         Assert.NotNull(second.SweepId);
@@ -51,10 +51,10 @@ public sealed class ReclaimContentObjectsJobPayloadTests
     public void ContinuingFrom_ALaterHandOn_StaysInTheSameSweepAndCountsOn()
     {
         // Arrange
-        var second = ReclaimContentObjectsJobPayload.FromTheStart().ContinuingFrom("half-way");
+        var second = ReclaimContentObjectsJobPayload.FromTheStart().ContinuingFrom("half-way", TimeSpan.Zero);
 
         // Act
-        var third = second.ContinuingFrom("further-on");
+        var third = second.ContinuingFrom("further-on", TimeSpan.Zero);
 
         // Assert
         Assert.Equal(second.SweepId, third.SweepId);
@@ -66,8 +66,8 @@ public sealed class ReclaimContentObjectsJobPayloadTests
     public void ToIdempotencyKey_TwoSegmentsOfOneSweep_ComposeDifferentIdentities()
     {
         // Arrange
-        var second = ReclaimContentObjectsJobPayload.FromTheStart().ContinuingFrom("half-way");
-        var third = second.ContinuingFrom("further-on");
+        var second = ReclaimContentObjectsJobPayload.FromTheStart().ContinuingFrom("half-way", TimeSpan.Zero);
+        var third = second.ContinuingFrom("further-on", TimeSpan.Zero);
 
         // Act
         var secondKey = second.ToIdempotencyKey();
@@ -83,7 +83,7 @@ public sealed class ReclaimContentObjectsJobPayloadTests
     public void ToIdempotencyKey_ASegmentResumingFromAPosition_CarriesNoPartOfThatPosition()
     {
         // Arrange
-        var segment = ReclaimContentObjectsJobPayload.FromTheStart().ContinuingFrom("mailfathom-incoming-recognizable");
+        var segment = ReclaimContentObjectsJobPayload.FromTheStart().ContinuingFrom("mailfathom-incoming-recognizable", TimeSpan.Zero);
 
         // Act
         var key = segment.ToIdempotencyKey();
@@ -94,11 +94,31 @@ public sealed class ReclaimContentObjectsJobPayloadTests
 
     /// <summary>The first segment is enqueued by the schedule under the occasion's own key, so it composes none.</summary>
     [Fact]
-    public void ToIdempotencyKey_TheSegmentASchedulDispatches_IsRefused() => Assert.Throws<InvalidOperationException>(
-        () => ReclaimContentObjectsJobPayload.FromTheStart().ToIdempotencyKey());
+    public void ToIdempotencyKey_TheSegmentAScheduleDispatches_IsRefused() =>
+
+        // Act, Assert
+        Assert.Throws<InvalidOperationException>(
+            () => ReclaimContentObjectsJobPayload.FromTheStart().ToIdempotencyKey());
 
     /// <summary>A segment that resumes nowhere is the first one, which nothing hands on to.</summary>
     [Fact]
-    public void ContinuingFrom_NoPosition_IsRefused() => Assert.Throws<ArgumentException>(
-        () => ReclaimContentObjectsJobPayload.FromTheStart().ContinuingFrom("  "));
+    public void ContinuingFrom_NoPosition_IsRefused() =>
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(
+            () => ReclaimContentObjectsJobPayload.FromTheStart().ContinuingFrom("  ", TimeSpan.Zero));
+
+    /// <summary>What the earlier segments met travels with the position, or the gauge would describe the last one alone.</summary>
+    [Fact]
+    public void ContinuingFrom_AHandOn_CarriesTheOldestOrphanTheSweepHasMet()
+    {
+        // Arrange
+        var first = ReclaimContentObjectsJobPayload.FromTheStart();
+
+        // Act
+        var second = first.ContinuingFrom("half-way", TimeSpan.FromDays(9));
+
+        // Assert
+        Assert.Equal(TimeSpan.FromDays(9), second.OldestOrphanAge);
+    }
 }

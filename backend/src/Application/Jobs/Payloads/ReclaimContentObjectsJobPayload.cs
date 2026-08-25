@@ -35,6 +35,15 @@ public sealed record ReclaimContentObjectsJobPayload : IJobPayload
     /// <summary>Gets the position in the listing this segment begins at, or <see langword="null" /> to begin at its start.</summary>
     public string? ResumeFrom { get; init; }
 
+    /// <summary>Gets the age of the oldest orphan the segments before this one met, zero for the segment that begins a sweep.</summary>
+    /// <remarks>
+    /// Carried for the same reason <see cref="ResumeFrom" /> is. The gauge that says how far behind reclamation has
+    /// fallen is written by the segment that reaches the end of the listing, and it can only speak for the whole bucket
+    /// if what the earlier segments met travels with the position they stopped at. A duration is not a reference to
+    /// anything in a message, so it costs the payload's privacy rule nothing.
+    /// </remarks>
+    public TimeSpan OldestOrphanAge { get; init; }
+
     /// <inheritdoc />
     [JsonIgnore]
     public JobType JobType => JobType.ReclaimContentObjects;
@@ -45,13 +54,14 @@ public sealed record ReclaimContentObjectsJobPayload : IJobPayload
 
     /// <summary>Describes the segment that carries whatever this one did not reach.</summary>
     /// <param name="resumeFrom">The position the run stopped at.</param>
+    /// <param name="oldestOrphanAge">The oldest orphan the sweep has met up to that position.</param>
     /// <returns>The payload of the next segment, belonging to the same sweep as this one.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="resumeFrom" /> is blank, because a segment that resumes nowhere is the first one.</exception>
     /// <remarks>
     /// The sweep identity is minted here when the chain began at a schedule, so a segment always belongs to a named
     /// sweep however it was reached. It is a version 7 identifier because a chain is read in the order it ran.
     /// </remarks>
-    public ReclaimContentObjectsJobPayload ContinuingFrom(string resumeFrom)
+    public ReclaimContentObjectsJobPayload ContinuingFrom(string resumeFrom, TimeSpan oldestOrphanAge)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(resumeFrom);
 
@@ -60,6 +70,7 @@ public sealed record ReclaimContentObjectsJobPayload : IJobPayload
             SweepId = this.SweepId ?? Guid.CreateVersion7().ToString(),
             Segment = this.Segment + 1,
             ResumeFrom = resumeFrom,
+            OldestOrphanAge = oldestOrphanAge,
         };
     }
 

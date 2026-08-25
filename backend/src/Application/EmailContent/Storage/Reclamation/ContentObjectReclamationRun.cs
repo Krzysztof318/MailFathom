@@ -19,7 +19,7 @@ namespace MailFathom.Application.EmailContent.Storage.Reclamation;
 /// </remarks>
 public sealed record ContentObjectReclamationRun
 {
-    /// <summary>Gets the run of a deployment that stores content in the database, which has no bucket to sweep.</summary>
+    /// <summary>Gets the run that has examined nothing, which is what a sweep accumulates onto as it reads its pages.</summary>
     public static ContentObjectReclamationRun None { get; } = new();
 
     /// <summary>Gets how many objects the run looked at, whether or not it removed them.</summary>

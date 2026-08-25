@@ -74,11 +74,15 @@ internal sealed partial class ObjectStorageContentReclamation : IContentObjectRe
     /// <inheritdoc />
     public async Task<ContentObjectReclamationRun> ReclaimAsync(
         string? resumeFrom,
+        TimeSpan oldestOrphanAgeSoFar,
         CancellationToken cancellationToken)
     {
         var reclaimableBefore = this.timeProvider.GetUtcNow() - this.bounds.MinimumObjectAge;
         var continuationToken = resumeFrom;
-        var run = ContentObjectReclamationRun.None;
+
+        // Seeded from what the sweep has already met rather than from zero, so the run that finishes the listing
+        // reports the oldest orphan of the whole bucket rather than of the pages after its own resume point.
+        var run = ContentObjectReclamationRun.None with { OldestOrphanAge = oldestOrphanAgeSoFar };
 
         do
         {

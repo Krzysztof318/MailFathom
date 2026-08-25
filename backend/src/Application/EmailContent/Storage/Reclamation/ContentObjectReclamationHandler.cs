@@ -68,14 +68,14 @@ public sealed class ContentObjectReclamationHandler : IJobHandler
             return;
         }
 
-        var run = await this.reclamation.ReclaimAsync(named.ResumeFrom, cancellationToken);
+        var run = await this.reclamation.ReclaimAsync(named.ResumeFrom, named.OldestOrphanAge, cancellationToken);
 
         if (run.ResumeFrom is not { } resumeFrom)
         {
             return;
         }
 
-        var next = named.ContinuingFrom(resumeFrom);
+        var next = named.ContinuingFrom(resumeFrom, run.OldestOrphanAge);
 
         // Outside the attempt's own cancellation, for the reason a re-derivation hands on outside it: the one moment
         // the rest of a sweep most needs to be written down is the shutdown that stopped it, and an enqueue cancelled

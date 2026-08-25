@@ -18,8 +18,9 @@ namespace MailFathom.Infrastructure.Observability;
 /// </para>
 /// <para>
 /// The oldest orphan is a gauge rather than a counter because it is the one number that says whether reclamation is
-/// keeping up. It is read from the most recent sweep that reached the end of the listing, so a value that grows across
-/// intervals is a backlog and a value that stays near the age floor is a bucket in step with the database.
+/// keeping up. It is read from the most recent sweep that reached the end of its listing, however many runs that took,
+/// so a value that grows across intervals is a backlog and a value that stays near the age floor is a bucket in step
+/// with the database.
 /// </para>
 /// <para>
 /// <b>Nothing here carries an object key, a bucket, or any part of a payload.</b> A key names one message, so what is
@@ -81,8 +82,10 @@ internal sealed class ContentObjectReclamationTelemetry
     /// <summary>Records how old the oldest object nothing pointed at was when a sweep reached the end of the listing.</summary>
     /// <param name="age">The age of the oldest orphan the sweep met, which is zero when it met none.</param>
     /// <remarks>
-    /// Written only by a sweep that finished its listing, because a sweep that stopped part-way saw part of the bucket
-    /// and the oldest orphan in a part of it says nothing about the whole.
+    /// Written only by the run that reached the end of the listing, because a run that stopped part-way saw part of the
+    /// bucket and the oldest orphan in a part of it says nothing about the whole. Where a bucket took a chain of runs to
+    /// sweep, that run reports what the whole chain met: each segment hands the age it reached on to the next alongside
+    /// the position, so the figure covers the sweep rather than the last segment of it.
     /// </remarks>
     public void RecordOldestOrphanAge(TimeSpan age) =>
         Volatile.Write(ref this.oldestOrphanAgeSeconds, Math.Max(age.TotalSeconds, 0));

@@ -5,6 +5,7 @@
 using MailFathom.Application.EmailContent.Storage.Reclamation;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Payloads;
+using MailFathom.Domain.Accounts;
 using NSubstitute;
 using Xunit;
 
@@ -25,7 +26,7 @@ public sealed class ContentObjectReclamationHandlerTests
         // Arrange
         var jobs = Substitute.For<IJobStore>();
         var reclamation = Substitute.For<IContentObjectReclamation>();
-        reclamation.ReclaimAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
+        reclamation.ReclaimAsync(Arg.Any<string?>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromResult(new ContentObjectReclamationRun { ReclaimedCount = 3 }));
 
         var handler = new ContentObjectReclamationHandler(jobs, reclamation);
@@ -46,7 +47,7 @@ public sealed class ContentObjectReclamationHandlerTests
         // Arrange
         var jobs = JobStoreAccepting();
         var reclamation = Substitute.For<IContentObjectReclamation>();
-        reclamation.ReclaimAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
+        reclamation.ReclaimAsync(Arg.Any<string?>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromResult(new ContentObjectReclamationRun { ResumeFrom = "next-page" }));
 
         var handler = new ContentObjectReclamationHandler(jobs, reclamation);
@@ -74,18 +75,75 @@ public sealed class ContentObjectReclamationHandlerTests
         // Arrange
         var jobs = JobStoreAccepting();
         var reclamation = Substitute.For<IContentObjectReclamation>();
-        reclamation.ReclaimAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
+        reclamation.ReclaimAsync(Arg.Any<string?>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromResult(ContentObjectReclamationRun.None));
 
         var handler = new ContentObjectReclamationHandler(jobs, reclamation);
 
         // Act
         await handler.RunAsync(
-            ReclaimContentObjectsJobPayload.FromTheStart().ContinuingFrom("half-way"),
+            ReclaimContentObjectsJobPayload.FromTheStart().ContinuingFrom("half-way", TimeSpan.Zero),
             TestContext.Current.CancellationToken);
 
         // Assert
-        await reclamation.Received(1).ReclaimAsync("half-way", Arg.Any<CancellationToken>());
+        await reclamation.Received(1).ReclaimAsync("half-way", Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>The oldest orphan a segment met travels on, or the gauge would describe the last segment of a sweep.</summary>
+    /// <remarks>
+    /// The figure is published by whichever run reaches the end of the listing, so a chain that dropped it at each
+    /// hand-on would report a bucket in step with the database whenever the old mail sat early in the listing.
+    /// </remarks>
+    [Fact]
+    public async Task RunAsync_ARunThatStoppedPartWay_HandsOnTheOldestOrphanItMet()
+    {
+        // Arrange
+        var jobs = JobStoreAccepting();
+        var reclamation = Substitute.For<IContentObjectReclamation>();
+        reclamation.ReclaimAsync(Arg.Any<string?>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(new ContentObjectReclamationRun
+            {
+                ResumeFrom = "next-page",
+                OldestOrphanAge = TimeSpan.FromDays(9),
+            }));
+
+        var handler = new ContentObjectReclamationHandler(jobs, reclamation);
+
+        // Act
+        await handler.RunAsync(
+            ReclaimContentObjectsJobPayload.FromTheStart(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await jobs.Received(1).EnqueueAsync(
+            Arg.Is<JobEnqueueRequest>(request =>
+                request != null
+                && ((ReclaimContentObjectsJobPayload)request.Payload).OldestOrphanAge == TimeSpan.FromDays(9)),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A run begins from what its own segment carries, so a chain measures the sweep rather than its tail.</summary>
+    [Fact]
+    public async Task RunAsync_ASegmentCarryingAnOldestOrphan_ResumesTheSweepWithIt()
+    {
+        // Arrange
+        var jobs = JobStoreAccepting();
+        var reclamation = Substitute.For<IContentObjectReclamation>();
+        reclamation.ReclaimAsync(Arg.Any<string?>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(ContentObjectReclamationRun.None));
+
+        var handler = new ContentObjectReclamationHandler(jobs, reclamation);
+
+        // Act
+        await handler.RunAsync(
+            ReclaimContentObjectsJobPayload.FromTheStart().ContinuingFrom("half-way", TimeSpan.FromDays(9)),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await reclamation.Received(1).ReclaimAsync(
+            "half-way",
+            TimeSpan.FromDays(9),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -120,9 +178,7 @@ public sealed class ContentObjectReclamationHandlerTests
         // Act, Assert
         await Assert.ThrowsAsync<ArgumentException>(
             () => handler.RunAsync(
-                RederiveStoredMailJobPayload.For(
-                    Domain.Accounts.MailAccountId.Create("work"),
-                    folderAlias: null),
+                RederiveStoredMailJobPayload.For(MailAccountId.Create("work"), folderAlias: null),
                 TestContext.Current.CancellationToken));
     }
 

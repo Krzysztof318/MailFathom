@@ -34,12 +34,25 @@ public interface IContentObjectReclamation
 {
     /// <summary>Reclaims what one bounded run reaches, beginning where the previous one stopped.</summary>
     /// <param name="resumeFrom">The position a previous run answered with, or <see langword="null" /> to begin the listing.</param>
+    /// <param name="oldestOrphanAgeSoFar">The oldest orphan the earlier runs of this sweep met, or <see cref="TimeSpan.Zero" /> to begin one.</param>
     /// <param name="cancellationToken">Ends the run between pages, leaving the rest to the run after it.</param>
     /// <returns>What the run examined, freed, and left behind.</returns>
     /// <remarks>
+    /// <para>
     /// Cancellation ends the run rather than raising, because being stopped is how an ordinary run ends: the executor
     /// cancels an attempt at its execution timeout and at shutdown, and neither says the work failed. What the run owes
     /// afterwards is the position the next one resumes from, which it cannot state by throwing.
+    /// </para>
+    /// <para>
+    /// <paramref name="oldestOrphanAgeSoFar" /> is carried in for the same reason the position is: a bucket larger than
+    /// one run is swept by a chain of them, and the run that finishes the listing is the one that publishes how far
+    /// behind reclamation has fallen. Seeding it from zero on every run would make that figure the oldest orphan met
+    /// since the last resume point rather than since the sweep began, which reads as a bucket in step with the database
+    /// whenever the old mail is early in the listing.
+    /// </para>
     /// </remarks>
-    Task<ContentObjectReclamationRun> ReclaimAsync(string? resumeFrom, CancellationToken cancellationToken);
+    Task<ContentObjectReclamationRun> ReclaimAsync(
+        string? resumeFrom,
+        TimeSpan oldestOrphanAgeSoFar,
+        CancellationToken cancellationToken);
 }

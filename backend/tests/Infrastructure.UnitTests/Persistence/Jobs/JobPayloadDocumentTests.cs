@@ -135,7 +135,7 @@ public sealed class JobPayloadDocumentTests
     public void Serialize_ASweepSegment_WritesThePositionAndReadsItBackAsTheSameSegment()
     {
         // Arrange
-        var payload = ReclaimContentObjectsJobPayload.FromTheStart().ContinuingFrom("half-way");
+        var payload = ReclaimContentObjectsJobPayload.FromTheStart().ContinuingFrom("half-way", TimeSpan.FromDays(9));
 
         // Act
         var document = JobPayloadDocument.Serialize(payload);
