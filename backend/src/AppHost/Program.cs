@@ -183,29 +183,45 @@ if (runsIntegrationTests)
     // a substituted client proves only that MailFathom composed the request it meant to. An ordinary container
     // resource under the ephemeral prefix rather than a fixture of its own.
     //
-    // What it is not is a production object store, and the difference is worth stating rather than glossing: this
-    // image serves the S3 API and stores what it is given, and it is what the whole ecosystem tests against. It is
-    // permissively licensed, which every store that would have been the more faithful choice here is not — and a
-    // storage engine's durability is not a claim MailFathom's own suite could establish anyway. What it settles is the
-    // exchange: the signed request, the conditional write, the digest the endpoint agrees it received, and the bytes.
+    // Silo rather than a test double, and the difference is the whole point of the resource: a mock accepts the
+    // requests it was written to accept, so what it proves is that MailFathom composed the request it meant to. Silo
+    // is a maintained fork of the open-source MinIO server, keeping one release line alive after upstream ended
+    // community distribution, and it is a server an operator can actually deploy — so a request it rejects is a defect
+    // MailFathom would have shipped against every vendor. What it settles is the exchange: the signed request,
+    // path-style addressing against a custom endpoint, the conditional write §2 of ADR 0017 rests on, the digest the
+    // endpoint agrees it received, the listing reclamation pages through, and the bytes.
+    //
+    // It is AGPL-3.0-or-later, which the acceptance policy in `THIRD_PARTY_LICENSES.md` places behind the owner's
+    // explicit approval; issue #1131 is that approval, and the register carries the reading it was granted under — a
+    // separate process reached over the network, pulled from its own registry, with nothing vendored, linked, or
+    // redistributed here.
+    //
+    // The credential below is the root credential the server is initialized with rather than a value it ignores, so
+    // the suite's requests are signed and checked rather than merely well formed.
     //
     // No volume, unlike PostgreSQL: nothing here outlives a run, and an endpoint that kept objects between runs would
-    // let a test read one an earlier run wrote. The bucket is created by the fixture, because the image ships none and
-    // creating one is a request the S3 API already answers.
+    // let a test read one an earlier run wrote. The bucket is created by the fixture, because the server ships none
+    // and creating one is a request the S3 API already answers.
     builder
         .AddContainer(
             OrchestrationContract.ObjectStorageResourceName,
-            "docker.io/adobe/s3mock",
-            "5.2.0")
+            "docker.io/pgsty/silo",
+            "RELEASE.2026-08-06T00-00-00Z")
         .WithContainerName($"{ephemeralResourceNamePrefix}-object-storage")
+        .WithEnvironment("MINIO_ROOT_USER", OrchestrationContract.ObjectStorageAccessKey)
+        .WithEnvironment("MINIO_ROOT_PASSWORD", OrchestrationContract.ObjectStorageSecretKey)
+        // The server's own start command, which every MinIO-derived image takes as arguments rather than as
+        // configuration. One directory inside the container, because a single-node single-drive pool is the topology a
+        // run needs and the only one a container with no volume could keep anything in.
+        .WithArgs("server", OrchestrationContract.ObjectStorageDataDirectory)
         .WithHttpEndpoint(
             targetPort: OrchestrationContract.ObjectStorageContainerPort,
             name: OrchestrationContract.ObjectStorageEndpointName)
-        // The route the image's own documentation names as its readiness probe. It has no health endpoint of its own
-        // under the default profile, and every S3 route is a request about a bucket — so what answers before any
-        // bucket exists is this one, and a 200 from it means the server is listening rather than starting.
+        // The server's own liveness route, which answers before any bucket exists — every other route on this port is
+        // a request about a bucket, and the root answers `403` to an unsigned one. A 200 from it means the pool is
+        // formatted and the API is serving rather than starting.
         .WithHttpHealthCheck(
-            "/favicon.ico",
+            "/minio/health/live",
             endpointName: OrchestrationContract.ObjectStorageEndpointName);
 
     builder

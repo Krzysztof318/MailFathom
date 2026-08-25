@@ -452,15 +452,23 @@ public static class OrchestrationContract
     /// </para>
     /// <para>
     /// The suite starts it because it is the one part of the object backend no substitute settles. What a substituted
-    /// client proves is that MailFathom composes the request it meant to; what an endpoint proves is that a payload
-    /// written under a minted key comes back byte for byte, that the digest the row carries is the one the endpoint
-    /// agreed it received, and that a second write under a second key leaves the first object where it was.
+    /// client proves is that MailFathom composes the request it meant to; what a real server proves is that the
+    /// requests MailFathom makes are ones an S3 implementation accepts — path-style addressing against a custom
+    /// endpoint, the conditional write, the checksum the endpoint verifies rather than echoes, the paged listing, and
+    /// the error shapes the failure classification reads.
     /// </para>
     /// </remarks>
     public const string ObjectStorageResourceName = "object-storage";
 
     /// <summary>The endpoint's own S3 port, which its image publishes and its entrypoint binds.</summary>
-    public const int ObjectStorageContainerPort = 9090;
+    public const int ObjectStorageContainerPort = 9000;
+
+    /// <summary>The directory inside the container the server keeps its one pool in.</summary>
+    /// <remarks>
+    /// Passed as an argument rather than as configuration, because that is how every MinIO-derived server takes it. No
+    /// volume is mounted over it: a run's objects are the container's and die with it.
+    /// </remarks>
+    public const string ObjectStorageDataDirectory = "/data";
 
     /// <summary>The endpoint the S3 API is answered on.</summary>
     public const string ObjectStorageEndpointName = "s3";
@@ -482,18 +490,22 @@ public static class OrchestrationContract
     /// </remarks>
     public const string ObjectStorageKeyPrefix = "mailfathom";
 
-    /// <summary>The access key the suite signs its requests to the endpoint with.</summary>
+    /// <summary>The access key the suite signs its requests to the endpoint with, and the root user the server is initialized as.</summary>
     /// <remarks>
     /// Stated rather than generated, for the reason <see cref="PostgresPassword" /> is: it reaches no deployment, and a
-    /// run that generated it would have to persist it somewhere to reach the same server twice. It is not a credential
-    /// to anything, and here it is less than one — the endpoint admits any well-formed signature rather than checking
-    /// this value, so what the constant buys is a client that composes and signs a real request rather than one handed
-    /// an empty credential. The server it reaches is a container this run started, on a port this run published.
+    /// run that generated it would have to persist it somewhere to reach the same server twice. Both sides of the run
+    /// read it here — the container is started with it as its root credential, and the client signs with it — so a
+    /// signature the server rejects is a defect in how MailFathom signs rather than a value the endpoint ignored. The
+    /// server it reaches is a container this run started, on a port this run published.
     /// </remarks>
     public const string ObjectStorageAccessKey = "mailfathom";
 
-    /// <summary>The secret key the suite reaches the endpoint with.</summary>
-    /// <remarks>Stated rather than generated, for the reason <see cref="ObjectStorageAccessKey" /> is.</remarks>
+    /// <summary>The secret key the suite signs its requests with, and the root password the server is initialized with.</summary>
+    /// <remarks>
+    /// Stated rather than generated, for the reason <see cref="ObjectStorageAccessKey" /> is, and carrying the same two
+    /// roles: the container is started with it and the client signs with it, so a value only one side was changed on
+    /// fails the run rather than being ignored.
+    /// </remarks>
     public const string ObjectStorageSecretKey = "mailfathom-integration-secret";
 
     /// <summary>The MailFathom account identifier every occurrence the integration-test topology stores belongs to.</summary>

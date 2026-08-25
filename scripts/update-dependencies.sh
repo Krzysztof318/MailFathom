@@ -406,13 +406,18 @@ collect_image_references() {
   # The AppHost states an image and its tag as consecutive quoted strings, whether that is `AddContainer(name, image,
   # tag)` on one line, the same call wrapped over three, or `WithImage(...)` followed by `WithImageTag(...)`. Keeping
   # the last image-shaped string seen and attaching the next tag-shaped or digest string to it reads all three.
+  #
+  # A tag starts with a digit or with `RELEASE.`, and the second form is here because a MinIO-derived server names its
+  # releases by timestamp rather than by version. Without it that image's tag falls through, the image reference is
+  # then overwritten by the next one in the file, and the pin disappears from this survey instead of being reported as
+  # unresolved — which is the one failure a reporting script must not have.
   if [[ -f 'backend/src/AppHost/Program.cs' ]]; then
     grep -oE '"[A-Za-z0-9][A-Za-z0-9./_-]*"' 'backend/src/AppHost/Program.cs' \
       | tr -d '"' \
       | awk '
           /^([a-z0-9-]+(\.[a-z0-9-]+)+\/)?[a-z0-9._-]+\/[a-z0-9._-]+$/ { image = $0; next }
           image != "" && length($0) == 64 && /^[a-f0-9]+$/ { print image "@sha256:" $0; image = ""; next }
-          image != "" && /^[0-9][A-Za-z0-9._-]*$/ { print image ":" $0; image = ""; next }
+          image != "" && /^([0-9]|RELEASE\.)[A-Za-z0-9._-]*$/ { print image ":" $0; image = ""; next }
         '
   fi
 }
@@ -481,6 +486,19 @@ resolve_image_latest() {
   tags="$(registry_tags "$repository")" || true
 
   [[ -n "${tags:-}" ]] || { printf 'unresolved'; return; }
+
+  # A tag with no leading version — `RELEASE.2026-08-06T00-00-00Z` and the rest of the MinIO-derived naming — has
+  # nothing for the version sort below to order. Every part of it that varies is a fixed-width run of digits, so the
+  # comparable tags are the ones matching the pinned tag with each such run wildcarded, and the newest of those is the
+  # last in plain lexicographic order. That is also what keeps `latest`, `distroless`, and the per-architecture tags
+  # out of the comparison.
+  if [[ "$tag" != [0-9]* ]]; then
+    tag_pattern="^$(printf '%s' "$tag" | sed -E 's#[][\\.*^$/+?(){}|]#\\&#g; s#[0-9]+#[0-9]+#g')\$"
+
+    printf '%s' "$(printf '%s\n' "$tags" | grep -E "$tag_pattern" | sort | tail -1)"
+
+    return
+  fi
 
   # The comparable tags are the ones shaped like the pinned one: its leading version becomes a wildcard and everything
   # after the first dash stays literal, so `0.8.6-pg18` is compared against other `pg18` builds rather than against a
