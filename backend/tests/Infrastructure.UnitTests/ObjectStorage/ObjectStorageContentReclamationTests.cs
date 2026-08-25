@@ -217,6 +217,41 @@ public sealed class ObjectStorageContentReclamationTests
         Assert.Equal(TimeSpan.FromDays(11), run.OldestOrphanAge);
     }
 
+    /// <summary>What a shutdown stopped the sweep from reaching is left behind, and it is counted as left behind.</summary>
+    /// <remarks>
+    /// A committed erasure counts its own remainder the same way, and the two report through one instrument split by
+    /// trigger. A sweep that stopped counting at the break would make that series read differently depending on which
+    /// of the two mechanisms the shutdown interrupted.
+    /// </remarks>
+    [Fact]
+    public async Task ReclaimAsync_ARunCancelledPartWayThroughAPage_CountsWhatItNeverReachedAsLeftBehind()
+    {
+        // Arrange
+        using CancellationTokenSource stopped = new();
+
+        var objectStore = ObjectStoreListing(
+            Aged("mailfathom/incoming/first", TimeSpan.FromDays(3), byteLength: 10),
+            Aged("mailfathom/incoming/second", TimeSpan.FromDays(3), byteLength: 20),
+            Aged("mailfathom/incoming/third", TimeSpan.FromDays(3), byteLength: 30));
+
+        objectStore.DeleteAsync("mailfathom/incoming/first", Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                stopped.Cancel();
+
+                return Task.CompletedTask;
+            });
+
+        var reclamation = ReclamationOver(objectStore, referenced: []);
+
+        // Act
+        var run = await reclamation.ReclaimAsync(resumeFrom: null, TimeSpan.Zero, stopped.Token);
+
+        // Assert
+        Assert.Equal(1, run.ReclaimedCount);
+        Assert.Equal(2, run.FailedCount);
+    }
+
     /// <summary>Sweeping the same object twice is what makes two overlapping runs safe, and removal answers either way.</summary>
     [Fact]
     public async Task ReclaimAsync_TheSameOrphanTwice_AsksForItsRemovalBothTimes()

@@ -573,7 +573,9 @@ counted, logged failure and an object nothing points at, which is exactly the st
 the same concurrency gate as ordinary work, so it yields rather than competing with mail arriving. Each run lists one
 page of keys beneath the configured prefix, asks the database which of that page a row still names, and removes the
 rest; a run that reaches its object ceiling hands the listing position to the next segment rather than starting over,
-and one interrupted mid-way costs at most the page it was on. Two runs overlapping cannot delete an object twice or
+and one interrupted mid-way costs at most the page it was on. The hand-on is the only record of where the walk reached,
+so a queue already at its configured depth ends the attempt rather than being read as a sweep that finished: the same
+segment is attempted again once the queue has drained. Two runs overlapping cannot delete an object twice or
 miss one — the job's lease admits one worker, and removing an object already gone is not an error.
 
 Three things bound what it may touch, and each is deliberate:

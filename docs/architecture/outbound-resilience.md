@@ -323,8 +323,9 @@ is the layer rather than something MailFathom re-implements:
   own, so the attempts are the pipeline's within one attempt and the queue's between them. `JobFailureClassifier` is
   where the second decision is made, beside `TransientFailureClassifier` because it reads the same failures — an
   `OutboundDependencyUnavailableException` is a dependency declining the work and therefore worth attempting again
-  later, a failure that declares its own repeatability is deferred to, and anything unrecognized is permanent, which is
-  the same refusal this classifier makes. [The stored schema](stored-email-schema.md#durable-background-work) holds
+  later, a job that could not enqueue the segment carrying the rest of its own work is a queue at its configured depth
+  and drains on its own, a failure that declares its own repeatability is deferred to, and anything unrecognized is
+  permanent, which is the same refusal this classifier makes. [The stored schema](stored-email-schema.md#durable-background-work) holds
   what the queue writes and [`Jobs`](../operations/configuration-runtime.md#jobs) the budget it runs under.
 
 ## Telemetry and privacy

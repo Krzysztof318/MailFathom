@@ -65,7 +65,53 @@ public sealed class ContentObjectReclamationHandlerTests
                 && request.AccountId == null
                 && ((ReclaimContentObjectsJobPayload)request.Payload).ResumeFrom == "next-page"
                 && ((ReclaimContentObjectsJobPayload)request.Payload).Segment == 1),
-            Arg.Any<CancellationToken>());
+            Arg.Is<CancellationToken>(token => token == CancellationToken.None));
+    }
+
+    /// <summary>The shutdown that stopped a sweep is the one moment the rest of it most needs to be written down.</summary>
+    [Fact]
+    public async Task RunAsync_ARunThatStoppedPartWay_EnqueuesTheSegmentOutsideTheAttemptsOwnCancellation()
+    {
+        // Arrange
+        var jobs = JobStoreAccepting();
+        var reclamation = Substitute.For<IContentObjectReclamation>();
+        reclamation.ReclaimAsync(Arg.Any<string?>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(new ContentObjectReclamationRun { ResumeFrom = "next-page" }));
+
+        var handler = new ContentObjectReclamationHandler(jobs, reclamation);
+
+        using CancellationTokenSource stopped = new();
+        await stopped.CancelAsync();
+
+        // Act
+        await handler.RunAsync(ReclaimContentObjectsJobPayload.FromTheStart(), stopped.Token);
+
+        // Assert
+        await jobs.Received(1).EnqueueAsync(
+            Arg.Any<JobEnqueueRequest>(),
+            Arg.Is<CancellationToken>(token => token == CancellationToken.None));
+    }
+
+    /// <summary>The segment is the only record of where the walk reached, so a queue that refuses it ends the attempt.</summary>
+    [Fact]
+    public async Task RunAsync_AQueueAtItsDepth_EndsTheAttemptRatherThanReportingASweepThatFinished()
+    {
+        // Arrange
+        var jobs = Substitute.For<IJobStore>();
+        jobs.EnqueueAsync(Arg.Any<JobEnqueueRequest>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(JobEnqueueResult.RefusedAtCapacity()));
+
+        var reclamation = Substitute.For<IContentObjectReclamation>();
+        reclamation.ReclaimAsync(Arg.Any<string?>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(new ContentObjectReclamationRun { ResumeFrom = "next-page" }));
+
+        var handler = new ContentObjectReclamationHandler(jobs, reclamation);
+
+        // Act, Assert
+        await Assert.ThrowsAsync<JobHandOnRefusedAtCapacityException>(
+            () => handler.RunAsync(
+                ReclaimContentObjectsJobPayload.FromTheStart(),
+                TestContext.Current.CancellationToken));
     }
 
     /// <summary>A run begins where the segment it is carrying says it begins, which is what makes a chain a sweep.</summary>

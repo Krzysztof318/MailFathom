@@ -134,13 +134,15 @@ internal sealed partial class ObjectStorageContentReclamation : IContentObjectRe
             [.. reclaimable.Select(static held => held.Key)],
             cancellationToken);
 
+        ListedObject[] orphans = [.. reclaimable.Where(held => !referenced.Contains(held.Key))];
+
         var reclaimedCount = 0;
         var reclaimedBytes = 0L;
         var failedCount = 0;
         var oldestOrphanAge = run.OldestOrphanAge;
         var sweptAt = this.timeProvider.GetUtcNow();
 
-        foreach (var orphan in reclaimable.Where(held => !referenced.Contains(held.Key)))
+        foreach (var orphan in orphans)
         {
             // Every object that got past the floor states a moment, so the pattern reads one rather than guarding one.
             if (orphan.WrittenAt is { } writtenAt && sweptAt - writtenAt > oldestOrphanAge)
@@ -148,8 +150,14 @@ internal sealed partial class ObjectStorageContentReclamation : IContentObjectRe
                 oldestOrphanAge = sweptAt - writtenAt;
             }
 
+            // Cancellation stops the loop rather than ending the method on an exception, and what it did not reach is
+            // counted as left behind, exactly as a committed erasure counts its own remainder. The two report through
+            // one instrument split by trigger, so a sweep that under-counted a shutdown would make that series read
+            // differently depending on which mechanism was interrupted.
             if (cancellationToken.IsCancellationRequested)
             {
+                failedCount += orphans.Length - reclaimedCount - failedCount;
+
                 break;
             }
 

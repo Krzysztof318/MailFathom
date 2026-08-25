@@ -19,7 +19,9 @@ namespace MailFathom.Application.EmailContent.Storage.Reclamation;
 /// <para>
 /// A segment that stops with objects still ahead of it hands the rest to a segment of its own, exactly as a
 /// re-derivation does. That is what keeps a bucket larger than one attempt reachable: without it every occasion would
-/// list the same first pages and the tail would never be swept.
+/// list the same first pages and the tail would never be swept. A queue that refuses the hand-on at its depth ends the
+/// attempt rather than being read as a sweep that finished, because the segment is the only record of where the walk
+/// had reached.
 /// </para>
 /// <para>
 /// Running it twice with one payload is the same as running it once. Removing an object nothing holds succeeds, and the
@@ -54,6 +56,7 @@ public sealed class ContentObjectReclamationHandler : IJobHandler
 
     /// <inheritdoc />
     /// <exception cref="ArgumentException">Thrown when the payload is not the contract this job type names.</exception>
+    /// <exception cref="JobHandOnRefusedAtCapacityException">Thrown when the queue refused the segment carrying the rest of the sweep.</exception>
     public async Task RunAsync(IJobPayload payload, CancellationToken cancellationToken)
     {
         if (payload is not ReclaimContentObjectsJobPayload named)
@@ -80,8 +83,13 @@ public sealed class ContentObjectReclamationHandler : IJobHandler
         // Outside the attempt's own cancellation, for the reason a re-derivation hands on outside it: the one moment
         // the rest of a sweep most needs to be written down is the shutdown that stopped it, and an enqueue cancelled
         // by the token that stopped the handler would leave the tail of the bucket unswept until the next occasion.
-        await this.jobs.EnqueueAsync(
+        var enqueued = await this.jobs.EnqueueAsync(
             JobEnqueueRequest.Create(next.ToIdempotencyKey(), next, accountId: null),
             CancellationToken.None);
+
+        if (enqueued.Outcome is JobEnqueueOutcome.RefusedAtCapacity)
+        {
+            throw new JobHandOnRefusedAtCapacityException(JobType.ReclaimContentObjects);
+        }
     }
 }

@@ -335,6 +335,15 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode JobPayloadTooLarge { get; } = new(34001);
 
+    /// <summary>Gets subcategory 4, durable jobs: a job that hands the rest of its work on could not enqueue the segment that carries it.</summary>
+    /// <remarks>
+    /// It shares the subcategory with the code above because both are the enqueue boundary refusing, and it is a code of
+    /// its own because the two say opposite things about who acts. An oversized payload is a defect in the enqueuer,
+    /// while a queue at its depth is backpressure that clears on its own — so this ends the attempt rather than the
+    /// work, and the attempt after it enqueues the same segment against a queue that has drained.
+    /// </remarks>
+    public static MailFathomErrorCode JobHandOnRefusedAtCapacity { get; } = new(34002);
+
     /// <summary>Gets subcategory 5, connection loss: a local write did not commit because the database failed in a way that can clear on its own.</summary>
     /// <remarks>
     /// It is a subcategory of its own rather than one more concurrent-write failure, because nothing raced. A write
@@ -863,6 +872,7 @@ public readonly record struct MailFathomErrorCode
         DatabaseSchemaStateUnreadable,
         DatabaseSchemaTextSearchConfigurationMismatch,
         JobPayloadTooLarge,
+        JobHandOnRefusedAtCapacity,
         PersistenceTransientFailure,
         PersistenceCommitOutcomeUnknown,
         ObjectStorageOperationCancelled,
