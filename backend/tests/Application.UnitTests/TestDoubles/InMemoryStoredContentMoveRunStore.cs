@@ -29,9 +29,12 @@ internal sealed class InMemoryStoredContentMoveRunStore : IStoredContentMoveRunS
     /// <param name="readNumber">Which read of the move the change lands in front of, counted from one.</param>
     /// <param name="decide">What the move becomes, applied to whatever is recorded when that read happens.</param>
     /// <remarks>
-    /// A pass reads the move twice — once to find out whether to carry it, and once inside the commit that records what
-    /// it carried — so which of the two an operator's decision arrives before is the difference between a pass that does
-    /// nothing and a pass that does its work and finds the move changed underneath it.
+    /// Read one is always the pass finding out whether to carry at all. What read two is depends on whether it carried
+    /// anything: a pass that carries a payload reads the move again between payloads, to see whether an operator has
+    /// paused it since, so read two is that check and the commit's own read comes after it; a pass that carries nothing
+    /// never reaches that check, and read two is the commit's. So a decision arranged on read two lands mid-pass on a
+    /// walk with payloads in front of it and inside the commit on one without, which is the difference between a pass
+    /// that stops after the payload in flight and a pass that does its work and finds the move changed underneath it.
     /// </remarks>
     internal void ArrangeDecisionOnRead(int readNumber, Func<StoredContentMoveRun, StoredContentMoveRun> decide)
     {

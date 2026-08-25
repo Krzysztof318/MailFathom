@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Failures;
+
 namespace MailFathom.Application.EmailContent.Storage;
 
 /// <summary>The object backend named directly, for the one use case whose subject is the object backend itself.</summary>
@@ -32,7 +34,7 @@ public interface IEmailContentObjectBackend
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The placement, naming the whole key and what was measured over the payload.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="rawMime" /> is empty.</exception>
-    /// <exception cref="Domain.Failures.MailFathomException">Thrown when the endpoint did not accept the object.</exception>
+    /// <exception cref="MailFathomException">Thrown when the endpoint did not accept the object.</exception>
     Task<PlacedEmailContent> PlaceAsync(
         EmailContentKind kind,
         ReadOnlyMemory<byte> rawMime,
@@ -44,7 +46,7 @@ public interface IEmailContentObjectBackend
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The bytes, or <see langword="null" /> when the endpoint holds no object under that key.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maximumByteLength" /> is not positive.</exception>
-    /// <exception cref="Domain.Failures.MailFathomException">Thrown when the endpoint could not answer.</exception>
+    /// <exception cref="MailFathomException">Thrown when the endpoint could not answer.</exception>
     /// <remarks>
     /// An absent object is answered rather than raised, because the two are different findings: an endpoint that cannot
     /// answer says to try the same payload again later, and an endpoint that answers with nothing says this payload must
