@@ -130,7 +130,7 @@ internal sealed class CredentialStore
 
         var session = this.OpenSession(name, credential);
 
-        this.MoveIntoSecretStore(name, credential, token, session);
+        var uncleared = this.MoveIntoSecretStore(name, credential, token, session);
 
         return new SignedInProfile(
             name,
@@ -141,6 +141,7 @@ internal sealed class CredentialStore
             credential.KeyPair)
         {
             Trust = credential.Transport ?? StoredTransportTrust.Protected,
+            Uncleared = uncleared,
         };
     }
 
@@ -214,13 +215,18 @@ internal sealed class CredentialStore
         var stored = this.Read();
         var address = AddressOf(endpoint);
 
+        // The spelling the file already files this profile under, because that is what every read afterwards uses:
+        // the profiles are keyed without regard to case, so signing in as 'PRODUCTION' over 'Production' rewrites the
+        // value and keeps the key, and a secret keyed by what was typed would be filed where nothing looks.
+        var profileName = StoredNameFor(stored, name) ?? name;
+
         // Whether this sign-in is replacing a profile whose secrets the platform store is already holding under this
         // same key, which is what decides whether an entry that will not clear is an orphan worth reporting or a
         // machine that never had one.
         var heldBefore = false;
         string? abandoned = null;
 
-        if (stored.Profiles.GetValueOrDefault(name) is { KeyPair: null, Token: null } replaced)
+        if (stored.Profiles.GetValueOrDefault(profileName) is { KeyPair: null, Token: null } replaced)
         {
             heldBefore = string.Equals(replaced.Endpoint, address, StringComparison.OrdinalIgnoreCase);
 
@@ -229,19 +235,19 @@ internal sealed class CredentialStore
             // placement, and not from the logout that reads the profile's current address. Here or never.
             if (!heldBefore)
             {
-                abandoned = this.ForgetBoth(name, replaced.Endpoint);
+                abandoned = this.ForgetBoth(profileName, replaced.Endpoint);
             }
         }
 
         var placement = keyPair is null
-            ? this.Place(name, address, token, session?.RefreshToken, heldBefore)
-            : this.PlaceNothing(name, address, heldBefore);
+            ? this.Place(profileName, address, token, session?.RefreshToken, heldBefore)
+            : this.PlaceNothing(profileName, address, heldBefore);
 
         placement = placement with { Uncleared = placement.Uncleared ?? abandoned };
 
         var held = placement.Store is not null;
 
-        stored.Profiles[name] = new StoredCredential(
+        stored.Profiles[profileName] = new StoredCredential(
             address,
             keyPair is not null || held ? null : this.protector.Protect(token, address),
             credentialName,
@@ -249,7 +255,7 @@ internal sealed class CredentialStore
             keyPair,
             Recorded(trust));
 
-        var written = stored with { Default = name };
+        var written = stored with { Default = profileName };
 
         this.Write(written);
         this.DiscardKeyIfUnused(written);
@@ -365,12 +371,9 @@ internal sealed class CredentialStore
         // The stored spelling rather than the typed one, because this name is what every later message prints and what
         // the default is written as. Returning what was typed would let 'switch PRODUCTION' rewrite the file's idea of
         // the profile's name without renaming the profile.
-        foreach (var storedName in stored.Profiles.Keys)
+        if (StoredNameFor(stored, requested) is { } matched)
         {
-            if (string.Equals(storedName, requested, StringComparison.OrdinalIgnoreCase))
-            {
-                return storedName;
-            }
+            return matched;
         }
 
         if (Uri.TryCreate(requested.Trim(), UriKind.Absolute, out var address)
@@ -397,6 +400,16 @@ internal sealed class CredentialStore
     private static string DescribeKnownProfiles(StoredCredentials stored) => stored.Profiles.Count == 0
         ? $"No deployment has been signed in to yet; run '{CliRootCommand.CommandName} login --endpoint https://host:port'."
         : $"Signed in: {string.Join(", ", stored.Profiles.Keys.Order(StringComparer.OrdinalIgnoreCase))}.";
+
+    /// <summary>Names the key the file already files a profile under, whatever spelling was typed.</summary>
+    /// <remarks>
+    /// The profiles are keyed without regard to case, so writing under a second spelling replaces the value and keeps
+    /// the original key — and every read afterwards goes through the stored one. A secret keyed by the typed spelling
+    /// would therefore be filed where nothing will ever look for it, while the entries the previous sign-in left under
+    /// the stored one stay in the operator's keyring with nothing left that reaches them.
+    /// </remarks>
+    private static string? StoredNameFor(StoredCredentials stored, string name) => stored.Profiles.Keys
+        .FirstOrDefault(storedName => string.Equals(storedName, name, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Reports what a profile has to record about its transport, which is nothing when it accepted nothing.</summary>
     /// <remarks>Leaving the default out keeps the file of an ordinary HTTPS profile exactly as it was, so the presence of the member is itself the statement that something was accepted.</remarks>
@@ -579,11 +592,11 @@ internal sealed class CredentialStore
     /// entirely rather than failing the command the operator actually ran.
     /// </para>
     /// </remarks>
-    private void MoveIntoSecretStore(string name, StoredCredential credential, string token, OAuthSession? session)
+    private string? MoveIntoSecretStore(string name, StoredCredential credential, string token, OAuthSession? session)
     {
         if (credential.Token is null && credential.Session?.RefreshToken is null)
         {
-            return;
+            return null;
         }
 
         if (credential.KeyPair is not null)
@@ -592,14 +605,19 @@ internal sealed class CredentialStore
             // wrote for it is the only thing keeping a key file alive.
             this.Rewrite(name, stored => stored with { Token = null });
 
-            return;
+            return null;
         }
 
         // Nothing of this profile is in the store yet — that is what makes it a profile to move — so a clear that
         // refuses on the way is about an entry that was never there.
-        if (this.Place(name, credential.Endpoint, token, session?.RefreshToken, heldBefore: false).Store is null)
+        var placement = this.Place(name, credential.Endpoint, token, session?.RefreshToken, heldBefore: false);
+
+        if (placement.Store is null)
         {
-            return;
+            // A move that took the first secret and could not put it back has left one where the file entry, still
+            // sealed, says there is none — so ClearSecrets will pass over it at every later logout. Carried out rather
+            // than dropped, because the command this happened under is the only one that will ever know.
+            return placement.Uncleared;
         }
 
         this.Rewrite(name, stored => stored with
@@ -607,6 +625,8 @@ internal sealed class CredentialStore
             Token = null,
             Session = stored.Session is { } recorded ? recorded with { RefreshToken = null } : null,
         });
+
+        return null;
     }
 
     /// <summary>Replaces one profile in the file, leaving a store somebody else has changed in the meantime alone.</summary>

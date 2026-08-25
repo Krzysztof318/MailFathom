@@ -1546,9 +1546,12 @@ the second sign-in overwriting the first. macOS is not covered because `mfctl` i
 
 What `credentials.json` then records is what a profile *is* rather than what it can do: the address, the credential's
 reported name, a key-pair profile's key path, an OAuth session's endpoint, issuer, client identifier, resource, scopes,
-and expiry, and the transport trust you accepted. None of those is a secret and each was already in clear. **A profile
-with no `token` member and no `keyPair` member is one whose secrets your operating system is holding**; one with no
-`token` member and a `keyPair` member stores no secret anywhere, which the section on key-pair profiles below covers.
+and expiry, and the transport trust you accepted. None of those is a secret and each was already in clear.
+Three shapes are written, and the `keyPair` member is present in all of them — it is its value rather than
+its presence that tells them apart. **A profile with no `token` member and `"keyPair": null` is one whose
+secrets your operating system is holding.** One whose `keyPair` names a private-key path stores no secret anywhere,
+which the section on key-pair profiles below covers. One that carries a `token` is sealed into this file,
+which the next paragraph is about.
 
 **Where this machine has no such store, the command seals them into the file instead** — `libsecret` not installed, no
 D-Bus session bus, no provider running, a locked collection, or the store refusing. That is the ordinary state of a

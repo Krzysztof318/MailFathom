@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text.Json;
 using MailFathom.Cli.Credentials;
 using MailFathom.Cli.Credentials.SecretStores;
 using Xunit;
@@ -545,6 +546,106 @@ public sealed class SecretStoreCredentialTests : IDisposable
         Assert.Equal("renewed-token", profile.Token);
         Assert.Equal("refresh-token", profile.Session?.RefreshToken);
         Assert.Null(this.store.Read().Profiles["production"].Token);
+    }
+
+    /// <summary>An older command sealed an empty token for a key-pair profile, and that value is the only thing keeping a key file alive.</summary>
+    /// <remarks>
+    /// Nothing this version writes produces the shape — <c>Save</c> writes no token for such a profile — so the branch
+    /// that moves it can only be reached from a file an earlier <c>mfctl</c> wrote, which is what this arranges. Left
+    /// uncovered, an operator whose only profile is key-pair would keep <c>credentials.key</c> on disk for good and go
+    /// on carrying a <c>token</c> member for a profile that holds nothing, and no test would say so.
+    /// </remarks>
+    [Fact]
+    public void Resolve_AKeyPairProfileSealedByAnOlderCommand_DropsItsTokenAndTheKeyFileWithIt()
+    {
+        // Arrange: the sealed empty token an older command wrote, produced by the same protector so the key file it
+        // needs exists exactly as it would have on that machine.
+        Directory.CreateDirectory(this.storeDirectory);
+
+        var sealedEmptyToken = new TokenProtector(this.KeyPath)
+            .Protect(string.Empty, "https://mail.example.test:8443");
+
+        var written = new StoredCredentials(
+            "production",
+            new Dictionary<string, StoredCredential>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["production"] = new(
+                    "https://mail.example.test:8443",
+                    sealedEmptyToken,
+                    "workstation",
+                    Session: null,
+                    new StoredKeyPair("/keys/mfctl.pem")),
+            });
+
+        File.WriteAllText(
+            this.StorePath,
+            JsonSerializer.Serialize(written, CliJsonContext.Default.StoredCredentials));
+
+        Assert.True(File.Exists(this.KeyPath));
+
+        // Act
+        var profile = this.store.Resolve("production");
+
+        // Assert
+        Assert.Equal(string.Empty, profile.Token);
+        Assert.Equal("/keys/mfctl.pem", profile.KeyPair?.PrivateKeyPath);
+        Assert.Null(this.store.Read().Profiles["production"].Token);
+        Assert.Empty(this.secretStore.Entries);
+        Assert.False(File.Exists(this.KeyPath));
+    }
+
+    /// <summary>A move undone half-way leaves a credential the file no longer points at, and the command the move happened under is the only one that will ever know.</summary>
+    /// <remarks>
+    /// The profile stays sealed, so it opens perfectly well and every later <c>logout</c> passes over it at the guard
+    /// for a sealed token — which is what makes saying so here the last chance rather than a courtesy.
+    /// </remarks>
+    [Fact]
+    public void Resolve_AMoveWhoseWithdrawalWasRefused_CarriesWhatIsLeftBehindOutOfTheMove()
+    {
+        // Arrange: a profile sealed on a machine that had no store, and a store that takes the access token, refuses
+        // the refresh token, and will not give the first one back.
+        this.CreateStore(secretStore: null)
+            .Save("production", Production, "access-token", "workstation", Session());
+
+        this.secretStore.Refuse(
+            ProfileSecret.RefreshToken("production", "https://mail.example.test:8443"),
+            "the collection is locked");
+        this.secretStore.RefuseClearing(
+            ProfileSecret.BearerToken("production", "https://mail.example.test:8443"),
+            "the collection is locked");
+
+        // Act
+        var profile = this.store.Resolve("production");
+
+        // Assert
+        Assert.Equal("access-token", profile.Token);
+        Assert.Equal("the collection is locked", profile.Uncleared);
+        Assert.NotNull(this.store.Read().Profiles["production"].Token);
+    }
+
+    /// <summary>The file keys its profiles without regard to case, so a second spelling replaces the value and keeps the key — and the entries have to follow the key.</summary>
+    /// <remarks>
+    /// Keyed by what was typed instead, the sign-in would file the credential under a spelling no read path ever asks
+    /// for: <c>Resolve</c> goes through the stored one. The profile would fail every later command, and the entries the
+    /// previous sign-in left under the stored spelling would stay in the keyring with nothing reaching them.
+    /// </remarks>
+    [Fact]
+    public void Save_AProfileSignedInUnderADifferentSpelling_KeepsTheEntriesUnderTheStoredName()
+    {
+        // Arrange
+        this.store.Save("Production", Production, "first-token", "workstation");
+
+        // Act
+        this.store.Save("production", Production, "second-token", "workstation");
+
+        // Assert
+        Assert.Single(this.secretStore.Entries);
+        Assert.Equal(
+            "second-token",
+            this.secretStore.Entries[
+                FakeOperatorSecretStore.KeyOf(ProfileSecret.BearerToken("Production", "https://mail.example.test:8443"))]);
+        Assert.Equal("second-token", this.store.Resolve("production").Token);
+        Assert.Equal("second-token", this.store.Resolve("Production").Token);
     }
 
     /// <summary>A renewal whose store has gone away changes nothing at all, rather than moving half a session into the file.</summary>

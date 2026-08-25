@@ -202,8 +202,7 @@ internal static class LoginCommand
         // no longer says the store holds anything, so nothing later goes looking for it and only the operator can.
         if (placement.Uncleared is { } uncleared)
         {
-            context.Console.WriteWarning(
-                $"An entry for this profile is still in the platform's secret store: {uncleared}. Remove it from your keyring once it is reachable.");
+            context.Console.WriteWarning(SecretPlacement.DescribeUncleared(uncleared));
         }
 
         if (session is not null)

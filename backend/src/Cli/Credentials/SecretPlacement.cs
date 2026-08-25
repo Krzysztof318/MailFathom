@@ -43,6 +43,18 @@ internal sealed record SecretPlacement(string? Store, string? Refusal, string? U
     internal static SecretPlacement Sealed(string refusal, string? uncleared = null) =>
         new(Store: null, refusal, uncleared);
 
+    /// <summary>Says what is still in the platform's store that nothing here could take out.</summary>
+    /// <param name="uncleared">Why the entry would not go.</param>
+    /// <returns>The sentence.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="uncleared" /> is <see langword="null" />.</exception>
+    /// <remarks>Stated once because three commands print it — a sign-in that had to withdraw or replace something, and the first command that moves an older profile into the store — and an operator meeting the same leftover twice should read the same sentence about it.</remarks>
+    internal static string DescribeUncleared(string uncleared)
+    {
+        ArgumentNullException.ThrowIfNull(uncleared);
+
+        return $"An entry for this profile is still in the platform's secret store: {uncleared}. Remove it from your keyring once it is reachable.";
+    }
+
     /// <summary>Says which of the two holds the credential.</summary>
     /// <returns>The sentence, or <see langword="null" /> when the profile keeps no secret to say it about.</returns>
     internal string? Describe() => this switch
