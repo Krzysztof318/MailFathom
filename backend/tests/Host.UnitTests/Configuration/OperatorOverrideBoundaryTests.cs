@@ -124,4 +124,27 @@ public sealed class OperatorOverrideBoundaryTests
         // Assert
         Assert.Equal(2, boundary);
     }
+
+    /// <summary>
+    /// Command-line arguments are an operator's override and are still not the boundary, because the boundary is the
+    /// lowest override rather than any of them. A host that composed the command line before its own files would
+    /// otherwise place both layers beneath those files, which is the inversion the boundary exists to prevent.
+    /// </summary>
+    [Fact]
+    public void FindIn_CommandLineComposedBeforeTheApplicationsFiles_IsStillNotTheBoundary()
+    {
+        // Arrange
+        IReadOnlyList<IConfigurationSource> sources =
+        [
+            new CommandLineConfigurationSource(),
+            new JsonConfigurationSource { Path = "appsettings.json" },
+            new EnvironmentVariablesConfigurationSource(),
+        ];
+
+        // Act
+        var boundary = OperatorOverrideBoundary.FindIn(sources);
+
+        // Assert
+        Assert.Equal(2, boundary);
+    }
 }

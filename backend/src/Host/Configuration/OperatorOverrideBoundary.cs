@@ -65,6 +65,12 @@ internal static class OperatorOverrideBoundary
         // whatever the deployment named it.
         ProvisionedJsonConfigurationSource => false,
         JsonConfigurationSource json => string.Equals(json.Path, UserSecretsFileName, StringComparison.Ordinal),
+
+        // Command-line arguments are an operator's override and are still not the boundary, because the boundary is
+        // the *lowest* override rather than any of them: the layer goes in below the first one and thereby below all
+        // of them. Recognizing the command line would change nothing where a host builder composes it last, and would
+        // do harm where one composes it early — the layer would land below the deployment's own files, which is the
+        // inversion this class exists to prevent. Everything else is the deployment's, and stays beneath the layer.
         _ => false,
     };
 }

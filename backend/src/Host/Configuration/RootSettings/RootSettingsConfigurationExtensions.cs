@@ -4,6 +4,7 @@
 
 using System.Text.Json;
 using MailFathom.Host.Configuration.Persistence;
+using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.Persistence.Settings;
 using MailFathom.Infrastructure.Secrets.Resolution;
 
@@ -93,8 +94,24 @@ internal static class RootSettingsConfigurationExtensions
         var document = await RootSettingsBootstrap.ReadAsync(
             new DatabaseConnectionSettingsMapper(configuration).Map(persistenceSettings),
             configuration.GetValue("Secrets:Interpretation", SecretValueInterpretation.ReferenceOnly),
+            BoundedCommandTimeout(persistenceSettings.CommandTimeoutSeconds),
             cancellationToken);
 
         return configuration.AddRootSettings(document);
     }
+
+    /// <summary>Turns the configured command timeout into a bound this read can actually be given.</summary>
+    /// <param name="configuredSeconds">What <c>Persistence:CommandTimeoutSeconds</c> bound to, before anything validated it.</param>
+    /// <returns>The configured bound, or the composed default when the configured one is not a bound at all.</returns>
+    /// <remarks>
+    /// The section's range is enforced by <c>ValidateOnStart</c>, which runs long after this read, so a value the
+    /// annotation will refuse still reaches it — and a zero or negative one means "no bound" to the driver, which is
+    /// exactly the startup that never returns. Falling back to the default keeps this one command bounded and leaves
+    /// the mistake to be reported by the validator that words it properly, rather than as an argument failure raised
+    /// from inside configuration composition.
+    /// </remarks>
+    private static TimeSpan BoundedCommandTimeout(int configuredSeconds) =>
+        TimeSpan.FromSeconds(configuredSeconds > 0
+            ? configuredSeconds
+            : HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds);
 }

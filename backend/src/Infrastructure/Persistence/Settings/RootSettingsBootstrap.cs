@@ -29,6 +29,12 @@ namespace MailFathom.Infrastructure.Persistence.Settings;
 /// shape as a configuration diagnostic and this read makes no attempt to improve on it. The data source is disposed
 /// before this returns either way, so no pool outlives the one read it existed for.
 /// </para>
+/// <para>
+/// The one command this runs is bounded by the deployment's own command timeout, because it runs before any endpoint
+/// is open and therefore before anything could report that the host is still starting. A server that accepts the
+/// connection and then never answers the statement would otherwise hold the process at that line for as long as it
+/// stayed silent, and the caller composing configuration has no deadline of its own to fall back on.
+/// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
 public static class RootSettingsBootstrap
@@ -36,17 +42,21 @@ public static class RootSettingsBootstrap
     /// <summary>Reads the deployment's persisted configuration document.</summary>
     /// <param name="connectionSettings">Where the connection string and its credential come from, read from the sources beneath this layer.</param>
     /// <param name="interpretation">How the deployment's configured secret-bearing values are interpreted.</param>
+    /// <param name="commandTimeout">How long the single read may run before the driver cancels it.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The document and the version it was read at.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="connectionSettings" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="interpretation" /> is not a supported mode, or <paramref name="commandTimeout" /> is not positive.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the configured connection settings do not describe a database that can be opened.</exception>
     /// <exception cref="RootSettingsUnreadableException">Thrown when the persisted configuration cannot be read at all.</exception>
     public static async Task<RootSettingsDocument> ReadAsync(
         PostgresConnectionSettings connectionSettings,
         SecretValueInterpretation interpretation,
+        TimeSpan commandTimeout,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connectionSettings);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(commandTimeout, TimeSpan.Zero);
 
         // The registration is reused rather than repeated, so a deployment that gains a managed-store scheme adapter
         // gains it here too instead of resolving one set of schemes at bootstrap and another once the host is running.
@@ -67,6 +77,11 @@ public static class RootSettingsBootstrap
             cancellationToken);
 
         var dataSourceBuilder = new NpgsqlDataSourceBuilder(composed.ConnectionSettings.ConnectionString);
+
+        // Written over whatever the connection string said, exactly as the long-lived pool's enrichment writes it over
+        // the same keyword: `Persistence:CommandTimeoutSeconds` is where the deployment states that bound, and a
+        // `Command Timeout=0` left in the connection string would mean this read has none at all.
+        dataSourceBuilder.ConnectionStringBuilder.CommandTimeout = (int)commandTimeout.TotalSeconds;
 
         ConnectionStringComposer.SupplyThePasswordPerConnection(
             dataSourceBuilder,

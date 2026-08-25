@@ -28,10 +28,13 @@ database that already carries some of them takes only what it is missing. You do
 given installation holds in order to know which file to apply — there is one file, and applying it twice is applying it
 once.
 
-It writes one row as well as creating tables. The chain provisions the **owner** every mailbox is bound to — one
-record, with the mail accounts this deployment already holds carried onto it — because a mailbox belongs to somebody
-from the moment its row exists. It is written on the apply that introduces it and left alone by every apply after that,
-so applying the file twice still provisions one owner.
+It writes two rows as well as creating tables, and each is written once and left alone afterwards. The chain provisions
+the **owner** every mailbox is bound to — one record, with the mail accounts this deployment already holds carried onto
+it — because a mailbox belongs to somebody from the moment its row exists. It also provisions the singleton row of
+`settings_root`, the deployment's **persisted configuration** document, as an empty document at version 1, because the
+host reads that row before it opens any endpoint and a deployment that has configured nothing still has to start. Both
+inserts are guarded against a row already being there, so applying the file twice still provisions one owner and one
+configuration document, and neither apply writes over what a running deployment has since put in them.
 
 Some migrations in the chain carry existing data onto a new shape as well, and one of them reads a table rather than
 only rewriting a column: the per-owner stored-content counter is seeded from what the message payloads already hold, so

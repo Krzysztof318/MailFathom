@@ -114,19 +114,25 @@ public sealed class RootSettingsConfigurationProviderTests
 
     /// <summary>
     /// A candidate that does not parse leaves the version in force exactly where it was, rather than emptying the layer
-    /// and letting the sources beneath it answer for settings the deployment had already adopted.
+    /// and letting the sources beneath it answer for settings the deployment had already adopted. The change token
+    /// stays unraised with it: a refusal changed nothing, so anything bound to the layer has nothing to re-read, and
+    /// raising the token anyway would push every options monitor through a rebind for a document nobody adopted.
     /// </summary>
     [Fact]
-    public void Apply_CandidateThatIsNotAnObject_KeepsTheLastValidSnapshot()
+    public void Apply_CandidateThatIsNotAnObject_KeepsTheLastValidSnapshotAndRaisesNoChangeToken()
     {
         // Arrange
         var provider = LoadedProvider("""{ "Kept": "before" }""");
+        var reloaded = false;
+
+        provider.GetReloadToken().RegisterChangeCallback(_ => reloaded = true, state: null);
 
         // Act
         var refusal = Record.Exception(() => provider.Apply(new RootSettingsDocument("\"not settings\"", Version: 9)));
 
         // Assert
         Assert.IsType<FormatException>(refusal);
+        Assert.False(reloaded);
         provider.TryGet("Kept", out var kept);
         Assert.Equal("before", kept);
         Assert.Equal(1, provider.Version);

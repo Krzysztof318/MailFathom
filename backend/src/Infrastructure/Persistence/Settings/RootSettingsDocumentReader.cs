@@ -22,6 +22,10 @@ namespace MailFathom.Infrastructure.Persistence.Settings;
 /// The statement names the singleton key as a parameter and no identifier is composed from anything a caller supplied,
 /// so there is nothing here for a value to reach.
 /// </para>
+/// <para>
+/// What a failed read tells the operator is <see cref="RootSettingsReadFailures" />'s, not this class's: the command
+/// needs a database and is proved against one, while the diagnosis is a decision worth stating in a unit test.
+/// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this reader.")]
 [RequiresIntegrationCoverage]
@@ -31,18 +35,6 @@ internal sealed class RootSettingsDocumentReader(NpgsqlDataSource dataSource) : 
         """
         SELECT "Document", "Version" FROM settings_root WHERE "Id" = @id;
         """;
-
-    /// <summary>The PostgreSQL code for a relation that does not exist, which is how a database missing the migration answers.</summary>
-    private const string UndefinedTableSqlState = "42P01";
-
-    /// <summary>The PostgreSQL code for a rejected password, which is how a wrong or rotated credential answers.</summary>
-    private const string InvalidPasswordSqlState = "28P01";
-
-    /// <summary>The PostgreSQL code for a connection no authorization rule admits, which is how <c>pg_hba.conf</c> refuses one.</summary>
-    private const string InvalidAuthorizationSqlState = "28000";
-
-    /// <summary>The PostgreSQL code for a refused privilege, which is how a schema applied by the wrong role answers.</summary>
-    private const string InsufficientPrivilegeSqlState = "42501";
 
     /// <inheritdoc />
     public async Task<RootSettingsDocument> ReadAsync(CancellationToken cancellationToken)
@@ -62,43 +54,9 @@ internal sealed class RootSettingsDocumentReader(NpgsqlDataSource dataSource) : 
 
             return new RootSettingsDocument(reader.GetString(0), reader.GetInt64(1));
         }
-        catch (PostgresException exception) when (exception.SqlState == UndefinedTableSqlState)
-        {
-            throw new RootSettingsUnreadableException(
-                "The database does not carry the settings_root table this build reads its persisted configuration from. Apply the migrations this build defines and start the host again.",
-                exception);
-        }
-        catch (PostgresException exception) when (exception.SqlState == InvalidPasswordSqlState)
-        {
-            throw new RootSettingsUnreadableException(
-                "The database holding the persisted configuration refused the configured credential. Check the Persistence secret block rather than the network: the server answered, and what it rejected is the password MailFathom composed for it.",
-                exception);
-        }
-        // The server answered and refused the connection outright, which is a `pg_hba.conf` with no rule admitting
-        // this role from this host to this database — the commoner of the two authorization failures on a new
-        // deployment, and one nothing about the network would explain.
-        catch (PostgresException exception) when (exception.SqlState == InvalidAuthorizationSqlState)
-        {
-            throw new RootSettingsUnreadableException(
-                "The database server admits no connection for the configured role, host, and database. Its authorization rules are what refused MailFathom, so the credential and the network are both beside the point.",
-                exception);
-        }
-
-        // A per-table grant on an existing deployment does not cover a table a later release adds, so this is what a
-        // correctly reachable database says when the schema was applied by one role and is served by another. It runs
-        // ahead of the schema gate that used to be the first to meet that condition, so it makes the same diagnosis
-        // rather than leaving the operator with a database that appears unreachable.
-        catch (PostgresException exception) when (exception.SqlState == InsufficientPrivilegeSqlState)
-        {
-            throw new RootSettingsUnreadableException(
-                "The serving role holds no privilege on settings_root. Grant it on the table the persisted configuration lives in, the way the schema documentation describes for a schema applied by one role and served by another.",
-                exception);
-        }
         catch (NpgsqlException exception)
         {
-            throw new RootSettingsUnreadableException(
-                "The database holding the persisted configuration could not be reached. MailFathom composes its settings from that layer before it opens any endpoint, so it refuses to start on the sources beneath it.",
-                exception);
+            throw new RootSettingsUnreadableException(RootSettingsReadFailures.Diagnose(exception), exception);
         }
     }
 }
