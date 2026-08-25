@@ -253,6 +253,50 @@ public sealed class RootSettingsLayerPrecedenceTests
         Assert.DoesNotContain("the-operator-never-sees-this", refused.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A document carrying a setting the storage catalog persists in a store of its own stops startup naming the path,
+    /// because composing it here would publish one setting out of two rows with nothing able to say which is current.
+    /// </summary>
+    [Fact]
+    public void AddRootSettings_DocumentCarryingASpeciallyRoutedSetting_FailsNamingThePath()
+    {
+        // Arrange
+        using var configuration = new ConfigurationManager();
+        var document = new RootSettingsDocument(
+            """{ "Accounts": { "0": { "DisplayName": "the-operator-never-sees-this" } } }""",
+            Version: 21);
+
+        // Act
+        var refusal = Record.Exception(() => configuration.AddRootSettings(document));
+
+        // Assert
+        var misrouted = Assert.IsType<MisroutedSettingPersistedException>(refusal);
+        Assert.Equal(MailFathomErrorCode.MisroutedSettingPersisted, misrouted.ErrorCode);
+        Assert.Contains("version 21", misrouted.Message, StringComparison.Ordinal);
+        Assert.Contains("Accounts", misrouted.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("the-operator-never-sees-this", misrouted.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The mailbox declarations carry the same word and are not the owner collection, so a deployment persisting them
+    /// still composes. This is the case the refusal above must not reach.
+    /// </summary>
+    [Fact]
+    public void AddRootSettings_DocumentCarryingMailSynchronizationAccounts_Composes()
+    {
+        // Arrange
+        using var configuration = new ConfigurationManager();
+        var document = new RootSettingsDocument(
+            """{ "MailSynchronization": { "Accounts": { "0": { "Alias": "work" } } } }""",
+            Version: 22);
+
+        // Act
+        configuration.AddRootSettings(document);
+
+        // Assert
+        Assert.Equal("work", configuration["MailSynchronization:Accounts:0:Alias"]);
+    }
+
     private static string DescribeSource(IConfigurationSource source) => source switch
     {
         RootSettingsConfigurationSource => "root-settings",

@@ -4,6 +4,7 @@
 
 using System.Text;
 using System.Text.Json;
+using MailFathom.Application.Configuration;
 using MailFathom.Infrastructure.Persistence.Settings;
 using Microsoft.Extensions.Configuration.Json;
 
@@ -20,8 +21,8 @@ namespace MailFathom.Host.Configuration.RootSettings;
 /// </para>
 /// <para>
 /// The provider holds one snapshot and never queries per key. A reload replaces that snapshot whole; a candidate the
-/// layer refuses — because it does not parse, or because it carries a setting the layer itself was reached through —
-/// leaves the last valid one in force.
+/// layer refuses — because it does not parse, because it carries a setting the layer itself was reached through, or
+/// because it carries one the storage catalog persists elsewhere — leaves the last valid one in force.
 /// </para>
 /// <para>
 /// The framework's parser is reached through a provider of its own, nested below, which exists only to be loaded and
@@ -51,6 +52,7 @@ internal sealed class RootSettingsConfigurationProvider : ConfigurationProvider
     /// <exception cref="FormatException">Thrown when the JSON configuration parser refuses the persisted document — a root that is not an object, or two keys differing only in case.</exception>
     /// <exception cref="JsonException">Thrown when the persisted document cannot be read as JSON at all, which for a <c>jsonb</c> column means one nested deeper than the reader's maximum.</exception>
     /// <exception cref="BootstrapOnlySettingPersistedException">Thrown when the document carries a setting read before this layer is composed.</exception>
+    /// <exception cref="MisroutedSettingPersistedException">Thrown when the document carries a setting the storage catalog persists in a store of its own.</exception>
     public override void Load() => this.Parse(this.document);
 
     /// <summary>Replaces the published snapshot with a document read after startup.</summary>
@@ -59,6 +61,7 @@ internal sealed class RootSettingsConfigurationProvider : ConfigurationProvider
     /// <exception cref="FormatException">Thrown when the JSON configuration parser refuses the candidate, in which case the snapshot in force is unchanged.</exception>
     /// <exception cref="JsonException">Thrown when the candidate cannot be read as JSON at all, in which case the snapshot in force is likewise unchanged.</exception>
     /// <exception cref="BootstrapOnlySettingPersistedException">Thrown when the candidate carries a setting read before this layer is composed, in which case the snapshot in force is likewise unchanged.</exception>
+    /// <exception cref="MisroutedSettingPersistedException">Thrown when the candidate carries a setting the storage catalog persists in a store of its own, in which case the snapshot in force is likewise unchanged.</exception>
     /// <remarks>
     /// <para>
     /// The change token is raised only once the candidate has been published, so a rejected candidate reloads nothing
@@ -94,6 +97,15 @@ internal sealed class RootSettingsConfigurationProvider : ConfigurationProvider
         {
             throw new BootstrapOnlySettingPersistedException(
                 $"The persisted configuration document at version {settings.Version} carries settings MailFathom reads before that layer exists: {string.Join(", ", refused)}. Remove them from the document and configure them in a file, the environment, or a command-line argument, which is where the bootstrap read takes them from.");
+        }
+
+        // The root document is the store for every path the catalog routes nowhere else, so a path it does route is one
+        // this document may not carry: the store that owns it holds it already, and composing both would publish one
+        // setting from two rows with nothing able to say which of them is current.
+        if (ConfigurationStorageCatalog.FindRoutedElsewhereIn(candidate.Keys) is { Count: > 0 } misrouted)
+        {
+            throw new MisroutedSettingPersistedException(
+                $"The persisted configuration document at version {settings.Version} carries settings MailFathom persists in a store of their own: {string.Join(", ", misrouted)}. Remove them from the document, which is where every setting no store of its own claims is persisted.");
         }
 
         this.Data = candidate;
