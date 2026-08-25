@@ -500,8 +500,12 @@ public static class OrchestrationContract
     /// </remarks>
     public const string ObjectStorageAccessKey = "mailfathom";
 
-    /// <summary>The secret key the suite reaches the endpoint with.</summary>
-    /// <remarks>Stated rather than generated, for the reason <see cref="ObjectStorageAccessKey" /> is.</remarks>
+    /// <summary>The secret key the suite signs its requests with, and the root password the server is initialized with.</summary>
+    /// <remarks>
+    /// Stated rather than generated, for the reason <see cref="ObjectStorageAccessKey" /> is, and carrying the same two
+    /// roles: the container is started with it and the client signs with it, so a value only one side was changed on
+    /// fails the run rather than being ignored.
+    /// </remarks>
     public const string ObjectStorageSecretKey = "mailfathom-integration-secret";
 
     /// <summary>The MailFathom account identifier every occurrence the integration-test topology stores belongs to.</summary>
