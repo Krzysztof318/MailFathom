@@ -24,6 +24,7 @@ public partial record WorkspaceModel
     private const string EverythingKey = "WorkspaceScope.Everything";
     private const string AccountFolderKey = "WorkspaceScope.AccountFolder";
     private const string SelectedKey = "WorkspaceScope.Selected";
+    private const string ConnectionAttemptKey = "Workspace.Connection.Attempt";
 
     private readonly IWorkspace workspace;
     private readonly IClientSession session;
@@ -63,6 +64,15 @@ public partial record WorkspaceModel
         this.OffersNothing = this.Session.Select(standing => standing.OffersNothing);
         this.AnythingUngranted = this.Any(CapabilityStanding.Ungranted);
         this.AnythingUnavailable = this.Any(CapabilityStanding.Unavailable);
+
+        // Held as a state for the reason the session above is: the three projections below would otherwise each be a
+        // reader of their own of what is one answer about one connection.
+        var connection = State.FromFeed(this, session.Connection);
+
+        this.IsRetryingDeployment = connection.Select(standing => standing.IsRetrying);
+        this.HasLostDeployment = connection.Select(standing => standing.IsLost);
+        this.HasReachedDeployment = connection.Select(standing => standing.IsReached);
+        this.ConnectionAttempt = connection.Select(this.DescribeAttempt);
     }
 
     /// <summary>What somebody is about to ask, held for the run rather than for the screen they typed it on.</summary>
@@ -130,6 +140,35 @@ public partial record WorkspaceModel
     /// </remarks>
     public IFeed<bool> AnythingUnavailable { get; }
 
+    /// <summary>Whether the client is asking its deployment again after an attempt that did not arrive.</summary>
+    /// <remarks>
+    /// The first attempt is deliberately not one of these, so an ordinary start shows no banner. What this is for is
+    /// the case a person would otherwise read as the application having frozen: a connection that dropped, and a
+    /// client working its way back to it without being restarted.
+    /// </remarks>
+    public IFeed<bool> IsRetryingDeployment { get; }
+
+    /// <summary>Whether the client has stopped asking on its own, which is the point the next ask becomes a person's.</summary>
+    /// <remarks>
+    /// Kept apart from a session that could not be had for the reason the two withholding notices are kept apart: a
+    /// deployment nothing answered from is a connection to look at, and a deployment that answered a refusal is a
+    /// sign-in to repeat. Telling somebody to check their network about a credential their operator has to widen sends
+    /// them nowhere.
+    /// </remarks>
+    public IFeed<bool> HasLostDeployment { get; }
+
+    /// <summary>Whether the deployment answered at all, whatever it answered.</summary>
+    /// <remarks>
+    /// What the failed-session notice is shown on, so the two never speak at once. A session that failed while nothing
+    /// was answering is the lost connection above and is said there; this is what is left — the deployment is there
+    /// and would not give this client a session.
+    /// </remarks>
+    public IFeed<bool> HasReachedDeployment { get; }
+
+    /// <summary>Which attempt at the deployment is under way, as the words shown beside the notice.</summary>
+    /// <remarks>Composed rather than fixed per control, because the numbers are the whole point of showing it: a client that says which attempt it is on is one somebody waits for rather than restarts.</remarks>
+    public IFeed<string> ConnectionAttempt { get; }
+
     /// <summary>
     /// The keys the words above are resolved by, in the one place they are written.
     /// </summary>
@@ -139,6 +178,9 @@ public partial record WorkspaceModel
     /// a sentence. The unit suite holds every authored table to naming all three.
     /// </remarks>
     internal static IReadOnlyList<string> ScopeResourceKeys { get; } = [EverythingKey, AccountFolderKey, SelectedKey];
+
+    /// <summary>The keys the connection notice's own words are resolved by, on the same terms as the scope's.</summary>
+    internal static IReadOnlyList<string> ConnectionResourceKeys { get; } = [ConnectionAttemptKey];
 
     /// <summary>Asks the deployment again for what this caller may do.</summary>
     /// <remarks>What the button on the failed state presses. It says nothing about what went wrong — the answer, or the next failure, arrives on <see cref="Session" /> exactly as the first one did.</remarks>
@@ -152,6 +194,9 @@ public partial record WorkspaceModel
 
     private IFeed<bool> Any(CapabilityStanding standing) =>
         this.Session.Select(session => session.Any(standing));
+
+    private string DescribeAttempt(DeploymentConnection reach) =>
+        this.localizer[ConnectionAttemptKey, reach.Attempt, reach.Attempts].Value;
 
     private string Describe(WorkspaceScope scope)
     {

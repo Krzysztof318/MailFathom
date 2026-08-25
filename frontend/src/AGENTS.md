@@ -416,9 +416,11 @@ what keeps that from being a rule somebody has to enforce by reading.
   process does not own, and a screen that repeated it would be putting an attacker's words in MailFathom's voice.
 - **The surface it reaches is `/api/client`**, the backend's third transport surface, served only where a deployment
   enabled `ClientEndpoint`. It is not the MCP endpoint and not the administrative one: a credential admitted by either
-  of those authenticates nothing here. Today it answers one route, `GET /api/client/session`, reporting the running
-  version and the grant the caller's credential carries and nothing that identifies that credential;
-  [the client endpoint](../../docs/operations/client-endpoint.md) is the page.
+  of those authenticates nothing here. It answers two routes today — `GET /api/client/session`, reporting the running
+  version and the grant the caller's credential carries and nothing that identifies that credential, and
+  `GET /api/client/accounts`, reporting the signed-in owner's own mailboxes and how current the copy of each one is.
+  [The client endpoint](../../docs/operations/client-endpoint.md) is the page. Neither route reaches a mail server, so
+  no screen here can wait on IMAP or set the remote `\Seen` flag.
 - **Signing in is authorization code with PKCE**, which is the grant `mfctl` performs against the administrative
   surface and for the same reason: a desktop binary and a WebAssembly bundle are both readable by whoever runs them, so
   this is a public client and holds no secret. Where to sign in is discovered rather than configured — the deployment's
@@ -479,3 +481,38 @@ The route above answers what this caller may do, and every screen follows it rat
 - **Every grant is a statement about the signed-in owner's scope.** Nothing the client shows may read as a view across
   the deployment, and nothing that identifies a credential is modelled, logged, stored, or put in telemetry — which is
   why `DeploymentSession` carries the service, the version, and the permissions, and carries nothing else.
+
+## Three facts a screen must never blur
+
+The client reads a copy of a mailbox rather than the mailbox. That is what makes it fast and what lets it work while a
+mail server is briefly unreachable, and the cost of it is a question every screen implicitly answers: *is what I am
+looking at current?* Three separable facts answer it and one screen tends to merge them. A person whose laptop is
+offline, a person whose mail provider is refusing connections, and a person reading a mailbox nobody has refreshed
+since Tuesday each need a different sentence, and none of them is served by a spinner.
+
+- **Whether the client reaches its deployment at all is `IClientSession.Connection`**, and it is the frame's to render
+  rather than any space's, because it is about this client rather than about a mailbox. `DeploymentConnection` says
+  which attempt is under way out of how many; `ConnectionStanding` says whether the deployment is being reached, was
+  reached, or has stopped answering. **A deployment that answered was reached, whatever it answered** — a refused
+  credential is a sign-in to repeat and not a connection to look at, and reporting one as the other sends somebody
+  nowhere. That is also why the frame's failed-session notice is shown on `HasReachedDeployment` rather than
+  unconditionally: the two never speak at once.
+- **Recovering from a lost connection is the session's, and it is bounded.** The retry is inside the fetch rather than
+  in a watcher of its own, because one exchange answers both questions and a second thing asking would be a second
+  request per screen and a second opinion to disagree with. `DeploymentConnectionRetry` states how many attempts and
+  what the waits are drawn from; the attempts are published as they are made, so a client working its way back says so
+  instead of appearing frozen. **Nothing composed over the session retries on top of it** — the root instructions
+  refuse nested retry storms, so a screen whose own read failed renders its error and offers the same ask.
+- **Whether a mailbox is behind is per account, and it is two fields rather than one.** `MailAccountStanding` says
+  whether the deployment is still refreshing it, and the freshness gap says how old the copy is; an account failing
+  since yesterday and an account nobody has written to since yesterday carry the same instant and are not the same
+  situation. `FreshnessGap` states the gap in bands rather than as a count — one string per language rather than a
+  plural rule per language — and **nothing calls a mailbox stale**, because how old is too old is the reader's
+  judgement and not this client's. A standing the deployment named that this build does not know claims nothing about
+  the copy rather than reading as one that is current.
+- **What a mailbox row may carry is its own name and nothing else.** MailFathom's identifier and display name are what
+  a person recognizes a mailbox by; the address, the mail server, the folders, and every message stay where they are.
+  None of it reaches a log or telemetry, here as anywhere else in this stack.
+- **An owner who owns no mailbox is a state rather than a failure**, rendered with what to do about it. It reaches a
+  screen as an empty list and a credential that may not read reaches it as a refusal, so the two are never the same
+  thing on a screen either.

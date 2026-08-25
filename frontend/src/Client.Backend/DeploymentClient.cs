@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Client.Backend.Accounts;
+
 namespace MailFathom.Client.Backend;
 
 /// <summary>The client's one way of asking the deployment it is pointed at something.</summary>
@@ -14,8 +16,9 @@ namespace MailFathom.Client.Backend;
 /// written without one by accident.
 /// </para>
 /// <para>
-/// It carries exactly one route today, deliberately. <c>/api/client/session</c> reports what the deployment made of the
-/// caller and nothing else, which is what lets sign-in be proven end to end before a screen exists to show anything.
+/// The two routes it carries are the two a client reads before it draws anything: what the deployment made of the
+/// caller, and which mailboxes that caller has beside a statement of how current each copy is. Neither reaches a mail
+/// server, so no screen here can wait on IMAP or set the remote <c>\Seen</c> flag.
 /// </para>
 /// </remarks>
 public sealed class DeploymentClient
@@ -47,6 +50,23 @@ public sealed class DeploymentClient
             this.Transport(),
             new HttpRequestMessage(HttpMethod.Get, DeploymentRoutes.SessionPath),
             DeploymentJsonContext.Default.DeploymentSession,
+            cancellationToken);
+
+    /// <summary>Asks the deployment which mail accounts the signed-in owner has, and how current each copy is.</summary>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The owner's accounts, empty where they own none.</returns>
+    /// <exception cref="DeploymentFailure">Thrown when the deployment refused, was unreachable, did not answer in time, or answered with something else.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when nothing has pointed this client at a deployment yet.</exception>
+    /// <remarks>
+    /// A caller whose grant does not carry reading mail is refused rather than answered with nothing, and reaches the
+    /// screen as <see cref="DeploymentFailureReason.CredentialRefused" /> — which is what keeps an owner who owns no
+    /// account from being shown the same thing as a credential that may not look.
+    /// </remarks>
+    public Task<DeploymentMailAccounts> ReadMailAccountsAsync(CancellationToken cancellationToken = default) =>
+        DeploymentExchange.ReadAsync(
+            this.Transport(),
+            new HttpRequestMessage(HttpMethod.Get, DeploymentRoutes.MailAccountsPath),
+            DeploymentJsonContext.Default.DeploymentMailAccounts,
             cancellationToken);
 
     /// <summary>Takes a transport aimed at wherever the client is pointed right now.</summary>

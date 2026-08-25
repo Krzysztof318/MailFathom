@@ -2,8 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Client.Backend.Accounts;
 using MailFathom.Client.Deployment;
 using MailFathom.Client.Presentation;
+using MailFathom.Client.Presentation.Spaces.Mail;
 using MailFathom.Client.Presentation.Workspace;
 
 namespace MailFathom.Client.UnitTests.Strings;
@@ -140,6 +142,58 @@ public sealed class ResourceTableTests
     {
         // Arrange
         var expected = WorkspaceModel.ScopeResourceKeys;
+
+        // Act
+        var table = DeclaredLanguages.TableOf(culture);
+
+        // Assert
+        Assert.All(expected, key => Assert.True(table.ContainsKey(key), key));
+    }
+
+    /// <summary>
+    /// The connection notice's attempt line is composed in the frame's model rather than named by a <c>x:Uid</c>, so
+    /// the key it asks for is one this asserts the tables hold.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Languages))]
+    public void Tables_TheWordsTheConnectionNoticeIsCountedWith_AreNamedInEveryLanguage(string culture)
+    {
+        // Arrange
+        var expected = WorkspaceModel.ConnectionResourceKeys;
+
+        // Act
+        var table = DeclaredLanguages.TableOf(culture);
+
+        // Assert
+        Assert.All(expected, key => Assert.True(table.ContainsKey(key), key));
+    }
+
+    /// <summary>
+    /// Every way a mailbox's copy can stand is composed into a resource name by the row rather than named by a
+    /// <c>x:Uid</c>, so a standing added with no sentence behind it is named here rather than met as a key by somebody
+    /// deciding whether to trust what they are reading.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Languages))]
+    public void Tables_EveryWayAMailboxCanStand_IsExplainedInEveryLanguage(string culture)
+    {
+        // Arrange
+        var expected = Enum.GetValues<MailAccountStanding>().Select(MailAccountLine.StandingResourceKeyFor);
+
+        // Act
+        var table = DeclaredLanguages.TableOf(culture);
+
+        // Assert
+        Assert.All(expected, key => Assert.True(table.ContainsKey(key), key));
+    }
+
+    /// <summary>Every band a freshness gap falls in is named, on the same terms and for the same reason.</summary>
+    [Theory]
+    [MemberData(nameof(Languages))]
+    public void Tables_EveryBandAFreshnessGapFallsIn_IsExplainedInEveryLanguage(string culture)
+    {
+        // Arrange
+        var expected = Enum.GetValues<FreshnessGap>().Select(MailAccountLine.FreshnessResourceKeyFor);
 
         // Act
         var table = DeclaredLanguages.TableOf(culture);

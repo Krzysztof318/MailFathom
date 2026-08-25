@@ -27,6 +27,9 @@ internal static class DeploymentRoutes
     /// <summary>Where a deployment reports what a presented credential makes the caller.</summary>
     internal const string SessionPath = $"{Prefix}/session";
 
+    /// <summary>Where a deployment reports the signed-in owner's mail accounts and how current each one's copy is.</summary>
+    internal const string MailAccountsPath = $"{Prefix}/accounts";
+
     /// <summary>Where a deployment publishes what a client must obtain before it holds any credential.</summary>
     internal const string ProtectedResourceMetadataPath = $"/.well-known/oauth-protected-resource{Prefix}";
 }

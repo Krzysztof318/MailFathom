@@ -369,4 +369,92 @@
     <value>Nie podano — nie udało się zapytać wdrożenia.</value>
     <comment>Stated rather than left blank, which would read as a deployment reporting no version at all.</comment>
   </data>
+  <data name="Workspace.InfoBar.Reaching.Title" xml:space="preserve">
+    <value>Ponowne łączenie z Twoim MailFathom</value>
+    <comment>Heads the notice shown while the client is asking its deployment again after an attempt that did not arrive.</comment>
+  </data>
+  <data name="Workspace.InfoBar.Reaching.Message" xml:space="preserve">
+    <value>Twoje wdrożenie nie odpowiedziało. Klient próbuje ponownie samodzielnie, więc nie musisz niczego uruchamiać od nowa.</value>
+    <comment>Says the client is working rather than frozen, and says the person need do nothing, which is the whole reason the notice exists.</comment>
+  </data>
+  <data name="Workspace.Connection.Attempt" xml:space="preserve">
+    <value>Próba {0} z {1}</value>
+    <comment>Composed in the frame's model rather than fixed per control. {0} is the attempt under way and {1} how many are made before the client stops and asks.</comment>
+  </data>
+  <data name="Workspace.InfoBar.DeploymentLost.Title" xml:space="preserve">
+    <value>Twój MailFathom nie odpowiada</value>
+    <comment>Heads the notice shown once the client has stopped asking on its own. Kept apart from a session that could not be had, because a connection is looked at and a sign-in is repeated.</comment>
+  </data>
+  <data name="Workspace.InfoBar.DeploymentLost.Message" xml:space="preserve">
+    <value>Z Twojego wdrożenia nic nie odpowiedziało, więc klient przestał próbować. Sprawdź, czy to urządzenie jest w sieci i czy Twoje wdrożenie działa, a potem spróbuj ponownie.</value>
+    <comment>Names the two things the person can check. It says nothing about credentials, which would send somebody to their operator about a network.</comment>
+  </data>
+  <data name="MailPage.TextBlock.Accounts.Text" xml:space="preserve">
+    <value>Twoje skrzynki</value>
+    <comment>Heads the list of the signed-in owner's own accounts. Never a deployment-wide list, which the client does not show.</comment>
+  </data>
+  <data name="MailPage.InfoBar.SynchronizationPaused.Title" xml:space="preserve">
+    <value>To wdrożenie nie odświeża poczty</value>
+    <comment>Heads the notice shown where synchronization is switched off for the whole deployment, which changes what every gap below it means.</comment>
+  </data>
+  <data name="MailPage.InfoBar.SynchronizationPaused.Message" xml:space="preserve">
+    <value>Nic poniżej nie jest utrzymywane w aktualnym stanie, choćby wyglądało na świeże. Poproś o ponowne włączenie synchronizacji osobę, która prowadzi Twój MailFathom.</value>
+    <comment>Says what the switch does to the readings beside it, and names the person who can change it.</comment>
+  </data>
+  <data name="MailPage.InfoBar.NoAccount.Title" xml:space="preserve">
+    <value>Nie ma jeszcze żadnej skrzynki</value>
+    <comment>Heads the state an owner with no mail account is shown. It is a state rather than a failure, so it is not worded as one.</comment>
+  </data>
+  <data name="MailPage.InfoBar.NoAccount.Message" xml:space="preserve">
+    <value>W Twoim MailFathom nie ma jeszcze konta pocztowego, więc nie ma tu czego czytać. Konto dodaje osoba, która go prowadzi.</value>
+    <comment>Says what to do about it rather than leaving an empty list. Adding an account is an administrative act, which is deliberately not offered here.</comment>
+  </data>
+  <data name="MailPage.InfoBar.AccountsUnavailable.Title" xml:space="preserve">
+    <value>Nie udało się odczytać Twoich skrzynek</value>
+    <comment>Heads the failed read of the account list, which is a different thing from a mailbox being out of date.</comment>
+  </data>
+  <data name="MailPage.InfoBar.AccountsUnavailable.Message" xml:space="preserve">
+    <value>Dopóki Twoje wdrożenie nie odpowie, ta lista nie jest pokazywana. Komunikat nad obszarem pracy mówi, co klient sądzi o połączeniu.</value>
+    <comment>Sends the reader to the frame, which is where reaching the deployment at all is told apart from a mailbox being behind.</comment>
+  </data>
+  <data name="MailPage.Button.RetryAccounts.Content" xml:space="preserve">
+    <value>Spróbuj ponownie</value>
+    <comment>Asks the deployment once more, which asks for the session and the mailboxes together.</comment>
+  </data>
+  <data name="MailPage.Account.Standing.Unrecognized" xml:space="preserve">
+    <value>Nieznany stan</value>
+    <comment>Shown where the deployment named a state this version of the client does not know. Nothing is claimed about the copy, which is the safe reading.</comment>
+  </data>
+  <data name="MailPage.Account.Standing.NeverSynchronized" xml:space="preserve">
+    <value>Jeszcze niezsynchronizowana</value>
+    <comment>Shown where nothing has ever been taken in for the account.</comment>
+  </data>
+  <data name="MailPage.Account.Standing.Synchronized" xml:space="preserve">
+    <value>Odświeżana</value>
+    <comment>Shown where the deployment's last attempt at the account did not fail. It says the copy is being kept current, and deliberately not that it is current — how old is too old is the reader's judgement.</comment>
+  </data>
+  <data name="MailPage.Account.Standing.Failing" xml:space="preserve">
+    <value>Nieosiągalna</value>
+    <comment>Shown where the deployment's last attempt at the account did not complete. It is about the account's own mail server rather than about this client's connection.</comment>
+  </data>
+  <data name="MailPage.Account.Freshness.Never" xml:space="preserve">
+    <value>Nie pobrano jeszcze żadnej poczty</value>
+    <comment>The gap for an account nothing has ever synchronized, where there is no instant to state.</comment>
+  </data>
+  <data name="MailPage.Account.Freshness.WithinTheHour" xml:space="preserve">
+    <value>Zaktualizowana w ciągu ostatniej godziny</value>
+    <comment>The narrowest gap band. A timestamp slightly ahead of this device's clock reads as this band rather than as a negative gap.</comment>
+  </data>
+  <data name="MailPage.Account.Freshness.Today" xml:space="preserve">
+    <value>Zaktualizowana w ciągu ostatniej doby</value>
+    <comment>The gap band for an account refreshed less than a day ago.</comment>
+  </data>
+  <data name="MailPage.Account.Freshness.WithinTheWeek" xml:space="preserve">
+    <value>Zaktualizowana w ciągu ostatniego tygodnia</value>
+    <comment>The gap band for an account refreshed less than a week ago.</comment>
+  </data>
+  <data name="MailPage.Account.Freshness.LongerAgo" xml:space="preserve">
+    <value>Od ponad tygodnia nic nie pobrano</value>
+    <comment>The widest gap band. It states the gap without calling the mailbox stale, which is the reader's judgement rather than the client's.</comment>
+  </data>
 </root>
