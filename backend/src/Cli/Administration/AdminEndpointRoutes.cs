@@ -60,6 +60,16 @@ internal static class AdminEndpointRoutes
     /// </remarks>
     internal const string ContentMoveResumePath = $"{ContentMovePath}/resume";
 
+    /// <summary>Where the database copies a move left beside its objects are read, and where they are freed.</summary>
+    /// <remarks>
+    /// A path of its own rather than a field on the move's, because the two are different acts under different grants:
+    /// copying mail into a bucket is work, and removing the last copy of it outside one is disposal. One path read with
+    /// <c>GET</c> and performed with <c>POST</c>, so the figure an operator confirms is the figure the deployment acts
+    /// on. One request frees one bounded batch and the command repeats it, which is what makes an interrupted release
+    /// resumable.
+    /// </remarks>
+    internal const string ContentReleasePath = $"{Prefix}/content/release";
+
     /// <summary>Where a deployment reports whether semantic search is working and how far behind it is.</summary>
     internal const string EmbeddingStatusPath = $"{Prefix}/embeddings";
 

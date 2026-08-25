@@ -11,6 +11,7 @@ using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Move;
+using MailFathom.Application.EmailContent.Release;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.EmailContent.Storage.Reclamation;
 using MailFathom.Application.Emails.Embeddings.Limits;
@@ -1014,6 +1015,10 @@ internal static class HostComposition
             .GetSection(ContentStorageOptions.SectionName)
             .Get<ContentStorageOptions>();
 
+        // Ahead of the branch, because a deployment that has switched back to the database still holds the copies its
+        // move left behind and its operator still frees them through the same request.
+        AddRetainedContentRelease(builder, declaredContentStorage?.Release ?? new ContentReleaseOptions());
+
         if (declaredContentStorage?.IsObjectStorageSelected is not true)
         {
             // A deployment that names no endpoint can still hold rows pointing into one, and every message behind such
@@ -1084,6 +1089,27 @@ internal static class HostComposition
         builder.Services.AddSingleton(declaredMove.ToMoveOptions());
         builder.Services.AddScoped<StoredContentMove>();
         builder.Services.AddHostedService<StoredContentMoveWorker>();
+    }
+
+    /// <summary>Registers the operator's act that frees the database copies a move left beside its objects.</summary>
+    /// <remarks>
+    /// Registered on every deployment rather than only where the object backend was selected, because retained copies
+    /// outlive the setting that produced them: an operator who moved their content and then switched back still has them
+    /// and still has to be able to free them.
+    /// <para>
+    /// No worker and no schedule, deliberately. Freeing a copy is the one irreversible step in the whole move, so
+    /// nothing here performs it — a request does, every time.
+    /// </para>
+    /// </remarks>
+    private static void AddRetainedContentRelease(WebApplicationBuilder builder, ContentReleaseOptions declaredRelease)
+    {
+        builder.Services.AddOptions<ContentReleaseOptions>()
+            .Bind(builder.Configuration
+                .GetSection(ContentStorageOptions.SectionName)
+                .GetSection(nameof(ContentStorageOptions.Release)));
+
+        builder.Services.AddSingleton(declaredRelease.ToReleaseOptions());
+        builder.Services.AddScoped<RetainedContentRelease>();
     }
 
     /// <summary>Registers the startup gates and the workers behind them, in the order a run may first touch mail.</summary>

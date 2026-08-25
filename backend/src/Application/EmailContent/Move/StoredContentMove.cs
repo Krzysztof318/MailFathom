@@ -21,7 +21,9 @@ namespace MailFathom.Application.EmailContent.Move;
 /// <para>
 /// One payload is copied at a time and nothing is held across the steps. The bytes are read, checked against what the
 /// row records, put under a key of their own, read back and checked again, and only then does the row point at the
-/// object — so <b>no database transaction is ever open across a call to the endpoint</b>, which is what
+/// object — which <b>copies rather than moves</b>: the payload the database was holding stays where it is as a retained
+/// duplicate, and freeing it is an operator's separate act. So <b>no database transaction is ever open across a call to
+/// the endpoint</b>, which is what
 /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md">ADR 0001</see>
 /// requires and what makes the copy safe to run against a live deployment.
 /// </para>
@@ -56,7 +58,7 @@ public sealed class StoredContentMove
     /// <param name="commitPolicy">Commits the run's progress, resolving a race with an operator's decision.</param>
     /// <param name="telemetry">Publishes what the pass carried and what it refused to carry.</param>
     /// <param name="options">Bounds one pass.</param>
-    /// <param name="timeProvider">Stamps the instant the walk reached the end of the content.</param>
+    /// <param name="timeProvider">Stamps the instant each object was verified, and the instant the walk reached the end of the content.</param>
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public StoredContentMove(
@@ -266,6 +268,7 @@ public sealed class StoredContentMove
             payload.Kind,
             payload.PayloadId,
             objectLocator,
+            this.timeProvider.GetUtcNow(),
             cancellationToken))
         {
             walk.CopiedPayloadCount++;

@@ -26,8 +26,9 @@ internal sealed class RecurringSendDraftConfiguration : IEntityTypeConfiguration
             table => table.HasCheckConstraint(
                 "ck_recurring_send_drafts_backend_payload",
                 """
-                ("Backend" = 'Database' AND "DraftMime" IS NOT NULL AND "ObjectLocator" IS NULL)
-                OR ("Backend" = 'ObjectStorage' AND "ObjectLocator" IS NOT NULL AND "DraftMime" IS NULL)
+                ("Backend" = 'Database' AND "DraftMime" IS NOT NULL AND "ObjectLocator" IS NULL AND "ObjectVerifiedAt" IS NULL)
+                OR ("Backend" = 'ObjectStorage' AND "ObjectLocator" IS NOT NULL
+                    AND ("DraftMime" IS NULL OR "ObjectVerifiedAt" IS NOT NULL))
                 """));
         entity.HasKey(draft => draft.RecurringSendId);
         entity.Property(draft => draft.RecurringSendId).ValueGeneratedNever();

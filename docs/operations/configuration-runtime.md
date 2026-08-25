@@ -155,6 +155,28 @@ A single payload larger than `MailSynchronization:MaxInFlightRawMimeBytes` is re
 move reads under the same process-wide budget synchronization reads under. It is counted, reported, and stepped past;
 raising that ceiling and asking for another move is what reaches it.
 
+### Freeing the copies the move left behind
+
+The move copies and never removes, so a payload it has carried is held in both stores until an operator frees the
+database's copy with `mfctl content release`. That request is the one irreversible step of the whole operation — what it
+removes is the last copy of a message outside the bucket — so nothing here performs it and no interval elapsing does
+either. What these two settle is how much one request frees, and how recently the copy it frees may have been verified.
+
+Unlike the move's block, both are judged on every deployment. The copies a finished move left are still there after an
+operator selects the database backend again for new writes, so the route that frees them is served whichever backend is
+selected.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `ContentStorage:Release:SafetyInterval` | TimeSpan | `00:00:00` | Not negative. Measured from when the move verified the object rather than from when the message was stored | restart |
+| `ContentStorage:Release:PayloadsPerBatch` | int | `200` | 1 – 2000. A batch of nothing never finishes, and one past the ceiling stops being the bounded, interruptible step the release is meant to be | restart |
+
+**Zero is not the same as releasing on its own.** The default hold is the operator's own decision, and nothing frees a
+copy until they ask. What a positive value adds is a floor beneath that decision: a deployment that wants a week of real
+reads against the bucket before the originals can go states a week here, and then even a release asked for on the same
+day frees nothing verified inside it. [Moving stored content into the bucket](moving-stored-content.md) holds the order
+of the steps and what each one cannot be undone from.
+
 ## `DataEncryption`
 
 The key ring every value MailFathom seals at rest is sealed under. A configuration root of its own rather than a

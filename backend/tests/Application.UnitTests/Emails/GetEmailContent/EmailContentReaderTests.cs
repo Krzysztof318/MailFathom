@@ -938,6 +938,36 @@ public sealed class EmailContentReaderTests
         },
     };
 
+    /// <summary>
+    /// A payload the move carried and an operator has not released is held twice, and the object is the authoritative
+    /// copy. Where the store had to serve the database's instead, the caller is answered from the bytes the deployment
+    /// has — refusing over a message it holds would be a self-inflicted outage — and the object is recorded as the thing
+    /// to repair, because a bucket answering nothing is exactly what must not be released against.
+    /// </summary>
+    [Fact]
+    public async Task ReadContentAsync_ContentServedFromTheRetainedCopy_AnswersTheCallerAndRequestsRepairOfTheObject()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create();
+        var repairRequests = new RecordingEmailContentRepairRequestStore();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf()),
+            repairRequests,
+            ContentStoreReturning(IntactContent() with { WasServedFromRetainedCopy = true }));
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(Assert.Single(result.Emails).Content);
+        Assert.Equal(
+            [new EmailContentRepairRequest(summary.StoredEmailId, EmailContentDefect.ObjectUnreadable)],
+            repairRequests.Recorded);
+    }
+
     [Fact]
     public async Task ReadContentAsync_StoredContentThatNoReaderCanRender_ReportsItAsUnreadableAndRequestsRepair()
     {

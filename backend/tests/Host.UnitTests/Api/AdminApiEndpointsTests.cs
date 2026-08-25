@@ -7,6 +7,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.EmailContent.Move;
+using MailFathom.Application.EmailContent.Release;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Embeddings.Administration;
 using MailFathom.Application.Emails.Embeddings.Backfill;
@@ -139,6 +140,8 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{ContentMoveEndpoints.MoveRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{ContentMoveEndpoints.PauseRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{ContentMoveEndpoints.ResumeRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{ContentReleaseEndpoints.ReleaseRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{ContentReleaseEndpoints.ReleaseRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{EmbeddingProfileEndpoints.StatusRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{EmbeddingProfileEndpoints.ActivationRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{EmbeddingProfileEndpoints.ActivationRoute}",
@@ -252,6 +255,8 @@ public sealed class AdminApiEndpointsTests
                 $"POST {prefix}{ContentMoveEndpoints.MoveRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"POST {prefix}{ContentMoveEndpoints.PauseRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"POST {prefix}{ContentMoveEndpoints.ResumeRoute} -> {MailFathomPermission.AdminOperate.Name}",
+                $"GET {prefix}{ContentReleaseEndpoints.ReleaseRoute} -> {MailFathomPermission.AdminRead.Name}",
+                $"POST {prefix}{ContentReleaseEndpoints.ReleaseRoute} -> {MailFathomPermission.AdminErase.Name}",
             }.Order(StringComparer.Ordinal),
             PublishedAllocation(endpoints).Order(StringComparer.Ordinal));
     }
@@ -456,6 +461,13 @@ public sealed class AdminApiEndpointsTests
         services.AddScoped(_ => new StoredContentMoveReader(
             runStore,
             Substitute.For<IStoredContentMoveStore>(),
+            Authorization));
+        services.AddScoped(_ => new RetainedContentRelease(
+            Substitute.For<IRetainedContentReleaseStore>(),
+            Substitute.For<IStoredContentMoveStore>(),
+            Substitute.For<IRetainedContentReleaseTelemetry>(),
+            new RetainedContentReleaseOptions(),
+            new FakeTimeProvider(),
             Authorization));
     }
 

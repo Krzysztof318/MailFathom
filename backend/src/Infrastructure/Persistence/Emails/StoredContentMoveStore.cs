@@ -106,11 +106,18 @@ internal sealed class StoredContentMoveStore(MailFathomDbContext dbContext) : IS
     /// One statement per row, issued outside any transaction this walk opened, which is what keeps the endpoint call
     /// that preceded it out of one. The predicate carries the backend, so a row a concurrent write has already repointed
     /// or replaced is left alone and reported as not moved rather than overwritten.
+    /// <para>
+    /// The payload column is not among the setters, and that is the whole difference between the copy and the release:
+    /// the row now reads from its object and goes on holding the bytes it always held, until an operator asks for them
+    /// to go. What is set beside the locator is the instant the object was verified, which is what the safety interval
+    /// on that request is measured from.
+    /// </para>
     /// </remarks>
     public async Task<bool> RepointAtObjectAsync(
         EmailContentKind kind,
         Guid payloadId,
         string objectLocator,
+        DateTimeOffset verifiedAt,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(objectLocator);
@@ -124,7 +131,7 @@ internal sealed class StoredContentMoveStore(MailFathomDbContext dbContext) : IS
                     setters => setters
                         .SetProperty(content => content.Backend, ContentStorageBackend.ObjectStorage)
                         .SetProperty(content => content.ObjectLocator, objectLocator)
-                        .SetProperty(content => content.RawMime, (byte[]?)null),
+                        .SetProperty(content => content.ObjectVerifiedAt, verifiedAt),
                     cancellationToken),
             EmailContentKind.OutgoingMessage => await dbContext.OutgoingEmailContents
                 .Where(content => content.OutgoingEmailId == payloadId
@@ -133,7 +140,7 @@ internal sealed class StoredContentMoveStore(MailFathomDbContext dbContext) : IS
                     setters => setters
                         .SetProperty(content => content.Backend, ContentStorageBackend.ObjectStorage)
                         .SetProperty(content => content.ObjectLocator, objectLocator)
-                        .SetProperty(content => content.RawMime, (byte[]?)null),
+                        .SetProperty(content => content.ObjectVerifiedAt, verifiedAt),
                     cancellationToken),
             EmailContentKind.RecurringSendDraft => await dbContext.RecurringSendDrafts
                 .Where(draft => draft.RecurringSendId == payloadId
@@ -142,7 +149,7 @@ internal sealed class StoredContentMoveStore(MailFathomDbContext dbContext) : IS
                     setters => setters
                         .SetProperty(draft => draft.Backend, ContentStorageBackend.ObjectStorage)
                         .SetProperty(draft => draft.ObjectLocator, objectLocator)
-                        .SetProperty(draft => draft.DraftMime, (byte[]?)null),
+                        .SetProperty(draft => draft.ObjectVerifiedAt, verifiedAt),
                     cancellationToken),
             EmailContentKind.MailDraft => await dbContext.MailDraftContents
                 .Where(content => content.MailDraftId == payloadId
@@ -151,7 +158,7 @@ internal sealed class StoredContentMoveStore(MailFathomDbContext dbContext) : IS
                     setters => setters
                         .SetProperty(content => content.Backend, ContentStorageBackend.ObjectStorage)
                         .SetProperty(content => content.ObjectLocator, objectLocator)
-                        .SetProperty(content => content.RawMime, (byte[]?)null),
+                        .SetProperty(content => content.ObjectVerifiedAt, verifiedAt),
                     cancellationToken),
             _ => throw UnknownKind(kind),
         };

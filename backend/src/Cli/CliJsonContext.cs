@@ -47,6 +47,7 @@ namespace MailFathom.Cli;
 [JsonSerializable(typeof(MailboxRederivationState))]
 [JsonSerializable(typeof(ContentMoveReport))]
 [JsonSerializable(typeof(ContentMoveRun))]
+[JsonSerializable(typeof(ContentReleaseReport))]
 [JsonSerializable(typeof(AdminProblem))]
 [JsonSerializable(typeof(EmbeddingStatus))]
 [JsonSerializable(typeof(EmbeddingActivationAssessment))]

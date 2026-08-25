@@ -45,6 +45,14 @@ internal sealed class ContentStorageOptions : IValidatableObject
     /// </remarks>
     public ContentMoveOptions Move { get; set; } = new();
 
+    /// <summary>Gets or sets what bounds the freeing of the database copies a move leaves beside the objects it verified.</summary>
+    /// <remarks>
+    /// It bounds a release rather than performing one, and it is judged on every deployment rather than only on one that
+    /// selected the object backend: a deployment that moved its content and then switched back still holds those copies,
+    /// and its operator still frees them through the same request.
+    /// </remarks>
+    public ContentReleaseOptions Release { get; set; } = new();
+
     /// <summary>Gets whether this deployment stores payloads in the configured object-storage endpoint.</summary>
     /// <remarks>Read by the composition root to decide whether the endpoint, its transport, and its readiness probe are registered at all.</remarks>
     public bool IsObjectStorageSelected => this.Backend is ContentStorageBackend.ObjectStorage;
@@ -70,6 +78,13 @@ internal sealed class ContentStorageOptions : IValidatableObject
                 [nameof(this.Backend)]);
 
             yield break;
+        }
+
+        // Judged whichever backend was selected, unlike the two blocks below: what it bounds is the freeing of copies an
+        // earlier move left behind, and a deployment that has since switched back to the database still holds them.
+        foreach (var error in this.Release.FindConfigurationErrors())
+        {
+            yield return new ValidationResult(error, [nameof(this.Release)]);
         }
 
         if (!this.IsObjectStorageSelected)

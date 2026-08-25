@@ -434,6 +434,38 @@ internal sealed class AdminApiClient
             cancellationToken,
             absenceMessage: NoContentMoveMessage);
 
+    /// <summary>Asks the deployment how much of its database is a copy of what its object backend already holds.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What is retained, and what the move has not yet carried.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the credential, could not be reached, or answered with something that is not a report.</exception>
+    internal Task<ContentReleaseReport> ReadContentReleaseAsync(string token, CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            AdminEndpointRoutes.ContentReleasePath,
+            token,
+            CliJsonContext.Default.ContentReleaseReport,
+            cancellationToken);
+
+    /// <summary>Asks the deployment to free one bounded batch of the database copies its move left behind.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the batch freed, and what is retained behind it.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a report.</exception>
+    /// <remarks>
+    /// The deployment refuses the whole request while its database still owns a payload the move has not carried, and
+    /// the refusal reaches the caller as a failure naming that backlog. Nothing is partly released.
+    /// </remarks>
+    internal Task<ContentReleaseReport> ReleaseContentAsync(string token, CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.ContentReleasePath,
+            token,
+            CliJsonContext.Default.ContentReleaseReport,
+            cancellationToken);
+
     /// <summary>Asks the deployment which mail rules it has loaded.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="cancellationToken">Cancels the request.</param>

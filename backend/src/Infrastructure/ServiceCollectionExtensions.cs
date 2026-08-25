@@ -9,6 +9,7 @@ using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Move;
+using MailFathom.Application.EmailContent.Release;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
@@ -467,6 +468,11 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<AccessAuthorization>(),
             provider.GetService<IEmailContentObjectBackend>()));
         services.AddScoped<StoredContentMoveReader>();
+        // The other half of the move: what the copy left duplicated in the database, and the one act that ends it.
+        // Registered whatever the selected backend is, because a deployment that has switched back to the database still
+        // holds the copies its move left and is exactly the one whose operator has to be able to free them.
+        services.AddScoped<IRetainedContentReleaseStore, RetainedContentReleaseStore>();
+        services.AddSingleton<IRetainedContentReleaseTelemetry, RetainedContentReleaseTelemetry>();
         // What the two maintenance commands read and write. Both are ordinary scoped stores over stored mail: the
         // counter is what puts a figure in front of an operator before a rewind is agreed to, and the walk is the pass
         // that re-reads what a rewind would otherwise fetch again.

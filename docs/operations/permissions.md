@@ -33,7 +33,7 @@ two disjoint halves, and the prefix after `mailfathom.` says which half a name b
 | `mailfathom.admin.operate` | administrative | Asking the deployment to do work it can already do: running rules over an account, classifying an account, retrying or dropping a stopped job, cancelling a reindex, rewinding synchronization, re-deriving stored mail, carrying stored content into the object backend, withdrawing or re-queueing one queued message, and writing to the contact book |
 | `mailfathom.admin.credentials.write` | administrative | Storing a mailbox refresh token |
 | `mailfathom.admin.spend` | administrative | Activating the declared embedding model, which is the one operation that starts a provider bill |
-| `mailfathom.admin.erase` | administrative | Disposing of what this deployment holds: the mail stored for a folder an account no longer mirrors, and one person and everything the contact book derived from them |
+| `mailfathom.admin.erase` | administrative | Disposing of what this deployment holds: the mail stored for a folder an account no longer mirrors, one person and everything the contact book derived from them, and the database copies a finished move left beside the objects it verified |
 
 **Three surfaces draw on those two halves.** The MCP endpoint and the client endpoint each draw on the mail half — the
 client reads the mail an agent reads, and a second vocabulary for one authority would be two things to keep in step —
@@ -155,6 +155,7 @@ what it puts in front of you or amends from:
 | `mfctl contact delete` | `mailfathom.admin.audit.read` beside `mailfathom.admin.erase` |
 | `mfctl mailbox rewind` | `mailfathom.admin.read` beside `mailfathom.admin.operate` |
 | `mfctl content move` | `mailfathom.admin.read` beside `mailfathom.admin.operate` |
+| `mfctl content release` | `mailfathom.admin.read` beside `mailfathom.admin.erase` |
 | `mfctl embedding activate` | `mailfathom.admin.read` beside `mailfathom.admin.spend` |
 
 A credential granted only the permission the operation itself is published under meets the refusal at the first request

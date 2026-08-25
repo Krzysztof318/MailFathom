@@ -50,11 +50,18 @@ internal static class ContentMoveStatusCommand
         var profile = await context.Deployment().ReachAsync(requestedDeployment, cancellationToken);
 
         using var transport = context.OpenTransport(profile.Endpoint, profile.Trust);
-        var report = await new AdminApiClient(transport, context.Console)
-            .ReadContentMoveAsync(profile.Token, cancellationToken);
+        var deployment = new AdminApiClient(transport, context.Console);
+
+        var report = await deployment.ReadContentMoveAsync(profile.Token, cancellationToken);
+
+        // Two requests, because the copies a finished move left behind are a different act under a different grant and
+        // therefore a route of their own. They are read here all the same: what an operator asks this command is where
+        // their mail is held, and a deployment holding all of it twice has not finished answering that with the backlog.
+        var retained = await deployment.ReadContentReleaseAsync(profile.Token, cancellationToken);
 
         CliDetails details = new();
         details.Add("In the database", report.DescribeBacklog());
+        details.Add("Copied and still duplicated", retained.DescribeRetained());
 
         if (report.Run is { } run)
         {
@@ -66,6 +73,12 @@ internal static class ContentMoveStatusCommand
         context.Console.Write(details);
 
         WriteWhatToDoNext(context, report);
+
+        if (retained.PayloadsRemain && report.RemainingPayloadCount == 0)
+        {
+            context.Console.WriteLine(
+                $"The database still holds a copy of everything the move carried, which is what a read falls back to while the object backend is being trusted. Free them with '{CliRootCommand.CommandName} content release' once you are satisfied it can be — that step cannot be undone.");
+        }
 
         return CliExitCode.Success;
     }

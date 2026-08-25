@@ -48,7 +48,8 @@ public sealed class StoredContentReadAllocationBudgetTests
             rawMime.LongLength,
             recordedHash,
             ContentStorageBackend.Database,
-            ObjectLocator: null);
+            ObjectLocator: null,
+            CarriesDatabasePayload: true);
 
         // Establishing that the run really verifies the payload is a step of its own, so the measured run can assert
         // nothing: an intact copy is what a read of ordinary mail meets, and a defect here would make the measurement

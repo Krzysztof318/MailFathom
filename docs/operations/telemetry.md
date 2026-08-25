@@ -622,6 +622,25 @@ than arriving as parentless spans among the requests around them. The pass that 
 nothing differently for one, and it would put the shape of the schema into every series the move publishes. Nothing here
 carries an object key, a payload identifier, or any part of a message.
 
+### While both stores hold the same payload
+
+The move copies and never removes, so a payload it has carried is held twice until an operator releases the database's
+copy. Two instrument families answer what happens in that window, and they are what the decision to release rests on.
+
+`mailfathom.mail.content.fallback` counts the reads a moved payload's object could not answer and the retained copy
+did, carrying `mailfathom.mail.content.fallback.reason` as `object_absent` or `object_mismatch`. **A flat counter is
+what a release waits for**: it says the deployment has been reading from its bucket and the bucket has answered every
+time, which is the only evidence there is that the copies are safe to free. A counter that moves at all is an endpoint
+to look at rather than a release to ask for, and the two reasons are two different faults — an object nobody wrote, and
+an object that is not what the row records.
+
+`mailfathom.mail.content.release.released` counts the retained copies an operator's releases have freed and
+`mailfathom.mail.content.release.released.bytes` how much raw MIME they were holding. They are counters rather than an
+answer per request because releasing a large mailbox is a hundred bounded requests: what one batch freed says nothing,
+and what the deployment has freed since it started is what an operator weighs against the backlog they began with. The
+volume is the point rather than a decoration, since this is the one step of the move that actually takes weight off a
+database. Neither carries a dimension of any kind — which payloads were freed is a list of mail.
+
 ### Durable background work
 
 Every attempt at a job opens **`run_job`**, and that span is what makes durable work readable as work at all. A job is

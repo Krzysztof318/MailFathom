@@ -43,6 +43,9 @@ internal sealed class StoredEmailContentTelemetry
     internal const string FoundTagName = "mailfathom.mail.content.found";
     internal const string OutcomeTagName = "mailfathom.mail.content.outcome";
 
+    /// <summary>The dimension naming why a read fell back to the copy the database still holds.</summary>
+    internal const string FallbackReasonTagName = "mailfathom.mail.content.fallback.reason";
+
     /// <summary>Names a read that returned a stored message.</summary>
     internal const string FoundOutcomeName = "found";
 
@@ -63,6 +66,7 @@ internal sealed class StoredEmailContentTelemetry
     private readonly Histogram<double> readDuration;
     private readonly Histogram<long> writtenBytes;
     private readonly Histogram<double> writeDuration;
+    private readonly Counter<long> fallbackReads;
 
     /// <summary>Initializes the instruments every content read and write is published through.</summary>
     /// <param name="timeProvider">Measures how long one read or write took.</param>
@@ -89,7 +93,29 @@ internal sealed class StoredEmailContentTelemetry
             "mailfathom.mail.content.write.duration",
             unit: "s",
             description: "How long one write of stored content took, by whether it completed.");
+        this.fallbackReads = Telemetry.Meter.CreateCounter<long>(
+            "mailfathom.mail.content.fallback",
+            unit: "{read}",
+            description: "Reads of a moved payload the retained database copy answered, by what the object did.");
     }
+
+    /// <summary>Records that a read of a moved payload was answered by the copy the database still holds.</summary>
+    /// <param name="reason">What the object did, which is what an operator acts on.</param>
+    /// <remarks>
+    /// <para>
+    /// A counter rather than a duration, because what it answers is asked across reads: whether this deployment's bucket
+    /// is being trusted safely, and therefore whether releasing the copies is the next step or the last thing to do. A
+    /// deployment whose move is done and whose fallback counter is flat has an endpoint it has actually been reading
+    /// from; one where the counter moves has a bucket to look at before anything irreversible happens.
+    /// </para>
+    /// <para>
+    /// Recorded here rather than on the read scope, because it is the same finding for all four payload kinds and only
+    /// one of them is spanned. Nothing about the message reaches it, not even its length: what fell back is a count, and
+    /// the reason is MailFathom's own word.
+    /// </para>
+    /// </remarks>
+    public void FellBackToRetainedCopy(StoredContentFallbackReason reason) =>
+        this.fallbackReads.Add(1, new TagList { { FallbackReasonTagName, NameOf(reason) } });
 
     /// <summary>Opens the span one content read is reported as, and returns the scope that ends it.</summary>
     /// <returns>The scope, which the caller must dispose after recording what the read found.</returns>
@@ -99,6 +125,14 @@ internal sealed class StoredEmailContentTelemetry
     /// <summary>Begins measuring one content write, and returns the scope that ends it.</summary>
     /// <returns>The scope, which the caller must dispose after recording what the write stored.</returns>
     public ContentWriteScope BeginWrite() => new(this, this.timeProvider.GetTimestamp());
+
+    /// <summary>Names the fallback the way a series carries it, which is the member's own word rather than its ordinal.</summary>
+    private static string NameOf(StoredContentFallbackReason reason) => reason switch
+    {
+        StoredContentFallbackReason.ObjectAbsent => "object_absent",
+        StoredContentFallbackReason.ObjectMismatch => "object_mismatch",
+        _ => "unclassified",
+    };
 
     private TimeSpan ElapsedSince(long startingTimestamp) => this.timeProvider.GetElapsedTime(startingTimestamp);
 

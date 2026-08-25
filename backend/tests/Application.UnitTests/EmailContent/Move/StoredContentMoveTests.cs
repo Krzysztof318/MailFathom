@@ -69,6 +69,10 @@ public sealed class StoredContentMoveTests
         var repoint = Assert.Single(this.content.Repoints);
         Assert.Equal(EmailContentKind.IncomingMessage, repoint.Kind);
         Assert.Contains(repoint.ObjectLocator, this.objects.Keys);
+
+        // The instant the object was vouched for is written on the row rather than inferred later, because it is what
+        // the safety interval holds the release back from, and nothing else on the row records when the copy happened.
+        Assert.Equal(Moment, repoint.VerifiedAt);
     }
 
     /// <summary>One pass is bounded by its payload count, so a mailbox is many passes rather than one that never ends.</summary>

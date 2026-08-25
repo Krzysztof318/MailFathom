@@ -8,14 +8,23 @@ using MailFathom.CodeCoverage;
 namespace MailFathom.Infrastructure.Persistence.Emails;
 
 /// <summary>The columns one stored-content read projects, before they become the application's own value.</summary>
-/// <param name="RawMime">The bytes this row itself carries, or <see langword="null" /> when the object backend holds them.</param>
+/// <param name="RawMime">The bytes this row itself carries, projected only where the database is the authoritative store for them.</param>
 /// <param name="MimeByteLength">The length recorded when those bytes were written.</param>
 /// <param name="Sha256Hash">The digest recorded when those bytes were written.</param>
 /// <param name="Backend">Which store holds the payload, which is this row's own answer rather than the deployment's.</param>
 /// <param name="ObjectLocator">The whole key the object was written under, or <see langword="null" /> when the database holds the payload.</param>
+/// <param name="CarriesDatabasePayload">Whether the payload column holds anything at all, whichever store is authoritative.</param>
 /// <remarks>
+/// <para>
 /// The row exists because EF Core projects into provider types: the columns are <c>bytea</c> and arrive as
 /// <see cref="byte" /> arrays, which the store then hands over as read-only memory so no caller can write through them.
+/// </para>
+/// <para>
+/// An object-backed row's payload column is deliberately <em>not</em> projected into <paramref name="RawMime" />, and
+/// that is what keeps the retained duplicate from costing every read of a moved message a second whole message off the
+/// database. What is projected instead is whether there is one, which is a boolean over the same column: a read that
+/// needs the retained bytes asks for them afterwards, and only a read whose object could not be vouched for ever does.
+/// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
 internal sealed record StoredEmailContentRow(
@@ -23,7 +32,8 @@ internal sealed record StoredEmailContentRow(
     long MimeByteLength,
     byte[] Sha256Hash,
     ContentStorageBackend Backend,
-    string? ObjectLocator)
+    string? ObjectLocator,
+    bool CarriesDatabasePayload)
 {
     /// <summary>Turns the returned columns into the application's own value, over a payload resolved from wherever it lives.</summary>
     /// <param name="payload">The bytes themselves: this row's own column under the database backend, or what the endpoint answered under the object one.</param>
