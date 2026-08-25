@@ -38,6 +38,9 @@ internal sealed class RootSettingsDocumentReader(NpgsqlDataSource dataSource) : 
     /// <summary>The PostgreSQL code for a rejected password, which is how a wrong or rotated credential answers.</summary>
     private const string InvalidPasswordSqlState = "28P01";
 
+    /// <summary>The PostgreSQL code for a connection no authorization rule admits, which is how <c>pg_hba.conf</c> refuses one.</summary>
+    private const string InvalidAuthorizationSqlState = "28000";
+
     /// <summary>The PostgreSQL code for a refused privilege, which is how a schema applied by the wrong role answers.</summary>
     private const string InsufficientPrivilegeSqlState = "42501";
 
@@ -71,6 +74,16 @@ internal sealed class RootSettingsDocumentReader(NpgsqlDataSource dataSource) : 
                 "The database holding the persisted configuration refused the configured credential. Check the Persistence secret block rather than the network: the server answered, and what it rejected is the password MailFathom composed for it.",
                 exception);
         }
+        // The server answered and refused the connection outright, which is a `pg_hba.conf` with no rule admitting
+        // this role from this host to this database — the commoner of the two authorization failures on a new
+        // deployment, and one nothing about the network would explain.
+        catch (PostgresException exception) when (exception.SqlState == InvalidAuthorizationSqlState)
+        {
+            throw new RootSettingsUnreadableException(
+                "The database server admits no connection for the configured role, host, and database. Its authorization rules are what refused MailFathom, so the credential and the network are both beside the point.",
+                exception);
+        }
+
         // A per-table grant on an existing deployment does not cover a table a later release adds, so this is what a
         // correctly reachable database says when the schema was applied by one role and is served by another. It runs
         // ahead of the schema gate that used to be the first to meet that condition, so it makes the same diagnosis

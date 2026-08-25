@@ -24,12 +24,13 @@ namespace MailFathom.Host.Configuration.RootSettings;
 /// leaves the last valid one in force.
 /// </para>
 /// <para>
-/// It derives from the stream provider to reach that parser, and deliberately never uses the stream on the source it
-/// is constructed with: <see cref="Load()" /> is overridden to read the document this provider was given instead. The
-/// base class's own <c>Load()</c> is the one that consumes <c>Source.Stream</c>, and it is never called.
+/// The framework's parser is reached through a provider of its own, nested below, which exists only to be loaded and
+/// read. That is what lets a candidate be parsed and judged without ever being published: this provider assigns its
+/// own dictionary once the document has been accepted, so no reader can observe a document the layer went on to
+/// refuse.
 /// </para>
 /// </remarks>
-internal sealed class RootSettingsConfigurationProvider : JsonStreamConfigurationProvider
+internal sealed class RootSettingsConfigurationProvider : ConfigurationProvider
 {
     private RootSettingsDocument document;
 
@@ -37,7 +38,6 @@ internal sealed class RootSettingsConfigurationProvider : JsonStreamConfiguratio
     /// <param name="document">The persisted configuration document and the version it was read at.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="document" /> is <see langword="null" />.</exception>
     public RootSettingsConfigurationProvider(RootSettingsDocument document)
-        : base(new JsonStreamConfigurationSource())
     {
         ArgumentNullException.ThrowIfNull(document);
 
@@ -48,7 +48,7 @@ internal sealed class RootSettingsConfigurationProvider : JsonStreamConfiguratio
     public long Version => this.document.Version;
 
     /// <inheritdoc />
-    /// <exception cref="FormatException">Thrown when the persisted document is not a JSON object of configuration keys.</exception>
+    /// <exception cref="FormatException">Thrown when the JSON configuration parser refuses the persisted document — a root that is not an object, or two keys differing only in case.</exception>
     /// <exception cref="JsonException">Thrown when the persisted document cannot be read as JSON at all, which for a <c>jsonb</c> column means one nested deeper than the reader's maximum.</exception>
     /// <exception cref="BootstrapOnlySettingPersistedException">Thrown when the document carries a setting read before this layer is composed.</exception>
     public override void Load() => this.Parse(this.document);
@@ -56,7 +56,7 @@ internal sealed class RootSettingsConfigurationProvider : JsonStreamConfiguratio
     /// <summary>Replaces the published snapshot with a document read after startup.</summary>
     /// <param name="candidate">The document to publish, and the version it was read at.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="candidate" /> is <see langword="null" />.</exception>
-    /// <exception cref="FormatException">Thrown when the candidate is not a JSON object of configuration keys, in which case the snapshot in force is unchanged.</exception>
+    /// <exception cref="FormatException">Thrown when the JSON configuration parser refuses the candidate, in which case the snapshot in force is unchanged.</exception>
     /// <exception cref="JsonException">Thrown when the candidate cannot be read as JSON at all, in which case the snapshot in force is likewise unchanged.</exception>
     /// <exception cref="BootstrapOnlySettingPersistedException">Thrown when the candidate carries a setting read before this layer is composed, in which case the snapshot in force is likewise unchanged.</exception>
     /// <remarks>
@@ -85,23 +85,44 @@ internal sealed class RootSettingsConfigurationProvider : JsonStreamConfiguratio
 
     private void Parse(RootSettingsDocument settings)
     {
-        var published = this.Data;
+        var candidate = DocumentParser.Flatten(settings.Json);
 
-        using var content = new MemoryStream(Encoding.UTF8.GetBytes(settings.Json));
-
-        this.Load(content);
-
-        // The refusal is read after the parse rather than off the raw JSON, because what a document contributes is the
-        // flattened keys and not its nesting: `{"Persistence": {"Password": {"Reference": …}}}` and
-        // `{"Persistence:Password:Reference": …}` are the same setting to every reader beneath this one. That means the
-        // dictionary has already been replaced by the time the answer exists, so a refusal puts the published one back
-        // — the parser's own refusals throw before the assignment and need no such care.
-        if (BootstrapOnlySettings.FindIn(this.Data.Keys) is { Count: > 0 } refused)
+        // The refusal is read off the flattened keys rather than off the raw JSON, because what a document contributes
+        // is those keys and not its nesting: `{"Persistence": {"Password": {"Reference": …}}}` and
+        // `{"Persistence:Password:Reference": …}` are the same setting to every reader beneath this one.
+        if (BootstrapOnlySettings.FindIn(candidate.Keys) is { Count: > 0 } refused)
         {
-            this.Data = published;
-
             throw new BootstrapOnlySettingPersistedException(
                 $"The persisted configuration document at version {settings.Version} carries settings MailFathom reads before that layer exists: {string.Join(", ", refused)}. Remove them from the document and configure them in a file, the environment, or a command-line argument, which is where the bootstrap read takes them from.");
+        }
+
+        this.Data = candidate;
+    }
+
+    /// <summary>Flattens a persisted document with the framework's own JSON parser, publishing nothing.</summary>
+    /// <remarks>
+    /// A stream provider is the shortest path to the framework's <c>JsonConfigurationFileParser</c>, which is not
+    /// public, and one instantiated here is read and discarded rather than added to any configuration. Judging a
+    /// candidate needs its flattened keys, and producing them on an instance nobody is bound to is what keeps a
+    /// document the layer refuses from being observable while it is being judged — a credential reference above all,
+    /// which is exactly what the refusal exists to keep out of the published snapshot.
+    /// </remarks>
+    private sealed class DocumentParser : JsonStreamConfigurationProvider
+    {
+        private DocumentParser()
+            : base(new JsonStreamConfigurationSource())
+        {
+        }
+
+        public static IDictionary<string, string?> Flatten(string json)
+        {
+            using var content = new MemoryStream(Encoding.UTF8.GetBytes(json));
+
+            var parser = new DocumentParser();
+
+            parser.Load(content);
+
+            return parser.Data;
         }
     }
 }

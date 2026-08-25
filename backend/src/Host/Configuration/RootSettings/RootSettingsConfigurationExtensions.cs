@@ -17,7 +17,7 @@ internal static class RootSettingsConfigurationExtensions
     /// <param name="document">The persisted configuration document and the version it was read at.</param>
     /// <returns>The provider a reload publishes a later document through.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> or <paramref name="document" /> is <see langword="null" />.</exception>
-    /// <exception cref="RootSettingsUnreadableException">Thrown when the persisted document is not a JSON object of configuration keys.</exception>
+    /// <exception cref="RootSettingsUnreadableException">Thrown when the JSON configuration parser refuses the persisted document.</exception>
     /// <exception cref="BootstrapOnlySettingPersistedException">Thrown when the document carries a setting read before this layer is composed.</exception>
     /// <remarks>
     /// <para>
@@ -27,7 +27,7 @@ internal static class RootSettingsConfigurationExtensions
     /// </para>
     /// <para>
     /// The document is parsed here, before the source joins the list, and that ordering is the whole reason this
-    /// method loads a provider by hand. Inserting into a <c>ConfigurationManager</c> rebuilds and reloads *every*
+    /// method loads a provider by hand. Inserting into a <c>ConfigurationManager</c> rebuilds and reloads <em>every</em>
     /// source it holds, so a mounted file rewritten mid-rollout would refuse inside the insert with the same
     /// <see cref="FormatException" /> a bad persisted document raises — and reporting that as the persisted layer's
     /// failure would send an operator to the database for a broken file. Loading the provider on its own leaves this
@@ -49,8 +49,11 @@ internal static class RootSettingsConfigurationExtensions
         }
         catch (Exception exception) when (exception is FormatException or JsonException)
         {
+            // The parser's own message is carried rather than summarized, because it names which refusal this was —
+            // a root that is not an object, or the key two entries differing only in case collided on, which a jsonb
+            // column preserves and a configuration dictionary cannot. It names no value.
             throw new RootSettingsUnreadableException(
-                $"The persisted configuration document at version {document.Version} is not a JSON object of configuration keys, so MailFathom composed no settings from it.",
+                $"The JSON configuration parser refused the persisted configuration document at version {document.Version}, so MailFathom composed no settings from it: {exception.Message}",
                 exception);
         }
 
@@ -64,7 +67,7 @@ internal static class RootSettingsConfigurationExtensions
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The provider a reload publishes a later document through.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
-    /// <exception cref="RootSettingsUnreadableException">Thrown when the persisted configuration cannot be read, or is not a JSON object of configuration keys.</exception>
+    /// <exception cref="RootSettingsUnreadableException">Thrown when the persisted configuration cannot be read, or the JSON configuration parser refuses it.</exception>
     /// <exception cref="BootstrapOnlySettingPersistedException">Thrown when the document carries a setting read before this layer is composed.</exception>
     /// <remarks>
     /// Everything the read needs — where the database is, which secret block carries its credential, and how a

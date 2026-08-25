@@ -207,6 +207,30 @@ public sealed class RootSettingsLayerPrecedenceTests
     }
 
     /// <summary>
+    /// A <c>jsonb</c> column keeps two keys that differ only in case and a configuration dictionary cannot, so the
+    /// document is a perfectly good JSON object the parser still refuses. The refusal says which one it was, naming
+    /// the key that collided and no value.
+    /// </summary>
+    [Fact]
+    public void AddRootSettings_DocumentWithKeysDifferingOnlyInCase_ReportsWhatTheParserRefused()
+    {
+        // Arrange
+        using var configuration = new ConfigurationManager();
+        var document = new RootSettingsDocument(
+            """{ "MailboxSearch": { "SnippetsPerEmail": "3" }, "mailboxsearch": { "SnippetsPerEmail": "4" } }""",
+            Version: 14);
+
+        // Act
+        var refusal = Record.Exception(() => configuration.AddRootSettings(document));
+
+        // Assert
+        var unreadable = Assert.IsType<RootSettingsUnreadableException>(refusal);
+        Assert.Equal(MailFathomErrorCode.RootSettingsUnreadable, unreadable.ErrorCode);
+        Assert.Contains("version 14", unreadable.Message, StringComparison.Ordinal);
+        Assert.Contains("MailboxSearch:SnippetsPerEmail", unreadable.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// A document carrying a setting the layer was itself reached through stops startup naming the key, rather than
     /// publishing a credential the bootstrap read never saw.
     /// </summary>
