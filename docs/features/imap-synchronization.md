@@ -1458,7 +1458,7 @@ somebody else removed it. Each account chooses, through `RemotelyDeletedEmailDis
 | Value | What happens locally |
 |---|---|
 | `RetainTombstone` (default) | The row stays and records `remote_expunge_observed_at`. Every mailbox query — the timeline, search, and the content read — excludes it from that moment, and so does every later reconciliation window. Its raw MIME and derived text stay in the database. |
-| `EraseLocalCopy` | The row is removed as the disappearance is observed, and PostgreSQL removes the raw MIME, the search document, the chunks, the vectors, and any outstanding repair request with it. Nothing of the message survives locally. |
+| `EraseLocalCopy` | The row is removed as the disappearance is observed, and PostgreSQL removes the raw MIME, the search document, the chunks, the vectors, and any outstanding repair request with it. A payload stored in a bucket goes too, once the transaction has committed. Nothing of the message survives locally. |
 
 The setting is per account because the accounts of one deployment are not interchangeable: a mailbox whose provider is
 the system of record can be followed exactly, while a mailbox MailFathom is the durable copy of must not lose mail because
@@ -1494,7 +1494,7 @@ opposite. Deleting on the server frees quota; the local archive is usually the r
 |---|---|
 | `RetainLocalCopy` (default) | The row stays readable. It records `remote_expunge_observed_at`, because the server no longer holds the message and the reconciliation queue must stop asking about it, and it also records `is_retained_after_authored_delete`, which keeps it inside the timeline, search, and content read. Freeing space on the server is then not the same instruction as forgetting the mail. |
 | `RetainTombstone` | Exactly the counterpart of the default above: the row stays and every mailbox query excludes it from that moment. The record that the email existed survives, so an authored delete is auditable rather than silent, and the mail itself stops being reachable. |
-| `EraseLocalCopy` | The row is removed as the disappearance is observed, and PostgreSQL removes the raw MIME, the search document, the chunks, the vectors, and any outstanding repair request with it. Nothing of the message survives locally. |
+| `EraseLocalCopy` | The row is removed as the disappearance is observed, and PostgreSQL removes the raw MIME, the search document, the chunks, the vectors, and any outstanding repair request with it. A payload stored in a bucket goes too, once the transaction has committed. Nothing of the message survives locally. |
 
 The default is the value that destroys nothing, for the reason the other setting's default is: a disposition nobody has
 thought about must not be why mail stops being readable.

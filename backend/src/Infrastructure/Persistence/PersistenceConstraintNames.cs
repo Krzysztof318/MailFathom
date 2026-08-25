@@ -355,22 +355,37 @@ internal static class PersistenceConstraintNames
     /// </remarks>
     internal const string StoredEmailThreadIndexName = "ix_stored_emails_thread";
 
-    /// <summary>The index the readiness census of object-backed content runs on, one per table that holds raw MIME.</summary>
+    /// <summary>The index over the object key a payload row names, one per table that holds raw MIME.</summary>
     /// <remarks>
+    /// <para>
     /// Four partial indexes filtered to the object backend, and partial for the reason that answers the cost: the
     /// stored default names the database, so on a deployment that configured no endpoint every one of them is empty and
-    /// the census reads four empty indexes rather than sequentially scanning four tables of mail. That census runs on
-    /// every readiness scrape, which is what makes the difference a per-scrape cost rather than a startup one. No query
-    /// but the census reads them — a payload is reached through the row that owns it, never through its backend.
+    /// both readers below meet four empty indexes rather than sequentially scanning four tables of mail.
+    /// </para>
+    /// <para>
+    /// Two readers, and the second is what puts the key in the index rather than the discriminator. The readiness
+    /// census asks whether any object-backed row exists at all, which the index's own filter answers on every scrape.
+    /// The sweep for objects nothing points at asks whether any row names each of a listed page of keys, and it asks
+    /// that once per page for as long as the bucket takes — so the difference between a keyed lookup and a scan of
+    /// every object-backed row is the difference between a sweep an operator can run hourly and one they cannot.
+    /// </para>
+    /// <para>
+    /// Unique, because a key is minted by the write that produced it and no two rows can name one: content addressing
+    /// was refused precisely so that removing an object could never take a payload another row still points at. A
+    /// violation would mean that assumption had stopped holding, which is a defect rather than a race to retry, so it
+    /// is deliberately absent from the conflict predicate.
+    /// </para>
     /// </remarks>
-    internal const string EmailMessageContentObjectBackedIndexName = "ix_email_message_contents_object_backed";
+    internal const string EmailMessageContentObjectLocatorUniqueIndexName =
+        "ix_email_message_contents_object_locator";
 
-    /// <inheritdoc cref="EmailMessageContentObjectBackedIndexName" />
-    internal const string OutgoingEmailContentObjectBackedIndexName = "ix_outgoing_email_contents_object_backed";
+    /// <inheritdoc cref="EmailMessageContentObjectLocatorUniqueIndexName" />
+    internal const string OutgoingEmailContentObjectLocatorUniqueIndexName =
+        "ix_outgoing_email_contents_object_locator";
 
-    /// <inheritdoc cref="EmailMessageContentObjectBackedIndexName" />
-    internal const string MailDraftContentObjectBackedIndexName = "ix_mail_draft_contents_object_backed";
+    /// <inheritdoc cref="EmailMessageContentObjectLocatorUniqueIndexName" />
+    internal const string MailDraftContentObjectLocatorUniqueIndexName = "ix_mail_draft_contents_object_locator";
 
-    /// <inheritdoc cref="EmailMessageContentObjectBackedIndexName" />
-    internal const string RecurringSendDraftObjectBackedIndexName = "ix_recurring_send_drafts_object_backed";
+    /// <inheritdoc cref="EmailMessageContentObjectLocatorUniqueIndexName" />
+    internal const string RecurringSendDraftObjectLocatorUniqueIndexName = "ix_recurring_send_drafts_object_locator";
 }

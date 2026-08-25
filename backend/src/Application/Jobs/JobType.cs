@@ -74,6 +74,15 @@ public readonly record struct JobType
     /// </remarks>
     public static JobType SendRecurringOccurrence { get; } = new("send-recurring-occurrence");
 
+    /// <summary>Gets the type whose work is one bounded segment of a sweep for stored mail nothing points at any more.</summary>
+    /// <remarks>
+    /// Its payload contract is <see cref="ReclaimContentObjectsJobPayload" />, which names a place in the object
+    /// endpoint's listing and nothing in a message. The work is long and belongs to no account: an attempt reclaims for
+    /// as long as it is given and hands whatever it did not reach to a segment of its own, so a bucket larger than one
+    /// attempt is swept in bounded pieces rather than by holding a worker for the whole of it.
+    /// </remarks>
+    public static JobType ReclaimContentObjects { get; } = new("reclaim-content-objects");
+
     /// <summary>Gets every declared job type.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
     public static IReadOnlyList<JobType> All { get; } =
@@ -83,6 +92,7 @@ public readonly record struct JobType
         RederiveStoredMail,
         DispatchHeldSend,
         SendRecurringOccurrence,
+        ReclaimContentObjects,
     ];
 
     /// <summary>Gets whether this value names a declared job type rather than the unusable struct default.</summary>

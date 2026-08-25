@@ -418,6 +418,236 @@ public sealed class S3EmailContentObjectStoreTests
         Assert.All(written, measurement => Assert.Equal(Message.Length, measurement.Value));
     }
 
+    /// <summary>Removing an object is what carries a committed erasure of its row through to the endpoint.</summary>
+    [Fact]
+    public async Task DeleteAsync_AnObject_RemovesExactlyThatKeyFromTheConfiguredBucket()
+    {
+        // Arrange
+        var bucket = BucketAnswering();
+        using var host = OutboundResilienceTestHost.WithConfiguredSettings();
+        var store = StoreOver(bucket, host);
+
+        // Act
+        await store.DeleteAsync("mailfathom/incoming/one", TestContext.Current.CancellationToken);
+
+        // Assert
+        await bucket.Received(1).DeleteObjectAsync(
+            Arg.Is<DeleteObjectRequest>(request =>
+                request != null && request.BucketName == "payloads" && request.Key == "mailfathom/incoming/one"),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A locator nothing supplied is a defect in the row that carried it rather than a removal to attempt.</summary>
+    [Fact]
+    public async Task DeleteAsync_ALocatorThatNamesNothing_IsRefusedWithoutReachingTheEndpoint()
+    {
+        // Arrange
+        var bucket = BucketAnswering();
+        using var host = OutboundResilienceTestHost.WithConfiguredSettings();
+        var store = StoreOver(bucket, host);
+
+        // Act, Assert
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => store.DeleteAsync("   ", TestContext.Current.CancellationToken));
+        await bucket.DidNotReceive().DeleteObjectAsync(
+            Arg.Any<DeleteObjectRequest>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>An endpoint that could not be reached is reported, because the object it still holds is mail nothing points at.</summary>
+    [Fact]
+    public async Task DeleteAsync_AnEndpointThatCannotBeReached_ReportsTheFailure()
+    {
+        // Arrange
+        var bucket = BucketAnswering();
+        bucket.DeleteObjectAsync(Arg.Any<DeleteObjectRequest>(), Arg.Any<CancellationToken>())
+            .Returns<Task<DeleteObjectResponse>>(_ => throw new HttpRequestException("no route to host"));
+
+        using var host = OutboundResilienceTestHost.WithConfiguredSettings(("ObjectStorageInvocation:MaxAttempts", "1"));
+        var store = StoreOver(bucket, host);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<ObjectStorageUnavailableException>(
+            () => store.DeleteAsync("mailfathom/incoming/one", TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(ObjectStorageFailure.TransientTransportFailure, failure.Failure);
+    }
+
+    /// <summary>
+    /// A sweep may delete only what this deployment wrote, and a prefix is the whole of what separates two deployments
+    /// sharing one bucket. A listing that reached outside it would let reclamation remove somebody else's mail.
+    /// </summary>
+    [Fact]
+    public async Task ListAsync_APage_AsksOnlyForKeysBeneathTheConfiguredPrefix()
+    {
+        // Arrange
+        var bucket = BucketAnswering();
+        using var host = OutboundResilienceTestHost.WithConfiguredSettings();
+        var store = StoreOver(bucket, host);
+
+        // Act
+        await store.ListAsync(continuationToken: null, maxObjects: 1000, TestContext.Current.CancellationToken);
+
+        // Assert
+        await bucket.Received(1).ListObjectsV2Async(
+            Arg.Is<ListObjectsV2Request>(request =>
+                request != null
+                && request.BucketName == "payloads"
+                && request.Prefix == "mailfathom/"
+                && request.MaxKeys == 1000),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>What a sweep decides about an object is its key, its age, and its size, so all three come back with it.</summary>
+    [Fact]
+    public async Task ListAsync_APage_AnswersEachObjectWithWhatTheSweepDecidesAboutIt()
+    {
+        // Arrange
+        var writtenAt = new DateTime(2026, 8, 24, 9, 30, 0, DateTimeKind.Utc);
+        var bucket = BucketAnswering();
+        bucket.ListObjectsV2Async(Arg.Any<ListObjectsV2Request>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(new ListObjectsV2Response
+            {
+                S3Objects =
+                [
+                    new S3Object { Key = "mailfathom/incoming/one", LastModified = writtenAt, Size = 4096 },
+                ],
+                IsTruncated = false,
+            }));
+
+        using var host = OutboundResilienceTestHost.WithConfiguredSettings();
+        var store = StoreOver(bucket, host);
+
+        // Act
+        var page = await store.ListAsync(
+            continuationToken: null,
+            maxObjects: 1000,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var listed = Assert.Single(page.Objects);
+        Assert.Equal("mailfathom/incoming/one", listed.Key);
+        Assert.Equal(new DateTimeOffset(writtenAt), listed.WrittenAt);
+        Assert.Equal(4096, listed.ByteLength);
+        Assert.Null(page.ContinuationToken);
+    }
+
+    /// <summary>An endpoint that named no moment is reported as having named none, rather than as an object of some age.</summary>
+    /// <remarks>
+    /// The moment decides whether the sweep may touch the object at all, so inventing one here would decide the age
+    /// floor from a value the endpoint never stated. The absence is carried through and the sweep leaves such an object
+    /// alone.
+    /// </remarks>
+    [Fact]
+    public async Task ListAsync_AnObjectTheEndpointNamedNoMomentFor_AnswersWithNoMoment()
+    {
+        // Arrange
+        var bucket = BucketAnswering();
+        bucket.ListObjectsV2Async(Arg.Any<ListObjectsV2Request>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(new ListObjectsV2Response
+            {
+                S3Objects = [new S3Object { Key = "mailfathom/incoming/undated", Size = 4096 }],
+                IsTruncated = false,
+            }));
+
+        using var host = OutboundResilienceTestHost.WithConfiguredSettings();
+        var store = StoreOver(bucket, host);
+
+        // Act
+        var page = await store.ListAsync(
+            continuationToken: null,
+            maxObjects: 1000,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(Assert.Single(page.Objects).WrittenAt);
+    }
+
+    /// <summary>
+    /// The listing's own flag decides whether there is another page, not whether a token came back. An endpoint that
+    /// ended the listing and echoed a token anyway would otherwise be listed from that token for ever.
+    /// </summary>
+    [Fact]
+    public async Task ListAsync_AnEndedListingThatStillEchoesAToken_AnswersNoContinuation()
+    {
+        // Arrange
+        var bucket = BucketAnswering();
+        bucket.ListObjectsV2Async(Arg.Any<ListObjectsV2Request>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(new ListObjectsV2Response
+            {
+                S3Objects = [],
+                IsTruncated = false,
+                NextContinuationToken = "echoed",
+            }));
+
+        using var host = OutboundResilienceTestHost.WithConfiguredSettings();
+        var store = StoreOver(bucket, host);
+
+        // Act
+        var page = await store.ListAsync(
+            continuationToken: null,
+            maxObjects: 1000,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(page.ContinuationToken);
+        Assert.Empty(page.Objects);
+    }
+
+    /// <summary>A truncated listing hands back the token the next page is asked for with, which is what makes a sweep resumable.</summary>
+    [Fact]
+    public async Task ListAsync_ATruncatedListing_AnswersTheTokenTheNextPageIsAskedForWith()
+    {
+        // Arrange
+        var bucket = BucketAnswering();
+        bucket.ListObjectsV2Async(Arg.Any<ListObjectsV2Request>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(new ListObjectsV2Response
+            {
+                S3Objects = [],
+                IsTruncated = true,
+                NextContinuationToken = "next-page",
+            }));
+
+        using var host = OutboundResilienceTestHost.WithConfiguredSettings();
+        var store = StoreOver(bucket, host);
+
+        // Act
+        var page = await store.ListAsync(
+            continuationToken: "this-page",
+            maxObjects: 1000,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("next-page", page.ContinuationToken);
+        await bucket.Received(1).ListObjectsV2Async(
+            Arg.Is<ListObjectsV2Request>(request => request != null && request.ContinuationToken == "this-page"),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>The SDK leaves an absent collection null from version 4 onwards, which is what an empty prefix answers with.</summary>
+    [Fact]
+    public async Task ListAsync_AnEndpointHoldingNothingBeneathThePrefix_AnswersAnEmptyPage()
+    {
+        // Arrange
+        var bucket = BucketAnswering();
+        bucket.ListObjectsV2Async(Arg.Any<ListObjectsV2Request>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(new ListObjectsV2Response { S3Objects = null, IsTruncated = false }));
+
+        using var host = OutboundResilienceTestHost.WithConfiguredSettings();
+        var store = StoreOver(bucket, host);
+
+        // Act
+        var page = await store.ListAsync(
+            continuationToken: null,
+            maxObjects: 1000,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(page.Objects);
+        Assert.Null(page.ContinuationToken);
+    }
+
     [Fact]
     public void Construction_MissingCollaborator_IsRefused()
     {
@@ -444,6 +674,10 @@ public sealed class S3EmailContentObjectStoreTests
             {
                 ResponseStream = new MemoryStream(Encoding.ASCII.GetBytes("stored")),
             }));
+        bucket.DeleteObjectAsync(Arg.Any<DeleteObjectRequest>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(new DeleteObjectResponse()));
+        bucket.ListObjectsV2Async(Arg.Any<ListObjectsV2Request>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(new ListObjectsV2Response { S3Objects = [], IsTruncated = false }));
 
         return bucket;
     }

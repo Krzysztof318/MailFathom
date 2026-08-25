@@ -253,8 +253,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("StoredEmailId");
 
-                    b.HasIndex("Backend")
-                        .HasDatabaseName("ix_email_message_contents_object_backed")
+                    b.HasIndex("ObjectLocator")
+                        .IsUnique()
+                        .HasDatabaseName("ix_email_message_contents_object_locator")
                         .HasFilter("\"Backend\" = 'ObjectStorage'");
 
                     b.ToTable("email_message_contents", null, t =>
@@ -763,8 +764,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("MailDraftId");
 
-                    b.HasIndex("Backend")
-                        .HasDatabaseName("ix_mail_draft_contents_object_backed")
+                    b.HasIndex("ObjectLocator")
+                        .IsUnique()
+                        .HasDatabaseName("ix_mail_draft_contents_object_locator")
                         .HasFilter("\"Backend\" = 'ObjectStorage'");
 
                     b.ToTable("mail_draft_contents", null, t =>
@@ -1463,8 +1465,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("OutgoingEmailId");
 
-                    b.HasIndex("Backend")
-                        .HasDatabaseName("ix_outgoing_email_contents_object_backed")
+                    b.HasIndex("ObjectLocator")
+                        .IsUnique()
+                        .HasDatabaseName("ix_outgoing_email_contents_object_locator")
                         .HasFilter("\"Backend\" = 'ObjectStorage'");
 
                     b.ToTable("outgoing_email_contents", null, t =>
@@ -1747,8 +1750,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("RecurringSendId");
 
-                    b.HasIndex("Backend")
-                        .HasDatabaseName("ix_recurring_send_drafts_object_backed")
+                    b.HasIndex("ObjectLocator")
+                        .IsUnique()
+                        .HasDatabaseName("ix_recurring_send_drafts_object_locator")
                         .HasFilter("\"Backend\" = 'ObjectStorage'");
 
                     b.ToTable("recurring_send_drafts", null, t =>

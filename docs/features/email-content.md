@@ -552,9 +552,59 @@ Two consequences are worth reading off that, because both are observable:
   the row, and the placement happened before that unit of work began — so every attempt stages the same locator over the
   same object, and the endpoint sees one write however many attempts the commit took.
 
-**An object the row stopped pointing at is left where it is.** Nothing here deletes one, which is a deliberate omission
-rather than an oversight: what removes content is erasure, retention, and the data-subject workflows those belong to,
-and a store that quietly dropped a payload the moment a row moved would decide that question in the wrong place.
+### An object nothing points at is reclaimed
+
+An object outlives the row that pointed at it in two ways, and both end with the object gone.
+
+**A row that goes takes its object with it, immediately after the transaction commits.** Deleting a stored email, an
+outgoing record, a recurring declaration, or a mail draft removes the payload from the endpoint as well as the record
+from the database. The order is the ordering
+[ADR 0001](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0001-application-owned-repositories-for-persistence-ports.md)
+requires of every remote call — the endpoint is reached after the commit rather than inside it, so a network that
+stalls holds no transaction open, and a delete that rolled back has removed nothing. The locators are read **inside**
+the transaction, before the rows go, because the foreign keys cascade: the content row is deleted by the database as a
+consequence of the mail row going, and the locator on it is the only thing that names the object.
+
+**A failure to remove one is recorded, and the object stays reclaimable.** The row is already gone at that point, so
+the endpoint refusing is not a reason to fail the caller's write or to put the record back — what it produces is a
+counted, logged failure and an object nothing points at, which is exactly the state the sweep below is for.
+
+**A sweep reclaims what nothing points at.** It is a recurring job like any other, bounded, resumable, and subject to
+the same concurrency gate as ordinary work, so it yields rather than competing with mail arriving. Each run lists one
+page of keys beneath the configured prefix, asks the database which of that page a row still names, and removes the
+rest; a run that reaches its object ceiling hands the listing position to the next segment rather than starting over,
+and one interrupted mid-way costs at most the page it was on. The hand-on is the only record of where the walk reached,
+so a queue already at its configured depth ends the attempt rather than being read as a sweep that finished: the same
+segment is attempted again once the queue has drained. Two runs overlapping cannot delete an object twice or
+miss one — the job's lease admits one worker, and removing an object already gone is not an error.
+
+Three things bound what it may touch, and each is deliberate:
+
+- **The configured key prefix is its whole authority.** It lists beneath `ContentStorage:ObjectStorage:KeyPrefix` and
+  nowhere else, so a bucket MailFathom shares with anything is a bucket whose other contents it cannot see. An object
+  written under a prefix a deployment has since changed is outside that authority and is not reclaimed.
+- **An object younger than the age floor is never reclaimed**, whatever the database says about it. A payload is
+  placed before the unit of work that points at it commits, so between those two moments an object legitimately has no
+  row naming it; the floor is what keeps the sweep from meeting mail in flight and deleting it. The age is read before
+  the database is asked, so a write in flight is not even a row the sweep looks up.
+- **A row committed between the listing and the lookup keeps its object.** The listing happens first and the lookup
+  second, which is the order that errs towards keeping a payload: an object whose row arrived in between is found by
+  the lookup and left alone.
+
+What an operator sees of both is in [telemetry](../operations/telemetry.md#reclaiming-content-objects): objects and
+bytes reclaimed, failures, and the age of the oldest orphan a completed sweep met, each split by which of the two
+mechanisms reported it. A deployment whose sweep reclaims everything is one whose post-commit path is failing, which is
+what the split is for. No key, bucket, or payload reaches any of it.
+
+**When mail is actually gone, then, has two answers.** In the ordinary case the record goes with the transaction and
+the bytes go immediately afterwards. Where the endpoint refused, or where a write crashed between placing an object and
+committing the row that would have pointed at it, the bytes go within one reclamation interval instead. That bound is
+the promise, which is what makes the interval and the age floor privacy-relevant settings rather than housekeeping:
+raising either lengthens how long mail whose record is gone still exists as bytes.
+
+A superseded draft revision is the crashed write's ordinary twin. Every placement mints a fresh key, so revising a
+draft leaves the previous object with nothing pointing at it the moment the new row commits — an orphan by design
+rather than by failure, and reclaimed on the same path.
 
 ### Losing the endpoint is a readiness condition
 
@@ -578,14 +628,21 @@ configured bucket whether it answers, and the check that asks the stored content
   which is what let the object backend arrive as one adapter's concern rather than four — no use case above it knows
   which store answered. [Mail delivery](mail-delivery.md) holds why the send's write may never be repeated and why the
   draft's must be, and [where a payload is kept](#where-a-payload-is-kept) holds what the two backends are.
+- `MailFathom.Application.EmailContent.Storage.Reclamation` — what one bounded sweep of the endpoint reclaimed, and the
+  port that runs one. The job handler beside them is what makes a sweep resumable: it hands the listing position of a
+  run that reached its ceiling to the segment after it, under a key no other segment of any sweep shares.
 - `MailFathom.Application.EmailContent.Rendering` — the renderer port, the body representations with their bounds, and
   the headers.
 - `MailFathom.Application.EmailContent.Repair` — the repair-request port, the request it carries, and the defect that
   raises one.
 - `MailFathom.Infrastructure.Mail.Mime` — `MimeKitEmailContentRenderer` and `EmailHtmlSanitizer`, which own the MIME parser
   and the HTML sanitizer respectively. Neither type escapes that namespace.
+- `MailFathom.Infrastructure.ObjectStorage` — `S3EmailContentObjectStore` and the two mechanisms that take a payload
+  back out of it: `ReleasedContentObjectEraser`, which the persistence session calls once its transaction has
+  committed, and `ObjectStorageContentReclamation`, which sweeps a listing.
 - `MailFathom.Infrastructure.Persistence.Emails` — `StoredEmailSummaryReader`, the content store's integrity-bearing read,
-  and `EmailContentRepairRequestStore`.
+  `EmailContentRepairRequestStore`, `ReleasedContentObjects`, which collects the locators of the rows a transaction is
+  about to remove, and `ContentObjectReferenceReader`, which answers the sweep's one question about a listed page.
 
 `MimeMessageHeaderReader` is shared with the extraction that fills the lexical index, so a message is indexed under
 exactly the headers it is displayed under.

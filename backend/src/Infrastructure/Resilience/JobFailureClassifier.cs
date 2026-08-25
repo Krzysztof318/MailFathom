@@ -52,6 +52,10 @@ internal sealed class JobFailureClassifier : IJobFailureClassifier
     {
         OutboundDependencyUnavailableException => JobFailureClassification.Transient,
 
+        // A queue at its depth is backpressure rather than a defect: the same segment enqueues once the queue drains,
+        // so the attempt is worth repeating and the attempt budget bounds a queue that never does.
+        JobHandOnRefusedAtCapacityException => JobFailureClassification.Transient,
+
         // The adapter has already classified its provider's answer, so this defers to it rather than producing a
         // second opinion for the same failure.
         EmbeddingGenerationFailedException generationFailure => generationFailure.IsWorthRepeating

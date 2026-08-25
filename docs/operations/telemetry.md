@@ -554,9 +554,45 @@ owns it and therefore a message, and the payload is mail; the operation and the 
 words and are the whole of what is published. The endpoint's own answers are the one place a response could carry a
 key, and the client is constructed with response and metric logging off so neither reaches a log at any level.
 
-The readiness probe is what publishes these today, one `list`, one `put`, and one `delete` per scrape — a zero-length
-object under a key of the deployment's own, written and removed, so nothing about a message reaches the bucket to
-establish that the bucket works. [Health endpoints](health-endpoints.md) records what an unready instance means.
+The readiness probe publishes these on a deployment that stores nothing, one `list`, one `put`, and one `delete` per
+scrape — a zero-length object under a key of the deployment's own, written and removed, so nothing about a message
+reaches the bucket to establish that the bucket works. [Health endpoints](health-endpoints.md) records what an unready
+instance means. Everything else on these instruments is mail: a `put` per payload stored, a `get` per payload read
+back, and the `list` and `delete` operations reclamation issues, which the section below reports separately.
+
+### Reclaiming content objects
+
+Mail whose record is gone stops being mail when its payload leaves the endpoint, and two mechanisms take it there: the
+deletion that follows a committed erasure, and the bounded sweep that reclaims objects no row points at.
+[An object nothing points at is reclaimed](../features/email-content.md#an-object-nothing-points-at-is-reclaimed) is
+what each of them does; this is what an operator reads.
+
+They report through one set of instruments split by `mailfathom.content_object_reclamation.trigger`, which is
+`erasure` or `sweep`, rather than through an instrument each. The split is the interesting part: a deployment whose
+sweep reclaims almost everything is one whose post-commit deletion is failing, and that reading is only available if
+both are in one series.
+
+`mailfathom.content_object_reclamation.reclaimed` counts objects the endpoint removed,
+`mailfathom.content_object_reclamation.bytes` how many bytes those objects held, and
+`mailfathom.content_object_reclamation.failed` counts the ones it did not — each of which is left where it is for a
+later sweep rather than retried in place. A shutdown that stops either mechanism part-way counts what it had not
+reached as well, rather than only what the endpoint refused, and how much of the remainder that is differs by
+mechanism: an erasure was handed every locator it was to remove and counts all of the ones it never attempted, while a
+sweep counts the orphans it had not attempted in the page it was on, the pages beyond it having never been listed and
+being reached instead by the segment that resumes the walk. Only the sweep contributes to the byte total, because only
+a listing states a size; a deletion that follows an erasure knows the key and not the length. Each counter is added to
+only when it moved, so an interval that reclaimed nothing publishes nothing rather than a stream of zeroes.
+
+**`mailfathom.content_object_reclamation.oldest_orphan.age` is the number that says whether reclamation is keeping
+up.** It is a gauge in seconds, read from the most recent sweep that reached the end of its listing — a run that
+stopped part-way saw part of the bucket, and the oldest orphan in part of one says nothing about the whole. A bucket
+too large for one run is swept by a chain of them, and each hands what it met on to the next alongside its listing
+position, so the figure covers the whole sweep rather than its last segment. A value that stays near the configured age
+floor is a bucket in step with the database; a value that grows across intervals is a backlog, and the interval or the
+object ceiling is what to move.
+
+Nothing here carries an object key, a bucket, or any part of a payload. A key names one message, so what is published
+is counts, volumes, and MailFathom's own two words for the two mechanisms.
 
 ### Durable background work
 

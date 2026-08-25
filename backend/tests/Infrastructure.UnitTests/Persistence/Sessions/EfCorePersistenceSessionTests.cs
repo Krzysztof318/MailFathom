@@ -5,11 +5,14 @@
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Persistence;
+using MailFathom.Infrastructure.ObjectStorage;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using MailFathom.TestSupport;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Persistence.Sessions;
@@ -19,6 +22,9 @@ public sealed class EfCorePersistenceSessionTests
     private const string CommitsInstrumentName = "mailfathom.persistence.commits";
 
     private const string OutcomeTagName = "mailfathom.persistence.commit.outcome";
+
+    /// <summary>Shared so the gauge its constructor registers is created once for the class rather than once per test.</summary>
+    private static readonly ContentObjectReclamationTelemetry ReclamationTelemetry = new();
 
     [Fact]
     public async Task CommitAsync_DbUpdateConcurrencyException_RollsBackAndReturnsConflict()
@@ -364,6 +370,101 @@ public sealed class EfCorePersistenceSessionTests
         Assert.Equal([false], afterDisposal.Endings);
     }
 
+    /// <summary>
+    /// The record goes with the transaction and the bytes go immediately afterwards, which is what makes an erasure
+    /// true of both stores. The locators are read before the rows go, because a cascade takes the only pointer with it.
+    /// </summary>
+    [Fact]
+    public async Task CommitAsync_ASessionThatReleasedObjects_RemovesThemAfterTheTransactionCommitted()
+    {
+        // Arrange
+        var objectStore = Substitute.For<IEmailContentObjectStore>();
+        var (resources, persistenceSession) = CreateSession(releasedContentObjects: EraserOver(objectStore));
+        await using var session = persistenceSession;
+        session.ReleaseOnCommit(["mailfathom/incoming/one"]);
+
+        // Act
+        var result = await session.CommitAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(PersistenceCommitResult.Committed, result);
+        Assert.Equal(1, resources.CommitCount);
+        await objectStore.Received(1).DeleteAsync("mailfathom/incoming/one", Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Removing the object of a deletion that then rolled back would be irreversible loss on a transient failure, which
+    /// is the whole reason the removal waits for the commit rather than joining the write.
+    /// </summary>
+    [Fact]
+    public async Task CommitAsync_ASessionThatConflicted_RemovesNothingItReleased()
+    {
+        // Arrange
+        var objectStore = Substitute.For<IEmailContentObjectStore>();
+        var (_, persistenceSession) = CreateSession(
+            new DbUpdateConcurrencyException(),
+            releasedContentObjects: EraserOver(objectStore));
+        await using var session = persistenceSession;
+        session.ReleaseOnCommit(["mailfathom/incoming/one"]);
+
+        // Act
+        var result = await session.CommitAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(PersistenceCommitResult.ConcurrencyConflict, result);
+        await objectStore.DidNotReceive().DeleteAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A session nothing released reaches the endpoint at all, which is every write a deployment makes.</summary>
+    [Fact]
+    public async Task CommitAsync_ASessionThatReleasedNothing_ReachesTheEndpointNotAtAll()
+    {
+        // Arrange
+        var objectStore = Substitute.For<IEmailContentObjectStore>();
+        var (_, persistenceSession) = CreateSession(releasedContentObjects: EraserOver(objectStore));
+        await using var session = persistenceSession;
+
+        // Act
+        await session.CommitAsync(CancellationToken.None);
+
+        // Assert
+        await objectStore.DidNotReceive().DeleteAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>The write already committed, so an endpoint that refused leaves the caller told its write succeeded.</summary>
+    [Fact]
+    public async Task CommitAsync_AnEndpointThatRefusesTheRemoval_StillReportsTheWriteAsCommitted()
+    {
+        // Arrange
+        var objectStore = Substitute.For<IEmailContentObjectStore>();
+        objectStore.DeleteAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ => throw ObjectStorageUnavailableException.From(
+                ObjectStorageFailure.TransientTransportFailure,
+                new HttpRequestException("no route to host")));
+
+        var (_, persistenceSession) = CreateSession(releasedContentObjects: EraserOver(objectStore));
+        await using var session = persistenceSession;
+        session.ReleaseOnCommit(["mailfathom/incoming/one"]);
+
+        // Act
+        var result = await session.CommitAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(PersistenceCommitResult.Committed, result);
+    }
+
+    /// <summary>A collection nothing supplied is a defect in the deletion path rather than an erasure that freed nothing.</summary>
+    [Fact]
+    public async Task ReleaseOnCommit_NoLocatorCollection_IsRefused()
+    {
+        // Arrange
+        var (_, persistenceSession) = CreateSession();
+        await using var session = persistenceSession;
+
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(() => session.ReleaseOnCommit(null!));
+    }
+
     [SuppressMessage(
         "Reliability",
         "CA2000:Dispose objects before losing scope",
@@ -375,7 +476,8 @@ public sealed class EfCorePersistenceSessionTests
         bool classifiesSaveChangesExceptionAsConcurrencyConflict = false,
         Exception? transientProviderFailure = null,
         Exception? disposeException = null,
-        Exception? commitTransactionException = null)
+        Exception? commitTransactionException = null,
+        ReleasedContentObjectEraser? releasedContentObjects = null)
     {
         var resources = new TestPersistenceSessionResources
         {
@@ -387,8 +489,16 @@ public sealed class EfCorePersistenceSessionTests
             CommitTransactionException = commitTransactionException,
         };
 
-        return (resources, new EfCorePersistenceSession(resources, new PersistenceCommitTelemetry()));
+        return (
+            resources,
+            new EfCorePersistenceSession(resources, new PersistenceCommitTelemetry(), releasedContentObjects));
     }
+
+    /// <summary>Composes the eraser over one endpoint, which is what a deployment storing content in a bucket has.</summary>
+    private static ReleasedContentObjectEraser EraserOver(IEmailContentObjectStore objectStore) => new(
+        ReclamationTelemetry,
+        NullLogger<ReleasedContentObjectEraser>.Instance,
+        objectStore);
 
     private sealed class TestPersistenceSessionResources : IEfCorePersistenceSessionResources
     {

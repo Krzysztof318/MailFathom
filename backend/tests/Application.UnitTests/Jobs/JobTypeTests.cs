@@ -25,6 +25,7 @@ public sealed class JobTypeTests
             JobType.RederiveStoredMail,
             JobType.DispatchHeldSend,
             JobType.SendRecurringOccurrence,
+            JobType.ReclaimContentObjects,
         ];
 
         // Act

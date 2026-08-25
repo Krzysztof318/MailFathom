@@ -34,4 +34,5 @@ namespace MailFathom.Infrastructure.Persistence.Jobs;
 [JsonSerializable(typeof(RecurringSendJobPayload))]
 [JsonSerializable(typeof(RunScheduledMailRulesJobPayload))]
 [JsonSerializable(typeof(RederiveStoredMailJobPayload))]
+[JsonSerializable(typeof(ReclaimContentObjectsJobPayload))]
 internal sealed partial class JobPayloadJsonContext : JsonSerializerContext;

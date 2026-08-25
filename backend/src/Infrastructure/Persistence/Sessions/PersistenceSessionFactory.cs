@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
 using MailFathom.CodeCoverage;
+using MailFathom.Infrastructure.ObjectStorage;
 using MailFathom.Infrastructure.Observability;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -17,7 +18,8 @@ namespace MailFathom.Infrastructure.Persistence.Sessions;
 internal sealed class PersistenceSessionFactory(
     MailFathomDbContext dbContext,
     ITransientFailureClassifier transientFailureClassifier,
-    PersistenceCommitTelemetry telemetry) : IPersistenceSessionFactory
+    PersistenceCommitTelemetry telemetry,
+    ReleasedContentObjectEraser releasedContentObjects) : IPersistenceSessionFactory
 {
     /// <inheritdoc />
     /// <remarks>
@@ -36,7 +38,8 @@ internal sealed class PersistenceSessionFactory(
         Task.FromResult<IPersistenceSession>(
             new EfCorePersistenceSession(
                 new EfCorePersistenceSessionResources(dbContext, transientFailureClassifier),
-                telemetry));
+                telemetry,
+                releasedContentObjects));
 
     private sealed class EfCorePersistenceSessionResources(
         MailFathomDbContext dbContext,

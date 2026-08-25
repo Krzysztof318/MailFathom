@@ -24,6 +24,21 @@ public sealed class JobPayloadDocumentTests
         ImapUidValidity.Create(12345),
         ImapUid.Create(4711)));
 
+    /// <summary>One payload of every declared job type, which is what the closed-set assertion below is stated over.</summary>
+    private static IJobPayload[] DeclaredPayloads =>
+    [
+        Payload,
+        RunScheduledMailRulesJobPayload.For(MailAccountId.Create("account-a")),
+        RederiveStoredMailJobPayload.For(MailAccountId.Create("account-a"), MailFolderAlias.Create("inbox")),
+        HeldSendJobPayload.For(
+            MailAccountId.Create("account-a"),
+            OutgoingEmailId.Create(Guid.Parse("6f9619ff-8b86-d011-b42d-00c04fc964ff"))),
+        RecurringSendJobPayload.For(
+            MailAccountId.Create("account-a"),
+            RecurringSendId.Create(Guid.Parse("6f9619ff-8b86-d011-b42d-00c04fc964ff"))),
+        ReclaimContentObjectsJobPayload.FromTheStart(),
+    ];
+
     /// <summary>
     /// The job type decides the contract on both sides, so a stored document is always read back as the shape it was
     /// written as — which is what removes the discriminator a polymorphic document would otherwise need.
@@ -109,6 +124,47 @@ public sealed class JobPayloadDocumentTests
             """{"accountId":"account-a","declarationId":"6f9619ff-8b86-d011-b42d-00c04fc964ff"}""",
             document);
         Assert.Equal(payload, JobPayloadDocument.Deserialize(JobType.SendRecurringOccurrence, document));
+    }
+
+    /// <summary>A segment of a sweep is a place in a listing and nothing about a message, and it survives the round trip.</summary>
+    /// <remarks>
+    /// A payload with no contract in this store is refused at enqueue rather than at compile time, so the chain that
+    /// carries a sweep past its first attempt would fail on its first hand-on and nothing before this would say so.
+    /// </remarks>
+    [Fact]
+    public void Serialize_ASweepSegment_WritesThePositionAndReadsItBackAsTheSameSegment()
+    {
+        // Arrange
+        var payload = ReclaimContentObjectsJobPayload.FromTheStart().ContinuingFrom("half-way", TimeSpan.FromDays(9));
+
+        // Act
+        var document = JobPayloadDocument.Serialize(payload);
+        var restored = JobPayloadDocument.Deserialize(JobType.ReclaimContentObjects, document);
+
+        // Assert
+        Assert.Equal(payload, restored);
+        Assert.Contains("\"resumeFrom\":\"half-way\"", document, StringComparison.Ordinal);
+    }
+
+    /// <summary>Every declared type is one this store can write, or a job of it is enqueueable and unstorable.</summary>
+    /// <remarks>
+    /// Stated over the closed enumeration rather than per type, because the failure this guards against is a type
+    /// appended without its two lines in the store — which nothing else reports until a deployment enqueues one.
+    /// </remarks>
+    [Fact]
+    public void Serialize_EveryDeclaredType_HasAContractInThisStore()
+    {
+        // Act
+        var withoutAContract = JobType.All
+            .Where(jobType => !DeclaredPayloads.Any(payload => payload.JobType == jobType))
+            .Select(jobType => jobType.Name)
+            .ToArray();
+
+        // Assert
+        Assert.Empty(withoutAContract);
+        Assert.All(DeclaredPayloads, payload => Assert.Equal(
+            payload,
+            JobPayloadDocument.Deserialize(payload.JobType, JobPayloadDocument.Serialize(payload))));
     }
 
     /// <summary>

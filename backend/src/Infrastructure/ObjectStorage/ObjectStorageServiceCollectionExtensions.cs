@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.EmailContent.Storage.Reclamation;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Secrets.Discovery;
@@ -27,21 +28,25 @@ namespace MailFathom.Infrastructure.ObjectStorage;
 /// </remarks>
 public static class ObjectStorageServiceCollectionExtensions
 {
-    /// <summary>Registers the object-storage transport, its client, its telemetry, its readiness probe, and the content store that writes through it.</summary>
+    /// <summary>Registers the object-storage transport, its client, its telemetry, its readiness probe, the content store that writes through it, and the sweep that reclaims what nothing points at.</summary>
     /// <param name="services">The service collection the registrations are added to.</param>
     /// <param name="endpoint">Where the endpoint is, which bucket it holds, and how a request to it is addressed and bounded.</param>
+    /// <param name="reclamationBounds">The age below which the sweep leaves an object alone, and how much one run of it may examine.</param>
     /// <param name="configuredTrustAnchor">The block referencing the private authority that signed the endpoint's certificate, or <see langword="null" /> for one the platform already trusts.</param>
     /// <returns>The same service collection, so registration reads as one expression.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> or <paramref name="endpoint" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" />, <paramref name="endpoint" />, or <paramref name="reclamationBounds" /> is <see langword="null" />.</exception>
     public static IServiceCollection AddObjectStorage(
         this IServiceCollection services,
         ObjectStorageEndpoint endpoint,
+        ContentObjectReclamationBounds reclamationBounds,
         ConfiguredSecret? configuredTrustAnchor)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(endpoint);
+        ArgumentNullException.ThrowIfNull(reclamationBounds);
 
         services.AddSingleton(endpoint);
+        services.AddSingleton(reclamationBounds);
         services.AddSingleton(provider => new ObjectStorageTransportTrust(
             configuredTrustAnchor,
             provider.GetRequiredService<TrustAnchorLoader>()));
@@ -60,6 +65,10 @@ public static class ObjectStorageServiceCollectionExtensions
         // Registered here and nowhere else, which is what makes the presence of this service the deployment's selection
         // of the object backend: the content store asks the container for it and writes to the database when it is absent.
         services.AddSingleton<IEmailContentObjectStore, S3EmailContentObjectStore>();
+
+        // Scoped rather than singleton, because the sweep's other half is a database read and the context that answers
+        // it is scoped. The job worker opens a scope per attempt, which is the boundary a whole run belongs to.
+        services.AddScoped<IContentObjectReclamation, ObjectStorageContentReclamation>();
 
         AddObjectStorageTransport(services);
 

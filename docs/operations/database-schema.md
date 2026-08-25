@@ -218,6 +218,12 @@ already serving:
   row, which is what makes `ADD COLUMN "Backend" … NOT NULL DEFAULT 'Database'` fast on a table of any size and what
   leaves every row written before that column existed reading as the thing it is; and the four indexes the second
   migration creates are partial, filtered to a backend no row on an upgrading deployment names, so each is built empty.
+  `IndexContentObjectLocators` then drops those four and creates four in their place, keyed on the locator rather than
+  on the backend and unique; the same filter makes each of the new ones empty on a deployment that stored nothing in an
+  endpoint, and proportional to the object-backed rows rather than to the table on one that did. Uniqueness is what a
+  deployment that already wrote such rows is held to at that moment, and a duplicate locator would fail the migration
+  rather than be created — no writer this schema has ever carried could produce one, since every placement mints its
+  own key.
 
 The first release's script creates a schema from nothing, so none of these applies to an empty database.
 

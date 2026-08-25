@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
+using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using Microsoft.EntityFrameworkCore;
@@ -55,6 +56,12 @@ internal static class OwnerAccountErasure
 
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var accountEntityType = MailboxAccountEntityTypeOf(writeContext.Model);
+
+        // Read before anything is deleted, because everything below reaches the payload rows by cascade and a cascade
+        // removes the only pointer to an object without any application code seeing it. An erasure answered to a data
+        // subject has to be true of the bucket as well as of the database, so this is the one deletion path that may
+        // not leave its objects to the sweep.
+        await ReleasedContentObjects.ReleaseForOwnerAsync(session, ownerId, cancellationToken);
 
         // The owner row is held for the rest of the transaction, so two erasures of one owner are serialized, and a
         // write that keys onto that row — the account insert a first folder binding makes — waits on the foreign-key

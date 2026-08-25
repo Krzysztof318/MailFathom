@@ -38,10 +38,13 @@ internal sealed class EmailMessageContentConfiguration : IEntityTypeConfiguratio
             .HasForeignKey<EmailMessageContentEntity>(content => content.StoredEmailId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // The census the readiness check runs, and the only reader of this column. Filtered to the object backend so a
-        // deployment that configured no endpoint answers it from an empty index rather than by scanning the table.
-        entity.HasIndex(content => content.Backend)
-            .HasDatabaseName(PersistenceConstraintNames.EmailMessageContentObjectBackedIndexName)
+        // The index both readers of the object backend meet, and unique because a key is minted by the write that
+        // produced it: the readiness census asks whether any row here names an object at all, and the sweep for objects
+        // nothing points at asks whether any row names each of a listed page of keys. Filtered to the object backend so
+        // a deployment that configured no endpoint answers either from an empty index rather than by scanning the table.
+        entity.HasIndex(content => content.ObjectLocator)
+            .IsUnique()
+            .HasDatabaseName(PersistenceConstraintNames.EmailMessageContentObjectLocatorUniqueIndexName)
             .HasFilter($"\"Backend\" = '{nameof(ContentStorageBackend.ObjectStorage)}'");
     }
 }

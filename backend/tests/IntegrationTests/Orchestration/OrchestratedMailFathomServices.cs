@@ -414,6 +414,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
                 OrchestratedObjectStorage.StatedCredentialSource>();
             builder.Services.AddObjectStorage(
                 OrchestratedObjectStorage.EndpointAt(orchestration.ObjectStorage),
+                OrchestratedObjectStorage.ReclamationBounds,
                 configuredTrustAnchor: null);
         }
         // Registered by a composition root for the reason the generator above is: AddInfrastructure registers neither

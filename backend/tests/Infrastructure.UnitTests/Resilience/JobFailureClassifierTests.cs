@@ -36,6 +36,20 @@ public sealed class JobFailureClassifierTests
         Assert.Equal(JobFailureClassification.Transient, record.Classification);
     }
 
+    /// <summary>A queue at its depth clears on its own, so the segment it refused is worth enqueuing again.</summary>
+    [Fact]
+    public void Classify_AHandOnTheQueueRefusedAtItsDepth_IsTransient()
+    {
+        // Arrange
+        var failure = new JobHandOnRefusedAtCapacityException(JobType.ReclaimContentObjects);
+
+        // Act
+        var record = this.classifier.Classify(failure);
+
+        // Assert
+        Assert.Equal(JobFailureClassification.Transient, record.Classification);
+    }
+
     /// <summary>An adapter that has already classified its provider's answer is deferred to, so the two never disagree.</summary>
     [Theory]
     [InlineData(EmbeddingGenerationFailure.RateLimited, JobFailureClassification.Transient)]

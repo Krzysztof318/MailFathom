@@ -176,6 +176,13 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
                 [.. erasedByAuthoredDelete.Select(email => email.Id)],
                 cancellationToken);
 
+            // An authored delete is a deliberate erasure, so it carries through to the object rather than being left
+            // to the sweep: the keys are read here, before the cascade removes the rows that carry them.
+            await ReleasedContentObjects.ReleaseForStoredEmailsAsync(
+                session,
+                [.. erasedByAuthoredDelete.Select(static row => row.Id)],
+                cancellationToken);
+
             sessionContext.StoredEmails.RemoveRange(erasedByAuthoredDelete);
         }
 
@@ -194,6 +201,13 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
             await OwnerStoredContentLedger.RemoveAsync(
                 sessionContext,
                 [.. disappeared.Select(email => email.Id)],
+                cancellationToken);
+
+            // Read first for the same reason: the cascade below takes the only pointer to an object with it, and this
+            // disposition exists to erase the local copy rather than to keep it.
+            await ReleasedContentObjects.ReleaseForStoredEmailsAsync(
+                session,
+                [.. disappeared.Select(static row => row.Id)],
                 cancellationToken);
 
             // One RemoveRange rather than a remove per row: the raw MIME, the search document, the chunks and their
