@@ -1571,6 +1571,10 @@ Signed in to https://mail.example.test:8443 as 'workstation' (MailFathom 0.8.0),
 The credential is sealed in the credentials file under a key beside it, because this session has no D-Bus session bus, so no Secret Service provider can be reached.
 ```
 
+Signing in again after a deployment has moved — a changed port keeps one profile rather than making two — **clears
+what that profile left in the store under its old address**, and says so if the store will not let it go. Nothing later
+in the profile's life reads that address, so this is the only moment those entries can be reached.
+
 A profile signed in before your machine had a store **moves into it by itself**, on the first command that opens the
 profile — you do not sign in again, and `credentials.key` is removed once no profile is still sealed under it. A move
 that does not complete leaves the sealed profile exactly as it was and the command you ran carries on.

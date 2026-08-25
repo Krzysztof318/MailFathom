@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using System.Text;
 
 namespace MailFathom.Cli.Credentials.SecretStores;
@@ -42,6 +43,22 @@ internal static class ProviderReportedText
 
         foreach (var character in reported)
         {
+            // Tested before anything is appended rather than after, so that the collapsing space below is bounded by
+            // the same ceiling as the text is. Testing it afterwards leaves a message whose 200th character arrives as
+            // that space one character over the bound and never equal to it again, which is unbounded rather than long.
+            if (kept.Length >= MaximumLength)
+            {
+                break;
+            }
+
+            // A format character is neither control nor whitespace and is the one that rewrites what the operator
+            // reads rather than merely adding to it: a right-to-left override or a directional isolate reorders the
+            // sentence this message is embedded in, so it is dropped outright rather than collapsed to a space.
+            if (char.GetUnicodeCategory(character) == UnicodeCategory.Format)
+            {
+                continue;
+            }
+
             // A control character is what carries an escape sequence and what breaks one line into two. The line
             // and paragraph separators break it without being control characters, and char.IsWhiteSpace covers
             // those as well as the ordinary blanks a run of which is collapsed below.
@@ -58,11 +75,6 @@ internal static class ProviderReportedText
             }
 
             kept.Append(character);
-
-            if (kept.Length == MaximumLength)
-            {
-                break;
-            }
         }
 
         var reduced = kept.ToString().TrimEnd();

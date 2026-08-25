@@ -19,6 +19,7 @@ public sealed class SecretStoreCredentialTests : IDisposable
 {
     private static readonly Uri Production = new("https://mail.example.test:8443");
     private static readonly Uri Staging = new("https://staging.example.test:8443");
+    private static readonly Uri Moved = new("https://mail.example.test:9443");
 
     private readonly string storeDirectory =
         Path.Combine(Path.GetTempPath(), $"mailfathom-cli-tests-{Guid.NewGuid():N}");
@@ -303,6 +304,32 @@ public sealed class SecretStoreCredentialTests : IDisposable
         Assert.Empty(this.store.Read().Profiles);
     }
 
+    /// <summary>One entry refusing says nothing about the other, and nothing comes back for a forgotten profile's second secret.</summary>
+    /// <remarks>
+    /// The Credential Manager refuses a delete per target, so a refusal here can be about one entry rather than about
+    /// the store. Ending the sequence on the first would leave the refresh token — the longer-lived of the two — in
+    /// the keyring with no attempt ever made, under a warning that says the entries are still there.
+    /// </remarks>
+    [Fact]
+    public void Remove_AStoreThatRefusesOneOfTheTwoEntries_StillClearsTheOther()
+    {
+        // Arrange
+        this.store.Save("production", Production, "access-token", "workstation", Session());
+        this.secretStore.RefuseClearing(
+            ProfileSecret.BearerToken("production", "https://mail.example.test:8443"),
+            "that entry is denied");
+
+        // Act
+        var removal = this.store.Remove("production");
+
+        // Assert
+        Assert.Equal("that entry is denied", removal.Uncleared);
+        Assert.Single(this.secretStore.Entries);
+        Assert.True(
+            this.secretStore.Entries.ContainsKey(
+                FakeOperatorSecretStore.KeyOf(ProfileSecret.BearerToken("production", "https://mail.example.test:8443"))));
+    }
+
     /// <summary>A profile that never used the platform store reports nothing about it, rather than a refusal it was always going to get.</summary>
     [Fact]
     public void Remove_ASealedProfileOnAMachineWithNoStore_ReportsNothingLeftBehind()
@@ -400,6 +427,66 @@ public sealed class SecretStoreCredentialTests : IDisposable
         Assert.Equal("the collection is locked", placement.Refusal);
         Assert.Equal("the collection is locked", placement.Uncleared);
         Assert.Single(this.secretStore.Entries);
+    }
+
+    /// <summary>A deployment that moves port keeps its profile, so the entries it left at the old address are reachable from nowhere unless this sign-in clears them.</summary>
+    /// <remarks>
+    /// The name a sign-in defaults to is the address's host without its port, so the same profile is what both
+    /// invocations write. Everything afterwards reads the profile's current address — the next placement, and the
+    /// <c>logout</c> that clears both halves — so an entry under the address it left is an administrative credential
+    /// nothing will ever look at again.
+    /// </remarks>
+    [Fact]
+    public void Save_AProfileWhoseDeploymentMoved_ClearsWhatItLeftAtTheOldAddress()
+    {
+        // Arrange
+        this.store.Save("production", Production, "access-token", "workstation", Session());
+
+        // Act
+        this.store.Save("production", Moved, "moved-token", "workstation");
+
+        // Assert
+        Assert.Equal(
+            "moved-token",
+            this.secretStore.Entries[
+                FakeOperatorSecretStore.KeyOf(ProfileSecret.BearerToken("production", "https://mail.example.test:9443"))]);
+        Assert.Single(this.secretStore.Entries);
+        Assert.Equal("moved-token", this.store.Resolve("production").Token);
+    }
+
+    /// <summary>Entries the move could not clear are the operator's to remove, and nothing later in the profile's life mentions them.</summary>
+    [Fact]
+    public void Save_AProfileWhoseDeploymentMovedAndAStoreThatRefuses_ReportsWhatIsLeftAtTheOldAddress()
+    {
+        // Arrange
+        this.store.Save("production", Production, "not-a-real-token", "workstation");
+        this.secretStore.RefuseClearing(
+            ProfileSecret.BearerToken("production", "https://mail.example.test:8443"),
+            "the collection is locked");
+
+        // Act
+        var placement = this.store.Save("production", Moved, "moved-token", "workstation");
+
+        // Assert
+        Assert.Equal("the platform's secret store", placement.Store);
+        Assert.Equal("the collection is locked", placement.Uncleared);
+    }
+
+    /// <summary>The profile gains a sealed token from here, which is what stops every later command from looking at the store for it.</summary>
+    [Fact]
+    public void Save_AStoreThatHasLockedSinceTheLastSignIn_ReportsTheEntriesItStillHolds()
+    {
+        // Arrange
+        this.store.Save("production", Production, "not-a-real-token", "workstation");
+        this.secretStore.Refusal = "the collection is locked";
+
+        // Act
+        var placement = this.store.Save("production", Production, "a-second-token", "workstation");
+
+        // Assert
+        Assert.Null(placement.Store);
+        Assert.Equal("the collection is locked", placement.Refusal);
+        Assert.Equal("the collection is locked", placement.Uncleared);
     }
 
     /// <summary>Signing a key-pair profile in over one the store held has to take the credential out, or it outlives the profile that named it.</summary>

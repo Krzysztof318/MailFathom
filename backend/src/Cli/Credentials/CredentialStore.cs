@@ -214,14 +214,30 @@ internal sealed class CredentialStore
         var stored = this.Read();
         var address = AddressOf(endpoint);
 
-        // Whether this sign-in is replacing a profile whose secrets the platform store is holding, which is what
-        // decides whether an entry that will not clear is an orphan worth reporting or a machine that never had one.
-        var heldBefore = stored.Profiles.TryGetValue(name, out var replaced)
-            && replaced is { KeyPair: null, Token: null };
+        // Whether this sign-in is replacing a profile whose secrets the platform store is already holding under this
+        // same key, which is what decides whether an entry that will not clear is an orphan worth reporting or a
+        // machine that never had one.
+        var heldBefore = false;
+        string? abandoned = null;
+
+        if (stored.Profiles.GetValueOrDefault(name) is { KeyPair: null, Token: null } replaced)
+        {
+            heldBefore = string.Equals(replaced.Endpoint, address, StringComparison.OrdinalIgnoreCase);
+
+            // A profile keeps its name when its deployment moves port or gains a domain, so signing in again files
+            // the new entries under a different key and leaves the old ones reachable from nowhere: not from this
+            // placement, and not from the logout that reads the profile's current address. Here or never.
+            if (!heldBefore)
+            {
+                abandoned = this.ForgetBoth(name, replaced.Endpoint);
+            }
+        }
 
         var placement = keyPair is null
             ? this.Place(name, address, token, session?.RefreshToken, heldBefore)
             : this.PlaceNothing(name, address, heldBefore);
+
+        placement = placement with { Uncleared = placement.Uncleared ?? abandoned };
 
         var held = placement.Store is not null;
 
@@ -414,7 +430,11 @@ internal sealed class CredentialStore
         }
         catch (SecretStoreUnavailable unavailable)
         {
-            return SecretPlacement.Sealed(unavailable.Message);
+            // A profile the store was already holding gains a sealed token in the file from here, and ClearSecrets
+            // passes over a sealed profile — so the entries it still holds would be reachable from nothing at all.
+            return SecretPlacement.Sealed(
+                unavailable.Message,
+                Reportable(unavailable.Message, heldBefore));
         }
 
         if (refreshToken is null)
@@ -447,11 +467,23 @@ internal sealed class CredentialStore
     private SecretPlacement PlaceNothing(string profile, string address, bool heldBefore) =>
         SecretPlacement.NothingToKeep with
         {
-            Uncleared = Reportable(
-                this.Forget(ProfileSecret.BearerToken(profile, address))
-                ?? this.Forget(ProfileSecret.RefreshToken(profile, address)),
-                heldBefore),
+            Uncleared = Reportable(this.ForgetBoth(profile, address), heldBefore),
         };
+
+    /// <summary>Takes both of a profile's secrets out of the platform store, and reports the first refusal.</summary>
+    /// <remarks>
+    /// Both are attempted whatever the first one answers. A refusal here can be about one entry rather than about the
+    /// store — the Credential Manager refuses a delete per target — and on every path that reaches this the profile is
+    /// being replaced or forgotten, so nothing comes back for the second entry later. Leaving the refresh token, which
+    /// is the longer-lived of the two, on the strength of the bearer token's refusal would be exactly that.
+    /// </remarks>
+    private string? ForgetBoth(string profile, string address)
+    {
+        var bearer = this.Forget(ProfileSecret.BearerToken(profile, address));
+        var refresh = this.Forget(ProfileSecret.RefreshToken(profile, address));
+
+        return bearer ?? refresh;
+    }
 
     /// <summary>Removes one entry where a store answers, and reports a store that would not let it go.</summary>
     private string? Forget(ProfileSecret secret)
@@ -613,17 +645,7 @@ internal sealed class CredentialStore
             return null;
         }
 
-        try
-        {
-            this.secretStore.Clear(ProfileSecret.BearerToken(name, credential.Endpoint));
-            this.secretStore.Clear(ProfileSecret.RefreshToken(name, credential.Endpoint));
-
-            return null;
-        }
-        catch (SecretStoreUnavailable unavailable)
-        {
-            return unavailable.Message;
-        }
+        return this.ForgetBoth(name, credential.Endpoint);
     }
 
     /// <summary>Removes the sealing key once no profile is sealed under it.</summary>

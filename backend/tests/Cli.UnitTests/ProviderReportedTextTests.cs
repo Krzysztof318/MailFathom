@@ -70,6 +70,41 @@ public sealed class ProviderReportedTextTests
         Assert.Equal(200, reduced?.Length);
     }
 
+    /// <summary>The collapsing space is text too, so a message that reaches the bound through one has reached the bound.</summary>
+    /// <remarks>
+    /// A ceiling tested after the append rather than before is a ceiling the whitespace branch steps over: the length
+    /// arrives at the bound as that space, every later character puts it one further past, and the equality never holds
+    /// again — which leaves the whole of a provider's message on an operator's terminal rather than 200 characters of
+    /// it.
+    /// </remarks>
+    [Fact]
+    public void Sanitize_AMessageThatReachesTheBoundThroughASpace_StopsThere()
+    {
+        // Arrange
+        var reported = new string('x', 199) + " " + new string('y', 100_000);
+
+        // Act
+        var reduced = ProviderReportedText.Sanitize(reported);
+
+        // Assert
+        Assert.Equal(new string('x', 199), reduced);
+    }
+
+    /// <summary>A format character rewrites what the operator reads rather than adding to it, which is worse than bulk.</summary>
+    [Theory]
+    [InlineData("lock\u202Eed", "locked")]
+    [InlineData("\u2066locked\u2069", "locked")]
+    [InlineData("loc\u200Eke\u200Fd", "locked")]
+    [InlineData("loc\u00ADked", "locked")]
+    public void Sanitize_TextCarryingAFormatCharacter_DropsItRatherThanCollapsingIt(string reported, string expected)
+    {
+        // Arrange, Act
+        var reduced = ProviderReportedText.Sanitize(reported);
+
+        // Assert
+        Assert.Equal(expected, reduced);
+    }
+
     /// <summary>Padding a message out with blanks would otherwise push the part worth reading past the bound.</summary>
     [Fact]
     public void Sanitize_BulkWhitespaceBeforeTheMessage_DoesNotSpendTheBoundOnIt()
