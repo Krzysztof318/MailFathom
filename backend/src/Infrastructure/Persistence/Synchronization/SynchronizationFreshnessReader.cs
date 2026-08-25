@@ -7,8 +7,6 @@ using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
-using MailFathom.Infrastructure.Persistence.Emails;
-using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Synchronization;
@@ -33,7 +31,7 @@ internal sealed class SynchronizationFreshnessReader(MailFathomDbContext dbConte
         // PostgreSQL performs the aggregate so the rows that cross the boundary number one per alias in scope, which is
         // the size of the result itself: the number of historical bindings behind an alias grows without a ceiling as a
         // server recreates folders, and grouping in process would make an unrelated request pay for that history.
-        var freshestBindings = await Matching(dbContext.MailFolders.AsNoTracking(), scope)
+        var freshestBindings = await MailFoldersInScope.Within(dbContext.MailFolders.AsNoTracking(), scope)
             .Select(folder => new
             {
                 folder.MailboxAccountId,
@@ -63,24 +61,5 @@ internal sealed class SynchronizationFreshnessReader(MailFathomDbContext dbConte
                 .OrderBy(freshness => freshness.AccountId.Value, StringComparer.Ordinal)
                 .ThenBy(freshness => freshness.FolderAlias.Value, StringComparer.Ordinal),
         ];
-    }
-
-    private static IQueryable<MailFolderEntity> Matching(IQueryable<MailFolderEntity> folders, MailboxScope scope)
-    {
-        if (scope.AccountIds.Count > 0)
-        {
-            var accountIds = scope.AccountIds.Select(static accountId => accountId.Value).ToArray();
-            folders = folders.Where(folder => accountIds.Contains(folder.MailboxAccountId));
-        }
-
-        folders = AccountScopedMailFolders.Selecting(folders, scope.SelectedFolders);
-
-        // A folder this read returns nothing from is withheld from how fresh it is as well. The timestamp says a folder
-        // exists and when it was last read, which is exactly what a caller must not learn about a folder they may not
-        // read — and what would name the junk folder to a caller who did not ask for it, or a folder no mapping names
-        // to a caller whose deployment no longer has it.
-        folders = AccountScopedMailFolders.Admitting(folders, scope.ReadableFolders);
-
-        return AccountScopedMailFolders.Excluding(folders, scope.WithheldJunkFolders);
     }
 }

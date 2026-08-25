@@ -92,18 +92,22 @@ internal sealed record ClientMailAccountsResponse(
 /// <summary>One of the owner's accounts, and how current its local copy is.</summary>
 /// <param name="Id">The identifier the account was declared under, which a client may hold and name it by; it is unique within the owner rather than across the deployment.</param>
 /// <param name="DisplayName">The name the account is published under, which is what a person recognizes; it is unique within the owner in the same way.</param>
-/// <param name="SynchronizationState">Whether the deployment's last attempt at the account succeeded, failed, or has never happened, as the state's own name.</param>
+/// <param name="SynchronizationState">Whether the deployment's last attempt at the account succeeded, failed, found no mail server, or has never happened, as the state's own name.</param>
 /// <param name="LastSynchronizedAt">When the account last durably took anything in, or <see langword="null" /> where it never has.</param>
+/// <param name="Behind">Whether any of the account's folders ended its last attempt with mail it had not yet taken in.</param>
 /// <remarks>
-/// The state and the timestamp answer different halves of one question and are published apart for that reason. The
-/// timestamp says how old what is being read is, and the state says whether it is still being refreshed — an account
-/// that has been failing since yesterday and one nobody has written to since yesterday carry the same instant.
+/// The three answer different parts of one question and are published apart for that reason. The timestamp says how old
+/// what is being read is, the state says whether it is still being refreshed, and being behind says whether there is
+/// known to be more to come — an account that has been failing since yesterday, one nobody has written to since
+/// yesterday, and one still catching up carry the same instant and are three different situations. A mailbox this
+/// deployment cannot currently reach is a state of its own for the same reason: it is waited out rather than repaired.
 /// </remarks>
 internal sealed record ClientMailAccountResponse(
     string Id,
     string DisplayName,
     string SynchronizationState,
-    DateTimeOffset? LastSynchronizedAt)
+    DateTimeOffset? LastSynchronizedAt,
+    bool Behind)
 {
     /// <summary>Describes one account on the wire.</summary>
     /// <param name="account">The account's freshness.</param>
@@ -112,5 +116,6 @@ internal sealed record ClientMailAccountResponse(
         account.Account.Id.Value,
         account.Account.DisplayName.Value,
         account.State.ToString(),
-        account.LastSynchronizedAt);
+        account.LastSynchronizedAt,
+        account.IsBehind);
 }

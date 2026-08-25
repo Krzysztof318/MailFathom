@@ -51,6 +51,8 @@ public sealed class ComposedClientEndpointSecurityTests
 
     private const string ClientAccountsRoute = "/api/client/accounts";
 
+    private const string ClientFoldersRoute = "/api/client/folders";
+
     private const string AdminSessionRoute = "/api/admin/session";
 
     private const string ClientProtectedResourceMetadataPath = "/.well-known/oauth-protected-resource/api/client";
@@ -222,6 +224,68 @@ public sealed class ComposedClientEndpointSecurityTests
         // Assert
         Assert.Equal(StatusCodes.Status200OK, session.StatusCode);
         Assert.Equal(StatusCodes.Status403Forbidden, accounts.StatusCode);
+    }
+
+    /// <summary>
+    /// The folder tree is the read every other one on this surface takes its scope from, so it follows the surface the
+    /// same way: absent on the listeners an operator opened for agents or for administering the service, and gated on
+    /// its own.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(PortsOfTheOtherSurfaces))]
+    public async Task ClientFoldersRoute_ServedBesideTheOthers_AnswersOnItsOwnListenerAndNoOther(int localPort)
+    {
+        // Arrange
+        await using var host = await InProcessComposedHost.StartAsync(
+            EverySurfaceServed(),
+            TestContext.Current.CancellationToken);
+
+        // Act
+        var elsewhere = await host.SendAsync(
+            HttpMethods.Get,
+            ClientFoldersRoute,
+            localPort,
+            (HeaderNames.Authorization, $"Bearer {NarrowedClientKey}"));
+
+        var served = await host.SendAsync(
+            HttpMethods.Get,
+            ClientFoldersRoute,
+            ClientPort,
+            (HeaderNames.Authorization, $"Bearer {NarrowedClientKey}"));
+
+        // Assert
+        Assert.Equal(StatusCodes.Status404NotFound, elsewhere.StatusCode);
+        Assert.Equal(StatusCodes.Status403Forbidden, served.StatusCode);
+    }
+
+    /// <summary>
+    /// Naming an owner's folders is the same disclosure as naming their mailboxes, so the credential narrowed to the
+    /// answering grant alone is refused the tree exactly as it is refused the mailbox list.
+    /// </summary>
+    [Fact]
+    public async Task ClientFoldersRoute_ACredentialWithoutTheMailboxGrant_IsRefusedRatherThanServedAnEmptyTree()
+    {
+        // Arrange
+        await using var host = await InProcessComposedHost.StartAsync(
+            EverySurfaceServed(),
+            TestContext.Current.CancellationToken);
+
+        // Act
+        var session = await host.SendAsync(
+            HttpMethods.Get,
+            ClientSessionRoute,
+            ClientPort,
+            (HeaderNames.Authorization, $"Bearer {NarrowedClientKey}"));
+
+        var folders = await host.SendAsync(
+            HttpMethods.Get,
+            ClientFoldersRoute,
+            ClientPort,
+            (HeaderNames.Authorization, $"Bearer {NarrowedClientKey}"));
+
+        // Assert
+        Assert.Equal(StatusCodes.Status200OK, session.StatusCode);
+        Assert.Equal(StatusCodes.Status403Forbidden, folders.StatusCode);
     }
 
     /// <summary>

@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -65,6 +65,7 @@ for you.
 | --- | --- |
 | `GET /api/client/session` | none |
 | `GET /api/client/accounts` | `mailfathom.mail.read` |
+| `GET /api/client/folders` | `mailfathom.mail.read` |
 
 There is no version segment in either path: the major version is `0` and
 [ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
@@ -111,13 +112,15 @@ It answers with the mail accounts the signed-in owner owns, and how current the 
       "id": "work",
       "displayName": "Work mail",
       "synchronizationState": "Synchronized",
-      "lastSynchronizedAt": "2026-08-15T10:00:00+00:00"
+      "lastSynchronizedAt": "2026-08-15T10:00:00+00:00",
+      "behind": false
     },
     {
       "id": "private",
       "displayName": "Private mail",
       "synchronizationState": "Failing",
-      "lastSynchronizedAt": "2026-08-14T21:12:00+00:00"
+      "lastSynchronizedAt": "2026-08-14T21:12:00+00:00",
+      "behind": true
     }
   ]
 }
@@ -128,23 +131,36 @@ unique within the owner rather than across the deployment, and both are MailFath
 server, the port, the user name, and every credential are deliberately absent, and so is everything of the mailbox
 itself — no message, no subject, no correspondent, no folder listing.
 
-**`synchronizationState` and `lastSynchronizedAt` answer different halves of one question**, which is why they are two
-fields rather than one:
+**`synchronizationState`, `lastSynchronizedAt` and `behind` answer different parts of one question**, which is why they
+are three fields rather than one:
 
 | `synchronizationState` | What it says |
 | --- | --- |
-| `Synchronized` | Progress has been committed and this deployment's most recent finished run of the account did not fail |
-| `Failing` | This deployment's most recent finished run of the account did not complete, whether or not it has ever synchronized |
+| `Synchronized` | Progress has been committed and this deployment's most recent finished attempt did not fail |
+| `Failing` | This deployment's most recent finished attempt did not complete, whether or not it has ever synchronized |
+| `Unreachable` | The mail server did not serve this deployment within its resilience budget, so nothing is refreshing the copy and nothing here is wrong with it |
 | `NeverSynchronized` | No run has ever durably committed progress for the account |
+
+`Unreachable` is separate from `Failing` because the two ask different things of whoever reads them: an unreachable
+mailbox is waited out or looked at on the server, and a failing one is a mapping, a credential, or a defect. An account
+reaches it only when unreachability is the whole of what went wrong — a run that also failed some other way reached the
+server, so it reads `Failing` instead.
 
 `lastSynchronizedAt` is when any of the account's folders last durably took something in, and is `null` where none ever
 has. How *old* is too old is the reader's judgement rather than this deployment's, so nothing here calls an account
 stale — an account that has been failing since yesterday and one nobody has written to since yesterday carry the same
 instant and are not the same situation.
 
+`behind` is `true` when any of the account's folders ended its last attempt with mail it had not yet taken in. It is not
+a state, because a folder can be behind under any of them: an attempt that succeeded within its batch budget leaves mail
+for the next one, and a failing folder is usually behind as well. An account that is merely catching up is therefore
+`Synchronized` and `behind`, which is a different situation from an unreachable one and reads as one.
+
 The state describes what the running process has observed. A process that has just started reports an account it has not
 run yet by what its stored progress says rather than by how its runs were going before the restart, because the backoff
-that was failing is not one this process is applying.
+that was failing is not one this process is applying. A host shutting down mid-attempt is not a failure either: the
+supervisor counts it under none, so an account backed off for every restart would be one approached less often for being
+stopped.
 
 **`synchronizationEnabled` is the deployment's switch rather than the owner's**, and it is reported beside the accounts
 because no per-account value carries it: a copy that last moved a week ago means one thing where the deployment is still
@@ -160,6 +176,104 @@ Nothing here contacts a mail server. The answer is composed from local state, so
 is reachable at the moment it is asked, and asking cannot set the remote `\Seen` flag. It is bounded by how many
 accounts the owner has and by nothing else — not by their folders, their messages, or how many times synchronization has
 run.
+
+### The folders route
+
+```http
+GET /api/client/folders
+```
+
+It answers with the owner's mailboxes and every folder in them, which is the one tree a mail screen is drawn from:
+
+```jsonc
+{
+  "synchronizationEnabled": true,
+  "accounts": [
+    {
+      "account": {
+        "id": "work",
+        "displayName": "Work mail",
+        "synchronizationState": "Synchronized",
+        "lastSynchronizedAt": "2026-08-15T10:00:00+00:00",
+        "behind": false
+      },
+      "folders": [
+        {
+          "alias": "INBOX",
+          "role": "Inbox",
+          "path": [ "INBOX" ],
+          "storedEmailCount": 4213,
+          "unreadEmailCount": 12,
+          "synchronizationState": "Synchronized",
+          "lastSynchronizedAt": "2026-08-15T10:00:00+00:00",
+          "behind": false
+        },
+        {
+          "alias": "ARCHIVE-2024",
+          "role": null,
+          "path": [ "Archiwum", "2024" ],
+          "storedEmailCount": 980,
+          "unreadEmailCount": 0,
+          "synchronizationState": "Synchronized",
+          "lastSynchronizedAt": "2026-08-15T09:41:00+00:00",
+          "behind": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+**`account` is the accounts route's own answer, field for field**, so a client parses one account shape across this
+surface and the two routes cannot come to disagree about what a mailbox is. That is why it is nested rather than
+flattened into the folders beside it.
+
+**The tree arrives in one request** because it is one thing on screen. A client that read the folders here and the
+mailbox names from [the accounts route](#the-accounts-route) would be composing one picture out of two answers, the
+second already stale relative to the first. The accounts route stays the cheaper answer for a client that only wants the
+mailbox list: counting a folder's mail is work proportional to the mail, so a client polling for whether a mailbox is
+reachable asks there and a client drawing a tree asks here.
+
+**`role` is the answer a client cannot work out for itself.** Special-use folders are advertised by server attribute
+rather than by name, and the names differ per provider and per language, so a screen that guessed which folder is the
+sent one from its name would guess wrong on somebody's Polish provider. The value is one of `Inbox`, `Archive`,
+`Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`, `Important`, or `Outbox` — the role
+[configuration labelled the folder with](configuration-mail.md), and `null` where it labelled it with none. Nothing is
+guessed from a folder's name to fill it in.
+
+**`path` is the folder's place on its mail server, outermost level first.** It is split into levels rather than
+published as a path and a delimiter, so a client builds a tree without knowing that mail servers have hierarchy
+delimiters or which character this one chose. The last level is what a person recognizes as the folder's name; `alias`
+above it is MailFathom's own name for the folder — one upper-cased configured word, unique within its account — and is
+what everything else on this surface names the folder by. A server that reports no delimiter has a flat mailbox and the
+whole path arrives as one level.
+
+**The counts are of the local copy, not of the mailbox.** `storedEmailCount` is what this deployment holds and would
+serve, and `unreadEmailCount` is how many of those the mail server last reported without `\Seen`. A folder still being
+backfilled holds fewer than the server does, which is why the three freshness fields travel in the same object: a count
+read without them is a figure somebody would take for the mailbox's own. Reading the unread count sets nothing — the
+flags are a snapshot reconciliation wrote, and this endpoint speaks no mail protocol at all.
+
+**Each folder's `synchronizationState`, `lastSynchronizedAt` and `behind` mean exactly what they mean on an account**,
+one folder at a time; the table above is the whole of it. An account's own reading is the reduction of its folders', so
+a tree and the mailbox list beside it never disagree: a folder that failed makes its account `Failing`, and an account
+is `Unreachable` only where being unable to reach the server is the whole of what went wrong.
+
+**The folders are the ones this deployment knows of.** An alias
+[configuration maps](configuration-mail.md) that nothing has ever bound to a remote folder is absent rather than empty —
+there is no folder on the server to draw — and where an operator finds out about such a mapping is
+[the administrative status route](admin-endpoint.md). A folder an operator withheld from tools is absent for the same
+reason it is absent from every other read: this surface admits what configuration admits. A folder that has been
+discovered but never synchronized *is* present, carrying `NeverSynchronized`, no `path` where its binding is not
+recorded yet, and both counts at zero, because an empty folder and an unsynchronized one are not the same thing on
+screen.
+
+**An owner with no mail account reads an empty `accounts` list**, and a credential whose grant does not carry
+`mailfathom.mail.read` is answered `403` — the same two answers the accounts route gives, because naming an owner's
+folders is the same disclosure as naming their mailboxes.
+
+The answer is bounded by the folders the owner's accounts have, which configuration bounds, and by nothing the mailbox
+can grow. Nothing here contacts a mail server, and asking cannot set the remote `\Seen` flag.
 
 ## Credentials do not cross surfaces
 

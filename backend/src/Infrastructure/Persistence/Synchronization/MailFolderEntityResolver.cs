@@ -99,8 +99,22 @@ internal static class MailFolderEntityResolver
         return new MailFolderResolution(
             MailFolderAlias.Create(entity.Alias),
             MailFolderResolutionGeneration.Create(entity.ResolutionGeneration),
-            RemoteFolderPath.Create(
-                entity.RemotePath,
-                entity.HierarchyDelimiter is { Length: > 0 } delimiter ? delimiter[0] : null));
+            ToRemotePath(entity.RemotePath, entity.HierarchyDelimiter));
     }
+
+    /// <summary>Rebuilds the remote folder a binding row names, from the two columns that hold it.</summary>
+    /// <param name="remotePath">The stored path.</param>
+    /// <param name="hierarchyDelimiter">The stored delimiter, which is text because PostgreSQL pads a fixed-width character column.</param>
+    /// <returns>The path the columns describe.</returns>
+    /// <remarks>
+    /// It takes the two columns rather than the row, so a read that projects them instead of materializing the entity —
+    /// which every bounded read of these rows does — reaches the same reading. The delimiter is the one character the
+    /// column holds, and an empty column is a folder whose server reported none; that is the reading
+    /// <see cref="AddAsync" /> writes the inverse of, and it is stated here once so nothing gets a second chance to
+    /// disagree about an empty string.
+    /// </remarks>
+    public static RemoteFolderPath ToRemotePath(string remotePath, string? hierarchyDelimiter) =>
+        RemoteFolderPath.Create(
+            remotePath,
+            hierarchyDelimiter is { Length: > 0 } delimiter ? delimiter[0] : null);
 }
