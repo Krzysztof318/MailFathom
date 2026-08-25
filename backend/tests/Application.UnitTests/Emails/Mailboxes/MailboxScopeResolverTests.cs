@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Folders;
@@ -688,28 +687,12 @@ public sealed class MailboxScopeResolverTests
     private static MailboxScopeResolver ResolverFor(
         MailOwnerId owner,
         IMailFolderParticipationReader folderParticipation,
-        params ServedMailAccount[] servedAccounts)
-    {
-        var servedCatalog = Substitute.For<IDeploymentMailAccountCatalog>();
-        servedCatalog.ServedAccounts.Returns(
-        [
-            .. servedAccounts.OrderBy(account => account.Id.Value, StringComparer.Ordinal),
-        ]);
-
-        var deploymentOwner = Substitute.For<IDeploymentMailOwnerSource>();
-        deploymentOwner.Owner.Returns(SyntheticMailOwner.Deployment);
-
-        var ownedCatalog = new OwnedMailAccountCatalog(
-            servedCatalog,
-            deploymentOwner,
-            AccessAuthorizations.ForOwnerGranted(owner));
-
-        return new MailboxScopeResolver(
-            ownedCatalog,
+        params ServedMailAccount[] servedAccounts) =>
+        new(
+            OwnedMailAccountCatalogs.For(AccessAuthorizations.ForOwnerGranted(owner), servedAccounts),
             folderParticipation,
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.Nothing.Resolver);
-    }
 
     private static MailboxScopeResolver Resolver(
         IMailFolderParticipationReader folderParticipation,

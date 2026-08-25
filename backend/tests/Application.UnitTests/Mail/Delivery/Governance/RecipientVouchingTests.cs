@@ -3,10 +3,11 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
-using MailFathom.Application.Accounts;
+using MailFathom.Application.Access;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Governance;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Delivery;
@@ -74,6 +75,28 @@ public sealed class RecipientVouchingTests
         Assert.Equal(0, unvouched);
     }
 
+    /// <summary>
+    /// A mailbox another owner sends as vouches for nothing here, because what vouches for an address is the caller's
+    /// own accounts rather than every account this deployment happens to serve.
+    /// </summary>
+    [Fact]
+    public async Task CountUnvouchedAsync_AddressAnotherOwnersAccountSendsAs_IsCounted()
+    {
+        // Arrange
+        var vouching = Vouching(
+            new InMemoryContactBookStore(),
+            ownAddress: "owner@example.test",
+            AccessAuthorizations.ForOwnerGranted(SyntheticMailOwner.Another, MailFathomPermission.MailSend));
+
+        // Act
+        var unvouched = await vouching.CountUnvouchedAsync(
+            [NamedByCaller("owner@example.test")],
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, unvouched);
+    }
+
     /// <summary>An address this system derived itself is not the caller's word, so a plain reply is never judged by this.</summary>
     [Theory]
     [InlineData(AuthoredRecipientProvenance.DerivedFromAnsweredEmail)]
@@ -135,10 +158,14 @@ public sealed class RecipientVouchingTests
         Assert.Equal(1, book.BatchedLookupCount);
     }
 
-    private static RecipientVouching Vouching(InMemoryContactBookStore book, string? ownAddress = null)
+    private static RecipientVouching Vouching(
+        InMemoryContactBookStore book,
+        string? ownAddress = null,
+        AccessAuthorization? authorization = null)
     {
-        var accounts = Substitute.For<IDeploymentMailAccountCatalog>();
-        accounts.ServedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+        var accounts = OwnedMailAccountCatalogs.For(
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
+            SyntheticServedAccount.Of(Account));
 
         var senderIdentities = Substitute.For<IOutgoingSenderIdentityReader>();
         senderIdentities.FindSenderIdentity(Account).Returns(

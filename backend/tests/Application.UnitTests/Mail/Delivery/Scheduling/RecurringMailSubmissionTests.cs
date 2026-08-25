@@ -187,6 +187,31 @@ public sealed class RecurringMailSubmissionTests
             () => submission.DeclareAsync(request, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// An account another owner owns is refused exactly as one nobody serves, so a repetition cannot be declared
+    /// against a mailbox this caller may not even read — which would otherwise send as that owner on every occasion.
+    /// </summary>
+    [Fact]
+    public async Task DeclareAsync_AnAccountTheCallersOwnerDoesNotOwn_IsRefusedAndDeclaresNothing()
+    {
+        // Arrange
+        var store = new InMemoryRecurringSendStore();
+        var submission = SubmissionOver(
+            store,
+            out _,
+            AccessAuthorizations.ForOwnerGranted(SyntheticMailOwner.Another, MailFathomPermission.MailSend));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailAccountNotAccessibleException>(
+            () => submission.DeclareAsync(
+                RequestFor("Daily at 09:00"),
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailAccountSelector.For(Account), refusal.RequestedAccount);
+        Assert.Empty(store.Declarations);
+    }
+
     /// <summary>Stopping a declaration stops every occasion still to come, and the row it leaves says when.</summary>
     [Fact]
     public async Task CancelAsync_AnActiveDeclaration_StopsEveryOccasionStillToCome()
@@ -351,8 +376,8 @@ public sealed class RecurringMailSubmissionTests
     {
         contentStore = ContentStores.Substituted();
 
-        var accountCatalog = Substitute.For<IDeploymentMailAccountCatalog>();
-        accountCatalog.ServedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+        var callerAuthorization = authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend);
+        var accountCatalog = OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account));
 
         var conflictsLeft = conflictingAttempts;
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
@@ -378,7 +403,7 @@ public sealed class RecurringMailSubmissionTests
                 sessionFactory,
                 new PersistenceConcurrencyOptions(),
                 TimeProvider.System),
-            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend));
+            callerAuthorization);
     }
 
 }

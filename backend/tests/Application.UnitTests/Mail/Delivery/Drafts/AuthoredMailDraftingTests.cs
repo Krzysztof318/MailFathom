@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Mail.Delivery;
 using MailFathom.Application.Mail.Delivery.Addressing;
@@ -81,6 +82,41 @@ public sealed class AuthoredMailDraftingTests
 
         // Assert
         await Assert.ThrowsAsync<MailAccountNotAccessibleException>(refusal);
+        Assert.Empty(harness.Drafts.Drafts);
+    }
+
+    /// <summary>
+    /// An account another owner owns is refused exactly as one nobody serves, so a caller cannot leave a message in
+    /// somebody else's own Drafts folder for them to read as theirs.
+    /// </summary>
+    [Fact]
+    public async Task SaveAsync_AnAccountTheCallersOwnerDoesNotOwn_IsRefusedAndWritesNoDraft()
+    {
+        // Arrange
+        var harness = Harness(new InMemoryOutgoingEmailStore());
+        var drafting = DraftingOver(
+            harness,
+            authorization: AccessAuthorizations.ForOwnerGranted(
+                SyntheticMailOwner.Another,
+                MailFathomPermission.MailDraftsWrite));
+
+        // Act
+        var refusal = () => drafting.SaveAsync(
+            new MailDraftRequest
+            {
+                Account = MailAccountSelector.For(Account),
+                Subject = "a draft",
+                PlainTextBody = "Hello.",
+                Author = OutgoingEmailRequester.Command("mfctl-4f2a"),
+            },
+            CancellationToken.None);
+
+        // Assert
+        var refused = await Assert.ThrowsAsync<MailAccountNotAccessibleException>(refusal);
+
+        // The refusal repeats what the caller named and nothing else, which is what keeps an account another owner owns
+        // from being told apart from one this deployment never served.
+        Assert.Equal(MailAccountSelector.For(Account), refused.RequestedAccount);
         Assert.Empty(harness.Drafts.Drafts);
     }
 
@@ -178,16 +214,17 @@ public sealed class AuthoredMailDraftingTests
     private static AuthoredMailDrafting DraftingOver(
         MailDraftHarness harness,
         InMemoryContactBookStore? book = null,
-        IAuthoredEmailComposer? composer = null)
+        IAuthoredEmailComposer? composer = null,
+        AccessAuthorization? authorization = null)
     {
-        var accountCatalog = Substitute.For<IDeploymentMailAccountCatalog>();
-        accountCatalog.ServedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+        var callerAuthorization =
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailDraftsWrite);
 
         return new AuthoredMailDrafting(
-            accountCatalog,
+            OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account)),
             new NamedRecipientResolver(book ?? new InMemoryContactBookStore()),
             composer ?? ComposingAuthoredEmails.ThatComposesDrafts(ComposedMime),
             harness.Book,
-            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailDraftsWrite));
+            callerAuthorization);
     }
 }

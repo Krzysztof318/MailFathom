@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Mail.Delivery.Composition;
@@ -11,14 +12,15 @@ using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Mail.Delivery.Governance;
 
-/// <summary>Answers how many of the addresses a caller wrote down nothing this deployment holds can vouch for.</summary>
+/// <summary>Answers how many of the addresses a caller wrote down neither the book nor the caller's owner's mailboxes vouch for.</summary>
 /// <remarks>
 /// <para>
 /// Two things vouch for an address, and both are the owner's rather than any caller's. The contact book holds the
 /// people this mailbox corresponds with — whether the owner wrote them down or collection recorded them from mail that
-/// arrived — and the deployment's own accounts hold the mailboxes it reads on their behalf. An address in neither is one
-/// this installation has no trace of at all, which is what the address inside an injected instruction looks like: a
-/// message telling an agent to write to its author's accomplice is naming somebody the mailbox has never heard of.
+/// arrived — and the owner's own accounts hold the mailboxes this deployment reads on their behalf. An address in
+/// neither is one this installation has no trace of at all, which is what the address inside an injected instruction
+/// looks like: a message telling an agent to write to its author's accomplice is naming somebody the mailbox has never
+/// heard of.
 /// </para>
 /// <para>
 /// It is asked only about addresses a caller supplied as text. A recipient resolved out of the book is vouched for by
@@ -37,18 +39,19 @@ namespace MailFathom.Application.Mail.Delivery.Governance;
 /// </para>
 /// </remarks>
 /// <param name="contacts">Reads which of a set of addresses the book already holds.</param>
-/// <param name="accounts">Says which accounts this deployment serves.</param>
+/// <param name="accounts">Says which accounts the caller's owner owns.</param>
 /// <param name="senderIdentities">Says which address each of those accounts sends as.</param>
 public sealed class RecipientVouching(
     IContactDirectory contacts,
-    IDeploymentMailAccountCatalog accounts,
+    ICallerMailAccountCatalog accounts,
     IOutgoingSenderIdentityReader senderIdentities)
 {
-    /// <summary>Counts the recipients a caller named itself that nothing this deployment holds vouches for.</summary>
+    /// <summary>Counts the recipients a caller named itself that neither the book nor their owner's mailboxes vouch for.</summary>
     /// <param name="recipients">Everybody the message is addressed to, whoever put them there.</param>
     /// <param name="cancellationToken">Cancels the reads of the book.</param>
-    /// <returns>How many of the addresses the caller supplied are ones this deployment has no trace of.</returns>
+    /// <returns>How many of the addresses the caller supplied are ones neither the book nor the caller's owner's mailboxes hold.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="recipients" /> is <see langword="null" />.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no owner, since what vouches for an address is an owner's own.</exception>
     /// <remarks>
     /// Text that names no mailbox at all is not counted here. Whether an address parses is the composition's question
     /// and it refuses one that does not, so counting unparsable text would refuse a send for a reason the caller is
@@ -105,13 +108,15 @@ public sealed class RecipientVouching(
         }
     }
 
-    /// <summary>Reads the mailboxes this deployment sends as, which are the owner's own and never a stranger's.</summary>
+    /// <summary>Reads the mailboxes this caller's owner sends as, which are their own and never a stranger's.</summary>
     /// <remarks>
     /// Read from configuration rather than from the database, so an installation that has synchronized nothing still
-    /// vouches for its own addresses. An account this deployment serves without a sending identity contributes none,
-    /// which is the honest answer: nothing here knows what a read-only account's own address is.
+    /// vouches for its own addresses. It is the caller's owner's accounts rather than the deployment's, because an
+    /// address vouched for by a mailbox this caller may not read is an answer about somebody else's correspondents. An
+    /// account without a sending identity contributes none, which is the honest answer: nothing here knows what a
+    /// read-only account's own address is.
     /// </remarks>
-    private HashSet<EmailAddress> OwnAddresses() => accounts.ServedAccounts
+    private HashSet<EmailAddress> OwnAddresses() => accounts.OwnedAccounts
         .Select(account => senderIdentities.FindSenderIdentity(account.Id))
         .OfType<OutgoingSenderIdentity>()
         .Select(identity => identity.Address)

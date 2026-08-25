@@ -591,10 +591,17 @@ scanner switched on nothing here runs, and an enqueue costs exactly what it did 
 ## Asking for a message to be sent
 
 `AuthoredMailSubmission` is the one use case a boundary reaches to send a message that answers nothing, and it composes
-the three steps above it rather than adding a fourth: the account a caller named is resolved against the accounts this
-deployment serves, the people named become addresses, the addresses and the text become MIME, and the MIME and the
+the three steps above it rather than adding a fourth: the account a caller named is resolved against the accounts the
+caller's owner owns, the people named become addresses, the addresses and the text become MIME, and the MIME and the
 request become the durable record. Composing them in one place is what keeps a second entrypoint from doing two of the
 three and inventing the middle one, and it is what `send_email` calls and the whole of what that tool does.
+
+The account resolution is the caller's owner's rather than the deployment's wherever a caller names one, which is the
+send, the draft, and the repeating send alike, and it is what vouches for a recipient as one of the caller's own
+addresses. An account the caller's owner does not own is refused exactly as one this deployment does not serve — the
+same failure, with nothing in it that separates *not yours* from *not here* — so a refusal enumerates neither the
+accounts another person owns nor whether the name was one at all. A send is where getting this wrong costs most: mail
+would leave as somebody else rather than merely be shown to the wrong reader.
 
 **Nothing here transmits, and no configuration makes it.** The use case holds no delivery session and no factory for
 one, so there is nothing in it that could open a submission channel; what it answers with is the record, at the stage a

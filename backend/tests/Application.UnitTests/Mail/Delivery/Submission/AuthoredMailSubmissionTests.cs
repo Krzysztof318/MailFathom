@@ -209,6 +209,38 @@ public sealed class AuthoredMailSubmissionTests
     }
 
     /// <summary>
+    /// An account belonging to another owner is refused exactly as one nobody serves, so mail cannot leave as somebody
+    /// whose mailbox this caller may not even read.
+    /// </summary>
+    [Fact]
+    public async Task SubmitAsync_AnAccountTheCallersOwnerDoesNotOwn_RefusesAndWritesNothing()
+    {
+        // Arrange
+        var store = new InMemoryOutgoingEmailStore();
+        var submission = SubmissionOver(
+            store,
+            out var composer,
+            out var signal,
+            authorization: AccessAuthorizations.ForOwnerGranted(
+                SyntheticMailOwner.Another,
+                MailFathomPermission.MailSend));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailAccountNotAccessibleException>(
+            () => submission.SubmitAsync(RequestTo("anna@example.test"), TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.MailAccountNotAccessible, refusal.ErrorCode);
+
+        // The refusal repeats what the caller named and says nothing else, which is what keeps an account another owner
+        // owns from being told apart from one this deployment never served.
+        Assert.Equal(MailAccountSelector.For(Account), refusal.RequestedAccount);
+        Assert.Empty(store.OpenRequests);
+        Assert.Equal(0, signal.Depth);
+        composer.DidNotReceiveWithAnyArgs().Compose(default, default!, default!, default!);
+    }
+
+    /// <summary>
     /// A list longer than a record could ever hold is refused before the book is read, because the reads carry what the
     /// caller supplied and the resolution treats that length as a defect in whoever called it.
     /// </summary>
@@ -594,8 +626,9 @@ public sealed class AuthoredMailSubmissionTests
         composer = ComposingAuthoredEmails.ThatComposes(ComposedMime);
         signal = new MailOutboxSignal(capacity: 8);
 
-        var accountCatalog = Substitute.For<IDeploymentMailAccountCatalog>();
-        accountCatalog.ServedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
+        var accountCatalog = OwnedMailAccountCatalogs.For(
+            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
+            SyntheticServedAccount.Of(Account));
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ =>

@@ -696,6 +696,36 @@ public sealed class EmailContentReaderTests
         Assert.Equal(MailFathomErrorCode.StoredEmailNotFound, failure.ErrorCode);
     }
 
+    /// <summary>
+    /// Mail in an account another owner owns is refused by the same answer, so holding an identifier is not a way to
+    /// read somebody else's correspondence.
+    /// </summary>
+    [Fact]
+    public async Task ReadContentAsync_EmailOfAnAccountTheCallersOwnerDoesNotOwn_IsReportedAsNotFound()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create();
+        var authorization = AccessAuthorizations.ForOwnerGranted(
+            SyntheticMailOwner.Another,
+            MailFathomPermission.MailRead);
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf()),
+            accountCatalog: OwnedMailAccountCatalogs.For(authorization, SyntheticServedAccount.Of(summary.AccountId)),
+            authorization: authorization);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        // The code an identifier naming nothing is answered with, which is what keeps "not yours" from being told apart
+        // from "not here".
+        var failure = FailureOf(Assert.Single(result.Emails));
+        Assert.Equal(MailFathomErrorCode.StoredEmailNotFound, failure.ErrorCode);
+    }
+
     /// <summary>A folder an operator withheld from tools is unreadable by identifier too, and refused the same way as mail that is not there.</summary>
     [Fact]
     public async Task ReadContentAsync_EmailOfAFolderWithheldFromTools_IsReportedAsNotFound()
