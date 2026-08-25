@@ -30,10 +30,12 @@ namespace MailFathom.Infrastructure.Persistence.Settings;
 /// before this returns either way, so no pool outlives the one read it existed for.
 /// </para>
 /// <para>
-/// The one command this runs is bounded by the deployment's own command timeout, because it runs before any endpoint
-/// is open and therefore before anything could report that the host is still starting. A server that accepts the
-/// connection and then never answers the statement would otherwise hold the process at that line for as long as it
-/// stayed silent, and the caller composing configuration has no deadline of its own to fall back on.
+/// Both legs that reach the server are bounded, because they run before any endpoint is open and therefore before
+/// anything could report that the host is still starting. The command carries the deployment's own command timeout,
+/// and the connect attempt carries the driver's default wherever the connection string left it infinite: a server
+/// that accepts TCP without finishing the handshake, or accepts the connection and then never answers the statement,
+/// would otherwise hold the process there for as long as it stayed silent, and the caller composing configuration has
+/// no deadline of its own to fall back on.
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
@@ -81,7 +83,22 @@ public static class RootSettingsBootstrap
         // Written over whatever the connection string said, exactly as the long-lived pool's enrichment writes it over
         // the same keyword: `Persistence:CommandTimeoutSeconds` is where the deployment states that bound, and a
         // `Command Timeout=0` left in the connection string would mean this read has none at all.
-        dataSourceBuilder.ConnectionStringBuilder.CommandTimeout = (int)commandTimeout.TotalSeconds;
+        //
+        // Rounded up and capped rather than truncated, because the keyword is whole seconds and this method admits any
+        // positive bound: a sub-second one would truncate to `0` and a bound past `int.MaxValue` seconds would wrap,
+        // and either would land on the very value the assignment exists to overwrite.
+        dataSourceBuilder.ConnectionStringBuilder.CommandTimeout =
+            (int)Math.Min(Math.Ceiling(commandTimeout.TotalSeconds), int.MaxValue);
+
+        // The connection leg is bounded for the same reason and has no configured bound of its own, so what it gets is
+        // the driver's own default in place of an infinite wait: `Timeout=0` means a connect attempt that never gives
+        // up, and a server accepting TCP without finishing the startup handshake would hold a starting host there. It
+        // is replaced only for this one read — the long-lived pool keeps whatever the deployment configured, where a
+        // process that is already serving can report the wait.
+        if (dataSourceBuilder.ConnectionStringBuilder.Timeout == 0)
+        {
+            dataSourceBuilder.ConnectionStringBuilder.Timeout = new NpgsqlConnectionStringBuilder().Timeout;
+        }
 
         ConnectionStringComposer.SupplyThePasswordPerConnection(
             dataSourceBuilder,

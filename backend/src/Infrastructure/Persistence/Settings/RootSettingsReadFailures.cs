@@ -20,7 +20,7 @@ internal static class RootSettingsReadFailures
     /// <returns>What the operator is told, which names the one place the correction is made.</returns>
     /// <remarks>
     /// <para>
-    /// The four recognized states are the ones a deployment actually meets on the way to its first successful read,
+    /// The five recognized states are the ones a deployment actually meets on the way to its first successful read,
     /// and each sends the operator somewhere different. An unrecognized one is a database that could not be reached,
     /// which is also what a transport failure with no state at all is, so both share the last arm.
     /// </para>
@@ -32,6 +32,12 @@ internal static class RootSettingsReadFailures
     /// </remarks>
     internal static string Diagnose(NpgsqlException exception) => exception switch
     {
+        // The server answered and holds no such database, which is provisioning that never ran rather than anything
+        // about the network. This read meets it before the schema gate does, and the gate collapses it into a reason
+        // class beside two others, so saying it plainly is worth an arm of its own.
+        PostgresException { SqlState: PostgresErrorCodes.InvalidCatalogName } =>
+            "The database server carries no database of the configured name. Create it, or correct the name in the connection settings: the server was reached and answered, so neither the network nor the credential is what refused MailFathom.",
+
         // How a database missing this build's migration answers.
         PostgresException { SqlState: PostgresErrorCodes.UndefinedTable } =>
             "The database does not carry the settings_root table this build reads its persisted configuration from. Apply the migrations this build defines and start the host again.",

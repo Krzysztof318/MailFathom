@@ -184,7 +184,7 @@ The row keeps the indexable part of what the MIME reader found and only that: `a
 | Column of `settings_root` | What it records |
 |---|---|
 | `Id` | The singleton key, always `1`, stated rather than generated |
-| `Document` | The persisted settings, as one sparse `jsonb` document. It is flattened into ordinary colon-delimited .NET configuration keys by the host, so nothing here queries into it and its shape is whatever the sections it carries define. A key it does not carry is inherited from the source beneath rather than read as an empty value |
+| `Document` | The persisted settings, as one sparse `jsonb` document. It is flattened into ordinary colon-delimited .NET configuration keys by the host, so nothing here queries into it and its shape is whatever the sections it carries define. A key it does not carry is inherited from the source beneath rather than read as an empty value, and an array element is written as an object keyed by its index — `{ "Rules": { "1": … } }` — because the parser renumbers a JSON array's elements from `0` |
 | `Version` | The version a write is accepted against, for the reason the owner record's is: a rejected write reports the version it was refused against, which a token the database generates behind the write cannot be quoted back |
 | `CreatedAt`, `UpdatedAt` | When the row was provisioned, and when the document last changed — which is the provisioning instant until it does |
 

@@ -18,6 +18,7 @@ public sealed class BootstrapOnlySettingsTests
     [InlineData("ConnectionStrings:mailfathom")]
     [InlineData("Persistence:ConnectionString")]
     [InlineData("Persistence:Password")]
+    [InlineData("Persistence:CommandTimeoutSeconds")]
     [InlineData("Secrets:Interpretation")]
     [InlineData("ConfigurationSources:Directory")]
     [InlineData("ConfigurationSources:File")]
@@ -89,13 +90,28 @@ public sealed class BootstrapOnlySettingsTests
         Assert.Equal(["Persistence:Password", "Secrets:Interpretation"], refused);
     }
 
+    /// <summary>
+    /// The prefix test runs one way only. A refused key beginning with a persisted one names a longer setting, so
+    /// <c>Persistence:CommandTimeout</c> is not <c>Persistence:CommandTimeoutSeconds</c> and the shorter name stays a
+    /// setting an operator may persist rather than being refused by the longer one it happens to be a prefix of.
+    /// </summary>
+    [Fact]
+    public void FindIn_KeyARefusedOneMerelyBeginsWith_IsCarried()
+    {
+        // Act
+        var refused = BootstrapOnlySettings.FindIn(["Persistence:CommandTimeout"]);
+
+        // Assert
+        Assert.Empty(refused);
+    }
+
     /// <summary>An ordinary document carries none of them, which is what the refusal costs a correct deployment.</summary>
     [Fact]
     public void FindIn_OrdinarySettings_AreCarried()
     {
         // Act
         var refused = BootstrapOnlySettings.FindIn(
-            ["MailboxSearch:SnippetsPerEmail", "Persistence:CommandTimeout", "Secrets:Files:0:Name"]);
+            ["MailboxSearch:SnippetsPerEmail", "Persistence:MaximumConcurrencyCommitAttempts", "Secrets:Files:0:Name"]);
 
         // Assert
         Assert.Empty(refused);

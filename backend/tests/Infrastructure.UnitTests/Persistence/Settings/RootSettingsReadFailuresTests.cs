@@ -10,12 +10,30 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Settings;
 
 /// <summary>
 /// Covers what a failed read of the persisted configuration tells the operator. The read itself needs a database, but
-/// which of four places it sends somebody to is a decision, and every one of them is a first install or an upgrade
+/// which of five places it sends somebody to is a decision, and every one of them is a first install or an upgrade
 /// that has gone wrong — where sending the reader to the network instead of to a grant is the difference between a
 /// deployment repaired in a minute and one nobody can diagnose.
 /// </summary>
 public sealed class RootSettingsReadFailuresTests
 {
+    /// <summary>
+    /// A database that was never created is provisioning rather than the network, and this read is the first thing to
+    /// meet it: the schema gate below would collapse it into a reason class beside two others.
+    /// </summary>
+    [Fact]
+    public void Diagnose_DatabaseDoesNotExist_SendsTheOperatorToTheProvisioning()
+    {
+        // Arrange
+        var exception = ProviderFailure(PostgresErrorCodes.InvalidCatalogName);
+
+        // Act
+        var diagnosis = RootSettingsReadFailures.Diagnose(exception);
+
+        // Assert
+        Assert.Contains("no database of the configured name", diagnosis, StringComparison.Ordinal);
+        Assert.DoesNotContain("could not be reached", diagnosis, StringComparison.Ordinal);
+    }
+
     /// <summary>A database missing this build's migration is told to apply the migrations rather than checked over.</summary>
     [Fact]
     public void Diagnose_TableDoesNotExist_SendsTheOperatorToTheMigrations()
@@ -113,6 +131,7 @@ public sealed class RootSettingsReadFailuresTests
     /// composes, so a message quoting one would put a host name, a database name, or worse into a startup log.
     /// </summary>
     [Theory]
+    [InlineData(PostgresErrorCodes.InvalidCatalogName)]
     [InlineData(PostgresErrorCodes.UndefinedTable)]
     [InlineData(PostgresErrorCodes.InvalidPassword)]
     [InlineData(PostgresErrorCodes.InvalidAuthorizationSpecification)]

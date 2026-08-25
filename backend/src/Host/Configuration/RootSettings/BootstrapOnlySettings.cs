@@ -7,10 +7,10 @@ namespace MailFathom.Host.Configuration.RootSettings;
 /// <summary>Refuses a persisted value for a setting the persisted layer itself was reached through.</summary>
 /// <remarks>
 /// <para>
-/// Reading the layer needs settings of its own: where the database is, how the secret reference carrying its
-/// credential is interpreted, and which configuration sources exist at all. Those are read from the sources beneath
-/// the layer, because a persisted value for one of them could not be read without first reading it — so the read is
-/// not circular, and the list below is exactly what makes it so.
+/// Reading the layer needs settings of its own: where the database is, how long its one statement may run, how the
+/// secret reference carrying its credential is interpreted, and which configuration sources exist at all. Those are
+/// read from the sources beneath the layer, because a persisted value for one of them could not be read without first
+/// reading it — so the read is not circular, and the list below is exactly what makes it so.
 /// </para>
 /// <para>
 /// What that leaves is a split rather than a circle, and the split is why this refuses rather than ignores. The layer
@@ -19,7 +19,9 @@ namespace MailFathom.Host.Configuration.RootSettings;
 /// authenticated with the persisted one, and nothing in the running process would report the disagreement. A persisted
 /// <c>Secrets:Interpretation</c> is worse than a split: it decides whether a plain-text value written where a
 /// reference belongs fails startup or is accepted, for the whole secret-resolution graph, which would make the layer a
-/// way to relax the terms the layer itself is trusted under.
+/// way to relax the terms the layer itself is trusted under. <c>Persistence:CommandTimeoutSeconds</c> is the same
+/// split one turn later: it bounds the statement that fetched the document, so a persisted value would bound the
+/// connection pool and the schema gate while the read that fetched it ran at the file's bound.
 /// </para>
 /// <para>
 /// Dropping the keys from the published snapshot was the other candidate and is refused. A document that persists one
@@ -41,6 +43,7 @@ internal static class BootstrapOnlySettings
         "ConnectionStrings:mailfathom",
         "Persistence:ConnectionString",
         "Persistence:Password",
+        "Persistence:CommandTimeoutSeconds",
         "Secrets:Interpretation",
         "ConfigurationSources:Directory",
         "ConfigurationSources:File",

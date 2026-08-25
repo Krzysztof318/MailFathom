@@ -99,8 +99,8 @@ internal static class EnvironmentOnlySettings
             $"Settings only the process environment can deliver carry a value that did not come from it: "
             + $"{string.Join(", ", misplacedVariables)}. Each is read before MailFathom's configuration exists, or by a "
             + "library that never consults it, so a value written into an appsettings file, a provisioned "
-            + "configuration file, or a command-line argument reaches nobody. Set each as an environment variable on "
-            + "the host process, or remove it.");
+            + "configuration file, the persisted configuration document, or a command-line argument reaches nobody. "
+            + "Set each as an environment variable on the host process, or remove it.");
     }
 
     private static bool IsEnvironmentOnly(string configurationKey) =>
