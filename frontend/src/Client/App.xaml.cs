@@ -8,6 +8,7 @@ using MailFathom.Client.Deployment;
 using MailFathom.Client.Presentation.Settings;
 using MailFathom.Client.Presentation.Spaces;
 using MailFathom.Client.Presentation.Workspace;
+using MailFathom.Client.Session;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace MailFathom.Client;
@@ -86,6 +87,12 @@ public partial class App : Application
                     // composing and what it would be asked against. One for the run rather than one per model: a
                     // model is discarded as its view is navigated away from, and so would be anything it held.
                     services.AddSingleton<IWorkspace, SharedWorkspace>();
+
+                    // What the deployment allows this caller, for the same reason and on the same terms. It is the
+                    // one place that answers whether something may be offered, so every screen reads one answer
+                    // instead of deriving its own from a request the deployment refused — and it keeps itself
+                    // current by listening where the two things that invalidate it happen.
+                    services.AddSingleton<IClientSession, DeploymentClientSession>();
                 })
                 // Light, dark, and follow-the-system, with the choice written to the platform's own settings store so
                 // the application starts the way it was left. Nothing here decides which one: AppTheme.System is the

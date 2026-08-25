@@ -10,14 +10,22 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       xmlns:workspace="using:MailFathom.Client.Presentation.Workspace"
       NavigationCacheMode="Required">
 
-  <!-- Two columns where there is room for them and the answer alone where there is not, which is the frame's
-       composition rather than this space's. What either column holds is #1174's to decide. -->
-  <workspace:WorkspaceColumns>
-    <workspace:WorkspaceColumns.Primary>
-      <local:SpacePlaceholder x:Uid="DiscoverPage.Answer" />
-    </workspace:WorkspaceColumns.Primary>
-    <workspace:WorkspaceColumns.Companion>
-      <local:SpacePlaceholder x:Uid="DiscoverPage.Evidence" />
-    </workspace:WorkspaceColumns.Companion>
-  </workspace:WorkspaceColumns>
+  <Grid>
+    <!-- Two columns where there is room for them and the answer alone where there is not, which is the frame's
+         composition rather than this space's. What either column holds is #1174's to decide. -->
+    <workspace:WorkspaceColumns>
+      <workspace:WorkspaceColumns.Primary>
+        <local:SpacePlaceholder x:Uid="DiscoverPage.Answer" />
+      </workspace:WorkspaceColumns.Primary>
+      <workspace:WorkspaceColumns.Companion>
+        <local:SpacePlaceholder x:Uid="DiscoverPage.Evidence" />
+      </workspace:WorkspaceColumns.Companion>
+    </workspace:WorkspaceColumns>
+
+    <!-- The frame drops this space from its navigation where the session does not offer it, so the only way to be
+         looking at it withheld is to have opened on it, which the route's default decides before any session is
+         known. WithheldOverlay carries what stands there then, and why it stands over the space rather than instead
+         of it. -->
+    <local:WithheldOverlay Withheld="{Binding WithholdsDiscover}" />
+  </Grid>
 </Page>

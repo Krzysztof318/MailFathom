@@ -6,6 +6,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 <Page x:Class="MailFathom.Client.Presentation.Workspace.WorkspacePage"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mvux="using:Uno.Extensions.Reactive.UI"
       xmlns:uen="using:Uno.Extensions.Navigation.UI"
       xmlns:utu="using:Uno.Toolkit.UI"
       NavigationCacheMode="Required"
@@ -76,20 +77,27 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                     IsBackButtonVisible="Collapsed"
                     PaneDisplayMode="LeftCompact">
       <NavigationView.MenuItems>
+        <!-- Each destination is present only where the session says this caller may reach it, which is what makes a
+             capability the credential does not carry absent rather than present and refused when it is pressed. The
+             converter collapses anything that is not an outright yes, so a session still being fetched offers
+             nothing. -->
         <NavigationViewItem x:Uid="Workspace.Rail.Discover"
-                            uen:Region.Name="Discover">
+                            uen:Region.Name="Discover"
+                            Visibility="{Binding OffersDiscover, Converter={StaticResource AffirmedVisibility}}">
           <NavigationViewItem.Icon>
             <SymbolIcon Symbol="Find" />
           </NavigationViewItem.Icon>
         </NavigationViewItem>
         <NavigationViewItem x:Uid="Workspace.Rail.Mail"
-                            uen:Region.Name="Mail">
+                            uen:Region.Name="Mail"
+                            Visibility="{Binding OffersMail, Converter={StaticResource AffirmedVisibility}}">
           <NavigationViewItem.Icon>
             <SymbolIcon Symbol="Mail" />
           </NavigationViewItem.Icon>
         </NavigationViewItem>
         <NavigationViewItem x:Uid="Workspace.Rail.Cases"
-                            uen:Region.Name="Cases">
+                            uen:Region.Name="Cases"
+                            Visibility="{Binding OffersCases, Converter={StaticResource AffirmedVisibility}}">
           <NavigationViewItem.Icon>
             <SymbolIcon Symbol="Folder" />
           </NavigationViewItem.Icon>
@@ -99,6 +107,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       <NavigationView.Content>
         <Grid>
           <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition />
             <RowDefinition Height="Auto" />
@@ -120,7 +129,10 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             <!-- The one place this frame takes typing, and therefore the one place the soft keyboard can cover
                  something: SafeArea as a control rather than as an attached mask, which is what the `SoftInput` mask
                  is supported on. A space that takes typing of its own says the same thing around its own field. -->
-            <utu:SafeArea Insets="SoftInput">
+            <!-- The field follows the space that would run what is typed into it: asking is Discover's act, so a
+                 credential that may not ask is not offered a field to ask in. -->
+            <utu:SafeArea Insets="SoftInput"
+                          Visibility="{Binding OffersDiscover, Converter={StaticResource AffirmedVisibility}}">
               <TextBox x:Uid="Workspace.TextBox.Intent"
                        Text="{Binding Intent, Mode=TwoWay}"
                        MaxWidth="720"
@@ -158,30 +170,101 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             </Button>
           </Grid>
 
+          <!-- What the session is doing, and what it means when it cannot be had. The frame renders it rather than
+               each space, because until it arrives no space knows what it may show — and a shell that said nothing
+               while the answer was unknown would be the empty frame this replaces. It sits in its own Auto row, so
+               the whole block takes no height at all once there is an answer and nothing to say about it. -->
+          <StackPanel Grid.Row="1"
+                      Padding="16,0,16,12"
+                      Spacing="8">
+            <!-- A grant of nothing is an answer rather than a failure, and it is the one a person can act on with
+                 their operator. It is read from the frame rather than from the state's own template so the sentence
+                 does not depend on which of the three spaces resolved how. -->
+            <InfoBar x:Uid="Workspace.InfoBar.NothingOffered"
+                     IsOpen="{Binding OffersNothing}"
+                     IsClosable="False"
+                     Severity="Warning" />
+
+            <!-- Two notices rather than one, and they are two because the acts they lead to are. A credential that
+                 does not carry something is widened by whoever runs the deployment; a deployment that does not have
+                 something is not widened by any credential at all, and telling somebody "you may not" there sends
+                 them looking for a permission nobody can give them. Both can stand at once, which is the honest
+                 reading of a session that withheld two things for two reasons. -->
+            <InfoBar x:Uid="Workspace.InfoBar.Ungranted"
+                     IsOpen="{Binding AnythingUngranted}"
+                     IsClosable="False"
+                     Severity="Informational" />
+
+            <InfoBar x:Uid="Workspace.InfoBar.Unavailable"
+                     IsOpen="{Binding AnythingUnavailable}"
+                     IsClosable="False"
+                     Severity="Informational" />
+
+            <mvux:FeedView Source="{Binding Session}">
+              <!-- Nothing: an answer that arrived is said by the shell itself rather than by a banner over it. -->
+              <mvux:FeedView.ValueTemplate>
+                <DataTemplate>
+                  <Border Height="0" />
+                </DataTemplate>
+              </mvux:FeedView.ValueTemplate>
+
+              <mvux:FeedView.ProgressTemplate>
+                <DataTemplate>
+                  <ProgressBar IsIndeterminate="True"
+                               HorizontalAlignment="Stretch" />
+                </DataTemplate>
+              </mvux:FeedView.ProgressTemplate>
+
+              <!-- What it means and what to try, in this application's own words: the failure carries an English
+                   message written for a log, and one of the four cases can carry text from a machine this process
+                   does not own. The retry reaches the model through the template's parent, because asking the
+                   deployment again is the session's act rather than this view's. -->
+              <mvux:FeedView.ErrorTemplate>
+                <DataTemplate>
+                  <InfoBar x:Uid="Workspace.InfoBar.SessionUnavailable"
+                           IsOpen="True"
+                           IsClosable="False"
+                           Severity="Error">
+                    <InfoBar.ActionButton>
+                      <Button x:Uid="Workspace.Button.RetrySession"
+                              Command="{Binding Parent.RetrySession}" />
+                    </InfoBar.ActionButton>
+                  </InfoBar>
+                </DataTemplate>
+              </mvux:FeedView.ErrorTemplate>
+            </mvux:FeedView>
+          </StackPanel>
+
           <!-- Left empty deliberately: navigation resolves a registered route and puts the view for it here. -->
-          <Grid Grid.Row="1"
+          <Grid Grid.Row="2"
                 uen:Region.Attached="True"
                 uen:Region.Navigator="Visibility" />
 
           <utu:TabBar x:Name="Spaces"
-                      Grid.Row="2"
+                      Grid.Row="3"
                       uen:Region.Attached="True"
                       Style="{StaticResource BottomTabBarStyle}"
                       Visibility="Collapsed">
+            <!-- The same three destinations under the same three conditions: the bottom navigation is the narrow
+                 composition of one navigation rather than a second one, so what it offers follows the session
+                 exactly as the rail does. -->
             <utu:TabBarItem x:Uid="Workspace.Tab.Discover"
-                            uen:Region.Name="Discover">
+                            uen:Region.Name="Discover"
+                            Visibility="{Binding OffersDiscover, Converter={StaticResource AffirmedVisibility}}">
               <utu:TabBarItem.Icon>
                 <SymbolIcon Symbol="Find" />
               </utu:TabBarItem.Icon>
             </utu:TabBarItem>
             <utu:TabBarItem x:Uid="Workspace.Tab.Mail"
-                            uen:Region.Name="Mail">
+                            uen:Region.Name="Mail"
+                            Visibility="{Binding OffersMail, Converter={StaticResource AffirmedVisibility}}">
               <utu:TabBarItem.Icon>
                 <SymbolIcon Symbol="Mail" />
               </utu:TabBarItem.Icon>
             </utu:TabBarItem>
             <utu:TabBarItem x:Uid="Workspace.Tab.Cases"
-                            uen:Region.Name="Cases">
+                            uen:Region.Name="Cases"
+                            Visibility="{Binding OffersCases, Converter={StaticResource AffirmedVisibility}}">
               <utu:TabBarItem.Icon>
                 <SymbolIcon Symbol="Folder" />
               </utu:TabBarItem.Icon>

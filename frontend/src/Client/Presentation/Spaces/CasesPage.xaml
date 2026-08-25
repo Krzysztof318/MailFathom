@@ -10,14 +10,19 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       xmlns:workspace="using:MailFathom.Client.Presentation.Workspace"
       NavigationCacheMode="Required">
 
-  <!-- The cases beside the one being worked on where there is room, and the cases alone where there is not. What
-       either column holds is #1189's to decide. -->
-  <workspace:WorkspaceColumns>
-    <workspace:WorkspaceColumns.Primary>
-      <local:SpacePlaceholder x:Uid="CasesPage.Cases" />
-    </workspace:WorkspaceColumns.Primary>
-    <workspace:WorkspaceColumns.Companion>
-      <local:SpacePlaceholder x:Uid="CasesPage.Case" />
-    </workspace:WorkspaceColumns.Companion>
-  </workspace:WorkspaceColumns>
+  <Grid>
+    <!-- The cases beside the one being worked on where there is room, and the cases alone where there is not. What
+         either column holds is #1189's to decide. -->
+    <workspace:WorkspaceColumns>
+      <workspace:WorkspaceColumns.Primary>
+        <local:SpacePlaceholder x:Uid="CasesPage.Cases" />
+      </workspace:WorkspaceColumns.Primary>
+      <workspace:WorkspaceColumns.Companion>
+        <local:SpacePlaceholder x:Uid="CasesPage.Case" />
+      </workspace:WorkspaceColumns.Companion>
+    </workspace:WorkspaceColumns>
+
+    <!-- What this space is instead where the session does not offer it. -->
+    <local:WithheldOverlay Withheld="{Binding WithholdsCases}" />
+  </Grid>
 </Page>

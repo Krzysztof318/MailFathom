@@ -2,19 +2,22 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Client.Session;
 using Microsoft.Extensions.Localization;
 
 namespace MailFathom.Client.Presentation.Workspace;
 
 /// <summary>
 /// The model behind <see cref="WorkspacePage"/>, which is the frame the three spaces are shown inside rather than a
-/// space of its own. It owns what sits above them: the question being composed, and what that question would be asked
-/// against.
+/// space of its own. It owns what sits above them: the question being composed, what that question would be asked
+/// against, and which of the spaces this session may be offered at all.
 /// </summary>
 /// <remarks>
-/// Neither is answered here. Running a question is Discover's work, and narrowing a scope is done by the space
-/// somebody is narrowing in — the frame's part is that both survive moving between spaces, which is why it reads them
-/// from <see cref="IWorkspace"/> rather than holding them itself.
+/// Neither the question nor the scope is answered here. Running a question is Discover's work, and narrowing a scope is
+/// done by the space somebody is narrowing in — the frame's part is that both survive moving between spaces, which is
+/// why it reads them from <see cref="IWorkspace"/> rather than holding them itself. What it does decide is what to put
+/// in front of somebody, and it decides that from <see cref="IClientSession"/> rather than from a request the
+/// deployment refused.
 /// </remarks>
 public partial record WorkspaceModel
 {
@@ -23,20 +26,43 @@ public partial record WorkspaceModel
     private const string SelectedKey = "WorkspaceScope.Selected";
 
     private readonly IWorkspace workspace;
+    private readonly IClientSession session;
     private readonly IStringLocalizer localizer;
 
-    /// <summary>Initializes the frame over the workspace its spaces share.</summary>
+    /// <summary>Initializes the frame over the workspace its spaces share and the session that decides what it offers.</summary>
     /// <param name="workspace">The question and the scope every space reads and writes.</param>
+    /// <param name="session">What the deployment allows this caller, which is what the frame offers from.</param>
     /// <param name="localizer">Where the words describing a scope come from, since they are composed rather than per control.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
-    public WorkspaceModel(IWorkspace workspace, IStringLocalizer localizer)
+    public WorkspaceModel(
+        IWorkspace workspace,
+        IClientSession session,
+        IStringLocalizer localizer)
     {
         ArgumentNullException.ThrowIfNull(workspace);
+        ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(localizer);
 
         this.workspace = workspace;
+        this.session = session;
         this.localizer = localizer;
+
         this.ScopeDescription = workspace.Scope.Select(this.Describe);
+
+        // Held as a state rather than handed on as the session's own feed, so the frame and every projection below it
+        // read one subscription: a feed is read from the start by whoever subscribes, and the four projections here
+        // would otherwise each be a reader of their own.
+        this.Session = State.FromFeed(this, session.Standing);
+
+        this.OffersDiscover = this.Offers(ClientCapability.Discover);
+        this.OffersMail = this.Offers(ClientCapability.Mail);
+        this.OffersCases = this.Offers(ClientCapability.Cases);
+        this.WithholdsDiscover = this.Withholds(ClientCapability.Discover);
+        this.WithholdsMail = this.Withholds(ClientCapability.Mail);
+        this.WithholdsCases = this.Withholds(ClientCapability.Cases);
+        this.OffersNothing = this.Session.Select(standing => standing.OffersNothing);
+        this.AnythingUngranted = this.Any(CapabilityStanding.Ungranted);
+        this.AnythingUnavailable = this.Any(CapabilityStanding.Unavailable);
     }
 
     /// <summary>What somebody is about to ask, held for the run rather than for the screen they typed it on.</summary>
@@ -49,6 +75,61 @@ public partial record WorkspaceModel
     /// </remarks>
     public IFeed<string> ScopeDescription { get; }
 
+    /// <summary>What the deployment allows this caller, which the frame both offers from and renders the state of.</summary>
+    /// <remarks>
+    /// Shown through a <c>FeedView</c> rather than read for a value, because fetching it can be under way and can
+    /// fail: a shell that rendered nothing while the answer was unknown would be an empty frame, and one that rendered
+    /// nothing when it failed would be an empty frame that never fills.
+    /// </remarks>
+    public IFeed<SessionStanding> Session { get; }
+
+    /// <summary>Whether the space a question is asked in may be put in front of this caller.</summary>
+    /// <remarks>The field the question is composed in follows it, because the field is that space's own act reached from the frame rather than something the frame does.</remarks>
+    public IFeed<bool> OffersDiscover { get; }
+
+    /// <summary>Whether the space correspondence is read in may be put in front of this caller.</summary>
+    public IFeed<bool> OffersMail { get; }
+
+    /// <summary>Whether the space a thread of work is followed in may be put in front of this caller.</summary>
+    public IFeed<bool> OffersCases { get; }
+
+    /// <summary>Whether this session keeps the space a question is asked in from being put in front of this caller.</summary>
+    /// <remarks>
+    /// Stated beside its opposite rather than derived from it in the view, because a space says what it is instead
+    /// only where the session outright withheld it. A feed carrying no value yet reaches a binding as the type's
+    /// default, so a view that showed the withheld state on the absence of an offer would announce it before the
+    /// session had answered — see <see cref="SessionStanding.Withholds" />.
+    /// </remarks>
+    public IFeed<bool> WithholdsDiscover { get; }
+
+    /// <summary>Whether this session keeps the space correspondence is read in from being put in front of this caller.</summary>
+    public IFeed<bool> WithholdsMail { get; }
+
+    /// <summary>Whether this session keeps the space a thread of work is followed in from being put in front of this caller.</summary>
+    public IFeed<bool> WithholdsCases { get; }
+
+    /// <summary>Whether this session leaves the frame with no space at all to open on.</summary>
+    /// <remarks>
+    /// Read from the frame rather than from inside the state's own template, so the sentence stays reachable however
+    /// the three spaces above resolve: a shell offering nothing has to say so once rather than showing three withheld
+    /// spaces and no reason for any of them.
+    /// </remarks>
+    public IFeed<bool> OffersNothing { get; }
+
+    /// <summary>Whether something this client can show is withheld because this caller's credential does not carry it.</summary>
+    /// <remarks>
+    /// Kept apart from the one below because conflating them produces the wrong message. This is the case somebody
+    /// acts on by asking whoever runs their MailFathom to widen what their credential may do.
+    /// </remarks>
+    public IFeed<bool> AnythingUngranted { get; }
+
+    /// <summary>Whether something this client can show is withheld because this deployment does not provide it.</summary>
+    /// <remarks>
+    /// The case no permission would change. Saying <em>you may not</em> here would send somebody looking for a grant
+    /// nobody can give them, which is exactly what the two notices exist to keep apart.
+    /// </remarks>
+    public IFeed<bool> AnythingUnavailable { get; }
+
     /// <summary>
     /// The keys the words above are resolved by, in the one place they are written.
     /// </summary>
@@ -58,6 +139,19 @@ public partial record WorkspaceModel
     /// a sentence. The unit suite holds every authored table to naming all three.
     /// </remarks>
     internal static IReadOnlyList<string> ScopeResourceKeys { get; } = [EverythingKey, AccountFolderKey, SelectedKey];
+
+    /// <summary>Asks the deployment again for what this caller may do.</summary>
+    /// <remarks>What the button on the failed state presses. It says nothing about what went wrong — the answer, or the next failure, arrives on <see cref="Session" /> exactly as the first one did.</remarks>
+    public void RetrySession() => this.session.Refresh();
+
+    private IFeed<bool> Offers(ClientCapability capability) =>
+        this.Session.Select(standing => standing.Offers(capability));
+
+    private IFeed<bool> Withholds(ClientCapability capability) =>
+        this.Session.Select(standing => standing.Withholds(capability));
+
+    private IFeed<bool> Any(CapabilityStanding standing) =>
+        this.Session.Select(session => session.Any(standing));
 
     private string Describe(WorkspaceScope scope)
     {

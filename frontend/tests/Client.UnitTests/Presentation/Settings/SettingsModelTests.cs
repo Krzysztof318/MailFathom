@@ -8,18 +8,25 @@ using MailFathom.Client.Backend;
 using MailFathom.Client.Backend.Authorization;
 using MailFathom.Client.Presentation;
 using MailFathom.Client.Presentation.Settings;
+using MailFathom.Client.Session;
 using MailFathom.Client.UnitTests.TestDoubles;
 
 namespace MailFathom.Client.UnitTests.Presentation.Settings;
 
-public sealed class SettingsModelTests
+public sealed class SettingsModelTests : IDisposable
 {
+    /// <summary>A deployment answering, for the tests whose subject is not what it answered.</summary>
+    private readonly StubClientSession running = SessionRunning("0.8.0");
+
+    /// <inheritdoc />
+    public void Dispose() => this.running.Dispose();
+
     /// <summary>Awaiting a feed is how a model's state is asserted in this stack, and this one proves the MVUX path behind the settings screen reaches the running build.</summary>
     [Fact]
     public async Task Build_TheScaffoldModel_YieldsTheRunningBuild()
     {
         // Arrange
-        await using var model = ModelOver();
+        await using var model = this.ModelOver();
 
         // Act
         var build = await model.Build;
@@ -36,7 +43,7 @@ public sealed class SettingsModelTests
         var address = new DeploymentAddress(new AccessTokenStore());
         address.PointAt(new Uri("https://mail.example/"));
 
-        await using var model = ModelOver(address: address);
+        await using var model = this.ModelOver(address: address);
 
         // Act
         var deployment = await model.Deployment;
@@ -45,12 +52,50 @@ public sealed class SettingsModelTests
         Assert.Equal("https://mail.example/", deployment);
     }
 
+    /// <summary>
+    /// Two versions rather than one: a client is installed and a deployment is upgraded, and the first question
+    /// anybody debugging asks is which of the pair they are reading.
+    /// </summary>
+    [Fact]
+    public async Task Session_ADeploymentReportingItsVersion_IsShownBesideTheClientsOwnBuild()
+    {
+        // Arrange
+        using var session = SessionRunning("0.9.1");
+        await using var model = this.ModelOver(session: session);
+
+        // Act
+        var standing = await model.Session;
+        var build = await model.Build;
+
+        // Assert
+        Assert.NotNull(standing);
+        Assert.NotNull(build);
+        Assert.Equal("0.9.1", standing.DeploymentVersion);
+        Assert.NotEqual(standing.DeploymentVersion, build.Version);
+    }
+
+    /// <summary>The screen names the version that answered rather than asking for one of its own.</summary>
+    [Fact]
+    public async Task Session_ReadTwice_IsTheApplicationsOwnSessionRatherThanASecondFetch()
+    {
+        // Arrange
+        using var session = SessionRunning("0.8.0");
+        await using var model = this.ModelOver(session: session);
+
+        // Act
+        var (first, second) = (model.Session, model.Session);
+
+        // Assert
+        Assert.Same(first, second);
+        Assert.Same(session.Standing, first);
+    }
+
     /// <summary>The screen offers what the configuration named and nothing else, in the order it named it.</summary>
     [Fact]
     public async Task Languages_TheConfiguredCultures_AreTheOnesOffered()
     {
         // Arrange
-        await using var model = ModelOver();
+        await using var model = this.ModelOver();
 
         // Act
         var languages = await model.Languages;
@@ -64,7 +109,7 @@ public sealed class SettingsModelTests
     public async Task ChosenLanguage_ACultureBeingReadIn_IsWhatTheChoiceStartsOn()
     {
         // Arrange
-        await using var model = ModelOver(new StubLocalizationService("pl", "en", "pl"));
+        await using var model = this.ModelOver(new StubLocalizationService("pl", "en", "pl"));
 
         // Act
         var chosen = await model.ChosenLanguage;
@@ -79,7 +124,7 @@ public sealed class SettingsModelTests
     {
         // Arrange
         var localization = new StubLocalizationService("en", "en", "pl");
-        await using var model = ModelOver(localization);
+        await using var model = this.ModelOver(localization);
         var polish = AppLanguage.FromCulture(CultureInfo.GetCultureInfo("pl"));
         await model.ChosenLanguage.UpdateAsync(_ => polish, TestContext.Current.CancellationToken);
 
@@ -97,7 +142,7 @@ public sealed class SettingsModelTests
     {
         // Arrange
         var localization = new StubLocalizationService("en", "en", "pl");
-        await using var model = ModelOver(localization);
+        await using var model = this.ModelOver(localization);
         await model.ChosenLanguage.UpdateAsync(_ => new AppLanguage("de", "Deutsch"), TestContext.Current.CancellationToken);
 
         // Act
@@ -113,7 +158,7 @@ public sealed class SettingsModelTests
     public async Task ThemeOptions_TheScaffoldModel_OffersSystemLightAndDark()
     {
         // Arrange
-        await using var model = ModelOver();
+        await using var model = this.ModelOver();
 
         // Act
         var options = await model.ThemeOptions;
@@ -129,7 +174,7 @@ public sealed class SettingsModelTests
     public async Task ThemeOptions_TheStringTable_NamesEveryOfferInTheLanguageBeingReadIn()
     {
         // Arrange
-        await using var model = ModelOver();
+        await using var model = this.ModelOver();
 
         // Act
         var options = await model.ThemeOptions;
@@ -145,7 +190,7 @@ public sealed class SettingsModelTests
     public async Task ChosenTheme_AServiceHoldingAPersistedChoice_StartsAtThatChoice()
     {
         // Arrange
-        await using var model = ModelOver(themes: new StubThemeService { Theme = AppTheme.Dark });
+        await using var model = this.ModelOver(themes: new StubThemeService { Theme = AppTheme.Dark });
 
         // Act
         var chosen = await model.ChosenTheme;
@@ -164,7 +209,7 @@ public sealed class SettingsModelTests
     {
         // Arrange
         var themes = new StubThemeService();
-        await using var model = ModelOver(themes: themes);
+        await using var model = this.ModelOver(themes: themes);
         var offers = await model.ThemeOptions;
         var light = offers.First(option => option.Theme is AppTheme.Light);
         var handedOver = new TaskCompletionSource<AppTheme>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -193,7 +238,7 @@ public sealed class SettingsModelTests
     public async Task ChosenTheme_ReadTwice_IsOneState()
     {
         // Arrange
-        await using var model = ModelOver();
+        await using var model = this.ModelOver();
 
         // Act
         var (first, second) = (model.ChosenTheme, model.ChosenTheme);
@@ -210,13 +255,15 @@ public sealed class SettingsModelTests
         var localization = new StubLocalizationService("en", "en", "pl");
         var themes = new StubThemeService();
         var address = new DeploymentAddress(new AccessTokenStore());
+        using var session = SessionRunning("0.8.0");
         var localizer = ThemeWords();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new SettingsModel(null!, themes, address, localizer));
-        Assert.Throws<ArgumentNullException>(() => new SettingsModel(localization, null!, address, localizer));
-        Assert.Throws<ArgumentNullException>(() => new SettingsModel(localization, themes, null!, localizer));
-        Assert.Throws<ArgumentNullException>(() => new SettingsModel(localization, themes, address, null!));
+        Assert.Throws<ArgumentNullException>(() => new SettingsModel(null!, themes, address, session, localizer));
+        Assert.Throws<ArgumentNullException>(() => new SettingsModel(localization, null!, address, session, localizer));
+        Assert.Throws<ArgumentNullException>(() => new SettingsModel(localization, themes, null!, session, localizer));
+        Assert.Throws<ArgumentNullException>(() => new SettingsModel(localization, themes, address, null!, localizer));
+        Assert.Throws<ArgumentNullException>(() => new SettingsModel(localization, themes, address, session, null!));
     }
 
     /// <summary>
@@ -251,15 +298,20 @@ public sealed class SettingsModelTests
             type.GetGenericArguments().SelectMany(Unwrap).Append(type);
     }
 
-    private static SettingsModel ModelOver(
+    private SettingsModel ModelOver(
         StubLocalizationService? localization = null,
         StubThemeService? themes = null,
-        DeploymentAddress? address = null) =>
+        DeploymentAddress? address = null,
+        StubClientSession? session = null) =>
         new(
             localization ?? new StubLocalizationService("en", "en", "pl"),
             themes ?? new StubThemeService(),
             address ?? new DeploymentAddress(new AccessTokenStore()),
+            session ?? this.running,
             ThemeWords());
+
+    private static StubClientSession SessionRunning(string version) =>
+        new(SessionStanding.Of(new DeploymentSession("MailFathom", version, [])));
 
     private static StubStringLocalizer ThemeWords() => new(new Dictionary<string, string>(StringComparer.Ordinal)
     {

@@ -27,6 +27,21 @@ public sealed class AccessTokenStore
 {
     private volatile string? current;
 
+    /// <summary>Raised when the signed-in identity changes: somebody signed in, or the session held here ended.</summary>
+    /// <remarks>
+    /// <para>
+    /// What the rest of the client refreshes on. A deployment answers about the credential presented to it, so
+    /// everything derived from that answer — what the caller may do, and therefore what the interface offers — is
+    /// stale the moment this fires. Publishing the change here rather than leaving each reader to ask again is what
+    /// keeps a screen from deciding it may not do something because nobody had signed in yet when it looked.
+    /// </para>
+    /// <para>
+    /// It carries nothing. The token is not readable outside this assembly and a subscriber has no business knowing
+    /// which identity replaced which; what it needs is that the answer it holds no longer describes this session.
+    /// </para>
+    /// </remarks>
+    public event EventHandler? SignedInChanged;
+
     /// <summary>Gets whether somebody has signed in during this run.</summary>
     /// <remarks>Not whether the token is still accepted: only the deployment knows that, and it says so by refusing a request.</remarks>
     public bool IsSignedIn => this.current is not null;
@@ -37,11 +52,18 @@ public sealed class AccessTokenStore
     /// <summary>Takes the token a completed sign-in produced.</summary>
     /// <param name="accessToken">The issued token.</param>
     /// <exception cref="ArgumentException">Thrown when the token is blank.</exception>
+    /// <remarks>
+    /// Every accepted token is announced, without the one held before it being read to decide whether anything moved.
+    /// A sign-in that produced a token is a new session whatever the bytes are, and comparing two credentials to save
+    /// an announcement would be a secret comparison written for nothing.
+    /// </remarks>
     internal void Accept(string accessToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(accessToken);
 
         this.current = accessToken;
+
+        this.SignedInChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Drops whatever is held, which ends the session without asking the deployment anything.</summary>
@@ -51,5 +73,15 @@ public sealed class AccessTokenStore
     /// that means nothing there — and the honest reading of a person moving to another deployment is that this session
     /// is over rather than that it travels.
     /// </remarks>
-    internal void Forget() => this.current = null;
+    internal void Forget()
+    {
+        var held = this.current is not null;
+
+        this.current = null;
+
+        if (held)
+        {
+            this.SignedInChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 }
