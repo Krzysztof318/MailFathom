@@ -1531,22 +1531,68 @@ keeps its profile instead of becoming a second entry. On Linux the file and its 
 created that way rather than tightened afterwards — a file created readable and corrected later is readable for the
 moment in between.
 
-**Tokens are encrypted in the file** with AES-256-GCM, under a random key generated on first use and kept beside the
-store as `credentials.key`; on Windows that key file's contents are additionally wrapped with DPAPI under the current
-user. Each token is bound to its own endpoint, so a value moved between entries does not decrypt.
+**The secrets themselves are held by your operating system, not by that file**, wherever this machine has somewhere to
+hold them:
 
-An OAuth profile holds a refresh token as well, sealed the same way and bound to the same endpoint — it is the
-longer-lived of the two secrets, so anything weaker would be a regression in the value most worth protecting. Beside it
-sit the values a renewal needs and that are not secrets: the token endpoint, the issuer, the client identifier, the
-resource, the scopes, and when the access token expires. They are recorded rather than rediscovered because a renewal
-happens on a command somebody is waiting on, and re-reading two discovery documents to spend a refresh token would put
-two more round trips in front of every expired session. A deployment that moves one of them is answered by signing in
-again.
+| Platform | Where a profile's secrets are held |
+| --- | --- |
+| Windows | The Credential Manager, as a generic credential named `MailFathom/mfctl/<address>/<kind>`, persisted for your logged-on user on this computer |
+| Linux | The Secret Service through `libsecret` — GNOME Keyring, KWallet, or another provider — in your session's default collection |
 
-**A key-pair profile stores no credential at all.** It records the absolute path of the private key and nothing else, so
-there is no sealed token in the file and nothing an attacker could present even if the key file's protection failed. The
-path is not a secret and is stored in clear; what it names is, and it is protected by that file's own permissions rather
-than by anything here.
+Two entries per profile at most: the bearer credential it presents, and an OAuth session's refresh token. Both are keyed
+by the deployment's address, so one deployment's credential is never presented to another, and renaming a profile does
+not lose them. macOS is not covered because `mfctl` is not published for it.
+
+What `credentials.json` then records is what a profile *is* rather than what it can do: the address, the credential's
+reported name, a key-pair profile's key path, an OAuth session's endpoint, issuer, client identifier, resource, scopes,
+and expiry, and the transport trust you accepted. None of those is a secret and each was already in clear. **A profile
+with no `token` member is one whose secrets your operating system is holding.**
+
+**Where this machine has no such store, the command seals them into the file instead** — `libsecret` not installed, no
+D-Bus session bus, no provider running, a locked collection, or the store refusing. That is the ordinary state of a
+headless server or a jump host, and `mfctl` keeps working there: the tokens are encrypted in the file with AES-256-GCM,
+under a random key generated on first use and kept beside the store as `credentials.key`; on Windows that key file's
+contents are additionally wrapped with DPAPI under the current user. Each token is bound to its own endpoint, so a value
+moved between entries does not decrypt.
+
+**`mfctl login` says which of the two you got**, so you never have to read the file to find out:
+
+```console
+$ mfctl login --endpoint https://mail.example.test:8443
+Signed in to https://mail.example.test:8443 as 'workstation' (MailFathom 0.8.0), saved as profile 'production' and selected.
+The credential is held by the Windows Credential Manager.
+```
+
+```console
+$ mfctl login --endpoint https://mail.example.test:8443
+Signed in to https://mail.example.test:8443 as 'workstation' (MailFathom 0.8.0), saved as profile 'production' and selected.
+The credential is sealed in the credentials file under a key beside it, because this session has no D-Bus session bus, so no Secret Service provider can be reached.
+```
+
+A profile signed in before your machine had a store **moves into it by itself**, on the first command that opens the
+profile — you do not sign in again, and `credentials.key` is removed once no profile is still sealed under it. A move
+that does not complete leaves the sealed profile exactly as it was and the command you ran carries on.
+
+A secret your operating system took and can no longer produce is not silently replaced by the file. A locked keyring and
+a removed entry say different things, because only one of them is answered by signing in again:
+
+```console
+$ mfctl status
+The credential for https://mail.example.test:8443 is held by this machine's secret store, which cannot be reached: the collection is locked. Make the store reachable and run the command again, or run 'mfctl login --endpoint https://mail.example.test:8443' to store the credential wherever this machine can hold it.
+```
+
+An OAuth profile holds a refresh token as well, kept wherever the access token is and bound to the same deployment — it
+is the longer-lived of the two secrets, so anything weaker would be a regression in the value most worth protecting.
+Beside it sit the values a renewal needs and that are not secrets: the token endpoint, the issuer, the client identifier,
+the resource, the scopes, and when the access token expires. They are recorded rather than rediscovered because a
+renewal happens on a command somebody is waiting on, and re-reading two discovery documents to spend a refresh token
+would put two more round trips in front of every expired session. A deployment that moves one of them is answered by
+signing in again.
+
+**A key-pair profile stores no credential at all**, in either place. It records the absolute path of the private key and
+nothing else, so there is nothing an attacker could present even if the key file's protection failed. The path is not a
+secret and is stored in clear; what it names is, and it is protected by that file's own permissions rather than by
+anything here.
 
 **A profile that accepted something about its transport records that too**, beside the endpoint and in clear: the
 pinned certificate's SHA-256 fingerprint, and whether the connection is unprotected. Neither is a secret — a fingerprint
@@ -1555,10 +1601,18 @@ same deployment. A profile that accepted nothing beyond the default records noth
 itself the statement that something was accepted, and a file written before the entry existed reads as an ordinary
 profile rather than failing.
 
-Be clear about what that buys. A credentials file that leaves the machine — in a backup, a synced folder, a support
-bundle, a screenshot of a directory listing — discloses nothing on its own. Someone already able to read your files on
-your machine can read the key too, and on Linux nothing prevents that; the file mode is what answers that case, and the
-encryption answers the copy. Holding the credential in the platform's own secret service is tracked as
+`mfctl logout` clears both halves. An entry your operating system will not let go of — a keyring that has locked since
+you signed in — is reported rather than left behind quietly, so you can remove it yourself once the keyring is open
+again. The profile is forgotten either way.
+
+Be clear about what each arrangement buys. **Where your operating system holds the secrets**, another account on the
+same machine cannot read them, and a copy of your profile directory taken elsewhere does not open. **Where they are
+sealed in the file**, a credentials file that leaves the machine — in a backup, a synced folder, a support bundle, a
+screenshot of a directory listing — still discloses nothing on its own, because the key is random rather than derived
+from anything about the machine; but someone already able to read your files on your machine reads the key as easily as
+the store, and on Linux nothing prevents that. Neither arrangement defends against code running as you: a keyring
+answers whoever can ask it. [ADR 0018](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0018-where-the-client-keeps-its-sign-in-credential.md)
+records the decision and the threat model it accepts, and packaging the command so it can be installed is tracked as
 [#318](https://github.com/Krzysztof318/MailFathom/issues/318).
 
 ## What the command records about itself

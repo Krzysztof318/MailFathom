@@ -8,12 +8,19 @@ namespace MailFathom.Cli.Credentials;
 
 /// <summary>One deployment the operator has signed in to, under the name they gave it.</summary>
 /// <param name="Endpoint">The address the profile reaches, so a command needs only the name.</param>
-/// <param name="Token">The bearer credential, encrypted; see <see cref="TokenProtector" />.</param>
+/// <param name="Token">The bearer credential, encrypted; see <see cref="TokenProtector" />. Absent when the platform's secret store holds it and when the profile stores no credential at all.</param>
 /// <param name="Credential">The name the deployment reported for the credential, kept so the command can say who it is signed in as without asking again.</param>
 /// <param name="Session">What an OAuth sign-in left behind, absent from a profile holding an API key or a pasted token.</param>
 /// <param name="KeyPair">Where a key-pair profile's private key lives, absent from every other kind of profile.</param>
 /// <param name="Transport">What the operator accepted about this deployment's transport, absent from a profile that accepted nothing beyond the default.</param>
 /// <remarks>
+/// <para>
+/// <b>An absent <see cref="Token" /> is the statement that this file holds no secret for the profile.</b> Either the
+/// platform's secret store has it, keyed by <see cref="Endpoint" />, or the profile is a key-pair one that stores none
+/// anywhere. <see cref="KeyPair" /> is what separates the two, and it is read first, so neither case has to be inferred
+/// from the other. A profile written before there was a secret store carries a sealed value here and goes on being read
+/// from it until the first command that opens it moves it.
+/// </para>
 /// <para>
 /// The ways of signing in leave different amounts behind, and the difference is two nullable members rather than three
 /// kinds of profile. An API key is a credential that stays valid until the deployment stops accepting it, so there is
@@ -33,7 +40,7 @@ namespace MailFathom.Cli.Credentials;
 /// </remarks>
 internal sealed record StoredCredential(
     [property: JsonPropertyName("endpoint")] string Endpoint,
-    [property: JsonPropertyName("token")] string Token,
+    [property: JsonPropertyName("token"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Token,
     [property: JsonPropertyName("credential")] string Credential,
     [property: JsonPropertyName("session")] StoredOAuthSession? Session = null,
     [property: JsonPropertyName("keyPair")] StoredKeyPair? KeyPair = null,
@@ -84,7 +91,7 @@ internal sealed record StoredTransportTrust(
 }
 
 /// <summary>What an OAuth sign-in has to remember so the next command does not ask the operator to sign in again.</summary>
-/// <param name="RefreshToken">The credential a spent access token is exchanged for a new one with, encrypted; see <see cref="TokenProtector" />.</param>
+/// <param name="RefreshToken">The credential a spent access token is exchanged for a new one with, encrypted; see <see cref="TokenProtector" />. Absent when the platform's secret store holds it, for the reason <see cref="StoredCredential.Token" /> is.</param>
 /// <param name="AccessTokenExpiresAt">When the stored access token stops being accepted, which is what decides whether a renewal happens at all.</param>
 /// <param name="TokenEndpoint">Where the exchange is made, taken from the authorization server's own discovery document at sign-in.</param>
 /// <param name="Issuer">Which authorization server the session belongs to, so a message can name it and a re-sign-in reaches the same one.</param>
@@ -104,7 +111,7 @@ internal sealed record StoredTransportTrust(
 /// </para>
 /// </remarks>
 internal sealed record StoredOAuthSession(
-    [property: JsonPropertyName("refreshToken")] string RefreshToken,
+    [property: JsonPropertyName("refreshToken"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? RefreshToken,
     [property: JsonPropertyName("accessTokenExpiresAt")] DateTimeOffset AccessTokenExpiresAt,
     [property: JsonPropertyName("tokenEndpoint")] string TokenEndpoint,
     [property: JsonPropertyName("issuer")] string Issuer,

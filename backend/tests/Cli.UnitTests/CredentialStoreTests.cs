@@ -212,7 +212,7 @@ public sealed class CredentialStoreTests : IDisposable
         var removed = this.store.Remove("production");
 
         // Assert
-        Assert.True(removed);
+        Assert.True(removed.Removed);
         Assert.Empty(this.store.Read().Profiles);
     }
 
@@ -255,7 +255,7 @@ public sealed class CredentialStoreTests : IDisposable
     public void Remove_NothingStored_ReportsThatThereWasNothingToForget()
     {
         // Act, Assert
-        Assert.False(this.store.Remove("production"));
+        Assert.False(this.store.Remove("production").Removed);
     }
 
     /// <summary>Forgetting a profile is what an operator does about a token that no longer opens, so it must not need one.</summary>

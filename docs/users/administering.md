@@ -143,10 +143,13 @@ arrives too late to change that.
 [When the connection is weaker than the default](../operations/admin-endpoint.md#when-the-connection-is-weaker-than-the-default)
 has both questions in full, and the two switches a scripted sign-in states the answers with.
 
-What is stored afterwards is one small file per user, with the tokens encrypted and the key beside it — and for a
-key-pair profile, no credential at all;
-[where the credential is kept](../operations/admin-endpoint.md#where-the-credential-is-kept) states the paths, what
-the encryption does protect, and what it does not.
+What is stored afterwards is one small file per user naming the deployments you signed in to — and the secrets
+themselves go to your operating system's own store, the Credential Manager on Windows and your keyring on Linux, so the
+file holds no credential at all. On a machine with no such store, a headless jump host being the usual one, the tokens
+are sealed into that file instead under a key beside it; `mfctl login` says which of the two you got rather than
+leaving you to guess. A key-pair profile keeps no credential in either place.
+[Where the credential is kept](../operations/admin-endpoint.md#where-the-credential-is-kept) states the paths, what each
+arrangement does protect, and what it does not.
 
 ## Everyday use
 

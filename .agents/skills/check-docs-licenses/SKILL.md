@@ -65,7 +65,7 @@ Ensure `THIRD_PARTY_LICENSES.md` is updated in the same change. A permissive SDK
 
 When a dependency is pinned in `backend/Directory.Packages.props`, record the exact package name, version, license expression, upstream URL, and any required attribution or `NOTICE` handling. Record the version the artifact's own graph resolves when nearest-wins resolution raises a pin that is only a floor.
 
-`THIRD_PARTY_LICENSES.md` records what the repository actually pins, bundles, or calls, and is not the project's own `LICENSE` or a generated notice bundle. Put an entry in the section that matches the component's exposure — redistributed, build-time, test-only, orchestration, continuous integration, developer tooling, externally sourced source, or hosted service — because that is what decides whether a release obligation follows.
+`THIRD_PARTY_LICENSES.md` records what the repository actually pins, bundles, or calls, and is not the project's own `LICENSE` or a generated notice bundle. Put an entry in the section that matches the component's exposure — redistributed, called on the machine an artifact runs on, build-time, test-only, orchestration, continuous integration, developer tooling, externally sourced source, or hosted service — because that is what decides whether a release obligation follows.
 
 Register only what the change actually introduces. A component it mentions, plans, evaluates, or rejects gets no row anywhere in the file, in any wording: a row asserts a completed review of software in use, and a rejected or deferred candidate would have to be reviewed again at adoption. Record that reasoning in the ADR or issue that owns the future work. Removing a component removes its row in the same change.
 

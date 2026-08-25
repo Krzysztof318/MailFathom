@@ -37,10 +37,19 @@ internal static class LogoutCommand
             var (name, credential) = context.Store.Locate(
                 CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)));
 
-            context.Store.Remove(name);
+            var removal = context.Store.Remove(name);
 
             context.Console.WriteLine(
                 $"Forgot profile '{name}' ({credential.Endpoint}). The credential stays valid until the deployment stops accepting it.");
+
+            // A profile whose secrets were in the platform's own store is forgotten in two places, and only the file
+            // half is certain. An entry left behind is one the operator can remove from their keyring themselves,
+            // which they can only do if they are told it is there.
+            if (removal.Uncleared is { } uncleared)
+            {
+                context.Console.WriteWarning(
+                    $"This profile's entries in the platform's secret store are still there: {uncleared}. Remove them from your keyring once it is reachable.");
+            }
 
             return CliExitCode.Success;
         });

@@ -4,6 +4,7 @@
 
 using System.Text.Json;
 using MailFathom.Cli.Commands;
+using MailFathom.Cli.Credentials.SecretStores;
 
 namespace MailFathom.Cli.Credentials;
 
@@ -20,26 +21,37 @@ namespace MailFathom.Cli.Credentials;
 /// name and its profile follows, rather than becoming a second entry nobody meant to create.
 /// </para>
 /// <para>
-/// Tokens are sealed before they are written; see <see cref="TokenProtector" />. Opening them is this type's job rather
-/// than its callers', so nothing above it ever holds a value it has to remember is still encrypted.
+/// <b>The secrets go where the operating system holds one for a person.</b> Where this machine has such a store, the
+/// file records the address, the credential's name, a key-pair path, the session metadata, and the transport trust —
+/// and no secret at all. Where it does not, the tokens are sealed into the file instead; see
+/// <see cref="TokenProtector" /> for what that is worth and <see cref="IOperatorSecretStore" /> for what it is not.
+/// Which of the two happened is returned rather than assumed, because the weaker arrangement is one an operator has to
+/// be told they got.
+/// </para>
+/// <para>
+/// Opening a secret is this type's job rather than its callers', so nothing above it ever holds a value it has to
+/// remember is still sealed, or has to know which of the two places it came out of.
 /// </para>
 /// </remarks>
 internal sealed class CredentialStore
 {
     private readonly string storePath;
     private readonly TokenProtector protector;
+    private readonly IOperatorSecretStore secretStore;
 
     /// <summary>Initializes a store over an explicit file, which is what a test supplies.</summary>
     /// <param name="storePath">The file the profiles are read from and written to.</param>
-    /// <param name="protector">Seals and opens the stored tokens.</param>
-    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    internal CredentialStore(string storePath, TokenProtector protector)
+    /// <param name="protector">Seals and opens the tokens of a profile no secret store took.</param>
+    /// <param name="secretStore">The platform store the secrets belong in, or <see langword="null" /> for a machine with none.</param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="secretStore" /> is <see langword="null" />.</exception>
+    internal CredentialStore(string storePath, TokenProtector protector, IOperatorSecretStore? secretStore = null)
     {
         ArgumentNullException.ThrowIfNull(storePath);
         ArgumentNullException.ThrowIfNull(protector);
 
         this.storePath = storePath;
         this.protector = protector;
+        this.secretStore = secretStore ?? NoSecretStore.Instance;
     }
 
     /// <summary>Reports where the store lives for the operator running the command.</summary>
@@ -47,15 +59,15 @@ internal sealed class CredentialStore
     /// <remarks><see cref="OperatorDirectory" /> holds where that is on each platform, and why everything the command owns on a machine lives in one directory.</remarks>
     internal static string DefaultPath() => Path.Combine(OperatorDirectory.Resolve(), "credentials.json");
 
-    /// <summary>Reports where the key sealing the stored tokens lives.</summary>
+    /// <summary>Reports where the key sealing a profile no secret store took lives.</summary>
     /// <returns>The absolute path of the key file.</returns>
-    /// <remarks>Beside the store rather than inside it, so the file an operator might copy or paste into a support bundle is not the file that opens it.</remarks>
+    /// <remarks>Beside the store rather than inside it, so the file an operator might copy or paste into a support bundle is not the file that opens it. It is created on first use and removed again once no profile is sealed under it.</remarks>
     internal static string DefaultKeyPath() => Path.Combine(OperatorDirectory.Resolve(), "credentials.key");
 
     /// <summary>Reads every profile and which one is the default.</summary>
     /// <returns>The stored state, empty when the operator has never signed in.</returns>
     /// <exception cref="CliFailure">Thrown when the file exists but cannot be read as a credential store.</exception>
-    /// <remarks>Tokens stay sealed here. Listing profiles never needs them, and a read that opened them would put every token in memory to print a table of names.</remarks>
+    /// <remarks>Secrets stay where they are here. Listing profiles never needs them, and a read that opened them would put every token in memory to print a table of names.</remarks>
     internal StoredCredentials Read()
     {
         if (!File.Exists(this.storePath))
@@ -89,38 +101,57 @@ internal sealed class CredentialStore
         }
     }
 
-    /// <summary>Settles which deployment a command acts on, and opens its token.</summary>
+    /// <summary>Settles which deployment a command acts on, and opens its secrets.</summary>
     /// <param name="requestedDeployment">A profile name, an absolute address, or <see langword="null" /> to use the default.</param>
     /// <returns>The profile the command acts through.</returns>
-    /// <exception cref="CliFailure">Thrown when the operator is not signed in to what they named, with what to run instead.</exception>
+    /// <exception cref="CliFailure">Thrown when the operator is not signed in to what they named, with what to run instead, and when a secret the platform store holds cannot be read back.</exception>
     /// <remarks>
+    /// <para>
     /// An address and a name are accepted in the same place because they answer the same question, and nothing can
     /// confuse them: a profile name is not an absolute URI. Naming an address is what lets one invocation reach a
     /// deployment other than the default without switching to it.
+    /// </para>
+    /// <para>
+    /// This is also where a profile written before there was a secret store moves into one. It happens on the first
+    /// command that opens the profile rather than at a sign-in, so an upgrade costs the operator nothing; a move that
+    /// does not complete leaves the sealed profile exactly as it was, and the command it happened under goes on.
+    /// </para>
     /// </remarks>
     internal SignedInProfile Resolve(string? requestedDeployment)
     {
         var (name, credential) = this.Locate(requestedDeployment);
 
+        // A key-pair profile holds no credential in either place: every command mints its own assertion, and
+        // DeploymentAccess is what fills this in. Read first so neither storage is consulted for a secret that does
+        // not exist, including the sealed empty token an older command wrote for such a profile.
+        var token = credential.KeyPair is not null
+            ? string.Empty
+            : this.Open(credential.Token, ProfileSecret.BearerToken(credential.Endpoint), credential.Endpoint);
+
+        var session = this.OpenSession(credential);
+
+        this.MoveIntoSecretStore(name, credential, token, session);
+
         return new SignedInProfile(
             name,
             new Uri(credential.Endpoint, UriKind.Absolute),
-            this.protector.Unprotect(credential.Token, credential.Endpoint),
+            token,
             credential.Credential,
-            this.OpenSession(credential),
+            session,
             credential.KeyPair)
         {
             Trust = credential.Transport ?? StoredTransportTrust.Protected,
         };
     }
 
-    /// <summary>Settles which profile a command acts on, without opening its token.</summary>
+    /// <summary>Settles which profile a command acts on, without opening its secrets.</summary>
     /// <param name="requestedDeployment">A profile name, an absolute address, or <see langword="null" /> to use the default.</param>
-    /// <returns>The profile's stored name and what it holds, with the token still sealed.</returns>
+    /// <returns>The profile's stored name and what it holds, with nothing opened.</returns>
     /// <exception cref="CliFailure">Thrown when the operator is not signed in to what they named, with what to run instead.</exception>
     /// <remarks>
     /// Separate from <see cref="Resolve" /> because a command that only names a profile must not depend on the sealing
-    /// key: forgetting a profile whose token no longer opens is exactly what an operator needs to do about it.
+    /// key or on a keyring being open: forgetting a profile whose token no longer opens is exactly what an operator
+    /// needs to do about it.
     /// </remarks>
     internal (string Name, StoredCredential Credential) Locate(string? requestedDeployment)
     {
@@ -149,22 +180,24 @@ internal sealed class CredentialStore
     /// <summary>Remembers a deployment under a name, and makes it the default.</summary>
     /// <param name="name">The operator's name for it.</param>
     /// <param name="endpoint">The address it is served at.</param>
-    /// <param name="token">The bearer credential, which is sealed before it is written.</param>
+    /// <param name="token">The bearer credential.</param>
     /// <param name="credentialName">The name the deployment reported for the credential.</param>
-    /// <param name="session">What an OAuth sign-in left behind, whose refresh token is sealed alongside the access token, or <see langword="null" /> for a presented credential.</param>
+    /// <param name="session">What an OAuth sign-in left behind, whose refresh token is kept alongside the access token, or <see langword="null" /> for a presented credential.</param>
     /// <param name="keyPair">Where a key-pair profile's private key lives, or <see langword="null" /> when the profile stores a credential of its own.</param>
     /// <param name="trust">What the operator accepted about this deployment's transport, or <see langword="null" /> when they accepted nothing beyond the default.</param>
+    /// <returns>Which of the two places took the profile's secrets, for the command to say so.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="session" />, <paramref name="keyPair" />, or <paramref name="trust" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the store cannot be written.</exception>
     /// <remarks>
     /// Signing in makes the new profile the default, because it is the deployment the operator just chose to work with;
     /// <c>switch</c> is how that is changed without signing in again.
     /// <para>
-    /// A key-pair profile passes an empty token and it is sealed like any other, rather than left out of the envelope.
-    /// The file then has one shape whatever a profile holds, and reading one back needs no branch on which kind it is.
+    /// A key-pair profile stores no secret in either place, and signing one in removes whatever an earlier profile at
+    /// the same address left in the platform store. The file then holds a path and no credential, which is the whole
+    /// point of that way of signing in.
     /// </para>
     /// </remarks>
-    internal void Save(
+    internal SecretPlacement Save(
         string name,
         Uri endpoint,
         string token,
@@ -181,15 +214,26 @@ internal sealed class CredentialStore
         var stored = this.Read();
         var address = AddressOf(endpoint);
 
+        var placement = keyPair is null
+            ? this.Place(address, token, session?.RefreshToken)
+            : this.PlaceNothing(address);
+
+        var held = placement.Store is not null;
+
         stored.Profiles[name] = new StoredCredential(
             address,
-            this.protector.Protect(token, address),
+            keyPair is not null || held ? null : this.protector.Protect(token, address),
             credentialName,
-            this.Seal(session, address),
+            this.Record(session, address, held),
             keyPair,
             Recorded(trust));
 
-        this.Write(stored with { Default = name });
+        var written = stored with { Default = name };
+
+        this.Write(written);
+        this.DiscardKeyIfUnused(written);
+
+        return placement;
     }
 
     /// <summary>Replaces one profile's access token with the one a silent renewal produced.</summary>
@@ -203,6 +247,11 @@ internal sealed class CredentialStore
     /// not a sign-in: it produces one new value and must not quietly move the session's end, adopt a rotated refresh
     /// token, or change which deployment later commands act on. A profile that has been forgotten in between is left
     /// forgotten rather than recreated by the renewal that was already in flight.
+    /// <para>
+    /// A renewal whose platform store has gone away since the sign-in changes nothing at all rather than falling back
+    /// to the file: the profile's other secret is still in that store, and moving half of it out would leave a session
+    /// no arrangement can open. The next command renews again.
+    /// </para>
     /// </remarks>
     internal void RenewAccessToken(string name, string accessToken, DateTimeOffset accessTokenExpiresAt)
     {
@@ -216,37 +265,59 @@ internal sealed class CredentialStore
             return;
         }
 
-        stored.Profiles[name] = credential with
+        if (credential.Token is null)
         {
-            Token = this.protector.Protect(accessToken, credential.Endpoint),
-            Session = session with { AccessTokenExpiresAt = accessTokenExpiresAt },
-        };
+            try
+            {
+                this.secretStore.Write(ProfileSecret.BearerToken(credential.Endpoint), accessToken);
+            }
+            catch (SecretStoreUnavailable)
+            {
+                return;
+            }
+
+            stored.Profiles[name] = credential with
+            {
+                Session = session with { AccessTokenExpiresAt = accessTokenExpiresAt },
+            };
+        }
+        else
+        {
+            stored.Profiles[name] = credential with
+            {
+                Token = this.protector.Protect(accessToken, credential.Endpoint),
+                Session = session with { AccessTokenExpiresAt = accessTokenExpiresAt },
+            };
+        }
 
         this.Write(stored);
     }
 
-    /// <summary>Forgets one profile.</summary>
+    /// <summary>Forgets one profile, in both places it may keep something.</summary>
     /// <param name="name">The profile name.</param>
-    /// <returns><see langword="true" /> when a profile was removed, <see langword="false" /> when no profile carried that name.</returns>
+    /// <returns>Whether a profile carried that name, and what could not be cleared from the platform store.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="name" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the store cannot be written.</exception>
     /// <remarks>Removing the default leaves the remaining profiles without one rather than promoting an arbitrary neighbour, so the next command says which deployment it needs instead of quietly choosing a different one.</remarks>
-    internal bool Remove(string name)
+    internal ProfileRemoval Remove(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
 
         var stored = this.Read();
 
-        if (!stored.Profiles.Remove(name))
+        if (!stored.Profiles.Remove(name, out var credential))
         {
-            return false;
+            return ProfileRemoval.NothingToForget;
         }
 
-        this.Write(string.Equals(stored.Default, name, StringComparison.OrdinalIgnoreCase)
+        var remaining = string.Equals(stored.Default, name, StringComparison.OrdinalIgnoreCase)
             ? stored with { Default = null }
-            : stored);
+            : stored;
 
-        return true;
+        this.Write(remaining);
+        this.DiscardKeyIfUnused(remaining);
+
+        return new ProfileRemoval(Removed: true, this.ClearSecrets(credential, remaining));
     }
 
     /// <summary>Makes one profile the default for later commands.</summary>
@@ -312,20 +383,111 @@ internal sealed class CredentialStore
         trust is null || trust == StoredTransportTrust.Protected ? null : trust;
 
     /// <summary>Reduces an endpoint to what identifies the deployment.</summary>
-    /// <remarks>The authority without a trailing slash, lowercased by the URI parser, so two spellings of one address are one profile rather than two — and so the value bound into the sealed token is stable across them.</remarks>
+    /// <remarks>The authority without a trailing slash, lowercased by the URI parser, so two spellings of one address are one profile rather than two — and so the value the secrets are keyed by is stable across them.</remarks>
     private static string AddressOf(Uri endpoint) => endpoint.GetLeftPart(UriPartial.Authority);
 
-    /// <summary>Seals an OAuth session's refresh token under the same binding the access token uses.</summary>
-    private StoredOAuthSession? Seal(OAuthSession? session, string address) => session is null
+    /// <summary>Hands a profile's secrets to the platform store, or reports why they have to be sealed instead.</summary>
+    /// <remarks>
+    /// Both or neither. A store that took the access token and refused the refresh token would leave a session split
+    /// between two places, so the first entry is taken back out and the profile is sealed whole — one arrangement per
+    /// profile is what makes reading one back a single decision.
+    /// </remarks>
+    private SecretPlacement Place(string address, string token, string? refreshToken)
+    {
+        try
+        {
+            this.secretStore.Write(ProfileSecret.BearerToken(address), token);
+        }
+        catch (SecretStoreUnavailable unavailable)
+        {
+            return SecretPlacement.Sealed(unavailable.Message);
+        }
+
+        if (refreshToken is null)
+        {
+            // Signing in with an API key over a profile that used to hold an OAuth session leaves that session's
+            // refresh token behind otherwise, which is a credential nothing will ever present again.
+            this.Forget(ProfileSecret.RefreshToken(address));
+
+            return SecretPlacement.Held(this.secretStore.Description);
+        }
+
+        try
+        {
+            this.secretStore.Write(ProfileSecret.RefreshToken(address), refreshToken);
+        }
+        catch (SecretStoreUnavailable unavailable)
+        {
+            this.Forget(ProfileSecret.BearerToken(address));
+
+            return SecretPlacement.Sealed(unavailable.Message);
+        }
+
+        return SecretPlacement.Held(this.secretStore.Description);
+    }
+
+    /// <summary>Leaves nothing of a profile in the platform store, for the one kind that keeps no secret.</summary>
+    private SecretPlacement PlaceNothing(string address)
+    {
+        this.Forget(ProfileSecret.BearerToken(address));
+        this.Forget(ProfileSecret.RefreshToken(address));
+
+        return SecretPlacement.NothingToKeep;
+    }
+
+    /// <summary>Removes one entry where a store answers, and passes over a machine where none does.</summary>
+    private void Forget(ProfileSecret secret)
+    {
+        try
+        {
+            this.secretStore.Clear(secret);
+        }
+        catch (SecretStoreUnavailable)
+        {
+        }
+    }
+
+    /// <summary>Records an OAuth session, sealing its refresh token only where the platform store did not take it.</summary>
+    private StoredOAuthSession? Record(OAuthSession? session, string address, bool held) => session is null
         ? null
         : new StoredOAuthSession(
-            this.protector.Protect(session.RefreshToken, address),
+            held ? null : this.protector.Protect(session.RefreshToken, address),
             session.AccessTokenExpiresAt,
             session.TokenEndpoint.ToString(),
             session.Issuer,
             session.ClientId,
             session.Resource,
             session.Scope);
+
+    /// <summary>Reads one secret back from whichever of the two places the profile keeps it in.</summary>
+    /// <remarks>
+    /// A profile the platform store holds has no fallback, and says so rather than reporting a corrupt file: the
+    /// keyring being locked and the entry having been removed are different things to an operator, and only one of them
+    /// is answered by signing in again.
+    /// </remarks>
+    private string Open(string? sealedSecret, ProfileSecret secret, string address)
+    {
+        if (sealedSecret is not null)
+        {
+            return this.protector.Unprotect(sealedSecret, address);
+        }
+
+        string? held;
+
+        try
+        {
+            held = this.secretStore.Read(secret);
+        }
+        catch (SecretStoreUnavailable unavailable)
+        {
+            throw new CliFailure(
+                $"The credential for {address} is held by this machine's secret store, which cannot be reached: {unavailable.Message}. Make the store reachable and run the command again, or run '{CliRootCommand.CommandName} login --endpoint {address}' to store the credential wherever this machine can hold it.",
+                unavailable);
+        }
+
+        return held ?? throw new CliFailure(
+            $"{this.secretStore.Description} no longer holds the credential for {address}. Run '{CliRootCommand.CommandName} login --endpoint {address}' to store it again.");
+    }
 
     /// <summary>Opens a stored OAuth session, or reports none where the profile holds an API key.</summary>
     /// <remarks>
@@ -338,7 +500,7 @@ internal sealed class CredentialStore
         credential.Session is { } session
         && Uri.TryCreate(session.TokenEndpoint, UriKind.Absolute, out var tokenEndpoint)
             ? new OAuthSession(
-                this.protector.Unprotect(session.RefreshToken, credential.Endpoint),
+                this.Open(session.RefreshToken, ProfileSecret.RefreshToken(credential.Endpoint), credential.Endpoint),
                 session.AccessTokenExpiresAt,
                 tokenEndpoint,
                 session.Issuer,
@@ -346,6 +508,119 @@ internal sealed class CredentialStore
                 session.Resource,
                 session.Scope)
             : null;
+
+    /// <summary>Moves a profile written before this machine had a secret store into the one it has now.</summary>
+    /// <remarks>
+    /// <para>
+    /// On the first command that opens the profile, because that is the one moment both secrets are already in hand:
+    /// doing it at a sign-in would mean asking for a credential the operator has, and doing it eagerly would mean
+    /// opening every profile's tokens to migrate the one being used.
+    /// </para>
+    /// <para>
+    /// The store is written first and the file second, so an interruption leaves the sealed values still readable and
+    /// the entries merely duplicated — the next command overwrites them. A file that cannot be rewritten is passed over
+    /// entirely rather than failing the command the operator actually ran.
+    /// </para>
+    /// </remarks>
+    private void MoveIntoSecretStore(string name, StoredCredential credential, string token, OAuthSession? session)
+    {
+        if (credential.Token is null && credential.Session?.RefreshToken is null)
+        {
+            return;
+        }
+
+        if (credential.KeyPair is not null)
+        {
+            // No store is involved: such a profile keeps nothing anywhere, and the sealed empty token an older command
+            // wrote for it is the only thing keeping a key file alive.
+            this.Rewrite(name, stored => stored with { Token = null });
+
+            return;
+        }
+
+        if (this.Place(credential.Endpoint, token, session?.RefreshToken).Store is null)
+        {
+            return;
+        }
+
+        this.Rewrite(name, stored => stored with
+        {
+            Token = null,
+            Session = stored.Session is { } recorded ? recorded with { RefreshToken = null } : null,
+        });
+    }
+
+    /// <summary>Replaces one profile in the file, leaving a store somebody else has changed in the meantime alone.</summary>
+    /// <remarks>Failure is swallowed because every caller is an upgrade rather than something the operator asked for: what is on disk still opens, and reporting a write that nobody requested would turn a working command into a failed one.</remarks>
+    private void Rewrite(string name, Func<StoredCredential, StoredCredential> change)
+    {
+        try
+        {
+            var stored = this.Read();
+
+            if (!stored.Profiles.TryGetValue(name, out var credential))
+            {
+                return;
+            }
+
+            stored.Profiles[name] = change(credential);
+
+            this.Write(stored);
+            this.DiscardKeyIfUnused(stored);
+        }
+        catch (CliFailure)
+        {
+        }
+    }
+
+    /// <summary>Clears a forgotten profile's entries from the platform store, and says what would not go.</summary>
+    /// <remarks>
+    /// Nothing is attempted for a profile whose secrets were never in the store, so a machine with no keyring reports
+    /// nothing rather than a refusal it was always going to get. A deployment another profile still reaches keeps its
+    /// entries, because they are that profile's as much as this one's.
+    /// </remarks>
+    private string? ClearSecrets(StoredCredential credential, StoredCredentials remaining)
+    {
+        if (credential.KeyPair is not null || credential.Token is not null)
+        {
+            return null;
+        }
+
+        foreach (var other in remaining.Profiles.Values)
+        {
+            if (string.Equals(other.Endpoint, credential.Endpoint, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+        }
+
+        try
+        {
+            this.secretStore.Clear(ProfileSecret.BearerToken(credential.Endpoint));
+            this.secretStore.Clear(ProfileSecret.RefreshToken(credential.Endpoint));
+
+            return null;
+        }
+        catch (SecretStoreUnavailable unavailable)
+        {
+            return unavailable.Message;
+        }
+    }
+
+    /// <summary>Removes the sealing key once no profile is sealed under it.</summary>
+    /// <remarks>The key is the weaker of the two arrangements, so leaving it behind on a machine whose profiles have all moved into the platform store would keep material alive that protects nothing. It is recreated on first use if a later sign-in has to seal something again.</remarks>
+    private void DiscardKeyIfUnused(StoredCredentials stored)
+    {
+        foreach (var profile in stored.Profiles.Values)
+        {
+            if (profile.Token is not null || profile.Session?.RefreshToken is not null)
+            {
+                return;
+            }
+        }
+
+        this.protector.Discard();
+    }
 
     /// <summary>Replaces the store with a new one, in a way an interrupted process cannot leave half written.</summary>
     /// <remarks>

@@ -172,7 +172,7 @@ internal static class LoginCommand
 
         // The minted assertion is deliberately not the stored token: it is spent within the minute and every later
         // command signs its own. What is stored for such a profile is where the key lives and nothing else.
-        context.Store.Save(
+        var placement = context.Store.Save(
             profileName,
             endpoint,
             keyPair is null ? token : string.Empty,
@@ -188,6 +188,14 @@ internal static class LoginCommand
 
         context.Console.WriteLine(
             $"Signed in to {endpoint.GetLeftPart(UriPartial.Authority)} as '{credentialName}' (MailFathom {deploymentSession.Version}), saved as profile '{profileName}' and selected.{DescribeTransport(connection.Trust)}");
+
+        // Which of the two arrangements this machine offered, said at the one moment it is decided. A workstation with
+        // a keyring and a jump host without one both keep working, and only the sentence tells them apart — so leaving
+        // it out would mean an operator finding out what protects their credential by reading the file.
+        if (placement.Describe() is { } storage)
+        {
+            context.Console.WriteNotice(storage);
+        }
 
         if (session is not null)
         {
