@@ -168,7 +168,7 @@ selected.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `ContentStorage:Release:SafetyInterval` | TimeSpan | `00:00:00` | Not negative. Measured from when the move verified the object rather than from when the message was stored | restart |
+| `ContentStorage:Release:SafetyInterval` | TimeSpan | `00:00:00` | Between nothing at all and 365 days. Measured from when the move verified the object rather than from when the message was stored | restart |
 | `ContentStorage:Release:PayloadsPerBatch` | int | `200` | 1 – 2000. A batch of nothing never finishes, and one past the ceiling stops being the bounded, interruptible step the release is meant to be | restart |
 
 **Zero is not the same as releasing on its own.** The default hold is the operator's own decision, and nothing frees a

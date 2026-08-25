@@ -130,7 +130,9 @@ something an operator deals with rather than something they scroll past.
 nothing frees a copy until they ask. What a positive value adds is a floor beneath that decision: a deployment that
 states `7.00:00:00` cannot free anything it has not been reading from the bucket for a week, however emphatically
 somebody asks. That is the answer to an operator who discovers a problem after switching, and it is why the interval is
-measured from when each object was verified rather than from when the mail was stored.
+measured from when each object was verified rather than from when the mail was stored. A year is the most a deployment
+may state, because a hold wider than that is a mistyped duration rather than a policy; holding a copy indefinitely needs
+no setting at all.
 
 **It needs `mailfathom.admin.erase`, not `mailfathom.admin.operate`.** Every other command on this page asks a
 deployment to do work; this one asks it to dispose of what it holds, which is the grant [permissions](permissions.md)
@@ -157,7 +159,7 @@ keys and their ranges.
 | `ContentStorage:Move:Interval` | 10 seconds | How long the deployment waits between two passes |
 | `ContentStorage:Move:PayloadsPerPass` | 20 | How many payloads one pass reaches |
 | `ContentStorage:Move:MaxBytesPerPass` | 64 MiB | How much raw MIME one pass reads, whatever the count says |
-| `ContentStorage:Release:SafetyInterval` | none | How long a copy is held after its object was verified |
+| `ContentStorage:Release:SafetyInterval` | `00:00:00` | How long a copy is held after its object was verified, up to a year |
 | `ContentStorage:Release:PayloadsPerBatch` | 200 | How many copies one release request frees |
 
 A pass ends on whichever ceiling it reaches first. Raising either, or shortening the interval, moves the mailbox sooner

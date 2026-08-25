@@ -36,6 +36,17 @@ internal sealed class ContentReleaseOptions
     /// </remarks>
     internal const int MaximumPayloadsPerBatch = 2000;
 
+    /// <summary>The longest hold a deployment may state between an object being verified and a release freeing its copy.</summary>
+    /// <remarks>
+    /// A year, because the hold answers an operator who discovers a problem some time after switching and nobody
+    /// discovers one a year later from bytes they have not read since. What the ceiling is really for is the value
+    /// nobody meant: an interval wide enough to put the cutoff before <see cref="DateTimeOffset.MinValue" /> throws when
+    /// a release computes it rather than when the host reads it, so a mistyped duration would be found by an operator
+    /// asking to free copies rather than by the deployment refusing to start. Holding a copy indefinitely needs no
+    /// setting at all — nothing frees one until somebody asks.
+    /// </remarks>
+    internal static readonly TimeSpan MaximumSafetyInterval = TimeSpan.FromDays(365);
+
     /// <summary>Gets or sets how long a retained copy is held after its object was verified, before any release frees it.</summary>
     /// <remarks>
     /// Zero by default, which is not the same as freeing anything on its own: the default hold is the operator's own
@@ -51,14 +62,15 @@ internal sealed class ContentReleaseOptions
     /// <returns>One message per faulty setting, each naming its configuration path, empty when the declaration is usable.</returns>
     public IEnumerable<string> FindConfigurationErrors()
     {
-        if (this.SafetyInterval < TimeSpan.Zero)
+        if (this.SafetyInterval < TimeSpan.Zero || this.SafetyInterval > MaximumSafetyInterval)
         {
             yield return Error(
                 nameof(this.SafetyInterval),
                 string.Format(
                     CultureInfo.InvariantCulture,
-                    "is '{0}', which is negative. State how long a copy is held after its object was verified, or nothing at all to hold it until an operator releases it.",
-                    this.SafetyInterval));
+                    "is '{0}', which is outside the permitted range of nothing at all to '{1}'. State how long a copy is held after its object was verified, or nothing at all to hold it until an operator releases it.",
+                    this.SafetyInterval,
+                    MaximumSafetyInterval));
         }
 
         if (this.PayloadsPerBatch <= 0 || this.PayloadsPerBatch > MaximumPayloadsPerBatch)

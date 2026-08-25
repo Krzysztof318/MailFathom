@@ -48,6 +48,29 @@ public sealed class ContentReleaseOptionsTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A hold nobody could have meant is refused while the host reads it rather than when an operator asks to free
+    /// something: an interval this wide puts the batch's cutoff before any instant a timestamp can carry.
+    /// </summary>
+    [Fact]
+    public void FindConfigurationErrors_ASafetyIntervalPastTheCeiling_IsRefusedNamingTheKey()
+    {
+        // Arrange
+        var options = new ContentReleaseOptions
+        {
+            SafetyInterval = ContentReleaseOptions.MaximumSafetyInterval + TimeSpan.FromDays(1),
+        };
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors());
+
+        // Assert
+        Assert.Contains(
+            $"{ContentReleaseOptions.SectionPath}:{nameof(ContentReleaseOptions.SafetyInterval)}",
+            error,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>Zero is the default rather than a mistake: it says the hold is the operator's own decision and nothing else.</summary>
     [Fact]
     public void FindConfigurationErrors_ASafetyIntervalOfNothing_IsAccepted()
