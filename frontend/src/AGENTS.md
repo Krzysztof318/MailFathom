@@ -368,8 +368,20 @@ what keeps that from being a rule somebody has to enforce by reading.
   redirect out of it. **The browser head must not navigate the document away** — that destroys the page along with the
   proof key and the anti-forgery value, leaving browser storage as the only place to put them back, which is exactly
   what this application does not do.
-- **The access token lives in memory for the process's lifetime and nowhere else** — no file, no browser storage, no
+- **The credential lives in memory for the process's lifetime and nowhere else** — no file, no browser storage, no
   platform credential store — and it is not readable outside `Client.Backend`: a screen may ask whether somebody is
-  signed in, and the handler in the transport pipeline is the only thing that sees the token. No refresh token is asked
-  for or kept, so the session ends when the issued token does and the person signs in again. A cache that survives a
-  restart is a separate decision with its own privacy reasoning; do not take it as a side effect of a screen.
+  signed in, and the handler in the transport pipeline is the only thing that sees it. No refresh token is asked for or
+  kept, so the session ends when the issued token does or when the process does, and the person signs in again.
+- **Where it may be kept instead is settled and not yet built**, and
+  [ADR 0018](../../docs/decisions/0018-where-the-client-keeps-its-sign-in-credential.md) is the whole of it — read the
+  record before writing any of it rather than deciding a store while building a screen. It keeps the credential only
+  where the operating system holds a secret for one user: the Credential Manager on Windows,
+  the login keychain on macOS, Secret Service over D-Bus on Linux, and `PasswordVault` on a mobile head, which Uno backs
+  with the Keystore and the Keychain but marks unsupported on its Skia targets — which is why the desktop head reaches
+  its three operating systems itself. **The browser head keeps nothing**, because every store a browser offers is scoped
+  to the page's origin rather than to a person, so anything running on the origin would read an owner's password.
+  `Client.Backend` declares the port and is the only thing that reads the credential back out of it; a head's
+  implementation under `Platforms/` reaches that platform's store and hands the value to nothing else, as
+  `BrowserSignInRedirectListener` already does for a port of the same shape. A head whose store is absent or refuses
+  falls back to memory and says so, never to a file beside the binary and never to
+  `ApplicationData.Current.LocalSettings`, which holds the deployment address and no secret.
