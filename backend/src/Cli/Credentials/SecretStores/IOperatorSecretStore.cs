@@ -48,10 +48,17 @@ internal interface IOperatorSecretStore
 /// <summary>Names one secret a profile keeps outside its file.</summary>
 /// <remarks>
 /// <para>
-/// Keyed by the deployment's address rather than by the profile's name, because the name is the operator's and the
-/// address is the deployment's: two names for one deployment are one credential, and renaming a profile must not
-/// orphan the entry holding its token. It is also what keeps one deployment's credential from ever being presented to
-/// another, which a key derived from a name could not promise.
+/// Keyed by the deployment's address and by the profile that holds it. The address is what keeps one deployment's
+/// credential from ever being presented to another, and it is not enough on its own: two profiles may name the same
+/// deployment under different credentials — an administrator's and a read-only one — and a key derived from the
+/// address alone would let the second sign-in overwrite the first, after which each profile would present the other's
+/// identity.
+/// </para>
+/// <para>
+/// The profile part is the name the file records the profile under, so an entry is reachable from exactly what a
+/// command already resolved and nothing has to be looked up to find it. There is no <c>rename</c>, so no ordinary act
+/// moves a profile out from under its entry; a profile signed in again under a second name is a second profile, which
+/// is what the file says too.
 /// </para>
 /// <para>
 /// Constructed only through the two factories, so the set of secrets a profile can keep is closed at exactly the two
@@ -60,11 +67,15 @@ internal interface IOperatorSecretStore
 /// </remarks>
 internal sealed record ProfileSecret
 {
-    private ProfileSecret(string address, string kind)
+    private ProfileSecret(string profile, string address, string kind)
     {
+        this.Profile = profile;
         this.Address = address;
         this.Kind = kind;
     }
+
+    /// <summary>Gets the name the file records the owning profile under.</summary>
+    internal string Profile { get; }
 
     /// <summary>Gets the deployment address this secret belongs to.</summary>
     internal string Address { get; }
@@ -73,25 +84,29 @@ internal sealed record ProfileSecret
     internal string Kind { get; }
 
     /// <summary>Names the bearer credential a profile presents.</summary>
+    /// <param name="profile">The profile's stored name.</param>
     /// <param name="address">The deployment address the profile holds.</param>
     /// <returns>The name of that profile's token entry.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="address" /> is <see langword="null" />.</exception>
-    internal static ProfileSecret BearerToken(string address)
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    internal static ProfileSecret BearerToken(string profile, string address)
     {
+        ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(address);
 
-        return new ProfileSecret(address, "token");
+        return new ProfileSecret(profile, address, "token");
     }
 
     /// <summary>Names the refresh token an OAuth profile renews its access token with.</summary>
+    /// <param name="profile">The profile's stored name.</param>
     /// <param name="address">The deployment address the profile holds.</param>
     /// <returns>The name of that profile's refresh-token entry.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="address" /> is <see langword="null" />.</exception>
-    internal static ProfileSecret RefreshToken(string address)
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    internal static ProfileSecret RefreshToken(string profile, string address)
     {
+        ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(address);
 
-        return new ProfileSecret(address, "refresh-token");
+        return new ProfileSecret(profile, address, "refresh-token");
     }
 }
 

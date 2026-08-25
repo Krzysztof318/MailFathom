@@ -145,7 +145,7 @@ internal sealed partial class SecretServiceKeyring : IOperatorSecretStore
 
     /// <summary>Names the item the way a keyring application lists it, which is the only place a person ever reads it.</summary>
     private static string LabelOf(ProfileSecret secret) =>
-        $"MailFathom mfctl {secret.Kind} for {secret.Address}";
+        $"MailFathom mfctl {secret.Kind} for {secret.Address} ({secret.Profile})";
 
     /// <summary>Refuses early where there is demonstrably no session bus to reach a provider over.</summary>
     /// <remarks>
@@ -199,7 +199,8 @@ internal sealed partial class SecretServiceKeyring : IOperatorSecretStore
 
         try
         {
-            var reported = Marshal.PtrToStringUTF8(Marshal.ReadIntPtr(failure, FailureMessageOffset));
+            var reported = ProviderReportedText.Sanitize(
+                Marshal.PtrToStringUTF8(Marshal.ReadIntPtr(failure, FailureMessageOffset)));
 
             throw new SecretStoreUnavailable(
                 $"the Secret Service refused this credential ({reported ?? "no reason reported"})");
@@ -212,13 +213,15 @@ internal sealed partial class SecretServiceKeyring : IOperatorSecretStore
 
     /// <summary>Builds the attribute set one entry is addressed by.</summary>
     /// <remarks>
-    /// Three attributes rather than one composed string, because this is what the store matches on: the application so
+    /// Four attributes rather than one composed string, because this is what the store matches on: the application so
     /// that nothing else's item is ever read, the deployment so that one deployment's credential is never presented to
-    /// another, and which of the profile's two secrets it is.
+    /// another, the profile so that two profiles at one deployment keep their own credentials, and which of the
+    /// profile's two secrets it is.
     /// </remarks>
     private static Attributes Describe(ProfileSecret secret) => new(
         ("application", "mfctl"),
         ("deployment", secret.Address),
+        ("profile", secret.Profile),
         ("secret", secret.Kind));
 
     /// <summary>Resolves one <c>glib</c> function by address, which is how <c>g_hash_table_new</c> takes its two.</summary>

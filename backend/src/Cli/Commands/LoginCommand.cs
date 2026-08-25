@@ -197,6 +197,15 @@ internal static class LoginCommand
             context.Console.WriteNotice(storage);
         }
 
+        // A sign-in that had to withdraw an entry, or replace a token profile with a key-pair one, can be refused by a
+        // keyring that locked while it ran. What is left behind is a live credential under a profile whose file entry
+        // no longer says the store holds anything, so nothing later goes looking for it and only the operator can.
+        if (placement.Uncleared is { } uncleared)
+        {
+            context.Console.WriteWarning(
+                $"An entry for this profile is still in the platform's secret store: {uncleared}. Remove it from your keyring once it is reachable.");
+        }
+
         if (session is not null)
         {
             context.Console.WriteNotice(

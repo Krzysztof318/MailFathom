@@ -7,6 +7,7 @@ namespace MailFathom.Cli.Credentials;
 /// <summary>Which of the two places ended up holding a profile's secrets.</summary>
 /// <param name="Store">The platform store that took them, or <see langword="null" /> when none did.</param>
 /// <param name="Refusal">Why no store took them, or <see langword="null" /> when one did or when there was nothing to keep.</param>
+/// <param name="Uncleared">Why an entry this sign-in meant to remove is still in the platform store, or <see langword="null" /> when nothing was left behind.</param>
 /// <remarks>
 /// <para>
 /// Returned rather than printed, because <see cref="CredentialStore" /> has no terminal and must not acquire one: the
@@ -17,21 +18,30 @@ namespace MailFathom.Cli.Credentials;
 /// Three states rather than two, because a key-pair profile keeps no secret in either place and the sentence about
 /// storage would be false either way it was worded.
 /// </para>
+/// <para>
+/// <see cref="Uncleared" /> is beside all three rather than one of them, because what a sign-in leaves behind and where
+/// it put this profile's secrets are separate facts: a profile can be sealed into the file because the keyring locked
+/// halfway through and have a live credential still in that keyring for the same reason.
+/// </para>
 /// </remarks>
-internal sealed record SecretPlacement(string? Store, string? Refusal)
+internal sealed record SecretPlacement(string? Store, string? Refusal, string? Uncleared = null)
 {
     /// <summary>Gets the answer for a profile that stores no secret anywhere.</summary>
     internal static SecretPlacement NothingToKeep { get; } = new(Store: null, Refusal: null);
 
     /// <summary>Reports that the platform's own store took them.</summary>
     /// <param name="store">What that store is called.</param>
+    /// <param name="uncleared">Why an entry this sign-in meant to remove is still there, or <see langword="null" /> when nothing was left behind.</param>
     /// <returns>The placement.</returns>
-    internal static SecretPlacement Held(string store) => new(store, Refusal: null);
+    internal static SecretPlacement Held(string store, string? uncleared = null) =>
+        new(store, Refusal: null, uncleared);
 
     /// <summary>Reports that they were sealed into the credentials file instead, and why.</summary>
     /// <param name="refusal">Why this machine has no secret store to hold them.</param>
+    /// <param name="uncleared">Why an entry the fallback meant to withdraw is still there, or <see langword="null" /> when nothing was left behind.</param>
     /// <returns>The placement.</returns>
-    internal static SecretPlacement Sealed(string refusal) => new(Store: null, refusal);
+    internal static SecretPlacement Sealed(string refusal, string? uncleared = null) =>
+        new(Store: null, refusal, uncleared);
 
     /// <summary>Says which of the two holds the credential.</summary>
     /// <returns>The sentence, or <see langword="null" /> when the profile keeps no secret to say it about.</returns>

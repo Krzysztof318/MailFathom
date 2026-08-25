@@ -126,9 +126,9 @@ internal sealed class CredentialStore
         // not exist, including the sealed empty token an older command wrote for such a profile.
         var token = credential.KeyPair is not null
             ? string.Empty
-            : this.Open(credential.Token, ProfileSecret.BearerToken(credential.Endpoint), credential.Endpoint);
+            : this.Open(credential.Token, ProfileSecret.BearerToken(name, credential.Endpoint), credential.Endpoint);
 
-        var session = this.OpenSession(credential);
+        var session = this.OpenSession(name, credential);
 
         this.MoveIntoSecretStore(name, credential, token, session);
 
@@ -214,9 +214,14 @@ internal sealed class CredentialStore
         var stored = this.Read();
         var address = AddressOf(endpoint);
 
+        // Whether this sign-in is replacing a profile whose secrets the platform store is holding, which is what
+        // decides whether an entry that will not clear is an orphan worth reporting or a machine that never had one.
+        var heldBefore = stored.Profiles.TryGetValue(name, out var replaced)
+            && replaced is { KeyPair: null, Token: null };
+
         var placement = keyPair is null
-            ? this.Place(address, token, session?.RefreshToken)
-            : this.PlaceNothing(address);
+            ? this.Place(name, address, token, session?.RefreshToken, heldBefore)
+            : this.PlaceNothing(name, address, heldBefore);
 
         var held = placement.Store is not null;
 
@@ -269,7 +274,7 @@ internal sealed class CredentialStore
         {
             try
             {
-                this.secretStore.Write(ProfileSecret.BearerToken(credential.Endpoint), accessToken);
+                this.secretStore.Write(ProfileSecret.BearerToken(name, credential.Endpoint), accessToken);
             }
             catch (SecretStoreUnavailable)
             {
@@ -317,7 +322,7 @@ internal sealed class CredentialStore
         this.Write(remaining);
         this.DiscardKeyIfUnused(remaining);
 
-        return new ProfileRemoval(Removed: true, this.ClearSecrets(credential, remaining));
+        return new ProfileRemoval(Removed: true, this.ClearSecrets(name, credential));
     }
 
     /// <summary>Makes one profile the default for later commands.</summary>
@@ -388,15 +393,24 @@ internal sealed class CredentialStore
 
     /// <summary>Hands a profile's secrets to the platform store, or reports why they have to be sealed instead.</summary>
     /// <remarks>
+    /// <para>
     /// Both or neither. A store that took the access token and refused the refresh token would leave a session split
     /// between two places, so the first entry is taken back out and the profile is sealed whole — one arrangement per
     /// profile is what makes reading one back a single decision.
+    /// </para>
+    /// <para>
+    /// The taking back is the one step that can itself fail, because the ordinary way the second write refuses is a
+    /// collection locking mid-command and a locked collection will not give the first entry up either. That leaves a
+    /// live credential in the operator's keyring under a profile whose file entry says it is sealed, which
+    /// <see cref="ClearSecrets" /> would then pass over at <c>logout</c> — so it is carried out with the placement and
+    /// said, rather than swallowed as an unlucky rollback.
+    /// </para>
     /// </remarks>
-    private SecretPlacement Place(string address, string token, string? refreshToken)
+    private SecretPlacement Place(string profile, string address, string token, string? refreshToken, bool heldBefore)
     {
         try
         {
-            this.secretStore.Write(ProfileSecret.BearerToken(address), token);
+            this.secretStore.Write(ProfileSecret.BearerToken(profile, address), token);
         }
         catch (SecretStoreUnavailable unavailable)
         {
@@ -407,45 +421,56 @@ internal sealed class CredentialStore
         {
             // Signing in with an API key over a profile that used to hold an OAuth session leaves that session's
             // refresh token behind otherwise, which is a credential nothing will ever present again.
-            this.Forget(ProfileSecret.RefreshToken(address));
-
-            return SecretPlacement.Held(this.secretStore.Description);
+            return SecretPlacement.Held(
+                this.secretStore.Description,
+                Reportable(this.Forget(ProfileSecret.RefreshToken(profile, address)), heldBefore));
         }
 
         try
         {
-            this.secretStore.Write(ProfileSecret.RefreshToken(address), refreshToken);
+            this.secretStore.Write(ProfileSecret.RefreshToken(profile, address), refreshToken);
         }
         catch (SecretStoreUnavailable unavailable)
         {
-            this.Forget(ProfileSecret.BearerToken(address));
-
-            return SecretPlacement.Sealed(unavailable.Message);
+            // Always reported: the write above succeeded against this same store moments ago, so the entry the
+            // withdrawal could not reach is one that demonstrably exists.
+            return SecretPlacement.Sealed(
+                unavailable.Message,
+                this.Forget(ProfileSecret.BearerToken(profile, address)));
         }
 
         return SecretPlacement.Held(this.secretStore.Description);
     }
 
     /// <summary>Leaves nothing of a profile in the platform store, for the one kind that keeps no secret.</summary>
-    private SecretPlacement PlaceNothing(string address)
-    {
-        this.Forget(ProfileSecret.BearerToken(address));
-        this.Forget(ProfileSecret.RefreshToken(address));
+    /// <remarks>Signing a key-pair profile in over one whose tokens the store held is what leaves something to clear here, so a clear that refuses leaves credentials behind exactly as the withdrawal above does, and is reported the same way.</remarks>
+    private SecretPlacement PlaceNothing(string profile, string address, bool heldBefore) =>
+        SecretPlacement.NothingToKeep with
+        {
+            Uncleared = Reportable(
+                this.Forget(ProfileSecret.BearerToken(profile, address))
+                ?? this.Forget(ProfileSecret.RefreshToken(profile, address)),
+                heldBefore),
+        };
 
-        return SecretPlacement.NothingToKeep;
-    }
-
-    /// <summary>Removes one entry where a store answers, and passes over a machine where none does.</summary>
-    private void Forget(ProfileSecret secret)
+    /// <summary>Removes one entry where a store answers, and reports a store that would not let it go.</summary>
+    private string? Forget(ProfileSecret secret)
     {
         try
         {
             this.secretStore.Clear(secret);
+
+            return null;
         }
-        catch (SecretStoreUnavailable)
+        catch (SecretStoreUnavailable unavailable)
         {
+            return unavailable.Message;
         }
     }
+
+    /// <summary>Keeps a refusal only where the profile had something in the store for it to be about.</summary>
+    /// <remarks>Every clear on a machine with no store at all refuses, and there is nothing on such a machine to be left behind — so reporting one would put a warning about an orphaned credential in front of every operator who signs in on a headless host, which is the population least able to check.</remarks>
+    private static string? Reportable(string? refusal, bool heldBefore) => heldBefore ? refusal : null;
 
     /// <summary>Records an OAuth session, sealing its refresh token only where the platform store did not take it.</summary>
     private StoredOAuthSession? Record(OAuthSession? session, string address, bool held) => session is null
@@ -496,11 +521,11 @@ internal sealed class CredentialStore
     /// command against a store an older or hand-edited file left in that state, which is a worse answer than one
     /// sign-in.
     /// </remarks>
-    private OAuthSession? OpenSession(StoredCredential credential) =>
+    private OAuthSession? OpenSession(string name, StoredCredential credential) =>
         credential.Session is { } session
         && Uri.TryCreate(session.TokenEndpoint, UriKind.Absolute, out var tokenEndpoint)
             ? new OAuthSession(
-                this.Open(session.RefreshToken, ProfileSecret.RefreshToken(credential.Endpoint), credential.Endpoint),
+                this.Open(session.RefreshToken, ProfileSecret.RefreshToken(name, credential.Endpoint), credential.Endpoint),
                 session.AccessTokenExpiresAt,
                 tokenEndpoint,
                 session.Issuer,
@@ -538,7 +563,9 @@ internal sealed class CredentialStore
             return;
         }
 
-        if (this.Place(credential.Endpoint, token, session?.RefreshToken).Store is null)
+        // Nothing of this profile is in the store yet — that is what makes it a profile to move — so a clear that
+        // refuses on the way is about an entry that was never there.
+        if (this.Place(name, credential.Endpoint, token, session?.RefreshToken, heldBefore: false).Store is null)
         {
             return;
         }
@@ -576,28 +603,20 @@ internal sealed class CredentialStore
     /// <summary>Clears a forgotten profile's entries from the platform store, and says what would not go.</summary>
     /// <remarks>
     /// Nothing is attempted for a profile whose secrets were never in the store, so a machine with no keyring reports
-    /// nothing rather than a refusal it was always going to get. A deployment another profile still reaches keeps its
-    /// entries, because they are that profile's as much as this one's.
+    /// nothing rather than a refusal it was always going to get. A second profile at the same deployment keeps its own
+    /// entries untouched, because an entry names the profile that holds it as well as the deployment it reaches.
     /// </remarks>
-    private string? ClearSecrets(StoredCredential credential, StoredCredentials remaining)
+    private string? ClearSecrets(string name, StoredCredential credential)
     {
         if (credential.KeyPair is not null || credential.Token is not null)
         {
             return null;
         }
 
-        foreach (var other in remaining.Profiles.Values)
-        {
-            if (string.Equals(other.Endpoint, credential.Endpoint, StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-        }
-
         try
         {
-            this.secretStore.Clear(ProfileSecret.BearerToken(credential.Endpoint));
-            this.secretStore.Clear(ProfileSecret.RefreshToken(credential.Endpoint));
+            this.secretStore.Clear(ProfileSecret.BearerToken(name, credential.Endpoint));
+            this.secretStore.Clear(ProfileSecret.RefreshToken(name, credential.Endpoint));
 
             return null;
         }
@@ -611,15 +630,13 @@ internal sealed class CredentialStore
     /// <remarks>The key is the weaker of the two arrangements, so leaving it behind on a machine whose profiles have all moved into the platform store would keep material alive that protects nothing. It is recreated on first use if a later sign-in has to seal something again.</remarks>
     private void DiscardKeyIfUnused(StoredCredentials stored)
     {
-        foreach (var profile in stored.Profiles.Values)
-        {
-            if (profile.Token is not null || profile.Session?.RefreshToken is not null)
-            {
-                return;
-            }
-        }
+        var stillSealed = stored.Profiles.Values.Any(
+            profile => profile.Token is not null || profile.Session?.RefreshToken is not null);
 
-        this.protector.Discard();
+        if (!stillSealed)
+        {
+            this.protector.Discard();
+        }
     }
 
     /// <summary>Replaces the store with a new one, in a way an interrupted process cannot leave half written.</summary>

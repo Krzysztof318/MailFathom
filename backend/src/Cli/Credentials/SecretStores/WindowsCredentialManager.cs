@@ -102,11 +102,12 @@ internal sealed partial class WindowsCredentialManager : IOperatorSecretStore
     /// <summary>Names one entry the way the Credential Manager lists it.</summary>
     /// <remarks>
     /// Prefixed with the product and the command, as the platform asks a generic credential to be, so an operator
-    /// reading the Credential Manager sees which application wrote it and can remove it from there. The address and the
-    /// kind follow, which is the key this store is addressed by.
+    /// reading the Credential Manager sees which application wrote it and can remove it from there. The address, the
+    /// profile, and the kind follow, which is the key this store is addressed by; the address leads so that one
+    /// deployment's entries list together.
     /// </remarks>
     private static string TargetNameOf(ProfileSecret secret) =>
-        $"MailFathom/mfctl/{secret.Address}/{secret.Kind}";
+        $"MailFathom/mfctl/{secret.Address}/{secret.Profile}/{secret.Kind}";
 
     private static unsafe string ReadBlob(nint held)
     {

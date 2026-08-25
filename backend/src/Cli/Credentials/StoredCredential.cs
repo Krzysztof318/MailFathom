@@ -16,9 +16,9 @@ namespace MailFathom.Cli.Credentials;
 /// <remarks>
 /// <para>
 /// <b>An absent <see cref="Token" /> is the statement that this file holds no secret for the profile.</b> Either the
-/// platform's secret store has it, keyed by <see cref="Endpoint" />, or the profile is a key-pair one that stores none
-/// anywhere. <see cref="KeyPair" /> is what separates the two, and it is read first, so neither case has to be inferred
-/// from the other. A profile written before there was a secret store carries a sealed value here and goes on being read
+/// platform's secret store has it, keyed by <see cref="Endpoint" /> and by the name this profile is filed under, or the
+/// profile is a key-pair one that stores none anywhere. <see cref="KeyPair" /> is what separates the two, and it is
+/// read first, so neither case has to be inferred from the other. A profile written before there was a secret store carries a sealed value here and goes on being read
 /// from it until the first command that opens it moves it.
 /// </para>
 /// <para>
@@ -28,7 +28,7 @@ namespace MailFathom.Cli.Credentials;
 /// is whatever renews it without the operator present.
 /// </para>
 /// <para>
-/// A key-pair profile is the one that stores no credential at all. <see cref="Token" /> is sealed empty for it and every
+/// A key-pair profile is the one that stores no credential at all. <see cref="Token" /> is absent for it and every
 /// command mints a fresh assertion from the key named here, which is why the two members are never both present: one
 /// says how a stored credential is renewed and the other says that there is none to renew.
 /// </para>

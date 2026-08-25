@@ -1536,17 +1536,19 @@ hold them:
 
 | Platform | Where a profile's secrets are held |
 | --- | --- |
-| Windows | The Credential Manager, as a generic credential named `MailFathom/mfctl/<address>/<kind>`, persisted for your logged-on user on this computer |
+| Windows | The Credential Manager, as a generic credential named `MailFathom/mfctl/<address>/<profile>/<kind>`, persisted for your logged-on user on this computer |
 | Linux | The Secret Service through `libsecret` — GNOME Keyring, KWallet, or another provider — in your session's default collection |
 
 Two entries per profile at most: the bearer credential it presents, and an OAuth session's refresh token. Both are keyed
-by the deployment's address, so one deployment's credential is never presented to another, and renaming a profile does
-not lose them. macOS is not covered because `mfctl` is not published for it.
+by the deployment's address and by the profile holding them, so one deployment's credential is never presented to
+another, and two profiles at one deployment — an administrator's and a read-only one — each keep their own rather than
+the second sign-in overwriting the first. macOS is not covered because `mfctl` is not published for it.
 
 What `credentials.json` then records is what a profile *is* rather than what it can do: the address, the credential's
 reported name, a key-pair profile's key path, an OAuth session's endpoint, issuer, client identifier, resource, scopes,
 and expiry, and the transport trust you accepted. None of those is a secret and each was already in clear. **A profile
-with no `token` member is one whose secrets your operating system is holding.**
+with no `token` member and no `keyPair` member is one whose secrets your operating system is holding**; one with no
+`token` member and a `keyPair` member stores no secret anywhere, which the section on key-pair profiles below covers.
 
 **Where this machine has no such store, the command seals them into the file instead** — `libsecret` not installed, no
 D-Bus session bus, no provider running, a locked collection, or the store refusing. That is the ordinary state of a

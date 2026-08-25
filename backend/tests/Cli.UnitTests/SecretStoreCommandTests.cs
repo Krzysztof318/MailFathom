@@ -90,6 +90,37 @@ public sealed class SecretStoreCommandTests : IDisposable
             line => line.Contains("The credential is", StringComparison.Ordinal));
     }
 
+    /// <summary>A credential the sign-in could not take back out lives on under a profile whose file entry no longer points at it, so nothing later goes looking and only the operator can.</summary>
+    [Fact]
+    public async Task Login_AKeyringThatLocksWhileTheProfileIsRewritten_ReportsTheEntryLeftBehind()
+    {
+        // Arrange: the profile's credential is in the store, and the keyring locks before it is signed in again
+        // against a key pair, which is the sign-in that has to take that credential out.
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
+        this.console.SecretToSupply = "not-a-real-key";
+
+        await this.RunAsync(handler, "login", "--endpoint", Endpoint);
+
+        this.secretStore.Refusal = "the collection is locked";
+
+        // Act
+        await this.RunAsync(
+            handler,
+            "login",
+            "--endpoint",
+            Endpoint,
+            "--mode",
+            "keypair",
+            "--private-key",
+            this.WriteKeyPair());
+
+        // Assert
+        Assert.Contains(
+            this.console.Warnings,
+            line => line.Contains("still in the platform's secret store", StringComparison.Ordinal)
+                && line.Contains("the collection is locked", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task Logout_AProfileThePlatformHolds_ClearsItsEntriesAndSaysNothingAboutThem()
     {

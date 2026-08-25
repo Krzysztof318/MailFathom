@@ -149,10 +149,10 @@ public sealed class SecretStoreCredentialTests : IDisposable
         // Assert
         Assert.Equal(
             "production-token",
-            this.secretStore.Entries[FakeOperatorSecretStore.KeyOf(ProfileSecret.BearerToken("https://mail.example.test:8443"))]);
+            this.secretStore.Entries[FakeOperatorSecretStore.KeyOf(ProfileSecret.BearerToken("production", "https://mail.example.test:8443"))]);
         Assert.Equal(
             "staging-token",
-            this.secretStore.Entries[FakeOperatorSecretStore.KeyOf(ProfileSecret.BearerToken("https://staging.example.test:8443"))]);
+            this.secretStore.Entries[FakeOperatorSecretStore.KeyOf(ProfileSecret.BearerToken("staging", "https://staging.example.test:8443"))]);
         Assert.Equal("production-token", this.store.Resolve("production").Token);
         Assert.Equal("staging-token", this.store.Resolve("staging").Token);
     }
@@ -163,7 +163,7 @@ public sealed class SecretStoreCredentialTests : IDisposable
     {
         // Arrange
         this.store.Save("production", Production, "not-a-real-token", "workstation");
-        this.secretStore.Clear(ProfileSecret.BearerToken("https://mail.example.test:8443"));
+        this.secretStore.Clear(ProfileSecret.BearerToken("production", "https://mail.example.test:8443"));
 
         // Act
         var failure = Assert.Throws<CliFailure>(() => this.store.Resolve("production"));
@@ -207,7 +207,7 @@ public sealed class SecretStoreCredentialTests : IDisposable
         Assert.Null(this.store.Read().Profiles["production"].Token);
         Assert.Equal(
             "not-a-real-token",
-            this.secretStore.Entries[FakeOperatorSecretStore.KeyOf(ProfileSecret.BearerToken("https://mail.example.test:8443"))]);
+            this.secretStore.Entries[FakeOperatorSecretStore.KeyOf(ProfileSecret.BearerToken("production", "https://mail.example.test:8443"))]);
         Assert.False(File.Exists(this.KeyPath));
     }
 
@@ -320,20 +320,126 @@ public sealed class SecretStoreCredentialTests : IDisposable
         Assert.Null(removal.Uncleared);
     }
 
-    /// <summary>The entries belong to the deployment rather than to one name for it, so a second profile reaching it keeps them.</summary>
+    /// <summary>An entry names the profile holding it, so forgetting one profile at a deployment cannot take another's credential with it.</summary>
     [Fact]
-    public void Remove_ADeploymentAnotherProfileStillReaches_LeavesItsEntriesAlone()
+    public void Remove_OneOfTwoProfilesAtOneDeployment_LeavesTheOthersEntryAlone()
     {
         // Arrange
-        this.store.Save("production", Production, "production-token", "workstation");
-        this.store.Save("mirror", Production, "production-token", "workstation");
+        this.store.Save("administrator", Production, "administrator-token", "workstation");
+        this.store.Save("readonly", Production, "readonly-token", "reporting");
 
         // Act
-        this.store.Remove("mirror");
+        this.store.Remove("readonly");
 
         // Assert
-        Assert.Equal("production-token", this.store.Resolve("production").Token);
+        Assert.Equal("administrator-token", this.store.Resolve("administrator").Token);
         Assert.Single(this.secretStore.Entries);
+    }
+
+    /// <summary>Two profiles may name one deployment under different credentials, and each has to present its own.</summary>
+    /// <remarks>
+    /// An administrator's profile and a read-only one at the same address is the ordinary way this happens. Keyed by
+    /// the address alone, the second sign-in would overwrite the first entry and each profile would then present the
+    /// other identity — silently, because the file still records each profile's own credential name beside it.
+    /// </remarks>
+    [Fact]
+    public void Save_TwoProfilesAtOneDeployment_KeepsEachProfilesOwnCredential()
+    {
+        // Arrange, Act
+        this.store.Save("administrator", Production, "administrator-token", "workstation");
+        this.store.Save("readonly", Production, "readonly-token", "reporting");
+
+        // Assert
+        Assert.Equal("administrator-token", this.store.Resolve("administrator").Token);
+        Assert.Equal("readonly-token", this.store.Resolve("readonly").Token);
+        Assert.Equal(2, this.secretStore.Entries.Count);
+    }
+
+    /// <summary>A session split between the two places opens under neither, so the half that was taken is put back.</summary>
+    [Fact]
+    public void Save_AStoreThatRefusesTheRefreshToken_WithdrawsTheAccessTokenAndSealsTheProfileWhole()
+    {
+        // Arrange
+        this.secretStore.Refuse(
+            ProfileSecret.RefreshToken("production", "https://mail.example.test:8443"),
+            "the collection is locked");
+
+        // Act
+        var placement = this.store.Save("production", Production, "access-token", "workstation", Session());
+
+        // Assert
+        var stored = this.store.Read().Profiles["production"];
+        var profile = this.store.Resolve("production");
+
+        Assert.Empty(this.secretStore.Entries);
+        Assert.Null(placement.Store);
+        Assert.Equal("the collection is locked", placement.Refusal);
+        Assert.NotNull(stored.Token);
+        Assert.NotNull(stored.Session?.RefreshToken);
+        Assert.Equal("access-token", profile.Token);
+        Assert.Equal("refresh-token", profile.Session?.RefreshToken);
+    }
+
+    /// <summary>The withdrawal is the one step that can itself fail, and what it leaves behind is a live credential nothing later goes looking for.</summary>
+    [Fact]
+    public void Save_AStoreThatLocksBetweenTheTwoWrites_ReportsTheEntryItCouldNotWithdraw()
+    {
+        // Arrange: the collection locks after the access token is written, so the second write and the withdrawal of
+        // the first are refused for the same reason.
+        this.secretStore.Refuse(
+            ProfileSecret.RefreshToken("production", "https://mail.example.test:8443"),
+            "the collection is locked");
+        this.secretStore.RefuseClearing(
+            ProfileSecret.BearerToken("production", "https://mail.example.test:8443"),
+            "the collection is locked");
+
+        // Act
+        var placement = this.store.Save("production", Production, "access-token", "workstation", Session());
+
+        // Assert
+        Assert.Equal("the collection is locked", placement.Refusal);
+        Assert.Equal("the collection is locked", placement.Uncleared);
+        Assert.Single(this.secretStore.Entries);
+    }
+
+    /// <summary>Signing a key-pair profile in over one the store held has to take the credential out, or it outlives the profile that named it.</summary>
+    [Fact]
+    public void Save_AKeyPairProfileOverOneThePlatformHeld_ClearsWhatTheStoreWasHolding()
+    {
+        // Arrange
+        this.store.Save("production", Production, "access-token", "workstation", Session());
+
+        // Act
+        var placement = this.store.Save(
+            "production",
+            Production,
+            string.Empty,
+            "workstation",
+            keyPair: new StoredKeyPair("/keys/mfctl.pem"));
+
+        // Assert
+        Assert.Empty(this.secretStore.Entries);
+        Assert.Null(placement.Uncleared);
+    }
+
+    /// <summary>A machine that never had a store has nothing to leave behind, so the warning about one would be false on every headless sign-in.</summary>
+    [Fact]
+    public void Save_AKeyPairProfileOnAMachineWithNoStore_ReportsNothingLeftBehind()
+    {
+        // Arrange
+        this.secretStore.Refusal = "libsecret is not installed here";
+
+        // Act
+        var placement = this.store.Save(
+            "production",
+            Production,
+            string.Empty,
+            "workstation",
+            keyPair: new StoredKeyPair("/keys/mfctl.pem"));
+
+        // Assert
+        Assert.Null(placement.Uncleared);
+        Assert.Null(placement.Describe());
     }
 
     /// <summary>A renewal replaces one value wherever that profile keeps it, and moves nothing between the two places.</summary>
@@ -352,6 +458,35 @@ public sealed class SecretStoreCredentialTests : IDisposable
         Assert.Equal("renewed-token", profile.Token);
         Assert.Equal("refresh-token", profile.Session?.RefreshToken);
         Assert.Null(this.store.Read().Profiles["production"].Token);
+    }
+
+    /// <summary>A renewal whose store has gone away changes nothing at all, rather than moving half a session into the file.</summary>
+    /// <remarks>
+    /// Advancing the file's expiry while the store still held the old access token would be the worst of the three
+    /// outcomes: the next command would read the session as fresh, skip the renewal, present the stale token, and be
+    /// refused by the deployment with nothing in the message naming the renewal that silently failed.
+    /// </remarks>
+    [Fact]
+    public void RenewAccessToken_AStoreThatHasGoneAway_LeavesTheProfileExactlyAsItWas()
+    {
+        // Arrange
+        this.store.Save("production", Production, "access-token", "workstation", Session());
+
+        var before = this.store.Read().Profiles["production"];
+
+        this.secretStore.Refusal = "the collection is locked";
+
+        // Act
+        this.store.RenewAccessToken("production", "renewed-token", DateTimeOffset.UnixEpoch.AddDays(2));
+
+        // Assert
+        this.secretStore.Refusal = null;
+
+        var after = this.store.Read().Profiles["production"];
+
+        Assert.Equal(before.Session?.AccessTokenExpiresAt, after.Session?.AccessTokenExpiresAt);
+        Assert.Null(after.Token);
+        Assert.Equal("access-token", this.store.Resolve("production").Token);
     }
 
     /// <summary>A key file left behind would be material protecting nothing, so the last profile to move takes it with it.</summary>
