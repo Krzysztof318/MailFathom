@@ -32,11 +32,14 @@ namespace MailFathom.IntegrationTests.ObjectStorage;
 /// and the list cannot drift away from what is proved.
 /// </para>
 /// <para>
-/// Three of the behaviours are reached through the endpoint's own client rather than through
+/// Four of the behaviours are reached through the endpoint's own client rather than through
 /// <see cref="IEmailContentObjectStore" />, because the port deliberately makes them unreachable: it mints a key per
 /// write, so no caller can ask it to write twice under one key or to hand the endpoint a digest the payload does not
-/// match. The client comes from the same factory the adapter opens, so what those tests sign, address, and send is what
-/// a deployment sends.
+/// match, and it answers a listing as MailFathom's own entries rather than as the response the endpoint sent. Three of
+/// those four open the client from the same factory the adapter opens, so what they sign, address, and send is what a
+/// deployment sends. The fourth is the refused credential, which is the one place a second client is the point: it is
+/// built by hand carrying a secret the server will not accept, because a factory configured to reach the endpoint
+/// cannot be asked to fail against it.
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
@@ -324,8 +327,9 @@ public sealed class OrchestratedS3SurfaceTests(MailFathomOrchestrationFixture or
 
     /// <summary>
     /// A deployment that has stored nothing yet still sweeps, and what it must get is an empty listing rather than a
-    /// failure. The SDK reports an absent collection as null from version 4 onwards, so this is also what proves the
-    /// adapter's own handling of that rather than only the endpoint's.
+    /// failure. What this settles is the endpoint's half of that: the SDK reports an absent collection as null from
+    /// version 4 onwards, so a listing under a prefix nothing is beneath is the shape the adapter's own coalescing has
+    /// to survive. The coalescing itself is the adapter's and is not reached from here.
     /// </summary>
     [Fact]
     public async Task ListAsync_BeneathAPrefixNothingIsWrittenUnder_AnswersAnEmptyPage()
