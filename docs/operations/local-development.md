@@ -1,6 +1,6 @@
 # Local development
 
-<!-- describes: scripts/**, global.json, MailFathom.code-workspace, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, frontend/MailFathom.Client.slnx, frontend/Directory.Packages.props, backend/src/AppHost/**, backend/src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, backend/tests/IntegrationTests/ProviderAdapters/**, backend/tools/** -->
+<!-- describes: scripts/**, global.json, MailFathom.code-workspace, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, frontend/MailFathom.Client.slnx, frontend/Directory.Packages.props, backend/src/AppHost/**, backend/src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, backend/tests/IntegrationTests/ProviderAdapters/**, backend/tests/IntegrationTests/ObjectStorage/**, backend/tools/** -->
 
 Use the .NET SDK pinned in `global.json`. Test execution is configured for Microsoft Testing Platform through the repository-level `global.json` test runner setting.
 
@@ -951,6 +951,7 @@ The app host is started with the argument `IntegrationTesting=true`, which selec
 - a `mailserver` container named `mailfathom-integrationtests-<run>-mailserver` is added, which a developer's orchestration never gets — it exists so the suite has a real IMAP server to synchronize against, and starting one beside a developer's own accounts would advertise a mailbox nothing points at;
 - a `presidio-analyzer` container named `mailfathom-integrationtests-<run>-presidio-analyzer` is added, on the same terms and for the same reason: the personal-data scanner's whole claim is about what a real analyzer answers, and a developer's orchestration never gets one because personal-data scanning is off by default and the image is the largest thing this repository pulls;
 - a `spamassassin` container named `mailfathom-integrationtests-<run>-spamassassin` is added, on the same terms again: the spam scanner's whole claim is about what a real rule corpus concludes, and a developer's orchestration never gets one because spam scanning is off by default;
+- an `object-storage` container named `mailfathom-integrationtests-<run>-object-storage` is added, on the same terms once more: the object content backend's whole claim is about what a real S3 server accepts, and a developer's orchestration never gets one because the object backend is off by default and a deployment that selects it points at whatever endpoint its operator runs. It is the one container here with no volume — nothing it holds is meant to survive a run, and an endpoint that kept objects between runs would let a test read one an earlier run wrote;
 - the `mailfathom-host` project resource is added to the model but never started, because the suite exercises classes against real infrastructure and a running MailFathom would synchronize mail underneath the data a test is asserting on. What a collection eventually starts is a host serving both of its network surfaces under the posture worth proving end to end: the MCP endpoint behind an API key and a narrowed origin list, and the administrative endpoint enabled on a listener of its own behind an API key that is none of the MCP ones — which is what lets the suite establish from outside the process that neither surface's credential authenticates the other's routes. The probes are served on the MCP endpoint's own socket rather than on one of theirs, which is the arrangement a single-node deployment publishes and the only place anything proves it works: a shared socket serves the union of what its surfaces answer, so a probe is answered there without a credential while the MCP route on it still requires one. Both sections therefore state the same bind address, because they describe one socket and an address written in one place and defaulted in the other would be two sockets the host refuses to open. The administrative endpoint keeps a socket of its own, so the suite carries both arrangements at once and can establish that a path belonging to a surface a listener does not serve is refused on it rather than served by whichever route matches. Every port on that resource is allocated rather than defaulted, because two MailFathom processes run at once under this topology, and every endpoint is published as a TCP one for the same reason: an HTTP one joins `ASPNETCORE_URLS`, which the host refuses outright. It is configured with the one account identifier the suite stores its mail under, and — for the tools that send — with what an account has to declare to be allowed to send at all: a submission endpoint in the reserved testing domain, the address to send from, and the switch that turns sending on, which is off for every account until an operator sets it. Configuration is what defines the accounts a deployment serves and it is read whether or not synchronization runs, so a host naming none would answer every mailbox read with an empty window over a database that is not empty, and one declaring no delivery would answer every sending tool with the coded refusal that says so rather than exercising the contract the suite is about. Beside those it carries what the delivery block's own validation requires and nothing then spends: the login the account is reached under, and a named password secret — a secret block is identified by its name rather than by where it sits, so one stating only a reference fails validation and stops the host before it binds a socket, which reaches the suite as every request to that host timing out rather than as configuration being wrong. The delivery pass itself runs on that host like it does on any deployment — the outbox worker is registered unconditionally and answers the signal a queued send raises — and the submission host it offers a message to resolves nowhere, so every attempt ends as a transport failure that defers the send rather than delivering or ending it. The first retry is therefore stretched past the length of a run, which is what leaves a send recorded and withdrawable after its one attempt instead of being claimed again while a test is reading it. Nothing else about the account is configured: with synchronization off, a reading server or a credential for it would be configuration nothing acts on;
 - a second project resource, `mailfathom-mtls-host`, is added on the same terms and started by a collection of its own, `MutualTlsHostCollectionDefinition`, which the assembly's orderer places after the collection that starts the host above — starting a second project process must not be what a rate limit is measured against. It serves the endpoint over an HTTPS profile behind a `Required` client-certificate profile, which is what lets the suite prove the mTLS rules against a real handshake; a certificate requirement is one answer for a whole process, so it cannot be a posture applied to the host above. Its server certificate, private key, and trust anchor are issued in memory per run by the test suite and injected into the environment variables the app model's `env:` secret references name, so nothing of the kind is committed and a developer's orchestration never gets this resource at all.
 
@@ -1018,6 +1019,36 @@ through the protocol because there is no HTTP endpoint to poll.
 What the suite establishes against it is what only a real corpus can settle: that the GTUBE test string is scored spam,
 that ordinary synthetic correspondence is not, and that the rule names and the corpus revision reach the stored
 classification record. Every message it is sent is written by the test, and none of it is real mail.
+
+### The object-storage endpoint
+
+The `object-storage` resource is `docker.io/pgsty/silo:RELEASE.2026-08-06T00-00-00Z`. Silo is a maintained fork of the
+open-source MinIO server, keeping one release line alive after upstream ended community distribution, and it is here for
+the reason the mail server and the analyzer are: what a substituted S3 client proves is that MailFathom composed the
+request it meant to, and what a real server proves is that the request is one an S3 implementation accepts. A request a
+mock accepts and a server refuses would otherwise first fail in somebody's deployment.
+
+It is started with the server's own `server /data` command, its root credential comes from the same two constants in
+`OrchestrationContract` the suite signs its requests with, and its health check polls `/minio/health/live` — the one
+route that answers before any bucket exists, because every other route on that port is a request about a bucket. The
+bucket itself is created by `MailFathomOrchestrationFixture` at start-up, since the server ships none and creating one is
+a request the S3 API already answers.
+
+`backend/tests/IntegrationTests/ObjectStorage/S3Surface.cs` is the list of the S3 operations and behaviours the adapter
+depends on, each naming the test that exercises it, and it is the answer to "which S3 implementations can MailFathom
+run against" — a list to check another server against rather than a reading of the adapter's source. Two tests beside it
+hold the list to that claim: every entry names a test the runner runs, and every test in the class is named by an entry.
+
+Two costs are worth knowing, and neither is large next to the analyzer's. The image is about 50 megabytes to pull and
+around 200 on disk, so the first run on a machine spends a few seconds fetching it; and the server formats its
+one-drive pool on every start, because no volume outlives the run. Neither reaches a developer's ordinary
+orchestration, which starts no endpoint at all.
+
+Silo is AGPL-3.0-or-later, which the acceptance policy in
+[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) places behind
+the owner's explicit approval. That approval is recorded, and so is the reading it was granted under: the server is a
+separate process one test run reaches over the network, pulled from its own registry, with nothing vendored, linked, or
+redistributed here and no deployment asset naming it.
 
 ### The provider-contract tests
 
