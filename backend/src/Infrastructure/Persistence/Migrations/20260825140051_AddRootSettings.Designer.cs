@@ -299,6 +299,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
+                    b.Property<DateTimeOffset?>("ObjectVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<byte[]>("RawMime")
                         .HasColumnType("bytea");
 
@@ -318,7 +321,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.ToTable("email_message_contents", null, t =>
                         {
-                            t.HasCheckConstraint("ck_email_message_contents_backend_payload", "(\"Backend\" = 'Database' AND \"RawMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL AND \"RawMime\" IS NULL)");
+                            t.HasCheckConstraint("ck_email_message_contents_backend_payload", "(\"Backend\" = 'Database' AND \"RawMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL AND \"ObjectVerifiedAt\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL\n    AND (\"RawMime\" IS NULL OR \"ObjectVerifiedAt\" IS NOT NULL))");
                         });
                 });
 
@@ -809,6 +812,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
+                    b.Property<DateTimeOffset?>("ObjectVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<byte[]>("RawMime")
                         .HasColumnType("bytea");
 
@@ -829,7 +835,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.ToTable("mail_draft_contents", null, t =>
                         {
-                            t.HasCheckConstraint("ck_mail_draft_contents_backend_payload", "(\"Backend\" = 'Database' AND \"RawMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL AND \"RawMime\" IS NULL)");
+                            t.HasCheckConstraint("ck_mail_draft_contents_backend_payload", "(\"Backend\" = 'Database' AND \"RawMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL AND \"ObjectVerifiedAt\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL\n    AND (\"RawMime\" IS NULL OR \"ObjectVerifiedAt\" IS NOT NULL))");
                         });
                 });
 
@@ -1510,6 +1516,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
+                    b.Property<DateTimeOffset?>("ObjectVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<byte[]>("RawMime")
                         .HasColumnType("bytea");
 
@@ -1530,7 +1539,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.ToTable("outgoing_email_contents", null, t =>
                         {
-                            t.HasCheckConstraint("ck_outgoing_email_contents_backend_payload", "(\"Backend\" = 'Database' AND \"RawMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL AND \"RawMime\" IS NULL)");
+                            t.HasCheckConstraint("ck_outgoing_email_contents_backend_payload", "(\"Backend\" = 'Database' AND \"RawMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL AND \"ObjectVerifiedAt\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL\n    AND (\"RawMime\" IS NULL OR \"ObjectVerifiedAt\" IS NOT NULL))");
                         });
                 });
 
@@ -1798,6 +1807,9 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
+                    b.Property<DateTimeOffset?>("ObjectVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<byte[]>("Sha256Hash")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1815,7 +1827,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.ToTable("recurring_send_drafts", null, t =>
                         {
-                            t.HasCheckConstraint("ck_recurring_send_drafts_backend_payload", "(\"Backend\" = 'Database' AND \"DraftMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL AND \"DraftMime\" IS NULL)");
+                            t.HasCheckConstraint("ck_recurring_send_drafts_backend_payload", "(\"Backend\" = 'Database' AND \"DraftMime\" IS NOT NULL AND \"ObjectLocator\" IS NULL AND \"ObjectVerifiedAt\" IS NULL)\nOR (\"Backend\" = 'ObjectStorage' AND \"ObjectLocator\" IS NOT NULL\n    AND (\"DraftMime\" IS NULL OR \"ObjectVerifiedAt\" IS NOT NULL))");
                         });
                 });
 
