@@ -192,16 +192,21 @@ internal static class PersistenceConstraintNames
     /// <summary>The index that answers why one message was filed, which is the history's first question.</summary>
     internal const string MailRuleExecutionEmailIndexName = "ix_mail_rule_executions_email_evaluated";
 
-    /// <summary>The order the contact book is listed and paginated in.</summary>
-    internal const string ContactListingIndexName = "ix_contacts_display_name_sort_key_id";
+    /// <summary>The order one owner's contact book is listed and paginated in.</summary>
+    /// <remarks>
+    /// The owner leads it because a listing is always of one person's book: leading with the name would make a page of
+    /// a small book a walk of every book on the deployment, filtered afterwards.
+    /// </remarks>
+    internal const string ContactListingIndexName = "ix_contacts_owner_display_name_sort_key_id";
 
-    /// <summary>The constraint that keeps one address in one person's hands, across the whole book.</summary>
+    /// <summary>The constraint that keeps one address in one person's hands, within one owner's book.</summary>
     /// <remarks>
     /// Named because a losing writer is recognized by the constraint its insert violated: two callers claiming one
     /// address is a race to resolve into the answer that names its holder, not a failure to report. It is also what the
-    /// lookup from an address to a person is answered from.
+    /// lookup from an address to a person is answered from. It leads with the owner, which is what lets two owners each
+    /// hold their own contact for one address while neither book holds it twice.
     /// </remarks>
-    internal const string ContactAddressUniqueIndexName = "ix_contact_addresses_normalized_address";
+    internal const string ContactAddressUniqueIndexName = "ix_contact_addresses_owner_normalized_address";
 
     /// <summary>The constraint an outgoing email's idempotency identity is enforced by, and which a losing writer is recognized from.</summary>
     /// <remarks>

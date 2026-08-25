@@ -212,7 +212,7 @@ public sealed class ContactBookTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        var stillHeld = await book.FindAsync(contact.Id, TestContext.Current.CancellationToken);
+        var stillHeld = await book.FindAsync(SyntheticMailOwner.Deployment, contact.Id, TestContext.Current.CancellationToken);
 
         Assert.Equal(ContactWriteOutcome.OriginRefusesWriter, result.Outcome);
         Assert.Equal(ContactOrigin.Collected, stillHeld?.Origin);
@@ -586,6 +586,7 @@ public sealed class ContactBookTests
         return new ContactBook(
             book,
             book,
+            ContactBookOwnerships.ForTheServedOwner(),
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), timeProvider),
             timeProvider,
             authorization ?? AccessAuthorizations.ForCallerGranted(

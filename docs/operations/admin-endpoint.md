@@ -905,6 +905,10 @@ figure an operator acts on and it would say which message the move is at.
 what you recorded about them. The book's own rules — what identifies a person, when two addresses are the same address,
 who may change what — are that page's; this is the command group over them.
 
+A book belongs to one owner, and this surface acts for none: it is the deployment's administrator rather than somebody
+whose mail is being served, so every command here reaches the book of the owner this deployment serves — which is
+exactly one while mail accounts are declared in configuration.
+
 ```console
 $ mfctl contact create --name "Anna Kowalska" --address anna@example.test --note "Met at the conference."
 Recorded contact 018f2b1c-9b3a-7c41-8f7d-2c6a5e9d10ab.

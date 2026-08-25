@@ -376,6 +376,9 @@ public sealed class RecurringMailSubmissionTests
     {
         contentStore = ContentStores.Substituted();
 
+        // One authorization, for the reason AuthoredSendGovernors.Governing states: the mailboxes the send leaves from,
+        // the book the recipients are resolved out of, and the caller the send is judged for are one scoped instance in
+        // production.
         var callerAuthorization = authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend);
         var accountCatalog = OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account));
 
@@ -395,7 +398,7 @@ public sealed class RecurringMailSubmissionTests
 
         return new RecurringMailSubmission(
             accountCatalog,
-            new NamedRecipientResolver(new InMemoryContactBookStore()),
+            new NamedRecipientResolver(new InMemoryContactBookStore(), ContactBookOwnerships.For(callerAuthorization)),
             ComposingAuthoredEmails.ThatComposes(ComposedMime),
             recurringSends,
             contentStore,

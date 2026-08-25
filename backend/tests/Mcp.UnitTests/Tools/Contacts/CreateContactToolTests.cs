@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Contacts.Failures;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.Mcp.Tools.Contacts;
@@ -68,7 +69,7 @@ public sealed class CreateContactToolTests
         var holder = ContactId.Create(Guid.CreateVersion7(StubContactBook.Now));
         var book = new StubContactBook();
         book.Directory
-            .FindHoldersOfAsync(Arg.Any<IReadOnlyCollection<EmailAddress>>(), Arg.Any<CancellationToken>())
+            .FindHoldersOfAsync(Arg.Any<MailOwnerId>(), Arg.Any<IReadOnlyCollection<EmailAddress>>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<EmailAddress, ContactId>
             {
                 [StubContactBook.Address("anna@example.test")] = holder,
@@ -107,6 +108,6 @@ public sealed class CreateContactToolTests
         // Assert
         Assert.DoesNotContain("@", refusal.Message, StringComparison.Ordinal);
         await book.Store.DidNotReceiveWithAnyArgs()
-            .AddAsync(default!, default!, TestContext.Current.CancellationToken);
+            .AddAsync(default!, default, default!, TestContext.Current.CancellationToken);
     }
 }

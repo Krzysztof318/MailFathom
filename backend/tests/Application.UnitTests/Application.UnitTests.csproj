@@ -18,6 +18,7 @@
     <Compile Include="..\shared\AccessAuthorizations.cs" Link="AccessAuthorizations.cs" />
     <Compile Include="..\shared\SyntheticMailOwner.cs" Link="SyntheticMailOwner.cs" />
     <Compile Include="..\shared\OwnedMailAccountCatalogs.cs" Link="OwnedMailAccountCatalogs.cs" />
+    <Compile Include="..\shared\ContactBookOwnerships.cs" Link="ContactBookOwnerships.cs" />
     <Compile Include="..\shared\OutgoingMailGovernors.cs" Link="OutgoingMailGovernors.cs" />
     <Compile Include="..\shared\AuthoredSendGovernors.cs" Link="AuthoredSendGovernors.cs" />
     <Compile Include="..\shared\StubMailFolderParticipation.cs" Link="StubMailFolderParticipation.cs" />

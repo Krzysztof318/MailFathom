@@ -158,20 +158,52 @@ public sealed class RecipientVouchingTests
         Assert.Equal(1, book.BatchedLookupCount);
     }
 
+    /// <summary>Another owner's book vouches for nobody here, because the vouching reads the book the send is authored for.</summary>
+    /// <remarks>
+    /// This is the control that keeps every other assertion in the class honest. All of them arrange one book and one
+    /// caller under the same owner, so a scope lost anywhere between here and the directory would let one owner's
+    /// correspondents vouch for a send authored for another — and the refusal an operator switched on would stop
+    /// refusing without a single test failing.
+    /// </remarks>
+    [Fact]
+    public async Task CountUnvouchedAsync_AddressOnlyAnotherOwnersBookHolds_IsCounted()
+    {
+        // Arrange
+        var book = new InMemoryContactBookStore();
+        book.Hold(SyntheticMailOwner.Deployment, ContactOf("Anna", "anna@example.test"));
+
+        var vouching = Vouching(
+            book,
+            authorization: AccessAuthorizations.ForOwnerGranted(
+                SyntheticMailOwner.Another,
+                MailFathomPermission.MailSend));
+
+        // Act
+        var unvouched = await vouching.CountUnvouchedAsync(
+            [NamedByCaller("anna@example.test")],
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, unvouched);
+    }
+
     private static RecipientVouching Vouching(
         InMemoryContactBookStore book,
         string? ownAddress = null,
         AccessAuthorization? authorization = null)
     {
-        var accounts = OwnedMailAccountCatalogs.For(
-            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
-            SyntheticServedAccount.Of(Account));
+        // One authorization, because the catalog the vouching reads its own addresses from and the book it reads
+        // correspondents from have to answer for the same owner. Resolving the default twice would let the two axes
+        // drift apart, and an empty book vouches for nobody — so a suite arranging a refusing posture would change
+        // verdict with nothing able to say why.
+        var caller = authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend);
+        var accounts = OwnedMailAccountCatalogs.For(caller, SyntheticServedAccount.Of(Account));
 
         var senderIdentities = Substitute.For<IOutgoingSenderIdentityReader>();
         senderIdentities.FindSenderIdentity(Account).Returns(
             ownAddress is null ? null : OutgoingSenderIdentity.Create(Account, Address(ownAddress)));
 
-        return new RecipientVouching(book, accounts, senderIdentities);
+        return new RecipientVouching(book, ContactBookOwnerships.For(caller), accounts, senderIdentities);
     }
 
     private static AuthoredEmailRecipient NamedByCaller(string address) =>

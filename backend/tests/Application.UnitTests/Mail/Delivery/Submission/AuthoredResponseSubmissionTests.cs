@@ -669,7 +669,7 @@ public sealed class AuthoredResponseSubmissionTests
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             senderIdentities ?? SenderIdentitiesFor(answered.AccountId),
-            new NamedRecipientResolver(new InMemoryContactBookStore()),
+            new NamedRecipientResolver(new InMemoryContactBookStore(), ContactBookOwnerships.For(granted)),
             Bounds(),
             granted);
 

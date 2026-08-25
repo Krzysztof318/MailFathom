@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Contacts.Failures;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Contacts;
 using MailFathom.Mcp.Tools.Contacts;
 using MailFathom.Mcp.UnitTests.TestDoubles;
@@ -27,7 +28,7 @@ public sealed class PromoteContactToolTests
         // Arrange
         var collected = StubContactBook.ContactOf("Anna Kowalska", "anna@example.test", ContactOrigin.Collected);
         var book = new StubContactBook();
-        book.Directory.FindAsync(collected.Id, Arg.Any<CancellationToken>()).Returns(collected);
+        book.Directory.FindAsync(Arg.Any<MailOwnerId>(), collected.Id, Arg.Any<CancellationToken>()).Returns(collected);
 
         var tool = new PromoteContactTool(book.Writer);
 
@@ -44,6 +45,7 @@ public sealed class PromoteContactToolTests
         // reports nothing about the person, so it is asserted where it actually happens.
         await book.Store.Received(1).ReplaceAsync(
             Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailOwnerId>(),
             Arg.Is<Contact>(promoted =>
                 promoted != null && promoted.Id == collected.Id && promoted.Origin == ContactOrigin.Asserted),
             Arg.Any<CancellationToken>());
@@ -56,7 +58,7 @@ public sealed class PromoteContactToolTests
         // Arrange
         var asserted = StubContactBook.ContactOf("Anna Kowalska", "anna@example.test");
         var book = new StubContactBook();
-        book.Directory.FindAsync(asserted.Id, Arg.Any<CancellationToken>()).Returns(asserted);
+        book.Directory.FindAsync(Arg.Any<MailOwnerId>(), asserted.Id, Arg.Any<CancellationToken>()).Returns(asserted);
 
         var tool = new PromoteContactTool(book.Writer);
 
@@ -77,7 +79,7 @@ public sealed class PromoteContactToolTests
         // Arrange
         var book = new StubContactBook();
         book.Directory
-            .FindAsync(Arg.Any<ContactId>(), Arg.Any<CancellationToken>())
+            .FindAsync(Arg.Any<MailOwnerId>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>())
             .Returns((Contact?)null);
 
         var tool = new PromoteContactTool(book.Writer);

@@ -21,6 +21,22 @@ Addressing a message by naming a contact](mail-delivery.md#addressing-a-message-
 becomes an address, which name refuses to, and what the record then keeps. Nothing about that writes the book: addressing
 somebody is not a fact about them, so no contact is created, amended, or promoted by being written to.
 
+## A book belongs to one owner
+
+Every contact is written in one owner's book and read out of it. The owner is a column on the record rather than a
+question the surface reading it answers, so which book a caller reaches is settled where the mail beside it is settled —
+by whom the caller was admitted to act for — and no request of theirs can name another. A caller on a mail-serving
+surface reads the book of the owner they act for; the deployment administrator and MailFathom's own work act for nobody
+and reach the book of the owner this deployment serves, which is exactly one while mail accounts are declared in
+configuration. [Single-tenant multi-user ownership](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0014-single-tenant-multi-user-ownership-on-the-mail-account.md)
+is the decision, and the day an owner is named on a request rather than derived is the day that resolution changes and
+nothing else here does.
+
+Two things follow, and both are the schema's rather than a predicate somebody remembered to write. Every read of the
+book leads with the owner, down to the index a listing and an address lookup are served from. And erasing an owner takes
+their book with them — the people they wrote down and every address row beneath — because `contacts` keys onto the owner
+record and `contact_addresses` keys onto `contacts`, so the cascade reaches an address through the person holding it.
+
 ## A contact is a person, not an address
 
 One person uses a work address, a personal one, and an old one they still receive on. A book keyed on the address could
@@ -70,11 +86,16 @@ The written form is kept beside the comparison form, so what a reader is shown i
 the comparison form is matched, grouped, or indexed on. It is the same rule and the same value the mail beside it is
 matched by, defined once in the domain rather than per writer.
 
-**One address belongs to one contact, across the whole book.** Adding an address a different contact already holds is
-refused with an answer naming which contact holds it, so the caller can look at that person rather than guess. The rule
-is a unique index in PostgreSQL rather than a check before the write: two callers claiming one address at once both read
-that nobody holds it, and only the database closes that window. Losing that race is a conflict the write retries from a
-fresh read, and the second caller is then told who holds the address.
+**One address belongs to one contact, within one owner's book.** Adding an address a different contact in the same book
+already holds is refused with an answer naming which contact holds it, so the caller can look at that person rather than
+guess. The rule is a unique index in PostgreSQL rather than a check before the write: two callers claiming one address at
+once both read that nobody holds it, and only the database closes that window. Losing that race is a conflict the write
+retries from a fresh read, and the second caller is then told who holds the address.
+
+It stops at the book's edge deliberately. Two owners who correspond with the same person each hold their own record of
+them, with their own name for them and their own note, because a rule across the table would make what one owner may
+write down depend on what another already had — and would let one of them find out that the other corresponds with
+somebody by being refused.
 
 Inside one record, two spellings of one address are merged rather than refused. They name the same mailbox of the same
 person, and refusing would ask an owner to resolve a difference nothing else makes.
@@ -114,6 +135,8 @@ one decides separately for each. [Configuration §
 the keys and their bounds.
 
 Collection runs inside the synchronization pass that stored the message, after the transaction that stored it committed.
+What it writes goes into the book of the owner this deployment serves, because MailFathom's own work acts for nobody in
+particular; the day an account names its own owner is the day it writes into that owner's book instead.
 It owns no worker, no timer, and no queue, and it reaches the mail server for nothing at all: the headers it reads were
 already read to store the message, so what one message costs is a bounded number of indexed reads and, rarely, one
 insert.
@@ -210,11 +233,13 @@ answered as a contact the book does not hold rather than putting the person back
 Three lookups and one listing:
 
 - **By identity**, which is what every other part of the system names a person by.
-- **By address**, which answers "who is this from" and is served from the unique index rather than from a scan. At most
-  one contact can answer, which is the uniqueness rule above rather than a property of the lookup.
+- **By address**, which answers "who is this from" and is served from the unique index rather than from a scan. The index
+  leads with the owner, so the lookup reads one book rather than the table. At most one contact can answer, which is the
+  uniqueness rule above rather than a property of the lookup.
 - **By the whole name**, which answers "who did they mean" and is what addressing a message to somebody reads. It matches
   the name's comparison form exactly rather than looking for text inside it, so it is served from the listing index the
-  name's key leads, and it answers with the one contact carrying the name or with how many carry it. More than one is not
+  owner and the name's key lead, and it answers with the one contact in that book carrying the name or with how many
+  carry it. A namesake in somebody else's book is not one of them. More than one is not
   a result to choose from: nothing here ranks people, and [mail delivery §
   Addressing a message by naming a contact](mail-delivery.md#addressing-a-message-by-naming-a-contact) is where refusing
   that is argued. The count is exact and comes from the database, and the addresses of the people a shared name matched
@@ -222,8 +247,8 @@ Three lookups and one listing:
   A name resolving to one person answers with that person and with the count that decided it read together, so the answer
   can never be one of two people a namesake written down meanwhile made ambiguous.
 - **A page of the book**, bounded and continued by a keyset cursor. The order is the name's comparison form and then the
-  identity, which makes it total: two people with one name are still served in a fixed order, so a walk of the book
-  serves every contact exactly once. A page holds 50 contacts unless the caller asks for fewer, and never more than 200.
+  identity, within the owner the page is of, which makes it total: two people with one name are still served in a fixed
+  order, so a walk of the book serves every contact exactly once. A page holds 50 contacts unless the caller asks for fewer, and never more than 200.
   A listing may be narrowed to one origin, which is the question "what did my instance pick up" and its inverse, and to
   a **search**.
 
@@ -251,7 +276,8 @@ filters, so continuing a walk with a different search or a different origin is d
 
 The order is taken on a comparison form stored beside the name rather than on the name itself, and the column holding it
 is pinned to PostgreSQL's `C` collation, so the order is the ordinal one MailFathom derived the form to produce rather
-than whichever collation the database was created with.
+than whichever collation the database was created with. The index it is served from leads with the owner and ends with
+the identity, which is what makes a page a page of one book and the walk over it terminate.
 
 ## Erasing and exporting a person
 
@@ -264,6 +290,11 @@ address outlives its person, rather than a second statement somebody remembers t
 first inside the same transaction so it can answer with what it removed — the contact and how many addresses went with
 it — and an owner asking for one gets an answer rather than a call that returned without complaint. Erasing somebody the book does not hold is a completed erasure, not
 a failure: the state the owner asked for is the state the book is in.
+
+**Erasing an owner erases their whole book.** It is the cascade rather than an erasure of its own, and it runs in two
+hops: `contacts` keys onto the owner record and `contact_addresses` keys onto `contacts` through `(ContactId, OwnerId)`.
+So a data-subject request against the owner discharges the people they wrote down and every address beneath them along
+with the mail.
 
 **Exporting a contact produces everything held about them** as of the instant it was taken: the name, every address,
 which is preferred, the note, the origin, and both timestamps. What an owner reads is left to the surface that asks for

@@ -174,8 +174,9 @@ every time is the loop being bounded.
 two things: somebody this deployment derived — whoever a reply answers, whoever a reply-to-all keeps, an address
 resolved from a contact the caller named, by the identity the book gave it or by the whole name the owner recorded —
 or an address the caller wrote out itself. Only the second is judged.
-Against it stands what this installation already holds a record of: the contact book, and the addresses its own
-accounts send as. An address that is neither is what an injected instruction looks like, and
+Against it stands what this installation already holds a record of: the contact book of the owner the send is authored
+for, and the addresses its own accounts send as. An address that is neither is what an injected instruction looks like,
+and
 [`MailDelivery:UnvouchedRecipients`](../operations/configuration-mail.md#a-recipient-nothing-here-vouches-for--maildeliveryunvouchedrecipients)
 is the deployment's choice of what to do about one: `Admit` records it, `Refuse` refuses the whole message.
 

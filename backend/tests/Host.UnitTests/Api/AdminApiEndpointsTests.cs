@@ -474,6 +474,7 @@ public sealed class AdminApiEndpointsTests
         services.AddScoped(_ => new ContactBook(
             Substitute.For<IContactStore>(),
             directory,
+            ContactBookOwnerships.ForTheServedOwner(),
             new OptimisticConcurrencyRetryPolicy(
                 Substitute.For<IPersistenceSessionFactory>(),
                 new PersistenceConcurrencyOptions(),

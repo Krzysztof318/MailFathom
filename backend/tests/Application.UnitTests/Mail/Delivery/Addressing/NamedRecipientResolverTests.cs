@@ -8,6 +8,7 @@ using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Mail.Delivery.Addressing;
@@ -32,7 +33,7 @@ public sealed class NamedRecipientResolverTests
         book.Hold(anna);
 
         // Act
-        var resolution = await new NamedRecipientResolver(book).ResolveAsync(
+        var resolution = await new NamedRecipientResolver(book, ContactBookOwnerships.ForTheServedOwner()).ResolveAsync(
             [NamedRecipient.ByContact(OutgoingRecipientRole.To, anna.Id)],
             TestContext.Current.CancellationToken);
 
@@ -56,7 +57,7 @@ public sealed class NamedRecipientResolverTests
         book.Hold(anna);
 
         // Act
-        var resolution = await new NamedRecipientResolver(book).ResolveAsync(
+        var resolution = await new NamedRecipientResolver(book, ContactBookOwnerships.ForTheServedOwner()).ResolveAsync(
             [NamedRecipient.ByContactName(OutgoingRecipientRole.To, ContactDisplayName.Create(writtenAs))],
             TestContext.Current.CancellationToken);
 
@@ -80,7 +81,7 @@ public sealed class NamedRecipientResolverTests
         book.Hold(ContactOf("Bruno Nowak", "bruno@example.test"));
 
         // Act
-        var resolution = await new NamedRecipientResolver(book).ResolveAsync(
+        var resolution = await new NamedRecipientResolver(book, ContactBookOwnerships.ForTheServedOwner()).ResolveAsync(
             [NamedRecipient.ByContactName(OutgoingRecipientRole.To, ContactDisplayName.Create("Anna Kowalska"))],
             TestContext.Current.CancellationToken);
 
@@ -102,11 +103,11 @@ public sealed class NamedRecipientResolverTests
         book.Hold(ContactOf("Anna Kowalska", "anna@example.test"));
 
         // Act
-        var byIdentity = await new NamedRecipientResolver(book).ResolveAsync(
+        var byIdentity = await new NamedRecipientResolver(book, ContactBookOwnerships.ForTheServedOwner()).ResolveAsync(
             [NamedRecipient.ByContact(OutgoingRecipientRole.To, AContactId())],
             TestContext.Current.CancellationToken);
 
-        var byName = await new NamedRecipientResolver(book).ResolveAsync(
+        var byName = await new NamedRecipientResolver(book, ContactBookOwnerships.ForTheServedOwner()).ResolveAsync(
             [NamedRecipient.ByContactName(OutgoingRecipientRole.To, ContactDisplayName.Create("Nobody Here"))],
             TestContext.Current.CancellationToken);
 
@@ -128,7 +129,7 @@ public sealed class NamedRecipientResolverTests
         book.Hold(anna);
 
         // Act
-        var resolution = await new NamedRecipientResolver(book).ResolveAsync(
+        var resolution = await new NamedRecipientResolver(book, ContactBookOwnerships.ForTheServedOwner()).ResolveAsync(
             [NamedRecipient.ByContact(OutgoingRecipientRole.To, anna.Id, "ANNA.HOME@example.test")],
             TestContext.Current.CancellationToken);
 
@@ -155,7 +156,7 @@ public sealed class NamedRecipientResolverTests
         book.Hold(anna);
 
         // Act
-        var resolution = await new NamedRecipientResolver(book).ResolveAsync(
+        var resolution = await new NamedRecipientResolver(book, ContactBookOwnerships.ForTheServedOwner()).ResolveAsync(
             [NamedRecipient.ByContact(OutgoingRecipientRole.To, anna.Id, chosenAddress)],
             TestContext.Current.CancellationToken);
 
@@ -173,7 +174,7 @@ public sealed class NamedRecipientResolverTests
         var book = new InMemoryContactBookStore();
 
         // Act
-        var resolution = await new NamedRecipientResolver(book).ResolveAsync(
+        var resolution = await new NamedRecipientResolver(book, ContactBookOwnerships.ForTheServedOwner()).ResolveAsync(
             [NamedRecipient.AtAddress(OutgoingRecipientRole.Cc, " Bruno@Example.test ", "Bruno Nowak")],
             TestContext.Current.CancellationToken);
 
@@ -194,7 +195,7 @@ public sealed class NamedRecipientResolverTests
         book.Hold(anna);
 
         // Act
-        var resolution = await new NamedRecipientResolver(book).ResolveAsync(
+        var resolution = await new NamedRecipientResolver(book, ContactBookOwnerships.ForTheServedOwner()).ResolveAsync(
             [
                 NamedRecipient.AtAddress(OutgoingRecipientRole.To, "first@example.test"),
                 NamedRecipient.ByContact(OutgoingRecipientRole.Cc, anna.Id),
@@ -219,7 +220,7 @@ public sealed class NamedRecipientResolverTests
         var book = new InMemoryContactBookStore();
 
         // Act
-        var resolution = await new NamedRecipientResolver(book).ResolveAsync(
+        var resolution = await new NamedRecipientResolver(book, ContactBookOwnerships.ForTheServedOwner()).ResolveAsync(
             [
                 NamedRecipient.AtAddress(OutgoingRecipientRole.To, "reachable@example.test"),
                 NamedRecipient.ByContact(OutgoingRecipientRole.Cc, AContactId()),
@@ -239,7 +240,7 @@ public sealed class NamedRecipientResolverTests
     public async Task ResolveAsync_NobodyNamedAtAll_IsResolvedToNoRecipients()
     {
         // Arrange
-        var resolver = new NamedRecipientResolver(new InMemoryContactBookStore());
+        var resolver = new NamedRecipientResolver(new InMemoryContactBookStore(), ContactBookOwnerships.ForTheServedOwner());
 
         // Act
         RecipientResolution resolution = await resolver.ResolveAsync([], TestContext.Current.CancellationToken);
@@ -269,7 +270,7 @@ public sealed class NamedRecipientResolverTests
 
         // Act, Assert
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
-            new NamedRecipientResolver(book).ResolveAsync(
+            new NamedRecipientResolver(book, ContactBookOwnerships.ForTheServedOwner()).ResolveAsync(
                 beyondTheBound,
                 TestContext.Current.CancellationToken));
 
@@ -304,7 +305,7 @@ public sealed class NamedRecipientResolverTests
             .ToArray();
 
         // Act
-        var resolution = await new NamedRecipientResolver(book).ResolveAsync(
+        var resolution = await new NamedRecipientResolver(book, ContactBookOwnerships.ForTheServedOwner()).ResolveAsync(
             namedBothWays,
             TestContext.Current.CancellationToken);
 
@@ -324,7 +325,7 @@ public sealed class NamedRecipientResolverTests
         book.Hold(anna);
 
         // Act
-        await new NamedRecipientResolver(book).ResolveAsync(
+        await new NamedRecipientResolver(book, ContactBookOwnerships.ForTheServedOwner()).ResolveAsync(
             [NamedRecipient.ByContact(OutgoingRecipientRole.To, anna.Id)],
             TestContext.Current.CancellationToken);
 

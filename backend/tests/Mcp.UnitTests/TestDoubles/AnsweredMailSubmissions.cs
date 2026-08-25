@@ -110,7 +110,7 @@ internal static class AnsweredMailSubmissions
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             SenderIdentities(),
-            new NamedRecipientResolver(Substitute.For<IContactDirectory>()),
+            new NamedRecipientResolver(Substitute.For<IContactDirectory>(), ContactBookOwnerships.For(granted)),
             Bounds(),
             granted);
 

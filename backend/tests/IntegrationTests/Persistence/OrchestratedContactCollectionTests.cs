@@ -133,8 +133,10 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
         var gone = await FindByAddressAsync(services, "picked-up@collected.contacts.test", cancellationToken);
 
         // Assert
-        // At least this test's own record and its two addresses: the book is shared, so another class's collected rows
-        // are erased by the same statement and counting them exactly would assert about somebody else's arrangement.
+        // At least this test's own record and its two addresses: the served owner's book is shared by every class in
+        // this collection, so another class's collected rows are erased by the same statement and counting them exactly
+        // would assert about somebody else's arrangement. The counts below are scoped to that owner rather than to the
+        // table, because the erasure is scoped to it and a foreign owner's collected rows are outside what it promises.
         Assert.True(erasure.ContactsErased >= 1);
         Assert.True(erasure.AddressesErased >= 2);
         Assert.Equal(0, collectedRowsLeft);
@@ -235,7 +237,10 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
         OrchestratedMailFathomServices services,
         string address,
         CancellationToken cancellationToken) => services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IContactDirectory>().FindByAddressAsync(Address(address), token),
+            (scope, token) => scope.GetRequiredService<IContactDirectory>().FindByAddressAsync(
+                services.ServedOwner,
+                Address(address),
+                token),
             cancellationToken);
 
     private static Task<int> CountCollectedRowsAsync(
@@ -244,7 +249,8 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
             (scope, token) => scope.GetRequiredService<MailFathomDbContext>()
                 .Contacts
                 .AsNoTracking()
-                .Where(contact => contact.Origin == ContactOrigin.Collected)
+                .Where(contact =>
+                    contact.OwnerId == services.ServedOwner.Value && contact.Origin == ContactOrigin.Collected)
                 .CountAsync(token),
             cancellationToken);
 

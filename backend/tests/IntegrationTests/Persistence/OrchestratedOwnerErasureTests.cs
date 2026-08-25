@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -35,6 +36,12 @@ namespace MailFathom.IntegrationTests.Persistence;
 /// other class's data: it belongs to the owner this suite already had, and nothing resolves an owner from an account.
 /// </para>
 /// <para>
+/// The contact book is seeded on both sides for a reason of its own: it is the one part of an owner's record that
+/// records no mail account at all, so neither the count taken table by table nor the statements the seam issues itself
+/// say anything about it, and it is reached only because <c>contacts</c> keys onto the owner row. A book that stopped
+/// being taken would leave every other assertion here green.
+/// </para>
+/// <para>
 /// The owner is provisioned by this test and erased by it, including on a failure. While it exists the deployment holds
 /// two owner records, which is exactly the state a configured mail account cannot be attributed in — so leaving one
 /// behind would refuse the folder bindings every later class in this collection arranges.
@@ -48,6 +55,19 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
     private const string SurvivingAccount = "owner-erasure-bystander";
 
     private const string AccountIdentifierPropertyName = nameof(MailFolderEntity.MailboxAccountId);
+
+    /// <summary>The one address in the erased owner's book, in a domain no other class here writes into.</summary>
+    private const string ErasedOwnerContactAddress = "correspondent@owner-erasure.contacts.test";
+
+    /// <summary>The one address this test adds to the surviving owner's book, which stays behind with the rest of it.</summary>
+    private const string SurvivingOwnerContactAddress = "correspondent@owner-erasure-bystander.contacts.test";
+
+    // The comparison form the domain derives and the column therefore holds, stated once so a row is sought by what a
+    // deployment would have written rather than by the form a literal happens to be typed in.
+    private const string ErasedOwnerContactNormalizedAddress = "CORRESPONDENT@OWNER-ERASURE.CONTACTS.TEST";
+
+    private const string SurvivingOwnerContactNormalizedAddress =
+        "CORRESPONDENT@OWNER-ERASURE-BYSTANDER.CONTACTS.TEST";
 
     [Fact]
     public async Task EraseAsync_TwoOwnersWithAMailboxEach_LeavesNoRowOfOnesAndEveryRowOfTheOthers()
@@ -127,9 +147,28 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
                         await context.Set<MailAnsweringAuditedEmailEntity>()
                             .CountAsync(citation => citation.StoredEmailId == storedEmailId, token));
 
+                    // The contact book, which the cascade reaches through the owner rather than through an account, so
+                    // neither the counts above nor a statement of the seam's own says anything about it: the person and
+                    // the address row that hung off them are both gone.
+                    Assert.Equal(
+                        0,
+                        await context.Contacts.CountAsync(contact => contact.OwnerId == erasedOwnerId, token));
+                    Assert.Equal(
+                        0,
+                        await context.ContactAddresses
+                            .CountAsync(
+                                address => address.NormalizedAddress == ErasedOwnerContactNormalizedAddress,
+                                token));
+
                     // Nobody else's: the owner this suite's own mail hangs off is still there, and the counts above say
                     // their account is too, down to the raw MIME of the message stored beneath it.
                     Assert.True(await context.OwnerAccounts.AnyAsync(owner => owner.Id == survivingOwnerId, token));
+                    Assert.Equal(
+                        1,
+                        await context.ContactAddresses
+                            .CountAsync(
+                                address => address.NormalizedAddress == SurvivingOwnerContactNormalizedAddress,
+                                token));
                     Assert.Equal(
                         1,
                         await context.EmailMessageContents
@@ -371,9 +410,39 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
             FolderAliases = ["inbox"],
         });
 
+        // The contact book records no mail account, so no statement of the seam's names it and the counts above never
+        // see it. It hangs off the owner directly, which is the whole of what takes it.
+        AddContact(context, ownerId, "Erased Correspondent", ErasedOwnerContactAddress);
+
         await context.SaveChangesAsync(cancellationToken);
 
         return storedEmail.Id;
+    }
+
+    /// <summary>Writes one person into an owner's book, with the one address row that hangs off them.</summary>
+    private static void AddContact(MailFathomDbContext context, Guid ownerId, string displayName, string address)
+    {
+        var contact = new ContactEntity
+        {
+            Id = Guid.CreateVersion7(),
+            OwnerId = ownerId,
+            DisplayName = displayName,
+            DisplayNameSortKey = displayName.ToUpperInvariant(),
+            PreferredNormalizedAddress = address.ToUpperInvariant(),
+            Origin = ContactOrigin.Asserted,
+            RecordedAt = DateTimeOffset.UnixEpoch,
+            AmendedAt = DateTimeOffset.UnixEpoch,
+        };
+
+        context.Contacts.Add(contact);
+        context.ContactAddresses.Add(new ContactAddressEntity
+        {
+            Id = Guid.CreateVersion7(),
+            ContactId = contact.Id,
+            OwnerId = ownerId,
+            Address = address,
+            NormalizedAddress = address.ToUpperInvariant(),
+        });
     }
 
     /// <summary>Writes a second account under the owner who is not being erased, with mail and rows beneath it.</summary>
@@ -456,6 +525,8 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
             LastProcessedStoredEmailId = storedEmail.Id,
             UpdatedAt = now,
         });
+
+        AddContact(context, ownerId, "Bystander Correspondent", SurvivingOwnerContactAddress);
 
         await context.SaveChangesAsync(cancellationToken);
     }

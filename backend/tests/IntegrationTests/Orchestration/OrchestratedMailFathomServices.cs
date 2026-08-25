@@ -43,11 +43,13 @@ using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.ObjectStorage;
+using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Infrastructure.Spam;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -122,6 +124,14 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
     private readonly IHost host;
 
     private OrchestratedMailFathomServices(IHost host) => this.host = host;
+
+    /// <summary>Gets the owner this deployment serves, which is the one the orchestrated database holds.</summary>
+    /// <remarks>
+    /// A test naming it is a test reaching a port that takes it — the contact book's, whose every read and write is one
+    /// owner's — rather than one deciding whose data it wants. It is the same value the composed graph hands every use
+    /// case, read from the same registration.
+    /// </remarks>
+    internal MailOwnerId ServedOwner => this.host.Services.GetRequiredService<IDeploymentMailOwnerSource>().Owner;
 
     /// <summary>Starts the composed services against the orchestrated infrastructure.</summary>
     /// <param name="orchestration">The running orchestration whose database and mail server are used.</param>
@@ -279,11 +289,14 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // announced anything at all.
         builder.Services.AddSingleton(new MailOutboxSignal(capacity: 16));
         builder.Services.AddSingleton<IDeploymentMailAccountCatalog>(account);
-        // Whose accounts those are. A composed host settles this from its owner records while it starts and nothing here
-        // starts one, so the harness states it; the caller-scoped catalog the infrastructure registers compares it
-        // against the owner a caller is admitted for, which is what makes a mailbox read here run through the same
-        // narrowing a deployment's does.
-        builder.Services.AddSingleton<IDeploymentMailOwnerSource>(new OrchestratedDeploymentOwner());
+        // Whose accounts those are, and whose contact book. A composed host settles this from its owner records while
+        // it starts and so does this harness, below, once the composed services can reach the database: the
+        // caller-scoped catalog the infrastructure registers compares it against the owner a caller is admitted for,
+        // which is what makes a mailbox read here run through the same narrowing a deployment's does, and a contact
+        // written here is keyed onto the owner record that identifier names.
+        var deploymentOwner = new OrchestratedDeploymentOwner();
+
+        builder.Services.AddSingleton<IDeploymentMailOwnerSource>(deploymentOwner);
         // The port every folder decision is read through, registered by the composition root from the same options
         // section the account above comes from. Chunking and every mailbox read resolve it, so a harness without it
         // would fail to compose rather than behave like a deployment that configured no folder switch.
@@ -474,7 +487,47 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         var host = builder.Build();
         await host.StartAsync(cancellationToken);
 
+        // Nothing owns the host between starting it and handing it to the wrapper, and the read below throws whenever
+        // the database holds anything but exactly one owner — the state a class that provisions a second owner leaves
+        // if its erasure did not run. Without this the caller's `await using` never binds, so the started host keeps
+        // its data source and pooled connections for the rest of the suite and every later start leaks another.
+        try
+        {
+            deploymentOwner.Resolved(await ReadSoleOwnerAsync(host, cancellationToken));
+        }
+        catch
+        {
+            // CancellationToken.None, as DisposeAsync stops it with: the ordinary way the read above is interrupted
+            // is the caller's token firing, and handing StopAsync an already-cancelled one throws out of this catch
+            // before Dispose runs — leaking the very host this block exists to reclaim.
+            await host.StopAsync(CancellationToken.None);
+            host.Dispose();
+
+            throw;
+        }
+
         return new OrchestratedMailFathomServices(host);
+    }
+
+    /// <summary>Reads the one owner the orchestrated database holds, which the migrations provisioned.</summary>
+    /// <remarks>
+    /// The identifier is the database's rather than the harness's because the schema keys onto it: a contact names its
+    /// owner through a foreign key, so a stated identifier would name a row that does not exist. It is read once, after
+    /// the migrations have run and before any test reaches a scope, exactly where a deployment's own startup gate reads
+    /// it.
+    /// </remarks>
+    private static async Task<MailOwnerId> ReadSoleOwnerAsync(IHost host, CancellationToken cancellationToken)
+    {
+        await using var scope = host.Services.CreateAsyncScope();
+
+        var ownerId = await scope.ServiceProvider
+            .GetRequiredService<MailFathomDbContext>()
+            .OwnerAccounts
+            .AsNoTracking()
+            .Select(owner => owner.Id)
+            .SingleAsync(cancellationToken);
+
+        return MailOwnerId.Create(ownerId);
     }
 
     /// <summary>Runs one unit of work in its own dependency-injection scope, the way a worker does.</summary>
@@ -510,7 +563,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
             {
                 scope.GetRequiredService<StatedAuthorizedPrincipalSource>()
                     .Assume(AuthorizedPrincipal.CallerActingFor(
-                        OrchestratedDeploymentOwner.ServedOwner,
+                        scope.GetRequiredService<IDeploymentMailOwnerSource>().Owner,
                         "orchestrated-caller",
                         grantedPermissions));
 

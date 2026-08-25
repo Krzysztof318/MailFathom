@@ -19,6 +19,7 @@
          needs the same answer the synchronizer's tests arrange. -->
     <Compile Include="..\shared\StubMailOwnership.cs" Link="StubMailOwnership.cs" />
     <Compile Include="..\shared\InMemoryOwnerStoredContentLedger.cs" Link="InMemoryOwnerStoredContentLedger.cs" />
+    <Compile Include="..\shared\ContactBookOwnerships.cs" Link="ContactBookOwnerships.cs" />
     <Compile Include="..\shared\StubMailFolderParticipation.cs" Link="StubMailFolderParticipation.cs" />
     <Compile Include="..\shared\StubJunkMailFolderCatalog.cs" Link="StubJunkMailFolderCatalog.cs" />
     <!-- The synchronization harness composes the classification gate, which reports through this. -->

@@ -51,47 +51,68 @@ internal static class AuthoredSendGovernors
         IOutgoingSenderIdentityReader? senderIdentities = null,
         IAuthoredSendAuditor? auditor = null,
         AccessAuthorization? authorization = null,
-        TimeProvider? timeProvider = null) =>
-        new(
+        TimeProvider? timeProvider = null)
+    {
+        // One authorization, because production composes one scoped instance that the vouching's ownership and the
+        // governor both read. Resolving the default twice would let a change to one of them leave the vouching reading
+        // a different owner's book than the send is judged for, and an empty book vouches for nobody — so every suite
+        // arranging a refusing posture would change verdict with nothing able to say why.
+        var caller = authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend);
+
+        return new AuthoredSendGovernor(
             recipientPolicy ?? OutgoingRecipientPolicy.Unrestricted,
             settings ?? AuthoredSendSettings.Permissive,
             new RecipientVouching(
                 contacts ?? new VouchingNobody(),
+                ContactBookOwnerships.For(caller),
                 accounts ?? new OwningNobody(),
                 senderIdentities ?? new SendingAsNobody()),
             ledger ?? new AuthoredSendUsageLedger(
                 AuthoredSendCeilings.Unbounded,
                 timeProvider ?? TimeProvider.System),
             auditor ?? new DiscardingAuditor(),
-            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
+            caller,
             timeProvider ?? TimeProvider.System);
+    }
 
     /// <summary>A contact book holding nobody, which is what an installation that has recorded no correspondent has.</summary>
     private sealed class VouchingNobody : IContactDirectory
     {
-        public Task<Contact?> FindAsync(ContactId contactId, CancellationToken cancellationToken) =>
+        public Task<Contact?> FindAsync(
+            MailOwnerId owner,
+            ContactId contactId,
+            CancellationToken cancellationToken) =>
             Task.FromResult<Contact?>(null);
 
         public Task<IReadOnlyDictionary<ContactId, Contact>> FindAllAsync(
+            MailOwnerId owner,
             IReadOnlyCollection<ContactId> contactIds,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyDictionary<ContactId, Contact>>(new Dictionary<ContactId, Contact>());
 
-        public Task<Contact?> FindByAddressAsync(EmailAddress address, CancellationToken cancellationToken) =>
+        public Task<Contact?> FindByAddressAsync(
+            MailOwnerId owner,
+            EmailAddress address,
+            CancellationToken cancellationToken) =>
             Task.FromResult<Contact?>(null);
 
         public Task<IReadOnlyDictionary<ContactDisplayName, ContactMatch>> MatchDisplayNamesAsync(
+            MailOwnerId owner,
             IReadOnlyCollection<ContactDisplayName> displayNames,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyDictionary<ContactDisplayName, ContactMatch>>(
                 new Dictionary<ContactDisplayName, ContactMatch>());
 
         public Task<IReadOnlyDictionary<EmailAddress, ContactId>> FindHoldersOfAsync(
+            MailOwnerId owner,
             IReadOnlyCollection<EmailAddress> addresses,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyDictionary<EmailAddress, ContactId>>(new Dictionary<EmailAddress, ContactId>());
 
-        public Task<ContactPage> ReadPageAsync(ContactQuery query, CancellationToken cancellationToken) =>
+        public Task<ContactPage> ReadPageAsync(
+            MailOwnerId owner,
+            ContactQuery query,
+            CancellationToken cancellationToken) =>
             Task.FromResult(new ContactPage([], null));
     }
 

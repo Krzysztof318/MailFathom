@@ -71,6 +71,15 @@ lives on the account row, and it is the only way to reach that fact without a ca
 decision and grants nothing — a worker was already admitted by name — and it is deliberately not a way for a caller to
 act for somebody else, because nothing published to a caller consults it.
 
+**Not everything owned is caller-scoped, and the difference is a second reading rather than a second rule.** The contact
+book belongs to an owner exactly as mail does, and it is reached by the administrator and by MailFathom's own
+synchronization as well as by a caller — so requiring an owner there would refuse the two principals that legitimately
+maintain it. `ActingOwner` is the reading those paths take: it answers with the owner the principal acts for, or with
+nothing when the principal acts for none, and one resolution then falls back to the owner this deployment serves. It
+refuses work reached under no principal exactly as `RequireOwner` does, because that is the case where nothing said what
+admitted the work at all. `ContactBookOwnership` is the only reader, and [Contacts § A book belongs to one
+owner](../features/contacts.md#a-book-belongs-to-one-owner) is where what it decides is described.
+
 The signed capability is what `GET /attachments/{capability}` runs under. That route authenticates nobody by design: the
 URL carries a ticket verified against the deployment's key ring, and what it names is one attachment of one email rather
 than a surface. So the capability *is* the authorization, already bounded to a single object and a lifetime, and the use

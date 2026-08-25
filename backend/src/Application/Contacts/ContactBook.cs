@@ -21,10 +21,16 @@ namespace MailFathom.Application.Contacts;
 /// collection can perform on its own behalf.
 /// </para>
 /// <para>
+/// A book belongs to one owner, and every act resolves whose through <see cref="ContactBookOwnership" /> before it
+/// reaches the store or the directory. So an identity, an address, or a name from another owner's book is answered as
+/// one this book does not hold, and two people who correspond with the same person each keep their own record of them.
+/// The origin rule above runs within a book rather than across the deployment, for the same reason.
+/// </para>
+/// <para>
 /// Each write is idempotent from a fresh read and is committed through the optimistic concurrency policy, so two callers
 /// claiming one address converge on the same answer instead of one of them meeting a provider failure: the loser's
-/// insert violates the unique constraint over addresses, the retry re-reads, and the second caller is told which contact
-/// holds it.
+/// insert violates the unique constraint over the owner and the address, the retry re-reads, and the second caller is
+/// told which contact of their own book holds it.
 /// </para>
 /// <para>
 /// Nothing here logs. A name, an address, and a note are personal data about a third party, and the outcomes this type
@@ -59,6 +65,7 @@ public sealed class ContactBook
 {
     private readonly IContactStore store;
     private readonly IContactDirectory directory;
+    private readonly ContactBookOwnership ownership;
     private readonly OptimisticConcurrencyRetryPolicy commitPolicy;
     private readonly TimeProvider timeProvider;
     private readonly AccessAuthorization authorization;
@@ -66,6 +73,7 @@ public sealed class ContactBook
     /// <summary>Initializes the book over the store it writes to and the directory it reads from.</summary>
     /// <param name="store">Keeps the records.</param>
     /// <param name="directory">Answers what the book already holds.</param>
+    /// <param name="ownership">Answers whose book each act reads and writes.</param>
     /// <param name="commitPolicy">Commits each write, retrying a lost race from a fresh read.</param>
     /// <param name="timeProvider">Stamps when a contact was recorded, amended, promoted, or exported.</param>
     /// <param name="authorization">Answers which principal reached each act.</param>
@@ -73,18 +81,21 @@ public sealed class ContactBook
     public ContactBook(
         IContactStore store,
         IContactDirectory directory,
+        ContactBookOwnership ownership,
         OptimisticConcurrencyRetryPolicy commitPolicy,
         TimeProvider timeProvider,
         AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(directory);
+        ArgumentNullException.ThrowIfNull(ownership);
         ArgumentNullException.ThrowIfNull(commitPolicy);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(authorization);
 
         this.store = store;
         this.directory = directory;
+        this.ownership = ownership;
         this.commitPolicy = commitPolicy;
         this.timeProvider = timeProvider;
         this.authorization = authorization;
@@ -103,7 +114,7 @@ public sealed class ContactBook
 
         this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
 
-        return this.directory.ReadPageAsync(query, cancellationToken);
+        return this.directory.ReadPageAsync(this.ownership.Owner, query, cancellationToken);
     }
 
     /// <summary>Reads one contact by the identity the book gave it.</summary>
@@ -115,7 +126,7 @@ public sealed class ContactBook
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
 
-        return this.directory.FindAsync(contactId, cancellationToken);
+        return this.directory.FindAsync(this.ownership.Owner, contactId, cancellationToken);
     }
 
     /// <summary>Reads the person who uses one address.</summary>
@@ -128,7 +139,7 @@ public sealed class ContactBook
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
 
-        return this.directory.FindByAddressAsync(address, cancellationToken);
+        return this.directory.FindByAddressAsync(this.ownership.Owner, address, cancellationToken);
     }
 
     /// <summary>Answers whether the book already holds one address, without answering whose it is.</summary>
@@ -146,7 +157,7 @@ public sealed class ContactBook
     {
         this.authorization.RequireProcessIdentity();
 
-        return await this.directory.FindByAddressAsync(address, cancellationToken) is not null;
+        return await this.directory.FindByAddressAsync(this.ownership.Owner, address, cancellationToken) is not null;
     }
 
     /// <summary>Records a person collection inferred from arriving mail.</summary>
@@ -225,10 +236,12 @@ public sealed class ContactBook
             MailFathomPermission.AdminOperate,
             MailFathomPermission.MailContactsWrite);
 
+        var owner = this.ownership.Owner;
+
         return this.commitPolicy.CommitAsync(
             async (session, token) =>
             {
-                var held = await this.directory.FindAsync(amendment.ContactId, token);
+                var held = await this.directory.FindAsync(owner, amendment.ContactId, token);
 
                 if (held is null)
                 {
@@ -247,12 +260,12 @@ public sealed class ContactBook
                     amendment.Note,
                     this.timeProvider.GetUtcNow());
 
-                if (await this.AddressHolderOtherThanAsync(amended, token) is { } holder)
+                if (await this.AddressHolderOtherThanAsync(owner, amended, token) is { } holder)
                 {
                     return ContactWriteResult.AddressHeldBy(holder);
                 }
 
-                return await this.store.ReplaceAsync(session, amended, token)
+                return await this.store.ReplaceAsync(session, owner, amended, token)
                     ? ContactWriteResult.Written(amended)
                     : ContactWriteResult.NotFound();
             },
@@ -292,10 +305,12 @@ public sealed class ContactBook
             MailFathomPermission.AdminOperate,
             MailFathomPermission.MailContactsWrite);
 
+        var owner = this.ownership.Owner;
+
         return this.commitPolicy.CommitAsync(
             async (session, token) =>
             {
-                var held = await this.directory.FindAsync(contactId, token);
+                var held = await this.directory.FindAsync(owner, contactId, token);
 
                 if (held is null)
                 {
@@ -314,7 +329,7 @@ public sealed class ContactBook
 
                 var promoted = held.PromotedToAsserted(this.timeProvider.GetUtcNow());
 
-                return await this.store.ReplaceAsync(session, promoted, token)
+                return await this.store.ReplaceAsync(session, owner, promoted, token)
                     ? ContactWriteResult.Written(promoted)
                     : ContactWriteResult.NotFound();
             },
@@ -340,8 +355,10 @@ public sealed class ContactBook
             MailFathomPermission.AdminErase,
             MailFathomPermission.MailContactsWrite);
 
+        var owner = this.ownership.Owner;
+
         return this.commitPolicy.CommitAsync(
-            (session, token) => this.store.EraseAsync(session, contactId, token),
+            (session, token) => this.store.EraseAsync(session, owner, contactId, token),
             cancellationToken);
     }
 
@@ -365,8 +382,10 @@ public sealed class ContactBook
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminErase);
 
+        var owner = this.ownership.Owner;
+
         return this.commitPolicy.CommitAsync(
-            (session, token) => this.store.EraseCollectedAsync(session, token),
+            (session, token) => this.store.EraseCollectedAsync(session, owner, token),
             cancellationToken);
     }
 
@@ -380,7 +399,7 @@ public sealed class ContactBook
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminAuditRead);
 
-        var held = await this.directory.FindAsync(contactId, cancellationToken);
+        var held = await this.directory.FindAsync(this.ownership.Owner, contactId, cancellationToken);
 
         return held is null ? null : new ContactExport(held, this.timeProvider.GetUtcNow());
     }
@@ -394,6 +413,7 @@ public sealed class ContactBook
     /// </remarks>
     private Task<ContactWriteResult> WriteNewContactAsync(NewContact newContact, CancellationToken cancellationToken)
     {
+        var owner = this.ownership.Owner;
         var recordedAt = this.timeProvider.GetUtcNow();
         var contact = Contact.Create(
             ContactId.Create(Guid.CreateVersion7(recordedAt)),
@@ -408,12 +428,12 @@ public sealed class ContactBook
         return this.commitPolicy.CommitAsync(
             async (session, token) =>
             {
-                if (await this.AddressHolderOtherThanAsync(contact, token) is { } holder)
+                if (await this.AddressHolderOtherThanAsync(owner, contact, token) is { } holder)
                 {
                     return ContactWriteResult.AddressHeldBy(holder);
                 }
 
-                await this.store.AddAsync(session, contact, token);
+                await this.store.AddAsync(session, owner, contact, token);
 
                 return ContactWriteResult.Written(contact);
             },
@@ -428,9 +448,12 @@ public sealed class ContactBook
     /// the time the insert runs — which is what the unique constraint underneath is for, and why losing that race is
     /// retried rather than reported.
     /// </remarks>
-    private async Task<ContactId?> AddressHolderOtherThanAsync(Contact contact, CancellationToken cancellationToken)
+    private async Task<ContactId?> AddressHolderOtherThanAsync(
+        MailOwnerId owner,
+        Contact contact,
+        CancellationToken cancellationToken)
     {
-        var holders = await this.directory.FindHoldersOfAsync(contact.Addresses, cancellationToken);
+        var holders = await this.directory.FindHoldersOfAsync(owner, contact.Addresses, cancellationToken);
         var otherHolders = holders.Values.Where(holder => holder != contact.Id).ToArray();
 
         return otherHolders.Length == 0 ? null : otherHolders[0];

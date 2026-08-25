@@ -445,7 +445,7 @@ public sealed class SendEmailToolTests
 
         return new SendEmailTool(new AuthoredMailSubmission(
             new StubMailAccountCatalog(Account),
-            new NamedRecipientResolver(Substitute.For<IContactDirectory>()),
+            new NamedRecipientResolver(Substitute.For<IContactDirectory>(), ContactBookOwnerships.For(granted)),
             composer,
             new MailOutbox(
                 store ?? new InMemoryOutgoingEmailStore(timeProvider: new FakeTimeProvider(Recorded)),

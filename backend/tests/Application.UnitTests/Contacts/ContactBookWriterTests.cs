@@ -10,6 +10,7 @@ using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -81,7 +82,7 @@ public sealed class ContactBookWriterTests
 
         // Assert
         Assert.Equal(MailFathomPermission.MailContactsWrite, refusal.RequiredPermission);
-        var untouched = await book.FindAsync(held.Id, TestContext.Current.CancellationToken);
+        var untouched = await book.FindAsync(SyntheticMailOwner.Deployment, held.Id, TestContext.Current.CancellationToken);
         Assert.Equal("Anna Kowalska", untouched?.DisplayName.Value);
     }
 
@@ -339,6 +340,7 @@ public sealed class ContactBookWriterTests
             new ContactBook(
                 book,
                 book,
+                ContactBookOwnerships.ForTheServedOwner(),
                 new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), timeProvider),
                 timeProvider,
                 new AccessAuthorization(principals)),

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -10,20 +11,29 @@ namespace MailFathom.Infrastructure.Persistence.Contacts;
 
 /// <summary>Turns one contact into the rows that keep it, and back.</summary>
 /// <remarks>
+/// <para>
 /// The domain type is what the invariants live in, so this mapping never repairs a row it disagrees with: rebuilding a
 /// contact goes through <see cref="Contact.Create" /> exactly as a write does, and a stored shape the domain refuses
 /// fails here rather than becoming a record no writer could have produced.
+/// </para>
+/// <para>
+/// Whose book a contact is written into travels beside the contact rather than on it. A contact is the person and what
+/// the owner recorded about them, and which book that record sits in is the store's question — resolved once per act
+/// and handed down — so the domain type stays free of a column that names a caller's own scope.
+/// </para>
 /// </remarks>
 internal static class ContactMapping
 {
     /// <summary>Builds the rows one contact is kept as.</summary>
+    /// <param name="owner">The owner whose book the contact is written into.</param>
     /// <param name="contact">The contact to keep.</param>
     /// <returns>The row to insert, with its address rows already attached.</returns>
-    internal static ContactEntity ToEntity(Contact contact)
+    internal static ContactEntity ToEntity(MailOwnerId owner, Contact contact)
     {
         var entity = new ContactEntity
         {
             Id = contact.Id.Value,
+            OwnerId = owner.Value,
             DisplayName = contact.DisplayName.Value,
             DisplayNameSortKey = contact.DisplayName.SortKey,
             PreferredNormalizedAddress = contact.PreferredAddress.NormalizedAddress,
@@ -35,17 +45,18 @@ internal static class ContactMapping
 
         foreach (var address in contact.Addresses)
         {
-            entity.Addresses.Add(ToAddressEntity(contact, address));
+            entity.Addresses.Add(ToAddressEntity(owner, contact, address));
         }
 
         return entity;
     }
 
     /// <summary>Builds the row one of a contact's addresses is kept as.</summary>
+    /// <param name="owner">The owner whose book the contact is in, which the row repeats because the uniqueness rule spans this table alone.</param>
     /// <param name="contact">The contact the address belongs to.</param>
     /// <param name="address">The address to keep.</param>
     /// <returns>The address row.</returns>
-    internal static ContactAddressEntity ToAddressEntity(Contact contact, EmailAddress address) =>
+    internal static ContactAddressEntity ToAddressEntity(MailOwnerId owner, Contact contact, EmailAddress address) =>
         new()
         {
             // Version 7 over the instant this record was written rather than a random value, so address rows are
@@ -55,6 +66,7 @@ internal static class ContactMapping
             // Nothing reads the ordering between them.
             Id = Guid.CreateVersion7(contact.AmendedAt),
             ContactId = contact.Id.Value,
+            OwnerId = owner.Value,
             Address = address.Address,
             NormalizedAddress = address.NormalizedAddress,
         };

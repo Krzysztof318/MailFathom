@@ -4,10 +4,12 @@
 
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.Host.Api;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Time.Testing;
@@ -74,6 +76,7 @@ public sealed class ContactEndpointsTests
 
         await this.store.Received(1).AddAsync(
             Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailOwnerId>(),
             Arg.Is<Contact>(contact => contact != null && contact.Origin == ContactOrigin.Asserted),
             Arg.Any<CancellationToken>());
     }
@@ -98,6 +101,7 @@ public sealed class ContactEndpointsTests
 
         await this.store.DidNotReceive().ReplaceAsync(
             Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailOwnerId>(),
             Arg.Any<Contact>(),
             Arg.Any<CancellationToken>());
     }
@@ -263,7 +267,7 @@ public sealed class ContactEndpointsTests
     public async Task FindAsync_AContactTheBookDoesNotHold_AnswersWithNoContactRatherThanNotFound()
     {
         // Arrange
-        this.directory.FindAsync(Arg.Any<ContactId>(), Arg.Any<CancellationToken>()).Returns((Contact?)null);
+        this.directory.FindAsync(Arg.Any<MailOwnerId>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>()).Returns((Contact?)null);
 
         // Act
         var result = await ContactEndpoints.FindAsync(
@@ -290,7 +294,7 @@ public sealed class ContactEndpointsTests
         var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
         Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
 
-        await this.directory.DidNotReceive().FindAsync(Arg.Any<ContactId>(), Arg.Any<CancellationToken>());
+        await this.directory.DidNotReceive().FindAsync(Arg.Any<MailOwnerId>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>An address that is not one is refused without being written into the answer.</summary>
@@ -326,7 +330,7 @@ public sealed class ContactEndpointsTests
         // Arrange
         var held = Asserted("Anna Kowalska", "anna@example.test");
         var cursor = ContactCursor.After(held.DisplayName, held.Id);
-        this.directory.ReadPageAsync(Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>())
+        this.directory.ReadPageAsync(Arg.Any<MailOwnerId>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>())
             .Returns(new ContactPage([held], cursor));
 
         // Act
@@ -348,7 +352,7 @@ public sealed class ContactEndpointsTests
     public async Task ListAsync_AnOriginNamedInAnyCasing_NarrowsTheQueryToIt()
     {
         // Arrange
-        this.directory.ReadPageAsync(Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>())
+        this.directory.ReadPageAsync(Arg.Any<MailOwnerId>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>())
             .Returns(new ContactPage([], NextCursor: null));
 
         // Act
@@ -361,6 +365,7 @@ public sealed class ContactEndpointsTests
 
         // Assert
         await this.directory.Received(1).ReadPageAsync(
+            Arg.Any<MailOwnerId>(),
             Arg.Is<ContactQuery>(query => query != null && query.Origin == ContactOrigin.Collected),
             Arg.Any<CancellationToken>());
     }
@@ -390,7 +395,7 @@ public sealed class ContactEndpointsTests
         Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
         Assert.Contains(expectedFragment, refusal.ProblemDetails.Detail, StringComparison.Ordinal);
 
-        await this.directory.DidNotReceive().ReadPageAsync(Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>());
+        await this.directory.DidNotReceive().ReadPageAsync(Arg.Any<MailOwnerId>(), Arg.Any<ContactQuery>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>An erasure says what it removed, and says nothing about who it was.</summary>
@@ -398,7 +403,7 @@ public sealed class ContactEndpointsTests
     public async Task EraseAsync_AContactTheBookHolds_AnswersWithTheCountsAndNothingAboutThePerson()
     {
         // Arrange
-        this.store.EraseAsync(Arg.Any<IPersistenceSession>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>())
+        this.store.EraseAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailOwnerId>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>())
             .Returns(new ContactErasure(ContactId.Create(Identity), WasHeld: true, AddressesErased: 3));
 
         // Act
@@ -420,7 +425,7 @@ public sealed class ContactEndpointsTests
     public async Task EraseCollectedAsync_ABookHoldingCollectedRecords_AnswersWithWhatItRemoved()
     {
         // Arrange
-        this.store.EraseCollectedAsync(Arg.Any<IPersistenceSession>(), Arg.Any<CancellationToken>())
+        this.store.EraseCollectedAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
             .Returns(new CollectedContactErasure(ContactsErased: 12, AddressesErased: 17));
 
         // Act
@@ -436,7 +441,7 @@ public sealed class ContactEndpointsTests
     public async Task EraseCollectedAsync_ABookThatCollectedNobody_AnswersThatNothingWasRemoved()
     {
         // Arrange
-        this.store.EraseCollectedAsync(Arg.Any<IPersistenceSession>(), Arg.Any<CancellationToken>())
+        this.store.EraseCollectedAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
             .Returns(new CollectedContactErasure(ContactsErased: 0, AddressesErased: 0));
 
         // Act
@@ -452,7 +457,7 @@ public sealed class ContactEndpointsTests
     public async Task ExportAsync_AContactTheBookDoesNotHold_AnswersWithNeitherRecordNorInstant()
     {
         // Arrange
-        this.directory.FindAsync(Arg.Any<ContactId>(), Arg.Any<CancellationToken>()).Returns((Contact?)null);
+        this.directory.FindAsync(Arg.Any<MailOwnerId>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>()).Returns((Contact?)null);
 
         // Act
         var result = await ContactEndpoints.ExportAsync(
@@ -526,20 +531,21 @@ public sealed class ContactEndpointsTests
 
         await this.store.DidNotReceive().AddAsync(
             Arg.Any<IPersistenceSession>(),
+            Arg.Any<MailOwnerId>(),
             Arg.Any<Contact>(),
             Arg.Any<CancellationToken>());
     }
 
     private void Holds(Contact contact)
     {
-        this.directory.FindAsync(Arg.Any<ContactId>(), Arg.Any<CancellationToken>()).Returns(contact);
+        this.directory.FindAsync(Arg.Any<MailOwnerId>(), Arg.Any<ContactId>(), Arg.Any<CancellationToken>()).Returns(contact);
         this.HoldsNoAddresses();
     }
 
     /// <summary>States that no other contact claims the addresses a write is about, which is the ordinary case.</summary>
     private void HoldsNoAddresses() =>
         this.directory
-            .FindHoldersOfAsync(Arg.Any<IReadOnlyCollection<EmailAddress>>(), Arg.Any<CancellationToken>())
+            .FindHoldersOfAsync(Arg.Any<MailOwnerId>(), Arg.Any<IReadOnlyCollection<EmailAddress>>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<EmailAddress, ContactId>());
 
     /// <summary>Builds the book the handlers write through, over substituted ports and a session that commits.</summary>
@@ -551,6 +557,7 @@ public sealed class ContactEndpointsTests
         return new ContactBook(
             this.store,
             this.directory,
+            ContactBookOwnerships.For(AdministrativeGrant.WholeSurface),
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), this.clock),
             this.clock,
             AdministrativeGrant.WholeSurface);

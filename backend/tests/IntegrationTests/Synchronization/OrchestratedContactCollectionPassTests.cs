@@ -244,7 +244,10 @@ public sealed class OrchestratedContactCollectionPassTests(MailFathomOrchestrati
                     throw new InvalidOperationException($"The test address '{address}' names no mailbox.");
                 }
 
-                return scope.GetRequiredService<IContactDirectory>().FindByAddressAsync(emailAddress, token);
+                return scope.GetRequiredService<IContactDirectory>().FindByAddressAsync(
+                    services.ServedOwner,
+                    emailAddress,
+                    token);
             },
             cancellationToken);
 }

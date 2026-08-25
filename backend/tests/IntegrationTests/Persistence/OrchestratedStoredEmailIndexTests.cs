@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
@@ -459,11 +458,11 @@ public sealed class OrchestratedStoredEmailIndexTests(MailFathomOrchestrationFix
         OrchestratedMailFathomServices services,
         string sql,
         IReadOnlyList<NpgsqlParameter> parameters,
-        CancellationToken cancellationToken) => WithConnectionAsync(
+        CancellationToken cancellationToken) => OrchestratedQueryPlans.WithConnectionAsync(
             services,
             async (connection, token) =>
             {
-                await using var command = CreateCommand(connection, sql, parameters);
+                await using var command = OrchestratedQueryPlans.CreateCommand(connection, sql, parameters);
 
                 var positions = new List<EmailTimelinePosition>();
 
@@ -487,7 +486,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailFathomOrchestrationFix
         string sql,
         IReadOnlyList<NpgsqlParameter> parameters,
         CancellationToken cancellationToken) =>
-        ReadQueryPlanAsync(services, sql, parameters, plannerSettings: [], cancellationToken);
+        OrchestratedQueryPlans.ReadAsync(services, sql, parameters, cancellationToken);
 
     /// <summary>Reads the plan PostgreSQL chooses once a sequential scan is not available to it.</summary>
     /// <remarks>
@@ -501,102 +500,11 @@ public sealed class OrchestratedStoredEmailIndexTests(MailFathomOrchestrationFix
         OrchestratedMailFathomServices services,
         string sql,
         IReadOnlyList<NpgsqlParameter> parameters,
-        CancellationToken cancellationToken) => ReadQueryPlanAsync(
+        CancellationToken cancellationToken) => OrchestratedQueryPlans.ReadAsync(
             services,
             sql,
             parameters,
             ["SET LOCAL enable_seqscan = off"],
-            cancellationToken);
-
-    /// <summary>Reads a query plan as the text a failure can be read from, under the given planner settings.</summary>
-    /// <remarks>
-    /// The plan is taken over the same parameterized command the read uses, so what it describes is the query under test
-    /// rather than a rewritten copy of it with its values inlined. The settings are applied with <c>SET LOCAL</c> inside a
-    /// transaction that is rolled back, so a pooled connection is handed back with the planner it arrived with.
-    /// </remarks>
-    private static Task<string> ReadQueryPlanAsync(
-        OrchestratedMailFathomServices services,
-        string sql,
-        IReadOnlyList<NpgsqlParameter> parameters,
-        IReadOnlyList<string> plannerSettings,
-        CancellationToken cancellationToken) => WithConnectionAsync(
-            services,
-            async (connection, token) =>
-            {
-                await using var transaction = await connection.BeginTransactionAsync(token);
-
-                foreach (var plannerSetting in plannerSettings)
-                {
-                    await using var settingCommand = CreateCommand(connection, plannerSetting, []);
-                    settingCommand.Transaction = transaction;
-
-                    await settingCommand.ExecuteNonQueryAsync(token);
-                }
-
-                await using var command = CreateCommand(connection, $"EXPLAIN {sql}", parameters);
-                command.Transaction = transaction;
-
-                var planLines = new List<string>();
-
-                await using (var reader = await command.ExecuteReaderAsync(token))
-                {
-                    while (await reader.ReadAsync(token))
-                    {
-                        planLines.Add(reader.GetString(0));
-                    }
-                }
-
-                await transaction.RollbackAsync(token);
-
-                return string.Join(Environment.NewLine, planLines);
-            },
-            cancellationToken);
-
-    [SuppressMessage(
-        "Security",
-        "CA2100:Review SQL queries for security vulnerabilities",
-        Justification = "Every command text is a compile-time constant of this class; the query term and the folder reach the command as parameters.")]
-    private static NpgsqlCommand CreateCommand(
-        NpgsqlConnection connection,
-        string sql,
-        IReadOnlyList<NpgsqlParameter> parameters)
-    {
-        var command = connection.CreateCommand();
-        command.CommandText = sql;
-
-        foreach (var parameter in parameters)
-        {
-            command.Parameters.Add(parameter);
-        }
-
-        return command;
-    }
-
-    /// <summary>Runs work on the connection the scoped context owns.</summary>
-    /// <remarks>
-    /// The commands are issued through ADO rather than through EF, because every query here is about SQL the provider does
-    /// not write: an ordering EF cannot express, a planner setting, and a plan EF has no API for. The connection still
-    /// comes from the context, so the credential the data source supplies per connection is the one a deployment uses.
-    /// </remarks>
-    private static Task<TResult> WithConnectionAsync<TResult>(
-        OrchestratedMailFathomServices services,
-        Func<NpgsqlConnection, CancellationToken, Task<TResult>> work,
-        CancellationToken cancellationToken) => services.InScopeAsync(
-            async (scope, token) =>
-            {
-                var database = scope.GetRequiredService<MailFathomDbContext>().Database;
-
-                await database.OpenConnectionAsync(token);
-
-                try
-                {
-                    return await work((NpgsqlConnection)database.GetDbConnection(), token);
-                }
-                finally
-                {
-                    await database.CloseConnectionAsync();
-                }
-            },
             cancellationToken);
 
     /// <summary>One seeded email, as the two metadata sources a synchronization run would have produced.</summary>

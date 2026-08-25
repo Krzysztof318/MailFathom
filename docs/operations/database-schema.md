@@ -239,11 +239,13 @@ carrying *more* migrations than a build defines has no pending migration for tha
 version keeps serving. What it does not do is use the new columns, which is why the window is a rollout rather than a
 resting state.
 
-**One migration narrows that window rather than closing it.** `AddOwnerAccounts` makes the owner of a mail account a
+**Two migrations narrow that window rather than closing it.** `AddOwnerAccounts` makes the owner of a mail account a
 required column, and a build older than the release carrying it does not know the column exists — so against this
 schema such a build serves the mail already stored and still fails the moment it has to bind a folder for an account it
-has never synchronized, because the row it writes states no owner. Keep the middle of the rollout short on this
-release, and do not treat a previous image as something that can be left running against it.
+has never synchronized, because the row it writes states no owner. `AddContactOwner` does the same for the contact
+book: an older build reads and amends the contacts already stored and fails the moment it records a new person or adds
+an address, because the row it writes states no owner either. Keep the middle of the rollout short on these releases,
+and do not treat a previous image as something that can be left running against them.
 
 ## When the host refuses to start
 
@@ -280,6 +282,12 @@ That leaves two answers, and which one applies is decided before the upgrade rat
   `AddOwnerAccounts`**: a build older than that release cannot bind a folder for an account this deployment has never
   synchronized against a schema whose mail accounts require an owner, so rolling the image back leaves a deployment
   that serves the mail it holds and takes on no new mailbox. Restoring from the backup is the way back there.
+
+  **Nor for the release that carries `AddContactOwner`**, for the same reason one table over: a build older than that
+  release reads and amends the contacts already stored and fails the moment it records a new person or adds an address,
+  because the row it writes states no owner. Rolling the image back leaves a deployment whose contact book can be read
+  and not written — including by the collection pass, which writes a contact per correspondent it recognizes — so
+  restoring from the backup is the way back there too.
 
   **`AddContentStorageBackendAndObjectLocator` narrows it conditionally**, and which way depends on what the deployment
   did rather than on the migration. A build older than that release reads a payload column it expects to be filled, and

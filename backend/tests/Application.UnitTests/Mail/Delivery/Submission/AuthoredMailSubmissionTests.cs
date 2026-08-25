@@ -626,9 +626,11 @@ public sealed class AuthoredMailSubmissionTests
         composer = ComposingAuthoredEmails.ThatComposes(ComposedMime);
         signal = new MailOutboxSignal(capacity: 8);
 
-        var accountCatalog = OwnedMailAccountCatalogs.For(
-            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
-            SyntheticServedAccount.Of(Account));
+        // One authorization, for the reason AuthoredSendGovernors.Governing states: the mailboxes the send leaves from,
+        // the book the recipients are resolved out of, and the caller the send is judged for are one scoped instance in
+        // production.
+        var granted = authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend);
+        var accountCatalog = OwnedMailAccountCatalogs.For(granted, SyntheticServedAccount.Of(Account));
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ =>
@@ -641,7 +643,9 @@ public sealed class AuthoredMailSubmissionTests
 
         return new AuthoredMailSubmission(
             accountCatalog,
-            new NamedRecipientResolver(book ?? new InMemoryContactBookStore()),
+            new NamedRecipientResolver(
+                book ?? new InMemoryContactBookStore(),
+                ContactBookOwnerships.For(granted)),
             composer,
             new MailOutbox(
                 store,
@@ -653,12 +657,12 @@ public sealed class AuthoredMailSubmissionTests
                 signal,
                 Substitute.For<IJobStore>(),
                 Substitute.For<IOutboxOperationStore>(),
-                authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
+                granted,
                 OutgoingMailGovernors.Permitting(),
                 OutgoingMailScreenings.Inactive(),
                 new FakeTimeProvider(Recorded)),
-            governor ?? AuthoredSendGovernors.Permitting(authorization),
-            authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend),
+            governor ?? AuthoredSendGovernors.Permitting(granted),
+            granted,
             new FakeTimeProvider(Recorded));
     }
 

@@ -10,7 +10,7 @@ using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Contacts;
 
-/// <summary>Reads the contact book for a caller that was granted reading it.</summary>
+/// <summary>Reads the caller's own contact book, for a caller that was granted reading it.</summary>
 /// <remarks>
 /// <para>
 /// The book itself is <see cref="ContactBook" /> and the rows are <see cref="IContactDirectory" />'s; what this use case
@@ -18,6 +18,11 @@ namespace MailFathom.Application.Contacts;
 /// <see cref="MailFathomPermission.MailContactsRead" />, and that every bound on a page is applied before the store is
 /// reached. The permission is asked for here rather than only at the transport, so an entrypoint added later cannot
 /// reach the book by arriving another way.
+/// </para>
+/// <para>
+/// Which book is read is <see cref="ContactBookOwnership" />'s answer rather than an argument of the request, so a
+/// caller reads the book of the owner they were admitted to act for and no request of theirs can name another. A
+/// contact of somebody else's book is answered as one this book does not hold.
 /// </para>
 /// <para>
 /// There is no unbounded read. A caller naming no page size is served the book's default rather than everything, and one
@@ -32,18 +37,25 @@ namespace MailFathom.Application.Contacts;
 public sealed class ContactBookReader
 {
     private readonly IContactDirectory directory;
+    private readonly ContactBookOwnership ownership;
     private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the use case over the directory it reads and the authorization it asks first.</summary>
     /// <param name="directory">Answers what the book holds.</param>
+    /// <param name="ownership">Answers whose book this caller reads.</param>
     /// <param name="authorization">Answers which principal reached this use case.</param>
     /// <exception cref="ArgumentNullException">Thrown when a required collaborator is <see langword="null" />.</exception>
-    public ContactBookReader(IContactDirectory directory, AccessAuthorization authorization)
+    public ContactBookReader(
+        IContactDirectory directory,
+        ContactBookOwnership ownership,
+        AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(directory);
+        ArgumentNullException.ThrowIfNull(ownership);
         ArgumentNullException.ThrowIfNull(authorization);
 
         this.directory = directory;
+        this.ownership = ownership;
         this.authorization = authorization;
     }
 
@@ -61,7 +73,7 @@ public sealed class ContactBookReader
 
         this.authorization.RequirePermission(MailFathomPermission.MailContactsRead);
 
-        return this.directory.ReadPageAsync(QueryFrom(request), cancellationToken);
+        return this.directory.ReadPageAsync(this.ownership.Owner, QueryFrom(request), cancellationToken);
     }
 
     /// <summary>Reads one contact by the identity the book gave it.</summary>
@@ -73,7 +85,7 @@ public sealed class ContactBookReader
     {
         this.authorization.RequirePermission(MailFathomPermission.MailContactsRead);
 
-        return this.directory.FindAsync(contactId, cancellationToken);
+        return this.directory.FindAsync(this.ownership.Owner, contactId, cancellationToken);
     }
 
     /// <summary>Reads the person who uses one address.</summary>
@@ -83,14 +95,14 @@ public sealed class ContactBookReader
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the reading grant.</exception>
     /// <remarks>
     /// The lookup a caller reaches for once it has an address out of mail, answered from the unique index over the
-    /// address comparison form rather than from a search over the book. At most one contact can answer, which is the
-    /// book's own uniqueness rule rather than a property of this method.
+    /// owner and the address comparison form rather than from a search over the book. At most one contact of that
+    /// owner's book can answer, which is the book's own uniqueness rule rather than a property of this method.
     /// </remarks>
     public Task<Contact?> FindByAddressAsync(EmailAddress address, CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.MailContactsRead);
 
-        return this.directory.FindByAddressAsync(address, cancellationToken);
+        return this.directory.FindByAddressAsync(this.ownership.Owner, address, cancellationToken);
     }
 
     /// <summary>Reads the query a request states, refusing every part of it the book does not serve.</summary>
