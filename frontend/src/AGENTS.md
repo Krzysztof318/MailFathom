@@ -114,11 +114,19 @@ particular continuation has to come back.
 - **Do not answer a discarded context with a dispatcher call.** Marshalling back by hand to undo a
   `ConfigureAwait(false)` costs a queue hop and leaves two statements saying what one omission said; the continuation
   that needs the UI thread is the one that keeps its context.
-- **This is judged by reading rather than by running.** The browser head is single-threaded, so a discarded context
-  costs nothing there and every continuation lands on the one thread there is — a defect introduced this way is
-  invisible in the browser and fails on desktop. Nothing checks it either: `frontend/Directory.Build.props` states why
+- **In `Client.Backend` the answer is not a judgement, so it is checked.** That project targets plain `net10.0`,
+  references no Uno package and no WinUI assembly, and holds only what reaches the service, so no continuation in it
+  can touch a visual tree and every one of them wants its context discarded.
+  `frontend/src/Client.Backend/.editorconfig` turns `CA2007` back on for that directory alone — the repository-root
+  file disables it everywhere else — and `TreatWarningsAsErrors` makes a missing `ConfigureAwait(false)` a build
+  failure there rather than something a reader has to notice.
+- **In `Client` it is judged by reading rather than by running.** The browser head is single-threaded, so a discarded
+  context costs nothing there and every continuation lands on the one thread there is — a defect introduced this way
+  is invisible in the browser and fails on desktop. Nothing checks that project and nothing is meant to, because the
+  rule an analyzer could apply is the wrong one: `frontend/Directory.Build.props` states why
   `Microsoft.VisualStudio.Threading.Analyzers` is absent from this stack, and the rule it would apply — `VSTHRD111`,
-  which asks for `ConfigureAwait` on every await — is the blanket habit this section refuses in both directions.
+  which asks for `ConfigureAwait` on every await — is the blanket habit this section refuses in both directions, which
+  is the same reason `CA2007` stays off in the project that draws.
 
 ## Project and build layout
 

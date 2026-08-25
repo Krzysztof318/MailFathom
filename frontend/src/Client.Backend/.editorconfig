@@ -1,0 +1,12 @@
+# CA2007 is off for the whole repository, because it is a blanket rule and both stacks refuse blanket habits: the
+# service installs no synchronization context, so writing ConfigureAwait(false) there says nothing, and the client
+# application draws on a UI thread, so writing it everywhere would break the continuations that have to come back.
+# This project is neither. It is plain net10.0, references no Uno package and no WinUI assembly, and holds only what
+# reaches the service — HTTP, serialization, storage, and the sign-in exchange. No continuation here touches a visual
+# tree, so every one of them wants its context discarded, and what frontend/src/AGENTS.md § "Awaiting, and the context
+# an await captures" states as a judgement for the application is a fact for this assembly. Turning the rule on here
+# is therefore not a style preference: it is the one place the blanket answer is the right one, and it makes the
+# omission a build failure rather than something a reader has to notice.
+
+[*.cs]
+dotnet_diagnostic.CA2007.severity = warning # Do not directly await tasks without ConfigureAwait; enforced in this project.
