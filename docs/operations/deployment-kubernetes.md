@@ -721,6 +721,13 @@ server is writing is a copy of neither state:
 ```bash
 kubectl --namespace mailfathom port-forward service/mailfathom-silo 9000:9000 &
 
+# The scoped key, read back out of the Secret the provisioning step patched rather than from shell variables, which
+# belonged to that session and are gone by the time a backup runs.
+access_key_id="$(kubectl --namespace mailfathom get secret mailfathom-secrets \
+  --output jsonpath='{.data.mailfathom-object-storage-access-key-id}' | base64 --decode)"
+secret_access_key="$(kubectl --namespace mailfathom get secret mailfathom-secrets \
+  --output jsonpath='{.data.mailfathom-object-storage-secret-access-key}' | base64 --decode)"
+
 mc --insecure alias set backup https://127.0.0.1:9000 "$access_key_id" "$secret_access_key"
 mc --insecure mirror --remove backup/mailfathom-content ./mailfathom-content-backup   # out
 mc --insecure mirror ./mailfathom-content-backup backup/mailfathom-content            # back in

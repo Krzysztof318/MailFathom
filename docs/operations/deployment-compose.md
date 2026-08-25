@@ -377,6 +377,11 @@ server is writing is a copy of neither state.
 ```bash
 mkdir -p mailfathom-content-backup
 
+# The scoped key, read back from the two files the provisioning step wrote rather than from shell variables, which
+# belonged to that session and are gone by the time a backup runs.
+access_key_id="$(cat secrets/mailfathom/mailfathom-object-storage-access-key-id)"
+secret_access_key="$(cat secrets/mailfathom/mailfathom-object-storage-secret-access-key)"
+
 # Out. A throwaway container on the same internal network, with the destination bind-mounted, so nothing is staged in
 # the store's own tmpfs and no port is published to reach it.
 docker compose run --rm --no-deps --entrypoint sh \

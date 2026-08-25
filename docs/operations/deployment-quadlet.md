@@ -36,7 +36,7 @@ credential path and the unit-level bounds, and it does it with less to arrange.
 | Rootless or root | Either | Rootless only — `UserNS=keep-id` is not supported for a root container |
 | Building from a checkout | `docker compose up --build` | No. It runs a published release image |
 | Nightly builds | `compose.nightly.yaml` | No overlay; edit `Image=` deliberately |
-| Bringing it up | One command | Five unit files, `systemctl --user` per service; each optional service is two or three more |
+| Bringing it up | One command | Five unit files, `systemctl --user` per service; each optional service is one or two more |
 
 ## What it needs
 
@@ -367,6 +367,13 @@ for both directions, which is why the root credential does not appear here.
 
 ```bash
 mkdir -p mailfathom-content-backup
+
+# The scoped key, decrypted back out of the credential store the provisioning step wrote it to rather than read from
+# shell variables, which belonged to that session and are gone by the time a backup runs.
+access_key_id="$(systemd-creds --user decrypt \
+  ~/.config/credstore.encrypted/mailfathom-object-storage-access-key-id -)"
+secret_access_key="$(systemd-creds --user decrypt \
+  ~/.config/credstore.encrypted/mailfathom-object-storage-secret-access-key -)"
 
 # Out. A throwaway container on the same internal network, with the destination bind-mounted.
 podman run --rm --interactive \
