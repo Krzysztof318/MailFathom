@@ -29,6 +29,10 @@ public sealed class StoredEmailContentTelemetryTests : IDisposable
 
     private const string OutcomeTagName = "mailfathom.mail.content.outcome";
 
+    private const string FallbackInstrument = "mailfathom.mail.content.fallback";
+
+    private const string FallbackReasonTagName = "mailfathom.mail.content.fallback.reason";
+
     private readonly ConcurrentBag<Activity> published = [];
     private readonly ActivityListener listener;
 
@@ -333,6 +337,48 @@ public sealed class StoredEmailContentTelemetryTests : IDisposable
             measurement => Assert.All(
                 measurement.Tags.Keys,
                 dimension => Assert.Equal(OutcomeTagName, dimension)));
+    }
+
+    /// <summary>
+    /// The one figure that says whether a deployment's bucket is being trusted or merely tolerated, which is what an
+    /// operator holds a release back on. The reason is a dimension because the two are different faults with different
+    /// repairs — an object nobody wrote, and an object that is not what the row records.
+    /// </summary>
+    /// <remarks>
+    /// Both reasons are driven from one test rather than from a theory, because the reason is an internal type and a
+    /// public test signature cannot carry one.
+    /// </remarks>
+    [Fact]
+    public void FellBackToRetainedCopy_AReadTheObjectCouldNotAnswer_CountsItUnderWhatTheObjectDid()
+    {
+        // Arrange
+        var telemetry = TelemetryOver(out _);
+        using var measurements = new RecordedMailFathomMeasurements(FallbackInstrument);
+
+        // Act
+        telemetry.FellBackToRetainedCopy(StoredContentFallbackReason.ObjectAbsent);
+        telemetry.FellBackToRetainedCopy(StoredContentFallbackReason.ObjectMismatch);
+
+        // Assert
+        Assert.Equal([1d, 1d], measurements.ValuesOf(FallbackInstrument));
+        Assert.Equal(
+            ["object_absent", "object_mismatch"],
+            measurements.DimensionOf(FallbackInstrument, FallbackReasonTagName));
+    }
+
+    /// <summary>A reason added later and never named here reaches an exporter as a word rather than as an ordinal.</summary>
+    [Fact]
+    public void FellBackToRetainedCopy_AReasonNothingNames_IsPublishedAsUnclassified()
+    {
+        // Arrange
+        var telemetry = TelemetryOver(out _);
+        using var measurements = new RecordedMailFathomMeasurements(FallbackInstrument);
+
+        // Act
+        telemetry.FellBackToRetainedCopy((StoredContentFallbackReason)int.MaxValue);
+
+        // Assert
+        Assert.Equal(["unclassified"], measurements.DimensionOf(FallbackInstrument, FallbackReasonTagName));
     }
 
     private static StoredEmailContentTelemetry TelemetryOver(out FakeTimeProvider timeProvider)

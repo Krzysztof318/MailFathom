@@ -523,17 +523,20 @@ What a reader of the schema sees is one shape per row across all four tables tha
   database-backed insert from having to state anything.
 - **`ObjectLocator`** carries the whole key an object was written under, and is empty for a database-backed row. Nothing
   ever recomputes it — see below.
-- **The payload column** carries the bytes for a database-backed row and is empty for an object-backed one. A payload is
-  never in both places: a second copy would be mail nobody agreed to keep.
+- **The payload column** carries the bytes for a database-backed row, and for an object-backed one it carries the copy
+  the move left beside the object until an operator releases it. That is the one duplication the schema permits, and it
+  is what a read falls back to while a deployment is trusting its bucket for the first time.
+- **`ObjectVerifiedAt`** records when the move read that object back and vouched for it against this row's own length
+  and digest. It is empty for a database-backed row, and it is what the release measures its safety interval from.
 - **The byte length and the SHA-256 digest are on the row either way**, so the integrity check a read performs is the
   same one under both backends. Under the object backend the digest is also what the endpoint was asked to verify the
   upload against, so a row carrying it describes an object the endpoint agreed it received intact rather than one this
   process merely believes it sent.
 
-A check constraint pairs those three, so none of the three ways of getting it wrong can be written at all: a row that
-names the object backend and carries no locator, one that names the database and carries no bytes, and one that names
-the object backend and carries bytes anyway — which would be the second copy of a message that the "never in both
-places" rule above forbids.
+A check constraint pairs them, so the ways of getting it wrong cannot be written at all: a row that names the object
+backend and carries no locator, one that names the database and carries no bytes, one that names the database and
+carries a locator or a verification instant anyway, and one that names the object backend and carries bytes nothing ever
+vouched for — a duplicate that no release could date and therefore none could safely free.
 
 ### The object write happens before the transaction, and every placement mints its own key
 
@@ -613,18 +616,29 @@ rather than by failure, and reclaimed on the same path.
 The setting deciding only where the next write goes leaves an operator with a mailbox in the database and a bucket that
 is empty. Moving it across is a separate, explicit operation: `mfctl content move` records a move, and the deployment
 carries it in bounded background passes that copy each payload, check it against the byte length and SHA-256 digest its
-own row records, read the object back and check it again, and only then point the row at the object and empty its
-payload column. A payload whose copy cannot be vouched for stays database-backed, counted, and reported by reason.
+own row records, read the object back and check it again, and only then point the row at the object and record when it
+vouched for it. A payload whose copy cannot be vouched for stays database-backed, counted, and reported by reason.
 
 It is an operator's act rather than a consequence of the setting, because it rewrites where somebody's mail is held —
 and it is startable, pausable, and resumable, because it runs for as long as the mailbox takes.
 [Moving stored content into the bucket](../operations/moving-stored-content.md) is the whole operation: what one pass
 does, what it costs while it runs, how progress is read, and what each refusal asks of an operator.
 
-Two things it deliberately does not do. It never reads a payload from both stores — a row is repointed only once its
-object has been read back and vouched for, so every read still resolves the backend from the row it is reading — and it
-never moves anything the other way: a deployment that goes back to the database backend goes on reading its
-object-backed rows from the endpoint, which is what the readiness condition below is about.
+**The move copies and never removes.** A row it has carried is read from its object and goes on holding the payload the
+database always held, so a deployment part way through trusting its bucket holds that mail twice. That is deliberate:
+where the object cannot be answered for — absent, or not what the row records — the read is served from the copy the
+database still has, counted as a fallback, and recorded as an object to repair, rather than refused over bytes this
+deployment is holding. It is the one place a read resolves anything beyond the backend its row names.
+
+Ending the duplication is a third act, and the only irreversible one: `mfctl content release` frees those payloads in
+bounded batches, leaving the object the only copy of that mail. It is refused outright while any payload is still
+waiting to be carried, it is published under the erasing grant rather than the operating one, and a released row keeps
+its recorded length and digest so the object stays checkable afterwards. The operations page holds the order of the
+steps and what each one cannot be undone from.
+
+One thing the move deliberately does not do is go the other way. A deployment that selects the database backend again
+writes new mail there and goes on reading its object-backed rows from the endpoint, which is what the readiness
+condition below is about; there is no operation that carries them back.
 
 ### Losing the endpoint is a readiness condition
 

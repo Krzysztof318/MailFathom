@@ -126,13 +126,15 @@ internal static class CliRootCommand
         // Where a deployment's mail content is held, rather than what it says. The group exists because moving a
         // mailbox out of the database is one long-running act an operator drives in four steps — start it, watch it,
         // stop it while the deployment is busy, set it going again — and each of them is a decision of its own rather
-        // than a flag on the others.
+        // than a flag on the others. The fifth is apart from all four: the move copies, and "release" is the separate,
+        // irreversible act that frees the copies the database went on holding.
         Command contentCommand = new("content", "Administer where this deployment holds the mail content it stores.")
         {
             MoveContentCommand.Create(context),
             ContentMoveStatusCommand.Create(context),
             PauseContentMoveCommand.Create(context),
             ResumeContentMoveCommand.Create(context),
+            ReleaseContentCommand.Create(context),
         };
 
         // The one group that writes something a person, rather than a mail server, put there. It is also the only place

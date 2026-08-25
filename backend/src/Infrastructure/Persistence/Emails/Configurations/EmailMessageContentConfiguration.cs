@@ -20,8 +20,9 @@ internal sealed class EmailMessageContentConfiguration : IEntityTypeConfiguratio
             table => table.HasCheckConstraint(
                 "ck_email_message_contents_backend_payload",
                 """
-                ("Backend" = 'Database' AND "RawMime" IS NOT NULL AND "ObjectLocator" IS NULL)
-                OR ("Backend" = 'ObjectStorage' AND "ObjectLocator" IS NOT NULL AND "RawMime" IS NULL)
+                ("Backend" = 'Database' AND "RawMime" IS NOT NULL AND "ObjectLocator" IS NULL AND "ObjectVerifiedAt" IS NULL)
+                OR ("Backend" = 'ObjectStorage' AND "ObjectLocator" IS NOT NULL
+                    AND ("RawMime" IS NULL OR "ObjectVerifiedAt" IS NOT NULL))
                 """));
         entity.HasKey(content => content.StoredEmailId);
         entity.Property(content => content.StoredEmailId).ValueGeneratedNever();

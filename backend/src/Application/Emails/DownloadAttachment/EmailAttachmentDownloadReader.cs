@@ -91,7 +91,8 @@ public sealed class EmailAttachmentDownloadReader
     /// <para>
     /// A damaged or missing local copy records a repair request before the refusal, exactly as reading the message's
     /// content does. The finding is about the stored copy rather than about who asked for it, so discarding it because
-    /// the request happened to arrive through a link would leave a defect discovered and unrecorded.
+    /// the request happened to arrive through a link would leave a defect discovered and unrecorded. A payload the
+    /// database answered for because its object could not be vouched for records one too, and the download proceeds.
     /// </para>
     /// </remarks>
     public async Task<IOpenedEmailAttachment?> OpenAsync(
@@ -122,6 +123,11 @@ public sealed class EmailAttachmentDownloadReader
         {
             return await this.RefuseAndRequestRepairAsync(summary, integrityDefect, cancellationToken);
         }
+
+        await this.repairRequestStore.NoteIfServedFromRetainedCopyAsync(
+            content,
+            summary.StoredEmailId,
+            cancellationToken);
 
         var opened = await this.attachmentContentReader.OpenAsync(
             content,

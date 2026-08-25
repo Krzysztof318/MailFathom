@@ -444,6 +444,7 @@ where your mail is held — and it means switching does nothing for the mailbox 
 | Start carrying it into the bucket | `mfctl content move` |
 | Stop it while the machine is busy | `mfctl content move-pause` |
 | Set it going again | `mfctl content move-resume` |
+| Free the copies once you trust the bucket | `mfctl content release` |
 
 The first one answers before you have configured anything, which is the point: it tells you how much of your database is
 message content, so you know what a bucket would take off it.
@@ -467,8 +468,27 @@ it cannot vouch for is left in the database, counted, and reported — nothing i
 `mfctl content move-status` says how many, and asking for another move once you have fixed the cause picks them up.
 
 **Pausing is safe and immediate.** It finishes the one message it is holding and stops there; resuming continues from
-the same place. [Moving stored content into the bucket](../operations/moving-stored-content.md) is the operator's
-reference — what it costs while it runs, the settings that bound it, and what each refusal is telling you.
+the same place.
+
+**Moving copies; it does not remove.** When a message has been carried, MailFathom reads it from the bucket and your
+database goes on holding it as well — so if the bucket ever fails to answer, the message is still served from the copy
+you have. That safety net is the point, and it means a finished move leaves your database no smaller than it was.
+
+Freeing those copies is a separate command you run when you are satisfied the bucket is answering:
+
+```console
+$ mfctl content release
+Retained:  22,500 payloads carrying 1,048,576 bytes
+Free those copies, leaving the object backend the only place that mail is held? [y/N] y
+Released:  22,500 payloads carrying 1,048,576 bytes
+```
+
+**This one cannot be undone.** What it removes is the last copy of that mail outside the bucket, so nothing does it for
+you — no interval, no finished move, no restart. It also refuses while any message is still waiting to be carried, and
+`mfctl content move-status` tells you when nothing is. If you would rather MailFathom hold the copies for a fixed
+period first, `ContentStorage:Release:SafetyInterval` is where you say how long, and even a release you ask for will not
+touch anything younger than that. [Moving stored content into the bucket](../operations/moving-stored-content.md) is the
+operator's reference — the order of the steps, what each one costs, and what each refusal is telling you.
 
 ## Background work that stopped
 

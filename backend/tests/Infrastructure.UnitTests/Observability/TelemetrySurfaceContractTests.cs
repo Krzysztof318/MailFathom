@@ -131,6 +131,7 @@ public sealed class TelemetrySurfaceContractTests
     private static readonly SensitiveContentEgressTelemetry Egress = new();
     private static readonly ObjectStorageTelemetry ObjectStorage = new(Clock);
     private static readonly StoredContentMoveTelemetry ContentMove = new(Clock);
+    private static readonly RetainedContentReleaseTelemetry ContentRelease = new();
     private static readonly StoredEmailContentTelemetry StoredContent = new(Clock);
     private static readonly StoredMailRederivationTelemetry Rederivation = new(Clock);
 
@@ -162,6 +163,7 @@ public sealed class TelemetrySurfaceContractTests
         typeof(MailSynchronizationTelemetry),
         typeof(ObjectStorageTelemetry),
         typeof(PersistenceCommitTelemetry),
+        typeof(RetainedContentReleaseTelemetry),
         typeof(SensitiveContentDerivationTelemetry),
         typeof(SensitiveContentEgressTelemetry),
         typeof(StoredContentMoveTelemetry),
@@ -287,6 +289,7 @@ public sealed class TelemetrySurfaceContractTests
         DriveContentStore();
         DriveContentObjectReclamation();
         DriveContentMove();
+        ContentRelease.Released(payloadCount: 3, byteCount: 61_057);
         DriveObjectStorage();
         DriveSensitiveContent();
         DriveStoredMailRederivation();
@@ -710,6 +713,11 @@ public sealed class TelemetrySurfaceContractTests
         using (var absent = StoredContent.BeginRead())
         {
             absent.Absent();
+        }
+
+        foreach (var reason in Enum.GetValues<StoredContentFallbackReason>())
+        {
+            StoredContent.FellBackToRetainedCopy(reason);
         }
 
         using var write = StoredContent.BeginWrite();

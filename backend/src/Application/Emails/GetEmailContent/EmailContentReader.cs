@@ -268,6 +268,11 @@ public sealed class EmailContentReader
             return await this.RequestRepairAsync(summary, integrityDefect, cancellationToken);
         }
 
+        await this.repairRequestStore.NoteIfServedFromRetainedCopyAsync(
+            content,
+            summary.StoredEmailId,
+            cancellationToken);
+
         var rendering = await this.renderer.RenderAsync(
             content,
             new EmailContentRenderingBounds(

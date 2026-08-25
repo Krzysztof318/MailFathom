@@ -17,10 +17,10 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 internal sealed class InMemoryStoredContentMoveStore : IStoredContentMoveStore
 {
     private readonly List<StoredRow> rows = [];
-    private readonly List<(EmailContentKind Kind, Guid PayloadId, string ObjectLocator)> repoints = [];
+    private readonly List<Repoint> repoints = [];
 
     /// <summary>Gets every repoint the move asked for, in the order it asked.</summary>
-    internal IReadOnlyList<(EmailContentKind Kind, Guid PayloadId, string ObjectLocator)> Repoints => this.repoints;
+    internal IReadOnlyList<Repoint> Repoints => this.repoints;
 
     /// <summary>Gets or sets whether a repoint finds the row still database-backed.</summary>
     /// <remarks>Off is the race the real predicate loses: a concurrent write replaced the payload while the object was being written.</remarks>
@@ -89,9 +89,10 @@ internal sealed class InMemoryStoredContentMoveStore : IStoredContentMoveStore
         EmailContentKind kind,
         Guid payloadId,
         string objectLocator,
+        DateTimeOffset verifiedAt,
         CancellationToken cancellationToken)
     {
-        this.repoints.Add((kind, payloadId, objectLocator));
+        this.repoints.Add(new Repoint(kind, payloadId, objectLocator, verifiedAt));
 
         if (!this.RepointSucceeds)
         {
@@ -113,6 +114,17 @@ internal sealed class InMemoryStoredContentMoveStore : IStoredContentMoveStore
             remaining.Count,
             remaining.Sum(row => row.RecordedByteLength)));
     }
+
+    /// <summary>One repoint the move asked for, with the verification instant it recorded on the row.</summary>
+    /// <param name="Kind">The payload kind.</param>
+    /// <param name="PayloadId">The identity of the row.</param>
+    /// <param name="ObjectLocator">The key the verified object was written under.</param>
+    /// <param name="VerifiedAt">When the move said it had vouched for that object.</param>
+    internal sealed record Repoint(
+        EmailContentKind Kind,
+        Guid PayloadId,
+        string ObjectLocator,
+        DateTimeOffset VerifiedAt);
 
     /// <summary>One row of one content table, and whether the move has already carried it.</summary>
     private sealed class StoredRow(

@@ -223,7 +223,12 @@ already serving:
   endpoint, and proportional to the object-backed rows rather than to the table on one that did. Uniqueness is what a
   deployment that already wrote such rows is held to at that moment, and a duplicate locator would fail the migration
   rather than be created — no writer this schema has ever carried could produce one, since every placement mints its
-  own key.
+  own key. `RetainDatabaseCopyUntilReleased` replaces those four `CHECK` constraints once more, relaxing them so that an
+  object-backed row may hold the payload the move left beside its object, and adds a nullable
+  `ObjectVerifiedAt` column to each table. Each table is therefore scanned under `ACCESS EXCLUSIVE` once more, on the
+  same terms as before — the predicate compares the backend name and null-tests the locator, the payload, and the new
+  column, none of which dereferences a payload PostgreSQL stored out of line — and the column is added without a
+  rewrite, since a nullable column with no default is a catalog change.
 
 The first release's script creates a schema from nothing, so none of these applies to an empty database.
 
@@ -297,6 +302,12 @@ That leaves two answers, and which one applies is decided before the upgrade rat
   the same over `outgoing_email_contents`, `mail_draft_contents`, and `recurring_send_drafts`, is the question to ask
   before choosing. The running deployment answers it too — the `object-backed-content` readiness check reports the same
   fact, as [health endpoints](health-endpoints.md) describes.
+
+  **`RetainDatabaseCopyUntilReleased` costs a rollback nothing**, and is recorded here because it looks as though it
+  should. A build older than that release reads an object-backed row from its object exactly as the newer one does, so a
+  row still carrying the copy the move left beside it is served correctly; what such a build does not have is the
+  fallback, the release, and the column, so it empties that copy at the next repoint rather than retaining it. Nothing
+  is lost either way — the object is the authoritative copy under both builds.
 
 ## What a release records
 

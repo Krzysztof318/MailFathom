@@ -31,6 +31,14 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 /// kinds of row indefinitely: the configured backend says where the next write goes and never what an existing row
 /// means.
 /// </para>
+/// <para>
+/// A row the move has carried and an operator has not yet released is held in both stores at once, and the object is the
+/// authoritative one. Where the object cannot be answered for, this serves the copy the database still holds and says so
+/// on the way out —
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0017-object-storage-content-backend-consistency-and-object-identity.md">ADR 0017</see> § 6,
+/// because refusing over bytes the deployment has would be a self-inflicted outage. Once the copy is released the same
+/// situation is answered with nothing, exactly as a missing database payload always was.
+/// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
 internal sealed class EmailContentStore(
@@ -81,11 +89,12 @@ internal sealed class EmailContentStore(
             .AsNoTracking()
             .Where(content => content.StoredEmailId == storedEmailId.Value)
             .Select(content => new StoredEmailContentRow(
-                content.RawMime,
+                content.Backend == ContentStorageBackend.Database ? content.RawMime : null,
                 content.MimeByteLength,
                 content.Sha256Hash,
                 content.Backend,
-                content.ObjectLocator))
+                content.ObjectLocator,
+                content.RawMime != null))
             .SingleOrDefaultAsync(cancellationToken);
 
         if (storedContent is null)
@@ -95,7 +104,15 @@ internal sealed class EmailContentStore(
             return null;
         }
 
-        var resolved = await this.ResolveAsync(storedContent, cancellationToken);
+        var resolved = await this.ResolveAsync(
+            storedContent,
+            token => dbContext.EmailMessageContents
+                .AsNoTracking()
+                .Where(content => content.StoredEmailId == storedEmailId.Value
+                    && content.Backend == ContentStorageBackend.ObjectStorage)
+                .Select(content => content.RawMime)
+                .SingleOrDefaultAsync(token),
+            cancellationToken);
         if (resolved is null)
         {
             read.Absent();
@@ -303,14 +320,23 @@ internal sealed class EmailContentStore(
             .AsNoTracking()
             .Where(content => content.OutgoingEmailId == outgoingEmailId.Value)
             .Select(content => new StoredEmailContentRow(
-                content.RawMime,
+                content.Backend == ContentStorageBackend.Database ? content.RawMime : null,
                 content.MimeByteLength,
                 content.Sha256Hash,
                 content.Backend,
-                content.ObjectLocator))
+                content.ObjectLocator,
+                content.RawMime != null))
             .SingleOrDefaultAsync(cancellationToken);
 
-        return await this.ResolveAsync(storedContent, cancellationToken);
+        return await this.ResolveAsync(
+            storedContent,
+            token => dbContext.OutgoingEmailContents
+                .AsNoTracking()
+                .Where(content => content.OutgoingEmailId == outgoingEmailId.Value
+                    && content.Backend == ContentStorageBackend.ObjectStorage)
+                .Select(content => content.RawMime)
+                .SingleOrDefaultAsync(token),
+            cancellationToken);
     }
 
     /// <inheritdoc />
@@ -374,14 +400,23 @@ internal sealed class EmailContentStore(
             .AsNoTracking()
             .Where(draft => draft.RecurringSendId == recurringSendId.Value)
             .Select(draft => new StoredEmailContentRow(
-                draft.DraftMime,
+                draft.Backend == ContentStorageBackend.Database ? draft.DraftMime : null,
                 draft.DraftByteLength,
                 draft.Sha256Hash,
                 draft.Backend,
-                draft.ObjectLocator))
+                draft.ObjectLocator,
+                draft.DraftMime != null))
             .SingleOrDefaultAsync(cancellationToken);
 
-        return await this.ResolveAsync(storedDraft, cancellationToken);
+        return await this.ResolveAsync(
+            storedDraft,
+            token => dbContext.RecurringSendDrafts
+                .AsNoTracking()
+                .Where(draft => draft.RecurringSendId == recurringSendId.Value
+                    && draft.Backend == ContentStorageBackend.ObjectStorage)
+                .Select(draft => draft.DraftMime)
+                .SingleOrDefaultAsync(token),
+            cancellationToken);
     }
 
     /// <inheritdoc />
@@ -492,26 +527,52 @@ internal sealed class EmailContentStore(
             .AsNoTracking()
             .Where(content => content.MailDraftId == draftId.Value)
             .Select(content => new StoredEmailContentRow(
-                content.RawMime,
+                content.Backend == ContentStorageBackend.Database ? content.RawMime : null,
                 content.MimeByteLength,
                 content.Sha256Hash,
                 content.Backend,
-                content.ObjectLocator))
+                content.ObjectLocator,
+                content.RawMime != null))
             .SingleOrDefaultAsync(cancellationToken);
 
-        return await this.ResolveAsync(storedContent, cancellationToken);
+        return await this.ResolveAsync(
+            storedContent,
+            token => dbContext.MailDraftContents
+                .AsNoTracking()
+                .Where(content => content.MailDraftId == draftId.Value
+                    && content.Backend == ContentStorageBackend.ObjectStorage)
+                .Select(content => content.RawMime)
+                .SingleOrDefaultAsync(token),
+            cancellationToken);
     }
 
-    /// <summary>Answers one row with the payload it points at, wherever that is.</summary>
-    /// <returns>The content, or <see langword="null" /> when the row names an object the endpoint no longer holds.</returns>
+    /// <summary>Answers one row with the payload it points at, wherever that is, and falls back to the copy it retains.</summary>
+    /// <param name="row">The columns the read projected, or <see langword="null" /> when no content is stored.</param>
+    /// <param name="readRetainedPayload">Reads the payload column of this row, asked for only where the object could not be vouched for.</param>
+    /// <param name="cancellationToken">Propagates caller cancellation.</param>
+    /// <returns>The content, or <see langword="null" /> when neither store could answer for it.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the row is object-backed and this deployment configured no endpoint.</exception>
     /// <remarks>
-    /// An object the endpoint no longer holds is answered as absent rather than raised, so the caller grades it exactly
-    /// as it grades a missing database payload: an ordinary answer for incoming mail, a defect for a send or a draft,
-    /// and a repair request either way.
+    /// <para>
+    /// The object is the authoritative store for an object-backed row, so it is asked first and its answer is checked
+    /// against the length and digest the row records — which is the same check the caller performs, run here for the one
+    /// decision only this method can take: whether to reach for the copy beside it. An object that passes is handed over
+    /// carrying <see cref="StoredEmailContent.WasVerifiedIntact" />, so the caller reads that answer instead of hashing
+    /// the message a second time.
+    /// </para>
+    /// <para>
+    /// It reaches for that copy only where there is one and the object failed, which is what keeps the second read off
+    /// every ordinary path: a released row, and a row written straight to the bucket, ask the endpoint once and stop.
+    /// </para>
+    /// <para>
+    /// A row with nothing to fall back to is answered as absent rather than raised, so the caller grades it exactly as
+    /// it grades a missing database payload: an ordinary answer for incoming mail, a defect for a send or a draft, and a
+    /// repair request either way.
+    /// </para>
     /// </remarks>
     private async Task<StoredEmailContent?> ResolveAsync(
         StoredEmailContentRow? row,
+        Func<CancellationToken, Task<byte[]?>> readRetainedPayload,
         CancellationToken cancellationToken)
     {
         if (row is null)
@@ -535,7 +596,58 @@ internal sealed class EmailContentStore(
 
         var payload = await objectStore.FindAsync(row.ObjectLocator!, row.MimeByteLength, cancellationToken);
 
-        return payload is null ? null : row.ToStoredContent(payload.Value);
+        if (payload is not { } objectPayload)
+        {
+            return await this.FallBackAsync(
+                row,
+                readRetainedPayload,
+                StoredContentFallbackReason.ObjectAbsent,
+                cancellationToken);
+        }
+
+        var fromObject = row.ToStoredContent(objectPayload);
+
+        if (fromObject.FindIntegrityDefect() is null)
+        {
+            return fromObject with { WasVerifiedIntact = true };
+        }
+
+        if (!row.CarriesDatabasePayload)
+        {
+            return fromObject;
+        }
+
+        // The object disagrees with its own row and a copy is still retained beside it. A release that landed between
+        // the projection above and the read below leaves nothing to fall back to, and the object is then this row's only
+        // answer — which the caller grades as the damaged copy it is.
+        return await this.FallBackAsync(
+            row,
+            readRetainedPayload,
+            StoredContentFallbackReason.ObjectMismatch,
+            cancellationToken) ?? fromObject;
+    }
+
+    /// <summary>Serves the copy the database still holds for a moved payload, and records that it had to.</summary>
+    /// <returns>The retained content, marked as such, or <see langword="null" /> when the copy is gone.</returns>
+    private async Task<StoredEmailContent?> FallBackAsync(
+        StoredEmailContentRow row,
+        Func<CancellationToken, Task<byte[]?>> readRetainedPayload,
+        StoredContentFallbackReason reason,
+        CancellationToken cancellationToken)
+    {
+        if (!row.CarriesDatabasePayload)
+        {
+            return null;
+        }
+
+        if (await readRetainedPayload(cancellationToken) is not { } retainedPayload)
+        {
+            return null;
+        }
+
+        telemetry.FellBackToRetainedCopy(reason);
+
+        return row.ToStoredContent(retainedPayload) with { WasServedFromRetainedCopy = true };
     }
 
     private static void EnsureOccurrenceMatches(StoredEmailEntity storedEmail, EmailOccurrenceId occurrenceId)

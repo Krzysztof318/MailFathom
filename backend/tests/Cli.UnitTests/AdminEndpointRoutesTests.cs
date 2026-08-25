@@ -84,6 +84,17 @@ public sealed class AdminEndpointRoutesTests
     }
 
     /// <summary>
+    /// The route the copies a finished move left behind are read at and freed on, pinned for the reason every other path
+    /// here is. It is one path answering both verbs, so the figure an operator confirms and the figure the deployment
+    /// acts on cannot become two counts that happen to agree.
+    /// </summary>
+    [Fact]
+    public void ContentReleasePath_IsTheRouteTheDeploymentFreesItsRetainedCopiesOn()
+    {
+        Assert.Equal("/api/admin/content/release", AdminEndpointRoutes.ContentReleasePath);
+    }
+
+    /// <summary>
     /// The contact-book paths, pinned for the reason every other path here is. The three composed ones are written out
     /// rather than built from the constant, because what would break is the shape rather than the prefix: a deployment
     /// serves one contact beneath a UUID segment, and a command composing the identity anywhere else would reach a 404

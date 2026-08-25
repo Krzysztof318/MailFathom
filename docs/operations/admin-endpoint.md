@@ -183,6 +183,8 @@ what it was never granted is what the record exists to make visible.
 | `POST /api/admin/content/move` | `mailfathom.admin.operate` | Asks for every payload the database still holds to be carried into the object backend, and answers with the move already under way where there is one. It records the request and copies nothing inside it. |
 | `POST /api/admin/content/move/pause` | `mailfathom.admin.operate` | Stops that move where it is, cancelling nothing and keeping everything it has carried. |
 | `POST /api/admin/content/move/resume` | `mailfathom.admin.operate` | Sets a stopped move going again from the position it stopped at. |
+| `GET /api/admin/content/release` | `mailfathom.admin.read` | Reports how much of this deployment's database is a copy of what its bucket already holds, and how much the move has not yet carried. This is what [`mfctl content release`](#freeing-the-copies-the-move-left-behind) reads first, and what `mfctl content move-status` reports beside the backlog. |
+| `POST /api/admin/content/release` | `mailfathom.admin.erase` | Frees one bounded batch of those copies, leaving the object the only place that mail is held. Refused with `409` while any payload is still waiting to be carried. |
 | `POST /api/admin/folders/erasure` | `mailfathom.admin.erase` | Erases one bounded pass of the mail stored for a folder the account no longer mirrors. **This is the one route that disposes of mail.** |
 | `GET /api/admin/contacts` | `mailfathom.admin.audit.read` | Reads one bounded, keyset-paginated page of the [contact book](../features/contacts.md), optionally narrowed to one origin. |
 | `POST /api/admin/contacts` | `mailfathom.admin.operate` | Records a person the book does not yet hold, as a contact this deployment's owner asserted. |
@@ -845,7 +847,7 @@ budget an operator has not asked to spend.
 
 ### Carrying stored content into the object backend
 
-Four routes beneath `/api/admin/content`, and what they are for is the half of the object backend a setting cannot
+Four of the six routes beneath `/api/admin/content`, and what they are for is the half of the object backend a setting cannot
 decide. Selecting `ContentStorage:ObjectStorage` writes the *next* payload to the bucket and leaves everything already
 stored in PostgreSQL, so a deployment that has been synchronizing a mailbox for a year has all of it in the database
 still. [Moving stored content into the bucket](moving-stored-content.md) is what one pass does and what it costs; this
@@ -898,6 +900,45 @@ that has never been asked for a move, which the command reports as there being n
 **Nothing here reads mail into the answer.** Every one of the four answers with counts, an instant, and a state name;
 the position the next pass resumes from is deliberately not served, because it is the identity of a row rather than a
 figure an operator acts on and it would say which message the move is at.
+
+### Freeing the copies the move left behind
+
+The remaining two routes, and the write among them is the only thing beneath this prefix that removes mail. The move
+copies and never removes, so a deployment part way through one holds its content twice: the object it now reads from,
+and the payload the database went on holding so that a read still works while the bucket is being trusted for the first
+time. Reads use it — where an object is absent or is not what its row records, the retained copy answers and the
+fallback is counted — and ending that duplication is a request of its own.
+
+**One path, two verbs, two grants.** `GET` reports what is duplicated under `mailfathom.admin.read`, because how much of
+a database is a copy is a question about what a deployment holds. `POST` frees a batch under `mailfathom.admin.erase`,
+because removing the last copy of a message outside the bucket is disposal rather than work. That split is deliberate: a
+credential that may start the move must not be able to end it.
+
+```console
+$ mfctl content release
+Retained:  22,500 payloads carrying 1,048,576 bytes
+Free those copies, leaving the object backend the only place that mail is held? [y/N] y
+Released:  22,500 payloads carrying 1,048,576 bytes
+The object backend now holds the only copy of that content. PostgreSQL reclaims the space on its own schedule, so what
+falls immediately is what a new backup has to carry rather than what the volume reports.
+```
+
+**One request is one bounded batch**, of `ContentStorage:Release:PayloadsPerBatch` payloads, and the command sends as
+many as the deployment needs. Answering after each batch is what makes an interrupted release resumable rather than a
+state nothing can finish: what a batch freed stays freed, and running the command again continues.
+
+**It is refused outright while the move is unfinished.** A payload the database still owns is one no object was ever
+verified for, so freeing the copies of everything else would end the safety of a job somebody is in the middle of. The
+refusal is `409` naming that backlog rather than `400`, because nothing is wrong with what was asked and asking again
+once the move reports no backlog is exactly the right thing to do.
+
+**A copy still inside `ContentStorage:Release:SafetyInterval` is left where it is.** The interval is measured from when
+the move verified the object, so a batch can answer having freed nothing while copies remain; the command says which
+setting is holding them and stops rather than asking again for the same answer.
+
+**What this removes cannot be undone from anywhere but a backup**, and there is no route that carries content back out
+of the bucket. [Moving stored content into the bucket](moving-stored-content.md) holds the order of the steps and what
+each one cannot be undone from.
 
 ### Administering the contact book
 

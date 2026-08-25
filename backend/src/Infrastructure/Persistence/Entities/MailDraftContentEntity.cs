@@ -42,7 +42,20 @@ internal sealed class MailDraftContentEntity
     /// </remarks>
     public string? ObjectLocator { get; set; }
 
-    /// <summary>Gets or sets the payload the row itself carries, or <see langword="null" /> when the object backend holds it.</summary>
+    /// <summary>Gets or sets when the move read this row's object back and found it to be the payload the row describes.</summary>
+    /// <remarks>
+    /// Null on every row the move has not carried, and on nothing else. It is what the safety interval on releasing the
+    /// retained copy is measured from, which is why it is written rather than derived: it says how long this deployment
+    /// has been reading the object, and that is a different question from how old the mail is or when it was stored.
+    /// </remarks>
+    public DateTimeOffset? ObjectVerifiedAt { get; set; }
+
+    /// <summary>Gets or sets the payload the row itself carries, which stays beside a verified object until an operator releases it.</summary>
+    /// <remarks>
+    /// Null when the object backend alone holds the payload — either because the write went there or because an operator
+    /// has released the copy the move left behind. While both are present the object is the authoritative one and this
+    /// is a retained duplicate a read falls back to.
+    /// </remarks>
     public byte[]? RawMime { get; set; }
 
     public long MimeByteLength { get; set; }
