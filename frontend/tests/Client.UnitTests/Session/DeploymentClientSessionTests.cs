@@ -258,6 +258,30 @@ public sealed class DeploymentClientSessionTests
         Assert.Single(harness.Deployment.Requests);
     }
 
+    /// <summary>
+    /// A failure this client has no reading of says nothing about the network, so it ends the standing rather than
+    /// leaving it mid-attempt: a standing still reading "reaching" would close the frame's notice about the failed
+    /// session along with the connection's, and the screen would have failed in silence.
+    /// </summary>
+    [Fact]
+    public async Task Connection_AFailureThatIsNotAFailedExchange_EndsTheStandingRatherThanLeavingItMidAttempt()
+    {
+        // Arrange
+        using var harness = new DeploymentHarness(_ => throw new InvalidOperationException("nothing composed this"));
+        using var session = SessionOver(harness, attempts: 3);
+
+        // Act
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await session.Standing);
+
+        // Assert
+        var connection = await session.Connection;
+        Assert.NotNull(connection);
+        Assert.True(connection.IsReached);
+        Assert.False(connection.IsRetrying);
+        Assert.False(connection.IsLost);
+        Assert.Equal(1, connection.Attempt);
+    }
+
     /// <summary>A session that could be built without one of its collaborators would be one nothing ever refreshed.</summary>
     [Fact]
     public void Constructor_AMissingService_IsRefused()

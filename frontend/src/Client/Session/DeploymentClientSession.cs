@@ -27,7 +27,9 @@ namespace MailFathom.Client.Session;
 /// one. A transport failure is retried on <see cref="DeploymentConnectionRetry" />'s curve and the attempt under way is
 /// published on <see cref="Connection" /> as it goes, so a client whose connection dropped recovers by itself and says it
 /// is trying instead of appearing frozen. A deployment that answered a refusal is not retried: nothing about asking
-/// again would change it, and the answer belongs to the person rather than to a timer.
+/// again would change it, and the answer belongs to the person rather than to a timer. Whatever ends the fetch ends
+/// the standing with it, cancellation aside, because the frame reads that standing to decide which of its notices
+/// speaks — one left mid-attempt would close every one of them and leave a screen that failed in silence.
 /// </para>
 /// <para>
 /// Nothing here is logged, stored, or exported. The answer carries a version and a grant and names no credential at
@@ -131,6 +133,16 @@ internal sealed class DeploymentClientSession : IClientSession, IDisposable
 
                     throw;
                 }
+            }
+            catch (Exception failure) when (failure is not OperationCanceledException)
+            {
+                // Anything that is not this client's own reading of a failed exchange says nothing about the network,
+                // so nothing here may blame it. Publishing rather than leaving the standing mid-attempt is what keeps
+                // the frame's notice about the failed session open: a standing still reading "reaching" would close
+                // both notices at once and leave somebody with a screen that failed silently.
+                await this.PublishAsync(ConnectionStanding.Reached, attempt, cancellationToken).ConfigureAwait(false);
+
+                throw;
             }
         }
     }
