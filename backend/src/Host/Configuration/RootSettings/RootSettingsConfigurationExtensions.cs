@@ -18,6 +18,7 @@ internal static class RootSettingsConfigurationExtensions
     /// <returns>The provider a reload publishes a later document through.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> or <paramref name="document" /> is <see langword="null" />.</exception>
     /// <exception cref="RootSettingsUnreadableException">Thrown when the persisted document is not a JSON object of configuration keys.</exception>
+    /// <exception cref="BootstrapOnlySettingPersistedException">Thrown when the document carries a setting read before this layer is composed.</exception>
     /// <remarks>
     /// <para>
     /// The layer is inserted at the same boundary the deployment-provisioned files were, and after them, which is what
@@ -25,10 +26,12 @@ internal static class RootSettingsConfigurationExtensions
     /// <see cref="OperatorOverrideBoundary" /> holds why that is the order.
     /// </para>
     /// <para>
-    /// Inserting the source is what parses the document, because the configuration manager builds a provider as it is
-    /// added. A document the parser refuses is therefore a startup failure here, and it is reported under the same
-    /// code as a document that could not be read at all: an operator meets one condition — the persisted configuration
-    /// did not become settings — and greps one number for it.
+    /// The document is parsed here, before the source joins the list, and that ordering is the whole reason this
+    /// method loads a provider by hand. Inserting into a <c>ConfigurationManager</c> rebuilds and reloads *every*
+    /// source it holds, so a mounted file rewritten mid-rollout would refuse inside the insert with the same
+    /// <see cref="FormatException" /> a bad persisted document raises — and reporting that as the persisted layer's
+    /// failure would send an operator to the database for a broken file. Loading the provider on its own leaves this
+    /// translation reading only its own document, and lets another source's refusal travel as itself.
     /// </para>
     /// </remarks>
     public static RootSettingsConfigurationProvider AddRootSettings(
@@ -42,7 +45,7 @@ internal static class RootSettingsConfigurationExtensions
 
         try
         {
-            configuration.Sources.Insert(OperatorOverrideBoundary.FindIn([.. configuration.Sources]), source);
+            source.Provider.Load();
         }
         catch (Exception exception) when (exception is FormatException or JsonException)
         {
@@ -50,6 +53,8 @@ internal static class RootSettingsConfigurationExtensions
                 $"The persisted configuration document at version {document.Version} is not a JSON object of configuration keys, so MailFathom composed no settings from it.",
                 exception);
         }
+
+        configuration.Sources.Insert(OperatorOverrideBoundary.FindIn([.. configuration.Sources]), source);
 
         return source.Provider;
     }
@@ -60,6 +65,7 @@ internal static class RootSettingsConfigurationExtensions
     /// <returns>The provider a reload publishes a later document through.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
     /// <exception cref="RootSettingsUnreadableException">Thrown when the persisted configuration cannot be read, or is not a JSON object of configuration keys.</exception>
+    /// <exception cref="BootstrapOnlySettingPersistedException">Thrown when the document carries a setting read before this layer is composed.</exception>
     /// <remarks>
     /// Everything the read needs — where the database is, which secret block carries its credential, and how a
     /// configured secret value is interpreted — is read from the sources beneath this layer and never from the layer

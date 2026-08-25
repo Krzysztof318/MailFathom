@@ -19,9 +19,9 @@ namespace MailFathom.Host.Configuration.RootSettings;
 /// both of which follow from using one flattening and one merge rather than a second vocabulary.
 /// </para>
 /// <para>
-/// The provider holds one snapshot and never queries per key. A reload replaces that snapshot whole; a candidate that
-/// does not parse leaves the last valid one in force, because the parser throws before the dictionary it would have
-/// replaced is assigned.
+/// The provider holds one snapshot and never queries per key. A reload replaces that snapshot whole; a candidate the
+/// layer refuses — because it does not parse, or because it carries a setting the layer itself was reached through —
+/// leaves the last valid one in force.
 /// </para>
 /// <para>
 /// It derives from the stream provider to reach that parser, and deliberately never uses the stream on the source it
@@ -50,6 +50,7 @@ internal sealed class RootSettingsConfigurationProvider : JsonStreamConfiguratio
     /// <inheritdoc />
     /// <exception cref="FormatException">Thrown when the persisted document is not a JSON object of configuration keys.</exception>
     /// <exception cref="JsonException">Thrown when the persisted document cannot be read as JSON at all, which for a <c>jsonb</c> column means one nested deeper than the reader's maximum.</exception>
+    /// <exception cref="BootstrapOnlySettingPersistedException">Thrown when the document carries a setting read before this layer is composed.</exception>
     public override void Load() => this.Parse(this.document);
 
     /// <summary>Replaces the published snapshot with a document read after startup.</summary>
@@ -57,6 +58,7 @@ internal sealed class RootSettingsConfigurationProvider : JsonStreamConfiguratio
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="candidate" /> is <see langword="null" />.</exception>
     /// <exception cref="FormatException">Thrown when the candidate is not a JSON object of configuration keys, in which case the snapshot in force is unchanged.</exception>
     /// <exception cref="JsonException">Thrown when the candidate cannot be read as JSON at all, in which case the snapshot in force is likewise unchanged.</exception>
+    /// <exception cref="BootstrapOnlySettingPersistedException">Thrown when the candidate carries a setting read before this layer is composed, in which case the snapshot in force is likewise unchanged.</exception>
     /// <remarks>
     /// <para>
     /// The change token is raised only once the candidate has been published, so a rejected candidate reloads nothing
@@ -83,8 +85,23 @@ internal sealed class RootSettingsConfigurationProvider : JsonStreamConfiguratio
 
     private void Parse(RootSettingsDocument settings)
     {
+        var published = this.Data;
+
         using var content = new MemoryStream(Encoding.UTF8.GetBytes(settings.Json));
 
         this.Load(content);
+
+        // The refusal is read after the parse rather than off the raw JSON, because what a document contributes is the
+        // flattened keys and not its nesting: `{"Persistence": {"Password": {"Reference": …}}}` and
+        // `{"Persistence:Password:Reference": …}` are the same setting to every reader beneath this one. That means the
+        // dictionary has already been replaced by the time the answer exists, so a refusal puts the published one back
+        // — the parser's own refusals throw before the assignment and need no such care.
+        if (BootstrapOnlySettings.FindIn(this.Data.Keys) is { Count: > 0 } refused)
+        {
+            this.Data = published;
+
+            throw new BootstrapOnlySettingPersistedException(
+                $"The persisted configuration document at version {settings.Version} carries settings MailFathom reads before that layer exists: {string.Join(", ", refused)}. Remove them from the document and configure them in a file, the environment, or a command-line argument, which is where the bootstrap read takes them from.");
+        }
     }
 }

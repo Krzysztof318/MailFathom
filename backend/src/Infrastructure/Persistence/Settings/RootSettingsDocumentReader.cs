@@ -38,6 +38,9 @@ internal sealed class RootSettingsDocumentReader(NpgsqlDataSource dataSource) : 
     /// <summary>The PostgreSQL code for a rejected password, which is how a wrong or rotated credential answers.</summary>
     private const string InvalidPasswordSqlState = "28P01";
 
+    /// <summary>The PostgreSQL code for a refused privilege, which is how a schema applied by the wrong role answers.</summary>
+    private const string InsufficientPrivilegeSqlState = "42501";
+
     /// <inheritdoc />
     public async Task<RootSettingsDocument> ReadAsync(CancellationToken cancellationToken)
     {
@@ -66,6 +69,16 @@ internal sealed class RootSettingsDocumentReader(NpgsqlDataSource dataSource) : 
         {
             throw new RootSettingsUnreadableException(
                 "The database holding the persisted configuration refused the configured credential. Check the Persistence secret block rather than the network: the server answered, and what it rejected is the password MailFathom composed for it.",
+                exception);
+        }
+        // A per-table grant on an existing deployment does not cover a table a later release adds, so this is what a
+        // correctly reachable database says when the schema was applied by one role and is served by another. It runs
+        // ahead of the schema gate that used to be the first to meet that condition, so it makes the same diagnosis
+        // rather than leaving the operator with a database that appears unreachable.
+        catch (PostgresException exception) when (exception.SqlState == InsufficientPrivilegeSqlState)
+        {
+            throw new RootSettingsUnreadableException(
+                "The serving role holds no privilege on settings_root. Grant it on the table the persisted configuration lives in, the way the schema documentation describes for a schema applied by one role and served by another.",
                 exception);
         }
         catch (NpgsqlException exception)

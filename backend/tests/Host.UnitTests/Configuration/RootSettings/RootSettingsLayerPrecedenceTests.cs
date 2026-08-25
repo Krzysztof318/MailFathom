@@ -206,6 +206,29 @@ public sealed class RootSettingsLayerPrecedenceTests
         Assert.Contains("version 12", unreadable.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A document carrying a setting the layer was itself reached through stops startup naming the key, rather than
+    /// publishing a credential the bootstrap read never saw.
+    /// </summary>
+    [Fact]
+    public void AddRootSettings_DocumentCarryingABootstrapSetting_FailsNamingTheKey()
+    {
+        // Arrange
+        using var configuration = new ConfigurationManager();
+        var document = new RootSettingsDocument(
+            """{ "Persistence": { "Password": { "Reference": "file:the-operator-never-sees-this" } } }""",
+            Version: 13);
+
+        // Act
+        var refusal = Record.Exception(() => configuration.AddRootSettings(document));
+
+        // Assert
+        var refused = Assert.IsType<BootstrapOnlySettingPersistedException>(refusal);
+        Assert.Equal(MailFathomErrorCode.BootstrapOnlySettingPersisted, refused.ErrorCode);
+        Assert.Contains("Persistence:Password", refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("the-operator-never-sees-this", refused.Message, StringComparison.Ordinal);
+    }
+
     private static string DescribeSource(IConfigurationSource source) => source switch
     {
         RootSettingsConfigurationSource => "root-settings",

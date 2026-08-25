@@ -67,19 +67,21 @@ An existing but empty directory is permitted and contributes nothing. A ConfigMa
 
 **The document is read at startup, and editing the row takes effect at the next start.** Nothing watches `settings_root` and nothing polls it, so a row edited directly in the database — with `psql`, or by anything other than MailFathom — changes no setting in the running process. Restart the host to compose over it.
 
-### What is never read from it
+### What it may not carry
 
-Everything needed to open the database is read from the sources beneath this layer and never from the layer itself, because a persisted value for one of them could not be read without first reading it. That is the whole of the list:
+Everything needed to open the database is read from the sources beneath this layer, because a persisted value for one of them could not be read without first reading it. That is the whole of the list, and a document carrying one of these keys — or anything nested beneath it — is **refused**, under error code `12004`, naming the keys:
 
 - `ConnectionStrings:mailfathom`, `Persistence:ConnectionString`, and `Persistence:Password` — where the database is and how to authenticate to it.
 - `Secrets:Interpretation` — how the secret reference carrying that credential is read.
 - `ConfigurationSources:Directory` and `ConfigurationSources:File` — which sources exist at all, which is settled before this one is composed.
 
+Refused rather than ignored, because ignoring would be the dangerous half of the two. The layer is composed above every file, so a persisted `Persistence:Password` that reached the published snapshot would leave the bootstrap read authenticating with the file's credential while the connection pool and every worker used the persisted one, with nothing in the running process reporting the disagreement; and `Secrets:Interpretation` decides whether a plain-text value written where a reference belongs fails startup or is accepted, for the whole process, which would make this layer a way to relax the terms it is itself trusted under. Dropping the keys silently would leave an operator believing they had configured something. Configure all six where the bootstrap read takes them from: a file, the environment, or a command-line argument.
+
 Secret material is not read from it either, and for a different reason: a secret-bearing setting holds a *reference* rather than material whichever source supplied it, so the persisted document carries the same references a file would and the material stays wherever [secret provisioning](secret-provisioning.md) puts it.
 
 ### Startup, and a reload that fails
 
-**The host fails to start when this layer cannot be read.** A database that cannot be reached, a database that refuses the configured credential, a schema that does not carry the table, a row that is not there, and a document that is not a JSON object of configuration keys are one failure to the process: the layer between the deployment's files and the operator's overrides cannot say what it contributes, and starting anyway would serve whichever values the files beneath it happen to carry with nothing saying that a layer was missing. All five carry error code `12003` and stop the process before any endpoint opens, and each message names which of them happened — a rejected credential sends the operator to the secret block rather than to the network. A database that has not had this release's migrations applied is the ordinary cause, and the message says so; [the database schema](database-schema.md) states the order a deployment applies them in.
+**The host fails to start when this layer cannot be read.** A database that cannot be reached, a database that refuses the configured credential, a database whose serving role holds no privilege on the table, a schema that does not carry the table, a row that is not there, and a document that is not a JSON object of configuration keys are one failure to the process: the layer between the deployment's files and the operator's overrides cannot say what it contributes, and starting anyway would serve whichever values the files beneath it happen to carry with nothing saying that a layer was missing. All six carry error code `12003` and stop the process before any endpoint opens, and each message names which of them happened — a rejected credential sends the operator to the secret block and a refused privilege to the grant, rather than either to the network. A document that carries a key [the layer may not carry](#what-it-may-not-carry) stops the process too, under `12004` rather than `12003`, because it is a document MailFathom read perfectly well and refused. A database that has not had this release's migrations applied is the ordinary cause, and the message says so; [the database schema](database-schema.md) states the order a deployment applies them in.
 
 Every start records the version it composed itself over, at `Information`:
 

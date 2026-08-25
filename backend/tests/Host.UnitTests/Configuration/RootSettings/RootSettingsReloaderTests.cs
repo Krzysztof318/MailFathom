@@ -87,6 +87,32 @@ public sealed class RootSettingsReloaderTests
         Assert.Contains(logger.Messages, message => message.Contains("version 11", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A candidate carrying a setting the layer was reached through is rejected like any other unusable document, so a
+    /// write cannot republish the terms the layer itself is trusted under.
+    /// </summary>
+    [Fact]
+    public async Task ReloadAsync_CandidateCarryingABootstrapSetting_KeepsTheVersionInForce()
+    {
+        // Arrange
+        var provider = LoadedProvider();
+        var reader = ReaderReturning(
+            new RootSettingsDocument("""{ "Secrets": { "Interpretation": "PlaintextAllowed" } }""", Version: 13));
+        var logger = new RecordingLogger<RootSettingsReloader>();
+
+        // Act
+        var published = await new RootSettingsReloader(provider, reader, logger).ReloadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(published);
+        Assert.Equal(3, provider.Version);
+        provider.TryGet("Secrets:Interpretation", out var interpretation);
+        Assert.Null(interpretation);
+        provider.TryGet("Layered:Setting", out var effective);
+        Assert.Equal("inForce", effective);
+        Assert.Contains(logger.Messages, message => message.Contains("version 13", StringComparison.Ordinal));
+    }
+
     /// <summary>A database that cannot be read leaves the deployment exactly as it was, and says so.</summary>
     [Fact]
     public async Task ReloadAsync_PersistedConfigurationUnreadable_KeepsTheVersionInForce()
