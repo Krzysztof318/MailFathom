@@ -1581,9 +1581,11 @@ in the profile's life reads that address, so this is the only moment those entri
 A profile signed in before your machine had a store **moves into it by itself**, on the first command that opens the
 profile — you do not sign in again, and `credentials.key` is removed once no profile is still sealed under it. A move
 that does not complete leaves the sealed profile exactly as it was and the command you ran carries on. A move
-interrupted after its first write can leave one entry behind in the store — the command running at the time says which
-one — and removing it from your keyring is yours to do, since nothing afterwards reads that entry and no later command
-looks for it.
+interrupted after its first write can leave an entry behind in the store, and the command running at the time says that
+one was left for this profile and what the store refused it with. Removing it is yours to do, and the act is to remove
+that profile's entries from your keyring — both of them, since the warning names the profile rather than which of the
+two: the profile stays sealed in the file, so nothing afterwards reads either and no later command looks for them. The
+table above is how they are named.
 
 A secret your operating system took and can no longer produce is not silently replaced by the file. A locked keyring and
 a removed entry say different things, because only one of them is answered by signing in again:
@@ -1592,6 +1594,12 @@ a removed entry say different things, because only one of them is answered by si
 $ mfctl status
 The credential for https://mail.example.test:8443 is held by this machine's secret store, which cannot be reached: the collection is locked. Make the store reachable and run the command again, or run 'mfctl login --endpoint https://mail.example.test:8443' to store the credential wherever this machine can hold it.
 ```
+
+**A provider that does not answer is given thirty seconds.** On Linux a store that has claimed the session bus can hold
+a call open indefinitely — a wedged keyring daemon, or a locked collection whose unlock prompt was raised on a display
+nobody is watching, which is the jump-host case. The command withdraws the call after thirty seconds and reports the
+store as unreachable, so it falls back or fails rather than hanging. The wait is that long deliberately: an unlock
+prompt somebody is answering takes tens of seconds, and cutting it shorter would break the case the store exists for.
 
 An OAuth profile holds a refresh token as well, kept wherever the access token is and bound to the same deployment — it
 is the longer-lived of the two secrets, so anything weaker would be a regression in the value most worth protecting.

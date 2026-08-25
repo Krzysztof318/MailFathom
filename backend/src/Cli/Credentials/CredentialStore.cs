@@ -257,10 +257,43 @@ internal sealed class CredentialStore
 
         var written = stored with { Default = profileName };
 
-        this.Write(written);
+        this.WriteOrWithdraw(written, profileName, address, heldBefore);
         this.DiscardKeyIfUnused(written);
 
         return (profileName, placement);
+    }
+
+    /// <summary>Writes the store, taking the placement back out when the file it was made for was not written.</summary>
+    /// <remarks>
+    /// A placement is made before the file is, so a directory that is full or read-only leaves a live credential in the
+    /// keyring under a profile name the file never gained: <c>Resolve</c> asks only for profiles the file carries, and
+    /// <c>logout</c> can name only those too, so nothing would ever read it and nothing would ever remove it.
+    /// <para>
+    /// Not where the store was already holding this profile's secrets. The file then still describes a profile whose
+    /// credential is in the store, and withdrawing would break the profile that survived the failure instead of
+    /// cleaning up after the one that did not happen — the entries under that key are this sign-in's, which is a
+    /// credential the surviving record can present rather than one nothing points at.
+    /// </para>
+    /// </remarks>
+    private void WriteOrWithdraw(StoredCredentials written, string profile, string address, bool heldBefore)
+    {
+        try
+        {
+            this.Write(written);
+        }
+        catch (CliFailure unwritten) when (!heldBefore)
+        {
+            if (this.ForgetBoth(profile, address) is not { } refusal)
+            {
+                throw;
+            }
+
+            // The sign-in is failing either way, so this is the one chance to say that the credential reached the
+            // store and could not be taken back out; the file failure alone would send the operator to their disk.
+            throw new CliFailure(
+                $"{unwritten.Message} The credential had already been placed in the platform's secret store and could not be taken back out ({refusal}), so remove this profile's entries from your keyring.",
+                unwritten);
+        }
     }
 
     /// <summary>Replaces one profile's access token with the one a silent renewal produced.</summary>

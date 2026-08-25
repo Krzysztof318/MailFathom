@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.CommandLine;
+using MailFathom.Cli.Credentials;
 
 namespace MailFathom.Cli.Commands;
 
@@ -47,8 +48,7 @@ internal static class LogoutCommand
             // which they can only do if they are told it is there.
             if (removal.Uncleared is { } uncleared)
             {
-                context.Console.WriteWarning(
-                    $"This profile's entries in the platform's secret store are still there: {uncleared}. Remove them from your keyring once it is reachable.");
+                context.Console.WriteWarning(SecretPlacement.DescribeUncleared(uncleared));
             }
 
             return CliExitCode.Success;

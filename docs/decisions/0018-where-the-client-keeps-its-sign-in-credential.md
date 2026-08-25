@@ -9,7 +9,7 @@ informed:
 
 # Keep a sign-in credential only where the operating system holds a secret for one user, persist nothing on the browser head, store the owner's password rather than anything derived from it, and let a command that must keep working fall back to a sealed file
 
-<!-- describes: backend/src/Cli/Credentials/** -->
+<!-- describes: backend/src/Cli/Credentials/**, backend/src/Cli/Commands/LoginCommand.cs, backend/src/Cli/Commands/LogoutCommand.cs, backend/src/Cli/Administration/DeploymentAccess.cs -->
 
 ## Context and Problem Statement
 
@@ -218,7 +218,7 @@ Exchange the password once for a long-lived value the client holds instead, so t
 - [ADR 0012](0012-authorization-model-named-permissions-and-where-they-are-enforced.md) governs what the presented credential is then allowed to do, which is unchanged by where it was kept.
 - [ADR 0016](0016-third-party-licence-obligations-per-artifact.md) governs any component taken to reach a platform store.
 - [#1148](https://github.com/Krzysztof318/MailFathom/issues/1148) implements this and carries the acceptance items that follow from it; [#1146](https://github.com/Krzysztof318/MailFathom/issues/1146) is the parent that cannot close until it lands.
-- The `describes:` marker names `backend/src/Cli/Credentials/**` because [#1274](https://github.com/Krzysztof318/MailFathom/issues/1274) landed the command's port and its two platform implementations. It gains the client's paths when [#1148](https://github.com/Krzysztof318/MailFathom/issues/1148) lands the per-head implementations, which is one of the two edits an accepted ADR is permitted.
+- The `describes:` marker names `backend/src/Cli/Credentials/**` because [#1274](https://github.com/Krzysztof318/MailFathom/issues/1274) landed the command's port and its two platform implementations, and names `LoginCommand.cs`, `LogoutCommand.cs`, and `Administration/DeploymentAccess.cs` beside it because three of the decisions above are implemented there rather than under `Credentials/`: which of the two places took the secrets is said by the sign-in, both halves are cleared by the sign-out, and what an interrupted move left behind is reported by the seam every other command settles its deployment on. It gains the client's paths when [#1148](https://github.com/Krzysztof318/MailFathom/issues/1148) lands the per-head implementations, which is one of the two edits an accepted ADR is permitted.
 - [#318](https://github.com/Krzysztof318/MailFathom/issues/318) asked for the command's storage and its installation together, on the reasoning that only an installed command may depend on a secret service. Naming the fallback here is what unpairs them: with the weaker storage stated rather than accidental, the store is taken wherever it is present without waiting for packaging, and #318 keeps the installation half.
 - [`operations/admin-endpoint.md`](../operations/admin-endpoint.md) states where the command keeps a credential on each platform and what the fallback means, for the operator rather than for a reader of this record.
 - Three things would reopen this: a sign-in method whose long-lived material is not password-equivalent, which supersedes the record for the head it changes; Uno implementing a credential store for the Skia desktop targets, which would replace three implementations with one while changing nothing decided here; and a browser capability that scopes a secret to something narrower than the origin, which is the only development that would make the browser head's answer worth reconsidering.

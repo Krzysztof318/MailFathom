@@ -309,7 +309,7 @@ public sealed class SecretStoreCredentialTests : IDisposable
     /// <remarks>
     /// The Credential Manager refuses a delete per target, so a refusal here can be about one entry rather than about
     /// the store. Ending the sequence on the first would leave the refresh token — the longer-lived of the two — in
-    /// the keyring with no attempt ever made, under a warning that says the entries are still there.
+    /// the keyring with no attempt ever made, under a warning saying an entry is still in the store.
     /// </remarks>
     [Fact]
     public void Remove_AStoreThatRefusesOneOfTheTwoEntries_StillClearsTheOther()
@@ -455,6 +455,69 @@ public sealed class SecretStoreCredentialTests : IDisposable
         Assert.Equal("the collection is locked", placement.Refusal);
         Assert.Equal("the collection is locked", placement.Uncleared);
         Assert.Single(this.secretStore.Entries);
+    }
+
+    /// <summary>The placement is made for a file, so a file that was not written leaves a credential in the keyring under a name nothing carries.</summary>
+    /// <remarks>
+    /// <c>Resolve</c> asks only for profiles the file holds and <c>logout</c> can name only those, so an entry filed
+    /// under a name the failed sign-in never gave the file is one nothing would ever read and nothing would ever
+    /// remove.
+    /// </remarks>
+    [Fact]
+    public void Save_AFileWriteThatCannotComplete_TakesTheCredentialBackOutOfTheStore()
+    {
+        // Arrange: a directory where the pending file has to be created, so the placement is made and the file is not.
+        Directory.CreateDirectory(this.StorePath + ".pending");
+
+        // Act
+        Assert.Throws<CliFailure>(
+            () => this.store.Save("production", Production, "not-a-real-token", "workstation"));
+
+        // Assert
+        Assert.Empty(this.secretStore.Entries);
+    }
+
+    /// <summary>A withdrawal the store refuses is the operator's to finish, and the failing sign-in is the only thing left that can tell them.</summary>
+    [Fact]
+    public void Save_AFileWriteThatCannotCompleteAndAStoreThatWillNotLetGo_SaysTheCredentialReachedTheStore()
+    {
+        // Arrange
+        Directory.CreateDirectory(this.StorePath + ".pending");
+
+        this.secretStore.RefuseClearing(
+            ProfileSecret.BearerToken("production", "https://mail.example.test:8443"),
+            "the collection is locked");
+
+        // Act
+        var failure = Assert.Throws<CliFailure>(
+            () => this.store.Save("production", Production, "not-a-real-token", "workstation"));
+
+        // Assert
+        Assert.Contains("could not be taken back out", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("the collection is locked", failure.Message, StringComparison.Ordinal);
+        Assert.Single(this.secretStore.Entries);
+    }
+
+    /// <summary>Where the file already describes a profile the store holds, the entries under that key are the surviving record's credential rather than an orphan.</summary>
+    /// <remarks>
+    /// The withdrawal exists for a name the file never gained. Running it here would empty the store for a profile the
+    /// file still carries and still says is held, which is the one arrangement <c>Resolve</c> cannot open at all — so
+    /// the failed sign-in would break the profile that survived it.
+    /// </remarks>
+    [Fact]
+    public void Save_AFileWriteThatCannotCompleteOverAProfileTheStoreHeld_LeavesTheSurvivingProfileOpenable()
+    {
+        // Arrange
+        this.store.Save("production", Production, "first-token", "workstation");
+
+        Directory.CreateDirectory(this.StorePath + ".pending");
+
+        // Act
+        Assert.Throws<CliFailure>(
+            () => this.store.Save("production", Production, "second-token", "workstation"));
+
+        // Assert
+        Assert.Equal("second-token", this.store.Resolve("production").Token);
     }
 
     /// <summary>A deployment that moves port keeps its profile, so the entries it left at the old address are reachable from nowhere unless this sign-in clears them.</summary>

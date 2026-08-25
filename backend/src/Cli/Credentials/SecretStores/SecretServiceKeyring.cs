@@ -21,6 +21,12 @@ namespace MailFathom.Cli.Credentials.SecretStores;
 /// arrive here as <see cref="SecretStoreUnavailable" />, and the command goes on with the sealed credentials file.
 /// </para>
 /// <para>
+/// A fifth case answers to none of those and is why every call carries a <c>GCancellable</c>: a provider that owns the
+/// session-bus name and does not answer. A wedged daemon, or a locked collection whose unlock prompt is raised on a
+/// display nobody is watching, would otherwise leave the calling thread inside <c>libsecret</c> for the life of the
+/// process — and a command that hangs is worse than one that falls back, because nothing about it says what happened.
+/// </para>
+/// <para>
 /// The <c>v</c> forms of the password functions are the ones taken deliberately. Their variadic siblings would have to
 /// be called through a declaration that is not variadic, which this platform's calling convention does not define;
 /// these take the attributes as a <c>GHashTable</c> instead, so every call here has the arity its declaration states.
@@ -35,6 +41,12 @@ internal sealed partial class SecretServiceKeyring : IOperatorSecretStore
 
     private const string Glib = "libglib-2.0.so.0";
 
+    /// <summary>Where <c>GCancellable</c> lives, which is GIO rather than glib proper.</summary>
+    private const string Gio = "libgio-2.0.so.0";
+
+    /// <summary>Where the reference counting every GIO object is released through lives.</summary>
+    private const string GObject = "libgobject-2.0.so.0";
+
     /// <summary><c>SECRET_COLLECTION_DEFAULT</c>: the session's own collection rather than a named one.</summary>
     private const string DefaultCollection = "default";
 
@@ -46,14 +58,24 @@ internal sealed partial class SecretServiceKeyring : IOperatorSecretStore
     /// </remarks>
     private const int FailureMessageOffset = 8;
 
+    /// <summary>How long a provider is given to answer before the call is withdrawn.</summary>
+    /// <remarks>
+    /// Long because the legitimate slow case is a person: a locked collection raises an unlock prompt, and somebody
+    /// reading it, finding their password, and typing it takes tens of seconds. Bounded because the illegitimate slow
+    /// case never ends, and this command exits after every invocation, so a wedged provider would otherwise make every
+    /// command against every profile hang rather than fall back to the file it was already able to read.
+    /// </remarks>
+    private static readonly TimeSpan ProviderDeadline = TimeSpan.FromSeconds(30);
+
     private static readonly Lazy<nint> StringHash = new(() => GlibFunction("g_str_hash"));
 
     private static readonly Lazy<nint> StringEqual = new(() => GlibFunction("g_str_equal"));
 
     /// <summary>Makes one call into <c>libsecret</c>, whose failure arrives beside its answer rather than in place of it.</summary>
+    /// <param name="cancellable">The <c>GCancellable</c> the deadline cancels, which the call is to be given.</param>
     /// <param name="error">The <c>GError</c> the call allocated, or zero when it succeeded.</param>
     /// <returns>Whatever the call returned, which is a pointer for a lookup and a truth value for the other two.</returns>
-    private delegate nint Exchange(out nint error);
+    private delegate nint Exchange(nint cancellable, out nint error);
 
     /// <inheritdoc />
     public string Description => "the Secret Service through libsecret";
@@ -69,7 +91,8 @@ internal sealed partial class SecretServiceKeyring : IOperatorSecretStore
 
         try
         {
-            var held = Call((out nint error) => PasswordLookup(0, attributes.Table, 0, out error));
+            var held = Call((nint deadline, out nint error) =>
+                PasswordLookup(0, attributes.Table, deadline, out error));
 
             if (held == 0)
             {
@@ -103,13 +126,13 @@ internal sealed partial class SecretServiceKeyring : IOperatorSecretStore
 
         try
         {
-            var stored = Call((out nint error) => PasswordStore(
+            var stored = Call((nint deadline, out nint error) => PasswordStore(
                 0,
                 attributes.Table,
                 DefaultCollection,
                 LabelOf(secret),
                 value,
-                0,
+                deadline,
                 out error));
 
             if (stored == 0)
@@ -135,7 +158,8 @@ internal sealed partial class SecretServiceKeyring : IOperatorSecretStore
 
         try
         {
-            return Call((out nint error) => PasswordClear(0, attributes.Table, 0, out error)) != 0;
+            return Call((nint deadline, out nint error) =>
+                PasswordClear(0, attributes.Table, deadline, out error)) != 0;
         }
         finally
         {
@@ -171,25 +195,58 @@ internal sealed partial class SecretServiceKeyring : IOperatorSecretStore
             "this session has no D-Bus session bus, so no Secret Service provider can be reached");
     }
 
-    /// <summary>Runs one <c>libsecret</c> call, turning everything that can go wrong into one exception.</summary>
+    /// <summary>Runs one <c>libsecret</c> call under a deadline, turning everything that can go wrong into one exception.</summary>
     /// <remarks>
-    /// The library being absent and the library refusing are the same case to a caller, so both leave here as
-    /// <see cref="SecretStoreUnavailable" />. A <c>GError</c> belongs to this side once it is set, which is why it is
-    /// read and freed here rather than at each call site.
+    /// The library being absent, the library refusing, and a provider that never answers are the same case to a
+    /// caller, so all three leave here as <see cref="SecretStoreUnavailable" />. A <c>GError</c> belongs to this side
+    /// once it is set, which is why it is read and freed here rather than at each call site.
+    /// <para>
+    /// The withdrawal is read back from the <c>GCancellable</c> rather than remembered on this side, because the
+    /// thread that would set a flag is the one blocked in the call. It decides only what the failure is called: a
+    /// cancelled call reports <c>G_IO_ERROR_CANCELLED</c>, whose message says an operation was cancelled and would
+    /// leave an operator reading that as something they did.
+    /// </para>
     /// </remarks>
     private static nint Call(Exchange exchange)
     {
         nint result;
         nint failure;
+        nint cancellable = 0;
+        var withdrawn = false;
 
         try
         {
-            result = exchange(out failure);
+            cancellable = CancellableNew();
+
+            // A timer rather than anything the calling thread could check: that thread is inside libsecret until the
+            // call returns, so whatever ends the wait has to run elsewhere, and cancelling is safe from any thread.
+            using var deadline = new Timer(Withdraw, cancellable, ProviderDeadline, Timeout.InfiniteTimeSpan);
+
+            try
+            {
+                result = exchange(cancellable, out failure);
+                withdrawn = CancellableIsCancelled(cancellable) != 0;
+            }
+            finally
+            {
+                // Retired here rather than left to the declaration above, because only this form waits for a
+                // cancellation already running — and that callback holds the handle released below. What the
+                // declaration then disposes is a timer already gone, which is a no-op.
+                StopWaitingOn(deadline);
+            }
         }
         catch (Exception missing) when (missing is DllNotFoundException or EntryPointNotFoundException)
         {
             throw new SecretStoreUnavailable(
-                "libsecret is not installed here, so there is no Secret Service to reach", missing);
+                "libsecret and the glib libraries it is reached through are not installed here, so there is no Secret Service to reach",
+                missing);
+        }
+        finally
+        {
+            if (cancellable != 0)
+            {
+                ObjectUnref(cancellable);
+            }
         }
 
         if (failure == 0)
@@ -199,6 +256,12 @@ internal sealed partial class SecretServiceKeyring : IOperatorSecretStore
 
         try
         {
+            if (withdrawn)
+            {
+                throw new SecretStoreUnavailable(
+                    $"the Secret Service did not answer within {ProviderDeadline.TotalSeconds:F0} seconds, so the call was withdrawn");
+            }
+
             var reported = ProviderReportedText.Sanitize(
                 Marshal.PtrToStringUTF8(Marshal.ReadIntPtr(failure, FailureMessageOffset)));
 
@@ -208,6 +271,24 @@ internal sealed partial class SecretServiceKeyring : IOperatorSecretStore
         finally
         {
             ErrorFree(failure);
+        }
+    }
+
+    /// <summary>Ends the wait on a provider that has had its time.</summary>
+    private static void Withdraw(object? cancellable) => CancellableCancel((nint)cancellable!);
+
+    /// <summary>Retires the deadline and waits for a cancellation already under way to finish.</summary>
+    /// <remarks>
+    /// Waiting is the whole point of this overload: an ordinary <c>Dispose</c> returns while a callback may still be
+    /// running, and that callback holds the <c>GCancellable</c> the caller is about to release.
+    /// </remarks>
+    private static void StopWaitingOn(Timer deadline)
+    {
+        using ManualResetEvent stopped = new(false);
+
+        if (deadline.Dispose(stopped))
+        {
+            stopped.WaitOne();
         }
     }
 
@@ -276,6 +357,22 @@ internal sealed partial class SecretServiceKeyring : IOperatorSecretStore
     [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
     [LibraryImport(Glib, EntryPoint = "g_error_free")]
     private static partial void ErrorFree(nint error);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
+    [LibraryImport(Gio, EntryPoint = "g_cancellable_new")]
+    private static partial nint CancellableNew();
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
+    [LibraryImport(Gio, EntryPoint = "g_cancellable_cancel")]
+    private static partial void CancellableCancel(nint cancellable);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
+    [LibraryImport(Gio, EntryPoint = "g_cancellable_is_cancelled")]
+    private static partial int CancellableIsCancelled(nint cancellable);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
+    [LibraryImport(GObject, EntryPoint = "g_object_unref")]
+    private static partial void ObjectUnref(nint instance);
 
     /// <summary>A <c>GHashTable</c> of attributes, and the unmanaged strings it points at.</summary>
     /// <remarks>

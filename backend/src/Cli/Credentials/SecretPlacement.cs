@@ -47,7 +47,7 @@ internal sealed record SecretPlacement(string? Store, string? Refusal, string? U
     /// <param name="uncleared">Why the entry would not go.</param>
     /// <returns>The sentence.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="uncleared" /> is <see langword="null" />.</exception>
-    /// <remarks>Stated once because three commands print it — a sign-in that had to withdraw or replace something, and the first command that moves an older profile into the store — and an operator meeting the same leftover twice should read the same sentence about it.</remarks>
+    /// <remarks>Stated once because three places print it — a sign-in that had to withdraw or replace something, a sign-out that could not clear both halves, and the first command that moves an older profile into the store — and an operator meeting the same leftover twice should read the same sentence about it.</remarks>
     internal static string DescribeUncleared(string uncleared)
     {
         ArgumentNullException.ThrowIfNull(uncleared);

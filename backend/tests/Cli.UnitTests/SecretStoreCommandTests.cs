@@ -193,7 +193,7 @@ public sealed class SecretStoreCommandTests : IDisposable
         // Assert
         Assert.Contains(
             this.console.Warnings,
-            line => line.Contains("still there", StringComparison.Ordinal)
+            line => line.Contains("still in the platform's secret store", StringComparison.Ordinal)
                 && line.Contains("the collection is locked", StringComparison.Ordinal));
     }
 
