@@ -216,6 +216,56 @@ public sealed class DeploymentClientSessionTests
         Assert.True(reach.IsReached);
     }
 
+    /// <summary>
+    /// A deployment that took too long is recovered from on the same terms as one nothing answered from. Both are the
+    /// connection rather than the answer, so the curve treats them alike, and asserting only the unreachable one would
+    /// leave the other free to stop being retried without a test saying so.
+    /// </summary>
+    [Fact]
+    public async Task Standing_ADeploymentThatTookTooLongAndThenAnswered_RecoversOnTheSameTerms()
+    {
+        // Arrange
+        var answers = 0;
+        using var harness = new DeploymentHarness(_ =>
+            ++answers is 1
+                ? throw new TaskCanceledException("this client's own timeout elapsed")
+                : StubTransport.JsonResponse(ACallerWhoMayRead));
+        using var session = SessionOver(harness, attempts: 3);
+
+        // Act
+        var standing = await session.Standing;
+
+        // Assert
+        Assert.NotNull(standing);
+        Assert.Equal(2, harness.Deployment.Requests.Count);
+
+        var reach = await session.Connection;
+        Assert.NotNull(reach);
+        Assert.True(reach.IsReached);
+    }
+
+    /// <summary>A deployment that never answers in time is given up on where one that never answers at all is.</summary>
+    [Fact]
+    public async Task Standing_ADeploymentThatNeverAnswersInTime_StopsAfterTheAttemptsAndSaysSo()
+    {
+        // Arrange
+        using var harness = new DeploymentHarness(
+            _ => throw new TaskCanceledException("this client's own timeout elapsed"));
+        using var session = SessionOver(harness, attempts: 3);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<DeploymentFailure>(async () => await session.Standing);
+
+        // Assert
+        Assert.Equal(DeploymentFailureReason.TimedOut, failure.Reason);
+        Assert.Equal(3, harness.Deployment.Requests.Count);
+
+        var reach = await session.Connection;
+        Assert.NotNull(reach);
+        Assert.True(reach.IsLost);
+        Assert.Equal(3, reach.Attempt);
+    }
+
     /// <summary>The attempts are bounded, so a deployment that is genuinely gone is said to be gone rather than waited on forever.</summary>
     [Fact]
     public async Task Standing_ADeploymentNothingAnswersFrom_StopsAfterTheAttemptsAndSaysSo()
