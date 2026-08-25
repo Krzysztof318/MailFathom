@@ -1537,7 +1537,7 @@ hold them:
 | Platform | Where a profile's secrets are held |
 | --- | --- |
 | Windows | The Credential Manager, as a generic credential named `MailFathom/mfctl/<address>/<profile>/<kind>`, persisted for your logged-on user on this computer |
-| Linux | The Secret Service through `libsecret` — GNOME Keyring, KWallet, or another provider — in your session's default collection |
+| Linux | The Secret Service through `libsecret` — GNOME Keyring, KWallet, or another provider — in your session's default collection, listed by a keyring application as `MailFathom mfctl <kind> for <address> (<profile>)` |
 
 Two entries per profile at most: the bearer credential it presents, and an OAuth session's refresh token. Both are keyed
 by the deployment's address and by the profile holding them, so one deployment's credential is never presented to

@@ -91,8 +91,8 @@ internal sealed partial class SecretServiceKeyring : IOperatorSecretStore
 
         try
         {
-            var held = Call((nint deadline, out nint error) =>
-                PasswordLookup(0, attributes.Table, deadline, out error));
+            var held = Call((nint cancellable, out nint error) =>
+                PasswordLookup(0, attributes.Table, cancellable, out error));
 
             if (held == 0)
             {
@@ -126,13 +126,13 @@ internal sealed partial class SecretServiceKeyring : IOperatorSecretStore
 
         try
         {
-            var stored = Call((nint deadline, out nint error) => PasswordStore(
+            var stored = Call((nint cancellable, out nint error) => PasswordStore(
                 0,
                 attributes.Table,
                 DefaultCollection,
                 LabelOf(secret),
                 value,
-                deadline,
+                cancellable,
                 out error));
 
             if (stored == 0)
@@ -158,8 +158,8 @@ internal sealed partial class SecretServiceKeyring : IOperatorSecretStore
 
         try
         {
-            return Call((nint deadline, out nint error) =>
-                PasswordClear(0, attributes.Table, deadline, out error)) != 0;
+            return Call((nint cancellable, out nint error) =>
+                PasswordClear(0, attributes.Table, cancellable, out error)) != 0;
         }
         finally
         {

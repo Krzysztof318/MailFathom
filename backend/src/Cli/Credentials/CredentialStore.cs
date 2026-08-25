@@ -220,30 +220,23 @@ internal sealed class CredentialStore
         // value and keeps the key, and a secret keyed by what was typed would be filed where nothing looks.
         var profileName = StoredNameFor(stored, name) ?? name;
 
-        // Whether this sign-in is replacing a profile whose secrets the platform store is already holding under this
-        // same key, which is what decides whether an entry that will not clear is an orphan worth reporting or a
-        // machine that never had one.
-        var heldBefore = false;
-        string? abandoned = null;
+        // What the platform store is already holding for this profile, which is what decides both whether an entry
+        // that will not clear is an orphan worth reporting and what has to be removed once the new record is durable.
+        // A profile keeps its name when its deployment moves port or gains a domain, so the entries it leaves at the
+        // address it is moving off are reachable from nowhere afterwards: not from the new placement, and not from the
+        // logout that reads the profile's current address.
+        var replaced = stored.Profiles.GetValueOrDefault(profileName) is { KeyPair: null, Token: null } previous
+            ? previous
+            : null;
 
-        if (stored.Profiles.GetValueOrDefault(profileName) is { KeyPair: null, Token: null } replaced)
-        {
-            heldBefore = string.Equals(replaced.Endpoint, address, StringComparison.OrdinalIgnoreCase);
+        var heldBefore = replaced is not null
+            && string.Equals(replaced.Endpoint, address, StringComparison.OrdinalIgnoreCase);
 
-            // A profile keeps its name when its deployment moves port or gains a domain, so signing in again files
-            // the new entries under a different key and leaves the old ones reachable from nowhere: not from this
-            // placement, and not from the logout that reads the profile's current address. Here or never.
-            if (!heldBefore)
-            {
-                abandoned = this.ForgetBoth(profileName, replaced.Endpoint);
-            }
-        }
+        var abandonedAddress = heldBefore ? null : replaced?.Endpoint;
 
         var placement = keyPair is null
             ? this.Place(profileName, address, token, session?.RefreshToken, heldBefore)
-            : this.PlaceNothing(profileName, address, heldBefore);
-
-        placement = placement with { Uncleared = placement.Uncleared ?? abandoned };
+            : SecretPlacement.NothingToKeep;
 
         var held = placement.Store is not null;
 
@@ -258,9 +251,19 @@ internal sealed class CredentialStore
         var written = stored with { Default = profileName };
 
         this.WriteOrWithdraw(written, profileName, address, heldBefore);
+
+        // After the write and never before it. Each of these removes an entry the record that was in the file until
+        // this moment pointed at, so a write that then failed would take a working profile with it: the file would
+        // still name the old address, or still say the store holds this profile, with nothing left under either key.
+        var leftBehind = this.ForgetWhatNothingPointsAtAnyMore(
+            profileName,
+            keyPair is null ? null : address,
+            abandonedAddress,
+            heldBefore);
+
         this.DiscardKeyIfUnused(written);
 
-        return (profileName, placement);
+        return (profileName, placement with { Uncleared = placement.Uncleared ?? leftBehind });
     }
 
     /// <summary>Writes the store, taking the placement back out when the file it was made for was not written.</summary>
@@ -507,13 +510,33 @@ internal sealed class CredentialStore
         return SecretPlacement.Held(this.secretStore.Description);
     }
 
-    /// <summary>Leaves nothing of a profile in the platform store, for the one kind that keeps no secret.</summary>
-    /// <remarks>Signing a key-pair profile in over one whose tokens the store held is what leaves something to clear here, so a clear that refuses leaves credentials behind exactly as the withdrawal above does, and is reported the same way.</remarks>
-    private SecretPlacement PlaceNothing(string profile, string address, bool heldBefore) =>
-        SecretPlacement.NothingToKeep with
-        {
-            Uncleared = Reportable(this.ForgetBoth(profile, address), heldBefore),
-        };
+    /// <summary>Removes what the profile the file now records is no longer reachable through.</summary>
+    /// <param name="profile">The profile's stored name.</param>
+    /// <param name="keptNothingAt">The profile's own address when this sign-in stores no secret at all, or <see langword="null" /> when it stores one there.</param>
+    /// <param name="abandonedAddress">The address the profile has just moved off, or <see langword="null" /> when it moved nowhere.</param>
+    /// <param name="heldBefore">Whether the store was holding this profile's secrets at its own address before this sign-in.</param>
+    /// <returns>The first refusal, or <see langword="null" /> when everything that had to go went.</returns>
+    /// <remarks>
+    /// Two cases, and both are a removal rather than a replacement, which is why neither can run before the file is
+    /// written. Signing a key-pair profile in over one whose tokens the store held leaves those tokens with nothing to
+    /// present them, and a deployment that moved leaves a pair under an address nothing will ask about again.
+    /// <para>
+    /// The first is reported only where the store really was holding something, since a machine that never had one
+    /// would otherwise be told about an orphan that cannot exist; the second always is, because a profile reaches it
+    /// only by having been store-held at that other address.
+    /// </para>
+    /// </remarks>
+    private string? ForgetWhatNothingPointsAtAnyMore(
+        string profile,
+        string? keptNothingAt,
+        string? abandonedAddress,
+        bool heldBefore)
+    {
+        var here = keptNothingAt is null ? null : Reportable(this.ForgetBoth(profile, keptNothingAt), heldBefore);
+        var moved = abandonedAddress is null ? null : this.ForgetBoth(profile, abandonedAddress);
+
+        return here ?? moved;
+    }
 
     /// <summary>Takes both of a profile's secrets out of the platform store, and reports the first refusal.</summary>
     /// <remarks>

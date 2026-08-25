@@ -498,6 +498,33 @@ public sealed class SecretStoreCredentialTests : IDisposable
         Assert.Single(this.secretStore.Entries);
     }
 
+    /// <summary>Clearing the address a profile is moving off is a removal, so it waits for the record that stops pointing there to be written.</summary>
+    /// <remarks>
+    /// Run before the write, a sign-in that then failed would have deleted the old address's entries and had the new
+    /// address's withdrawn behind it, leaving a file that still names the old address and a store holding nothing under
+    /// either key. The credential that was working before the sign-in would be gone because of a sign-in that never
+    /// took effect.
+    /// </remarks>
+    [Fact]
+    public void Save_AFileWriteThatCannotCompleteOnAMovedDeployment_LeavesTheOldAddressWhereTheRecordStillPointsAtIt()
+    {
+        // Arrange: a profile the store holds at one address, and a sign-in at the address it moved to whose file
+        // write cannot complete.
+        this.store.Save("production", Production, "first-token", "workstation");
+
+        Directory.CreateDirectory(this.StorePath + ".pending");
+
+        // Act
+        Assert.Throws<CliFailure>(() => this.store.Save("production", Moved, "moved-token", "workstation"));
+
+        // Assert
+        Assert.Equal(
+            FakeOperatorSecretStore.KeyOf(ProfileSecret.BearerToken("production", "https://mail.example.test:8443")),
+            Assert.Single(this.secretStore.Entries).Key);
+
+        Assert.Equal("first-token", this.store.Resolve("production").Token);
+    }
+
     /// <summary>Where the file already describes a profile the store holds, the entries under that key are the surviving record's credential rather than an orphan.</summary>
     /// <remarks>
     /// The withdrawal exists for a name the file never gained. Running it here would empty the store for a profile the
@@ -628,7 +655,9 @@ public sealed class SecretStoreCredentialTests : IDisposable
         this.store.Save("production", Production, "access-token", "workstation", Session());
 
         // Act
-        this.store.RenewAccessToken("production", "renewed-token", DateTimeOffset.UnixEpoch.AddDays(2));
+        var renewedUntil = DateTimeOffset.UnixEpoch.AddDays(2);
+
+        this.store.RenewAccessToken("production", "renewed-token", renewedUntil);
 
         // Assert
         var profile = this.store.Resolve("production");
@@ -636,6 +665,10 @@ public sealed class SecretStoreCredentialTests : IDisposable
         Assert.Equal("renewed-token", profile.Token);
         Assert.Equal("refresh-token", profile.Session?.RefreshToken);
         Assert.Null(this.store.Read().Profiles["production"].Token);
+
+        // The expiry the renewal was given, because a session left reading as spent renews again on every command:
+        // the file is the only place it is recorded, and the store holds the token rather than when it dies.
+        Assert.Equal(renewedUntil, this.store.Read().Profiles["production"].Session?.AccessTokenExpiresAt);
     }
 
     /// <summary>An older command sealed an empty token for a key-pair profile, and that value is the only thing keeping a key file alive.</summary>
