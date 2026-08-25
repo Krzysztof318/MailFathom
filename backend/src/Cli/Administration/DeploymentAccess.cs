@@ -34,13 +34,15 @@ internal sealed class DeploymentAccess
     private readonly Func<Uri, StoredTransportTrust, DeploymentTransport> openTransport;
     private readonly TimeProvider timeProvider;
     private readonly CliInvocationRecord? invocation;
+    private readonly ICliConsole? console;
 
     /// <summary>Initializes access over the store, the transport, and the clock a command was given.</summary>
     /// <param name="store">Where the profiles live.</param>
     /// <param name="openTransport">Opens a transport aimed at one address; this type disposes what it opens.</param>
     /// <param name="timeProvider">Decides whether the stored access token is still usable.</param>
     /// <param name="invocation">What this invocation is recording, so its log line names the deployment acted on; <see langword="null" /> records nothing.</param>
-    /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="invocation" /> is <see langword="null" />.</exception>
+    /// <param name="console">Where the one thing settling a deployment can leave behind is said, or <see langword="null" /> to say nothing — which is what a test not about that wants.</param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="invocation" /> or <paramref name="console" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// This is the one place that knows which deployment a command settled on, because settling it is what this type
     /// does — the option, the environment variable, and the stored default are reconciled here and nowhere else. That
@@ -51,7 +53,8 @@ internal sealed class DeploymentAccess
         CredentialStore store,
         Func<Uri, StoredTransportTrust, DeploymentTransport> openTransport,
         TimeProvider timeProvider,
-        CliInvocationRecord? invocation = null)
+        CliInvocationRecord? invocation = null,
+        ICliConsole? console = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(openTransport);
@@ -61,6 +64,7 @@ internal sealed class DeploymentAccess
         this.openTransport = openTransport;
         this.timeProvider = timeProvider;
         this.invocation = invocation;
+        this.console = console;
     }
 
     /// <summary>Settles which deployment a command acts on, renewing its access token when the stored one is spent.</summary>
@@ -73,6 +77,14 @@ internal sealed class DeploymentAccess
         var profile = this.store.Resolve(requestedDeployment);
 
         this.invocation?.ReachedDeployment(profile.Name);
+
+        // Resolving a profile can move it into the platform store, and a move undone half-way leaves a credential in
+        // the keyring the file no longer points at. This is the only place every command passes through, so it is the
+        // only place that can say so — the store has no terminal and the commands do not know a move happened.
+        if (profile.Uncleared is { } uncleared)
+        {
+            this.console?.WriteWarning(SecretPlacement.DescribeUncleared(uncleared));
+        }
 
         if (profile.KeyPair is { } keyPair)
         {

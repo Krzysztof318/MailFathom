@@ -172,7 +172,10 @@ internal static class LoginCommand
 
         // The minted assertion is deliberately not the stored token: it is spent within the minute and every later
         // command signs its own. What is stored for such a profile is where the key lives and nothing else.
-        context.Store.Save(
+        // The name the file records rather than the one that was typed: the profiles are keyed without regard to case,
+        // so signing in again under a second spelling keeps the first, and everything said or recorded below has to
+        // name the profile a later command will be able to open.
+        var (storedName, placement) = context.Store.Save(
             profileName,
             endpoint,
             keyPair is null ? token : string.Empty,
@@ -184,10 +187,26 @@ internal static class LoginCommand
         // Named here rather than by the access seam every other command goes through, because a sign-in establishes a
         // profile instead of resolving one — so without this the command that gives a deployment its name is the one
         // whose own record does not carry it.
-        context.Invocation.ReachedDeployment(profileName);
+        context.Invocation.ReachedDeployment(storedName);
 
         context.Console.WriteLine(
-            $"Signed in to {endpoint.GetLeftPart(UriPartial.Authority)} as '{credentialName}' (MailFathom {deploymentSession.Version}), saved as profile '{profileName}' and selected.{DescribeTransport(connection.Trust)}");
+            $"Signed in to {endpoint.GetLeftPart(UriPartial.Authority)} as '{credentialName}' (MailFathom {deploymentSession.Version}), saved as profile '{storedName}' and selected.{DescribeTransport(connection.Trust)}");
+
+        // Which of the two arrangements this machine offered, said at the one moment it is decided. A workstation with
+        // a keyring and a jump host without one both keep working, and only the sentence tells them apart — so leaving
+        // it out would mean an operator finding out what protects their credential by reading the file.
+        if (placement.Describe() is { } storage)
+        {
+            context.Console.WriteNotice(storage);
+        }
+
+        // A sign-in that had to withdraw an entry, or replace a token profile with a key-pair one, can be refused by a
+        // keyring that locked while it ran. What is left behind is a live credential under a profile whose file entry
+        // no longer says the store holds anything, so nothing later goes looking for it and only the operator can.
+        if (placement.Uncleared is { } uncleared)
+        {
+            context.Console.WriteWarning(SecretPlacement.DescribeUncleared(uncleared));
+        }
 
         if (session is not null)
         {

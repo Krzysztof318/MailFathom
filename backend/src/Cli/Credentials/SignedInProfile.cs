@@ -37,6 +37,16 @@ internal sealed record SignedInProfile(
     /// </remarks>
     internal StoredTransportTrust Trust { get; init; } = StoredTransportTrust.Protected;
 
+    /// <summary>Gets why an entry the platform store still holds for this profile could not be removed, or <see langword="null" /> when nothing was left behind.</summary>
+    /// <remarks>
+    /// Set only where resolving the profile moved it into the platform store and the move had to be undone half-way —
+    /// a collection locking between the two writes. The profile stays sealed in the file and opens perfectly well, so
+    /// this is not a failure to report as one; what it is, is a live credential in the operator's keyring that the file
+    /// entry no longer points at, which every later <c>logout</c> will pass over. The command that triggered the move
+    /// is the only one that will ever know, so it carries the fact rather than the store keeping it.
+    /// </remarks>
+    internal string? Uncleared { get; init; }
+
     /// <inheritdoc />
     /// <remarks>Redacted, so no diagnostic or exception message prints the token by formatting the record it lives in.</remarks>
     public override string ToString() => $"{nameof(SignedInProfile)} {{ {this.Name}, {this.Endpoint}, {this.Credential} }}";

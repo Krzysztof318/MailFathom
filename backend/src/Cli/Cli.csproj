@@ -20,6 +20,11 @@
          earlier and by a mechanism that costs the restore graph nothing: .config/BannedSymbols.txt bans the
          reflection-based JSON overloads outright, and the ordinary build rejects the call. -->
     <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- The two platform secret stores are reached by P/Invoke, and the source-generated imports that survive trimming
+         are generated as unsafe code. Nothing hand-written here takes a pointer except the one Windows structure the
+         Credential Manager writes from, which has to be pinned for the duration of the call. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

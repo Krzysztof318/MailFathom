@@ -27,7 +27,13 @@ namespace MailFathom.Cli.Credentials;
 /// So a credentials file that leaves the machine — in a backup, a synced folder, a support bundle, a screenshot of a
 /// directory listing — discloses nothing on its own. Someone already able to read arbitrary files as this user on this
 /// machine can read the key too, and no scheme that runs unattended can prevent that; the file mode is what answers
-/// that case, and this answers the copy. Issue #318 replaces the arrangement with the platform's own secret service.
+/// that case, and this answers the copy.
+/// </para>
+/// <para>
+/// <b>This is the weaker of the two arrangements, and the one taken only where the stronger is absent.</b> A machine
+/// with a secret store keeps the credential there instead — see <see cref="SecretStores.IOperatorSecretStore" /> — and
+/// nothing then reaches this type, which is why <see cref="Discard" /> exists: the key file has to go once no profile
+/// is sealed under it, or the weaker material would outlive every value it protected.
 /// </para>
 /// </remarks>
 internal sealed class TokenProtector
@@ -80,6 +86,24 @@ internal sealed class TokenProtector
             throw new CliFailure(
                 "The stored credential could not be read. That is what a credentials file copied from another machine or another user looks like. Sign in again to replace it.",
                 failure);
+        }
+    }
+
+    /// <summary>Removes the key file, which a store holding no sealed value no longer needs.</summary>
+    /// <remarks>
+    /// Silent about a file that is not there and about one that will not go: the first is the ordinary case on a
+    /// machine that never sealed anything, and the second leaves a key that opens nothing, which is not worth failing a
+    /// command the operator ran for another reason. Nothing regenerates it until a profile is sealed again, and that
+    /// path creates it on first use.
+    /// </remarks>
+    internal void Discard()
+    {
+        try
+        {
+            File.Delete(this.keyPath);
+        }
+        catch (Exception residue) when (residue is IOException or UnauthorizedAccessException)
+        {
         }
     }
 

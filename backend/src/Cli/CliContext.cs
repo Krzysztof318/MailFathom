@@ -5,6 +5,7 @@
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Authorization;
 using MailFathom.Cli.Credentials;
+using MailFathom.Cli.Credentials.SecretStores;
 using MailFathom.Cli.Diagnostics;
 using MailFathom.Cli.Transport;
 
@@ -73,7 +74,10 @@ internal sealed record CliContext(
     /// <returns>The context.</returns>
     internal static CliContext ForTerminal() => new(
         SystemCliConsole.ForTerminal(),
-        new CredentialStore(CredentialStore.DefaultPath(), new TokenProtector(CredentialStore.DefaultKeyPath())),
+        new CredentialStore(
+            CredentialStore.DefaultPath(),
+            new TokenProtector(CredentialStore.DefaultKeyPath()),
+            PlatformSecretStore.ForThisMachine()),
         DeploymentTransport.Open,
         redirectUri => new LoopbackRedirectAwaiter(redirectUri),
         WebBrowserLauncher.TryOpen,
@@ -82,7 +86,8 @@ internal sealed record CliContext(
 
     /// <summary>Reaches the deployment a command acts on, renewing a spent access token on the way.</summary>
     /// <returns>The access seam every command that sends a request goes through.</returns>
-    internal DeploymentAccess Deployment() => new(this.Store, this.OpenTransport, this.Clock, this.Invocation);
+    internal DeploymentAccess Deployment() =>
+        new(this.Store, this.OpenTransport, this.Clock, this.Invocation, this.Console);
 
     /// <summary>Opens a transport aimed at an address no profile has accepted anything about.</summary>
     /// <param name="address">The address, which is an authorization server rather than a deployment.</param>
