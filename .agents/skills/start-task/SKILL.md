@@ -95,7 +95,24 @@ them if that access were ever removed.
    session spent on a diff that cannot merge.
 8. Identify the GitHub issue that governs the task, reading
    `docs/operations/issue-tracking.md` first. Create it when none exists; its body draws on what
-   step 6 read.
+   step 6 read. Then read what it waits on, before it is placed and before it is claimed:
+
+   ```bash
+   gh api repos/Krzysztof318/MailFathom/issues/<number>/dependencies/blocked_by \
+     --jq '.[] | select(.state == "open") | "#\(.number) \(.title)"'
+   ```
+
+   Every line it returns is a refusal. Return `blocked`, name each one, and start nothing: those
+   relations are where the order between issues is recorded, and an issue taken past one produces a
+   change written against a contract that has not landed. Say which blockers would have to close,
+   so the answer is a next step rather than a stop.
+
+   An empty answer is read against the body rather than taken as permission. An issue whose order
+   was never recorded returns nothing while its `## Dependencies` section names what it waits on,
+   so compare the two and write the missing relations — the call is in
+   `docs/operations/issue-tracking.md` § *The order between issues* — before concluding the issue is
+   free. A blocker that has since closed stops nothing and is why the query filters on `open` rather
+   than on the list being empty.
 9. Place the issue. The label and the milestone need write access to the repository, so they belong
    to the owner's checkout; the board fields need write access to the board, which step 2
    established. It carries exactly one `type:*` label, a `backend` or `frontend` label where the work
@@ -109,11 +126,20 @@ them if that access were ever removed.
    Verify the values landed, because the built-in workflows set `Status` and nothing else, and an
    unplaced issue disappears from the views the owner reads.
 
-   In the fork role, open the issue and stop at what the probe allows. Without board write that is the
-   issue alone: an arrival carries no label, no milestone, and no board fields by design, and the
-   maintainer's triage pass supplies them. With board write it is the issue plus its `Area`, `Queue`,
-   and `Size`, and the labels and the milestone still wait for triage. Say which of the two happened in the
-   brief, so nobody reads the absence as a step that failed.
+   An issue this step opened also carries its order. Write one `blocked by` relation for each issue
+   its `## Dependencies` section names that is still open, and none for one already closed, with the
+   call `docs/operations/issue-tracking.md` § *The order between issues* gives. Where the issue is a
+   parent, its `## Delivery order` table is what those relations are read from, and that page
+   requires the table on every parent — so a parent is not placed until it has one.
+
+   In the fork role, open the issue and stop at what the probe allows. Without board write that is
+   the issue alone: an arrival carries no label, no milestone, no board fields, and no relation by
+   design, and the maintainer's triage pass supplies them. With board write it is the issue plus its
+   `Area`, `Queue`, and `Size`, and the labels, the milestone, and the relations still wait for
+   triage — a relation is write access to this repository exactly as a label is. Step 8 is
+   unaffected either way, the dependencies of a public issue being public, so the refusal it carries
+   holds in both roles. Say which of the two happened in the brief, so nobody reads the absence as a
+   step that failed.
 10. Claim the issue, in the owner's checkout, once the brief below will read `safe`:
 
     ```bash
@@ -137,6 +163,7 @@ Workspace: <safe or blocked, branch, base branch>
 Scope: <what governs the task, or that nothing does>
 Protected paths: <none reached, or which and what that means for this role>
 Issue: <number and title, or created with reason>
+Blocked by: <the open blockers refusing the work, or none — and any relation written>
 Placement: <type label, stack label or neither, Area, Queue, Size, milestone or none — or what the board probe left to triage>
 Claim: <agent:claimed applied, already present, or not applicable in the fork role>
 Required context: <files read>

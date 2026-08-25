@@ -602,8 +602,12 @@ The canonical skills are:
   differ. Deleting that file is how a first run is asked for again;
 - `start-task` requires a clean workspace or an explicitly approved inventory
   and preservation plan, identifies or creates the GitHub issue that governs the
-  task, places it on the board and claims it with `agent:claimed`, then loads the
-  applicable documentation and ADR context before edits;
+  task, refuses it while another open issue blocks it, places it on the board and
+  claims it with `agent:claimed`, then loads the applicable documentation and ADR
+  context before edits. The refusal reads the issue's own `blocked by` list, so
+  what stops the session is the order the tracker records rather than a judgement
+  the session makes; an issue it opens carries that order out to the tracker in
+  the same pass that places it;
 - `review-change` performs a findings-first diff review and records verification
   status and residual risks, and reruns the fast loop only when something has
   invalidated its last green run;
@@ -652,8 +656,12 @@ themselves: which work needs an issue, what an issue body contains, the `type:*`
 label it carries, the `backend` or `frontend` label saying which stack the work
 lands in and the case that takes neither, the `agent:claimed` marker a session
 applies when it takes one, the `Area`, `Queue` and `Size` fields that place it on
-the board, the milestone that scopes it to a release, and which board transitions
-belong to the project automation rather than to an agent. It sits there rather
+the board, the milestone that scopes it to a release, the dependency relation
+that records which issue has to land before which — distinct from both the
+sub-issue hierarchy and the `blocked` label, and read by `start-task` before it
+takes anything — the delivery table every parent carries those relations in, and
+which board transitions belong to the project automation rather than to an
+agent. It sits there rather
 than in root `AGENTS.md` because it is acted on twice per task and read by
 nothing else, so an always-loaded copy would cost every session that touches no
 issue. `start-task` and `finish-change` each name it at the step that writes the

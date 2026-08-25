@@ -76,6 +76,9 @@ body:
     attributes:
       label: Dependencies
       description: >-
-        Issues this waits on, as `#<number>` references so the board shows them as links.
+        Issues this waits on, as `#<number>` references so the board shows them as links, and
+        with the reason each one is waited on. The order itself is also recorded as a
+        dependency relation on the issue when it is placed, which is what refuses the work
+        while a blocker is open.
     validations:
       required: false
