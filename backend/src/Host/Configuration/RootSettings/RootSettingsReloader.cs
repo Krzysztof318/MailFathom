@@ -13,7 +13,8 @@ namespace MailFathom.Host.Configuration.RootSettings;
 /// <para>
 /// Reloading is a read followed by a publish, and either half can refuse. A document that cannot be read leaves the
 /// version already in force exactly where it was; a document that reads but is one the layer will not publish — not a
-/// configuration object, or carrying a setting read before the layer existed — is rejected by version, which is what
+/// configuration object, carrying a setting read before the layer existed, or carrying one another store owns — is
+/// rejected by version, which is what
 /// an operator needs to know: the number they wrote is the number that did not take. What never happens is a fall back
 /// to the sources beneath this layer, because those never carried the persisted values and reverting to them would
 /// quietly change settings the deployment had already adopted.
@@ -50,12 +51,16 @@ internal sealed partial class RootSettingsReloader(
         {
             provider.Apply(candidate);
         }
-        // Three exception types for one outcome, which is a candidate the layer will not publish: the framework's
+        // Four exception types for one outcome, which is a candidate the layer will not publish: the framework's
         // parser reports a document that is not an object of configuration keys as a FormatException and leaves a
         // JsonException — a document nested deeper than the reader's maximum, which jsonb stores happily — to
-        // propagate as it came, and the layer itself refuses a document carrying a setting read before it existed.
+        // propagate as it came, and the layer itself refuses a document carrying a setting read before it existed or
+        // one the storage catalog persists in a store of its own.
         catch (Exception exception)
-            when (exception is FormatException or JsonException or BootstrapOnlySettingPersistedException)
+            when (exception is FormatException
+                or JsonException
+                or BootstrapOnlySettingPersistedException
+                or MisroutedSettingPersistedException)
         {
             this.LogCandidateRejected(candidate.Version, provider.Version, exception);
 

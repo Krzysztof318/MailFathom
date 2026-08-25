@@ -113,6 +113,30 @@ public sealed class RootSettingsReloaderTests
         Assert.Contains(logger.Messages, message => message.Contains("version 13", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A candidate carrying a setting the storage catalog persists elsewhere is rejected the same way, because a reload
+    /// that published it would leave one setting readable from two stores.
+    /// </summary>
+    [Fact]
+    public async Task ReloadAsync_CandidateCarryingASpeciallyRoutedSetting_KeepsTheVersionInForce()
+    {
+        // Arrange
+        var provider = LoadedProvider();
+        var reader = ReaderReturning(
+            new RootSettingsDocument("""{ "Accounts": { "0": { "DisplayName": "owner" } } }""", Version: 17));
+        var logger = new RecordingLogger<RootSettingsReloader>();
+
+        // Act
+        var published = await new RootSettingsReloader(provider, reader, logger).ReloadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(published);
+        Assert.Equal(3, provider.Version);
+        provider.TryGet("Accounts:0:DisplayName", out var owner);
+        Assert.Null(owner);
+        Assert.Contains(logger.Messages, message => message.Contains("version 17", StringComparison.Ordinal));
+    }
+
     /// <summary>A database that cannot be read leaves the deployment exactly as it was, and says so.</summary>
     [Fact]
     public async Task ReloadAsync_PersistedConfigurationUnreadable_KeepsTheVersionInForce()

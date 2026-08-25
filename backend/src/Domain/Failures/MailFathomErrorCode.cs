@@ -69,6 +69,15 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode BootstrapOnlySettingPersisted { get; } = new(12004);
 
+    /// <summary>Gets subcategory 2, configuration sources: the persisted root document carries a setting MailFathom persists in another store.</summary>
+    /// <remarks>
+    /// Where each writable setting lives is decided by a compiled catalog, so a setting the catalog routes elsewhere
+    /// has a home already and the root document is not it. Two rows describing one setting would leave every later
+    /// reader choosing which of them the deployment meant, with nothing to choose on, which is why the document is
+    /// refused rather than composed with the duplicate dropped.
+    /// </remarks>
+    public static MailFathomErrorCode MisroutedSettingPersisted { get; } = new(12005);
+
     /// <summary>Gets subcategory 3, mailbox access tokens: an account's authorization server did not issue an access token its OAuth mechanisms require.</summary>
     public static MailFathomErrorCode MailAccessTokenUnavailable { get; } = new(13001);
 
@@ -855,6 +864,7 @@ public readonly record struct MailFathomErrorCode
         EnvironmentOnlySettingMisplaced,
         RootSettingsUnreadable,
         BootstrapOnlySettingPersisted,
+        MisroutedSettingPersisted,
         MailAccessTokenUnavailable,
         MailboxAuthorizationFailed,
         PrincipalNotAuthorized,

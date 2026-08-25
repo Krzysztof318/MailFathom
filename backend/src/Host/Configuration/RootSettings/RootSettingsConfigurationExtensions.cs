@@ -20,6 +20,7 @@ internal static class RootSettingsConfigurationExtensions
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> or <paramref name="document" /> is <see langword="null" />.</exception>
     /// <exception cref="RootSettingsUnreadableException">Thrown when the JSON configuration parser refuses the persisted document.</exception>
     /// <exception cref="BootstrapOnlySettingPersistedException">Thrown when the document carries a setting read before this layer is composed.</exception>
+    /// <exception cref="MisroutedSettingPersistedException">Thrown when the document carries a setting the storage catalog persists in a store of its own.</exception>
     /// <remarks>
     /// <para>
     /// The layer is inserted at the same boundary the deployment-provisioned files were, and after them, which is what
@@ -70,6 +71,7 @@ internal static class RootSettingsConfigurationExtensions
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
     /// <exception cref="RootSettingsUnreadableException">Thrown when the persisted configuration cannot be read, or the JSON configuration parser refuses it.</exception>
     /// <exception cref="BootstrapOnlySettingPersistedException">Thrown when the document carries a setting read before this layer is composed.</exception>
+    /// <exception cref="MisroutedSettingPersistedException">Thrown when the document carries a setting the storage catalog persists in a store of its own.</exception>
     /// <remarks>
     /// Everything the read needs — where the database is, which secret block carries its credential, and how a
     /// configured secret value is interpreted — is read from the sources beneath this layer and never from the layer

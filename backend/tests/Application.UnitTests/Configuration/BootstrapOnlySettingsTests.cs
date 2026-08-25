@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Host.Configuration.RootSettings;
+using MailFathom.Application.Configuration;
 using Xunit;
 
-namespace MailFathom.Host.UnitTests.Configuration.RootSettings;
+namespace MailFathom.Application.UnitTests.Configuration;
 
 /// <summary>
 /// Covers which settings the persisted layer refuses to carry. The list is what keeps the layer from supplying the
@@ -115,5 +115,58 @@ public sealed class BootstrapOnlySettingsTests
 
         // Assert
         Assert.Empty(refused);
+    }
+
+    /// <summary>
+    /// The same list decides what may be written, one path at a time rather than one document at a time, because a
+    /// write arrives as the single path an administrator asked to change.
+    /// </summary>
+    [Theory]
+    [InlineData("Persistence:Password", "Persistence:Password")]
+    [InlineData("Persistence:Password:SecretReference", "Persistence:Password")]
+    [InlineData("connectionstrings:mailfathom", "ConnectionStrings:mailfathom")]
+    public void TryFindCovering_PathAWriteMayNotReach_ReportsTheRefusedSetting(string configurationPath, string expected)
+    {
+        // Act
+        var refused = BootstrapOnlySettings.TryFindCovering(configurationPath, out var refusedSetting);
+
+        // Assert
+        Assert.True(refused);
+        Assert.Equal(expected, refusedSetting);
+    }
+
+    /// <summary>
+    /// A write names a subtree rather than a value, so a section carrying a refused setting reaches it as surely as a
+    /// path beneath one does. The reported setting is the one the write would have carried.
+    /// </summary>
+    [Theory]
+    [InlineData("Persistence", "Persistence:ConnectionString")]
+    [InlineData("Secrets", "Secrets:Interpretation")]
+    [InlineData("ConfigurationSources", "ConfigurationSources:Directory")]
+    public void TryFindCovering_SectionContainingARefusedSetting_ReportsTheSettingItCarries(
+        string configurationPath,
+        string expected)
+    {
+        // Act
+        var refused = BootstrapOnlySettings.TryFindCovering(configurationPath, out var refusedSetting);
+
+        // Assert
+        Assert.True(refused);
+        Assert.Equal(expected, refusedSetting);
+    }
+
+    /// <summary>An ordinary setting is covered by nothing here, which leaves the catalog free to route it.</summary>
+    [Theory]
+    [InlineData("MailboxSearch:SnippetsPerEmail")]
+    [InlineData("Persistence:PasswordRotationInterval")]
+    [InlineData("Persistence:CommandTimeout")]
+    public void TryFindCovering_OrdinarySetting_ReportsNoRefusal(string configurationPath)
+    {
+        // Act
+        var refused = BootstrapOnlySettings.TryFindCovering(configurationPath, out var refusedSetting);
+
+        // Assert
+        Assert.False(refused);
+        Assert.Null(refusedSetting);
     }
 }

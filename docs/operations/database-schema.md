@@ -283,7 +283,8 @@ already existed. Both name the same missing schema step, and each log line names
 
 Anything else that stops the host is not a schema problem: a secret reference that did not resolve, a configuration
 value the options validation refused, a persisted configuration document carrying a setting MailFathom reads before
-that layer exists (`12004`), or a port already taken all fail before or beside this gate and report their own codes.
+that layer exists (`12004`) or one it persists in a store of its own (`12005`), or a port already taken all fail before
+or beside this gate and report their own codes.
 
 ## Rolling back
 

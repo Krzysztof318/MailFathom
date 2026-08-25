@@ -2,4 +2,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Domain\Domain.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="MailFathom.Application.UnitTests" />
+  </ItemGroup>
 </Project>
