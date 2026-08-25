@@ -6,6 +6,8 @@ using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts;
+using MailFathom.Application.EmailContent.Move;
+using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Embeddings.Administration;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
@@ -118,6 +120,9 @@ public sealed class AdminApiEndpointsTests
         // The contact-book paths appear twice and three times for the same reason: the book is listed and written to at
         // one path, and one contact is read, amended, and erased at another. The collected half is erased at a path of
         // its own, because what it names is every record of one origin rather than a resource anybody can read.
+        // The content move appears twice at its own path and once at each of the two the operator stops and resumes it
+        // on, because pausing and resuming are opposite decisions and a body naming which one was meant would make a
+        // mistyped value the difference between them.
         Assert.Equal(
             [
                 $"{AdminEndpointOptions.RoutePrefix}{MailAnsweringAuditEndpoint.Route}",
@@ -130,6 +135,10 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactExportRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{ContactEndpoints.ContactPromotionRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{ContentMoveEndpoints.MoveRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{ContentMoveEndpoints.MoveRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{ContentMoveEndpoints.PauseRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{ContentMoveEndpoints.ResumeRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{EmbeddingProfileEndpoints.StatusRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{EmbeddingProfileEndpoints.ActivationRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{EmbeddingProfileEndpoints.ActivationRoute}",
@@ -239,6 +248,10 @@ public sealed class AdminApiEndpointsTests
                 $"DELETE {prefix}{ContactEndpoints.CollectedContactsRoute} -> {MailFathomPermission.AdminErase.Name}",
                 $"GET {prefix}{ContactEndpoints.ContactExportRoute} -> {MailFathomPermission.AdminAuditRead.Name}",
                 $"POST {prefix}{ContactEndpoints.ContactPromotionRoute} -> {MailFathomPermission.AdminOperate.Name}",
+                $"GET {prefix}{ContentMoveEndpoints.MoveRoute} -> {MailFathomPermission.AdminRead.Name}",
+                $"POST {prefix}{ContentMoveEndpoints.MoveRoute} -> {MailFathomPermission.AdminOperate.Name}",
+                $"POST {prefix}{ContentMoveEndpoints.PauseRoute} -> {MailFathomPermission.AdminOperate.Name}",
+                $"POST {prefix}{ContentMoveEndpoints.ResumeRoute} -> {MailFathomPermission.AdminOperate.Name}",
             }.Order(StringComparer.Ordinal),
             PublishedAllocation(endpoints).Order(StringComparer.Ordinal));
     }
@@ -374,6 +387,7 @@ public sealed class AdminApiEndpointsTests
         services.AddSingleton(Substitute.For<IAuthorizationRefusalTelemetry>());
         RegisterEmbeddingAdministration(services);
         RegisterContactBook(services);
+        RegisterContentMove(services);
 
         return new TestEndpointRouteBuilder(services.BuildServiceProvider());
     }
@@ -418,6 +432,30 @@ public sealed class AdminApiEndpointsTests
             generationStore,
             retryPolicy,
             backfillSchedule,
+            Authorization));
+    }
+
+    /// <summary>Places what the content-move routes resolve, for the reason the embedding registrations exist.</summary>
+    /// <remarks>
+    /// The control is given an object backend, because whether it has one decides what two of its routes answer rather
+    /// than whether they exist; nothing here makes a request, so neither is ever asked.
+    /// </remarks>
+    private static void RegisterContentMove(IServiceCollection services)
+    {
+        var runStore = Substitute.For<IStoredContentMoveRunStore>();
+
+        services.AddScoped(_ => new StoredContentMoveControl(
+            runStore,
+            new OptimisticConcurrencyRetryPolicy(
+                Substitute.For<IPersistenceSessionFactory>(),
+                new PersistenceConcurrencyOptions(),
+                new FakeTimeProvider()),
+            new FakeTimeProvider(),
+            Authorization,
+            Substitute.For<IEmailContentObjectBackend>()));
+        services.AddScoped(_ => new StoredContentMoveReader(
+            runStore,
+            Substitute.For<IStoredContentMoveStore>(),
             Authorization));
     }
 

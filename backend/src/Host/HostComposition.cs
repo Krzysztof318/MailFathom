@@ -10,6 +10,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent.Attachments;
+using MailFathom.Application.EmailContent.Move;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.EmailContent.Storage.Reclamation;
 using MailFathom.Application.Emails.Embeddings.Limits;
@@ -1058,6 +1059,31 @@ internal static class HostComposition
         builder.Services.AddSingleton<ObjectStorageHealthCheck>();
         builder.Services.AddHealthChecks()
             .Add(ObjectStorageHealthCheck.Registration());
+
+        AddStoredContentMove(builder, declaredContentStorage.Move);
+    }
+
+    /// <summary>Registers the walk that carries already-stored content into the bucket, and the worker that paces it.</summary>
+    /// <remarks>
+    /// Only where the object backend was selected, because there is nowhere else to carry content to. The two halves an
+    /// operator reaches — the control and the reader — are registered by the infrastructure regardless, so a deployment
+    /// storing content in the database still answers how much of it there is and refuses a move rather than 404ing.
+    /// <para>
+    /// The bounds are read once, which the configuration reference marks as needing a restart: they describe the pace of
+    /// a background walk rather than a decision taken per pass, and a pass reading them afresh would let a reload change
+    /// the rate underneath a move an operator is watching.
+    /// </para>
+    /// </remarks>
+    private static void AddStoredContentMove(WebApplicationBuilder builder, ContentMoveOptions declaredMove)
+    {
+        builder.Services.AddOptions<ContentMoveOptions>()
+            .Bind(builder.Configuration
+                .GetSection(ContentStorageOptions.SectionName)
+                .GetSection(nameof(ContentStorageOptions.Move)));
+
+        builder.Services.AddSingleton(declaredMove.ToMoveOptions());
+        builder.Services.AddScoped<StoredContentMove>();
+        builder.Services.AddHostedService<StoredContentMoveWorker>();
     }
 
     /// <summary>Registers the startup gates and the workers behind them, in the order a run may first touch mail.</summary>

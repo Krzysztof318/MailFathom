@@ -8,6 +8,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using MailFathom.Cli.Administration.Contacts;
+using MailFathom.Cli.Administration.Content;
 using MailFathom.Cli.Administration.Embeddings;
 using MailFathom.Cli.Administration.Folders;
 using MailFathom.Cli.Administration.Jobs;
@@ -44,6 +45,15 @@ internal sealed class AdminApiClient
     /// </remarks>
     private const string CredentialRefused =
         "The deployment refused the credential. Check that it is one the administrative endpoint is configured with, and that it has not expired.";
+
+    /// <summary>What the two decisions about a move say when the deployment has never been asked for one.</summary>
+    /// <remarks>
+    /// A deployment answers the move's routes whether or not it has a move, so the absent answer here means the move
+    /// itself rather than the endpoint — which is the opposite of what the general message about an absent route would
+    /// send an operator to check.
+    /// </remarks>
+    private const string NoContentMoveMessage =
+        "This deployment has never been asked to move its stored content, so there is none to act on.";
 
     private static readonly string CommandVersion =
         StampedAssemblyVersion.ReadFrom(typeof(AdminApiClient).Assembly).Version;
@@ -365,6 +375,64 @@ internal sealed class AdminApiClient
             token,
             CliJsonContext.Default.EmbeddingReindexCancellation,
             cancellationToken);
+
+    /// <summary>Asks the deployment where the move of its stored content stands, and how much the database still holds.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The move, where there is one, together with what is left in the database.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the credential, could not be reached, or answered with something that is not a report.</exception>
+    internal Task<ContentMoveReport> ReadContentMoveAsync(string token, CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            AdminEndpointRoutes.ContentMovePath,
+            token,
+            CliJsonContext.Default.ContentMoveReport,
+            cancellationToken);
+
+    /// <summary>Asks the deployment to carry every payload its database still holds into the object backend.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The move the deployment now has, which is the one already under way when there was one.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a move.</exception>
+    internal Task<ContentMoveRun> StartContentMoveAsync(string token, CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.ContentMovePath,
+            token,
+            CliJsonContext.Default.ContentMoveRun,
+            cancellationToken);
+
+    /// <summary>Tells the deployment to stop the move where it is.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The move as it now stands.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment has never been asked for a move, refused the credential, or could not be reached.</exception>
+    internal Task<ContentMoveRun> PauseContentMoveAsync(string token, CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.ContentMovePausePath,
+            token,
+            CliJsonContext.Default.ContentMoveRun,
+            cancellationToken,
+            absenceMessage: NoContentMoveMessage);
+
+    /// <summary>Tells the deployment to set a stopped move going again.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The move as it now stands.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment has never been asked for a move, refused the request or the credential, or could not be reached.</exception>
+    internal Task<ContentMoveRun> ResumeContentMoveAsync(string token, CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.ContentMoveResumePath,
+            token,
+            CliJsonContext.Default.ContentMoveRun,
+            cancellationToken,
+            absenceMessage: NoContentMoveMessage);
 
     /// <summary>Asks the deployment which mail rules it has loaded.</summary>
     /// <param name="token">The bearer credential to present.</param>

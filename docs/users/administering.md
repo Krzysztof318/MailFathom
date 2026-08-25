@@ -173,12 +173,12 @@ Documentation for that version: https://krzysztof318.github.io/MailFathom/v0.2.0
 ```
 
 A credential is granted a set of named permissions on the deployment, and each command needs the one its operation is
-published under — two, for the six commands that read something before they change it. Signing in
+published under — two, for the seven commands that read something before they change it. Signing in
 needs none, so a key that reads `It holds no administrative permission` still signs in and is refused everywhere else —
 which is how a credential is retired without its entry being removed. When a command is refused for want of one, it
 names the permission to add and where it is written, so the answer is to widen that credential's grant rather than to
 replace the key.
-[What a credential may do](../operations/permissions.md) lists the names, what each covers, and which six commands need
+[What a credential may do](../operations/permissions.md) lists the names, what each covers, and which seven commands need
 a second one; [what the endpoint serves](../operations/admin-endpoint.md#what-the-endpoint-serves) names the permission
 every route is published under.
 
@@ -431,6 +431,44 @@ done: a deployment restarted mid-re-derivation picks the run up where it stopped
 re-read again. [Bringing stored mail up to a later
 release](../operations/admin-endpoint.md#bringing-stored-mail-up-to-a-later-release) is the operator's reference for all
 three.
+
+## Moving your stored mail into object storage
+
+If you configure object storage for message content, MailFathom writes the **next** message there and leaves everything
+it has already stored in the database. That is deliberate — a change to a configuration file should not start rewriting
+where your mail is held — and it means switching does nothing for the mailbox you already have until you ask:
+
+| What you want | Command |
+| --- | --- |
+| See how much is still in the database | `mfctl content move-status` |
+| Start carrying it into the bucket | `mfctl content move` |
+| Stop it while the machine is busy | `mfctl content move-pause` |
+| Set it going again | `mfctl content move-resume` |
+
+The first one answers before you have configured anything, which is the point: it tells you how much of your database is
+message content, so you know what a bucket would take off it.
+
+```console
+$ mfctl content move
+To move:  22,500 payloads carrying 1,048,576 bytes
+Move that content into the object backend? [y/N] y
+Move:      under way
+Progress:  0 moved carrying 0 bytes, 0 left in the database
+Watch it with 'mfctl content move-status', and stop it with 'mfctl content move-pause'.
+```
+
+The command returns straight away — the deployment does the carrying, a little at a time, so it stays responsive while
+it works. Closing your terminal stops nothing, and restarting the deployment loses nothing: it picks up where it was and
+does not copy anything twice.
+
+**Every message is checked before and after it moves.** MailFathom compares what it read against what your database
+recorded for it, writes the object, reads it back, compares again, and only then points the row at the bucket. Anything
+it cannot vouch for is left in the database, counted, and reported — nothing is lost and nothing is half-moved.
+`mfctl content move-status` says how many, and asking for another move once you have fixed the cause picks them up.
+
+**Pausing is safe and immediate.** It finishes the one message it is holding and stops there; resuming continues from
+the same place. [Moving stored content into the bucket](../operations/moving-stored-content.md) is the operator's
+reference — what it costs while it runs, the settings that bound it, and what each refusal is telling you.
 
 ## Background work that stopped
 

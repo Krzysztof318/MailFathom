@@ -32,6 +32,7 @@ public sealed class PersistenceConcurrencyConflictsTests
         PersistenceConstraintNames.MailRederivationRunPrimaryKeyConstraintName,
         PersistenceConstraintNames.ContactAddressUniqueIndexName,
         PersistenceConstraintNames.MailDraftCopyPrimaryKeyConstraintName,
+        PersistenceConstraintNames.ContentMoveRunPrimaryKeyConstraintName,
     ];
 
     [Theory]

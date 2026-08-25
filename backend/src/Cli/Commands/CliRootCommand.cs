@@ -4,6 +4,7 @@
 
 using System.CommandLine;
 using MailFathom.Cli.Commands.Contacts;
+using MailFathom.Cli.Commands.Content;
 using MailFathom.Cli.Commands.Folders;
 using MailFathom.Cli.Commands.Jobs;
 using MailFathom.Cli.Commands.Outbox;
@@ -122,6 +123,18 @@ internal static class CliRootCommand
             EraseFolderCommand.Create(context),
         };
 
+        // Where a deployment's mail content is held, rather than what it says. The group exists because moving a
+        // mailbox out of the database is one long-running act an operator drives in four steps — start it, watch it,
+        // stop it while the deployment is busy, set it going again — and each of them is a decision of its own rather
+        // than a flag on the others.
+        Command contentCommand = new("content", "Administer where this deployment holds the mail content it stores.")
+        {
+            MoveContentCommand.Create(context),
+            ContentMoveStatusCommand.Create(context),
+            PauseContentMoveCommand.Create(context),
+            ResumeContentMoveCommand.Create(context),
+        };
+
         // The one group that writes something a person, rather than a mail server, put there. It is also the only place
         // outside "folder erase" where a command disposes of data for good: "delete" is the contact book's data-subject
         // erasure path and says so, and "export" is its access path, both commands rather than seams nothing invokes.
@@ -156,6 +169,7 @@ internal static class CliRootCommand
             jobsCommand,
             outboxCommand,
             folderCommand,
+            contentCommand,
             contactCommand,
         };
     }

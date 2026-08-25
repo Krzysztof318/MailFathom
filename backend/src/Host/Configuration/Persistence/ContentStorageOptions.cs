@@ -37,6 +37,14 @@ internal sealed class ContentStorageOptions : IValidatableObject
     /// <remarks>An absent block takes the working defaults, which are refused the moment <see cref="Backend" /> selects that backend, because none of them names an address, a bucket, or a credential.</remarks>
     public ObjectStorageOptions ObjectStorage { get; set; } = new();
 
+    /// <summary>Gets or sets the rate at which content already stored in the database is carried into that endpoint.</summary>
+    /// <remarks>
+    /// It bounds a move rather than asking for one: what starts, pauses, and resumes a move is an operator through the
+    /// administrative endpoint, because selecting a backend decides where the next payload goes and never what becomes
+    /// of the mail already stored.
+    /// </remarks>
+    public ContentMoveOptions Move { get; set; } = new();
+
     /// <summary>Gets whether this deployment stores payloads in the configured object-storage endpoint.</summary>
     /// <remarks>Read by the composition root to decide whether the endpoint, its transport, and its readiness probe are registered at all.</remarks>
     public bool IsObjectStorageSelected => this.Backend is ContentStorageBackend.ObjectStorage;
@@ -72,6 +80,11 @@ internal sealed class ContentStorageOptions : IValidatableObject
         foreach (var error in this.ObjectStorage.FindConfigurationErrors())
         {
             yield return new ValidationResult(error, [nameof(this.ObjectStorage)]);
+        }
+
+        foreach (var error in this.Move.FindConfigurationErrors())
+        {
+            yield return new ValidationResult(error, [nameof(this.Move)]);
         }
     }
 }

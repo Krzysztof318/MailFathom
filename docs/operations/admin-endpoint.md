@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, backend/src/Host/Api/Admin*.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/Embedding*.cs, backend/src/Host/Api/Job*.cs, backend/src/Host/Api/Mail*.cs, backend/src/Host/Api/Outbox*.cs, backend/src/Host/Api/Spam*.cs, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Security/Endpoints/RouteAuthorization.cs, backend/src/Host/Security/Endpoints/RoutePermission.cs, backend/src/Host/Security/Endpoints/TransportListenerBinder.cs, backend/src/Host/Security/Transport/TransportRateLimiting.cs, backend/src/Cli/**, scripts/install-mfctl.sh -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, backend/src/Host/Api/Admin*.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/Content*.cs, backend/src/Host/Api/Embedding*.cs, backend/src/Host/Api/Job*.cs, backend/src/Host/Api/Mail*.cs, backend/src/Host/Api/Outbox*.cs, backend/src/Host/Api/Spam*.cs, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Security/Endpoints/RouteAuthorization.cs, backend/src/Host/Security/Endpoints/RoutePermission.cs, backend/src/Host/Security/Endpoints/TransportListenerBinder.cs, backend/src/Host/Security/Transport/TransportRateLimiting.cs, backend/src/Cli/**, scripts/install-mfctl.sh -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -77,7 +77,7 @@ six names — `mailfathom.admin.read`, `mailfathom.admin.audit.read`, `mailfatho
 `mailfathom.admin.credentials.write`, `mailfathom.admin.spend`, and `mailfathom.admin.erase` — allocated so that the
 separations an operator would plausibly want to make are the ones they can: reading state, reading what was derived
 from mail, causing work, placing a credential, starting a bill, and destroying what the deployment holds.
-[What a credential may do](permissions.md) states what each name reaches, which two permissions the six commands that
+[What a credential may do](permissions.md) states what each name reaches, which two permissions the seven commands that
 read before they write need together, how a grant is written, and what fails startup;
 [what the endpoint serves](#what-the-endpoint-serves) names the permission every route is published under.
 
@@ -179,6 +179,10 @@ what it was never granted is what the record exists to make visible.
 | `GET /api/admin/outbox/{id}` | `mailfathom.admin.audit.read` | Reads one queued message by identity, with who it is offered to and what each of them was told. It is the one outbox reading that names people, and is published under the grant every other reading of identified third parties is. |
 | `POST /api/admin/outbox/cancellation` | `mailfathom.admin.operate` | Withdraws one queued message that has not begun transmitting. **This is the only point at which sending is reversible.** |
 | `POST /api/admin/outbox/requeue` | `mailfathom.admin.operate` | Offers one queued message again. **This is the one route that can put a second copy of a message in somebody's mailbox.** |
+| `GET /api/admin/content/move` | `mailfathom.admin.read` | Reports how much mail content the database still holds, where the move of it has got to, and whether this deployment has a bucket to move it into. This is what [`mfctl content move-status`](#carrying-stored-content-into-the-object-backend) asks. |
+| `POST /api/admin/content/move` | `mailfathom.admin.operate` | Asks for every payload the database still holds to be carried into the object backend, and answers with the move already under way where there is one. It records the request and copies nothing inside it. |
+| `POST /api/admin/content/move/pause` | `mailfathom.admin.operate` | Stops that move where it is, cancelling nothing and keeping everything it has carried. |
+| `POST /api/admin/content/move/resume` | `mailfathom.admin.operate` | Sets a stopped move going again from the position it stopped at. |
 | `POST /api/admin/folders/erasure` | `mailfathom.admin.erase` | Erases one bounded pass of the mail stored for a folder the account no longer mirrors. **This is the one route that disposes of mail.** |
 | `GET /api/admin/contacts` | `mailfathom.admin.audit.read` | Reads one bounded, keyset-paginated page of the [contact book](../features/contacts.md), optionally narrowed to one origin. |
 | `POST /api/admin/contacts` | `mailfathom.admin.operate` | Records a person the book does not yet hold, as a contact this deployment's owner asserted. |
@@ -838,6 +842,62 @@ express the difference.
 **Neither route touches embeddings, and neither re-runs classification for a verdict already recorded.** Chunks and
 vectors stay the [embedding profile's](embedding-profiles.md) business, so a refresh cannot quietly spend the provider
 budget an operator has not asked to spend.
+
+### Carrying stored content into the object backend
+
+Four routes beneath `/api/admin/content`, and what they are for is the half of the object backend a setting cannot
+decide. Selecting `ContentStorage:ObjectStorage` writes the *next* payload to the bucket and leaves everything already
+stored in PostgreSQL, so a deployment that has been synchronizing a mailbox for a year has all of it in the database
+still. [Moving stored content into the bucket](moving-stored-content.md) is what one pass does and what it costs; this
+is what the endpoint serves.
+
+**`mfctl content move` records the move and returns.** The passes are the deployment's own background work, one per
+`ContentStorage:Move:Interval`, so an operator's terminal is not what keeps the move alive and closing one stops
+nothing:
+
+```console
+$ mfctl content move
+To move:  22,500 payloads carrying 1,048,576 bytes
+Move that content into the object backend? [y/N] y
+Move:      under way
+Progress:  0 moved carrying 0 bytes, 0 left in the database
+Watch it with 'mfctl content move-status', and stop it with 'mfctl content move-pause'.
+```
+
+**The backlog is read before the move is asked for**, which is one path answering `GET` with what the database holds
+and `POST` with the move it now has — the same arrangement the rewind and the embedding activation use, and for the
+same reason. `--yes` states the agreement in the command; an invocation with input redirected and no flag is refused
+rather than reading an answer out of whatever was piped in. A deployment naming no object-storage endpoint is refused
+with `400` naming `ContentStorage:ObjectStorage`, rather than given a move that would carry nothing while looking
+exactly like one that is working.
+
+**Asking twice is asking once.** A move already running or paused is answered with itself rather than started over, so
+a second request never discards the position an operator stopped at. A move that finished is what a further one is
+asked for past, which is how payloads an earlier move left behind are reached once the reason has been repaired.
+
+**A second command reads it**, on the same path with `GET`:
+
+```console
+$ mfctl content move-status
+In the database:  21,457 payloads carrying 987,136 bytes
+Move:             under way
+Requested:        2026-08-24 12:00:00Z
+Progress:         1,043 moved carrying 61,440 bytes, 0 left in the database
+```
+
+It answers on a deployment that has never been asked for a move and on one that stores its content in the database,
+because the backlog is exactly the figure an operator weighs before selecting the other backend at all. Then it says
+what to do next, which differs for each of those answers.
+
+**Stopping and resuming are paths of their own** rather than a field in a body, because they are opposite decisions and
+a mistyped value must never be the difference between stopping a move of somebody's mailbox and starting one over.
+Neither carries a body. Pausing cancels nothing — the pass that is running finishes the one payload it holds and the
+next one finds the move stopped — and resuming continues from the committed position. Both answer `404` on a deployment
+that has never been asked for a move, which the command reports as there being none to act on.
+
+**Nothing here reads mail into the answer.** Every one of the four answers with counts, an instant, and a state name;
+the position the next pass resumes from is deliberately not served, because it is the identity of a row rather than a
+figure an operator acts on and it would say which message the move is at.
 
 ### Administering the contact book
 

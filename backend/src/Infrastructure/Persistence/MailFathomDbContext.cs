@@ -92,6 +92,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<MailRederivationRunEntity> MailRederivationRuns => this.Set<MailRederivationRunEntity>();
 
+    internal DbSet<ContentMoveRunEntity> ContentMoveRuns => this.Set<ContentMoveRunEntity>();
+
     internal DbSet<MailRuleEvaluationRunEntity> MailRuleEvaluationRuns => this.Set<MailRuleEvaluationRunEntity>();
 
     internal DbSet<SynchronizationCheckpointEntity> SynchronizationCheckpoints => this.Set<SynchronizationCheckpointEntity>();
@@ -179,6 +181,7 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new BackfillPositionConfiguration());
         modelBuilder.ApplyConfiguration(new MailRederivationPositionConfiguration());
         modelBuilder.ApplyConfiguration(new MailRederivationRunConfiguration());
+        modelBuilder.ApplyConfiguration(new ContentMoveRunConfiguration());
         modelBuilder.ApplyConfiguration(new SynchronizationCheckpointConfiguration());
         modelBuilder.ApplyConfiguration(new MailboxRefreshTokenConfiguration());
         modelBuilder.ApplyConfiguration(new MailboxMutationConfiguration());

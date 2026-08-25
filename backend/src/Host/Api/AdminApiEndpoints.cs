@@ -43,6 +43,14 @@ namespace MailFathom.Host.Api;
 /// rather than anything a model reasons over.
 /// </para>
 /// <para>
+/// The four after them carry the mail already stored into the object backend, which
+/// <see cref="ContentMoveEndpoints" /> describes: reading how much of it is still database-backed and what the
+/// current move has carried, asking for one, pausing it, and taking it up again. They are here because selecting the
+/// backend decides where the next payload is written and says nothing about what is already stored, so carrying that
+/// across is a decision about this deployment's storage and about what its endpoint will be billed for rather than
+/// anything a model reasons over.
+/// </para>
+/// <para>
 /// The next reads one account's record of the changes MailFathom made to its mailbox, which
 /// <see cref="MailboxMutationAuditEndpoint" /> describes. It is here rather than on the MCP surface because its answer
 /// is an operator's accountability evidence rather than anything a model reasons over, and because the credential that
@@ -138,6 +146,7 @@ internal static class AdminApiEndpoints
         api.MapMailboxRefreshToken();
         api.MapMailboxSynchronizationStatus();
         api.MapMailboxMaintenance();
+        api.MapContentMove();
         api.MapMailboxMutationAudit();
         api.MapMailAnsweringAudit();
         api.MapEmbeddingProfile();

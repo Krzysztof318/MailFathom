@@ -41,6 +41,25 @@ internal static class AdminEndpointRoutes
     /// </remarks>
     internal const string MailboxRederivationPath = $"{Prefix}/mailbox/rederivation";
 
+    /// <summary>Where the move of already-stored content into the object backend is asked for, and where it is read.</summary>
+    /// <remarks>
+    /// One path read with <c>GET</c> and asked for with <c>POST</c>, for the reason the rewind's is: what the reading
+    /// reports is the move the write asked for, and an operator who started one comes back to the same place to find out
+    /// where it has got to. The reading also answers on a deployment that moves nothing, because how much content its
+    /// database holds is the figure it weighs before selecting the other backend at all.
+    /// </remarks>
+    internal const string ContentMovePath = $"{Prefix}/content/move";
+
+    /// <summary>Where a move under way is stopped.</summary>
+    internal const string ContentMovePausePath = $"{ContentMovePath}/pause";
+
+    /// <summary>Where a stopped move is set going again.</summary>
+    /// <remarks>
+    /// A path of its own rather than a field on the request, because pausing and resuming are opposite decisions and a
+    /// body carrying which one was meant would make a mistyped value the difference between the two.
+    /// </remarks>
+    internal const string ContentMoveResumePath = $"{ContentMovePath}/resume";
+
     /// <summary>Where a deployment reports whether semantic search is working and how far behind it is.</summary>
     internal const string EmbeddingStatusPath = $"{Prefix}/embeddings";
 

@@ -57,6 +57,9 @@
     - name: Applying the database schema
       href: database-schema.md
       description: Applying a migration as an explicit operator action, why startup never applies one, and what an instance does when the schema is behind.
+    - name: Moving stored content into the bucket
+      href: moving-stored-content.md
+      description: Carrying the mail content already in the database into the configured object backend, what it costs while it runs, and how to read its progress.
     - name: Changing the embedding model
       href: embedding-profiles.md
       description: Activating a new embedding profile without invalidating the vectors already stored, and what the change costs while it runs.

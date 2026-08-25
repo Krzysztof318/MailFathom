@@ -759,6 +759,36 @@ work that was really done, and a run whose position row is gone is a finished ru
 Nothing in it is personal data. An account alias, a folder alias, an identifier this deployment generated, counts, and
 two instants are MailFathom's own names for things and for its own work.
 
+## Where the move of stored content has got to
+
+`content_move_runs` holds the one move of database-held raw MIME into the object backend a deployment may have — the
+walk [`mfctl content move`](../operations/moving-stored-content.md) drives after an operator selects
+`ContentStorage:ObjectStorage` on a deployment whose mail is already stored. It is what makes the move resume rather
+than restart across a restart, and what an operator reads its progress off.
+
+| Column | What it records |
+|---|---|
+| `Name` | The primary key, and always `stored-content`. A check constraint pins it to that one value, which is how the table holds at most one row: a move is a decision about the whole deployment rather than about a scope somebody names, so there is nothing to key it by and a second row would be a second walk over the same payloads |
+| `RequestedAt` | When the move was asked for. It is also the identity a pass commits against — a pass that finds a different instant on the row is writing into a move somebody replaced, and records nothing |
+| `State` | `Running`, `Paused`, or `Completed`, written as its own name rather than an ordinal. Only the first is carried; the other two are what make a pass idle without cancelling anything |
+| `Kind` | Which of the four raw-MIME tables the walk is on, written as its own name for the same reason. The walk moves to the next kind when a kind runs out, and past the last one it is finished |
+| `ResumeAfter` | The payload identity the last committed pass reached inside that kind, null at the start of one. The walk is keyset-ordered by that identity, so the next pass continues past this value and re-copies nothing it verified |
+| `CopiedPayloadCount`, `FailedPayloadCount`, `MovedByteCount` | What the move's passes have committed so far. Every pass adds its own figures to what the row holds rather than writing a total, for the reason the re-derivation run does |
+| `EndedAt` | When the walk reached the end of the content, null while it has not |
+| `ConcurrencyVersion` | The `xmin` token again. A pass reads the row, adds to it, and writes it back while an operator may be pausing it from a request, and without the token one of the two would be written over |
+
+There is no foreign key onto anything, and no row per payload. What the move is doing to a payload is on the payload's
+own row — the backend it names and the locator it carries — so this table holds the walk and nothing else, and a payload
+repointed by a move that was later replaced is simply an object-backed payload.
+
+A row survives the move it describes. `Completed` is what lets `mfctl content move-status` say how the last move ended
+rather than that there was none, and asking for another move writes a fresh row over it, starting again at the first
+kind — which is how payloads a move left in the database are reached once the reason has been repaired.
+
+Nothing in it is personal data. A constant, two instants, a state, a payload kind, one local identifier, and three
+counts are MailFathom's own names for its own work. The resume position is the one value that names a row holding mail,
+which is why it is not served by the endpoint that reports the rest.
+
 ## The outgoing messages waiting to be sent
 
 `outgoing_emails` holds one row per message MailFathom has been asked to send, written **before** the first SMTP

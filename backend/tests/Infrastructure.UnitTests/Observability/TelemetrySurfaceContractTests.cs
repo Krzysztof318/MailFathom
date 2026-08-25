@@ -5,6 +5,7 @@
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Chat;
 using MailFathom.Application.Contacts.Collection;
+using MailFathom.Application.EmailContent.Move;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Backfill;
 using MailFathom.Application.Emails.Embeddings.Generations;
@@ -129,6 +130,7 @@ public sealed class TelemetrySurfaceContractTests
     private static readonly SensitiveContentDerivationTelemetry Derivation = new();
     private static readonly SensitiveContentEgressTelemetry Egress = new();
     private static readonly ObjectStorageTelemetry ObjectStorage = new(Clock);
+    private static readonly StoredContentMoveTelemetry ContentMove = new(Clock);
     private static readonly StoredEmailContentTelemetry StoredContent = new(Clock);
     private static readonly StoredMailRederivationTelemetry Rederivation = new(Clock);
 
@@ -162,6 +164,7 @@ public sealed class TelemetrySurfaceContractTests
         typeof(PersistenceCommitTelemetry),
         typeof(SensitiveContentDerivationTelemetry),
         typeof(SensitiveContentEgressTelemetry),
+        typeof(StoredContentMoveTelemetry),
         typeof(StoredEmailContentTelemetry),
         typeof(StoredMailRederivationTelemetry),
     ];
@@ -283,6 +286,7 @@ public sealed class TelemetrySurfaceContractTests
         DriveSynchronization();
         DriveContentStore();
         DriveContentObjectReclamation();
+        DriveContentMove();
         DriveObjectStorage();
         DriveSensitiveContent();
         DriveStoredMailRederivation();
@@ -294,6 +298,25 @@ public sealed class TelemetrySurfaceContractTests
         surface.ObserveGauges();
 
         return surface;
+    }
+
+    /// <summary>Drives a pass that carried a payload, refused one for every stated reason, and reached the end.</summary>
+    /// <remarks>
+    /// Every refusal is driven rather than one, because the reason is the dimension: a member added later and named off
+    /// something a message carried would only reach an exporter through the branch that names it.
+    /// </remarks>
+    private static void DriveContentMove()
+    {
+        using var pass = ContentMove.BeginPass();
+
+        pass.Copied(61_027);
+
+        foreach (var failure in Enum.GetValues<StoredContentMoveFailure>())
+        {
+            pass.Failed(failure);
+        }
+
+        pass.ReachedEndOfContent();
     }
 
     /// <summary>Drives a segment that ended its run and one that handed the rest on, over both shapes of scope.</summary>
