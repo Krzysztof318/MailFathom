@@ -131,6 +131,7 @@ internal sealed class SyntheticMailAccount(
         "reconciliation-window",
         "relocation-source",
         "relocation-target",
+        "retained-content-release",
         "rule-evaluation",
         "rule-evaluation-parked",
         "seen-state-provenance",
