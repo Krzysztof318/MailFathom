@@ -112,7 +112,7 @@ public sealed class MailAccountFreshnessReaderTests
 
         // Assert
         var account = Assert.Single(directory.Accounts);
-        Assert.Equal(MailAccountSynchronizationState.Synchronized, account.State);
+        Assert.Equal(MailSynchronizationState.Synchronized, account.State);
         Assert.Equal(Now, account.LastSynchronizedAt);
     }
 
@@ -140,10 +140,10 @@ public sealed class MailAccountFreshnessReaderTests
 
         // Assert
         var failing = directory.Accounts.Single(account => account.Account == Work);
-        Assert.Equal(MailAccountSynchronizationState.Failing, failing.State);
+        Assert.Equal(MailSynchronizationState.Failing, failing.State);
         Assert.Equal(Now, failing.LastSynchronizedAt);
         Assert.Equal(
-            MailAccountSynchronizationState.Synchronized,
+            MailSynchronizationState.Synchronized,
             directory.Accounts.Single(account => account.Account == Private).State);
     }
 
@@ -159,7 +159,7 @@ public sealed class MailAccountFreshnessReaderTests
 
         // Assert
         var account = Assert.Single(directory.Accounts);
-        Assert.Equal(MailAccountSynchronizationState.NeverSynchronized, account.State);
+        Assert.Equal(MailSynchronizationState.NeverSynchronized, account.State);
         Assert.Null(account.LastSynchronizedAt);
     }
 
@@ -177,7 +177,7 @@ public sealed class MailAccountFreshnessReaderTests
 
         // Assert
         var account = Assert.Single(directory.Accounts);
-        Assert.Equal(MailAccountSynchronizationState.Failing, account.State);
+        Assert.Equal(MailSynchronizationState.Failing, account.State);
         Assert.Null(account.LastSynchronizedAt);
     }
 
@@ -192,7 +192,161 @@ public sealed class MailAccountFreshnessReaderTests
         var directory = await reader.ReadAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(MailAccountSynchronizationState.Synchronized, Assert.Single(directory.Accounts).State);
+        Assert.Equal(MailSynchronizationState.Synchronized, Assert.Single(directory.Accounts).State);
+    }
+
+    /// <summary>
+    /// The acceptance this route was extended for: a mailbox whose server is not answering is named as that rather than
+    /// as broken, because the two ask different things of whoever reads them.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_AnAccountWhoseFoldersFoundNoMailServer_IsUnreachableRatherThanFailing()
+    {
+        // Arrange
+        var ledger = Ledger();
+        ledger.RecordFolderUnsynchronized(
+            Folder(Work.Id, "inbox"),
+            MailFolderRunOutcome.DeferredAfterMailServerUnavailable);
+        ledger.RecordRunEnded(Work.Id, scheduledFolderCount: 1, failedFolderCount: 1, mutationConvergenceFailed: false);
+        var reader = ReaderOver(Freshness((Work.Id, "inbox", Now)), OwningAccounts(Work), ledger);
+
+        // Act
+        var directory = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var account = Assert.Single(directory.Accounts);
+        Assert.Equal(MailSynchronizationState.Unreachable, account.State);
+        Assert.Equal(Now, account.LastSynchronizedAt);
+    }
+
+    /// <summary>
+    /// A run that also failed some other way reached the server, so the account is failing rather than unreachable — the
+    /// unreachable folder is still named as one, because that is the folder's own answer.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_AnAccountFailingOneFolderAndUnableToReachAnother_IsFailingAndKeepsBothFolderReadings()
+    {
+        // Arrange
+        var ledger = Ledger();
+        ledger.RecordFolderUnsynchronized(
+            Folder(Work.Id, "archive"),
+            MailFolderRunOutcome.DeferredAfterMailServerUnavailable);
+        ledger.RecordFolderUnsynchronized(Folder(Work.Id, "inbox"), MailFolderRunOutcome.AliasUnresolved);
+        ledger.RecordRunEnded(Work.Id, scheduledFolderCount: 2, failedFolderCount: 2, mutationConvergenceFailed: false);
+        var reader = ReaderOver(
+            Freshness((Work.Id, "archive", Now), (Work.Id, "inbox", Now)),
+            OwningAccounts(Work),
+            ledger);
+
+        // Act
+        var directory = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var account = Assert.Single(directory.Accounts);
+        Assert.Equal(MailSynchronizationState.Failing, account.State);
+        Assert.Equal(
+            [MailSynchronizationState.Unreachable, MailSynchronizationState.Failing],
+            account.Folders.Select(folder => folder.State));
+    }
+
+    /// <summary>Every way a folder's turn can fail reaches the folder as a failure, so a screen never has to read an outcome.</summary>
+    [Theory]
+    [InlineData(MailFolderRunOutcome.AliasUnresolved)]
+    [InlineData(MailFolderRunOutcome.AliasAmbiguous)]
+    [InlineData(MailFolderRunOutcome.DeferredAfterConcurrencyConflict)]
+    [InlineData(MailFolderRunOutcome.UnexpectedFailure)]
+    public async Task ReadAsync_AFolderWhoseTurnDidNotComplete_IsFailing(MailFolderRunOutcome outcome)
+    {
+        // Arrange
+        var ledger = Ledger();
+        ledger.RecordFolderUnsynchronized(Folder(Work.Id, "inbox"), outcome);
+        var reader = ReaderOver(Freshness((Work.Id, "inbox", Now)), OwningAccounts(Work), ledger);
+
+        // Act
+        var directory = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var folder = Assert.Single(Assert.Single(directory.Accounts).Folders);
+        Assert.Equal(MailSynchronizationState.Failing, folder.State);
+        Assert.Equal(Now, folder.SynchronizedAt);
+    }
+
+    /// <summary>
+    /// A host shutting down is not a failure — the supervisor counts it under none, so an account backed off for every
+    /// restart would be one approached less often for being stopped — and the folder reports what its progress says.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_AFolderInterruptedByShutdown_ReportsWhatItsStoredProgressSays()
+    {
+        // Arrange
+        var ledger = Ledger();
+        ledger.RecordFolderUnsynchronized(Folder(Work.Id, "inbox"), MailFolderRunOutcome.InterruptedByShutdown);
+        var reader = ReaderOver(Freshness((Work.Id, "inbox", Now)), OwningAccounts(Work), ledger);
+
+        // Act
+        var directory = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var account = Assert.Single(directory.Accounts);
+        Assert.Equal(MailSynchronizationState.Synchronized, account.State);
+        Assert.Equal(MailSynchronizationState.Synchronized, Assert.Single(account.Folders).State);
+    }
+
+    /// <summary>
+    /// Being behind is not a state, because a turn that succeeded within its batch budget leaves mail for the next one:
+    /// the folder says so beside its state, and the account says so because one of its folders did.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_AFolderWhoseTurnLeftMailBehind_SaysSoOnTheFolderAndOnTheAccount()
+    {
+        // Arrange
+        var ledger = Ledger();
+        ledger.RecordFolderSynchronized(
+            Folder(Work.Id, "inbox"),
+            storedEmailCount: 200,
+            skippedOversizedEmailCount: 0,
+            unreadableMimeEmailCount: 0,
+            hasMoreEmails: true);
+        ledger.RecordFolderSynchronized(
+            Folder(Work.Id, "archive"),
+            storedEmailCount: 3,
+            skippedOversizedEmailCount: 0,
+            unreadableMimeEmailCount: 0,
+            hasMoreEmails: false);
+        var reader = ReaderOver(
+            Freshness((Work.Id, "archive", Now), (Work.Id, "inbox", Now)),
+            OwningAccounts(Work),
+            ledger);
+
+        // Act
+        var directory = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var account = Assert.Single(directory.Accounts);
+        Assert.Equal(MailSynchronizationState.Synchronized, account.State);
+        Assert.True(account.IsBehind);
+        Assert.Equal([false, true], account.Folders.Select(folder => folder.IsBehind));
+    }
+
+    /// <summary>A folder no run of this process has reached is read from its own stored progress, one entry per folder the directory knows of.</summary>
+    [Fact]
+    public async Task ReadAsync_FoldersThisProcessHasNotRun_PublishesOneReadingPerFolderFromItsProgress()
+    {
+        // Arrange
+        var reader = ReaderOver(
+            Freshness((Work.Id, "archive", null), (Work.Id, "inbox", Now)),
+            OwningAccounts(Work));
+
+        // Act
+        var directory = await reader.ReadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var account = Assert.Single(directory.Accounts);
+        Assert.Equal(
+            [MailSynchronizationState.NeverSynchronized, MailSynchronizationState.Synchronized],
+            account.Folders.Select(folder => folder.State));
+        Assert.Equal([null, Now], account.Folders.Select(folder => folder.SynchronizedAt));
+        Assert.False(account.IsBehind);
     }
 
     /// <summary>The deployment's own switch is answered beside the accounts, because a stale copy on a deployment that stopped trying is a different fact.</summary>
@@ -250,6 +404,10 @@ public sealed class MailAccountFreshnessReaderTests
         await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
             reader.ReadAsync(TestContext.Current.CancellationToken));
     }
+
+    /// <summary>Names one folder of one account, which is the pair the run ledger records a turn against.</summary>
+    private static MailFolderIdentity Folder(MailAccountId accountId, string folderAlias) =>
+        new(accountId, MailFolderAlias.Create(folderAlias));
 
     private static MailSynchronizationRunLedger Ledger() => new(new FakeTimeProvider(Now));
 

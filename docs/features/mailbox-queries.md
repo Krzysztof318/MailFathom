@@ -371,21 +371,54 @@ historical bindings behind an alias grows every time a server recreates the fold
 make an ordinary listing pay for that history; the result itself is bounded by the folders of the accounts in scope, which
 configuration bounds.
 
-### The account-level reading
+### The reading a reader trusts a mailbox by
 
-A reader deciding whether to trust a mailbox at all needs the same fact one size larger, and `MailAccountFreshnessReader`
-is where the per-folder entries are reduced to it: one instant per account and one state. The instant is the newest of
+The checkpoint is half of what a reader needs and `MailAccountFreshnessReader` is where the other half joins it. That
+use case reduces the per-folder entries twice: once per folder, and once per account above them. Both readings are
+`MailSynchronizationState` — one vocabulary at two sizes, so a reader moving between a mailbox list and a folder tree
+does not learn it twice — beside the instant the checkpoint gave and a flag saying whether more mail is known to be
+coming.
+
+The per-folder reading joins the checkpoint's instant to what the run ledger observed. `Unreachable` is a mail server
+that did not serve the folder within its resilience budget, `Failing` is every other way a turn can end short, and a
+turn interrupted by a host shutting down is neither — the supervisor counts that under no failure, so an account backed
+off for every restart would be one approached less often for being stopped. Being behind is deliberately not one of the
+states: a turn that succeeded within its batch budget leaves mail for the next one, so a folder can be behind under any
+of them.
+
+The account's reading is the reduction of its folders' rather than a second derivation beside them, which is what keeps
+a folder tree and the mailbox list above it from disagreeing about one account. A folder that failed outranks one whose
+server was unreachable, because a run that also failed some other way reached the server; the account's own run answers
+for what no folder reports, which is a failure to carry its outstanding mailbox changes. The instant is the newest of
 the account's folders, because it answers "when did this mailbox last take anything in" — the oldest would hold a whole
-account at the beginning of time over one folder that has been empty since it was mapped. The state is
-`MailAccountSynchronizationState`, which says whether this deployment's most recent finished run of the account failed,
-succeeded, or has never happened; that comes from the run ledger rather than from a checkpoint, so it describes the
-running process and resets with it, exactly as
+account at the beginning of time over one folder that has been empty since it was mapped. All of it comes from the run
+ledger rather than from a checkpoint, so it describes the running process and resets with it, exactly as
 [the administrative status route's](../operations/admin-endpoint.md) phase and failure count do.
 
-The two facts stay separate because they answer different halves of one question, and the separation is what a reader
-needs: an account failing since yesterday and an account nobody has written to since yesterday carry the same instant.
-The result is one line per account and grows with nothing else — not the folders, not the messages, not the runs. It is
-what [`GET /api/client/accounts`](../operations/client-endpoint.md#the-accounts-route) publishes.
+The facts stay separate because they answer different parts of one question, and the separation is what a reader needs:
+an account failing since yesterday, one nobody has written to since yesterday, and one still catching up carry the same
+instant. The account-level answer is one line per account and grows with nothing else — not the messages, not the runs.
+It is what [`GET /api/client/accounts`](../operations/client-endpoint.md#the-accounts-route) publishes.
+
+### The folder tree
+
+`MailFolderDirectoryReader` composes that reading and adds what only a screen drawing folders needs: the role each
+folder plays, its place in the mail server's own hierarchy, and how much mail is stored in it. It is a separate use case
+from the reading above because it costs more — counting a folder's mail is work proportional to the mail — and because
+nothing listing messages needs any of it.
+
+`IStoredMailFolderReader` is the port that answers those, over the same mailbox scope every other read narrows by, so a
+folder withheld from a caller is withheld from its counts as well. It answers in two queries: the newest binding of each
+alias, which is where the hierarchy comes from, and one aggregate over the mail those aliases hold. The counts are of
+every binding's mail together, because an alias rebound after a server recreated the folder still lists what the older
+binding stored, and they admit exactly the rows a listing of the folder would return — a count assembled from its own
+idea of what is readable would be a figure no listing could reproduce.
+
+The folders are the ones local state knows of. An alias configuration maps that nothing has ever bound to a remote
+folder is absent rather than empty, because there is no folder on the server to draw; where an operator finds out about
+such a mapping is [the administrative status route](../operations/admin-endpoint.md), which composes its folder list
+from configuration for exactly that reason. The tree is what
+[`GET /api/client/folders`](../operations/client-endpoint.md#the-folders-route) publishes.
 
 ## Where the pieces live
 
@@ -399,15 +432,19 @@ what [`GET /api/client/accounts`](../operations/client-endpoint.md#the-accounts-
   it.
 - `MailFathom.Application.Accounts` — the two account catalogs, `MailAccountDirectoryReader`, the one use case that
   publishes an account set rather than bounding a read with it, and `MailAccountFreshnessReader`, which reduces that
-  answer to one line per account for a reader that wants the mailbox list rather than the folders. The second is composed
-  over the first rather than written beside it, so whose accounts these are, which folders count, the grant that is
-  required, and the read that is recorded are decided in one place. `IDeploymentMailAccountCatalog` describes every account
-  this deployment serves, and `ConfiguredMailAccountCatalog` implements it over the bound mail section, so that answer
-  comes from the configuration that defines the accounts. `ICallerMailAccountCatalog` describes the accounts the caller
+  answer to one reading per folder and one per account above them. The second is composed over the first rather than
+  written beside it, so whose accounts these are, which folders count, the grant that is required, and the read that is
+  recorded are decided in one place; `MailSynchronizationState` is the vocabulary both of its readings are named in.
+  `IDeploymentMailAccountCatalog` describes every account this deployment serves, and `ConfiguredMailAccountCatalog`
+  implements it over the bound mail section, so that answer comes from the configuration that defines the accounts. `ICallerMailAccountCatalog` describes the accounts the caller
   in hand *owns*, and it is the one every caller-facing read resolves through: its single member answers both questions
   asked of it, whether the account a request named is accepted and which accounts an unscoped request is narrowed to.
   The two are told apart by the members they publish rather than by a flag, so a read model reaching the wrong one names
   something the right one does not have.
+- `MailFathom.Application.Folders` — `MailFolderDirectoryReader`, the folder tree a mail screen is drawn from, and
+  `IStoredMailFolderReader`, the port answering where each folder sits on its server and how much of it is stored. It is
+  a use case of its own rather than a wider mailbox list because counting a folder's mail is work proportional to the
+  mail, and it composes the reading above rather than re-deriving it.
 - `MailFathom.Application.Synchronization.Checkpoints` — the freshness port and its read model, kept separate from the
   readers that return mail because every read model attaches freshness.
 - `MailFathom.Infrastructure.Persistence.Emails` — `StoredEmailTimelineReader`, which evaluates every filter, the keyset
@@ -416,4 +453,6 @@ what [`GET /api/client/accounts`](../operations/client-endpoint.md#the-accounts-
   search and with the single-email lookup. Both are written once because each is a control that decides what a mailbox
   read can return at all: a second copy would have to be found and read before anyone could say what that is.
 - `MailFathom.Infrastructure.Persistence.Synchronization` — `SynchronizationFreshnessReader`, which answers the freshness
-  the timeline attaches from the same database and under the same no-tracking rule.
+  the timeline attaches from the same database and under the same no-tracking rule, and `StoredMailFolderReader`, which
+  answers the folder tree's hierarchy and counts. `MailFoldersInScope` is the narrowing both of them apply, written once
+  because two readers reporting on a caller's folders must admit exactly the same folders.

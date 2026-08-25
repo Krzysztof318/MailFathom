@@ -125,6 +125,7 @@ public sealed class ClientApiEndpointsTests
         Assert.Equal(
             [
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailAccountsEndpoint.MailAccountsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientMailFoldersEndpoint.MailFoldersRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientApiEndpoints.SessionRoute}",
             ],
             routes);
@@ -168,6 +169,7 @@ public sealed class ClientApiEndpointsTests
         Assert.Equal(
             [
                 $"GET {prefix}{ClientMailAccountsEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientMailFoldersEndpoint.MailFoldersRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientApiEndpoints.SessionRoute} -> none",
             ],
             PublishedAllocation(endpoints).Order(StringComparer.Ordinal));
@@ -257,11 +259,12 @@ public sealed class ClientApiEndpointsTests
     /// <summary>Builds the routing seam the mapping extends, with the routing services the group needs and nothing else.</summary>
     /// <param name="authorization">What the group's filter asks about the caller, defaulting to the one no test issues a request under.</param>
     /// <remarks>
-    /// The accounts route's use case is placed at the request rather than while the endpoint is built, because that
-    /// handler states <c>[FromServices]</c>; minimal APIs bind a handler's arguments ahead of the filter chain, so the
-    /// one test that issues a request needs it resolvable even though the refusal means it is never called. It is
-    /// composed from substitutes for that reason — what it would answer is <c>MailAccountFreshnessReaderTests</c>'s
-    /// subject, and a route refused before the handler runs asks it nothing.
+    /// The mail-reading routes' use cases are placed at the request rather than while the endpoint is built, because
+    /// those handlers state <c>[FromServices]</c>; minimal APIs bind a handler's arguments ahead of the filter chain, so
+    /// the one test that issues a request needs them resolvable even though the refusal means they are never called.
+    /// They are composed from substitutes for that reason — what they would answer is
+    /// <c>MailAccountFreshnessReaderTests</c>'s and <c>MailFolderDirectoryReaderTests</c>'s subject, and a route refused
+    /// before the handler runs asks them nothing.
     /// </remarks>
     private static TestEndpointRouteBuilder BuildRouteBuilder(AccessAuthorization? authorization = null)
     {
@@ -273,19 +276,31 @@ public sealed class ClientApiEndpointsTests
         services.AddScoped(_ => Substitute.For<IAuthorizedPrincipalSource>());
         services.AddScoped(_ => granted);
         services.AddSingleton(Substitute.For<IAuthorizationRefusalTelemetry>());
-        services.AddScoped(_ => new MailAccountFreshnessReader(
-            new MailAccountDirectoryReader(
-                Substitute.For<ICallerMailAccountCatalog>(),
-                Substitute.For<ISynchronizationFreshnessReader>(),
-                new MailboxScopeResolver(
-                    Substitute.For<ICallerMailAccountCatalog>(),
-                    Substitute.For<IMailFolderParticipationReader>(),
-                    Substitute.For<IJunkMailFolderCatalog>(),
-                    new MailFolderReferenceResolver(Substitute.For<IMailFolderMappingReader>())),
-                Substitute.For<IMailboxReadTelemetry>(),
-                granted),
-            new MailSynchronizationRunLedger(new FakeTimeProvider())));
+        services.AddScoped(_ => UnreachedFreshnessReader(granted));
+        services.AddScoped(_ => new MailFolderDirectoryReader(
+            UnreachedFreshnessReader(granted),
+            UnreachedScopeResolver(),
+            Substitute.For<IStoredMailFolderReader>(),
+            Substitute.For<IMailFolderMappingReader>()));
 
         return new TestEndpointRouteBuilder(services.BuildServiceProvider());
     }
+
+    /// <summary>Composes the mailbox reading a refused request never reaches, from substitutes that answer nothing.</summary>
+    private static MailAccountFreshnessReader UnreachedFreshnessReader(AccessAuthorization granted) =>
+        new(
+            new MailAccountDirectoryReader(
+                Substitute.For<ICallerMailAccountCatalog>(),
+                Substitute.For<ISynchronizationFreshnessReader>(),
+                UnreachedScopeResolver(),
+                Substitute.For<IMailboxReadTelemetry>(),
+                granted),
+            new MailSynchronizationRunLedger(new FakeTimeProvider()));
+
+    private static MailboxScopeResolver UnreachedScopeResolver() =>
+        new(
+            Substitute.For<ICallerMailAccountCatalog>(),
+            Substitute.For<IMailFolderParticipationReader>(),
+            Substitute.For<IJunkMailFolderCatalog>(),
+            new MailFolderReferenceResolver(Substitute.For<IMailFolderMappingReader>()));
 }

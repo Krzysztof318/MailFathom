@@ -572,6 +572,10 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<TimeProvider>(),
             provider.GetService<ITextEmbeddingGenerator>()));
         services.AddScoped<ISynchronizationFreshnessReader, SynchronizationFreshnessReader>();
+        // Beside the freshness reader because both narrow the same folder rows to the same scope, and apart from it
+        // because this one counts mail: it is asked for by the read that draws a folder tree and by nothing that
+        // attaches freshness to a listing.
+        services.AddScoped<IStoredMailFolderReader, StoredMailFolderReader>();
         // A singleton because what it holds is one account of what this process's synchronization is doing: a scoped
         // ledger would be written by the workers and read, empty, by every administrative request. Registered whether or
         // not this deployment synchronizes, because a deployment that switched it off is exactly the one whose operator
@@ -706,6 +710,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<StoredEmailContentTelemetry>();
         services.AddScoped<MailAccountDirectoryReader>();
         services.AddScoped<MailAccountFreshnessReader>();
+        services.AddScoped<MailFolderDirectoryReader>();
         // The guard every egress point calls, registered for every deployment rather than only where a scanner is
         // switched on. What is conditional is the redaction behind it: with both switches off the provider hands over
         // no redactor, no detector is constructed, and every call returns its argument. Registering it conditionally

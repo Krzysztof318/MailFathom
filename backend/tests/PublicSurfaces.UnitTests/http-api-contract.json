@@ -29,6 +29,9 @@
       },
       "ClientMailAccountResponse": {
         "properties": {
+          "behind": {
+            "type": "boolean"
+          },
           "displayName": {
             "type": "string"
           },
@@ -50,7 +53,8 @@
           "id",
           "displayName",
           "synchronizationState",
-          "lastSynchronizedAt"
+          "lastSynchronizedAt",
+          "behind"
         ],
         "type": "object"
       },
@@ -59,6 +63,101 @@
           "accounts": {
             "items": {
               "$ref": "#/components/schemas/ClientMailAccountResponse"
+            },
+            "type": "array"
+          },
+          "synchronizationEnabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "synchronizationEnabled",
+          "accounts"
+        ],
+        "type": "object"
+      },
+      "ClientMailFolderAccountResponse": {
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/ClientMailAccountResponse"
+          },
+          "folders": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailFolderResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "account",
+          "folders"
+        ],
+        "type": "object"
+      },
+      "ClientMailFolderResponse": {
+        "properties": {
+          "alias": {
+            "type": "string"
+          },
+          "behind": {
+            "type": "boolean"
+          },
+          "lastSynchronizedAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "role": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "storedEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "synchronizationState": {
+            "type": "string"
+          },
+          "unreadEmailCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "alias",
+          "role",
+          "path",
+          "storedEmailCount",
+          "unreadEmailCount",
+          "synchronizationState",
+          "lastSynchronizedAt",
+          "behind"
+        ],
+        "type": "object"
+      },
+      "ClientMailFoldersResponse": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailFolderAccountResponse"
             },
             "type": "array"
           },
@@ -4238,6 +4337,30 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ClientMailAccountsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/folders": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientMailFoldersResponse"
                 }
               }
             },

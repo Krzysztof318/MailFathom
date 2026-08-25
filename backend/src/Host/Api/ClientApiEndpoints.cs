@@ -60,6 +60,7 @@ internal static class ClientApiEndpoints
             .RequireNoPermission();
 
         api.MapClientMailAccounts();
+        api.MapClientMailFolders();
 
         return api;
     }
