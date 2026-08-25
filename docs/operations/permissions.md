@@ -146,7 +146,7 @@ Every administrative route publishes the one permission it requires as endpoint 
 [what the endpoint serves](admin-endpoint.md#what-the-endpoint-serves) states it route by route beside what each route
 does. Two consequences of that mapping belong here rather than to any one route.
 
-**Seven `mfctl` commands make two requests and therefore need two permissions**, because what such a command reads is
+**Eight `mfctl` commands make two requests and therefore need two permissions**, because what such a command reads is
 what it puts in front of you or amends from:
 
 | Command | Needs |
