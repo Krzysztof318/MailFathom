@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Buffers;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -27,6 +28,9 @@ namespace MailFathom.Infrastructure.ObjectStorage;
 /// </remarks>
 internal sealed class S3EmailContentObjectStore : IEmailContentObjectStore
 {
+    /// <summary>How much of a response body is read at a time, which is the framework's own default copy buffer.</summary>
+    private const int ReadBufferByteLength = 81920;
+
     private readonly IObjectStorageClientFactory clientFactory;
     private readonly ObjectStorageOperationRunner operationRunner;
 
@@ -96,9 +100,13 @@ internal sealed class S3EmailContentObjectStore : IEmailContentObjectStore
     }
 
     /// <inheritdoc />
-    public async Task<ReadOnlyMemory<byte>?> FindAsync(string objectLocator, CancellationToken cancellationToken)
+    public async Task<ReadOnlyMemory<byte>?> FindAsync(
+        string objectLocator,
+        long maximumByteLength,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(objectLocator);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumByteLength);
 
         var endpoint = this.clientFactory.Endpoint;
 
@@ -106,7 +114,12 @@ internal sealed class S3EmailContentObjectStore : IEmailContentObjectStore
 
         var payload = await this.operationRunner.RunAsync(
             ObjectStorageTelemetry.GetOperationName,
-            attemptToken => ReadObjectAsync(openedClient.Client, endpoint.Bucket, objectLocator, attemptToken),
+            attemptToken => ReadObjectAsync(
+                openedClient.Client,
+                endpoint.Bucket,
+                objectLocator,
+                maximumByteLength,
+                attemptToken),
             answer => answer?.Length,
             cancellationToken);
 
@@ -202,6 +215,7 @@ internal sealed class S3EmailContentObjectStore : IEmailContentObjectStore
         IAmazonS3 client,
         string bucket,
         string objectKey,
+        long maximumByteLength,
         CancellationToken cancellationToken)
     {
         try
@@ -210,15 +224,52 @@ internal sealed class S3EmailContentObjectStore : IEmailContentObjectStore
                 new GetObjectRequest { BucketName = bucket, Key = objectKey },
                 cancellationToken);
 
-            using var payload = new MemoryStream();
-            await answer.ResponseStream.CopyToAsync(payload, cancellationToken);
-
-            return payload.ToArray();
+            return await ReadBoundedAsync(answer.ResponseStream, maximumByteLength, cancellationToken);
         }
         catch (AmazonS3Exception absent) when (absent.StatusCode == HttpStatusCode.NotFound)
         {
             return null;
         }
+    }
+
+    /// <summary>Reads a response body, stopping one byte past what the caller said the object may be.</summary>
+    /// <remarks>
+    /// The one byte past the ceiling is the point: stopping exactly at it would hand back something indistinguishable
+    /// from an object of precisely that length, while one byte more is a length that disagrees with the row and every
+    /// caller already holds the length and the digest that says so. What this bounds is this process — a remote answer
+    /// never decides how much memory is spent on it, whatever the endpoint was asked for or has become.
+    /// </remarks>
+    private static async Task<byte[]> ReadBoundedAsync(
+        Stream body,
+        long maximumByteLength,
+        CancellationToken cancellationToken)
+    {
+        var ceiling = maximumByteLength + 1;
+        var buffer = ArrayPool<byte>.Shared.Rent(ReadBufferByteLength);
+
+        using MemoryStream payload = new();
+
+        try
+        {
+            while (payload.Length < ceiling)
+            {
+                var wanted = (int)Math.Min(buffer.Length, ceiling - payload.Length);
+                var read = await body.ReadAsync(buffer.AsMemory(0, wanted), cancellationToken);
+
+                if (read == 0)
+                {
+                    break;
+                }
+
+                payload.Write(buffer, 0, read);
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+
+        return payload.ToArray();
     }
 
     /// <summary>Gets the payload as one array the whole of which is the payload, copying only when it is not already one.</summary>

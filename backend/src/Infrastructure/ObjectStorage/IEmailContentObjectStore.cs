@@ -32,17 +32,27 @@ internal interface IEmailContentObjectStore
         ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken);
 
-    /// <summary>Reads back the object one row points at.</summary>
+    /// <summary>Reads back the object one row points at, up to the length that row records.</summary>
     /// <param name="objectLocator">The whole key, exactly as the row carries it.</param>
+    /// <param name="maximumByteLength">The length the row records, past which the endpoint's answer stops being read.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The bytes, or <see langword="null" /> when the endpoint holds no object under that key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maximumByteLength" /> is not positive.</exception>
     /// <exception cref="ObjectStorageUnavailableException">Thrown when the endpoint could not answer.</exception>
     /// <remarks>
     /// An absent object is answered rather than raised, because it is a content defect the caller grades: the read that
     /// meets it reports the same content-unavailable outcome a missing database payload produces and raises a repair
     /// request, which is a different thing from an endpoint that could not be reached at all.
+    /// <para>
+    /// The ceiling is a bound on this process rather than an assertion about the object: the read stops one byte past
+    /// what the row records, so an endpoint answering with more hands back something longer than the row describes and
+    /// every caller already holds the length and the digest that says so. Nothing here decides what that means.
+    /// </para>
     /// </remarks>
-    Task<ReadOnlyMemory<byte>?> FindAsync(string objectLocator, CancellationToken cancellationToken);
+    Task<ReadOnlyMemory<byte>?> FindAsync(
+        string objectLocator,
+        long maximumByteLength,
+        CancellationToken cancellationToken);
 
     /// <summary>Removes one object, which is what carries a committed deletion of its row through to the endpoint.</summary>
     /// <param name="objectLocator">The whole key, exactly as the row that was deleted carried it.</param>

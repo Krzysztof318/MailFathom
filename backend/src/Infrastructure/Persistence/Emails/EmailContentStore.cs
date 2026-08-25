@@ -533,7 +533,7 @@ internal sealed class EmailContentStore(
                 "This payload is held in object storage and no object-storage endpoint is configured for this deployment.");
         }
 
-        var payload = await objectStore.FindAsync(row.ObjectLocator!, cancellationToken);
+        var payload = await objectStore.FindAsync(row.ObjectLocator!, row.MimeByteLength, cancellationToken);
 
         return payload is null ? null : row.ToStoredContent(payload.Value);
     }

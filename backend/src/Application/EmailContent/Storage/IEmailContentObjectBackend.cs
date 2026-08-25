@@ -40,13 +40,23 @@ public interface IEmailContentObjectBackend
 
     /// <summary>Reads back the object one key names, so what was written can be checked against what a row records.</summary>
     /// <param name="objectLocator">The whole key, exactly as the placement produced it.</param>
+    /// <param name="maximumByteLength">The length the row records, past which the endpoint's answer stops being read.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The bytes, or <see langword="null" /> when the endpoint holds no object under that key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maximumByteLength" /> is not positive.</exception>
     /// <exception cref="Domain.Failures.MailFathomException">Thrown when the endpoint could not answer.</exception>
     /// <remarks>
     /// An absent object is answered rather than raised, because the two are different findings: an endpoint that cannot
     /// answer says to try the same payload again later, and an endpoint that answers with nothing says this payload must
     /// not be repointed at all.
+    /// <para>
+    /// The ceiling is what keeps a remote answer from deciding how much this process holds. A caller states the length
+    /// it expects, the read stops one byte past it, and an endpoint answering with more is met as a payload that
+    /// disagrees with its row rather than as a buffer grown to fit whatever arrived.
+    /// </para>
     /// </remarks>
-    Task<ReadOnlyMemory<byte>?> ReadBackAsync(string objectLocator, CancellationToken cancellationToken);
+    Task<ReadOnlyMemory<byte>?> ReadBackAsync(
+        string objectLocator,
+        long maximumByteLength,
+        CancellationToken cancellationToken);
 }

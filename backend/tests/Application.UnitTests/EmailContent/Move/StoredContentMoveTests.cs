@@ -289,6 +289,25 @@ public sealed class StoredContentMoveTests
         Assert.Equal(1L, this.runs.Current?.CopiedPayloadCount);
     }
 
+    /// <summary>An endpoint answering with more than the row records meets the ceiling, and what came back is the mismatch it is.</summary>
+    [Fact]
+    public async Task RunAsync_ObjectComesBackLongerThanTheRowRecords_ReadsNoFurtherThanTheCeiling()
+    {
+        // Arrange
+        this.ArrangeRunningMove();
+        this.content.Arrange(EmailContentKind.IncomingMessage, PayloadId(1), Payload(1, byteLength: 8));
+        this.objects.CorruptedReadBack = Payload(1, byteLength: 4096);
+
+        // Act
+        var pass = await this.MoveOver().RunAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(8L, this.objects.ReadBackCeiling);
+        Assert.Equal(1L, pass.FailedPayloadCount);
+        Assert.Equal(StoredContentMoveFailure.ObjectMismatch, Assert.Single(this.telemetry.Failures));
+        Assert.Empty(this.content.Repoints);
+    }
+
     /// <summary>An endpoint that cannot be written to writes nothing, and the row it was about to hold stays in the database.</summary>
     [Fact]
     public async Task RunAsync_EndpointCannotAnswerTheWrite_LeavesTheRowInTheDatabase()

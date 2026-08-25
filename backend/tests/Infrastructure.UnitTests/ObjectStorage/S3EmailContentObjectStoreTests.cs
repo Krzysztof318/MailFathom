@@ -304,11 +304,38 @@ public sealed class S3EmailContentObjectStoreTests
         var store = StoreOver(bucket, host);
 
         // Act
-        var payload = await store.FindAsync("mailfathom/incoming/one", TestContext.Current.CancellationToken);
+        var payload = await store.FindAsync("mailfathom/incoming/one", Message.Length, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(payload);
         Assert.Equal(Message, payload.Value.ToArray());
+    }
+
+    /// <summary>
+    /// An endpoint answering with more than the row records is bounded here rather than buffered whole: the read stops
+    /// one byte past the ceiling, which is a length no row describes and every reader already holds the digest to
+    /// refuse.
+    /// </summary>
+    [Fact]
+    public async Task FindAsync_AnObjectLongerThanTheRowRecords_ReadsNoFurtherThanOneBytePastTheCeiling()
+    {
+        // Arrange
+        var overlongAnswer = new byte[64 * 1024];
+        var bucket = BucketAnswering();
+        bucket.GetObjectAsync(Arg.Any<GetObjectRequest>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(new GetObjectResponse { ResponseStream = new MemoryStream(overlongAnswer) }));
+
+        using var host = OutboundResilienceTestHost.WithConfiguredSettings();
+        var store = StoreOver(bucket, host);
+
+        // Act
+        var payload = await store.FindAsync(
+            "mailfathom/incoming/one",
+            Message.Length,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(Message.Length + 1, payload?.Length);
     }
 
     /// <summary>
@@ -331,7 +358,7 @@ public sealed class S3EmailContentObjectStoreTests
         var store = StoreOver(bucket, host);
 
         // Act
-        var payload = await store.FindAsync("mailfathom/incoming/gone", TestContext.Current.CancellationToken);
+        var payload = await store.FindAsync("mailfathom/incoming/gone", Message.Length, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(payload);
@@ -352,7 +379,7 @@ public sealed class S3EmailContentObjectStoreTests
 
         // Act
         var failure = await Assert.ThrowsAsync<ObjectStorageUnavailableException>(
-            () => store.FindAsync("mailfathom/incoming/one", TestContext.Current.CancellationToken));
+            () => store.FindAsync("mailfathom/incoming/one", Message.Length, TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(ObjectStorageFailure.TransientTransportFailure, failure.Failure);
@@ -372,7 +399,7 @@ public sealed class S3EmailContentObjectStoreTests
 
         // Act
         var failure = await Assert.ThrowsAsync<ObjectStorageUnavailableException>(
-            () => store.FindAsync("mailfathom/incoming/private-key-name", TestContext.Current.CancellationToken));
+            () => store.FindAsync("mailfathom/incoming/private-key-name", Message.Length, TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Contains("ContentStorage:ObjectStorage:Endpoint", failure.Message, StringComparison.Ordinal);
@@ -390,7 +417,7 @@ public sealed class S3EmailContentObjectStoreTests
 
         // Act, Assert
         await Assert.ThrowsAsync<ArgumentException>(
-            () => store.FindAsync("   ", TestContext.Current.CancellationToken));
+            () => store.FindAsync("   ", Message.Length, TestContext.Current.CancellationToken));
         await bucket.DidNotReceive().GetObjectAsync(Arg.Any<GetObjectRequest>(), Arg.Any<CancellationToken>());
     }
 

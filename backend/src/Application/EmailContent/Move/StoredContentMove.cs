@@ -133,7 +133,7 @@ public sealed class StoredContentMove
         try
         {
             while (walk.CarriedPayloadCount < this.options.PayloadsPerPass
-                && walk.ReadByteCount < this.options.MaxBytesPerPass
+                && walk.ReachedByteCount < this.options.MaxBytesPerPass
                 && !cancellationToken.IsCancellationRequested)
             {
                 if (pending.Count == 0)
@@ -172,7 +172,7 @@ public sealed class StoredContentMove
 
                 walk.ResumeAfter = carried.PayloadId;
 
-                if (await this.StoppedByOperatorAsync(run, cancellationToken))
+                if (await this.StoppedByOperatorAsync(run))
                 {
                     break;
                 }
@@ -209,10 +209,16 @@ public sealed class StoredContentMove
     /// go on rewriting where somebody's mail is held after they asked for it to stop. It is deliberately not a read the
     /// walk trusts for anything else: a move replaced under the pass, or ended, is left for
     /// <see cref="RecordAsync" /> to recognize on the same terms it always did.
+    /// <para>
+    /// Outside the pass's cancellation, so that the one await between two payloads cannot itself raise. A shutdown
+    /// landing here would otherwise end the pass through an exception rather than through the loop's own condition,
+    /// which is what this type documents and what a caller reading that contract is entitled to. The read is a
+    /// single-row primary-key lookup, so waiting for it costs a shutdown nothing worth measuring.
+    /// </para>
     /// </remarks>
-    private async Task<bool> StoppedByOperatorAsync(StoredContentMoveRun began, CancellationToken cancellationToken)
+    private async Task<bool> StoppedByOperatorAsync(StoredContentMoveRun began)
     {
-        var current = await this.runStore.FindAsync(cancellationToken);
+        var current = await this.runStore.FindAsync(CancellationToken.None);
 
         return current is not { State: StoredContentMoveState.Running }
             || current.RequestedAt != began.RequestedAt;
@@ -234,7 +240,7 @@ public sealed class StoredContentMove
         CancellationToken cancellationToken)
     {
         walk.CarriedPayloadCount++;
-        walk.ReadByteCount += payload.ByteLength;
+        walk.ReachedByteCount += payload.ByteLength;
 
         if (payload.ByteLength > this.memoryBudget.CapacityBytes)
         {
@@ -305,6 +311,11 @@ public sealed class StoredContentMove
     /// Read back rather than trusted, although the endpoint verified the checksum the put carried. What the row is about
     /// to point at is the only copy the deployment will read from afterwards, and the one question worth the second
     /// request is whether that copy is there and is the message.
+    /// <para>
+    /// The read is bounded by what the row records, so an endpoint answering with more than the payload it was given
+    /// meets a ceiling rather than this process growing a buffer to fit somebody else's answer. What comes back is then
+    /// longer than the row describes, which is the mismatch it is: the row is left exactly where it is.
+    /// </para>
     /// </remarks>
     private async Task<bool> VerifyAsync(
         DatabaseBackedPayload payload,
@@ -315,7 +326,7 @@ public sealed class StoredContentMove
     {
         using var reservation = await this.memoryBudget.ReserveAsync(payload.ByteLength, cancellationToken);
 
-        var written = await this.objectBackend.ReadBackAsync(objectLocator, cancellationToken);
+        var written = await this.objectBackend.ReadBackAsync(objectLocator, payload.ByteLength, cancellationToken);
 
         if (written is not { } writtenBytes)
         {
@@ -390,7 +401,9 @@ public sealed class StoredContentMove
         /// <remarks>What the pass is bounded by, rather than the copied count: a pass that met twenty payloads it could not carry has done twenty payloads' worth of work.</remarks>
         public int CarriedPayloadCount { get; set; }
 
-        public long ReadByteCount { get; set; }
+        /// <summary>Gets or sets the declared length of every payload the pass has reached, whether or not its bytes were ever read.</summary>
+        /// <remarks>The byte ceiling's counterpart to <see cref="CarriedPayloadCount" />, and counted the same way: a payload refused for being larger than this process may hold cost the pass its whole size in what the pass was willing to take on.</remarks>
+        public long ReachedByteCount { get; set; }
 
         public long CopiedPayloadCount { get; set; }
 

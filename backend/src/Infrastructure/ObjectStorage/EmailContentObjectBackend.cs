@@ -24,6 +24,9 @@ internal sealed class EmailContentObjectBackend(IEmailContentObjectStore objectS
         objectStore.PlaceAsync(kind, rawMime, cancellationToken);
 
     /// <inheritdoc />
-    public Task<ReadOnlyMemory<byte>?> ReadBackAsync(string objectLocator, CancellationToken cancellationToken) =>
-        objectStore.FindAsync(objectLocator, cancellationToken);
+    public Task<ReadOnlyMemory<byte>?> ReadBackAsync(
+        string objectLocator,
+        long maximumByteLength,
+        CancellationToken cancellationToken) =>
+        objectStore.FindAsync(objectLocator, maximumByteLength, cancellationToken);
 }
