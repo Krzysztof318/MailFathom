@@ -22,6 +22,16 @@ public interface IClientSession
     /// <summary>Gets what may be offered here, and the version of the deployment that said so.</summary>
     IFeed<SessionStanding> Standing { get; }
 
+    /// <summary>Gets whether the deployment can be reached at all, and what the client is doing about it when it cannot.</summary>
+    /// <remarks>
+    /// Beside the standing rather than folded into it, because they answer different questions and a screen acts on
+    /// them differently. A deployment that refused this credential was reached; a deployment nothing answered from was
+    /// not, and only the second is something the client recovers from by itself. It is also what keeps a lost
+    /// connection from reading as mail that is out of date — the two are separate sentences on a screen because they
+    /// are separate facts here.
+    /// </remarks>
+    IFeed<DeploymentConnection> Connection { get; }
+
     /// <summary>Asks the deployment again, which is what a person presses after a fetch that failed.</summary>
     /// <remarks>Nothing is awaited: the answer arrives on <see cref="Standing" /> like any other, so a retry is the same state a first fetch is rather than a second path with its own progress and its own failure.</remarks>
     void Refresh();

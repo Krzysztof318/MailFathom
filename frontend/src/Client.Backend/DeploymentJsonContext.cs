@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json.Serialization;
+using MailFathom.Client.Backend.Accounts;
 using MailFathom.Client.Backend.Authorization;
 
 namespace MailFathom.Client.Backend;
@@ -23,6 +24,7 @@ namespace MailFathom.Client.Backend;
 /// </remarks>
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(DeploymentSession))]
+[JsonSerializable(typeof(DeploymentMailAccounts))]
 [JsonSerializable(typeof(ProtectedResourceMetadata))]
 [JsonSerializable(typeof(AuthorizationServerMetadata))]
 [JsonSerializable(typeof(OAuthTokenResponse))]

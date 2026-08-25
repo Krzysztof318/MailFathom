@@ -253,6 +253,58 @@ public sealed class WorkspaceModelTests : IDisposable
         Assert.True(await model.OffersNothing);
     }
 
+    /// <summary>
+    /// A first attempt is not a retry, so an ordinary start shows no connection notice at all — a banner on every
+    /// launch would be one nobody reads by the time it means something.
+    /// </summary>
+    [Fact]
+    public async Task IsRetryingDeployment_ADeploymentThatAnswered_SaysNothingAboutTheConnection()
+    {
+        // Arrange
+        await using var model = this.ModelOver();
+
+        // Act, Assert
+        Assert.False(await model.IsRetryingDeployment);
+        Assert.False(await model.HasLostDeployment);
+        Assert.True(await model.HasReachedDeployment);
+    }
+
+    /// <summary>
+    /// A client working its way back to a deployment says which attempt it is on, because seeing the count move is
+    /// what makes it something somebody waits for rather than restarts.
+    /// </summary>
+    [Fact]
+    public async Task ConnectionAttempt_AClientTryingAgain_SaysWhichAttemptIsUnderWay()
+    {
+        // Arrange
+        using var session = SessionOffering("mailfathom.mail.read");
+        session.Answered = new DeploymentConnection(ConnectionStanding.Reaching, Attempt: 2, Attempts: 5);
+        await using var model = this.ModelOver(session: session);
+
+        // Act, Assert
+        Assert.True(await model.IsRetryingDeployment);
+        Assert.False(await model.HasReachedDeployment);
+        Assert.Equal("Attempt 2 of 5", await model.ConnectionAttempt);
+    }
+
+    /// <summary>
+    /// A deployment nothing answered from and a deployment that refused this credential lead to different acts, so
+    /// the frame never says both at once: the failed-session notice is shown only where something answered.
+    /// </summary>
+    [Fact]
+    public async Task HasLostDeployment_AClientThatStoppedTrying_IsKeptApartFromASessionThatWasRefused()
+    {
+        // Arrange
+        using var session = SessionOffering("mailfathom.mail.read");
+        session.Answered = new DeploymentConnection(ConnectionStanding.Lost, Attempt: 5, Attempts: 5);
+        await using var model = this.ModelOver(session: session);
+
+        // Act, Assert
+        Assert.True(await model.HasLostDeployment);
+        Assert.False(await model.HasReachedDeployment);
+        Assert.False(await model.IsRetryingDeployment);
+    }
+
     /// <summary>Asking the deployment again is the session's act, so the frame hands it on rather than fetching for itself.</summary>
     [Fact]
     public async Task RetrySession_PressedOnAFailedSession_AsksTheSessionAgain()
@@ -331,5 +383,6 @@ public sealed class WorkspaceModelTests : IDisposable
         ["WorkspaceScope.Everything"] = "All your mail",
         ["WorkspaceScope.AccountFolder"] = "{0} · {1}",
         ["WorkspaceScope.Selected"] = "{0} · {1} selected",
+        ["Workspace.Connection.Attempt"] = "Attempt {0} of {1}",
     });
 }

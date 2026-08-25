@@ -7,6 +7,7 @@ using MailFathom.Client.Backend;
 using MailFathom.Client.Deployment;
 using MailFathom.Client.Presentation.Settings;
 using MailFathom.Client.Presentation.Spaces;
+using MailFathom.Client.Presentation.Spaces.Mail;
 using MailFathom.Client.Presentation.Workspace;
 using MailFathom.Client.Session;
 using Microsoft.Extensions.DependencyInjection;
@@ -93,6 +94,13 @@ public partial class App : Application
                     // instead of deriving its own from a request the deployment refused — and it keeps itself
                     // current by listening where the two things that invalidate it happen.
                     services.AddSingleton<IClientSession, DeploymentClientSession>();
+
+                    // How many times a client that has lost its deployment asks again before it stops and offers the
+                    // ask as a button, and what the wait between attempts is measured against. Both are registered
+                    // rather than written into the session, because what they decide is a policy this composition
+                    // states and a test states differently.
+                    services.AddSingleton(DeploymentConnectionRetry.Standard);
+                    services.AddSingleton(TimeProvider.System);
                 })
                 // Light, dark, and follow-the-system, with the choice written to the platform's own settings store so
                 // the application starts the way it was left. Nothing here decides which one: AppTheme.System is the
@@ -191,7 +199,7 @@ public partial class App : Application
             new ViewMap(ViewModel: typeof(ShellModel)),
             new ViewMap<WorkspacePage, WorkspaceModel>(),
             new ViewMap<DiscoverPage>(),
-            new ViewMap<MailPage>(),
+            new ViewMap<MailPage, MailModel>(),
             new ViewMap<CasesPage>(),
             new ViewMap<SettingsPage, SettingsModel>(),
             new ViewMap<ConnectPage, ConnectModel>());
@@ -212,7 +220,7 @@ public partial class App : Application
                         Nested:
                         [
                             new RouteMap(ClientRoutes.Discover, View: views.FindByView<DiscoverPage>(), IsDefault: true),
-                            new RouteMap(ClientRoutes.Mail, View: views.FindByView<MailPage>()),
+                            new RouteMap(ClientRoutes.Mail, View: views.FindByViewModel<MailModel>()),
                             new RouteMap(ClientRoutes.Cases, View: views.FindByView<CasesPage>()),
                         ]),
                     new RouteMap(ClientRoutes.Settings, View: views.FindByViewModel<SettingsModel>()),

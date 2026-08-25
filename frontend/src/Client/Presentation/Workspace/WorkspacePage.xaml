@@ -177,6 +177,38 @@ Project repository: https://github.com/Krzysztof318/MailFathom
           <StackPanel Grid.Row="1"
                       Padding="16,0,16,12"
                       Spacing="8">
+            <!-- Whether the client reaches its deployment at all, which is the first of the three facts a screen must
+                 not blur and the one every other notice below rests on. It is the frame's rather than a space's
+                 because it is about this client rather than about any mailbox: a person whose network dropped and a
+                 person whose mail provider is refusing connections need different sentences, and this is the first
+                 of the two. -->
+            <InfoBar x:Uid="Workspace.InfoBar.Reaching"
+                     IsOpen="{Binding IsRetryingDeployment}"
+                     IsClosable="False"
+                     Severity="Warning">
+              <!-- The attempt beside the sentence rather than folded into it: seeing the count move is what tells
+                   somebody the client is working rather than stuck, which is the whole reason this is shown. -->
+              <InfoBar.Content>
+                <TextBlock Text="{Binding ConnectionAttempt}"
+                           Margin="0,0,0,12"
+                           TextWrapping="Wrap"
+                           Style="{StaticResource CaptionTextBlockStyle}" />
+              </InfoBar.Content>
+            </InfoBar>
+
+            <!-- The client has stopped asking on its own, so the next ask is a person's. Its own notice rather than
+                 the failed-session one below, because the two lead to different acts — a connection to look at, and a
+                 sign-in to repeat. -->
+            <InfoBar x:Uid="Workspace.InfoBar.DeploymentLost"
+                     IsOpen="{Binding HasLostDeployment}"
+                     IsClosable="False"
+                     Severity="Error">
+              <InfoBar.ActionButton>
+                <Button x:Uid="Workspace.Button.RetrySession"
+                        Command="{Binding RetrySession}" />
+              </InfoBar.ActionButton>
+            </InfoBar>
+
             <!-- A grant of nothing is an answer rather than a failure, and it is the one a person can act on with
                  their operator. It is read from the frame rather than from the state's own template so the sentence
                  does not depend on which of the three spaces resolved how. -->
@@ -218,11 +250,15 @@ Project repository: https://github.com/Krzysztof318/MailFathom
               <!-- What it means and what to try, in this application's own words: the failure carries an English
                    message written for a log, and one of the four cases can carry text from a machine this process
                    does not own. The retry reaches the model through the template's parent, because asking the
-                   deployment again is the session's act rather than this view's. -->
+                   deployment again is the session's act rather than this view's.
+
+                   Shown only where the deployment answered, so this and the lost-connection notice above never speak
+                   at once: a session that failed because nothing was answering is said there, and what is left here
+                   is the deployment being present and refusing this client a session. -->
               <mvux:FeedView.ErrorTemplate>
                 <DataTemplate>
                   <InfoBar x:Uid="Workspace.InfoBar.SessionUnavailable"
-                           IsOpen="True"
+                           IsOpen="{Binding Parent.HasReachedDeployment}"
                            IsClosable="False"
                            Severity="Error">
                     <InfoBar.ActionButton>

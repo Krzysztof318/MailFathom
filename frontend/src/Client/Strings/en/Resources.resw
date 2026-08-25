@@ -369,4 +369,92 @@
     <value>Not reported — the deployment could not be asked.</value>
     <comment>Stated rather than left blank, which would read as a deployment reporting no version at all.</comment>
   </data>
+  <data name="Workspace.InfoBar.Reaching.Title" xml:space="preserve">
+    <value>Reconnecting to your MailFathom</value>
+    <comment>Heads the notice shown while the client is asking its deployment again after an attempt that did not arrive.</comment>
+  </data>
+  <data name="Workspace.InfoBar.Reaching.Message" xml:space="preserve">
+    <value>Your deployment did not answer. The client is trying again on its own, so there is nothing to restart.</value>
+    <comment>Says the client is working rather than frozen, and says the person need do nothing, which is the whole reason the notice exists.</comment>
+  </data>
+  <data name="Workspace.Connection.Attempt" xml:space="preserve">
+    <value>Attempt {0} of {1}</value>
+    <comment>Composed in the frame's model rather than fixed per control. {0} is the attempt under way and {1} how many are made before the client stops and asks.</comment>
+  </data>
+  <data name="Workspace.InfoBar.DeploymentLost.Title" xml:space="preserve">
+    <value>Your MailFathom is not answering</value>
+    <comment>Heads the notice shown once the client has stopped asking on its own. Kept apart from a session that could not be had, because a connection is looked at and a sign-in is repeated.</comment>
+  </data>
+  <data name="Workspace.InfoBar.DeploymentLost.Message" xml:space="preserve">
+    <value>Nothing answered at your deployment, so the client stopped trying. Check that this device is online and that your deployment is running, then try again.</value>
+    <comment>Names the two things the person can check. It says nothing about credentials, which would send somebody to their operator about a network.</comment>
+  </data>
+  <data name="MailPage.TextBlock.Accounts.Text" xml:space="preserve">
+    <value>Your mailboxes</value>
+    <comment>Heads the list of the signed-in owner's own accounts. Never a deployment-wide list, which the client does not show.</comment>
+  </data>
+  <data name="MailPage.InfoBar.SynchronizationPaused.Title" xml:space="preserve">
+    <value>This deployment is not refreshing mail</value>
+    <comment>Heads the notice shown where synchronization is switched off for the whole deployment, which changes what every gap below it means.</comment>
+  </data>
+  <data name="MailPage.InfoBar.SynchronizationPaused.Message" xml:space="preserve">
+    <value>Nothing below is being kept up to date, however recent it looks. Ask whoever runs your MailFathom to turn synchronization back on.</value>
+    <comment>Says what the switch does to the readings beside it, and names the person who can change it.</comment>
+  </data>
+  <data name="MailPage.InfoBar.NoAccount.Title" xml:space="preserve">
+    <value>No mailbox yet</value>
+    <comment>Heads the state an owner with no mail account is shown. It is a state rather than a failure, so it is not worded as one.</comment>
+  </data>
+  <data name="MailPage.InfoBar.NoAccount.Message" xml:space="preserve">
+    <value>There is no mail account on your MailFathom yet, so there is nothing to read here. Adding one is done by whoever runs it.</value>
+    <comment>Says what to do about it rather than leaving an empty list. Adding an account is an administrative act, which is deliberately not offered here.</comment>
+  </data>
+  <data name="MailPage.InfoBar.AccountsUnavailable.Title" xml:space="preserve">
+    <value>Your mailboxes could not be read</value>
+    <comment>Heads the failed read of the account list, which is a different thing from a mailbox being out of date.</comment>
+  </data>
+  <data name="MailPage.InfoBar.AccountsUnavailable.Message" xml:space="preserve">
+    <value>Until your deployment answers, this list is not shown. The notice above the workspace says what the client makes of the connection.</value>
+    <comment>Sends the reader to the frame, which is where reaching the deployment at all is told apart from a mailbox being behind.</comment>
+  </data>
+  <data name="MailPage.Button.RetryAccounts.Content" xml:space="preserve">
+    <value>Try again</value>
+    <comment>Asks the deployment once more, which asks for the session and the mailboxes together.</comment>
+  </data>
+  <data name="MailPage.Account.Standing.Unrecognized" xml:space="preserve">
+    <value>State not recognized</value>
+    <comment>Shown where the deployment named a state this version of the client does not know. Nothing is claimed about the copy, which is the safe reading.</comment>
+  </data>
+  <data name="MailPage.Account.Standing.NeverSynchronized" xml:space="preserve">
+    <value>Not synchronized yet</value>
+    <comment>Shown where nothing has ever been taken in for the account.</comment>
+  </data>
+  <data name="MailPage.Account.Standing.Synchronized" xml:space="preserve">
+    <value>Being refreshed</value>
+    <comment>Shown where the deployment's last attempt at the account did not fail. It says the copy is being kept current, and deliberately not that it is current — how old is too old is the reader's judgement.</comment>
+  </data>
+  <data name="MailPage.Account.Standing.Failing" xml:space="preserve">
+    <value>Not reachable</value>
+    <comment>Shown where the deployment's last attempt at the account did not complete. It is about the account's own mail server rather than about this client's connection.</comment>
+  </data>
+  <data name="MailPage.Account.Freshness.Never" xml:space="preserve">
+    <value>No mail taken in yet</value>
+    <comment>The gap for an account nothing has ever synchronized, where there is no instant to state.</comment>
+  </data>
+  <data name="MailPage.Account.Freshness.WithinTheHour" xml:space="preserve">
+    <value>Updated within the last hour</value>
+    <comment>The narrowest gap band. A timestamp slightly ahead of this device's clock reads as this band rather than as a negative gap.</comment>
+  </data>
+  <data name="MailPage.Account.Freshness.Today" xml:space="preserve">
+    <value>Updated within the last day</value>
+    <comment>The gap band for an account refreshed less than a day ago.</comment>
+  </data>
+  <data name="MailPage.Account.Freshness.WithinTheWeek" xml:space="preserve">
+    <value>Updated within the last week</value>
+    <comment>The gap band for an account refreshed less than a week ago.</comment>
+  </data>
+  <data name="MailPage.Account.Freshness.LongerAgo" xml:space="preserve">
+    <value>Nothing taken in for over a week</value>
+    <comment>The widest gap band. It states the gap without calling the mailbox stale, which is the reader's judgement rather than the client's.</comment>
+  </data>
 </root>
