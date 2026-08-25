@@ -51,8 +51,13 @@ message eventually wants durability and an upgrade path that a claim does not pr
 database.deploy.enabled=false and name a server you operate when it does.
 {{ end }}
 {{ if .Values.contentStorage.objectStorage.deploy.enabled }}
-The object store is this release's own: one Silo node on one claim, retained when the release is uninstalled. Its
-console is not served and no Service port routes to one.
+The object store is this release's own: one Silo node on one claim, retained when the release is uninstalled.
+{{- if .Values.contentStorage.objectStorage.deploy.console.enabled }}
+Its console is served, on a Service port no Ingress publishes: reach it with a deliberate port-forward, and know that
+what authenticates at it is the root credential, which is the whole store rather than the one bucket.
+{{- else }}
+Its console is not served and no Service port routes to one.
+{{- end }}
 
 It ships no bucket and no access key, and this release creates neither, so both are provisioned once with the root
 credential in {{ .Values.contentStorage.objectStorage.deploy.rootCredentialSecret }} — which MailFathom itself never

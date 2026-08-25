@@ -424,9 +424,9 @@
                       "type": "string",
                       "enum": [
                         "ReadWriteOnce",
-                        "ReadWriteOncePod",
-                        "ReadWriteMany"
-                      ]
+                        "ReadWriteOncePod"
+                      ],
+                      "description": "One node owns one pool, so a mode that lets a second node mount it would describe a topology this chart does not render."
                     },
                     "storageClassName": {
                       "type": "string"
