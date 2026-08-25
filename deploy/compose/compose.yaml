@@ -107,6 +107,39 @@ services:
       ConnectionStrings__mailfathom: "Host=postgres;Port=5432;Database=${MAILFATHOM_DATABASE:-mailfathom};Username=${MAILFATHOM_DATABASE_ROLE:-mailfathom}"
       Persistence__Password__Name: mailfathom-database-password
       Persistence__Password__SecretReference: file:/run/secrets/mailfathom-database-password
+      # Where the raw MIME of the messages stored next is written: `Database`, which keeps every payload in PostgreSQL
+      # beside the metadata and is what this deployment has always done, or `ObjectStorage`, which writes new payloads
+      # into the S3-compatible bucket named below. Everything else still goes through PostgreSQL either way.
+      #
+      # **It decides only where the next write goes.** Every content row names the store holding its own payload, so
+      # switching moves nothing already stored and switching back re-encodes nothing. And a `pg_dump` stops being a
+      # whole backup the moment this says ObjectStorage: docs/operations/deployment-compose.md § Backup and what
+      # survives removal states the order the two stores are backed up and restored in.
+      #
+      # The settings below are read only under the object backend, so they are set unconditionally like the spam
+      # scanner's address further down and cost a Database deployment nothing. Under ObjectStorage the address, the
+      # bucket, and both credential files are required, and MailFathom refuses to start without them rather than signing
+      # requests as whatever identity the host carries.
+      ContentStorage__Backend: ${MAILFATHOM_CONTENT_STORAGE:-Database}
+      ContentStorage__ObjectStorage__Endpoint: ${MAILFATHOM_OBJECT_STORAGE_ENDPOINT:-}
+      ContentStorage__ObjectStorage__Bucket: ${MAILFATHOM_OBJECT_STORAGE_BUCKET:-}
+      ContentStorage__ObjectStorage__KeyPrefix: ${MAILFATHOM_OBJECT_STORAGE_KEY_PREFIX:-}
+      ContentStorage__ObjectStorage__Region: ${MAILFATHOM_OBJECT_STORAGE_REGION:-}
+      ContentStorage__ObjectStorage__UsePathStyleAddressing: ${MAILFATHOM_OBJECT_STORAGE_PATH_STYLE:-true}
+      # Two files under ./secrets/mailfathom/, like every mailbox password and API key, rather than two Compose secrets:
+      # the identifier names an identity at the endpoint and is half of what an attacker needs, so it is provisioned and
+      # rotated by exactly the machinery its secret is. Both are resolved before every request, so replacing a file
+      # takes effect on the next call with no restart.
+      ContentStorage__ObjectStorage__AccessKeyId__Name: mailfathom-object-storage-access-key-id
+      ContentStorage__ObjectStorage__AccessKeyId__SecretReference: file:/etc/mailfathom/secrets/mailfathom-object-storage-access-key-id
+      ContentStorage__ObjectStorage__SecretAccessKey__Name: mailfathom-object-storage-secret-access-key
+      ContentStorage__ObjectStorage__SecretAccessKey__SecretReference: file:/etc/mailfathom/secrets/mailfathom-object-storage-secret-access-key
+      # The certificate authority that signed the endpoint's certificate, for an endpoint you run yourself. Commented
+      # out rather than defaulted to an empty reference: an endpoint the host already trusts needs none, and a block
+      # present with nothing in it is a credential MailFathom cannot read rather than an anchor it does not need. There
+      # is no setting anywhere that turns validation off instead — see docs/operations/platform-tls-policy.md.
+      #ContentStorage__ObjectStorage__TrustAnchor__Name: mailfathom-object-storage-trust-anchor
+      #ContentStorage__ObjectStorage__TrustAnchor__SecretReference: file:/etc/mailfathom/secrets/mailfathom-object-storage-trust-anchor
       # MailFathom's own client, served by the application as a page at the same address its client surface answers on.
       # The bundle is inside the image, so this pulls nothing and starts no second container; what it needs beside it is
       # ClientEndpoint:Enabled in ./config, since the page is served on that surface's listeners and calls them.

@@ -353,6 +353,25 @@ docker compose exec -T postgres pg_restore --username mailfathom --dbname mailfa
 
 The files under `secrets/` and `config/` are yours and are never touched by either.
 
+### With content in a bucket, the dump above is only half of it
+
+`MAILFATHOM_CONTENT_STORAGE=ObjectStorage` makes the two stores one backup taken in two places. The content rows point
+at objects in the bucket by a locator nothing recomputes, so a `pg_dump` alone restores a database naming objects it
+does not carry.
+
+1. **Take the dump above**, exactly as before.
+2. **Back up the bucket** — everything beneath `MAILFATHOM_OBJECT_STORAGE_KEY_PREFIX`, or the whole bucket where
+   MailFathom has it to itself. Your provider's own tooling does this; nothing here takes a bucket backup.
+3. **Restore the database first, then the bucket.** In that order the window between them is a database pointing at
+   objects not back yet, which reads as content temporarily unavailable. The other order leaves objects nothing points
+   at, and the reclamation sweep is entitled to delete those once they are older than `MinimumObjectAge` — so restoring
+   the bucket first can destroy part of what you are restoring.
+
+Take both from the same moment where you can. A row whose object is missing is not a corrupt deployment: the read
+reports that message's content as unavailable and names it, every other message keeps working, and
+[when the local copy is unusable](../features/email-content.md#when-the-local-copy-is-unusable) states what a client
+sees. That message is re-fetchable from the mail server like any other; what is not is anything derived from it.
+
 ## Uninstalling
 
 ```bash
@@ -535,12 +554,64 @@ the image's build scores today's mail worse than a fresh one. Nothing derived fr
 host names to third parties switched off, and the image bundles no plugin that reports anything anywhere. Remove
 `frontend` from the service to take the egress away and keep the corpus the image shipped with.
 
+## Storing message content in a bucket
+
+The raw MIME of every message lives in PostgreSQL beside the metadata unless `MAILFATHOM_CONTENT_STORAGE` says
+otherwise. `ObjectStorage` writes new payloads into an S3-compatible bucket instead; the metadata, the indexes, the
+embeddings, and every job still go through PostgreSQL, so this is a decision about payload bytes and about nothing else.
+This file starts no object store and there is no profile that would: the endpoint and its bucket exist before the first
+start.
+
+```dotenv
+MAILFATHOM_CONTENT_STORAGE=ObjectStorage
+MAILFATHOM_OBJECT_STORAGE_ENDPOINT=https://objects.example.test
+MAILFATHOM_OBJECT_STORAGE_BUCKET=mailfathom-content
+```
+
+The credential is two files rather than two variables, for the reason no credential is in `.env`: it goes into
+`./secrets/mailfathom/`, the directory MailFathom reads its own secrets from, beside the mailbox passwords.
+
+```bash
+printf %s '<access key id>' > secrets/mailfathom/mailfathom-object-storage-access-key-id
+printf %s '<secret access key>' > secrets/mailfathom/mailfathom-object-storage-secret-access-key
+chmod 444 secrets/mailfathom/mailfathom-object-storage-*
+```
+
+`printf %s` rather than `echo`, so the file holds exactly what the endpoint issued. MailFathom strips one trailing
+newline when it decodes material as text, so `echo` would work as well — but only one, and a signature derived from a
+credential with a stray byte in it reaches you as every request being rejected rather than as a credential it could not
+read. The access key identifier is a secret like the secret beside it — it names an identity at the endpoint, and it is
+one half of what an attacker needs. Both are read before every request, so rotating a key at the endpoint and replacing
+the file takes effect on the next call with nothing to restart.
+
+MailFathom refuses to start under this backend without an address, a bucket, and both files, rather than acquiring the
+host's own identity from the environment, and it refuses an endpoint that is not `https` — a request carries a signature
+and, on a write, the message itself. An endpoint you run yourself, whose certificate this host's trust store does not
+answer for, needs its authority as a third file and the two `TrustAnchor` lines in `compose.yaml` uncommented; leaving
+them commented is what an endpoint the host already trusts wants, because an empty reference is a credential MailFathom
+cannot read rather than an anchor it does not need. No setting anywhere turns validation off instead — see
+[platform TLS policy](platform-tls-policy.md).
+
+`MAILFATHOM_OBJECT_STORAGE_KEY_PREFIX` is what makes a bucket MailFathom shares with something else safe, and nothing
+here can check that two deployments sharing one arranged disjoint prefixes; the reclamation sweep lists beneath that
+prefix and nowhere else. The timeouts, the sweep, and the bounds on moving what is already stored are ordinary
+configuration and belong in `./config` beside the
+mailboxes — [`ContentStorage`](configuration-runtime.md#contentstorage) holds every key, and
+[where a payload is kept](../features/email-content.md#where-a-payload-is-kept) states what a content row records.
+
+**Switching is a move, not a setting.** The variable decides only where the next write goes: every content row names the
+store holding its own payload, so setting it moves nothing already stored and clearing it re-encodes nothing. Carrying
+what is already in the database into the bucket is an operator's act with its own controls —
+[moving stored content into the bucket](moving-stored-content.md) is that operation. Until it has run, and after a
+partial run, the deployment reads from both stores and keeps needing both: pointing it at a bucket it no longer has
+leaves the deployment unready rather than the mail unreadable.
+
 ## Bounds
 
 `.env.example` documents every knob: log rotation, CPU and memory limits for all four services, the published bind
-address and port, the database and role names, the volume name, the four personal-data settings, and the seven spam
-settings. Each is the value the Compose file already applies, so an unset variable and the documented value mean the same
-thing.
+address and port, the database and role names, the volume name, the four personal-data settings, the seven spam
+settings, and the six content-storage settings. Each is the value the Compose file already applies, so an unset variable
+and the documented value mean the same thing.
 
 The analyzer's memory limit is the one worth reading before it is lowered: it defaults to two gigabytes because the model
 is held for the life of the container, and below roughly one it is killed while loading — which reaches MailFathom as an

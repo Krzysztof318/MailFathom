@@ -88,9 +88,16 @@ downloads the desktop client from the release instead.
   and a setup of your own**: credential provisioning, TLS parameters, and file-permission expectations all differ
   there, nothing in this repository is verified against it, and a defect that reproduces only on Windows is not one
   this project can act on today.
-- **PostgreSQL with the `vector` extension.** The synchronized mail, its indexes, and the raw message content all live
-  there. The Compose deployment, the Quadlet units, and the Helm chart bring their own (`pgvector/pgvector`,
-  PostgreSQL 18); a native process expects yours, and the chart uses yours when you ask it to.
+- **PostgreSQL with the `vector` extension.** The synchronized mail, its indexes, and — unless you choose otherwise —
+  the raw message content all live there. The Compose deployment, the Quadlet units, and the Helm chart bring their own
+  (`pgvector/pgvector`, PostgreSQL 18); a native process expects yours, and the chart uses yours when you ask it to.
+- **An S3-compatible bucket, only if you want the message payloads out of the database.** It is off, and a deployment
+  that never mentions it is the ordinary one. What it changes is where the raw MIME of each message is written; the
+  metadata, the indexes, the embeddings, and every job still run through PostgreSQL either way. MailFathom runs no
+  object store and no deployment shape here starts one, so the endpoint and its bucket exist before the first start,
+  and it needs an `https` address and a credential of its own — an access key identifier and its secret, both
+  provisioned as [secret references](../operations/secret-provisioning.md) like every other credential.
+  [Choosing where message content lives](#choosing-where-message-content-lives) is the rest of it.
 - **An IMAP account to synchronize** and its password or app password, provisioned as a
   [secret reference](../operations/secret-provisioning.md) rather than written into configuration.
 - **A data-encryption key, if any mailbox authenticates with OAuth.** MailFathom seals the refresh tokens it stores
@@ -190,6 +197,36 @@ Build with the SDK pinned in `global.json`. The process is then an ordinary ASP.
 - A mail server whose TLS parameters the machine's own OpenSSL refuses is reached by naming an OpenSSL configuration
   file in the service's environment, which is a pre-start concern no MailFathom setting can replace.
   [The platform TLS policy](../operations/platform-tls-policy.md) has the sample file and the unit fragment.
+
+## Choosing where message content lives
+
+Two stores can hold the raw MIME of your mail, and which one is a decision you take once per deployment rather than per
+message. Configuring nothing keeps every payload in PostgreSQL beside the metadata, which is the shape everything above
+describes. Setting `ContentStorage:Backend` to `ObjectStorage` writes new payloads into an S3-compatible bucket instead
+— useful when the mail is larger than the database you want to operate, or when object storage is what your platform
+already backs up well. Everything else stays where it was.
+
+Each shape carries the setting in its own idiom: `contentStorage` in the Helm chart's values,
+`MAILFATHOM_CONTENT_STORAGE` and the variables beside it in Compose's `.env`, and the `ContentStorage` lines in the
+Quadlet unit.
+[`ContentStorage`](../operations/configuration-runtime.md#contentstorage) is the reference for every key and its bounds.
+
+Two things about it are worth knowing before you choose rather than after.
+
+**Switching is a move, not a setting.** The value decides only where the *next* payload is written. Every stored message
+records which store holds its own content, so turning the bucket on leaves everything already in the database exactly
+where it is and readable, and turning it back off re-encodes nothing. Carrying the mail you already have into the bucket
+is something you run, with its own controls and its own progress — [moving stored content into the
+bucket](../operations/moving-stored-content.md) is that operation. Until it has finished, the deployment needs both
+stores, and pointing it away from one it still has mail in leaves it unready rather than leaving that mail unreadable.
+
+**A database backup stops being a whole backup.** Once payloads are in the bucket, the rows point at objects there, so
+your backup is the database and the bucket together — and a restore brings the database back first and the bucket
+second, because the other order can let the reclamation sweep delete objects the database has not caught up to yet. Each
+deployment page states the order for its own shape:
+[Kubernetes](../operations/deployment-kubernetes.md#what-you-now-back-up-and-in-which-order),
+[Compose](../operations/deployment-compose.md#with-content-in-a-bucket-the-dump-above-is-only-half-of-it), and
+[Quadlet](../operations/deployment-quadlet.md#backup-and-what-survives-removal).
 
 ## Verifying any installation
 

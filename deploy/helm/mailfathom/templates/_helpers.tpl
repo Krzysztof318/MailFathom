@@ -189,6 +189,45 @@ while the chart was also deploying one would scan through a service the release 
 {{- end -}}
 
 {{/*
+Content storage is the one block here whose "off" is a different store rather than a workload that does not exist, so
+what it checks is different too: nothing is rendered either way, and what a mistake produces is mail written somewhere
+nobody named. Selecting the bucket therefore requires everything a request needs — an https address, a bucket, and both
+halves of a credential — because MailFathom's own refusal would come from a pod that never became ready, and this one
+comes from `helm install`. The other direction is the analyzer's rule: a bucket named while the database backend is
+selected is a values file that reads as though mail were going somewhere it is not.
+
+The three secret keys are checked against each other because each becomes a `ConfiguredSecret` inside one configuration
+root, where a name is required to be unique — two of them naming one key is refused at startup, and here it also means
+the identifier and the secret are the same file.
+*/}}
+{{- $objectStorage := .Values.contentStorage.objectStorage -}}
+{{- if eq .Values.contentStorage.backend "objectStorage" -}}
+  {{- if not $objectStorage.endpoint -}}
+    {{- fail "contentStorage.objectStorage.endpoint is not set while contentStorage.backend is 'objectStorage'. MailFathom reaches the endpoint at an address the deployment states and resolves none from the node, so name the absolute https address of the S3-compatible service holding your mail." -}}
+  {{- end -}}
+  {{- if not $objectStorage.bucket -}}
+    {{- fail "contentStorage.objectStorage.bucket is not set while contentStorage.backend is 'objectStorage'. Every payload is written into one bucket, which the deployment names and the chart does not create." -}}
+  {{- end -}}
+  {{- if not $objectStorage.accessKeyIdSecretKey -}}
+    {{- fail "contentStorage.objectStorage.accessKeyIdSecretKey is not set while contentStorage.backend is 'objectStorage'. Name the key inside secrets.existingSecret holding the access key identifier: MailFathom presents an explicit credential on every request and never acquires the node's own identity from the environment, so a deployment that configures none is refused rather than signing as whoever the node is." -}}
+  {{- end -}}
+  {{- if not $objectStorage.secretAccessKeySecretKey -}}
+    {{- fail "contentStorage.objectStorage.secretAccessKeySecretKey is not set while contentStorage.backend is 'objectStorage'. Name the key inside secrets.existingSecret holding the secret half of the credential." -}}
+  {{- end -}}
+  {{- $secretKeys := list $objectStorage.accessKeyIdSecretKey $objectStorage.secretAccessKeySecretKey -}}
+  {{- if $objectStorage.trustAnchorSecretKey -}}
+    {{- $secretKeys = append $secretKeys $objectStorage.trustAnchorSecretKey -}}
+  {{- end -}}
+  {{- if ne (len $secretKeys) (len (uniq $secretKeys)) -}}
+    {{- fail (printf "The content-storage secret keys are not distinct: %s. Each becomes a credential of its own inside one configuration root, where MailFathom requires a unique name — and two of them naming one key would make the access key identifier and its secret the same file." (join ", " $secretKeys)) -}}
+  {{- end -}}
+{{- else -}}
+  {{- if or $objectStorage.endpoint $objectStorage.bucket -}}
+    {{- fail "contentStorage.objectStorage names an endpoint or a bucket while contentStorage.backend is 'database'. Nothing would read it, so this deployment writes every payload into PostgreSQL while its values file reads as though mail were going to a bucket. Select the object-storage backend, or remove the endpoint and the bucket." -}}
+  {{- end -}}
+{{- end -}}
+
+{{/*
 The spam scanner follows the analyzer's shape exactly, and for the same reason: the address is either derived from the
 release or stated, never both, so a deployment cannot scan through a daemon the release did not install. The one thing
 it does not check is the address itself — a host name is any string, and refusing one here would refuse the short names

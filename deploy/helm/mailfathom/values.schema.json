@@ -243,6 +243,75 @@
       },
       "additionalProperties": false
     },
+    "contentStorage": {
+      "type": "object",
+      "required": [
+        "backend",
+        "objectStorage"
+      ],
+      "properties": {
+        "backend": {
+          "type": "string",
+          "enum": [
+            "database",
+            "objectStorage"
+          ],
+          "description": "Where the raw MIME of the messages stored next is written. 'database' keeps every payload in PostgreSQL beside the metadata, which is what a deployment that configures nothing runs. 'objectStorage' writes new payloads to the S3-compatible endpoint below, and makes a database dump stop being a whole backup."
+        },
+        "objectStorage": {
+          "type": "object",
+          "required": [
+            "endpoint",
+            "bucket",
+            "accessKeyIdSecretKey",
+            "secretAccessKeySecretKey"
+          ],
+          "properties": {
+            "endpoint": {
+              "type": "string",
+              "pattern": "^$|^https://.+",
+              "description": "An absolute https address. A plain http one is refused, because a request carries a signature and, on a write, the message itself."
+            },
+            "bucket": {
+              "type": "string"
+            },
+            "keyPrefix": {
+              "type": "string",
+              "not": {
+                "pattern": "^\\s+$",
+                "description": "Whitespace would write every key under a prefix nobody can type. Leave it empty for a bucket this deployment has to itself."
+              }
+            },
+            "region": {
+              "type": "string"
+            },
+            "usePathStyleAddressing": {
+              "type": "boolean"
+            },
+            "accessKeyIdSecretKey": {
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+              "description": "A key inside secrets.existingSecret rather than the identifier itself. The chart templates no credential, so this becomes a file: reference into the Secret the pod already mounts. The pattern and the length are what MailFathom accepts as a secret name."
+            },
+            "secretAccessKeySecretKey": {
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+              "description": "A key inside secrets.existingSecret rather than the secret itself, read before every request so a rotated key needs no restart."
+            },
+            "trustAnchorSecretKey": {
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^$|^[A-Za-z0-9][A-Za-z0-9._-]*$",
+              "description": "The certificate authority that signed the endpoint's certificate, as a key inside the same Secret. Empty for an endpoint the cluster already trusts; there is no setting anywhere that turns validation off instead."
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "secrets": {
       "type": "object",
       "required": [
@@ -294,9 +363,9 @@
               },
               {
                 "not": {
-                  "pattern": "^(ConnectionStrings__|Persistence__Password__|ConfigurationSources__|HealthEndpoints__|ASPNETCORE_|SensitiveContent__Pii__Enabled$|SensitiveContent__PersonalDataAnalyzer__|ClientEndpoint__Application__Enabled$)"
+                  "pattern": "^(ConnectionStrings__|Persistence__Password__|ConfigurationSources__|HealthEndpoints__|ASPNETCORE_|SensitiveContent__Pii__Enabled$|SensitiveContent__PersonalDataAnalyzer__|ClientEndpoint__Application__Enabled$|ContentStorage__Backend$|ContentStorage__ObjectStorage__(Endpoint|Bucket|KeyPrefix|Region|UsePathStyleAddressing|AccessKeyId__|SecretAccessKey__|TrustAnchor__))"
                 },
-                "description": "These settings are the chart's, not an override's. The environment block outranks every mounted file, so re-declaring one of them here would silently replace what the templates emit \u2014 and `ConnectionStrings__mailfathom` is the one that matters: the conventional Npgsql form carries `Password=`, which would put a credential into the rendered Deployment and bypass the mounted-file path entirely. `HealthEndpoints__` is the chart's for a different reason: `probes.port` sets both the container port the kubelet dials and the port the host binds, so moving one of them here would leave all three probes dialling a port nothing listens on and the pod never becoming ready. The personal-data switch and its analyzer block are the chart's for a third: `personalDataScanning` decides whether an analyzer workload exists at all, so an address stated here would send mail content somewhere else while the pod the release installed sat idle. Whether the client is served is the chart's for a fourth: `client.enabled` writes that switch beside the clear-text permission the application requires, and a switch stated here would turn the page on without it and refuse the start. `ClientEndpoint__Application__AllowClearText` is deliberately not one of these \u2014 it is the one an operator whose TLS terminates somewhere the chart cannot read has to state for themselves. Change `database`, `config`, `secrets`, `probes`, `personalDataScanning`, and `client` instead \u2014 the category list and its suppressions are ordinary configuration and belong in `config.files`."
+                "description": "These settings are the chart's, not an override's. The environment block outranks every mounted file, so re-declaring one of them here would silently replace what the templates emit \u2014 and `ConnectionStrings__mailfathom` is the one that matters: the conventional Npgsql form carries `Password=`, which would put a credential into the rendered Deployment and bypass the mounted-file path entirely. `HealthEndpoints__` is the chart's for a different reason: `probes.port` sets both the container port the kubelet dials and the port the host binds, so moving one of them here would leave all three probes dialling a port nothing listens on and the pod never becoming ready. The personal-data switch and its analyzer block are the chart's for a third: `personalDataScanning` decides whether an analyzer workload exists at all, so an address stated here would send mail content somewhere else while the pod the release installed sat idle. Whether the client is served is the chart's for a fourth: `client.enabled` writes that switch beside the clear-text permission the application requires, and a switch stated here would turn the page on without it and refuse the start. Which store holds a payload is the chart's for a fifth: `contentStorage` writes the backend together with the endpoint it needs and the credential references into the mounted Secret, so a backend selected here alone would point mail at a bucket the chart named nothing about \u2014 the timeouts, the reclamation sweep, and the bounds on moving what is already stored are deliberately not among these, because they are tuning rather than deployment shape and belong in `config.files`. `ClientEndpoint__Application__AllowClearText` is deliberately not one of these either \u2014 it is the one an operator whose TLS terminates somewhere the chart cannot read has to state for themselves. Change `database`, `config`, `secrets`, `probes`, `personalDataScanning`, `client`, and `contentStorage` instead \u2014 the category list and its suppressions are ordinary configuration and belong in `config.files`."
               }
             ]
           },
