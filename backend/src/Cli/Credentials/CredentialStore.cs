@@ -186,7 +186,7 @@ internal sealed class CredentialStore
     /// <param name="session">What an OAuth sign-in left behind, whose refresh token is kept alongside the access token, or <see langword="null" /> for a presented credential.</param>
     /// <param name="keyPair">Where a key-pair profile's private key lives, or <see langword="null" /> when the profile stores a credential of its own.</param>
     /// <param name="trust">What the operator accepted about this deployment's transport, or <see langword="null" /> when they accepted nothing beyond the default.</param>
-    /// <returns>Which of the two places took the profile's secrets, for the command to say so.</returns>
+    /// <returns>The name the profile is filed under, which is the one an earlier sign-in chose when the two spellings differ, and which of the two places took its secrets, for the command to say both.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="session" />, <paramref name="keyPair" />, or <paramref name="trust" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the store cannot be written.</exception>
     /// <remarks>
@@ -198,7 +198,7 @@ internal sealed class CredentialStore
     /// point of that way of signing in.
     /// </para>
     /// </remarks>
-    internal SecretPlacement Save(
+    internal (string Name, SecretPlacement Placement) Save(
         string name,
         Uri endpoint,
         string token,
@@ -260,7 +260,7 @@ internal sealed class CredentialStore
         this.Write(written);
         this.DiscardKeyIfUnused(written);
 
-        return placement;
+        return (profileName, placement);
     }
 
     /// <summary>Replaces one profile's access token with the one a silent renewal produced.</summary>
@@ -465,11 +465,10 @@ internal sealed class CredentialStore
         }
         catch (SecretStoreUnavailable unavailable)
         {
-            // Always reported: the write above succeeded against this same store moments ago, so the entry the
-            // withdrawal could not reach is one that demonstrably exists.
-            return SecretPlacement.Sealed(
-                unavailable.Message,
-                this.Forget(ProfileSecret.BearerToken(profile, address)));
+            // Both, because the refresh entry a previous sign-in left is still there and this profile is about to be
+            // sealed whole — after which nothing looks at either key again. Always reported: the write above succeeded
+            // against this same store moments ago, so an entry the withdrawal could not reach demonstrably exists.
+            return SecretPlacement.Sealed(unavailable.Message, this.ForgetBoth(profile, address));
         }
 
         return SecretPlacement.Held(this.secretStore.Description);

@@ -1580,7 +1580,10 @@ in the profile's life reads that address, so this is the only moment those entri
 
 A profile signed in before your machine had a store **moves into it by itself**, on the first command that opens the
 profile — you do not sign in again, and `credentials.key` is removed once no profile is still sealed under it. A move
-that does not complete leaves the sealed profile exactly as it was and the command you ran carries on.
+that does not complete leaves the sealed profile exactly as it was and the command you ran carries on. A move
+interrupted after its first write can leave one entry behind in the store — the command running at the time says which
+one — and removing it from your keyring is yours to do, since nothing afterwards reads that entry and no later command
+looks for it.
 
 A secret your operating system took and can no longer produce is not silently replaced by the file. A locked keyring and
 a removed entry say different things, because only one of them is answered by signing in again:

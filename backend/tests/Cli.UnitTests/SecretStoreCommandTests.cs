@@ -5,6 +5,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using MailFathom.Cli.Credentials;
+using MailFathom.Cli.Credentials.SecretStores;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
@@ -13,10 +14,11 @@ namespace MailFathom.Cli.UnitTests;
 
 /// <summary>Covers what an operator is told about where their credential ended up.</summary>
 /// <remarks>
-/// <see cref="SecretStoreCredentialTests" /> covers what the store does; this covers the two commands that have to say
-/// so. Both sentences exist for the same reason: the arrangement an operator gets follows from what their machine
-/// offers rather than from anything they chose, so a command that stayed silent would leave them to work it out from a
-/// file — or, at <c>logout</c>, to not know an entry was left in their keyring at all.
+/// <see cref="SecretStoreCredentialTests" /> covers what the store does; this covers the commands that have to say so.
+/// Every one of those sentences exists for the same reason: the arrangement an operator gets follows from what their
+/// machine offers rather than from anything they chose, so a command that stayed silent would leave them to work it out
+/// from a file — or, at <c>logout</c> and at the first command that opens a moved profile, to not know an entry was
+/// left in their keyring at all.
 /// </remarks>
 public sealed class SecretStoreCommandTests : IDisposable
 {
@@ -121,6 +123,41 @@ public sealed class SecretStoreCommandTests : IDisposable
                 && line.Contains("the collection is locked", StringComparison.Ordinal));
     }
 
+    /// <summary>A profile whose move into the store was interrupted is opened by ordinary commands rather than by <c>login</c>, so the seam every one of them passes through is what has to say what was left behind.</summary>
+    /// <remarks>
+    /// <c>status</c> stands here for all of them: it does nothing of its own before settling its deployment, so what
+    /// the warning proves is the seam rather than the command.
+    /// </remarks>
+    [Fact]
+    public async Task Status_AMoveIntoTheStoreRefusedHalfway_ReportsTheEntryLeftBehind()
+    {
+        // Arrange: an OAuth profile sealed on a machine that had no store, and a store that now takes the access
+        // token, refuses the refresh token, and will not give the first one back when the move is undone.
+        using var handler = FakeAdminEndpoint.Accepting("workstation");
+
+        new CredentialStore(
+            Path.Combine(this.storeDirectory, "credentials.json"),
+            new TokenProtector(Path.Combine(this.storeDirectory, "credentials.key")))
+            .Save("production", new Uri(Endpoint), "access-token", "workstation", this.UnexpiredSession());
+
+        this.secretStore.RefuseWriting(
+            ProfileSecret.RefreshToken("production", Endpoint),
+            "the collection is locked");
+
+        this.secretStore.RefuseClearing(
+            ProfileSecret.BearerToken("production", Endpoint),
+            "the collection is locked");
+
+        // Act
+        await this.RunAsync(handler, "status");
+
+        // Assert
+        Assert.Contains(
+            this.console.Warnings,
+            line => line.Contains("still in the platform's secret store", StringComparison.Ordinal)
+                && line.Contains("the collection is locked", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task Logout_AProfileThePlatformHolds_ClearsItsEntriesAndSaysNothingAboutThem()
     {
@@ -170,6 +207,16 @@ public sealed class SecretStoreCommandTests : IDisposable
 
     private Task<int> RunAsync(FakeHttpMessageHandler handler, params string[] args) =>
         CliRunner.RunAsync(this.Context(handler), args);
+
+    /// <summary>Builds a sign-in whose access token this test's clock has not spent, so nothing renews it mid-test.</summary>
+    private OAuthSession UnexpiredSession() => new(
+        "refresh-token",
+        this.clock.GetUtcNow().AddHours(1),
+        new Uri("https://issuer.example.test/token"),
+        "https://issuer.example.test",
+        "mfctl",
+        Endpoint,
+        "openid");
 
     /// <summary>Writes the key a key-pair sign-in signs its assertion with, which is a file rather than anything stored.</summary>
     private string WriteKeyPair()

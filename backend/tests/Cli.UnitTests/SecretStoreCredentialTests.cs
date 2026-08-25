@@ -65,7 +65,7 @@ public sealed class SecretStoreCredentialTests : IDisposable
     public void Save_AStoreThatAccepts_ReportsThatThePlatformHoldsTheCredential()
     {
         // Arrange, Act
-        var placement = this.store.Save("production", Production, "not-a-real-token", "workstation");
+        var (_, placement) = this.store.Save("production", Production, "not-a-real-token", "workstation");
 
         // Assert
         Assert.Equal("the platform's secret store", placement.Store);
@@ -81,7 +81,7 @@ public sealed class SecretStoreCredentialTests : IDisposable
         this.secretStore.Refusal = "there is no D-Bus session bus here";
 
         // Act
-        var placement = this.store.Save("production", Production, "not-a-real-token", "workstation");
+        var (_, placement) = this.store.Save("production", Production, "not-a-real-token", "workstation");
 
         // Assert
         Assert.NotNull(this.store.Read().Profiles["production"].Token);
@@ -99,7 +99,7 @@ public sealed class SecretStoreCredentialTests : IDisposable
         this.secretStore.Refusal = "there is no D-Bus session bus here";
 
         // Act
-        var placement = this.store.Save("production", Production, "not-a-real-token", "workstation");
+        var (_, placement) = this.store.Save("production", Production, "not-a-real-token", "workstation");
 
         // Assert
         Assert.Equal(
@@ -387,13 +387,14 @@ public sealed class SecretStoreCredentialTests : IDisposable
     [Fact]
     public void Save_AStoreThatRefusesTheRefreshToken_WithdrawsTheAccessTokenAndSealsTheProfileWhole()
     {
-        // Arrange
-        this.secretStore.Refuse(
+        // Arrange: the store takes the access token and will not take the refresh token, which is the longer of the
+        // two and the one a size limit refuses.
+        this.secretStore.RefuseWriting(
             ProfileSecret.RefreshToken("production", "https://mail.example.test:8443"),
-            "the collection is locked");
+            "the credential is larger than this store accepts");
 
         // Act
-        var placement = this.store.Save("production", Production, "access-token", "workstation", Session());
+        var (_, placement) = this.store.Save("production", Production, "access-token", "workstation", Session());
 
         // Assert
         var stored = this.store.Read().Profiles["production"];
@@ -401,11 +402,37 @@ public sealed class SecretStoreCredentialTests : IDisposable
 
         Assert.Empty(this.secretStore.Entries);
         Assert.Null(placement.Store);
-        Assert.Equal("the collection is locked", placement.Refusal);
+        Assert.Equal("the credential is larger than this store accepts", placement.Refusal);
         Assert.NotNull(stored.Token);
         Assert.NotNull(stored.Session?.RefreshToken);
         Assert.Equal("access-token", profile.Token);
         Assert.Equal("refresh-token", profile.Session?.RefreshToken);
+    }
+
+    /// <summary>The withdrawal is of the profile rather than of this invocation's own write, because a profile sealed whole is one nothing reads either key of again.</summary>
+    /// <remarks>
+    /// The refresh entry an earlier sign-in left is the one at stake: this sign-in never wrote it, so a withdrawal
+    /// scoped to what it did write would leave the longer-lived of the two secrets in the keyring, under a profile
+    /// whose file entry says the store holds nothing.
+    /// </remarks>
+    [Fact]
+    public void Save_AStoreThatRefusesTheRefreshTokenOverAProfileItHeld_WithdrawsBothOfThatProfilesEntries()
+    {
+        // Arrange: a sign-in the store took whole, and a store that will not take the refresh token on the next one.
+        this.store.Save("production", Production, "access-token", "workstation", Session());
+
+        this.secretStore.RefuseWriting(
+            ProfileSecret.RefreshToken("production", "https://mail.example.test:8443"),
+            "the credential is larger than this store accepts");
+
+        // Act
+        var (_, placement) = this.store.Save("production", Production, "a-second-token", "workstation", Session());
+
+        // Assert
+        Assert.Empty(this.secretStore.Entries);
+        Assert.Null(placement.Store);
+        Assert.Null(placement.Uncleared);
+        Assert.Equal("a-second-token", this.store.Resolve("production").Token);
     }
 
     /// <summary>The withdrawal is the one step that can itself fail, and what it leaves behind is a live credential nothing later goes looking for.</summary>
@@ -414,7 +441,7 @@ public sealed class SecretStoreCredentialTests : IDisposable
     {
         // Arrange: the collection locks after the access token is written, so the second write and the withdrawal of
         // the first are refused for the same reason.
-        this.secretStore.Refuse(
+        this.secretStore.RefuseWriting(
             ProfileSecret.RefreshToken("production", "https://mail.example.test:8443"),
             "the collection is locked");
         this.secretStore.RefuseClearing(
@@ -422,7 +449,7 @@ public sealed class SecretStoreCredentialTests : IDisposable
             "the collection is locked");
 
         // Act
-        var placement = this.store.Save("production", Production, "access-token", "workstation", Session());
+        var (_, placement) = this.store.Save("production", Production, "access-token", "workstation", Session());
 
         // Assert
         Assert.Equal("the collection is locked", placement.Refusal);
@@ -466,7 +493,7 @@ public sealed class SecretStoreCredentialTests : IDisposable
             "the collection is locked");
 
         // Act
-        var placement = this.store.Save("production", Moved, "moved-token", "workstation");
+        var (_, placement) = this.store.Save("production", Moved, "moved-token", "workstation");
 
         // Assert
         Assert.Equal("the platform's secret store", placement.Store);
@@ -482,7 +509,7 @@ public sealed class SecretStoreCredentialTests : IDisposable
         this.secretStore.Refusal = "the collection is locked";
 
         // Act
-        var placement = this.store.Save("production", Production, "a-second-token", "workstation");
+        var (_, placement) = this.store.Save("production", Production, "a-second-token", "workstation");
 
         // Assert
         Assert.Null(placement.Store);
@@ -498,7 +525,7 @@ public sealed class SecretStoreCredentialTests : IDisposable
         this.store.Save("production", Production, "access-token", "workstation", Session());
 
         // Act
-        var placement = this.store.Save(
+        var (_, placement) = this.store.Save(
             "production",
             Production,
             string.Empty,
@@ -518,7 +545,7 @@ public sealed class SecretStoreCredentialTests : IDisposable
         this.secretStore.Refusal = "libsecret is not installed here";
 
         // Act
-        var placement = this.store.Save(
+        var (_, placement) = this.store.Save(
             "production",
             Production,
             string.Empty,
@@ -607,7 +634,7 @@ public sealed class SecretStoreCredentialTests : IDisposable
         this.CreateStore(secretStore: null)
             .Save("production", Production, "access-token", "workstation", Session());
 
-        this.secretStore.Refuse(
+        this.secretStore.RefuseWriting(
             ProfileSecret.RefreshToken("production", "https://mail.example.test:8443"),
             "the collection is locked");
         this.secretStore.RefuseClearing(

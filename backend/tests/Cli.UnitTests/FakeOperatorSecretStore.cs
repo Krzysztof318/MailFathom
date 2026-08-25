@@ -28,17 +28,22 @@ internal sealed class FakeOperatorSecretStore : IOperatorSecretStore
     /// <summary>Gets what the store is holding, keyed as <see cref="KeyOf" /> spells it.</summary>
     internal IReadOnlyDictionary<string, string> Entries => this.entries;
 
-    /// <summary>Refuses one secret while the rest of the store goes on answering.</summary>
-    /// <param name="secret">Which secret the store will not take, read, or clear.</param>
+    /// <summary>Refuses to take one secret while the rest of the store goes on answering.</summary>
+    /// <param name="secret">Which secret the store will not take.</param>
     /// <param name="reason">What the refusal says.</param>
     /// <remarks>
     /// A whole-store <see cref="Refusal" /> cannot arrange the one input that reaches the withdrawal in
     /// <c>CredentialStore.Place</c>: a store that takes the access token and then refuses the refresh token, which is
-    /// what a collection locking mid-command looks like and what a blob over the Credential Manager's size limit looks
-    /// like on Windows. Without it that branch is unreachable from a test, and it is the branch that decides whether a
-    /// live credential is left in an operator's keyring under a profile whose file says it holds none.
+    /// what a blob over the Credential Manager's size limit looks like on Windows. Without it that branch is
+    /// unreachable from a test, and it is the branch that decides whether a live credential is left in an operator's
+    /// keyring under a profile whose file says it holds none.
+    /// <para>
+    /// The write alone, because that is what the failure it stands for refuses: an entry the store would not accept is
+    /// still one the store will hand back and let go of. A collection that has locked refuses everything and is
+    /// <see cref="Refusal" />; a store that will not release an entry it holds is <see cref="RefuseClearing" />.
+    /// </para>
     /// </remarks>
-    internal void Refuse(ProfileSecret secret, string reason) => this.refusedSecrets[KeyOf(secret)] = reason;
+    internal void RefuseWriting(ProfileSecret secret, string reason) => this.refusedSecrets[KeyOf(secret)] = reason;
 
     /// <summary>Keeps one secret readable and writable while refusing to let it go.</summary>
     /// <param name="secret">Which secret the store will not remove.</param>
@@ -46,8 +51,8 @@ internal sealed class FakeOperatorSecretStore : IOperatorSecretStore
     /// <remarks>
     /// A collection that locks between a sign-in's two writes refuses the second write and the withdrawal of the first
     /// for the same reason, which is the one arrangement in which the credential store has to report an entry it left
-    /// behind rather than a rollback that quietly worked. <see cref="Refuse" /> cannot express it: refusing the access
-    /// token outright would stop the write that has to succeed first.
+    /// behind rather than a rollback that quietly worked. <see cref="RefuseWriting" /> cannot express it: it refuses
+    /// the write alone, and a whole-store <see cref="Refusal" /> would stop the write that has to succeed first.
     /// </remarks>
     internal void RefuseClearing(ProfileSecret secret, string reason) => this.refusedClears[KeyOf(secret)] = reason;
 
@@ -57,7 +62,7 @@ internal sealed class FakeOperatorSecretStore : IOperatorSecretStore
     /// <inheritdoc />
     public string? Read(ProfileSecret secret)
     {
-        this.RefuseWhenAsked(secret);
+        this.RefuseWhileTheStoreIsGone();
 
         return this.entries.GetValueOrDefault(KeyOf(secret));
     }
@@ -65,7 +70,8 @@ internal sealed class FakeOperatorSecretStore : IOperatorSecretStore
     /// <inheritdoc />
     public void Write(ProfileSecret secret, string value)
     {
-        this.RefuseWhenAsked(secret);
+        this.RefuseWhileTheStoreIsGone();
+        Refuse(this.refusedSecrets, secret);
 
         this.entries[KeyOf(secret)] = value;
     }
@@ -73,12 +79,8 @@ internal sealed class FakeOperatorSecretStore : IOperatorSecretStore
     /// <inheritdoc />
     public bool Clear(ProfileSecret secret)
     {
-        this.RefuseWhenAsked(secret);
-
-        if (this.refusedClears.GetValueOrDefault(KeyOf(secret)) is { } refused)
-        {
-            throw new SecretStoreUnavailable(refused);
-        }
+        this.RefuseWhileTheStoreIsGone();
+        Refuse(this.refusedClears, secret);
 
         return this.entries.Remove(KeyOf(secret));
     }
@@ -87,9 +89,17 @@ internal sealed class FakeOperatorSecretStore : IOperatorSecretStore
     internal static string KeyOf(ProfileSecret secret) =>
         $"{secret.Address}/{secret.Profile}/{secret.Kind}";
 
-    private void RefuseWhenAsked(ProfileSecret secret)
+    private static void Refuse(Dictionary<string, string> refusals, ProfileSecret secret)
     {
-        if ((this.Refusal ?? this.refusedSecrets.GetValueOrDefault(KeyOf(secret))) is { } reason)
+        if (refusals.GetValueOrDefault(KeyOf(secret)) is { } reason)
+        {
+            throw new SecretStoreUnavailable(reason);
+        }
+    }
+
+    private void RefuseWhileTheStoreIsGone()
+    {
+        if (this.Refusal is { } reason)
         {
             throw new SecretStoreUnavailable(reason);
         }
