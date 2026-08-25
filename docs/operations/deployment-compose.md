@@ -261,7 +261,8 @@ application port, so widening one does not widen the other.
 
 PostgreSQL publishes no port at all. It sits on `backend`, which is declared `internal`, so it is reachable from
 MailFathom and from whatever else you attach to that network — a schema step or a backup container — and from nothing
-else.
+else. The object store's S3 port is the same: it holds the payload of every stored message, and the only mapping the
+`object-storage` profile publishes is its console's, on loopback, answering nothing until that console is switched on.
 
 ## Upgrading
 
@@ -366,6 +367,46 @@ does not carry.
    objects not back yet, which reads as content temporarily unavailable. The other order leaves objects nothing points
    at, and the reclamation sweep is entitled to delete those once they are older than `MinimumObjectAge` — so restoring
    the bucket first can destroy part of what you are restoring.
+
+A store the `object-storage` profile runs is no different in that order, and the second step is a copy out of it. It is
+the S3 API that answers, so the same client does both directions — and `docker compose down --volumes` destroys
+`mailfathom-silo-data` alongside the database's, which is a second thing that table is about. Copying the volume's files
+underneath a running server is not a backup: the pool has its own metadata in `.minio.sys`, and a copy taken while the
+server is writing is a copy of neither state.
+
+```bash
+mkdir -p mailfathom-content-backup
+
+# The scoped key, read back from the two files the provisioning step wrote rather than from shell variables, which
+# belonged to that session and are gone by the time a backup runs.
+access_key_id="$(cat secrets/mailfathom/mailfathom-object-storage-access-key-id)"
+secret_access_key="$(cat secrets/mailfathom/mailfathom-object-storage-secret-access-key)"
+
+# Out. A throwaway container on the same internal network, with the destination bind-mounted, so nothing is staged in
+# the store's own tmpfs and no port is published to reach it.
+docker compose run --rm --no-deps --entrypoint sh \
+  --volume "$PWD/mailfathom-content-backup:/backup" \
+  silo -s "$access_key_id" "$secret_access_key" <<'BACKUP'
+set -eu
+mcli --insecure alias set store https://silo:9000 "$1" "$2"
+mcli --insecure mirror --remove store/mailfathom-content /backup
+BACKUP
+
+# Back in. The same run without --remove, which there would delete from the store rather than from the copy.
+docker compose run --rm --no-deps --entrypoint sh \
+  --volume "$PWD/mailfathom-content-backup:/backup" \
+  silo -s "$access_key_id" "$secret_access_key" <<'RESTORE'
+set -eu
+mcli --insecure alias set store https://silo:9000 "$1" "$2"
+mcli --insecure mirror /backup store/mailfathom-content
+RESTORE
+```
+
+The scoped access key is enough for both directions, which is why the root credential does not appear here.
+`--insecure` because the certificate is one you issued and this client carries only the public roots the image ships —
+the name is right, the authority is one nothing here was told about, and it is MailFathom rather than a backup script
+that has to validate it. `--remove` on the way out makes the copy match the bucket rather than accumulate objects the
+sweep has already reclaimed.
 
 Take both from the same moment where you can. A row whose object is missing is not a corrupt deployment: the read
 reports that message's content as unavailable and names it, every other message keeps working, and
@@ -536,7 +577,9 @@ COMPOSE_PROFILES=spam-scanning
 MAILFATHOM_SPAM_SCANNING=true
 ```
 
-Both profiles at once are `COMPOSE_PROFILES=personal-data-scanning,spam-scanning`.
+`COMPOSE_PROFILES` takes a list, so several at once are
+`COMPOSE_PROFILES=personal-data-scanning,spam-scanning,object-storage` — the third being
+[the object store](#running-an-object-store-beside-mailfathom), which this file can also start.
 
 The first start is slow here too: the daemon compiles its rule corpus before it listens, and MailFathom refuses to serve
 while no daemon answers, so `restart: unless-stopped` carries that refusal into a retry exactly as it does for the
@@ -559,8 +602,9 @@ host names to third parties switched off, and the image bundles no plugin that r
 The raw MIME of every message lives in PostgreSQL beside the metadata unless `MAILFATHOM_CONTENT_STORAGE` says
 otherwise. `ObjectStorage` writes new payloads into an S3-compatible bucket instead; the metadata, the indexes, the
 embeddings, and every job still go through PostgreSQL, so this is a decision about payload bytes and about nothing else.
-This file starts no object store and there is no profile that would: the endpoint and its bucket exist before the first
-start.
+The endpoint is one you operate or rent, or the one
+[the `object-storage` profile](#running-an-object-store-beside-mailfathom) starts beside MailFathom. Either way its
+bucket exists before MailFathom writes to it: nothing here creates one.
 
 ```dotenv
 MAILFATHOM_CONTENT_STORAGE=ObjectStorage
@@ -606,17 +650,140 @@ what is already in the database into the bucket is an operator's act with its ow
 partial run, the deployment reads from both stores and keeps needing both: pointing it at a bucket it no longer has
 leaves the deployment unready rather than the mail unreadable.
 
+## Running an object store beside MailFathom
+
+An operator who wants payload bytes out of PostgreSQL and does not already run object storage has nothing to point the
+endpoint above at. The `object-storage` profile is that answer: it starts one [Silo](https://github.com/pgsty/silo)
+container on a named volume, on the internal network and reachable from nothing outside the host. Silo is PGSTY's
+maintained fork of the open-source MinIO server, keeping one release line alive after upstream ended community
+distribution — the same image, at the same pin, that the Helm chart, the Quadlet units, and the
+[integration suite](local-development.md#the-object-storage-endpoint) use, so what runs here is the server the S3
+adapter was verified against.
+
+**One container, one volume, and that is the whole of it.** No erasure coding, no second node, no replication, no
+failover. What it protects against is a container being replaced; a disk that fails takes the payloads with it, which is
+what makes [the backup order](#with-content-in-a-bucket-the-dump-above-is-only-half-of-it) the thing standing between
+this and losing them.
+
+Enabling it is the profile beside the settings the section above already needs — Compose cannot make an environment
+entry conditional on a profile, so the profile decides whether the store exists and these decide whether MailFathom
+writes to it:
+
+```dotenv
+COMPOSE_PROFILES=object-storage
+MAILFATHOM_CONTENT_STORAGE=ObjectStorage
+MAILFATHOM_OBJECT_STORAGE_ENDPOINT=https://silo:9000
+MAILFATHOM_OBJECT_STORAGE_BUCKET=mailfathom-content
+```
+
+**It answers over TLS, and there is no way to run it otherwise.** MailFathom refuses a plain `http` endpoint and
+validates what it is presented, with no setting anywhere that turns that off, so the store terminates TLS itself with a
+certificate covering `silo` — the service name it is reached at on the internal network. No public authority issues one
+for that, so it is signed by an authority of your own, and that authority is the third file in
+`./secrets/mailfathom/` the section above describes, with the two `TrustAnchor` lines in `compose.yaml` uncommented.
+
+Four files have to exist before the container starts, and they are in `./secrets/` rather than `./secrets/mailfathom/`
+on purpose: that second directory is bind-mounted into the MailFathom container, and the root credential administers the
+whole store. A missing one fails the container rather than starting a server that would serve plain HTTP or accept a
+credential nobody chose.
+
+```bash
+printf %s "$(openssl rand -hex 12)" > secrets/silo-root-access-key-id
+printf %s "$(openssl rand -base64 32)" > secrets/silo-root-secret-access-key
+cp /path/to/silo.crt secrets/silo-public.crt
+cp /path/to/silo.key secrets/silo-private.key
+chmod 400 secrets/silo-*
+```
+
+The root secret must be at least eight characters, which is the server's own rule.
+
+**Neither the bucket nor the access key MailFathom presents is created by the store**, so both are provisioned once
+after it is healthy, with the management client the image already carries. Until they exist MailFathom reports itself
+unready rather than storing mail: its startup probe writes and deletes one object of its own, so read permission alone
+is not enough to become ready.
+
+```bash
+docker compose up -d silo
+
+access_key_id="$(openssl rand -hex 12)"
+secret_access_key="$(openssl rand -base64 32)"
+
+docker compose exec -T silo sh -s "$access_key_id" "$secret_access_key" <<'PROVISION'
+set -eu
+
+# --insecure throughout: the call is to the container's own loopback address, which the certificate names nowhere. What
+# it names is `silo`, and that is the name MailFathom validates.
+mcli --insecure alias set store https://127.0.0.1:9000 \
+  "$(cat /run/secrets/silo-root-access-key-id)" \
+  "$(cat /run/secrets/silo-root-secret-access-key)"
+
+mcli --insecure mb --ignore-existing store/mailfathom-content
+
+# The four operations the adapter performs and nothing else: it lists beneath its prefix to reclaim released objects,
+# and it gets, puts, and deletes one object at a time. It never creates a bucket and never touches another one.
+cat > /tmp/mailfathom-content.json <<'POLICY'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    { "Effect": "Allow", "Action": [ "s3:ListBucket" ], "Resource": [ "arn:aws:s3:::mailfathom-content" ] },
+    { "Effect": "Allow", "Action": [ "s3:GetObject", "s3:PutObject", "s3:DeleteObject" ], "Resource": [ "arn:aws:s3:::mailfathom-content/*" ] }
+  ]
+}
+POLICY
+
+mcli --insecure admin policy create store mailfathom-content /tmp/mailfathom-content.json
+mcli --insecure admin user add store "$1" "$2"
+mcli --insecure admin policy attach store mailfathom-content --user "$1"
+PROVISION
+
+printf %s "$access_key_id" > secrets/mailfathom/mailfathom-object-storage-access-key-id
+printf %s "$secret_access_key" > secrets/mailfathom/mailfathom-object-storage-secret-access-key
+chmod 444 secrets/mailfathom/mailfathom-object-storage-*
+```
+
+**The console is not exposed.** It is a management interface over every object the store holds — bucket contents, access
+keys, the server's own configuration — so it is a second surface onto the mail rather than a convenience, and with
+`MAILFATHOM_SILO_CONSOLE` at its default the server never starts that listener; the published port is on loopback and
+answers nothing. Setting it to `on` starts it, on `127.0.0.1:9001` unless `MAILFATHOM_SILO_CONSOLE_BIND` says otherwise
+— and it is bound there because what authenticates at it is the root credential, which is the whole store rather than
+the one bucket. Nothing terminates TLS in front of it; the store's own certificate names `silo`, so a browser reaching
+it through the loopback mapping will report a name mismatch.
+
+**Upgrading it is a variable and a restart**, and deliberately not part of a MailFathom upgrade: the two have no version
+relationship, and doing both at once makes a failure ambiguous. Back the bucket up first — the on-disk format is the
+server's, and a version that will not start against it leaves the payloads reachable only by going back to the previous
+tag, which is the same one-variable change in reverse.
+
+```dotenv
+MAILFATHOM_SILO_IMAGE=docker.io/pgsty/silo:RELEASE.<newer>
+```
+
+```bash
+docker compose up -d silo
+```
+
+The store is unreachable while the container is replaced, and MailFathom reports itself unready and stores nothing new
+for that window rather than failing a read of what is already in PostgreSQL. Read the upstream release notes between the
+two tags before moving one: Silo's release line is a MinIO one, named by timestamp rather than by version.
+
+**Nothing of Silo is in MailFathom's image or in this repository.** `compose.yaml` names an image your host pulls from
+PGSTY's own registry. Silo is AGPL-3.0-or-later, which
+[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) records
+together with the reading it is used under. Its own lifecycle — upgrades, its configuration, its users beyond the one
+above — is yours; MailFathom manages none of it.
+
 ## Bounds
 
-`.env.example` documents every knob: log rotation, CPU and memory limits for all four services, the published bind
-address and port, the database and role names, the volume name, the four personal-data settings, the seven spam
-settings, and the six content-storage settings. Each is the value the Compose file already applies, so an unset variable
-and the documented value mean the same thing.
+`.env.example` documents every knob: log rotation, CPU and memory limits for all five services, the published bind
+address and port, the database and role names, both volume names, the four personal-data settings, the seven spam
+settings, the six content-storage settings, and the four the object store adds. Each is the value the Compose file
+already applies, so an unset variable and the documented value mean the same thing.
 
 The analyzer's memory limit is the one worth reading before it is lowered: it defaults to two gigabytes because the model
 is held for the life of the container, and below roughly one it is killed while loading — which reaches MailFathom as an
 analyzer that never became ready. The spam daemon's is modest by comparison and defaults to 512 megabytes, which holds
-the compiled corpus and a child per scan.
+the compiled corpus and a child per scan. The object store's is modest for a different reason — it holds no index in
+memory and streams what it serves, so what it wants is disk, and that is the volume rather than a limit.
 
 ## Related
 

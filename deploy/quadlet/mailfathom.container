@@ -38,6 +38,14 @@ After=mailfathom-postgres.service
 #Requires=mailfathom-spamassassin.service
 #After=mailfathom-spamassassin.service
 
+# Only where the object store is this deployment's own, and uncommented together with the ContentStorage lines further
+# down and mailfathom-silo.container being installed at all. That unit declares `Notify=healthy` too, so this waits for
+# a store that answers rather than for a container that exists. Nothing breaks without it — MailFathom starts either
+# way and reports unready until the store answers — but the ordering keeps the pool's first format off the
+# application's readiness probe, and `Requires=` propagates a stop rather than leaving MailFathom writing at nothing.
+#Requires=mailfathom-silo.service
+#After=mailfathom-silo.service
+
 # At least one file MailFathom will actually read, which is a narrower thing than the directory existing. Podman
 # creates a missing bind source as an empty directory rather than refusing, the setup creates that directory in a step
 # of its own, and MailFathom layers in `*.json` and nothing else — so a directory that is absent, empty, or holds only
@@ -108,8 +116,8 @@ Environment=Persistence__Password__SecretReference=systemd-credential:mailfathom
 # Where the raw MIME of the messages stored next is written, and it is PostgreSQL because these lines are commented out
 # — which is what this deployment has always done. Uncommenting them writes new payloads into the S3-compatible bucket
 # named below instead; everything else still runs through PostgreSQL, so this is a decision about payload bytes alone.
-# MailFathom runs no object store of its own and no unit here starts one: the endpoint already exists and its bucket is
-# created before the first start.
+# The endpoint is one you operate, one you rent, or the one mailfathom-silo.container starts beside this unit — a store
+# MailFathom's own process never manages either way. Its bucket is created before the first start.
 #
 # **It decides only where the next write goes.** Every content row names the store holding its own payload, so
 # uncommenting these moves nothing already stored and commenting them back re-encodes nothing; until a move has run,
@@ -132,6 +140,9 @@ Environment=Persistence__Password__SecretReference=systemd-credential:mailfathom
 # name and a certificate to match it. The timeouts, the reclamation sweep, and the bounds on moving what is already
 # stored are ordinary configuration and belong in the configuration directory beside this unit;
 # docs/operations/configuration-runtime.md holds every key.
+# For the store mailfathom-silo.container runs, the address is `https://mailfathom-silo:9000` — the container name on
+# the internal network, and therefore the name its certificate has to carry — and the trust anchor two blocks down is
+# required rather than optional, because nothing on this host answers for a certificate issued to that name.
 #Environment=ContentStorage__Backend=ObjectStorage
 #Environment=ContentStorage__ObjectStorage__Endpoint=https://objects.example.test
 #Environment=ContentStorage__ObjectStorage__Bucket=mailfathom-content

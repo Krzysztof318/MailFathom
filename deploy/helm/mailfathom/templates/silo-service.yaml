@@ -1,0 +1,40 @@
+{{- /*
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+*/ -}}
+{{- if .Values.contentStorage.objectStorage.deploy.enabled }}
+{{- $objectStore := .Values.contentStorage.objectStorage.deploy }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mailfathom.objectStoreFullname" . }}
+  labels:
+    {{- include "mailfathom.objectStoreLabels" . | nindent 4 }}
+spec:
+  {{- /*
+    ClusterIP, and there is no value to make it anything else. What answers here is the raw MIME of every message this
+    deployment has stored, so the one shape this chart supports is one where nothing outside the cluster can reach it —
+    which is also why no ingress rule is rendered for either port. The name of this Service is what the endpoint
+    MailFathom is given is derived from, and therefore the name the certificate has to carry.
+  */}}
+  type: ClusterIP
+  selector:
+    {{- include "mailfathom.objectStoreSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: s3
+      port: {{ $objectStore.service.port }}
+      targetPort: s3
+      protocol: TCP
+    {{- if $objectStore.console.enabled }}
+    {{- /*
+      Only where the console was asked for, and still only inside the cluster: reaching it is a deliberate
+      `kubectl port-forward`, and anything put in front of it is the operator's to authenticate. It authenticates with
+      the root credential, which administers the whole server rather than the one bucket.
+    */}}
+    - name: console
+      port: {{ $objectStore.console.port }}
+      targetPort: console
+      protocol: TCP
+    {{- end }}
+{{- end }}

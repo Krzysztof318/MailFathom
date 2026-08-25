@@ -1,0 +1,228 @@
+{{- /*
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+*/ -}}
+{{- if .Values.contentStorage.objectStorage.deploy.enabled }}
+{{- include "mailfathom.validate" . -}}
+{{- $objectStore := .Values.contentStorage.objectStorage.deploy }}
+{{- $certificatesDirectory := include "mailfathom.objectStoreCertificatesDirectory" . }}
+{{- $credentialsDirectory := include "mailfathom.objectStoreCredentialsDirectory" . }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "mailfathom.objectStoreFullname" . }}
+  labels:
+    {{- include "mailfathom.objectStoreLabels" . | nindent 4 }}
+spec:
+  {{- /*
+    One replica, and no value to change it, for the reason the database has none. A second pod against a ReadWriteOnce
+    claim is not a replica of anything, and a distributed pool is a topology decided when the pool is created rather
+    than a number raised afterwards. Erasure coding, a second node, and replication are what an object store somebody
+    operates gives you, which is what turning this off and naming an endpoint is for.
+  */}}
+  replicas: 1
+  serviceName: {{ include "mailfathom.objectStoreFullname" . }}
+  selector:
+    matchLabels:
+      {{- include "mailfathom.objectStoreSelectorLabels" . | nindent 6 }}
+  {{- /*
+    The claim outlives the release, like the database's: `helm uninstall` deletes neither a StatefulSet's claims nor
+    this one, so removing the release does not remove the payloads it wrote. Deleting them is a deliberate
+    `kubectl delete pvc` afterwards — and one that leaves every content row in the database pointing at an object that
+    is gone.
+  */}}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "mailfathom.objectStoreLabels" . | nindent 10 }}
+      spec:
+        accessModes:
+          - {{ $objectStore.persistence.accessMode }}
+        {{- with $objectStore.persistence.storageClassName }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $objectStore.persistence.size }}
+  template:
+    metadata:
+      labels:
+        {{- include "mailfathom.objectStoreSelectorLabels" . | nindent 8 }}
+    spec:
+      {{- with $objectStore.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- /*
+        The image declares no account of its own, so it would run as root without this. The uid is not load-bearing the
+        way the database's is — the entrypoint points HOME at a writable directory for whatever account it was started
+        as, and nothing here looks an effective user up in /etc/passwd — but it is stated rather than left to the
+        cluster's default so the claim below is owned by an account this pod actually runs as across a reschedule.
+      */}}
+      securityContext:
+        {{- toYaml $objectStore.podSecurityContext | nindent 8 }}
+      {{- /*
+        The server talks to nothing in the cluster and answers requests about buckets. It has no business holding a
+        token that can talk to the API server, and it is the pod that holds every stored message at rest.
+      */}}
+      automountServiceAccountToken: false
+      {{- /*
+        Long enough to finish the writes in flight. The server is stopped with SIGTERM and drains its own requests;
+        killing it mid-write leaves an object the database already has a row for.
+      */}}
+      terminationGracePeriodSeconds: 60
+      {{- with $objectStore.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $objectStore.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $objectStore.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: silo
+          image: {{ include "mailfathom.objectStoreImage" . | quote }}
+          imagePullPolicy: {{ $objectStore.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $objectStore.containerSecurityContext | nindent 12 }}
+          {{- /*
+            The server's own start command, which every MinIO-derived image takes as arguments rather than as
+            configuration; the image's entrypoint puts the executable in front of them. One directory, which is the
+            single-node single-drive pool this chart supports and the only topology one claim could hold.
+
+            `--console-address` is present only where the console was asked for. Without it the administrative listener
+            does not exist at all, which is a stronger statement than a port nothing routes to.
+          */}}
+          args:
+            - server
+            - /data
+            - --certs-dir
+            - {{ $certificatesDirectory | quote }}
+            - --address
+            - ":9000"
+            {{- if $objectStore.console.enabled }}
+            - --console-address
+            - ":9001"
+            {{- end }}
+          env:
+            {{- /*
+              Both halves of the root credential as files rather than as values, so no credential is in this object. The
+              server reads each path itself — a name with no slash would be looked for under /run/secrets, which is why
+              these are absolute.
+            */}}
+            - name: MINIO_ROOT_USER_FILE
+              value: {{ printf "%s/%s" $credentialsDirectory $objectStore.rootAccessKeyIdSecretKey | quote }}
+            - name: MINIO_ROOT_PASSWORD_FILE
+              value: {{ printf "%s/%s" $credentialsDirectory $objectStore.rootSecretAccessKeySecretKey | quote }}
+            {{- if not $objectStore.console.enabled }}
+            {{- /*
+              **The administrative console, off.** It is a management interface over every object the store holds, so
+              what keeps it from being a second surface onto the mail is that the server never starts it.
+            */}}
+            - name: MINIO_BROWSER
+              value: "off"
+            {{- end }}
+          ports:
+            - name: s3
+              containerPort: 9000
+              protocol: TCP
+            {{- if $objectStore.console.enabled }}
+            - name: console
+              containerPort: 9001
+              protocol: TCP
+            {{- end }}
+          {{- /*
+            The server's own liveness route, which answers before any bucket exists — every other route on this port is
+            a request about a bucket, and the root answers 403 to an unsigned one. `HTTPS` because that is what this
+            listener speaks; the kubelet does not verify the certificate it is presented, which is what lets a probe
+            reach a listener whose authority only MailFathom was given.
+          */}}
+          startupProbe:
+            httpGet:
+              path: /minio/health/live
+              port: s3
+              scheme: HTTPS
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 24
+          readinessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: s3
+              scheme: HTTPS
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: s3
+              scheme: HTTPS
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml $objectStore.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            {{- /*
+              Read-only, and the server tolerates that: it tries to create a `CAs` directory beneath this one while
+              starting and treats a refusal from a mounted directory as nothing to do. There is nothing to put in it
+              either — what has to be trusted here is the store's own certificate, and that trust is MailFathom's.
+            */}}
+            - name: certificates
+              mountPath: {{ $certificatesDirectory | quote }}
+              readOnly: true
+            - name: credentials
+              mountPath: {{ $credentialsDirectory | quote }}
+              readOnly: true
+            {{- /*
+              The image points HOME here and the server probes its own configuration directory beneath it while
+              starting, so this is what makes a read-only root filesystem workable.
+            */}}
+            - name: temporary
+              mountPath: /tmp
+      volumes:
+        {{- /*
+          The certificate the store answers with, under the two names the server reads. A `kubernetes.io/tls` Secret
+          carries them as `tls.crt` and `tls.key`, which is why the keys are values rather than constants: what is fixed
+          is the file name inside the container, not the key an issuer chose.
+        */}}
+        - name: certificates
+          secret:
+            secretName: {{ $objectStore.tls.existingSecret }}
+            defaultMode: 0400
+            items:
+              - key: {{ $objectStore.tls.certificateSecretKey }}
+                path: public.crt
+              - key: {{ $objectStore.tls.privateKeySecretKey }}
+                path: private.key
+        {{- /*
+          A Secret of its own, and the direction matters for the reason it does with the database's superuser password:
+          the application pod mounts `secrets.existingSecret` whole, because the keys MailFathom reads are named by an
+          operator's configuration rather than by this chart. A credential that administers the whole store therefore
+          has to live somewhere the application never mounts, and what MailFathom presents instead is an access key
+          scoped to the one bucket.
+        */}}
+        - name: credentials
+          secret:
+            secretName: {{ $objectStore.rootCredentialSecret }}
+            defaultMode: 0400
+            items:
+              - key: {{ $objectStore.rootAccessKeyIdSecretKey }}
+                path: {{ $objectStore.rootAccessKeyIdSecretKey }}
+              - key: {{ $objectStore.rootSecretAccessKeySecretKey }}
+                path: {{ $objectStore.rootSecretAccessKeySecretKey }}
+        - name: temporary
+          emptyDir: {}
+{{- end }}

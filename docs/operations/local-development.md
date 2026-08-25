@@ -1047,8 +1047,10 @@ orchestration, which starts no endpoint at all.
 Silo is AGPL-3.0-or-later, which the acceptance policy in
 [`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) places behind
 the owner's explicit approval. That approval is recorded, and so is the reading it was granted under: the server is a
-separate process one test run reaches over the network, pulled from its own registry, with nothing vendored, linked, or
-redistributed here and no deployment asset naming it.
+separate process reached over the network, pulled from its own registry, with nothing vendored, linked, or redistributed
+here. The same image is what the three deployment shapes offer an operator as an optional store beside MailFathom, off
+in every default rendering, which is why the pin is one decision — a server the suite verified the adapter against is
+the server an operator gets.
 
 ### The provider-contract tests
 

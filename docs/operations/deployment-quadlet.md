@@ -36,7 +36,7 @@ credential path and the unit-level bounds, and it does it with less to arrange.
 | Rootless or root | Either | Rootless only — `UserNS=keep-id` is not supported for a root container |
 | Building from a checkout | `docker compose up --build` | No. It runs a published release image |
 | Nightly builds | `compose.nightly.yaml` | No overlay; edit `Image=` deliberately |
-| Bringing it up | One command | Five unit files, `systemctl --user` per service |
+| Bringing it up | One command | Five unit files, `systemctl --user` per service; each optional service is one or two more |
 
 ## What it needs
 
@@ -102,15 +102,17 @@ material is that each file is ciphertext.
 
 ```bash
 cp deploy/quadlet/mailfathom.container deploy/quadlet/mailfathom-postgres.container \
-   deploy/quadlet/*.network deploy/quadlet/*.volume ~/.config/containers/systemd/
+   deploy/quadlet/*.network deploy/quadlet/mailfathom-postgres.volume ~/.config/containers/systemd/
 cp deploy/quadlet/config/10-mailfathom.json.example ~/.config/mailfathom/config/10-mailfathom.json
 cp deploy/compose/postgres/10-create-mailfathom-database.sh ~/.config/mailfathom/postgres-init/
 ```
 
-The two `.container` files are named rather than globbed because there are two more, `mailfathom-presidio.container` and
-`mailfathom-spamassassin.container`, and those are the units here that are optional: copying one is half of switching
-its feature on, and a deployment that wants neither never copies either. See [Personal-data
-scanning](#personal-data-scanning) and [Spam scanning](#spam-scanning) below.
+The `.container` files and the one `.volume` are named rather than globbed because there are three more container units
+and a second volume, and those are the parts of this directory that are optional: `mailfathom-presidio.container`,
+`mailfathom-spamassassin.container`, and `mailfathom-silo.container` with `mailfathom-silo.volume` beside it. Copying
+one is half of switching its feature on, and a deployment that wants none never copies any. See [Personal-data
+scanning](#personal-data-scanning), [Spam scanning](#spam-scanning), and
+[Running an object store beside MailFathom](#running-an-object-store-beside-mailfathom) below.
 
 The last line is not a mistake. The database initialization script is the Compose deployment's, reused rather than
 forked, which is why the database container mounts its credentials at `/run/secrets`: that is the path the script
@@ -357,6 +359,44 @@ and names itself, every other message keeps working, and
 [when the local copy is unusable](../features/email-content.md#when-the-local-copy-is-unusable) states what a client
 sees.
 
+A store `mailfathom-silo.container` runs is no different in that order, and the bucket backup is a copy out of it rather
+than a provider's console. It is the S3 API that answers, so the same client does both directions, and copying
+`mailfathom-silo-data`'s files underneath a running server is not a backup: the pool has its own metadata in
+`.minio.sys`, and a copy taken while the server is writing is a copy of neither state. The scoped access key is enough
+for both directions, which is why the root credential does not appear here.
+
+```bash
+mkdir -p mailfathom-content-backup
+
+# The scoped key, decrypted back out of the credential store the provisioning step wrote it to rather than read from
+# shell variables, which belonged to that session and are gone by the time a backup runs.
+access_key_id="$(systemd-creds --user decrypt \
+  ~/.config/credstore.encrypted/mailfathom-object-storage-access-key-id -)"
+secret_access_key="$(systemd-creds --user decrypt \
+  ~/.config/credstore.encrypted/mailfathom-object-storage-secret-access-key -)"
+
+# Out. A throwaway container on the same internal network, with the destination bind-mounted.
+podman run --rm --interactive \
+  --network mailfathom-backend \
+  --volume "$PWD/mailfathom-content-backup:/backup:Z" \
+  --entrypoint sh \
+  docker.io/pgsty/silo:RELEASE.2026-08-06T00-00-00Z -s "$access_key_id" "$secret_access_key" <<'BACKUP'
+set -eu
+mcli --insecure alias set store https://mailfathom-silo:9000 "$1" "$2"
+mcli --insecure mirror --remove store/mailfathom-content /backup
+BACKUP
+```
+
+Restoring is the same run with the two paths swapped and **without** `--remove`, which there would delete from the store
+rather than from the copy. `--insecure` because the certificate is one you issued and this client carries only the
+public roots the image ships — the name is right, the authority is one nothing here was told about, and it is MailFathom
+rather than a backup script that has to validate it.
+
+Stopping the units leaves that volume as it leaves the database's. Removing it is
+`podman volume rm mailfathom-silo-data`, and it costs more than the database's: a lost payload is not a
+resynchronization, because the database still holds a row for every object and each of those then reads as content
+unavailable.
+
 Stopping them can also report `rootless netns: kill network process: permission denied`, which is the host's AppArmor
 policy refusing a signal rather than a unit that failed to stop. These containers are torn down through the same
 rootless network namespace as the Compose deployment's and end on the same step, so
@@ -366,16 +406,21 @@ holds here unchanged.
 ## Uninstalling
 
 ```bash
-# mailfathom-presidio.service only where the analyzer unit was installed; stopping MailFathom does not stop it, because
-# the ordering runs the other way.
-systemctl --user stop mailfathom.service mailfathom-presidio.service mailfathom-postgres.service
+# The optional units only where they were installed; stopping MailFathom does not stop any of them, because the
+# ordering runs the other way.
+systemctl --user stop mailfathom.service \
+  mailfathom-presidio.service mailfathom-spamassassin.service mailfathom-silo.service \
+  mailfathom-postgres.service
 rm ~/.config/containers/systemd/mailfathom*.{container,network,volume}
 systemctl --user daemon-reload
 
 podman volume rm mailfathom-postgres-data      # destroys the mail
+podman volume rm mailfathom-silo-data          # destroys the payloads, where the object store was installed
 rm -r ~/.config/mailfathom ~/.config/credstore.encrypted
 loginctl disable-linger "$USER"                # only if nothing else of yours runs as a user service
 ```
+
+Removing one of those two volumes and not the other leaves the remaining one holding half of what a message is.
 
 ## The client
 
@@ -480,7 +525,9 @@ them the daemon refuses to start.
 The raw MIME of every message lives in PostgreSQL beside the metadata unless the `ContentStorage` lines in
 `mailfathom.container` are uncommented. Uncommented, new payloads go into an S3-compatible bucket instead; the metadata,
 the indexes, the embeddings, and every job still run through PostgreSQL, so this is a decision about payload bytes and
-about nothing else. No unit here starts an object store: the endpoint and its bucket exist before the first start.
+about nothing else. The endpoint is one you operate or rent, or the one
+[`mailfathom-silo.container`](#running-an-object-store-beside-mailfathom) starts beside the rest. Either way its bucket
+exists before MailFathom writes to it: nothing here creates one.
 
 Switching it on is two edits, and each half alone is a deployment that does not start:
 
@@ -538,6 +585,143 @@ nothing. Carrying what is already in the database into the bucket is an operator
 partial run, this deployment reads from both stores and keeps needing both: pointing it at a bucket it no longer has
 leaves the unit running and unready rather than the mail unreadable.
 
+## Running an object store beside MailFathom
+
+An operator who wants payload bytes out of PostgreSQL and does not already run object storage has nothing to point the
+endpoint above at. `mailfathom-silo.container` is that answer: one [Silo](https://github.com/pgsty/silo) container on a
+named volume, on the internal network and reachable from nothing outside the host. Silo is PGSTY's maintained fork of
+the open-source MinIO server, keeping one release line alive after upstream ended community distribution — the same
+image, at the same pin, that the Compose deployment, the Helm chart, and the
+[integration suite](local-development.md#the-object-storage-endpoint) use, so what runs here is the server the S3
+adapter was verified against.
+
+**One container, one volume, and that is the whole of it.** No erasure coding, no second node, no replication, no
+failover. What it protects against is a container being replaced; a disk that fails takes the payloads with it, which is
+what makes [the backup order](#backup-and-what-survives-removal) the thing standing between this and losing them.
+
+It is optional the way the analyzer and the scanner units are: Quadlet has no equivalent of Compose's profiles, so
+switching it on is copying the two files and uncommenting the `ContentStorage` lines above.
+
+```bash
+cp deploy/quadlet/mailfathom-silo.container deploy/quadlet/mailfathom-silo.volume \
+   ~/.config/containers/systemd/
+```
+
+The endpoint to name in `mailfathom.container` is the container's own name on the internal network:
+
+```ini
+Environment=ContentStorage__ObjectStorage__Endpoint=https://mailfathom-silo:9000
+```
+
+**It answers over TLS, and there is no way to run it otherwise.** MailFathom refuses a plain `http` endpoint and
+validates what it is presented, with no setting anywhere that turns that off, so the store terminates TLS itself with a
+certificate covering `mailfathom-silo`. No public authority issues one for that, so it is signed by an authority of your
+own — and here the `TrustAnchor` credential is required rather than optional, because nothing in this host's trust store
+answers for it.
+
+Four credentials belong to the store rather than to MailFathom, and they are encrypted the way
+[the credentials](#the-credentials) above encrypts every other one. The root credential administers the whole server —
+it creates buckets, issues access keys, and reads every object — which is why it is granted to `mailfathom-silo.service`
+alone and appears in no `LoadCredentialEncrypted=` line of `mailfathom.container`. The certificate is encrypted along
+with its key, not because it is secret but because the two are one thing to provision, rotate, and lose together.
+
+```bash
+printf %s "$(openssl rand -hex 12)" \
+  | systemd-creds --user encrypt --name=silo-root-access-key-id - \
+      ~/.config/credstore.encrypted/silo-root-access-key-id
+
+printf %s "$(openssl rand -base64 32)" \
+  | systemd-creds --user encrypt --name=silo-root-secret-access-key - \
+      ~/.config/credstore.encrypted/silo-root-secret-access-key
+
+systemd-creds --user encrypt --name=silo-public.crt /path/to/silo.crt \
+  ~/.config/credstore.encrypted/silo-public.crt
+
+systemd-creds --user encrypt --name=silo-private.key /path/to/silo.key \
+  ~/.config/credstore.encrypted/silo-private.key
+```
+
+The root secret must be at least eight characters, which is the server's own rule. Each is named with an absolute path
+in the unit rather than by name alone, for the reason every credential here is: a bare name that misses is not fatal,
+and a store started with neither root credential set would fall back to something nobody chose.
+
+**Neither the bucket nor the access key MailFathom presents is created by the store**, so both are provisioned once
+after the unit is healthy, with the management client the image already carries. Until they exist MailFathom reports
+itself unready rather than storing mail: its startup probe writes and deletes one object of its own, so read permission
+alone is not enough to become ready.
+
+```bash
+systemctl --user start mailfathom-silo.service
+
+access_key_id="$(openssl rand -hex 12)"
+secret_access_key="$(openssl rand -base64 32)"
+
+podman exec --interactive mailfathom-silo sh -s "$access_key_id" "$secret_access_key" <<'PROVISION'
+set -eu
+
+# --insecure throughout: the call is to the container's own loopback address, which the certificate names nowhere. What
+# it names is `mailfathom-silo`, and that is the name MailFathom validates.
+mcli --insecure alias set store https://127.0.0.1:9000 \
+  "$(cat /etc/silo/credentials/silo-root-access-key-id)" \
+  "$(cat /etc/silo/credentials/silo-root-secret-access-key)"
+
+mcli --insecure mb --ignore-existing store/mailfathom-content
+
+# The four operations the adapter performs and nothing else: it lists beneath its prefix to reclaim released objects,
+# and it gets, puts, and deletes one object at a time. It never creates a bucket and never touches another one.
+cat > /tmp/mailfathom-content.json <<'POLICY'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    { "Effect": "Allow", "Action": [ "s3:ListBucket" ], "Resource": [ "arn:aws:s3:::mailfathom-content" ] },
+    { "Effect": "Allow", "Action": [ "s3:GetObject", "s3:PutObject", "s3:DeleteObject" ], "Resource": [ "arn:aws:s3:::mailfathom-content/*" ] }
+  ]
+}
+POLICY
+
+mcli --insecure admin policy create store mailfathom-content /tmp/mailfathom-content.json
+mcli --insecure admin user add store "$1" "$2"
+mcli --insecure admin policy attach store mailfathom-content --user "$1"
+PROVISION
+
+printf %s "$access_key_id" \
+  | systemd-creds --user encrypt --name=mailfathom-object-storage-access-key-id - \
+      ~/.config/credstore.encrypted/mailfathom-object-storage-access-key-id
+
+printf %s "$secret_access_key" \
+  | systemd-creds --user encrypt --name=mailfathom-object-storage-secret-access-key - \
+      ~/.config/credstore.encrypted/mailfathom-object-storage-secret-access-key
+```
+
+**The console is not exposed.** It is a management interface over every object the store holds — bucket contents, access
+keys, the server's own configuration — so it is a second surface onto the mail rather than a convenience, and the unit
+sets `MINIO_BROWSER=off` and publishes no port at all. Turning it on is setting that to `on` and uncommenting the
+`PublishPort=` line beside it, which is on loopback — because what authenticates at it is the root credential, which is
+the whole store rather than the one bucket. Nothing terminates TLS in front of it; the store's certificate names
+`mailfathom-silo`, so a browser reaching it through the loopback mapping will report a name mismatch.
+
+**Upgrading it is one edit and one restart**, and deliberately not part of a MailFathom upgrade: the two have no version
+relationship, and doing both at once makes a failure ambiguous. Back the bucket up first — the on-disk format is the
+server's, and a version that will not start against it leaves the payloads reachable only by going back to the previous
+tag, which is the same edit in reverse.
+
+```bash
+$EDITOR ~/.config/containers/systemd/mailfathom-silo.container    # Image=docker.io/pgsty/silo:RELEASE.<newer>
+systemctl --user daemon-reload
+systemctl --user restart mailfathom-silo.service
+```
+
+The store is unreachable while the container is replaced, and MailFathom reports itself unready and stores nothing new
+for that window rather than failing a read of what is already in PostgreSQL. Read the upstream release notes between the
+two tags before moving one: Silo's release line is a MinIO one, named by timestamp rather than by version. The unit
+carries no `AutoUpdate=`, so nothing moves it for you.
+
+**Nothing of Silo is in MailFathom's image or in this repository.** The unit names an image your host pulls from PGSTY's
+own registry. Silo is AGPL-3.0-or-later, which
+[`THIRD_PARTY_LICENSES.md`](https://github.com/Krzysztof318/MailFathom/blob/main/THIRD_PARTY_LICENSES.md) records
+together with the reading it is used under. Its own lifecycle — upgrades, its configuration, its users beyond the one
+above — is yours; MailFathom manages none of it.
+
 ## Bounds
 
 Every knob is in the unit file, edited in place; there is no `.env` equivalent, which is one of the things this shape
@@ -545,7 +729,7 @@ trades away. The values the units apply:
 
 | Where | What |
 | --- | --- |
-| `[Service] MemoryMax=`, `CPUQuota=` | 1 GiB and two cores per unit, applied by systemd to the whole cgroup rather than to one container inside it. The analyzer's is 2 GiB, because it holds a language model for the life of the container and below roughly one gigabyte is killed while loading; the spam daemon's is 512 MiB, which holds its compiled rule corpus and a child per scan |
+| `[Service] MemoryMax=`, `CPUQuota=` | 1 GiB and two cores per unit, applied by systemd to the whole cgroup rather than to one container inside it. The analyzer's is 2 GiB, because it holds a language model for the life of the container and below roughly one gigabyte is killed while loading; the spam daemon's is 512 MiB, which holds its compiled rule corpus and a child per scan; the object store keeps the 1 GiB default, because it holds no index in memory and streams what it serves — what it wants is disk, and that is the volume |
 | `[Service] LimitCORE=0`, `[Container] Ulimit=core=0` | No core dump from the process holding decrypted material, or from what it starts |
 | `[Container] StopTimeout=`, `[Service] TimeoutStopSec=` | 60 and 90 seconds, so the host finishes its shutdown drain rather than being killed mid-run |
 | `[Container] Tmpfs=/tmp` | 64 MiB, the one writable path the runtime needs on an otherwise read-only root filesystem |

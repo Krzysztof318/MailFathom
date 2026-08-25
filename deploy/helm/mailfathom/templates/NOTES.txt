@@ -8,6 +8,12 @@ Secrets:  {{ .Values.secrets.existingSecret }}, mounted read-only at {{ .Values.
 {{- if .Values.database.deploy.enabled }}
           {{ .Values.database.deploy.superuserPasswordSecret }}, read by the database alone and never by MailFathom
 {{- end }}
+{{- if .Values.contentStorage.objectStorage.deploy.enabled }}
+          {{ .Values.contentStorage.objectStorage.deploy.rootCredentialSecret }}, read by the object store alone and never by MailFathom
+{{- end }}
+{{- if eq .Values.contentStorage.backend "objectStorage" }}
+Content:  {{ include "mailfathom.objectStorageEndpoint" . }}/{{ .Values.contentStorage.objectStorage.bucket }}{{ if .Values.contentStorage.objectStorage.deploy.enabled }}, deployed by this release{{ else }}, operated by you{{ end }}
+{{- end }}
 {{- if $documentation }}
 Docs:     {{ $documentation }}
 {{- end }}
@@ -43,6 +49,25 @@ The role MailFathom connects as owns its database and is not a superuser; the sc
 Back it up the same way, with pg_dump, rather than by copying the volume's files. A store holding every synchronized
 message eventually wants durability and an upgrade path that a claim does not provide by itself — set
 database.deploy.enabled=false and name a server you operate when it does.
+{{ end }}
+{{ if .Values.contentStorage.objectStorage.deploy.enabled }}
+The object store is this release's own: one Silo node on one claim, retained when the release is uninstalled.
+{{- if .Values.contentStorage.objectStorage.deploy.console.enabled }}
+Its console is served, on a Service port no Ingress publishes: reach it with a deliberate port-forward, and know that
+what authenticates at it is the root credential, which is the whole store rather than the one bucket.
+{{- else }}
+Its console is not served and no Service port routes to one.
+{{- end }}
+
+It ships no bucket and no access key, and this release creates neither, so both are provisioned once with the root
+credential in {{ .Values.contentStorage.objectStorage.deploy.rootCredentialSecret }} — which MailFathom itself never
+holds. Until the bucket answers and {{ .Values.secrets.existingSecret }} carries an access key scoped to it under
+{{ .Values.contentStorage.objectStorage.accessKeyIdSecretKey }} and {{ .Values.contentStorage.objectStorage.secretAccessKeySecretKey }},
+this deployment reports itself unready rather than storing mail. The `mcli` commands are in
+{{ $documentationRoot }}operations/deployment-kubernetes.html.
+
+Two stores now, so a pg_dump is no longer a whole backup: back the bucket up beside the database, and restore the
+database first, or the reclamation sweep is entitled to delete objects nothing points at yet.
 {{ end }}
 {{ if not .Values.ingress.enabled }}
 No Ingress is configured, so the endpoint is reachable only from inside the cluster. Reach it for a check with:
