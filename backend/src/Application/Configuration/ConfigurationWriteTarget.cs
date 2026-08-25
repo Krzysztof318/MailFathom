@@ -37,7 +37,12 @@ public sealed record ConfigurationWriteTarget
     /// <param name="route">The store the setting is persisted in.</param>
     /// <returns>A routed target.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="route" /> is the unspecified default rather than a store.</exception>
-    public static ConfigurationWriteTarget RoutedTo(ConfigurationStorageRoute route)
+    /// <remarks>
+    /// Both factories are internal so <see cref="ConfigurationStorageCatalog" /> is the only thing that produces a
+    /// target. A writable target reachable beside the catalog would be a way to reach a store without the deny-list
+    /// having run, which is the second entry point the catalog exists to not have.
+    /// </remarks>
+    internal static ConfigurationWriteTarget RoutedTo(ConfigurationStorageRoute route)
     {
         if (!route.IsSpecified)
         {
@@ -47,22 +52,31 @@ public sealed record ConfigurationWriteTarget
         return new ConfigurationWriteTarget(route, refusalMessage: null);
     }
 
-    /// <summary>Reports a write refused because it targets a setting the persisted layer is itself reached through.</summary>
+    /// <summary>Reports a write refused because it would reach a setting the persisted layer is itself read through.</summary>
     /// <param name="configurationPath">The path the write targeted.</param>
-    /// <param name="refusedSetting">The bootstrap setting covering that path, which the message names.</param>
+    /// <param name="refusedSetting">The bootstrap setting the write would reach, which the message names.</param>
     /// <returns>A refused target.</returns>
     /// <exception cref="ArgumentException">Thrown when either argument is <see langword="null" />, empty, or white space.</exception>
-    public static ConfigurationWriteTarget RefusedAsBootstrapOnly(string configurationPath, string refusedSetting)
+    /// <remarks>
+    /// The message names the path the caller wrote and, when the two differ, how it reaches the refused setting — as a
+    /// value beneath it, or as a section carrying it. Which of the two happened is what an administrator needs to know
+    /// to write a narrower path instead.
+    /// </remarks>
+    internal static ConfigurationWriteTarget RefusedAsBootstrapOnly(string configurationPath, string refusedSetting)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(configurationPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(refusedSetting);
 
-        var setting = SettingPath.Covers(refusedSetting, configurationPath) && !string.Equals(configurationPath, refusedSetting, StringComparison.OrdinalIgnoreCase)
-            ? $"{configurationPath}, which is part of {refusedSetting}"
-            : configurationPath;
+        var namesItExactly = string.Equals(configurationPath, refusedSetting, StringComparison.OrdinalIgnoreCase);
+
+        var subject = namesItExactly
+            ? configurationPath
+            : SettingPath.Covers(refusedSetting, configurationPath)
+                ? $"{configurationPath}, which is part of {refusedSetting}"
+                : $"{configurationPath}, which contains {refusedSetting}";
 
         return new ConfigurationWriteTarget(
             route: default,
-            $"MailFathom does not persist {setting}: it is read before the persisted configuration layer exists, so a persisted value for it could not be read without first reading it. Configure it in a file, in the environment, or as a command-line argument, which is where MailFathom takes it from.");
+            $"MailFathom does not persist {subject}: {(namesItExactly ? "it" : refusedSetting)} is read before the persisted configuration layer exists, so a persisted value for it could not be read without first reading it. Configure it in a file, in the environment, or as a command-line argument, which is where MailFathom takes it from.");
     }
 }

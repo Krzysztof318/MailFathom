@@ -71,4 +71,19 @@ public sealed class ConfigurationWriteTargetTests
         Assert.NotNull(target.RefusalMessage);
         Assert.Contains("Persistence:Password:SecretReference, which is part of Persistence:Password", target.RefusalMessage, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A section carrying a refused setting is refused the other way round, and the message says so: what the caller
+    /// has to do about it is write a narrower path, which reads differently from removing a value.
+    /// </summary>
+    [Fact]
+    public void RefusedAsBootstrapOnly_SectionCarryingARefusedSetting_SaysWhatItContains()
+    {
+        // Act
+        var target = ConfigurationWriteTarget.RefusedAsBootstrapOnly("Persistence", "Persistence:Password");
+
+        // Assert
+        Assert.NotNull(target.RefusalMessage);
+        Assert.Contains("Persistence, which contains Persistence:Password", target.RefusalMessage, StringComparison.Ordinal);
+    }
 }

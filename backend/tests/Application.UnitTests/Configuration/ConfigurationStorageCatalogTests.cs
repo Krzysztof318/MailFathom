@@ -138,6 +138,45 @@ public sealed class ConfigurationStorageCatalogTests
         Assert.Contains("part of Persistence:Password", target.RefusalMessage, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A write carries the subtree it names, so a section containing a refused setting would persist that setting as a
+    /// child. Accepting it would put the credential into the document the next start refuses whole, which locks the
+    /// deployment out of its own configuration through a write that had been validated.
+    /// </summary>
+    [Theory]
+    [InlineData("Persistence", "Persistence:ConnectionString")]
+    [InlineData("Secrets", "Secrets:Interpretation")]
+    [InlineData("ConnectionStrings", "ConnectionStrings:mailfathom")]
+    [InlineData("ConfigurationSources", "ConfigurationSources:Directory")]
+    public void ResolveWriteTarget_SectionContainingABootstrapSetting_IsRefusedNamingWhatItContains(
+        string configurationPath,
+        string contained)
+    {
+        // Act
+        var target = ConfigurationStorageCatalog.ResolveWriteTarget(configurationPath);
+
+        // Assert
+        Assert.False(target.IsWritable);
+        Assert.Contains($"{configurationPath}, which contains {contained}", target.RefusalMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The refusal above is a section-level one, so the settings beside a refused one in the same section stay writable.
+    /// Widening it to the whole section would take ordinary settings away from an administrator.
+    /// </summary>
+    [Theory]
+    [InlineData("Persistence:MaximumConcurrencyCommitAttempts")]
+    [InlineData("Secrets:Files:0:Name")]
+    public void ResolveWriteTarget_SettingBesideABootstrapOneInTheSameSection_IsWritable(string configurationPath)
+    {
+        // Act
+        var target = ConfigurationStorageCatalog.ResolveWriteTarget(configurationPath);
+
+        // Assert
+        Assert.True(target.IsWritable);
+        Assert.Equal(ConfigurationStorageRoute.RootDocument, target.Route);
+    }
+
     /// <summary>A path nobody supplied is a caller defect rather than a refusal an administrator reads.</summary>
     [Theory]
     [InlineData("")]

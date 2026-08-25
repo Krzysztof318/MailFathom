@@ -67,16 +67,24 @@ public static class BootstrapOnlySettings
         return SettingPath.FindReachedIn(RefusedPaths, persistedKeys);
     }
 
-    /// <summary>Finds the refused setting a write would land on.</summary>
-    /// <param name="configurationPath">The path a write targets, which may name a value nested beneath a refused section.</param>
-    /// <param name="refusedSetting">The refused setting covering the path, when one does; otherwise <see langword="null" />.</param>
+    /// <summary>Finds the refused setting a write would carry.</summary>
+    /// <param name="configurationPath">The path a write targets, which may name a refused setting, a value nested beneath one, or a section containing one.</param>
+    /// <param name="refusedSetting">The refused setting the write would reach, when it reaches one; otherwise <see langword="null" />.</param>
     /// <returns><see langword="true" /> when the path may only come from beneath the persisted layer.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="configurationPath" /> is <see langword="null" />, empty, or white space.</exception>
+    /// <remarks>
+    /// The match runs both ways, because a write carries the subtree it names rather than a single value. A path
+    /// beneath a refused section is the credential half of it; a path *containing* one — a write addressed at
+    /// <c>Persistence</c>, or at <c>Secrets</c> — would persist the refused setting as a child, and the deployment
+    /// would then be locked out of its own configuration by a write that had been validated and accepted, since the
+    /// next start refuses the whole document. A more specific write reaches neither and is unaffected.
+    /// </remarks>
     public static bool TryFindCovering(string configurationPath, [NotNullWhen(true)] out string? refusedSetting)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(configurationPath);
 
-        refusedSetting = RefusedPaths.FirstOrDefault(path => SettingPath.Covers(path, configurationPath));
+        refusedSetting = RefusedPaths.FirstOrDefault(path =>
+            SettingPath.Covers(path, configurationPath) || SettingPath.Covers(configurationPath, path));
 
         return refusedSetting is not null;
     }

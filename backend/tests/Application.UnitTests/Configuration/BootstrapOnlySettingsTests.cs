@@ -135,6 +135,26 @@ public sealed class BootstrapOnlySettingsTests
         Assert.Equal(expected, refusedSetting);
     }
 
+    /// <summary>
+    /// A write names a subtree rather than a value, so a section carrying a refused setting reaches it as surely as a
+    /// path beneath one does. The reported setting is the one the write would have carried.
+    /// </summary>
+    [Theory]
+    [InlineData("Persistence", "Persistence:ConnectionString")]
+    [InlineData("Secrets", "Secrets:Interpretation")]
+    [InlineData("ConfigurationSources", "ConfigurationSources:Directory")]
+    public void TryFindCovering_SectionContainingARefusedSetting_ReportsTheSettingItCarries(
+        string configurationPath,
+        string expected)
+    {
+        // Act
+        var refused = BootstrapOnlySettings.TryFindCovering(configurationPath, out var refusedSetting);
+
+        // Assert
+        Assert.True(refused);
+        Assert.Equal(expected, refusedSetting);
+    }
+
     /// <summary>An ordinary setting is covered by nothing here, which leaves the catalog free to route it.</summary>
     [Theory]
     [InlineData("MailboxSearch:SnippetsPerEmail")]
