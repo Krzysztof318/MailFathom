@@ -37,6 +37,8 @@ database:
   host: postgres.databases.svc.cluster.local
 ```
 
+**Optionally, a bucket.** `contentStorage.backend` decides where the raw MIME of each message is written: PostgreSQL beside the metadata by default, or an S3-compatible endpoint you name. The chart runs no object store and renders nothing at all on the default, so a values document that never mentions this installs exactly what it always did. Selecting the bucket requires an `https` endpoint, a bucket name, and both halves of a credential — as *keys inside the Secret above*, never as values here — and it changes what a backup is: the rows then point at objects in the bucket, so the database and the bucket are backed up together and restored database-first. Switching it is a move rather than a setting, because every stored message records which store holds its own content. [Storing message content in a bucket](https://krzysztof318.github.io/MailFathom/operations/deployment-kubernetes.html#storing-message-content-in-a-bucket) is the page.
+
 ## Installing
 
 ```bash

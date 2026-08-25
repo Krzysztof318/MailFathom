@@ -114,6 +114,52 @@ spec:
               value: {{ .Values.database.passwordSecretKey | quote }}
             - name: Persistence__Password__SecretReference
               value: {{ printf "file:%s/%s" (trimSuffix "/" .Values.secrets.mountPath) .Values.database.passwordSecretKey | quote }}
+            {{- if eq .Values.contentStorage.backend "objectStorage" }}
+            {{- /*
+              Where the raw MIME of the messages stored next is written, and everything one request to that endpoint
+              needs. Nothing is written on the database backend, which is what keeps a rendering that selected nothing
+              identical to one from a chart that never carried this block.
+
+              The backend and the endpoint are written together for the reason the analyzer's switch and address are:
+              MailFathom refuses to start with the bucket selected and no address, no bucket, or no credential, and the
+              refusal would be about a file an operator did not think they were editing. The credential itself is never
+              in this object — both halves are references into the Secret the pod mounts, resolved before every request,
+              which is why a key rotated behind an unchanged mount reaches the next call with no restart.
+            */}}
+            {{- $objectStorage := .Values.contentStorage.objectStorage }}
+            {{- $secretsDirectory := trimSuffix "/" .Values.secrets.mountPath }}
+            - name: ContentStorage__Backend
+              value: ObjectStorage
+            - name: ContentStorage__ObjectStorage__Endpoint
+              value: {{ $objectStorage.endpoint | quote }}
+            - name: ContentStorage__ObjectStorage__Bucket
+              value: {{ $objectStorage.bucket | quote }}
+            - name: ContentStorage__ObjectStorage__KeyPrefix
+              value: {{ $objectStorage.keyPrefix | quote }}
+            - name: ContentStorage__ObjectStorage__Region
+              value: {{ $objectStorage.region | quote }}
+            - name: ContentStorage__ObjectStorage__UsePathStyleAddressing
+              value: {{ $objectStorage.usePathStyleAddressing | quote }}
+            - name: ContentStorage__ObjectStorage__AccessKeyId__Name
+              value: {{ $objectStorage.accessKeyIdSecretKey | quote }}
+            - name: ContentStorage__ObjectStorage__AccessKeyId__SecretReference
+              value: {{ printf "file:%s/%s" $secretsDirectory $objectStorage.accessKeyIdSecretKey | quote }}
+            - name: ContentStorage__ObjectStorage__SecretAccessKey__Name
+              value: {{ $objectStorage.secretAccessKeySecretKey | quote }}
+            - name: ContentStorage__ObjectStorage__SecretAccessKey__SecretReference
+              value: {{ printf "file:%s/%s" $secretsDirectory $objectStorage.secretAccessKeySecretKey | quote }}
+            {{- with $objectStorage.trustAnchorSecretKey }}
+            {{- /*
+              Only where the deployment named one. An endpoint the cluster's own trust store answers for needs none, and
+              an empty block here would be an unresolvable reference rather than an absent anchor — which MailFathom
+              reports as a credential it could not read rather than as an endpoint it already trusts.
+            */}}
+            - name: ContentStorage__ObjectStorage__TrustAnchor__Name
+              value: {{ . | quote }}
+            - name: ContentStorage__ObjectStorage__TrustAnchor__SecretReference
+              value: {{ printf "file:%s/%s" $secretsDirectory . | quote }}
+            {{- end }}
+            {{- end }}
             {{- if .Values.client.enabled }}
             {{- /*
               The switch that puts the page in front of the mailbox, and — separately — the statement that its hop is

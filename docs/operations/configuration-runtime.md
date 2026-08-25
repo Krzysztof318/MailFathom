@@ -71,6 +71,19 @@ content](../features/email-content.md#where-a-payload-is-kept) reads off the sch
 into the bucket is an operator's act rather than a setting; [moving stored content into the
 bucket](moving-stored-content.md) is the operation, and `ContentStorage:Move` below is what bounds its cost.
 
+**A database backup stops being a complete backup while this names a bucket.** The rows point at objects by a locator
+nothing recomputes, so the two stores are one backup taken in two places and a restore brings the database back before
+the bucket — the other order leaves objects nothing points at, which the reclamation sweep below is entitled to delete.
+Each deployment shape states the order in its own terms:
+[Kubernetes](deployment-kubernetes.md#what-you-now-back-up-and-in-which-order),
+[Compose](deployment-compose.md#with-content-in-a-bucket-the-dump-above-is-only-half-of-it), and
+[Quadlet](deployment-quadlet.md#backup-and-what-survives-removal).
+
+Each of those shapes also carries the section in its own idiom, so a deployment sets it there rather than assembling the
+keys below by hand: `contentStorage` in the Helm chart's values, `MAILFATHOM_CONTENT_STORAGE` and the variables beside
+it in Compose's `.env`, and the `ContentStorage` lines in the Quadlet unit. Every one of them writes the credential as a
+reference to material the deployment provisioned, never as a value.
+
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
 | `ContentStorage:Backend` | enum | `Database` | `Database`, `ObjectStorage` | restart |

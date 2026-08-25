@@ -139,6 +139,70 @@ database:
   # written for one deployment reads correctly in the other.
   passwordSecretKey: mailfathom-database-password
 
+### Where message content is stored
+#
+# The raw MIME of every message this deployment stores next: in PostgreSQL beside the metadata, which is the default and
+# what every deployment that has never heard of this setting is already running, or in an S3-compatible bucket you
+# operate or rent. Selecting the bucket changes nothing else — the metadata, the indexes, and every job still run
+# through PostgreSQL — so this is a decision about payload bytes rather than about the database.
+#
+# **It decides only where the next write goes.** Every content row names the store holding its own payload, so turning
+# this on moves nothing already stored and turning it back off re-encodes nothing. Getting content out of one store and
+# into the other is a move an operator runs, not a setting they flip, and until it has run a deployment reads from both.
+#
+# **A `pg_dump` stops being a whole backup the moment this is on.** The rows point at objects in the bucket, so the two
+# stores are backed up and restored together, database first;
+# docs/operations/deployment-kubernetes.md states the order and what a mismatch between them looks like.
+#
+# The chart writes nothing when `backend` is `database`, which is what makes a rendering that sets none of this
+# identical to one from a chart that never carried it. Enabling it requires an `https` endpoint, a bucket, and both
+# halves of a credential — MailFathom presents an explicit credential on every request and never acquires the host's own
+# identity from the environment, so a deployment that named none is refused at startup rather than signing as whoever
+# the node is. The timeouts, the reclamation sweep, and the bounds on moving what is already stored are tuning rather
+# than deployment shape and belong in
+# `config.files`; docs/operations/configuration-runtime.md holds every key.
+contentStorage:
+  # `database` or `objectStorage`.
+  backend: database
+
+  objectStorage:
+    # The endpoint, not the bucket: the bucket is named below and reached by whichever addressing style the flag further
+    # down selects. An absolute `https` address — a plain `http` one is refused, because a request carries a signature
+    # and, on a write, the message itself.
+    endpoint: ""
+
+    # The one bucket every object is written into and read from. It is not created for you.
+    bucket: ""
+
+    # The prefix every key this deployment writes begins with. Empty is a bucket MailFathom has to itself, which is the
+    # ordinary shape; a prefix is what makes a shared bucket safe, and nothing here can check that two deployments
+    # sharing one arranged disjoint prefixes. The reclamation sweep lists beneath this prefix and nowhere else.
+    keyPrefix: ""
+
+    # The region a request is signed under. Empty takes `us-east-1`, which is what an endpoint with no notion of a
+    # region accepts; a request always carries one, because SigV4 puts a region into the credential scope either way.
+    region: ""
+
+    # On by default, because virtual-hosted addressing needs a wildcard DNS name and a certificate to match it, which an
+    # endpoint reached by a Service name inside a cluster has neither of.
+    usePathStyleAddressing: true
+
+    # The two halves of the credential, as **keys inside `secrets.existingSecret`** rather than as values. The chart
+    # templates no credential and creates no Secret, so what is named here is a file in the Secret the pod already
+    # mounts, and MailFathom reads it as `file:<secrets.mountPath>/<key>` before every request — which is what lets a
+    # key rotated behind an unchanged mount reach the next call with no restart to schedule.
+    #
+    # The access key identifier is a secret like the secret beside it. It names an identity at the endpoint, it is one
+    # half of what an attacker needs, and every provider that issues one issues it together with its secret from the
+    # same place.
+    accessKeyIdSecretKey: mailfathom-object-storage-access-key-id
+    secretAccessKeySecretKey: mailfathom-object-storage-secret-access-key
+
+    # The certificate authority that signed the endpoint's certificate, as a key inside the same Secret. Leave it empty
+    # for an endpoint the cluster's own trust store already answers for, which is every hosted provider; name a key for
+    # an endpoint you run yourself. It is the only supported way to reach one — no setting anywhere turns validation off.
+    trustAnchorSecretKey: ""
+
 ### Secrets
 #
 # The chart creates no Secret and templates no credential. It mounts one the operator has already created, read-only,

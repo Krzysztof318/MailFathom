@@ -345,6 +345,18 @@ Stopping the units leaves the volume. Removing it is `podman volume rm mailfatho
 because rebuilding it costs a full IMAP resynchronization — and everything that is not in the mailbox, the answering
 audit trail and the embeddings, is regenerated rather than refetched.
 
+**With the `ContentStorage` lines uncommented, that dump is only half of it.** The content rows point at objects in the
+bucket by a locator nothing recomputes, so a dump alone restores a database naming objects it does not carry. Back the
+bucket up beside it — everything beneath `KeyPrefix`, or the whole bucket where MailFathom has it to itself, with your
+provider's own tooling, because nothing here takes a bucket backup — and **restore the database first, then the
+bucket**. In that order the window between them is a database pointing at objects not back yet, which reads as content
+temporarily unavailable; the other order leaves objects nothing points at, and the reclamation sweep is entitled to
+delete those once they are older than `MinimumObjectAge`, so restoring the bucket first can destroy part of what you
+are restoring. A row whose object is missing is not a corrupt deployment: that message's content reports as unavailable
+and names itself, every other message keeps working, and
+[when the local copy is unusable](../features/email-content.md#when-the-local-copy-is-unusable) states what a client
+sees.
+
 Stopping them can also report `rootless netns: kill network process: permission denied`, which is the host's AppArmor
 policy refusing a signal rather than a unit that failed to stop. These containers are torn down through the same
 rootless network namespace as the Compose deployment's and end on the same step, so
@@ -462,6 +474,69 @@ blocklist rules that would send sending addresses and URI host names to third pa
 It is also the one unit here granted a capability back. It binds its port as root and runs every scan as an unprivileged
 account, which is what parses the mail, so `SETUID` and `SETGID` are added after all capabilities are dropped; without
 them the daemon refuses to start.
+
+## Storing message content in a bucket
+
+The raw MIME of every message lives in PostgreSQL beside the metadata unless the `ContentStorage` lines in
+`mailfathom.container` are uncommented. Uncommented, new payloads go into an S3-compatible bucket instead; the metadata,
+the indexes, the embeddings, and every job still run through PostgreSQL, so this is a decision about payload bytes and
+about nothing else. No unit here starts an object store: the endpoint and its bucket exist before the first start.
+
+Switching it on is two edits, and each half alone is a deployment that does not start:
+
+```ini
+Environment=ContentStorage__Backend=ObjectStorage
+Environment=ContentStorage__ObjectStorage__Endpoint=https://objects.example.test
+Environment=ContentStorage__ObjectStorage__Bucket=mailfathom-content
+Environment=ContentStorage__ObjectStorage__AccessKeyId__Name=mailfathom-object-storage-access-key-id
+Environment=ContentStorage__ObjectStorage__AccessKeyId__SecretReference=systemd-credential:mailfathom-object-storage-access-key-id
+Environment=ContentStorage__ObjectStorage__SecretAccessKey__Name=mailfathom-object-storage-secret-access-key
+Environment=ContentStorage__ObjectStorage__SecretAccessKey__SecretReference=systemd-credential:mailfathom-object-storage-secret-access-key
+```
+
+The other half is the two credentials, which are systemd credentials like the database password rather than files in a
+directory, so each needs its own `LoadCredentialEncrypted=` line in `[Service]` — both are already there, commented,
+beside the ones this unit already grants. Produce them the way [the credentials](#the-credentials) above produces every
+other one:
+
+```bash
+printf %s '<access key id>' \
+  | systemd-creds --user encrypt --name=mailfathom-object-storage-access-key-id - \
+      ~/.config/credstore.encrypted/mailfathom-object-storage-access-key-id
+
+systemd-ask-password -n \
+  | systemd-creds --user encrypt --name=mailfathom-object-storage-secret-access-key - \
+      ~/.config/credstore.encrypted/mailfathom-object-storage-secret-access-key
+```
+
+The secret half arrives through `systemd-ask-password -n` for the reason the mailbox password does — neither a shell
+history entry nor a file to remember to delete — and `-n` is what keeps a trailing newline out of the material. The
+identifier is piped with `printf %s` for the same reason: MailFathom strips one trailing newline when it decodes
+material as text, so `echo` would work too, but a signature derived from a credential with a stray byte in it reaches
+you as every request being rejected rather than as a credential it could not read. The access key identifier is a
+secret like the secret beside it — it names an identity at the endpoint, and it is one half of what an attacker needs.
+Both are read before every request, so re-encrypting one after a rotation at the endpoint takes effect on the next call.
+
+MailFathom refuses to start under this backend without an address, a bucket, and both credentials rather than acquiring
+the host's own identity from the environment, and it refuses an endpoint that is not `https` — a request carries a
+signature and, on a write, the message itself. An endpoint you run yourself, whose certificate this host's trust store
+does not answer for, takes a third credential and the two `TrustAnchor` lines; leave both out for a hosted provider,
+because an empty reference is a credential MailFathom cannot read rather than an anchor it does not need. No setting
+anywhere turns validation off instead — see [platform TLS policy](platform-tls-policy.md).
+
+`KeyPrefix` is what makes a bucket MailFathom shares with something else safe, and nothing here can check that two
+deployments sharing one arranged disjoint prefixes; the reclamation sweep lists beneath that prefix and nowhere else.
+The timeouts, the sweep, and the bounds on moving what is already stored are ordinary configuration and belong in the
+configuration directory beside the unit —
+[`ContentStorage`](configuration-runtime.md#contentstorage) holds every key, and
+[where a payload is kept](../features/email-content.md#where-a-payload-is-kept) states what a content row records.
+
+**Switching is a move, not a setting.** These lines decide only where the next write goes: every content row names the
+store holding its own payload, so uncommenting them moves nothing already stored and commenting them back re-encodes
+nothing. Carrying what is already in the database into the bucket is an operator's act with its own controls —
+[moving stored content into the bucket](moving-stored-content.md) is that operation. Until it has run, and after a
+partial run, this deployment reads from both stores and keeps needing both: pointing it at a bucket it no longer has
+leaves the unit running and unready rather than the mail unreadable.
 
 ## Bounds
 

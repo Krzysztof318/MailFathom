@@ -511,6 +511,76 @@ that and MailFathom's own startup gate refuses to come up while the daemon is no
 application pod may restart a few times before the scanner is ready. `resources`, `nodeSelector`, `tolerations`,
 `affinity`, both security contexts, and the digest-pinned image are values under `spamScanning.scanner`.
 
+## Storing message content in a bucket
+
+The raw MIME of every message lives in PostgreSQL beside the metadata unless `contentStorage.backend` says otherwise.
+Setting it to `objectStorage` writes new payloads into an S3-compatible bucket instead; the metadata, the indexes, the
+embeddings, and every job still run through PostgreSQL, so this is a decision about payload bytes and about nothing
+else. The chart runs no object store and installs none: the endpoint and its bucket exist before the install.
+
+Off is the default, and the chart writes nothing at all on it — a rendering that sets none of this is byte for byte a
+rendering from a chart that never carried the block, which `deploy/helm/mailfathom/ci/golden/` records.
+
+```yaml
+contentStorage:
+  backend: objectStorage
+  objectStorage:
+    endpoint: https://objects.example.test
+    bucket: mailfathom-content
+    keyPrefix: production/
+    region: eu-central-1
+    accessKeyIdSecretKey: mailfathom-object-storage-access-key-id
+    secretAccessKeySecretKey: mailfathom-object-storage-secret-access-key
+```
+
+**The credential is two keys inside `secrets.existingSecret`, never a value here.** The chart templates no credential
+and creates no Secret, so what those two settings name is a file in the Secret the pod already mounts, and MailFathom
+reads each as `file:<secrets.mountPath>/<key>` before every request — which is what lets a key rotated behind an
+unchanged mount reach the next call with no restart to schedule. The access key identifier is a secret like the secret
+beside it: it names an identity at the endpoint, and it is one half of what an attacker needs.
+
+`helm install` refuses the object backend without an address, a bucket, and both credential keys, and refuses an
+endpoint that is not `https` — a request carries a signature and, on a write, the message itself. It refuses an endpoint
+or a bucket named while the backend is still `database` as well, because nothing would read it and the values file would
+read as though mail were going somewhere it is not. An endpoint whose certificate the cluster's own trust store does not
+answer for takes `trustAnchorSecretKey`, a third key in the same Secret; there is no setting anywhere that turns
+validation off instead, which [platform TLS policy](platform-tls-policy.md) covers.
+
+`keyPrefix` is what makes a bucket MailFathom shares with something else safe, and nothing in the chart or the
+application can check that two deployments sharing one arranged disjoint prefixes. The reclamation sweep lists beneath
+that prefix and nowhere else. The timeouts, the sweep itself, and the bounds on moving what is already stored are
+tuning rather than deployment shape and belong in
+`config.files`; [`ContentStorage`](configuration-runtime.md#contentstorage) holds every key, and
+[where a payload is kept](../features/email-content.md#where-a-payload-is-kept) states what a content row records.
+
+**Switching is a move, not a setting.** The value decides only where the next write goes: every content row names the
+store holding its own payload, so turning the object backend on moves nothing already stored and turning it back off
+re-encodes nothing. Carrying what a mailbox has accumulated into the bucket is an operator's act with its own controls
+and its own bounds — [moving stored content into the bucket](moving-stored-content.md) is that operation. Until it has
+run, and after a partial run, the deployment reads from both stores and keeps needing both: a bucket this release no
+longer names leaves the pod unready rather than the mail unreadable, which is the honest outcome and what
+[health endpoints](health-endpoints.md) reports.
+
+### What you now back up, and in which order
+
+**A `pg_dump` stops being a complete backup the moment the object backend is on.** The rows point at objects in the
+bucket by a locator nothing recomputes, so the database and the bucket are one backup taken in two places, and a restore
+brings back both.
+
+1. **Back up the database**, exactly as before.
+2. **Back up the bucket** — everything beneath `keyPrefix`, or the whole bucket where MailFathom has it to itself. Your
+   provider's own tooling does this; nothing in MailFathom or the chart takes a bucket backup.
+3. **Restore the database first, then the bucket.** In that order the window between them is a database pointing at
+   objects not back yet, which reads as content temporarily unavailable. The other order leaves objects nothing points
+   at, which the reclamation sweep is entitled to delete once they are older than `MinimumObjectAge` — so restoring the
+   bucket first can destroy part of what you are restoring.
+
+Take both from the same moment where you can. A row whose object is missing is not a corrupt deployment and not a
+mystery: the read reports that message's content as unavailable and names it, every other message keeps working, and
+[when the local copy is unusable](../features/email-content.md#when-the-local-copy-is-unusable) states what a client
+sees. A message whose object is missing is re-fetchable from the mail server like any other; what is not is anything
+derived — the answering audit trail and the embeddings.
+
 ## Scheduling, resources, and placement
 
 `nodeSelector`, `tolerations`, `affinity`, `topologySpreadConstraints`, `priorityClassName`, `resources`,
@@ -522,7 +592,9 @@ them together: a grace period shorter than the drain kills the process with the 
 
 ## Upgrading, rolling back, and uninstalling
 
-Back up the database and apply the new release's `mailfathom-schema-<version>.sql` **before** the upgrade. The new pod
+Back up the database — and the bucket beside it where `contentStorage.backend` is `objectStorage`, for the reason
+[what you now back up](#what-you-now-back-up-and-in-which-order) gives — and apply the new release's
+`mailfathom-schema-<version>.sql` **before** the upgrade. The new pod
 refuses to start against a schema that is behind it, and the old pod keeps serving against a schema that is ahead — so
 that order is the one with no window in which nothing serves.
 

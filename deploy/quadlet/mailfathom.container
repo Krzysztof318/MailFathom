@@ -105,6 +105,50 @@ Environment=ConnectionStrings__mailfathom=Host=mailfathom-postgres;Port=5432;Dat
 Environment=Persistence__Password__Name=mailfathom-database-password
 Environment=Persistence__Password__SecretReference=systemd-credential:mailfathom-database-password
 
+# Where the raw MIME of the messages stored next is written, and it is PostgreSQL because these lines are commented out
+# — which is what this deployment has always done. Uncommenting them writes new payloads into the S3-compatible bucket
+# named below instead; everything else still runs through PostgreSQL, so this is a decision about payload bytes alone.
+# MailFathom runs no object store of its own and no unit here starts one: the endpoint already exists and its bucket is
+# created before the first start.
+#
+# **It decides only where the next write goes.** Every content row names the store holding its own payload, so
+# uncommenting these moves nothing already stored and commenting them back re-encodes nothing; until a move has run,
+# this deployment reads from both stores.
+#
+# **With them uncommented a `pg_dump` is no longer a whole backup**, because the rows point at objects in the bucket.
+# docs/operations/deployment-quadlet.md § Backup, and what survives removal states the order the two stores are backed
+# up and restored in, and what a row pointing at an object the bucket no longer holds reaches a client as.
+#
+# The seven lines of the first block are required together: MailFathom refuses to start without an address, a bucket,
+# and both halves of a credential rather than signing requests as whatever identity the host carries. The address is the
+# endpoint rather than the bucket and it is `https` — a request carries a signature and, on a write, the message itself.
+# The two credentials are systemd credentials like the database password, so each needs a LoadCredentialEncrypted= line
+# in the [Service] section below; the identifier is a secret like the secret beside it, because it names an identity at
+# the endpoint and is half of what an attacker needs. Both are read before every request, so re-encrypting one and
+# restarting nothing takes effect on the next call.
+#
+# The prefix, the region, and path-style addressing carry working defaults — an empty prefix is a bucket MailFathom has
+# to itself, an empty region signs as `us-east-1`, and path style is on because the alternative needs a wildcard DNS
+# name and a certificate to match it. The timeouts, the reclamation sweep, and the bounds on moving what is already
+# stored are ordinary configuration and belong in the configuration directory beside this unit;
+# docs/operations/configuration-runtime.md holds every key.
+#Environment=ContentStorage__Backend=ObjectStorage
+#Environment=ContentStorage__ObjectStorage__Endpoint=https://objects.example.test
+#Environment=ContentStorage__ObjectStorage__Bucket=mailfathom-content
+#Environment=ContentStorage__ObjectStorage__AccessKeyId__Name=mailfathom-object-storage-access-key-id
+#Environment=ContentStorage__ObjectStorage__AccessKeyId__SecretReference=systemd-credential:mailfathom-object-storage-access-key-id
+#Environment=ContentStorage__ObjectStorage__SecretAccessKey__Name=mailfathom-object-storage-secret-access-key
+#Environment=ContentStorage__ObjectStorage__SecretAccessKey__SecretReference=systemd-credential:mailfathom-object-storage-secret-access-key
+# Optional, and only where the bucket has one:
+#Environment=ContentStorage__ObjectStorage__KeyPrefix=production/
+#Environment=ContentStorage__ObjectStorage__Region=eu-central-1
+#Environment=ContentStorage__ObjectStorage__UsePathStyleAddressing=true
+# Only for an endpoint you run yourself, whose certificate this host's own trust store does not answer for. Leave both
+# out for a hosted provider: an empty reference is a credential MailFathom cannot read rather than an anchor it does not
+# need, and no setting anywhere turns validation off instead.
+#Environment=ContentStorage__ObjectStorage__TrustAnchor__Name=mailfathom-object-storage-trust-anchor
+#Environment=ContentStorage__ObjectStorage__TrustAnchor__SecretReference=systemd-credential:mailfathom-object-storage-trust-anchor
+
 # MailFathom's own client, off because these two lines are commented out. The bundle travels inside the image, so
 # uncommenting them pulls nothing and installs no second unit; what they need beside them is ClientEndpoint:Enabled in
 # the configuration directory, since the page is served on that surface's listeners and calls them. Uncommenting
@@ -199,6 +243,11 @@ LoadCredentialEncrypted=imap-primary-password:%h/.config/credstore.encrypted/ima
 LoadCredentialEncrypted=mcp-workstation-key:%h/.config/credstore.encrypted/mcp-workstation-key
 # Only when a mailbox authenticates with OAuth. See config/10-mailfathom.json.example.
 #LoadCredentialEncrypted=mailfathom-data-key:%h/.config/credstore.encrypted/mailfathom-data-key
+# Only when message content is stored in a bucket — uncommented together with the ContentStorage lines above. The third
+# is for an endpoint whose certificate this host does not already trust and is left out for a hosted provider.
+#LoadCredentialEncrypted=mailfathom-object-storage-access-key-id:%h/.config/credstore.encrypted/mailfathom-object-storage-access-key-id
+#LoadCredentialEncrypted=mailfathom-object-storage-secret-access-key:%h/.config/credstore.encrypted/mailfathom-object-storage-secret-access-key
+#LoadCredentialEncrypted=mailfathom-object-storage-trust-anchor:%h/.config/credstore.encrypted/mailfathom-object-storage-trust-anchor
 
 # Bound the in-memory exposure that no code-level measure addresses, for the process that decrypts every credential
 # above before handing it on.
