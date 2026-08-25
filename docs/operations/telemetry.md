@@ -575,10 +575,13 @@ both are in one series.
 `mailfathom.content_object_reclamation.reclaimed` counts objects the endpoint removed,
 `mailfathom.content_object_reclamation.bytes` how many bytes those objects held, and
 `mailfathom.content_object_reclamation.failed` counts the ones it did not — each of which is left where it is for a
-later sweep rather than retried in place. A shutdown that stops either mechanism part-way counts everything it had not
-reached as well, so the number is what the run left behind rather than only what the endpoint refused. Only the sweep contributes to the byte total, because only a listing states a
-size; a deletion that follows an erasure knows the key and not the length. Each counter is added to only when it moved,
-so an interval that reclaimed nothing publishes nothing rather than a stream of zeroes.
+later sweep rather than retried in place. A shutdown that stops either mechanism part-way counts what it had not
+reached as well, rather than only what the endpoint refused, and how much of the remainder that is differs by
+mechanism: an erasure was handed every locator it was to remove and counts all of the ones it never attempted, while a
+sweep counts the orphans it had not attempted in the page it was on, the pages beyond it having never been listed and
+being reached instead by the segment that resumes the walk. Only the sweep contributes to the byte total, because only
+a listing states a size; a deletion that follows an erasure knows the key and not the length. Each counter is added to
+only when it moved, so an interval that reclaimed nothing publishes nothing rather than a stream of zeroes.
 
 **`mailfathom.content_object_reclamation.oldest_orphan.age` is the number that says whether reclamation is keeping
 up.** It is a gauge in seconds, read from the most recent sweep that reached the end of its listing — a run that
