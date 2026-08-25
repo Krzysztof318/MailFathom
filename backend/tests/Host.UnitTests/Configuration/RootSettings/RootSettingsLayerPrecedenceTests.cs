@@ -240,7 +240,7 @@ public sealed class RootSettingsLayerPrecedenceTests
         // Arrange
         using var configuration = new ConfigurationManager();
         var document = new RootSettingsDocument(
-            """{ "Persistence": { "Password": { "Reference": "file:the-operator-never-sees-this" } } }""",
+            """{ "Persistence": { "Password": { "SecretReference": "file:the-operator-never-sees-this" } } }""",
             Version: 13);
 
         // Act

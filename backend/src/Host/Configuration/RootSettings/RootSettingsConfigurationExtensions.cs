@@ -102,16 +102,19 @@ internal static class RootSettingsConfigurationExtensions
 
     /// <summary>Turns the configured command timeout into a bound this read can actually be given.</summary>
     /// <param name="configuredSeconds">What <c>Persistence:CommandTimeoutSeconds</c> bound to, before anything validated it.</param>
-    /// <returns>The configured bound, or the composed default when the configured one is not a bound at all.</returns>
+    /// <returns>The configured bound, or the composed default when the configured one is outside the range the section permits.</returns>
     /// <remarks>
     /// The section's range is enforced by <c>ValidateOnStart</c>, which runs long after this read, so a value the
-    /// annotation will refuse still reaches it — and a zero or negative one means "no bound" to the driver, which is
-    /// exactly the startup that never returns. Falling back to the default keeps this one command bounded and leaves
-    /// the mistake to be reported by the validator that words it properly, rather than as an argument failure raised
-    /// from inside configuration composition.
+    /// annotation will refuse still reaches it. Both ends matter and for the same reason: a zero or negative one means
+    /// "no bound" to the driver, and a mistyped <c>6000</c> for <c>600</c> is a bound of a hundred minutes — and this
+    /// read runs with no endpoint open, so neither failure is one a deployment could observe or report. Falling back
+    /// keeps the command bounded and leaves the mistake to the validator that words it properly, rather than raising
+    /// an argument failure from inside configuration composition.
     /// </remarks>
     private static TimeSpan BoundedCommandTimeout(int configuredSeconds) =>
-        TimeSpan.FromSeconds(configuredSeconds > 0
-            ? configuredSeconds
-            : HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds);
+        TimeSpan.FromSeconds(
+            configuredSeconds is >= PersistenceOptions.MinimumCommandTimeoutSeconds
+                and <= PersistenceOptions.MaximumCommandTimeoutSeconds
+                ? configuredSeconds
+                : HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds);
 }

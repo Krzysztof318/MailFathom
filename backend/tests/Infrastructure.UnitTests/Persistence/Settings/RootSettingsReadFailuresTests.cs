@@ -10,7 +10,7 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Settings;
 
 /// <summary>
 /// Covers what a failed read of the persisted configuration tells the operator. The read itself needs a database, but
-/// which of five places it sends somebody to is a decision, and every one of them is a first install or an upgrade
+/// which of six places it sends somebody to is a decision, and every one of them is a first install or an upgrade
 /// that has gone wrong — where sending the reader to the network instead of to a grant is the difference between a
 /// deployment repaired in a minute and one nobody can diagnose.
 /// </summary>
@@ -95,6 +95,24 @@ public sealed class RootSettingsReadFailuresTests
         // Assert
         Assert.Contains("no privilege on settings_root", diagnosis, StringComparison.Ordinal);
         Assert.Contains("Grant it", diagnosis, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The bound expiring says nothing about whether the database can be reached, so it is sorted apart from the
+    /// failure that does: the server accepted the connection and answered everything up to the statement.
+    /// </summary>
+    [Fact]
+    public void Diagnose_CommandTimeoutExpired_SendsTheOperatorToTheBoundRatherThanTheNetwork()
+    {
+        // Arrange
+        var exception = new NpgsqlException("exception while reading from stream", new TimeoutException());
+
+        // Act
+        var diagnosis = RootSettingsReadFailures.Diagnose(exception);
+
+        // Assert
+        Assert.Contains("Persistence:CommandTimeoutSeconds", diagnosis, StringComparison.Ordinal);
+        Assert.DoesNotContain("could not be reached", diagnosis, StringComparison.Ordinal);
     }
 
     /// <summary>An unrecognized state is a database that could not be read, and it says nothing it cannot support.</summary>

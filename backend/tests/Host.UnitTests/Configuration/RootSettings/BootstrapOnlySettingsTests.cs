@@ -39,8 +39,8 @@ public sealed class BootstrapOnlySettingsTests
     /// key. Refusing only the section's own key would admit exactly the part that matters.
     /// </summary>
     [Theory]
-    [InlineData("Persistence:Password:Reference")]
-    [InlineData("Persistence:Password:Store")]
+    [InlineData("Persistence:Password:SecretReference")]
+    [InlineData("Persistence:Password:Lifetime")]
     public void FindIn_KeyNestedBeneathARefusedSection_IsRefused(string persistedKey)
     {
         // Act
@@ -84,7 +84,7 @@ public sealed class BootstrapOnlySettingsTests
     {
         // Act
         var refused = BootstrapOnlySettings.FindIn(
-            ["Secrets:Interpretation", "Persistence:Password:Reference", "MailboxSearch:SnippetsPerEmail"]);
+            ["Secrets:Interpretation", "Persistence:Password:SecretReference", "MailboxSearch:SnippetsPerEmail"]);
 
         // Assert
         Assert.Equal(["Persistence:Password", "Secrets:Interpretation"], refused);

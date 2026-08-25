@@ -35,7 +35,7 @@ internal static class BootstrapOnlySettings
     /// <remarks>
     /// Prefixes rather than exact names, because two of them are sections rather than values: <c>Persistence:Password</c>
     /// is a secret block whose reference and store live under it, and refusing only the section's own key would admit
-    /// <c>Persistence:Password:Reference</c>, which is the half that decides the credential. The rest are scalars and
+    /// <c>Persistence:Password:SecretReference</c>, which is the half that decides the credential. The rest are scalars and
     /// match themselves.
     /// </remarks>
     private static readonly string[] RefusedKeys =

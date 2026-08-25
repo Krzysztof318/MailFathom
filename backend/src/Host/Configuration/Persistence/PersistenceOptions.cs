@@ -21,6 +21,18 @@ internal sealed class PersistenceOptions : IValidatableObject
     /// <summary>The configuration section these settings are bound from.</summary>
     public const string SectionName = "Persistence";
 
+    /// <summary>The shortest bound a database command may be given.</summary>
+    /// <remarks>
+    /// Stated as a constant rather than written into the annotation alone, because the persisted configuration layer
+    /// is composed before <c>ValidateOnStart</c> runs and normalizes a value against this range itself. One range
+    /// declared once is what keeps the annotation and that normalization from drifting apart.
+    /// </remarks>
+    public const int MinimumCommandTimeoutSeconds = 1;
+
+    /// <summary>The longest bound a database command may be given.</summary>
+    /// <remarks>A command is one statement rather than one unit of work, so ten minutes is already far past any of them.</remarks>
+    public const int MaximumCommandTimeoutSeconds = 600;
+
     /// <summary>Gets or sets the maximum number of complete local write attempts after concurrency conflicts, including the first attempt.</summary>
     [Range(1, 10)]
     public int MaximumConcurrencyCommitAttempts { get; set; } = 2;
@@ -42,7 +54,7 @@ internal sealed class PersistenceOptions : IValidatableObject
     /// governs one command, not one unit of work: a session that issues several commands is bounded by the caller's
     /// cancellation token instead.
     /// </remarks>
-    [Range(1, 600)]
+    [Range(MinimumCommandTimeoutSeconds, MaximumCommandTimeoutSeconds)]
     public int CommandTimeoutSeconds { get; set; } = HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds;
 
     /// <summary>Gets or sets the reference to a complete PostgreSQL connection string, or <see langword="null" /> when <c>ConnectionStrings:mailfathom</c> supplies it.</summary>

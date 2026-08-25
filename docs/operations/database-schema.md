@@ -264,7 +264,7 @@ before the gate runs at all and is described below the table.
 | Code | Failure | What it means | What to do |
 | --- | --- | --- | --- |
 | `32001` | `DatabaseSchemaOutOfDateException` | The database has not applied migrations this build defines, and the message names them | Apply the schema artifact for this version, then start the host again |
-| `32002` | `DatabaseSchemaStateUnreadableException` | The schema state could not be established at all — an unreachable server, a database that was never created, or a role without rights on the migration history | Fix the connection, the database, or the grant. The message names the reason class only; the provider's own text is the inner exception, because it can carry a host, user, and database name |
+| `32002` | `DatabaseSchemaStateUnreadableException` | The schema state could not be established at all — an unreachable server, a database that was never created, or a role without rights on the migration history | Fix the connection, the database, or the grant. The message names the reason class only; the provider's own text is the inner exception, because it can carry a host, user, and database name. Two of those three reach an operator as `12003` first, from the read the subsection below describes, which names the uncreated database and the missing grant apart rather than as one class |
 | `32003` | `DatabaseSchemaTextSearchConfigurationMismatchException` | The lexical index was built with one PostgreSQL text search configuration and this host is configured for another, so searching would stem queries one way and read lexemes built another | Set `Persistence:TextSearchConfiguration` to the value the message reports the schema holds, or rebuild the index under the configured one |
 
 ### The schema is read once before this gate, and reports its own code
@@ -272,10 +272,11 @@ before the gate runs at all and is described below the table.
 `12003` reaches an operator first on a database this release's migrations have not been applied to, and it is a schema
 problem despite not being a `32xxx` one. MailFathom composes its settings over
 [the persisted configuration layer](configuration-sources.md#the-persisted-layer) before it builds the host at all, so
-a missing `settings_root` table, a role holding no privilege on it, a refused credential, and a server whose
-authorization rules admit no such connection are all met by that read rather than by the gate below — under
-`RootSettingsUnreadableException`, whose message names which of them it was. The correction is the same one this page
-gives for `32001` and `32002`: apply this version's schema artifact, or fix the grant.
+a server carrying no database of the configured name, a missing `settings_root` table, a role holding no privilege on
+it, a refused credential, and a server whose authorization rules admit no such connection are all met by that read
+rather than by the gate below — under `RootSettingsUnreadableException`, whose message names which of them it was. The
+correction is the same one this page gives for `32001` and `32002`: create the database, apply this version's schema
+artifact, or fix the grant.
 
 So on a first install `12003` is the expected refusal and `32001` is what an operator would have seen had the layer
 already existed. Both name the same missing schema step, and each log line names exactly what it found missing.
