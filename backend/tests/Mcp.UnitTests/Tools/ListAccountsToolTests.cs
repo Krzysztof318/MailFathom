@@ -97,31 +97,34 @@ public sealed class ListAccountsToolTests
 
     /// <summary>
     /// Both names are the owner's own and unique within them, so two owners may each declare an account under the same
-    /// identifier and the same display name. Each caller is published their own, and nothing in either answer says the
-    /// other exists.
+    /// identifier and the same display name, and each caller is published the names their own catalog answered with —
+    /// account entries and folder entries alike.
     /// </summary>
+    /// <remarks>
+    /// What this cannot claim is that an account of the other owner is withheld here, and no arrangement at this seam
+    /// would report one. The reader delegates the owner bound wholly to <see cref="ICallerMailAccountCatalog" /> and
+    /// then attaches folders to the accounts that catalog answered with, by an identifier lookup — so a freshness entry
+    /// for an unowned account is dropped by the lookup whatever the bound does, and a reader with no bound at all would
+    /// publish exactly what is asserted below. The bound itself is taken in
+    /// <c>OwnedMailAccountCatalog</c> and proven there, over the accounts a deployment serves and the owner a caller
+    /// was admitted for.
+    /// </remarks>
     [Fact]
-    public async Task ListAccountsAsync_TwoOwnersHoldingIdenticallyNamedAccounts_PublishesEachOwnerOnlyTheirOwn()
+    public async Task ListAccountsAsync_TwoOwnersHoldingIdenticallyNamedAccounts_PublishesEachOwnerTheirOwnNames()
     {
         // Arrange
         var studio = SyntheticServedAccount.Of("studio", SyntheticMailOwner.Deployment);
         var ledger = SyntheticServedAccount.Of("ledger", SyntheticMailOwner.Another);
         var sharedOfOneOwner = SharedlyNamedAccountOf(SyntheticMailOwner.Deployment);
         var sharedOfAnotherOwner = SharedlyNamedAccountOf(SyntheticMailOwner.Another);
-
-        // Each owner's freshness also carries the folder of the account only the other owner owns, which is what puts an
-        // unowned name where the absence assertions can observe it: the freshness reader answers whatever local state
-        // holds rather than what the scope admitted, so a reader that lost its owner bound would publish that folder.
         var toOneOwner = ToolOver(
             CatalogServing(sharedOfOneOwner, studio),
             SynchronizedInbox(sharedOfOneOwner),
-            SynchronizedInbox(studio),
-            SynchronizedInbox(ledger));
+            SynchronizedInbox(studio));
         var toAnotherOwner = ToolOver(
             CatalogServing(ledger, sharedOfAnotherOwner),
             SynchronizedInbox(ledger),
-            SynchronizedInbox(sharedOfAnotherOwner),
-            SynchronizedInbox(studio));
+            SynchronizedInbox(sharedOfAnotherOwner));
 
         // Act
         var forOneOwner = await toOneOwner.ListAccountsAsync(TestContext.Current.CancellationToken);
@@ -131,20 +134,15 @@ public sealed class ListAccountsToolTests
         Assert.Equal(["shared", "studio"], forOneOwner.Accounts.Select(static account => account.AccountId));
         Assert.Equal(["ledger", "shared"], forAnotherOwner.Accounts.Select(static account => account.AccountId));
 
-        // The control the absence assertions need: a folder entry is published for every account, so the helper reads
-        // both halves of each answer, and each owner's own distinctive names are observed present in what it reads.
+        // Every account carries a folder entry, so the names read below are read from both halves of each answer rather
+        // than from the account entries alone.
         Assert.All(forOneOwner.Accounts, static account => Assert.NotEmpty(account.Folders));
         Assert.All(forAnotherOwner.Accounts, static account => Assert.NotEmpty(account.Folders));
 
-        var namesForOneOwner = PublishedNamesOf(forOneOwner);
-        var namesForAnotherOwner = PublishedNamesOf(forAnotherOwner);
-        string[] namesOnlyOneOwnerCarries = [studio.Id.Value, studio.DisplayName.Value];
-        string[] namesOnlyAnotherOwnerCarries = [ledger.Id.Value, ledger.DisplayName.Value];
-
-        Assert.Empty(namesOnlyOneOwnerCarries.Except(namesForOneOwner, StringComparer.OrdinalIgnoreCase));
-        Assert.Empty(namesOnlyAnotherOwnerCarries.Except(namesForAnotherOwner, StringComparer.OrdinalIgnoreCase));
-        Assert.Empty(namesForOneOwner.Intersect(namesOnlyAnotherOwnerCarries, StringComparer.OrdinalIgnoreCase));
-        Assert.Empty(namesForAnotherOwner.Intersect(namesOnlyOneOwnerCarries, StringComparer.OrdinalIgnoreCase));
+        Assert.Empty(new[] { studio.Id.Value, studio.DisplayName.Value }
+            .Except(PublishedNamesOf(forOneOwner), StringComparer.OrdinalIgnoreCase));
+        Assert.Empty(new[] { ledger.Id.Value, ledger.DisplayName.Value }
+            .Except(PublishedNamesOf(forAnotherOwner), StringComparer.OrdinalIgnoreCase));
     }
 
     /// <summary>An empty folder list says synchronization has never reached the account, which an empty mailbox answer cannot say for itself.</summary>
@@ -234,7 +232,7 @@ public sealed class ListAccountsToolTests
         MailAccountDisplayName.Create("The shared mailbox"),
         MailSynchronizationMode.Polling);
 
-    /// <summary>Reads every name the answer published, wherever it named an account, so a leak anywhere in it is caught.</summary>
+    /// <summary>Reads every name the answer published, wherever it named an account, so both halves of it are asserted on.</summary>
     private static IReadOnlyList<string> PublishedNamesOf(ListAccountsToolResult result) =>
     [
         .. result.Accounts.SelectMany(static account =>
