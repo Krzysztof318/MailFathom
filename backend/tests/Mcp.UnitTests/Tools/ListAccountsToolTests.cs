@@ -108,14 +108,20 @@ public sealed class ListAccountsToolTests
         var ledger = SyntheticServedAccount.Of("ledger", SyntheticMailOwner.Another);
         var sharedOfOneOwner = SharedlyNamedAccountOf(SyntheticMailOwner.Deployment);
         var sharedOfAnotherOwner = SharedlyNamedAccountOf(SyntheticMailOwner.Another);
+
+        // Each owner's freshness also carries the folder of the account only the other owner owns, which is what puts an
+        // unowned name where the absence assertions can observe it: the freshness reader answers whatever local state
+        // holds rather than what the scope admitted, so a reader that lost its owner bound would publish that folder.
         var toOneOwner = ToolOver(
             CatalogServing(sharedOfOneOwner, studio),
             SynchronizedInbox(sharedOfOneOwner),
-            SynchronizedInbox(studio));
+            SynchronizedInbox(studio),
+            SynchronizedInbox(ledger));
         var toAnotherOwner = ToolOver(
             CatalogServing(ledger, sharedOfAnotherOwner),
             SynchronizedInbox(ledger),
-            SynchronizedInbox(sharedOfAnotherOwner));
+            SynchronizedInbox(sharedOfAnotherOwner),
+            SynchronizedInbox(studio));
 
         // Act
         var forOneOwner = await toOneOwner.ListAccountsAsync(TestContext.Current.CancellationToken);

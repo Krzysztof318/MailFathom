@@ -321,9 +321,11 @@ the structured filters or writes a different query.
 ## Empty results, and what they do not reveal
 
 A query that matches nothing returns an empty window rather than a failure, so a search cannot be used to establish that
-an account or a folder holds mail the caller was not already entitled to see. An account this deployment does not serve
-is still refused with `53001 MailAccountNotAccessible` before anything is read, for the reason a listing refuses one: an
-empty result would confirm the identifier.
+an account or a folder holds mail the caller was not already entitled to see. A name that reaches none of the accounts
+the caller's owner owns is still refused with `53001 MailAccountNotAccessible` before anything is read, for the reason a
+listing refuses one: an empty result would confirm the identifier. It is one answer for three cases — nothing carries
+that name, this deployment stopped serving the account, or the account is somebody else's — so a refusal separates none
+of them.
 
 Every result carries one `MailboxFolderFreshness` entry per folder in scope, exactly as a listing does. Without it a
 caller cannot tell a folder that holds nothing matching from one whose synchronization has been failing for a week.
