@@ -26,6 +26,13 @@
     <Compile Include="..\shared\RecordingDerivedWorkGateTelemetry.cs" Link="RecordingDerivedWorkGateTelemetry.cs" />
     <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
     <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
+    <!-- The mail list is a route that publishes mail text, so the use case behind it composes the egress guard even
+         where the deployment under test scans nothing. The four arrive together, as they do in every suite that
+         builds one: the inactive guard names the scanning deployment in its own documentation. -->
+    <Compile Include="..\shared\MarkerSensitiveContentScanner.cs" Link="MarkerSensitiveContentScanner.cs" />
+    <Compile Include="..\shared\RecordingSensitiveContentEgressTelemetry.cs" Link="RecordingSensitiveContentEgressTelemetry.cs" />
+    <Compile Include="..\shared\SensitiveContentEgressGuards.cs" Link="SensitiveContentEgressGuards.cs" />
+    <Compile Include="..\shared\ScanningSensitiveContentEgress.cs" Link="ScanningSensitiveContentEgress.cs" />
 
     <!-- Every boundary that publishes instruments asserts them the same way, through a listener over the one
          process-wide meter, so the recorder is built once rather than per suite. -->

@@ -13,6 +13,7 @@ using MailFathom.Application.EmailContent.Release;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.BrowseTimeline;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.DownloadAttachment;
 using MailFathom.Application.Emails.Embeddings;
@@ -554,6 +555,7 @@ public static class ServiceCollectionExtensions
         // write repositories rather than through one of them.
         services.AddScoped<IStoredEmailTimelineReader, StoredEmailTimelineReader>();
         services.AddScoped<IStoredEmailSummaryReader, StoredEmailSummaryReader>();
+        services.AddScoped<IStoredEmailPreviewReader, StoredEmailPreviewReader>();
         services.AddScoped<IEmailThreadReader, StoredEmailThreadReader>();
         services.AddScoped<IEmailSearchIndexReader, StoredEmailSearchIndexReader>();
         services.AddScoped<IEmailVectorSearchIndexReader, EmailVectorSearchIndexReader>();
@@ -747,6 +749,7 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<ISensitiveContentDerivationTelemetry>(),
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<MailboxTimelineReader>();
+        services.AddScoped<MailTimelineBrowser>();
         services.AddScoped<EmailContentReader>();
         services.AddScoped<EmailAttachmentDownloadReader>();
         services.AddScoped<MailboxSearchReader>();

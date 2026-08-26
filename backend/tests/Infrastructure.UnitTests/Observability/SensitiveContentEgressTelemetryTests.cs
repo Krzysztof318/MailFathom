@@ -151,6 +151,7 @@ public sealed class SensitiveContentEgressTelemetryTests
     [InlineData(nameof(SensitiveContentEgressPoint.McpSnippet), "mcp_snippet")]
     [InlineData(nameof(SensitiveContentEgressPoint.McpEmailContent), "mcp_email_content")]
     [InlineData(nameof(SensitiveContentEgressPoint.OutgoingMail), "outgoing_mail")]
+    [InlineData(nameof(SensitiveContentEgressPoint.ClientMailListing), "client_mail_listing")]
     public void RecordGuarded_EachEgressPoint_PublishesItsOwnTagValue(string egressPointName, string expectedTag)
     {
         // Arrange

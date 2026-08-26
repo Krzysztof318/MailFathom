@@ -61,6 +61,7 @@ internal static class ClientApiEndpoints
 
         api.MapClientMailAccounts();
         api.MapClientMailFolders();
+        api.MapClientMailTimeline();
 
         return api;
     }

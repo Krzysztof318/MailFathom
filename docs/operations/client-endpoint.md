@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -66,6 +66,7 @@ for you.
 | `GET /api/client/session` | none |
 | `GET /api/client/accounts` | `mailfathom.mail.read` |
 | `GET /api/client/folders` | `mailfathom.mail.read` |
+| `GET /api/client/emails` | `mailfathom.mail.read` |
 
 There is no version segment in either path: the major version is `0` and
 [ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
@@ -274,6 +275,108 @@ folders is the same disclosure as naming their mailboxes.
 
 The answer is bounded by the folders the owner's accounts have, which configuration bounds, and by nothing the mailbox
 can grow. Nothing here contacts a mail server, and asking cannot set the remote `\Seen` flag.
+
+### The mail list route
+
+```http
+GET /api/client/emails?account=work&folder=INBOX&pageSize=50
+```
+
+It answers with one page of the owner's mail, ordered by when each message was received, and with the cursor that
+continues the list at each end:
+
+```jsonc
+{
+  "emails": [
+    {
+      "id": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
+      "account": "work",
+      "folder": "INBOX",
+      "threadId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91",
+      "subject": "Release 0.8.0 is out",
+      "receivedAt": "2026-08-15T09:58:00+00:00",
+      "sentAt": "2026-08-15T09:57:12+00:00",
+      "senderAddress": "releases@example.test",
+      "senderDisplayName": "Example Releases",
+      "toAddresses": [ "somebody@example.test" ],
+      "unread": true,
+      "flagged": false,
+      "answered": false,
+      "hasAttachments": true,
+      "attachmentCount": 2,
+      "sizeOctets": 48213,
+      "preview": "The release went out this morning and the notes are attached."
+    }
+  ],
+  "nextCursor": "AbCd...",
+  "previousCursor": null,
+  "pageSize": 50
+}
+```
+
+**A row is everything a list draws and nothing else.** Who wrote it, what it is about, when it arrived, whether it has
+been read, flagged or answered, whether anything is attached, and the opening of the message's own text. There is no
+body and no raw MIME on this route at all: a page of fifty rows each carrying a body is a megabyte to draw a list, and
+reading a message is a different request.
+
+**`preview` is at most 200 characters of the message's own text**, with runs of whitespace collapsed to single spaces,
+cut by PostgreSQL rather than by the service — so a body never crosses out of the database to produce one. It is the
+text as extraction trimmed it, without quoted history or a signature block, which is what keeps a reply's preview from
+being the message it was answering. It is `null` for mail this deployment has stored but not yet extracted, which is
+not the same as a message whose text is empty. The bound is fixed: no request may raise it and no deployment may
+change it.
+
+**The cursor is opaque and yours to hold.** It names a row of the page together with the list it was read under, and
+nothing on the server remembers it, so a client may keep one while the screen is closed, or across a restart of the
+deployment, and continue from it afterwards. `nextCursor` reads the page after this one and `previousCursor` the page
+before it; either being `null` means that end of the list has been reached. A page that came back empty carries
+neither, and a client that asked to scroll back from the first row it holds keeps the cursor it already had.
+
+**Scrolling back is the same list read the other way, never a re-sort.** `direction=backward` returns the page
+*before* the cursor, still in the order the list is sorted in, so a client prepends what it receives. It continues from
+a cursor and from nothing else: `direction=backward` with no `cursor` is refused, because there is no page before the
+leading end and answering with the leading page would read as having scrolled to the top.
+
+| Parameter | Accepts | Default |
+| --- | --- | --- |
+| `account` | An account identifier or display name | every account the owner owns |
+| `folder` | A folder alias, or a role as `role:Inbox` | every folder of those accounts |
+| `includeJunk` | `true`, `false` | `false` |
+| `unread` | `true`, `false` | both |
+| `flagged` | `true`, `false` | both |
+| `hasAttachments` | `true`, `false` | both |
+| `receivedOnOrAfter` | A timestamp, inclusive | no start |
+| `receivedBefore` | A timestamp, exclusive | no end |
+| `sort` | `receivedAt` | `receivedAt` |
+| `order` | `newestFirst`, `oldestFirst` | `newestFirst` |
+| `direction` | `forward`, `backward` | `forward` |
+| `pageSize` | 1 to 100 | 25 |
+| `cursor` | A cursor a previous page returned | the leading end of the list |
+
+**A value this deployment cannot honour is refused with `400`, never ignored.** `sort=subject` is the case worth
+naming: the list is ordered by the column the timeline indexes are ordered by, and a screen that asked for something
+else and was handed the default order would have no way to tell. The same holds for an unknown `order` or `direction`,
+a `folder` naming neither an alias nor a role, a `pageSize` outside the range, and a cursor — a cursor this deployment
+never issued and a cursor issued for a different list are refused separately, because they are two mistakes with two
+repairs. What is never returned instead is the first page.
+
+**A parameter sent empty is a parameter that was not sent**, and `sort`, `order` and `direction` are matched without
+regard to case. A query string is composed by a page rather than typed, so a field the screen has nothing to put in yet
+arrives as `?folder=`; making that mean something other than "every folder" would be a refusal no client could act on.
+
+**Filtering is what a list offers, not what a search does.** The parameters above are the controls a person can see on
+a mail screen. A sender, a subject fragment, or a phrase from the body is search, which ranks rather than orders, and
+is not this route.
+
+The filters are part of what a cursor was issued for, so changing any of them — or the `order` — makes a cursor taken
+before the change belong to a different list. Changing `pageSize` alone does not: page size moves no boundary.
+
+**The page is served from the local copy.** Nothing here contacts a mail server, so no screen waits on IMAP, and
+reading a folder cannot set the remote `\Seen` flag. How current that copy is, per folder, is what
+[the folders route](#the-folders-route) answers; it is not repeated on every page.
+
+**An owner with no mail account reads an empty `emails` list**, and a credential whose grant does not carry
+`mailfathom.mail.read` is answered `403`.
 
 ## Credentials do not cross surfaces
 
