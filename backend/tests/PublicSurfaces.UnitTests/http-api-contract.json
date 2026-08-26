@@ -171,6 +171,172 @@
         ],
         "type": "object"
       },
+      "ClientMailSearchResponse": {
+        "properties": {
+          "includedJunkMail": {
+            "type": "boolean"
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pageSize": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailSearchResultResponse"
+            },
+            "type": "array"
+          },
+          "retrievalMode": {
+            "type": "string"
+          },
+          "semanticSearch": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "results",
+          "nextCursor",
+          "pageSize",
+          "retrievalMode",
+          "semanticSearch",
+          "includedJunkMail"
+        ],
+        "type": "object"
+      },
+      "ClientMailSearchResultResponse": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "answered": {
+            "type": "boolean"
+          },
+          "attachmentCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "flagged": {
+            "type": "boolean"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "hasAttachments": {
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "matchedBy": {
+            "type": "string"
+          },
+          "preview": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "receivedAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "senderAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "senderDisplayName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sentAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sizeOctets": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "snippets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "subject": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "threadId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "toAddresses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "unread": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "account",
+          "folder",
+          "threadId",
+          "subject",
+          "receivedAt",
+          "sentAt",
+          "senderAddress",
+          "senderDisplayName",
+          "toAddresses",
+          "unread",
+          "flagged",
+          "answered",
+          "hasAttachments",
+          "attachmentCount",
+          "sizeOctets",
+          "preview",
+          "snippets",
+          "matchedBy"
+        ],
+        "type": "object"
+      },
       "ClientMailTimelineEntryResponse": {
         "properties": {
           "account": {
@@ -4611,6 +4777,130 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ClientMailTimelineResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/emails/search": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "account",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "folder",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "includeJunk",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sender",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "recipient",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unread",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "flagged",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hasAttachments",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "receivedOnOrAfter",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "receivedBefore",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientMailSearchResponse"
                 }
               }
             },

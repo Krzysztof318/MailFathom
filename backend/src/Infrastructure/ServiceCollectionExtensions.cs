@@ -13,6 +13,7 @@ using MailFathom.Application.EmailContent.Release;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.BrowseSearch;
 using MailFathom.Application.Emails.BrowseTimeline;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.DownloadAttachment;
@@ -753,6 +754,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<EmailContentReader>();
         services.AddScoped<EmailAttachmentDownloadReader>();
         services.AddScoped<MailboxSearchReader>();
+        services.AddScoped<MailSearchBrowser>();
     }
 
     /// <summary>Registers the classifier itself, the ordering that puts it in front of every other derivation, and what a verdict causes.</summary>

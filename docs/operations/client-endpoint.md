@@ -67,6 +67,7 @@ for you.
 | `GET /api/client/accounts` | `mailfathom.mail.read` |
 | `GET /api/client/folders` | `mailfathom.mail.read` |
 | `GET /api/client/emails` | `mailfathom.mail.read` |
+| `GET /api/client/emails/search` | `mailfathom.mail.read` |
 
 There is no version segment in either path: the major version is `0` and
 [ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
@@ -365,8 +366,8 @@ regard to case. A query string is composed by a page rather than typed, so a fie
 arrives as `?folder=`; making that mean something other than "every folder" would be a refusal no client could act on.
 
 **Filtering is what a list offers, not what a search does.** The parameters above are the controls a person can see on
-a mail screen. A sender, a subject fragment, or a phrase from the body is search, which ranks rather than orders, and
-is not this route.
+a mail screen. A phrase from the body ranks rather than orders, and is [the search route](#the-mail-search-route)
+instead.
 
 The filters are part of what a cursor was issued for, so changing any of them — or the `order` — makes a cursor taken
 before the change belong to a different list. Changing `pageSize` alone does not: page size moves no boundary.
@@ -376,6 +377,117 @@ reading a folder cannot set the remote `\Seen` flag. How current that copy is, p
 [the folders route](#the-folders-route) answers; it is not repeated on every page.
 
 **An owner with no mail account reads an empty `emails` list**, and a credential whose grant does not carry
+`mailfathom.mail.read` is answered `403`.
+
+### The mail search route
+
+```http
+GET /api/client/emails/search?query=invoice%20from%20accounting&folder=INBOX&pageSize=20
+```
+
+It answers with one page of the owner's mail ranked against what they are looking for:
+
+```jsonc
+{
+  "results": [
+    {
+      "id": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
+      "account": "work",
+      "folder": "INBOX",
+      "threadId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91",
+      "subject": "Invoice 4471",
+      "receivedAt": "2026-08-15T09:58:00+00:00",
+      "sentAt": "2026-08-15T09:57:12+00:00",
+      "senderAddress": "accounts@example.test",
+      "senderDisplayName": "Example Accounting",
+      "toAddresses": [ "somebody@example.test" ],
+      "unread": false,
+      "flagged": false,
+      "answered": false,
+      "hasAttachments": true,
+      "attachmentCount": 1,
+      "sizeOctets": 48213,
+      "preview": "The invoice for August is attached and due at the end of the month.",
+      "snippets": [ "The **invoice** for August is attached" ],
+      "matchedBy": "BothRankings"
+    }
+  ],
+  "nextCursor": "AbCd...",
+  "pageSize": 20,
+  "retrievalMode": "Hybrid",
+  "semanticSearch": "Available",
+  "includedJunkMail": false
+}
+```
+
+**One route searches by words and by meaning at once.** A person looking for a message does not know whether the words
+they remember are the words the message used, so there is no parameter that chooses between the two: the deployment
+ranks both ways wherever it can, and the answer says which happened.
+[Search](https://krzysztof318.github.io/MailFathom/features/email-search.html) is where the two rankings and their
+fusion are described.
+
+**A result is a list row with two fields added**, so one layout draws both and a result can be opened, filtered, and
+acted on without a second request. `snippets` are the extracts around what matched, each marking the matched words with
+`**` — text cut from untrusted mail rather than markup to render — and `preview` is the same bounded opening the list
+route publishes.
+
+**`matchedBy` is why the row is there**: `LexicalRanking` for a message carrying the query's words, `SemanticRanking`
+for one matching by meaning, and `BothRankings` for one both rankings found. It is the field a screen needs most for
+the second of those: a semantically ranked message carries no `snippets`, because there is no extract of it that shows
+the query's words, and a row with nothing under it would otherwise read as unexplained. On a lexically ranked page
+every result is `LexicalRanking` by construction.
+
+**`retrievalMode` and `semanticSearch` are how a narrower answer says it is narrower.** `Lexical` means this page was
+ranked by words alone; `Hybrid` means both rankings took part. What separates a deployment that deliberately does not
+embed from one whose provider is refusing is the field beside it: `Inactive` is the first, `Degraded` the second, and
+`Available` is a deployment ranking by meaning. A search is never refused because an embedding provider was
+unreachable — it is answered lexically and says so, which is what makes the degradation something an operator can act
+on rather than results that quietly got worse.
+
+| Parameter | Accepts | Default |
+| --- | --- | --- |
+| `query` | The text to search for, up to 512 characters | required |
+| `account` | An account identifier or display name | every account the owner owns |
+| `folder` | A folder alias, or a role as `role:Inbox` | every folder of those accounts |
+| `includeJunk` | `true`, `false` | `false` |
+| `sender` | An address the sender must carry | any sender |
+| `recipient` | An address a `To` or `Cc` recipient must carry | any recipient |
+| `unread` | `true`, `false` | both |
+| `flagged` | `true`, `false` | both |
+| `hasAttachments` | `true`, `false` | both |
+| `receivedOnOrAfter` | A timestamp, inclusive | no start |
+| `receivedBefore` | A timestamp, exclusive | no end |
+| `pageSize` | 1 to 50 | 20 |
+| `cursor` | A cursor a previous page returned | the best-ranked results |
+
+**Every parameter beside `query` constrains rather than ranks.** A person who narrowed to one sender and to last year
+has said which mail may come back, so those values decide what is eligible before anything is ranked and the query
+decides only the order of what remains. They are applied inside the ranking query rather than to what it returned,
+which is what keeps a page from being filled by mail the filters exclude and then emptied.
+
+**A query that matched nothing is answered with nothing.** `results` comes back empty and `nextCursor` is `null`,
+rather than the page being filled with the nearest mail — so a person told the search found nothing knows to write a
+different one.
+
+**Paging walks forward through a ranked list of at most 200 results.** `nextCursor` continues it and `null` means the
+list ends there; a client keeps the pages it has already drawn, because a relevance order is recomputed per query and
+there is nothing to scroll back to. What a ranked cursor cannot promise is what the list route's promises: a message
+indexed between two pages can move across a boundary a client is holding and be seen twice or not at all. Somebody who
+has read two hundred results without finding what they wanted narrows the filters, which is what would have found it
+sooner.
+
+**A value this deployment cannot honour is refused with `400`, never ignored.** A blank or over-long `query`, an
+address filter that is not an address, a `folder` naming neither an alias nor a role, a `pageSize` outside the range,
+and a cursor — a cursor this deployment never issued and a cursor issued for a different search are refused separately,
+because they are two mistakes with two repairs. What is never returned instead is the best-ranked page of a search
+nobody asked for. A refusal states what to change and never echoes what was sent: a query is the most revealing value
+this surface carries.
+
+**The page is served from the local copy**, and only mail that has been extracted is searchable at all — a message
+this deployment has stored but not yet indexed matches nothing here. Nothing on this route contacts a mail server, so
+no search waits on IMAP and none can set the remote `\Seen` flag.
+
+**An owner with no mail account reads an empty `results` list**, and a credential whose grant does not carry
 `mailfathom.mail.read` is answered `403`.
 
 ## Credentials do not cross surfaces
