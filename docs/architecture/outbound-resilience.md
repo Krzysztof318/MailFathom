@@ -382,6 +382,13 @@ group without a validated-snapshot layer. The registration binds a frozen copy o
 configuration, so the classification holds by construction: a reloaded budget is not adopted, and a malformed one
 cannot disturb a pipeline that is already serving.
 
+Restart-required is about when a budget is *adopted*, not about when one is judged. The registration is stated among
+the sections a start binds rather than inline in the composition root, and
+[a configuration write](../operations/configuration-sources.md#changing-a-persisted-setting)
+runs exactly those bindings and validators against the configuration its candidate would produce — so a write carrying
+a budget this section refuses is refused under `12007`, rather than committing and stopping the restart that would have
+adopted it.
+
 That indirection is not ceremony. Bound against the live configuration, `OptionsMonitor` drops its cache when a change
 token fires and rebuilds the named instance *inside* that notification, so one malformed edit raises
 `OptionsValidationException` on the thread that reported the change — a file-watcher callback in a deployed host. ADR

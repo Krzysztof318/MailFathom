@@ -33,13 +33,35 @@ internal sealed class InMemoryRootSettingsRow(string json, long version)
     /// </remarks>
     public Action? WhenCommitted { get; set; }
 
+    /// <summary>Gets or sets what happens the moment the row has been read, which is where a competing writer can move it.</summary>
+    /// <remarks>
+    /// The other seam a race needs, and the one that reaches the window the version guard exists for: a write reads the
+    /// row, composes a candidate over what it read, and only then issues its statement, so a competitor committing
+    /// between those two is what the guard has to refuse. It runs after the answer has been composed, so the reader
+    /// still returns the version the caller genuinely saw.
+    /// </remarks>
+    public Action? WhenRead { get; set; }
+
     /// <inheritdoc />
     /// <remarks>The token is observed because the real reader hands it to Npgsql, which throws on one already cancelled.</remarks>
     public Task<RootSettingsDocument> ReadAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        return Task.FromResult(new RootSettingsDocument(this.Json, this.Version));
+        var answer = new RootSettingsDocument(this.Json, this.Version);
+
+        this.WhenRead?.Invoke();
+
+        return Task.FromResult(answer);
+    }
+
+    /// <summary>Moves the row as a competing writer would, leaving the document it wrote and the version it produced.</summary>
+    /// <param name="json">The document the competitor committed.</param>
+    public void CommitFromElsewhere(string json)
+    {
+        this.Json = json;
+        this.Version++;
+        this.AcceptedCommits++;
     }
 
     /// <inheritdoc />

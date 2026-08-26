@@ -99,12 +99,41 @@ public sealed class RootSettingsWriteFailuresTests
         Assert.DoesNotContain("nothing was written", diagnosis, StringComparison.Ordinal);
     }
 
-    /// <summary>An unrecognized state is a database that could not be reached, and it says nothing it cannot support.</summary>
-    [Fact]
-    public void Diagnose_UnrecognizedProviderState_ReportsTheDatabaseAsUnreached()
+    /// <summary>
+    /// A state no arm names is still a server that answered, so the diagnosis names the state and leaves the operator
+    /// reading the statement rather than the network. <c>22P05</c> is the worked example — a value the column cannot
+    /// hold — and a retry of it would fail exactly as the first attempt did, which is why the sentence about retrying
+    /// belongs to the unreachable case alone.
+    /// </summary>
+    /// <param name="sqlState">A state the arms above do not name.</param>
+    [Theory]
+    [InlineData(PostgresErrorCodes.UntranslatableCharacter)]
+    [InlineData(PostgresErrorCodes.DiskFull)]
+    [InlineData(PostgresErrorCodes.DeadlockDetected)]
+    public void Diagnose_AStateNoArmNames_ReportsAServerThatAnsweredAndNamesTheState(string sqlState)
     {
         // Arrange
-        var exception = ProviderFailure(PostgresErrorCodes.ConnectionException);
+        var exception = ProviderFailure(sqlState);
+
+        // Act
+        var diagnosis = RootSettingsWriteFailures.Diagnose(exception);
+
+        // Assert
+        Assert.Contains(sqlState, diagnosis, StringComparison.Ordinal);
+        Assert.Contains("reached and answered", diagnosis, StringComparison.Ordinal);
+        Assert.DoesNotContain("could not be reached", diagnosis, StringComparison.Ordinal);
+        Assert.DoesNotContain("safe to attempt again", diagnosis, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A driver failure carrying no state at all is the one case nothing was answered, and the only one the operator is
+    /// sent to the network for and told to retry.
+    /// </summary>
+    [Fact]
+    public void Diagnose_AFailureCarryingNoServerState_ReportsTheDatabaseAsUnreached()
+    {
+        // Arrange
+        var exception = new NpgsqlException("the connection was never established");
 
         // Act
         var diagnosis = RootSettingsWriteFailures.Diagnose(exception);

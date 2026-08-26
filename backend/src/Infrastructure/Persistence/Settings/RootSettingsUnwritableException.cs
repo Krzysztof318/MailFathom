@@ -15,9 +15,12 @@ namespace MailFathom.Infrastructure.Persistence.Settings;
 /// same list as three outcomes an operator's own edit produced.
 /// </para>
 /// <para>
-/// The deployment's configuration is unchanged when this is raised, which is what makes it safe to report and retry:
-/// the commit is one statement, so it either took effect or did not, and no reload token rises for a statement that
-/// did not.
+/// The deployment's configuration is unchanged when this is raised, with one exception, and the exception is the
+/// reason the rule is worth stating: the commit is one statement, so it either took effect or did not, and no reload
+/// token rises for a statement that did not — but a statement that outran its command timeout was accepted by the
+/// server and then stopped being answered, so which of the two happened is not known from here. The message says so
+/// where it applies, and the version now in force is what settles it. A retry is safe in both cases either way,
+/// because the version guard refuses one composed over a version a first attempt already moved.
 /// </para>
 /// <para>
 /// The message names neither the connection, the credential, nor any part of the document. What the database actually

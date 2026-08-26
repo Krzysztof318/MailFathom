@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text.Json;
 using MailFathom.Infrastructure.Persistence.Settings;
 using Xunit;
 
@@ -89,6 +90,45 @@ public sealed class RootSettingsCommitRulesTests
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => RootSettingsCommitRules.RefuseWhatCannotBeCommitted(json, expectedVersion: 1));
+    }
+
+    /// <summary>
+    /// Every one of these is a valid <c>jsonb</c> value, so the column's own cast would store each of them and the next
+    /// start would then refuse to read the row: a configuration layer is composed from colon-delimited keys, and only
+    /// an object has any. The refusal belongs on this side for that reason.
+    /// </summary>
+    /// <param name="json">A JSON value whose root is not an object.</param>
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("""["Persistence:Password", "plaintext"]""")]
+    [InlineData("5")]
+    [InlineData("null")]
+    [InlineData("\"not settings\"")]
+    public void RefuseWhatCannotBeCommitted_ACandidateWhoseRootIsNotAnObject_IsRefused(string json)
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(
+            () => RootSettingsCommitRules.RefuseWhatCannotBeCommitted(json, expectedVersion: 1));
+
+        // Assert
+        Assert.Contains("root is not an object", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Text that is not JSON at all is the one refusal the column would also take, and it arrives here as the reader's
+    /// own exception. It leaves as an argument refusal like every other candidate this type turns away, so a caller has
+    /// one exception type to answer rather than two.
+    /// </summary>
+    [Fact]
+    public void RefuseWhatCannotBeCommitted_ACandidateThatIsNotJson_IsRefusedAsAnArgument()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(
+            () => RootSettingsCommitRules.RefuseWhatCannotBeCommitted("{ not json", expectedVersion: 1));
+
+        // Assert
+        Assert.Contains("is not JSON", refusal.Message, StringComparison.Ordinal);
+        Assert.IsAssignableFrom<JsonException>(refusal.InnerException);
     }
 
     /// <summary>No document ever stood at a negative version, so a commit against one is refused.</summary>

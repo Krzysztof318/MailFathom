@@ -3,6 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Rules.Conditions;
+using MailFathom.Host.Configuration.Answering;
+using MailFathom.Host.Configuration.Chat;
+using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Rules;
 using MailFathom.Infrastructure.Rules;
@@ -40,8 +43,44 @@ internal static class ComposedSettings
 
         return
         [
+            .. FindProviderRefusals(configuration),
             .. FindMailRuleRefusals(configuration, new NCalcMailRuleConditionCompiler()),
             .. FindSurfaceRefusals(configuration),
+        ];
+    }
+
+    /// <summary>Finds what the declared AI endpoints and the ceilings around them would be refused for.</summary>
+    /// <param name="configuration">The configuration to judge.</param>
+    /// <returns>One refusal per section that would stop a start, in the order a start meets them.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when a section will not bind at all.</exception>
+    /// <remarks>
+    /// The chat section is the one bound without <c>ValidateDataAnnotations</c> and without <c>ValidateOnStart</c>,
+    /// deliberately and for the reason <see cref="BoundSettings" /> gives — it reloads, and the framework validator has
+    /// nowhere to report a reloaded candidate's refusal. That makes these rules the only thing judging the section, so
+    /// a candidate that escaped them would escape every rule the section has.
+    /// </remarks>
+    public static IReadOnlyList<SettingsRefusal> FindProviderRefusals(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        var embeddings = configuration.GetSection(EmbeddingOptions.SectionName).Get<EmbeddingOptions>();
+        var chat = configuration.GetSection(ChatModelOptions.SectionName).Get<ChatModelOptions>();
+        var answering = configuration.GetSection(MailAnsweringOptions.SectionName).Get<MailAnsweringOptions>()
+            ?? new MailAnsweringOptions();
+
+        return
+        [
+            // Ahead of the chat rules because the ceiling it carries is what the filter's candidate count is judged
+            // against: an operator who wrote one mistake in each reads the one their other mistake depends on first.
+            .. Refusal<MailAnsweringOptions>(MailAnsweringOptions.SectionName, answering.FindConfigurationErrors()),
+
+            // Every rule the chat declaration answers to, in one reading: the section's own bounds, the alias that names
+            // one AI endpoint across the whole deployment because a credential, a resilience circuit, and a log line are
+            // all keyed by it, and the filter's candidate count against what a lookup actually hands over.
+            .. Refusal<ChatModelOptions>(
+                ChatModelOptions.SectionName,
+                ChatDeclarationRules.FindDeclarationErrors(chat, embeddings, answering)),
         ];
     }
 

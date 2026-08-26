@@ -138,6 +138,49 @@ public sealed class RootSettingsConfigurationProviderTests
         Assert.Equal(1, provider.Version);
     }
 
+    /// <summary>
+    /// Two writers finish in whatever order their commits and their republishes interleave, which is not the order they
+    /// committed in, so the older candidate has to be a no-op rather than a step backwards: publishing it would leave
+    /// the process serving a version the database no longer holds, with nothing to correct it until the next write.
+    /// </summary>
+    /// <param name="supersededVersion">A version behind the one in force, and the one in force itself.</param>
+    [Theory]
+    [InlineData(3L)]
+    [InlineData(4L)]
+    public void Apply_CandidateNoNewerThanTheVersionInForce_PublishesNothingAndRaisesNoChangeToken(long supersededVersion)
+    {
+        // Arrange
+        var provider = new RootSettingsConfigurationProvider(new RootSettingsDocument("""{ "Kept": "in force" }""", Version: 4));
+        var reloaded = false;
+
+        provider.Load();
+        provider.GetReloadToken().RegisterChangeCallback(_ => reloaded = true, state: null);
+
+        // Act
+        var published = provider.Apply(new RootSettingsDocument("""{ "Kept": "superseded" }""", supersededVersion));
+
+        // Assert
+        Assert.False(published);
+        Assert.False(reloaded);
+        provider.TryGet("Kept", out var kept);
+        Assert.Equal("in force", kept);
+        Assert.Equal(4, provider.Version);
+    }
+
+    /// <summary>A candidate newer than the version in force is the one case that publishes, and it says so.</summary>
+    [Fact]
+    public void Apply_LaterDocument_ReportsThatItPublished()
+    {
+        // Arrange
+        var provider = LoadedProvider("""{ "Kept": "before" }""");
+
+        // Act
+        var published = provider.Apply(new RootSettingsDocument("""{ "Kept": "after" }""", Version: 2));
+
+        // Assert
+        Assert.True(published);
+    }
+
     private static RootSettingsConfigurationProvider LoadedProvider(string json)
     {
         var provider = new RootSettingsConfigurationProvider(new RootSettingsDocument(json, Version: 1));

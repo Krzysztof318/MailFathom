@@ -12,6 +12,7 @@ using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.Spam;
+using MailFathom.Infrastructure.Resilience;
 using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Configuration;
@@ -33,6 +34,9 @@ namespace MailFathom.Host.Configuration;
 /// </remarks>
 internal static class BoundSettings
 {
+    /// <summary>The section the outbound dependency budgets are read from, which owns no options type of its own.</summary>
+    private const string ResilienceSectionName = "Resilience";
+
     /// <summary>Registers the bound settings and the validators that judge them.</summary>
     /// <param name="services">The container the options are registered in.</param>
     /// <param name="configuration">The configuration the sections are bound from.</param>
@@ -215,5 +219,13 @@ internal static class BoundSettings
                 binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             .ValidateDataAnnotations()
             .ValidateOnStart();
+        // The non-HTTP dependency budgets, registered from here rather than from the composition root so that a
+        // configuration write is judged by them too: they are restart-required, so a candidate carrying an attempt count
+        // past its range or a section naming no dependency class would commit and stop the next start. The registration
+        // is the whole of the rule — it binds each class strictly under ValidateOnStart and refuses an unknown section at
+        // registration time — and it freezes the section it reads, which is what keeps the restart-required
+        // classification true whichever configuration it is handed. HttpClient traffic is already wrapped once by the
+        // standard resilience handler in the service defaults, which is why this covers the non-HTTP classes only.
+        services.AddOutboundResiliencePipelines(configuration.GetSection(ResilienceSectionName));
     }
 }

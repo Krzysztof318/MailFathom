@@ -236,6 +236,46 @@ public sealed class RootSettingsWriterTests
         Assert.Equal("3", published);
     }
 
+    /// <summary>
+    /// The window the version guard exists for, which the two cases above never open: the row is read, the candidate is
+    /// composed and judged over what it said, and a competitor commits before the statement is issued. The refusal
+    /// names the version now in force rather than the one after the version read, because the winner may have
+    /// committed more than once while this candidate was being judged — so the number the operator recomposes over is
+    /// read from the row rather than counted from the one this write started at.
+    /// </summary>
+    [Fact]
+    public async Task WriteAsync_ARowMovedBetweenTheReadAndTheCommit_IsRefusedNamingTheVersionNowInForce()
+    {
+        // Arrange
+        using var deployment = Deployment.WithPersisted("{}", version: 4);
+        var competitorHasCommitted = false;
+
+        deployment.Row.WhenRead = () =>
+        {
+            if (competitorHasCommitted)
+            {
+                return;
+            }
+
+            competitorHasCommitted = true;
+            deployment.Row.CommitFromElsewhere("""{ "MailboxSearch": { "SnippetsPerEmail": "9" } }""");
+            deployment.Row.CommitFromElsewhere("""{ "MailboxSearch": { "SnippetsPerEmail": "11" } }""");
+        };
+
+        // Act
+        var result = await deployment.WriteAsync(
+            expectedVersion: 4,
+            ConfigurationEdit.SetTo("MailboxSearch:SnippetsPerEmail", "3"));
+
+        // Assert
+        Assert.False(result.IsCommitted);
+        Assert.Equal(MailFathomErrorCode.ConfigurationVersionSuperseded, result.Refusal);
+        Assert.Equal(6, result.Version);
+        Assert.Equal(6, deployment.Row.Version);
+        Assert.Contains(result.RefusalMessages, message => message.Contains("version 6", StringComparison.Ordinal));
+        Assert.Null(deployment.PublishedValueOf("MailboxSearch:SnippetsPerEmail"));
+    }
+
     /// <summary>A setting MailFathom reads before the layer exists is persisted nowhere, so a write to it is refused.</summary>
     [Theory]
     [InlineData("Persistence:Password:SecretReference")]
@@ -360,21 +400,26 @@ public sealed class RootSettingsWriterTests
     }
 
     /// <summary>
-    /// A refusal is recorded as a count rather than as the sentences it produced. The messages quote what the caller
-    /// wrote, and the caller is the one person who already has it; a log an operator reads is not.
+    /// A refusal is recorded as a count rather than as the sentences it produced. The change is one whose refusal
+    /// provably quotes what the caller wrote — the path, which the refusal has to name for the caller to know which of
+    /// its changes was turned away — so the assertion is about redaction rather than about a message that happened to
+    /// carry nothing of the caller's. The caller already holds what it sent; a log an operator reads does not.
     /// </summary>
     [Fact]
     public async Task WriteAsync_ARefusedChange_RecordsHowManySettingsRatherThanWhatWasWritten()
     {
         // Arrange
         using var deployment = Deployment.WithPersisted("{}", version: 4);
+        const string Path = "Persistence:Password:SecretReference";
 
         // Act
-        await deployment.WriteAsync(ConfigurationEdit.SetTo("MailboxSearch:SnippetsPerEmail", "-1"));
+        var result = await deployment.WriteAsync(ConfigurationEdit.SetTo(Path, "file:/run/secrets/whatever"));
 
         // Assert
+        Assert.False(result.IsCommitted);
+        Assert.Contains(result.RefusalMessages, message => message.Contains(Path, StringComparison.Ordinal));
         Assert.Contains(deployment.WriterRecords, message => message.Contains("was refused", StringComparison.Ordinal));
-        Assert.DoesNotContain(deployment.WriterRecords, message => message.Contains("-1", StringComparison.Ordinal));
+        Assert.DoesNotContain(deployment.WriterRecords, message => message.Contains(Path, StringComparison.Ordinal));
     }
 
     /// <summary>A write states at least one change, and states no more than the boundary accepts.</summary>
@@ -389,6 +434,28 @@ public sealed class RootSettingsWriterTests
             [],
             expectedVersion: 4,
             TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// More changes than the boundary accepts is the other half of that bound, and it is refused before anything is
+    /// read: the ceiling is what keeps one request from composing an unbounded document, so it holds whatever the
+    /// changes themselves would have produced.
+    /// </summary>
+    [Fact]
+    public async Task WriteAsync_MoreChangesThanTheBoundaryAccepts_IsRefusedAsACallersMistake()
+    {
+        // Arrange
+        using var deployment = Deployment.WithPersisted("{}", version: 4);
+        var edits = Enumerable.Range(0, IConfigurationWriter.MaximumEdits + 1)
+            .Select(position => ConfigurationEdit.SetTo($"Deployment:Padding:{position}", "x"))
+            .ToArray();
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => deployment.Writer.WriteAsync(
+            edits,
+            expectedVersion: 4,
+            TestContext.Current.CancellationToken));
+        Assert.Equal(0, deployment.Row.AcceptedCommits);
     }
 
     /// <summary>A version no document ever stood at is a caller's mistake rather than a refused write.</summary>

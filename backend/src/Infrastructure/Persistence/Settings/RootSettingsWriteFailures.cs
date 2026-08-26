@@ -68,6 +68,14 @@ internal static class RootSettingsWriteFailures
         { InnerException: TimeoutException } =>
             "The statement writing the persisted configuration did not finish within the configured command timeout, so whether it applied is not known from here. Read the version now in force to find out, and attempt the write again over the version it was composed on — which the version guard refuses if the first attempt did commit. What to look at is Persistence:CommandTimeoutSeconds and whatever is holding the settings_root row, rather than the network.",
 
+        // The server answered and refused, with a state none of the arms above names. Saying which state it gave is the
+        // whole of what this side knows, and it is what separates a statement to correct from a database to reach: a
+        // value the column cannot hold (a NUL in a configuration value renders as `22P05`), a full disk, a deadlock.
+        // Reported as its own arm rather than absorbed below, because the sentence below sends an operator to the
+        // network and tells them to retry a write that may never succeed.
+        PostgresException { SqlState: { Length: > 0 } sqlState } =>
+            $"The database refused the statement that would have persisted the configuration write, answering SQLSTATE {sqlState}, so nothing was written. The server was reached and answered, so what to correct is the statement's own subject rather than the network; the provider's own text is the inner exception.",
+
         _ => "The database holding the persisted configuration could not be reached, so nothing was written. The deployment goes on serving the configuration it already composed, and the write is safe to attempt again.",
     };
 }

@@ -55,8 +55,9 @@ internal sealed class RootSettingsConfigurationProvider : ConfigurationProvider
     /// <exception cref="MisroutedSettingPersistedException">Thrown when the document carries a setting the storage catalog persists in a store of its own.</exception>
     public override void Load() => this.Parse(this.document);
 
-    /// <summary>Replaces the published snapshot with a document read after startup.</summary>
+    /// <summary>Replaces the published snapshot with a document read after startup, when it is newer than the one in force.</summary>
     /// <param name="candidate">The document to publish, and the version it was read at.</param>
+    /// <returns><see langword="true" /> when the candidate was published, <see langword="false" /> when a version at least as new was already in force.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="candidate" /> is <see langword="null" />.</exception>
     /// <exception cref="FormatException">Thrown when the JSON configuration parser refuses the candidate, in which case the snapshot in force is unchanged.</exception>
     /// <exception cref="JsonException">Thrown when the candidate cannot be read as JSON at all, in which case the snapshot in force is likewise unchanged.</exception>
@@ -70,20 +71,38 @@ internal sealed class RootSettingsConfigurationProvider : ConfigurationProvider
     /// reverting to them would silently change settings the deployment had adopted.
     /// </para>
     /// <para>
-    /// One caller republishes, so this is not written for concurrent publishers: the snapshot and the version it is
-    /// read at are two assignments, and a second publisher running against the first would leave a reader able to see
-    /// one without the other. A reader is otherwise unaffected — the dictionary is replaced by reference rather than
+    /// Candidates arrive in whatever order the writers that produced them finish, which is not the order they
+    /// committed in, so a version at least as new as the one in force is refused rather than published. That is the
+    /// whole of the ordering: it holds across two processes, where no lock either writer could take exists, and it
+    /// makes a superseded republish a no-op rather than a step backwards.
+    /// </para>
+    /// <para>
+    /// It is not written for two publishers running at the same instant: the snapshot and the version it is read at
+    /// are two assignments, and a second publisher running against the first would leave a reader able to see one
+    /// without the other. A reader is otherwise unaffected — the dictionary is replaced by reference rather than
     /// mutated, so no read ever observes a half-applied document.
     /// </para>
     /// </remarks>
-    public void Apply(RootSettingsDocument candidate)
+    public bool Apply(RootSettingsDocument candidate)
     {
         ArgumentNullException.ThrowIfNull(candidate);
+
+        // A version already published, or one behind it, is not a candidate. Two writers interleave whenever two
+        // administrators edit at once — and across two processes, where no lock either of them could take exists: the
+        // one that committed first can be the one that republishes last, and publishing its document over the other's
+        // would leave the process serving a version the database no longer holds, with nothing to correct it until the
+        // next write. The guard is on the version rather than on the caller because that is the fact both writers share.
+        if (candidate.Version <= this.document.Version)
+        {
+            return false;
+        }
 
         this.Parse(candidate);
         this.document = candidate;
 
         this.OnReload();
+
+        return true;
     }
 
     private void Parse(RootSettingsDocument settings)

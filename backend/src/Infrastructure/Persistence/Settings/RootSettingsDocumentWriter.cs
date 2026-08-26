@@ -37,9 +37,11 @@ internal sealed class RootSettingsDocumentWriter(NpgsqlDataSource dataSource, Ti
     /// <summary>Replaces the document only where the row still stands at the version the candidate was composed over.</summary>
     /// <remarks>
     /// The cast is what turns the parameter into the column's own type, so the server parses the document and refuses
-    /// one that is not an object rather than storing text nothing can read back. <c>RETURNING</c> is what distinguishes
-    /// the two outcomes in one round trip: a version when the row was replaced, nothing at all when another writer had
-    /// already moved it.
+    /// text that is not JSON at all rather than storing something nothing can read back. It refuses no further than
+    /// that — <c>jsonb</c> holds an array, a number, and a bare string as happily as an object — which is why the shape
+    /// a configuration layer can be composed from is refused by <see cref="RootSettingsCommitRules" /> before the
+    /// statement is issued. <c>RETURNING</c> is what distinguishes the two outcomes in one round trip: a version when
+    /// the row was replaced, nothing at all when another writer had already moved it.
     /// </remarks>
     private const string CommitDocument =
         """

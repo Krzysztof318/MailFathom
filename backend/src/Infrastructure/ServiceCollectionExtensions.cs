@@ -1145,17 +1145,44 @@ public static class ServiceCollectionExtensions
     /// it off no corpus is assembled, no expression is compiled, and neither descriptor exists.
     /// </para>
     /// <para>
-    /// The catalog is registered beside the scanner rather than always, because startup refuses a switch that is on
-    /// with nothing behind it, and a catalog present without a detector would turn that refusal into a scanner that
-    /// runs and finds nothing. Both are singletons: the corpus is compiled once and the scanner holds it.
+    /// The catalog is not registered here and is not conditional; <see cref="AddSensitiveContentCatalogs" /> says why.
+    /// The scanner is a singleton, because the corpus is compiled once and the scanner holds it.
     /// </para>
     /// </remarks>
     public static IServiceCollection AddSecretContentScanning(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddSingleton<ISensitiveContentCatalog, SecretContentCatalog>();
         services.AddSingleton<ISensitiveContentScanner, SecretContentScanner>();
+
+        return services;
+    }
+
+    /// <summary>Registers what every scanner declares it can find, whichever scanners this deployment switched on.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// A catalog is a declaration rather than a detector: it assembles no corpus, compiles no expression, opens no
+    /// client, and holds nothing an unused registration would cost. What reads one selects by the switches — a plan is
+    /// composed only for a scanner that is on — so registering all of them changes nothing about what a deployment
+    /// scans.
+    /// </para>
+    /// <para>
+    /// Unconditional because of what depends on the answer, which is the rule rather than the scanning: startup refuses
+    /// a scanner switched on with nothing behind it, and a configuration write is judged by that same rule against the
+    /// catalogs this process holds. Registering them with their scanners would make that rule read the switches the
+    /// process started with, so on a deployment that scans nothing every candidate turning a scanner on would be refused
+    /// as having no detector — a sentence false about the candidate, and a setting no write could ever change.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddSensitiveContentCatalogs(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton<ISensitiveContentCatalog, SecretContentCatalog>();
+        services.AddSingleton<ISensitiveContentCatalog, PersonalDataContentCatalog>();
 
         return services;
     }
@@ -1172,16 +1199,15 @@ public static class ServiceCollectionExtensions
     /// configuration this project does not bind.
     /// </para>
     /// <para>
-    /// The probe is registered beside the scanner rather than always, for the reason the catalog is: startup refuses a
-    /// switch that is on with nothing behind it, and either one present without the other would turn that refusal into a
-    /// scanner that runs and finds nothing.
+    /// The probe is registered beside the scanner rather than always, because it answers for a client this deployment
+    /// only opens where the switch is on: a probe without a scanner would report on an analyzer nothing reaches. The
+    /// catalog is neither here nor conditional, for the reason <see cref="AddSensitiveContentCatalogs" /> gives.
     /// </para>
     /// </remarks>
     public static IServiceCollection AddPersonalDataContentScanning(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddSingleton<ISensitiveContentCatalog, PersonalDataContentCatalog>();
         services.AddSingleton<ISensitiveContentScanner, PresidioContentScanner>();
         services.AddSingleton<IPersonalDataAnalyzerProbe, PresidioAnalyzerProbe>();
         AddPersonalDataAnalyzerClient(services);

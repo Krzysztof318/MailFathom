@@ -801,7 +801,7 @@ public sealed class ServiceCollectionExtensionsTests
 
     /// <summary>An opt-in nobody took must cost nothing, so the detector exists only where the switch put it.</summary>
     [Fact]
-    public void AddSecretContentScanning_NotCalled_LeavesNoDetectorAndNoDeclarationBehind()
+    public void AddSecretContentScanning_NotCalled_LeavesNoDetectorBehind()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -811,13 +811,12 @@ public sealed class ServiceCollectionExtensionsTests
         using var provider = services.BuildServiceProvider();
 
         // Assert
-        Assert.Empty(provider.GetServices<ISensitiveContentCatalog>());
         Assert.Empty(provider.GetServices<ISensitiveContentScanner>());
     }
 
-    /// <summary>Registering one without the other would turn the refusal a switch with nothing behind it earns into a scanner that finds nothing.</summary>
+    /// <summary>The detector is what the switch puts there; what it declares it can find is registered whatever the switches say.</summary>
     [Fact]
-    public void AddSecretContentScanning_Called_RegistersTheDetectorAndWhatItDeclares()
+    public void AddSecretContentScanning_Called_RegistersTheDetector()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -838,10 +837,38 @@ public sealed class ServiceCollectionExtensionsTests
         using var provider = services.BuildServiceProvider();
         Assert.Equal(
             SensitiveContentScannerKind.Secrets,
-            Assert.Single(provider.GetServices<ISensitiveContentCatalog>()).Scanner);
-        Assert.Equal(
-            SensitiveContentScannerKind.Secrets,
             Assert.Single(provider.GetServices<ISensitiveContentScanner>()).Scanner);
+    }
+
+    /// <summary>
+    /// Every catalog is registered whichever scanners a deployment switched on, because what reads one is the rule that
+    /// judges a candidate configuration rather than the scanning. Registered with their scanners, that rule would read
+    /// the switches the process started with, and a deployment scanning nothing could never turn a scanner on: the
+    /// candidate would be refused as having no detector behind it.
+    /// </summary>
+    [Fact]
+    public void AddSensitiveContentCatalogs_Called_RegistersWhatEveryScannerDeclaresWhateverIsSwitchedOn()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddSensitiveContentCatalogs();
+
+        // Assert
+        using var provider = services.BuildServiceProvider();
+        Assert.Equal(
+            [SensitiveContentScannerKind.Secrets, SensitiveContentScannerKind.Pii],
+            provider.GetServices<ISensitiveContentCatalog>().Select(catalog => catalog.Scanner));
+        Assert.Empty(provider.GetServices<ISensitiveContentScanner>());
+    }
+
+    [Fact]
+    public void AddSensitiveContentCatalogs_WithoutAServiceCollection_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(
+            () => ServiceCollectionExtensions.AddSensitiveContentCatalogs(null!));
     }
 
     [Fact]
@@ -899,9 +926,6 @@ public sealed class ServiceCollectionExtensionsTests
         Assert.Equal(
             SensitiveContentScannerKind.Pii,
             Assert.Single(provider.GetServices<ISensitiveContentScanner>()).Scanner);
-        Assert.Equal(
-            SensitiveContentScannerKind.Pii,
-            Assert.Single(provider.GetServices<ISensitiveContentCatalog>()).Scanner);
         Assert.NotNull(provider.GetService<IPersonalDataAnalyzerProbe>());
 
         using var client = provider

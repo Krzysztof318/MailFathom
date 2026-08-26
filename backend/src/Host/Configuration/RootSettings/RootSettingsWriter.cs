@@ -61,7 +61,7 @@ internal sealed partial class RootSettingsWriter(
 
     /// <inheritdoc />
     /// <exception cref="RootSettingsUnreadableException">Thrown when the document the write would change could not be read.</exception>
-    /// <exception cref="RootSettingsUnwritableException">Thrown when the database refused the commit, in which case the deployment's configuration is unchanged.</exception>
+    /// <exception cref="RootSettingsUnwritableException">Thrown when the commit did not complete. The deployment's configuration is unchanged in every case but a command timeout, where the server accepted the statement and stopped answering and the version now in force is what says whether it applied.</exception>
     public async Task<ConfigurationWriteResult> WriteAsync(
         IReadOnlyList<ConfigurationEdit> edits,
         long expectedVersion,

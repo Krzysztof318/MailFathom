@@ -112,6 +112,22 @@ public sealed class ConfigurationEditTests
         Assert.Equal(longest, edit.Value);
     }
 
+    /// <summary>
+    /// A NUL composes into valid JSON and can never be stored, so it is the one value refused for what the store would
+    /// do with it rather than for its shape. Left to the commit it would compose, validate, and be refused by the
+    /// server on every attempt, with nothing but a state number to tell the operator which value did it.
+    /// </summary>
+    [Fact]
+    public void SetTo_AValueCarryingANulCharacter_IsRefused()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(
+            () => ConfigurationEdit.SetTo("MailboxSearch:SnippetsPerEmail", "three\0four"));
+
+        // Assert
+        Assert.Contains("NUL", refusal.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>A path past the bound is refused, which is what keeps the document a path produces shallow enough to read back.</summary>
     [Fact]
     public void SetTo_APathPastTheBound_IsRefused()

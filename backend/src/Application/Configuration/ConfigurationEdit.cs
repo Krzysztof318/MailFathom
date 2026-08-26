@@ -66,13 +66,27 @@ public sealed record ConfigurationEdit
     /// <param name="path">The colon-delimited configuration path.</param>
     /// <param name="value">The configuration value, which may be empty because an empty string is a value an operator can mean.</param>
     /// <returns>The change.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="path" /> is not a configuration key.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="path" /> is not a configuration key, or when <paramref name="value" /> carries a NUL character.</exception>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="value" /> is <see langword="null" />, which is <see cref="Removing" /> rather than a value.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="path" /> is longer than <see cref="MaximumPathLength" />, or <paramref name="value" /> longer than <see cref="MaximumValueLength" />.</exception>
+    /// <remarks>
+    /// A NUL is refused here rather than left to the commit because it is the one character a candidate can carry that
+    /// composes into valid JSON and can never be stored: PostgreSQL's <c>jsonb</c> holds text, and text in PostgreSQL
+    /// has no NUL, so the value would compose, validate, and then be refused by the server on every attempt. Answering
+    /// it at the surface that stated the value names the character; answering it at the commit could only name a state
+    /// the server gave.
+    /// </remarks>
     public static ConfigurationEdit SetTo(string path, string value)
     {
         ArgumentNullException.ThrowIfNull(value);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value.Length, MaximumValueLength, nameof(value));
+
+        if (value.Contains('\0', StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "The configuration value carries a NUL character, which no PostgreSQL text value can hold, so the document composed from it could never be persisted.",
+                nameof(value));
+        }
 
         return new ConfigurationEdit(Validated(path), value);
     }

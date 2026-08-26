@@ -19,14 +19,34 @@ public static class RootSettingsCommitRules
     /// <summary>Refuses a candidate no statement should be issued for.</summary>
     /// <param name="json">The candidate document.</param>
     /// <param name="expectedVersion">The version the candidate was composed over.</param>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="json" /> is not a document, or is past what the layer composes settings from.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="json" /> is not JSON at all, is JSON of a shape no configuration layer composes from, or is past what the layer composes settings from.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="expectedVersion" /> is negative.</exception>
+    /// <remarks>
+    /// Every refusal here is an <see cref="ArgumentException" /> because every one of them is a candidate this build
+    /// composed wrongly rather than anything the database has an opinion about. The <c>jsonb</c> cast refuses text that
+    /// is not JSON and nothing beyond it, so a reader's <see cref="JsonException" /> is translated rather than allowed
+    /// to escape as itself: the caller either supplied a document or did not, and one exception type says so.
+    /// </remarks>
     public static void RefuseWhatCannotBeCommitted(string json, long expectedVersion)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(json);
         ArgumentOutOfRangeException.ThrowIfNegative(expectedVersion);
 
-        var persistedOctets = PersistedOctetsOf(json);
+        int persistedOctets;
+
+        try
+        {
+            RefuseWhatIsNotAnObject(json);
+
+            persistedOctets = PersistedOctetsOf(json);
+        }
+        catch (JsonException exception)
+        {
+            throw new ArgumentException(
+                "The candidate configuration document is not JSON, so no statement is issued for it. The column would take it no further: its jsonb cast refuses exactly this, and the refusal belongs on the side that composed the document.",
+                nameof(json),
+                exception);
+        }
 
         if (persistedOctets > RootSettingsDocument.MaximumOctets)
         {
@@ -40,6 +60,7 @@ public static class RootSettingsCommitRules
     /// <param name="json">The candidate document.</param>
     /// <returns><see langword="true" /> when it fits; otherwise <see langword="false" />.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="json" /> is <see langword="null" />.</exception>
+    /// <exception cref="JsonException">Thrown when the candidate is not JSON at all.</exception>
     public static bool FitsWhatIsComposedFrom(string json) => PersistedOctetsOf(json) <= RootSettingsDocument.MaximumOctets;
 
     /// <summary>Measures a candidate as the database will store it rather than as it was composed.</summary>
@@ -102,5 +123,26 @@ public static class RootSettingsCommitRules
         }
 
         return utf8.Length + separators;
+    }
+
+    /// <summary>Refuses a candidate whose root is not an object, which no configuration layer can be composed from.</summary>
+    /// <remarks>
+    /// A configuration source publishes colon-delimited keys, and only an object has any. An array, a number, or a bare
+    /// string is a valid <c>jsonb</c> value the column stores without complaint and the next start then refuses to
+    /// read — a row that commits and stops the deployment, which is the shape of defect this whole type exists to catch
+    /// before a statement is issued rather than after one has been.
+    /// </remarks>
+    private static void RefuseWhatIsNotAnObject(string json)
+    {
+        var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(json));
+
+        if (reader.Read() && reader.TokenType == JsonTokenType.StartObject)
+        {
+            return;
+        }
+
+        throw new ArgumentException(
+            "The candidate configuration document is JSON whose root is not an object, so it carries no configuration keys at all. The column would store it, and the next start would refuse to read it: only an object composes into a configuration layer.",
+            nameof(json));
     }
 }

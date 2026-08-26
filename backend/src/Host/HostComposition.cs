@@ -75,7 +75,6 @@ using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.ObjectStorage;
 using MailFathom.Infrastructure.Persistence.Connections;
-using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Rules;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Mcp;
@@ -195,9 +194,6 @@ internal static class HostComposition
         // where a reference belongs fails startup instead of authenticating.
         builder.Services.AddSecretResolution(
             builder.Configuration.GetValue("Secrets:Interpretation", SecretValueInterpretation.ReferenceOnly));
-        // The non-HTTP dependency classes only. HttpClient traffic, which is how the AI provider clients reach a hosted
-        // model, is already wrapped once by AddStandardResilienceHandler in the service defaults above.
-        builder.Services.AddOutboundResiliencePipelines(builder.Configuration.GetSection("Resilience"));
     }
 
     /// <summary>Registers the scanners this deployment switched on, and reports what it declared.</summary>
@@ -211,6 +207,12 @@ internal static class HostComposition
         var declaredSensitiveContent = builder.Configuration
             .GetSection(SensitiveContentOptions.SectionName)
             .Get<SensitiveContentOptions>() ?? new SensitiveContentOptions();
+
+        // Registered whichever way the switches read, unlike the detectors below them. What a scanner declares it can
+        // find is what the startup rule and a configuration write are both judged against, so binding that answer to the
+        // switches this process started with would make a candidate turning a scanner on refusable on a deployment that
+        // had it off — which is every deployment that would ever want to turn one on.
+        builder.Services.AddSensitiveContentCatalogs();
 
         if (declaredSensitiveContent.Secrets.Enabled)
         {
@@ -698,40 +700,14 @@ internal static class HostComposition
         var declaredAnswering = builder.Configuration.GetSection(MailAnsweringOptions.SectionName).Get<MailAnsweringOptions>()
             ?? new MailAnsweringOptions();
 
-        // Validated here rather than through ValidateOnStart, for the reason the endpoint sections below are: the mapping
-        // on the next line happens while the builder is being composed, so the container that would have run the pipeline
-        // does not exist yet. Without this a typo would first be noticed by an ArgumentOutOfRangeException out of a Create
-        // method and reach an operator as a framework stack trace instead of the aggregated report every other section
-        // produces.
-        var answeringConfigurationErrors = declaredAnswering.FindConfigurationErrors();
-
-        if (answeringConfigurationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                MailAnsweringOptions.SectionName,
-                typeof(MailAnsweringOptions),
-                answeringConfigurationErrors);
-        }
+        // Validated in ComposedSettings rather than through ValidateOnStart and rather than here, for two reasons that
+        // meet: the mapping below happens while the builder is being composed, so the container that would have run the
+        // pipeline does not exist yet, and a rule this file kept to itself is one a configuration write would not be
+        // judged by. Chat is the section that makes that matter most — it is bound without the framework's validator at
+        // all, so these are the only rules it has.
+        ComposedSettings.RefuseFirstOf(ComposedSettings.FindProviderRefusals(builder.Configuration));
 
         var answeringBudget = MailAnsweringBudgetMapper.Map(declaredAnswering);
-
-        // Every rule the chat declaration answers to, in one reading: the section's own bounds, the alias that names one AI
-        // endpoint across the whole deployment because a credential, a resilience circuit, and a log line are all keyed by
-        // it, and the filter's candidate count against what a lookup actually hands over. Judged here rather than through
-        // ValidateOnStart so the same rules judge a reloaded candidate, and reported together so an operator who wrote two
-        // mistakes reads both.
-        var chatConfigurationErrors = ChatDeclarationRules.FindDeclarationErrors(
-            declaredChat,
-            declaredEmbeddings,
-            declaredAnswering);
-
-        if (chatConfigurationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                ChatModelOptions.SectionName,
-                typeof(ChatModelOptions),
-                chatConfigurationErrors);
-        }
 
         // Registered whether or not a chat endpoint was declared, because the credential source below reads it on behalf of
         // an embedding-only deployment too, and because an instance that declared nothing is the one whose operator has to
