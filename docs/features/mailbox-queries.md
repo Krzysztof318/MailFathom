@@ -1,6 +1,6 @@
 # Mailbox queries
 
-<!-- describes: backend/src/Application/Accounts/**, backend/src/Application/Emails/ListEmails/**, backend/src/Application/Emails/Mailboxes/**, backend/src/Application/Emails/Summaries/**, backend/src/Application/Folders/**, backend/src/Application/Synchronization/Checkpoints/**, backend/src/Infrastructure/Persistence/Emails/**, backend/src/Infrastructure/Persistence/Synchronization/** -->
+<!-- describes: backend/src/Application/Accounts/**, backend/src/Application/Emails/BrowseTimeline/**, backend/src/Application/Emails/ListEmails/**, backend/src/Application/Emails/Mailboxes/**, backend/src/Application/Emails/Summaries/**, backend/src/Application/Folders/**, backend/src/Application/Synchronization/Checkpoints/**, backend/src/Infrastructure/Persistence/Emails/**, backend/src/Infrastructure/Persistence/Synchronization/** -->
 
 MailFathom answers a mailbox listing from its local copy. `ListEmails` is the first read use case: it takes structured
 filters, returns a bounded page of email summaries, issues the cursor that continues the walk, and reports how current
@@ -9,6 +9,12 @@ never touches the remote `\Seen` flag, because it speaks no mail protocol at all
 
 The protocol adapter is not part of this: `MailboxTimelineReader` is an application use case, and the `list_emails` MCP
 tool that publishes it is described by [MCP tools](mcp-tools.md).
+
+`MailTimelineBrowser` is the same walk read for a screen rather than for a tool, and everything on this page about the
+scope, the filters, the order, the bound and the cursor holds for it unchanged. What it adds is stated in two places
+below: [a preview on every row](#the-preview-a-list-row-shows), and [a page that can be asked for in either
+direction](#reading-a-page-backwards). [`GET /api/client/emails`](../operations/client-endpoint.md#the-mail-list-route)
+is what publishes it.
 
 [Email search](email-search.md) is the second read use case and applies the same structured filters
 this page documents, so nothing about what a filter means is restated there.
@@ -231,6 +237,34 @@ answer refuses the listing. Both switches are off by default, and nothing on thi
 [Sensitive-content scanning § the guarded egress
 points](sensitive-content-scanning.md#the-guarded-egress-points) holds the contract.
 
+### The preview a list row shows
+
+A summary carries no body, and a screen drawing a message list needs two lines of one. `BrowsedEmail` is the summary
+with that beside it: `EmailPreview.MaximumCharacters` characters of the message's own text, whitespace collapsed, or
+nothing where nothing has extracted the message yet. The two are separate values rather than one projection because
+they come from separate tables and a stored message may have the first without the second.
+
+**The text is cut by PostgreSQL and read by identity.** `IStoredEmailPreviewReader` asks for that many characters of
+the derived text of the rows one page actually returned, so a body is never in a result set that crosses the boundary
+and never in this process — the same arrangement [search](email-search.md) uses for its snippets. It is a second query
+beside the timeline rather than a column on it: the text lives in the search-document table, which is deliberately
+absent from every ordinary mailbox query, and joining it would put a body's worth of text into the timeline read for
+every filter it considered rather than for the rows it returned.
+
+It reads the trimmed text rather than the untrimmed reading beside it, because quoted history and a signature block are
+what the opening two hundred characters of a reply would otherwise be.
+
+The bound is then applied again where the text is reflowed, and it is applied on a character boundary rather than at an
+index. PostgreSQL counts its own cut in codepoints, so a message carrying an emoji arrives with more UTF-16 characters
+than were asked for; cutting that by index would end inside one character and publish half of it, which a JSON writer
+refuses to serialize. Collapsing only ever shortens what arrived, so a preview shorter than the bound is a message that
+was wrapped rather than one that was cut.
+
+**The bound is fixed rather than configured**, and it is a data-minimization control before it is a display decision: a
+caller who could raise it could lift what limits how much mail one page draws out. Being the message's own text, a
+preview is scanned wherever a sensitive-content scanner is switched on, at the `client_mail_listing` egress point
+beside the subject and the sender's display name.
+
 ### The sender verdict a summary carries
 
 The sender's address is what the message wrote about itself, so the summary carries beside it what somebody else
@@ -355,6 +389,32 @@ The absence of a cursor in a result is the end of the result set rather than a h
 storage for one row beyond the page and finding none. A present cursor never promises that the next page is non-empty —
 mail can be expunged between two requests — but continuing from it can never skip or repeat a row.
 
+### Reading a page backwards
+
+A tool listing walks one way: it asks for the next page until no cursor comes back. A screen scrolls both ways, so
+`MailTimelineBrowser` takes a second value beside the cursor — `TimelinePageDirection` — saying whether the page asked
+for lies after that cursor or before it, and returns a cursor at each end of what it read.
+
+**The order a list is sorted in never changes with it.** That order is part of what a cursor was issued for, so folding
+the two questions into one value would make scrolling back a re-sort — a list that turned over under somebody's finger.
+A backward page is read away from the cursor with the *walk* reversed and handed back in the sorted order, and its
+cursors carry the sorted list's fingerprint. That is what lets a client page in both directions from cursors it
+collected in either, and it needs nothing of the storage port: the reversed walk is the same read model asked for the
+opposite direction.
+
+Each end is established the same way the single-ended walk establishes its one end — by asking storage for one row
+beyond the page and finding none — with one case that needs no asking. A page reached from a cursor has whatever that
+cursor was taken from behind it, so a forward page always offers a previous cursor unless it was read from the leading
+end; a backward page always offers a next one, because the row its cursor named is still there.
+
+**A backward page continues from a cursor and from nothing else.** Asking for one without a cursor is refused with
+`51002 MailboxQueryFilterInvalid`, naming the page direction: there is no page before the leading end, and answering
+with the leading page would read as having scrolled to the top of the list.
+
+A page that came back empty carries no cursor at either end, because a cursor names a row of the page and there is
+none. A client that reached the leading end has nothing more to ask for, and one whose backward page came back empty
+keeps the cursor it already held.
+
 ## Freshness reporting
 
 Every result carries one `MailboxFolderFreshness` entry per folder in the request's scope, each reporting when
@@ -423,13 +483,20 @@ from configuration for exactly that reason. The tree is what
 ## Where the pieces live
 
 - `MailFathom.Application.Emails.ListEmails` — the use case, its request, and its result.
+- `MailFathom.Application.Emails.BrowseTimeline` — `MailTimelineBrowser`, the same walk read for a screen, with its
+  request, its page, the row that pairs a summary with a preview, and the page direction that says which way a page
+  continues from its cursor. It is a use case of its own rather than a wider listing because both of those are things a
+  tool has no use for, and it shares the scope, the filters, the order, the bound and the cursor codec with the listing
+  rather than restating any of them.
 - `MailFathom.Application.Emails.Mailboxes` — `MailboxEmailSelection` and the timeline filter that wraps it, the cursor,
   the page size, and the query failures shared with the other read models. `MailboxScopeResolver` is here too: it
   resolves the accounts a read runs against and refuses one this deployment does not serve, and it is a collaborator
   rather than a step inside the use case because the refusal is an access decision every read model has to make
   identically.
 - `MailFathom.Application.Emails.Summaries` — the summary a read model publishes and the two reader ports that produce
-  it.
+  it, and beside them `EmailPreview` and `IStoredEmailPreviewReader`: the bound a list row's preview is cut to and the
+  port that reads one. The bound lives with the summary rather than with the screen that shows it, because it is what
+  decides how much of a message a read publishes.
 - `MailFathom.Application.Accounts` — the two account catalogs, `MailAccountDirectoryReader`, the one use case that
   publishes an account set rather than bounding a read with it, and `MailAccountFreshnessReader`, which reduces that
   answer to one reading per folder and one per account above them. The second is composed over the first rather than
@@ -452,6 +519,8 @@ from configuration for exactly that reason. The tree is what
   filter predicate, shared with search, and `StoredEmailSummaryRow` carries the column list and the mapping, shared with
   search and with the single-email lookup. Both are written once because each is a control that decides what a mailbox
   read can return at all: a second copy would have to be found and read before anyone could say what that is.
+  `StoredEmailPreviewReader` is beside them, reading the opening of the derived text of one page's rows by identity and
+  asking PostgreSQL to cut it.
 - `MailFathom.Infrastructure.Persistence.Synchronization` — `SynchronizationFreshnessReader`, which answers the freshness
   the timeline attaches from the same database and under the same no-tracking rule, and `StoredMailFolderReader`, which
   answers the folder tree's hierarchy and counts. `MailFoldersInScope` is the narrowing both of them apply, written once

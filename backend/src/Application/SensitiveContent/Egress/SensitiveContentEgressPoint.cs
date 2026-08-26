@@ -63,4 +63,13 @@ public enum SensitiveContentEgressPoint
     /// </para>
     /// </remarks>
     OutgoingMail = 4,
+
+    /// <summary>Text the client API answers a message list with: the subjects, the sender display names, and the preview of the message's own text on every row.</summary>
+    /// <remarks>
+    /// Apart from the MCP listing rather than folded into it, because the two publish different amounts of a message
+    /// and to different readers. A row carries the opening of the body and a tool listing carries none, so what a
+    /// scanner finds here is found in text no other listing point ever sees — and sharing a tag would leave an operator
+    /// unable to tell which surface a finding crossed, which is the one thing every tag on this register is for.
+    /// </remarks>
+    ClientMailListing = 5,
 }

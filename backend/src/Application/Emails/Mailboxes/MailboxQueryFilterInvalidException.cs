@@ -125,6 +125,21 @@ public sealed class MailboxQueryFilterInvalidException : MailFathomException
             filterName),
         filterName);
 
+    /// <summary>Refuses a value whose meaning is a boundary, where the request presented none to measure it from.</summary>
+    /// <param name="filterName">How this assembly names the value, for example <c>page direction</c>.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// Reading a page backwards is the case this exists for. There is no page before the leading end of a list, so a
+    /// request asking for one without a cursor has asked for something that does not exist — and answering it with the
+    /// leading page anyway is the silent substitution a caller would read as having scrolled back.
+    /// </remarks>
+    public static MailboxQueryFilterInvalidException NeedsACursor(string filterName) => new(
+        string.Format(
+            CultureInfo.InvariantCulture,
+            "The mailbox query {0} is measured from a cursor, and the request carries none.",
+            filterName),
+        filterName);
+
     /// <summary>Refuses a filter that names more distinct values than the query accepts.</summary>
     /// <param name="count">How many distinct values the filter names.</param>
     /// <param name="limit">The greatest number of values the filter accepts.</param>

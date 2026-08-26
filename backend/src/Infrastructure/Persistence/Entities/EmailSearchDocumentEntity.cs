@@ -11,9 +11,11 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 /// <summary>The derived text one stored email contributes to lexical search, and the vector built from it.</summary>
 /// <remarks>
 /// <para>
-/// The document is a table of its own for the reason raw MIME is: it is large, it is read by search alone, and every
-/// ordinary mailbox query would otherwise carry a body's worth of text and its search vector through the change tracker
-/// on its way to a timeline that shows neither.
+/// The document is a table of its own for the reason raw MIME is: it is large, no ordinary mailbox query reads it, and
+/// every one of them would otherwise carry a body's worth of text and its search vector through the change tracker on
+/// its way to a timeline that shows neither. The two reads that do reach it — lexical search, and the preview a client
+/// list row shows — each ask PostgreSQL to cut the text and never select the column, so a body crosses no boundary
+/// through either.
 /// </para>
 /// <para>
 /// Its columns are derived from the message and inherit that message's classification, retention, export, and erasure
