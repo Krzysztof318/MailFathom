@@ -78,6 +78,52 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode MisroutedSettingPersisted { get; } = new(12005);
 
+    /// <summary>Gets subcategory 2, configuration sources: a configuration write named a path MailFathom persists nowhere.</summary>
+    /// <remarks>
+    /// The refusal is the write-time half of <see cref="BootstrapOnlySettingPersisted" /> and of a store this build has
+    /// no writer for, and it is one code because the operator's next move is the same for both: the setting is not
+    /// persisted, so it is configured wherever it is actually read from. Refusing at the write rather than at the next
+    /// start is what keeps a validated, accepted change from being the thing that stops the deployment.
+    /// </remarks>
+    public static MailFathomErrorCode ConfigurationPathNotWritable { get; } = new(12006);
+
+    /// <summary>Gets subcategory 2, configuration sources: the configuration a write would produce did not bind or validate.</summary>
+    /// <remarks>
+    /// The candidate is judged as a whole rather than key by key, because a setting means what it means beside the
+    /// sources above and below it: a value that binds alone can still break a cross-field rule, and a source with
+    /// higher precedence may be what a bound value actually comes from. An unknown property, a segment that is not the
+    /// array position it was written as, and a refused validator all arrive here.
+    /// </remarks>
+    public static MailFathomErrorCode ConfigurationCandidateInvalid { get; } = new(12007);
+
+    /// <summary>Gets subcategory 2, configuration sources: the persisted document moved on before a write against it committed.</summary>
+    /// <remarks>
+    /// Two administrators editing at once is the case it exists for. The second write is refused rather than applied,
+    /// because applying it would compose an edit authored against one document over a different one and neither writer
+    /// would be told; re-reading the current version and deciding again is the answer, which is why the refusal names
+    /// the version now in force.
+    /// </remarks>
+    public static MailFathomErrorCode ConfigurationVersionSuperseded { get; } = new(12008);
+
+    /// <summary>Gets subcategory 2, configuration sources: a configuration write carried secret material where a reference belongs.</summary>
+    /// <remarks>
+    /// A secret-bearing setting holds a <c>&lt;scheme&gt;:&lt;target&gt;</c> reference, and the material behind it is
+    /// stored where material is stored. A write carrying the material itself would put it in an unsealed column that
+    /// every later read of the layer composes from, so it is refused with a message naming the setting and repeating
+    /// neither the value nor its length.
+    /// </remarks>
+    public static MailFathomErrorCode ConfigurationSecretMaterialRefused { get; } = new(12009);
+
+    /// <summary>Gets subcategory 2, configuration sources: the database refused the statement that would have persisted a validated configuration write.</summary>
+    /// <remarks>
+    /// The counterpart of <see cref="RootSettingsUnreadable" /> on the other direction of travel, and separate from it
+    /// because what an operator does about it is different: a refused read stops a start, while this leaves a running
+    /// deployment serving the configuration it already had. It is also separate from
+    /// <see cref="ConfigurationVersionSuperseded" />, which is another writer winning rather than the database
+    /// refusing — a missing privilege on the table, a connection that dropped, a statement that outran its bound.
+    /// </remarks>
+    public static MailFathomErrorCode RootSettingsUnwritable { get; } = new(12010);
+
     /// <summary>Gets subcategory 3, mailbox access tokens: an account's authorization server did not issue an access token its OAuth mechanisms require.</summary>
     public static MailFathomErrorCode MailAccessTokenUnavailable { get; } = new(13001);
 
@@ -865,6 +911,11 @@ public readonly record struct MailFathomErrorCode
         RootSettingsUnreadable,
         BootstrapOnlySettingPersisted,
         MisroutedSettingPersisted,
+        ConfigurationPathNotWritable,
+        ConfigurationCandidateInvalid,
+        ConfigurationVersionSuperseded,
+        ConfigurationSecretMaterialRefused,
+        RootSettingsUnwritable,
         MailAccessTokenUnavailable,
         MailboxAuthorizationFailed,
         PrincipalNotAuthorized,

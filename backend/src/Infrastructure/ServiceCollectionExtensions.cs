@@ -341,6 +341,9 @@ public static class ServiceCollectionExtensions
         // bootstrap read that composed the configuration happened before this container existed and built its own
         // data source for it; this registration is the same statement over the pool everything else uses.
         services.AddSingleton<IRootSettingsDocumentReader, RootSettingsDocumentReader>();
+        // The other direction of travel over the same row, registered beside the read because it is the same one
+        // statement over the same pool. Nothing resolves it unless a configuration write is composed above it.
+        services.AddSingleton<IRootSettingsDocumentWriter, RootSettingsDocumentWriter>();
         // The counter every session reports its ending to is a singleton, because the instrument it holds belongs to the
         // process rather than to a scope: one per request would create the same instrument again on every call.
         services.AddSingleton<PersistenceCommitTelemetry>();

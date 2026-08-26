@@ -37,14 +37,8 @@ namespace MailFathom.Infrastructure.Persistence.Settings;
 internal sealed class RootSettingsDocumentReader(NpgsqlDataSource dataSource) : IRootSettingsDocumentReader
 {
     /// <summary>The largest persisted configuration document this build will compose settings from.</summary>
-    /// <remarks>
-    /// <c>jsonb</c> holds up to a gigabyte, and this document is expanded three times over on its way to a snapshot —
-    /// the string the driver materializes, the UTF-8 bytes the parser is handed, and the flattened dictionary — while
-    /// the host composes its configuration with no endpoint open. A ceiling that a configuration document could
-    /// plausibly reach would be the wrong ceiling; this one is far past any settings a deployment writes and far below
-    /// anything that costs the composition a thought, so a row past it is a row something went wrong with.
-    /// </remarks>
-    private const int MaximumDocumentOctets = 1024 * 1024;
+    /// <remarks>Stated on <see cref="RootSettingsDocument" /> so the write that produces a document is bounded by the same number the read composes from.</remarks>
+    private const int MaximumDocumentOctets = RootSettingsDocument.MaximumOctets;
 
     /// <summary>Reads the singleton row, and the document with it only when the document is small enough to compose.</summary>
     /// <remarks>
