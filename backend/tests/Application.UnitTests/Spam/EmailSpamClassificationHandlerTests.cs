@@ -11,6 +11,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Spam;
+using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -19,14 +20,15 @@ namespace MailFathom.Application.UnitTests.Spam;
 /// <summary>Covers what one leased classification does, and what makes running it twice the same as running it once.</summary>
 public sealed class EmailSpamClassificationHandlerTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("acct-1");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-1"));
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
     private static readonly DateTimeOffset EvaluatedAt = new(2026, 8, 13, 9, 0, 0, TimeSpan.Zero);
 
     private static readonly EmailOccurrenceId Occurrence = EmailOccurrenceId.Create(
-        Account,
+        Account.Id,
         new MailFolderResolutionId(Inbox, MailFolderResolutionGeneration.First),
         ImapUidValidity.Create(9),
         ImapUid.Create(4401));
@@ -49,7 +51,7 @@ public sealed class EmailSpamClassificationHandlerTests
 
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            ClassifyEmailSpamJobPayload.For(Occurrence),
+            ClassifyEmailSpamJobPayload.For(SyntheticMailOwner.Deployment, Occurrence),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -68,7 +70,7 @@ public sealed class EmailSpamClassificationHandlerTests
 
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            ClassifyEmailSpamJobPayload.For(Occurrence),
+            ClassifyEmailSpamJobPayload.For(SyntheticMailOwner.Deployment, Occurrence),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -82,7 +84,7 @@ public sealed class EmailSpamClassificationHandlerTests
     {
         // Act
         await this.CreateHandler(MarksJunkRead).RunAsync(
-            ClassifyEmailSpamJobPayload.For(Occurrence),
+            ClassifyEmailSpamJobPayload.For(SyntheticMailOwner.Deployment, Occurrence),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -98,7 +100,7 @@ public sealed class EmailSpamClassificationHandlerTests
 
         // Act
         await this.CreateHandler(MarksJunkRead, SpamClassificationSettings.Disabled).RunAsync(
-            ClassifyEmailSpamJobPayload.For(Occurrence),
+            ClassifyEmailSpamJobPayload.For(SyntheticMailOwner.Deployment, Occurrence),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -139,7 +141,7 @@ public sealed class EmailSpamClassificationHandlerTests
     {
         var emailId = this.harness.Emails.Add(new ClassifiableEmail(
             StoredEmailId.Create(Guid.Parse("0199a0c0-0000-7000-8000-000000000001")),
-            Account,
+            Account.Id,
             Inbox));
 
         this.harness.Emails.AddOccurrence(Occurrence, emailId);
@@ -163,7 +165,7 @@ public sealed class EmailSpamClassificationHandlerTests
             this.harness.CreateClassifier(settingsReader, commitPolicy),
             this.harness.CreateActionRecorder(
                 actions ?? SpamActionSettings.None,
-                SpamClassificationHarness.OccurrenceReader(Account, Inbox),
+                SpamClassificationHarness.OccurrenceReader(Account.Id, Inbox),
                 sessionFactory,
                 commitPolicy));
     }

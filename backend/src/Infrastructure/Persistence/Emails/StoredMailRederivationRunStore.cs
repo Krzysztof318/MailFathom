@@ -5,6 +5,7 @@
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -29,13 +30,16 @@ internal sealed class StoredMailRederivationRunStore(MailFathomDbContext dbConte
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        var account = scope.Account.Value;
+        var owner = scope.Account.Owner.Value;
+        var account = scope.Account.Id.Value;
         var folder = KeyedFolderOf(scope);
 
         var recorded = await dbContext.MailRederivationRuns
             .AsNoTracking()
             .SingleOrDefaultAsync(
-                run => run.MailboxAccountId == account && run.FolderAlias == folder,
+                run => run.OwnerId == owner
+                    && run.MailboxAccountId == account
+                    && run.FolderAlias == folder,
                 cancellationToken);
 
         return recorded is null ? null : Read(recorded);
@@ -51,7 +55,7 @@ internal sealed class StoredMailRederivationRunStore(MailFathomDbContext dbConte
         ArgumentNullException.ThrowIfNull(run);
 
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-        var account = run.Scope.Account.Value;
+        var account = run.Scope.Account.Id.Value;
         var folder = KeyedFolderOf(run.Scope);
 
         // FindAsync resolves a row this session already staged from the change tracker, so a session that writes the
@@ -63,6 +67,9 @@ internal sealed class StoredMailRederivationRunStore(MailFathomDbContext dbConte
             recorded = new MailRederivationRunEntity
             {
                 MailboxAccountId = account,
+
+                // Written from the scope the request resolved, which named the owner beside the identifier.
+                OwnerId = run.Scope.Account.Owner.Value,
                 FolderAlias = folder,
             };
 
@@ -80,7 +87,9 @@ internal sealed class StoredMailRederivationRunStore(MailFathomDbContext dbConte
     {
         RunId = StoredMailRederivationRunId.Create(recorded.RunId),
         Scope = new StoredMailScope(
-            MailAccountId.Create(recorded.MailboxAccountId),
+            MailAccountIdentity.Create(
+                MailOwnerId.Create(recorded.OwnerId),
+                MailAccountId.Create(recorded.MailboxAccountId)),
             recorded.FolderAlias is { Length: > 0 } alias ? MailFolderAlias.Create(alias) : null),
         RequestedAt = recorded.RequestedAt,
         SegmentCount = recorded.SegmentCount,

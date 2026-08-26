@@ -8,6 +8,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Synchronization;
+using MailFathom.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -53,6 +54,10 @@ public sealed class StoredMailFolderReaderCommandTests
     }
 
     /// <summary>The scope is what keeps a caller out of another owner's folders, so it has to be in the command rather than applied afterwards.</summary>
+    /// <remarks>
+    /// The owner is asserted beside the account because the account identifier alone stops naming one account once two owners may
+    /// each declare it, and a narrowing that lost the owner would then answer one owner's folder tree with another's bindings in it.
+    /// </remarks>
     [Fact]
     public void NewestBindingsIn_AScopeNamingOneAccount_NarrowsToItInTheCommand()
     {
@@ -61,6 +66,7 @@ public sealed class StoredMailFolderReaderCommandTests
 
         // Assert
         Assert.Contains(nameof(MailFolderEntity.MailboxAccountId), NarrowingIn(command), StringComparison.Ordinal);
+        Assert.Contains(nameof(MailFolderEntity.OwnerId), NarrowingIn(command), StringComparison.Ordinal);
     }
 
     /// <summary>The counts are one grouped aggregate over the mail, which is the whole reason this is a query and not a walk.</summary>
@@ -124,7 +130,7 @@ public sealed class StoredMailFolderReaderCommandTests
     {
         var inbox = new MailFolderIdentity(Work, MailFolderAlias.Create("inbox"));
 
-        return MailboxScope.Create([Work], [inbox]);
+        return MailboxScope.Create(SyntheticMailOwner.Deployment, [Work], [inbox]);
     }
 
     /// <summary>Returns the select list, which is where an aggregate sits and where a narrowing does not.</summary>

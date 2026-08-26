@@ -35,7 +35,8 @@ public sealed class MailOutboxTests
     /// <summary>The literal the screened deployment's detector reports, which stands in for a credential in a message.</summary>
     private const string ScreenedMarker = "AKIAEXAMPLEKEY";
 
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset Authored = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 
@@ -623,7 +624,7 @@ public sealed class MailOutboxTests
                 && request.Key.Value == $"held-send:{record.Id}"
                 && request.JobType == JobType.DispatchHeldSend
                 && request.AvailableAt == DueAt
-                && request.AccountId == Account),
+                && request.Account == Account),
             Arg.Any<CancellationToken>());
     }
 

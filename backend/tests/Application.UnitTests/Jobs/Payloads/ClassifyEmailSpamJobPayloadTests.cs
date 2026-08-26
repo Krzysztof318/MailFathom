@@ -7,6 +7,7 @@ using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Jobs.Payloads;
@@ -26,7 +27,7 @@ public sealed class ClassifyEmailSpamJobPayloadTests
     public void ToOccurrenceId_AfterDescribingAnOccurrence_RebuildsTheSameIdentity()
     {
         // Act
-        var payload = ClassifyEmailSpamJobPayload.For(Occurrence);
+        var payload = ClassifyEmailSpamJobPayload.For(SyntheticMailOwner.Deployment, Occurrence);
 
         // Assert
         Assert.Equal(Occurrence, payload.ToOccurrenceId());
@@ -40,7 +41,7 @@ public sealed class ClassifyEmailSpamJobPayloadTests
     public void JobType_OfAnOccurrencePayload_NamesTheTypeItIsTheContractOf()
     {
         // Act
-        var payload = ClassifyEmailSpamJobPayload.For(Occurrence);
+        var payload = ClassifyEmailSpamJobPayload.For(SyntheticMailOwner.Deployment, Occurrence);
 
         // Assert
         Assert.Equal(JobType.ClassifyEmailSpam, payload.JobType);
@@ -56,6 +57,7 @@ public sealed class ClassifyEmailSpamJobPayloadTests
         // Arrange
         string[] expected =
         [
+            nameof(ClassifyEmailSpamJobPayload.OwnerId),
             nameof(ClassifyEmailSpamJobPayload.AccountId),
             nameof(ClassifyEmailSpamJobPayload.FolderAlias),
             nameof(ClassifyEmailSpamJobPayload.FolderResolutionGeneration),
@@ -79,7 +81,7 @@ public sealed class ClassifyEmailSpamJobPayloadTests
     public void For_NoOccurrence_IsRefused()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => ClassifyEmailSpamJobPayload.For(null!));
+        Assert.Throws<ArgumentNullException>(() => ClassifyEmailSpamJobPayload.For(SyntheticMailOwner.Deployment, null!));
     }
 
     /// <summary>
@@ -90,7 +92,7 @@ public sealed class ClassifyEmailSpamJobPayloadTests
     public void ToOccurrenceId_AStoredComponentThatNoLongerValidates_IsRefused()
     {
         // Arrange
-        var payload = ClassifyEmailSpamJobPayload.For(Occurrence) with { Uid = 0 };
+        var payload = ClassifyEmailSpamJobPayload.For(SyntheticMailOwner.Deployment, Occurrence) with { Uid = 0 };
 
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(payload.ToOccurrenceId);

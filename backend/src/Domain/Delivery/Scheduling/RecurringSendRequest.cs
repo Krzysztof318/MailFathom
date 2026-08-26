@@ -23,19 +23,24 @@ namespace MailFathom.Domain.Delivery.Scheduling;
 public sealed record RecurringSendRequest
 {
     private RecurringSendRequest(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         OutgoingEmailRequester requester,
         IReadOnlyList<OutgoingRecipient> recipients,
         string schedule)
     {
-        this.AccountId = accountId;
+        this.Account = account;
         this.Requester = requester;
         this.Recipients = recipients;
         this.Schedule = schedule;
     }
 
-    /// <summary>Gets the account every occurrence is submitted through and sent as.</summary>
-    public MailAccountId AccountId { get; }
+    /// <summary>Gets the account every occurrence is submitted through and sent as, named by its owner and its identifier.</summary>
+    /// <remarks>
+    /// The pair, for the reason <see cref="OutgoingEmailRequest.Account" /> is one: the declaration becomes a row that
+    /// records whose repetition it is, and the owner comes with the account the catalog resolved rather than from a
+    /// second read of the account table.
+    /// </remarks>
+    public MailAccountIdentity Account { get; }
 
     /// <summary>Gets the authored act asking, which is what makes the same declaration twice one declaration.</summary>
     public OutgoingEmailRequester Requester { get; }
@@ -47,7 +52,7 @@ public sealed record RecurringSendRequest
     public string Schedule { get; }
 
     /// <summary>Asks for one message to be sent again on every occasion a schedule names.</summary>
-    /// <param name="accountId">The account every occurrence is sent as.</param>
+    /// <param name="account">The account every occurrence is sent as, named by its owner and its identifier.</param>
     /// <param name="requester">The authored act asking.</param>
     /// <param name="recipients">The people every occurrence is offered to.</param>
     /// <param name="schedule">The repetition as it was written.</param>
@@ -55,7 +60,7 @@ public sealed record RecurringSendRequest
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="requester" /> or <paramref name="recipients" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="recipients" /> is empty, holds more than <see cref="OutgoingEmailRequest.MaximumRecipientCount" /> entries, or names one mailbox more than once, or when <paramref name="schedule" /> is blank, carries a control character, or is longer than <see cref="RecurringSend.MaximumScheduleLength" />.</exception>
     public static RecurringSendRequest Create(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         OutgoingEmailRequester requester,
         IReadOnlyList<OutgoingRecipient> recipients,
         string schedule)
@@ -66,7 +71,7 @@ public sealed record RecurringSendRequest
 
         // Every occasion becomes an outgoing request, so a declaration this system could not write one message for is
         // refused where somebody is still present to be told rather than every week from a worker.
-        var occurrence = OutgoingEmailRequest.Create(accountId, requester, recipients);
+        var occurrence = OutgoingEmailRequest.Create(account, requester, recipients);
 
         var trimmedSchedule = schedule.Trim();
 
@@ -84,6 +89,6 @@ public sealed record RecurringSendRequest
             throw new ArgumentException("A declared schedule cannot contain a control character.", nameof(schedule));
         }
 
-        return new RecurringSendRequest(accountId, requester, occurrence.Recipients, trimmedSchedule);
+        return new RecurringSendRequest(account, requester, occurrence.Recipients, trimmedSchedule);
     }
 }

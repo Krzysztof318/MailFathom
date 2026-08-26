@@ -33,7 +33,9 @@ namespace MailFathom.IntegrationTests.Persistence;
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
 public sealed class OrchestratedOutboxOperationStoreTests(MailFathomOrchestrationFixture orchestration)
 {
-    private static readonly MailAccountId Account = SyntheticMailAccount.AccountId;
+    /// <summary>Gets the account this suite writes under, whose owner the orchestrated database provisioned.</summary>
+    /// <remarks>Read on each use rather than captured in a field, because the owner is resolved when the harness starts.</remarks>
+    private static MailAccountIdentity Account => SyntheticMailAccount.Account;
 
     /// <summary>
     /// The ordinary withdrawal, and the two refusals that follow it. A send already withdrawn cannot be withdrawn

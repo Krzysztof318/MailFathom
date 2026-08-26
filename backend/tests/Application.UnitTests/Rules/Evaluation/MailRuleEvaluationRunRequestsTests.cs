@@ -20,7 +20,8 @@ namespace MailFathom.Application.UnitTests.Rules.Evaluation;
 public sealed class MailRuleEvaluationRunRequestsTests
 {
     private static readonly DateTimeOffset RequestedAt = new(2026, 4, 2, 11, 0, 0, TimeSpan.Zero);
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     /// <summary>What a scheduled occasion is dispatched under, which is what the deployment's own process reaches this with.</summary>
     private static readonly AccessAuthorization ProcessItself =
@@ -39,7 +40,7 @@ public sealed class MailRuleEvaluationRunRequestsTests
         Assert.True(request.Accepted);
         Assert.Equal(RequestedAt, request.Run.RequestedAt);
         Assert.True(request.Run.IsOutstanding);
-        Assert.Equal(Account, this.runStore.Find(Account)?.AccountId);
+        Assert.Equal(Account, this.runStore.Find(Account)?.Account);
     }
 
     /// <summary>Asking twice is asking once: the caller wanted the mail re-evaluated, and it is going to be.</summary>
@@ -67,7 +68,7 @@ public sealed class MailRuleEvaluationRunRequestsTests
         // Arrange
         this.runStore.Arrange(new MailRuleEvaluationRun
         {
-            AccountId = Account,
+            Account = Account,
             RequestedAt = RequestedAt.AddDays(-1),
             Trigger = MailRuleExecutionTrigger.RequestedRun,
             EndedAt = RequestedAt.AddDays(-1).AddMinutes(3),
@@ -107,7 +108,7 @@ public sealed class MailRuleEvaluationRunRequestsTests
         // Arrange
         this.runStore.Arrange(new MailRuleEvaluationRun
         {
-            AccountId = Account,
+            Account = Account,
             RequestedAt = RequestedAt.AddMinutes(-5),
             Trigger = outstanding,
         });
@@ -129,7 +130,7 @@ public sealed class MailRuleEvaluationRunRequestsTests
         // Arrange
         this.runStore.Arrange(new MailRuleEvaluationRun
         {
-            AccountId = Account,
+            Account = Account,
             RequestedAt = RequestedAt.AddMinutes(-5),
             Trigger = MailRuleExecutionTrigger.ScheduledRun,
             EvaluatedEmailCount = 40,
@@ -151,7 +152,7 @@ public sealed class MailRuleEvaluationRunRequestsTests
         // Arrange
         this.runStore.WhenAStartIsAttempted = () => this.runStore.Arrange(new MailRuleEvaluationRun
         {
-            AccountId = Account,
+            Account = Account,
             RequestedAt = RequestedAt.AddSeconds(-1),
             Trigger = MailRuleExecutionTrigger.RequestedRun,
             EvaluatedEmailCount = 12,
@@ -175,7 +176,7 @@ public sealed class MailRuleEvaluationRunRequestsTests
         // Arrange
         this.runStore.WhenAStartIsAttempted = () => this.runStore.Arrange(new MailRuleEvaluationRun
         {
-            AccountId = Account,
+            Account = Account,
             RequestedAt = RequestedAt.AddSeconds(-1),
             Trigger = MailRuleExecutionTrigger.RequestedRun,
             EvaluatedEmailCount = 40,

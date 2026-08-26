@@ -55,7 +55,7 @@ public sealed class MailFolderResolver
     }
 
     /// <summary>Resolves one configured alias against the folders its server currently advertises.</summary>
-    /// <param name="accountId">The account owning the alias.</param>
+    /// <param name="account">The account owning the alias.</param>
     /// <param name="mapping">What configuration says the alias names.</param>
     /// <param name="transportSecurityPolicy">The connection and authentication policy discovery must obey.</param>
     /// <param name="cancellationToken">Cancels discovery and the write that records a new binding.</param>
@@ -69,7 +69,7 @@ public sealed class MailFolderResolver
     /// checkpoint, so the new folder is synchronized from its first UID whatever UIDVALIDITY it reports.
     /// </remarks>
     public async Task<MailFolderResolutionResult> ResolveAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderMapping mapping,
         MailTransportSecurityPolicy transportSecurityPolicy,
         CancellationToken cancellationToken)
@@ -77,7 +77,7 @@ public sealed class MailFolderResolver
         ArgumentNullException.ThrowIfNull(mapping);
 
         var advertisedFolders = await this.remoteFolderCatalog.ListFoldersAsync(
-            accountId,
+            account.Id,
             transportSecurityPolicy,
             cancellationToken);
 
@@ -90,7 +90,7 @@ public sealed class MailFolderResolver
 
         RemoteFolderPath? matchedPath = matchedFolders.Count == 1
             ? matchedFolders[0].Path
-            : await this.CreateConfiguredFolderAsync(accountId, mapping, transportSecurityPolicy, cancellationToken);
+            : await this.CreateConfiguredFolderAsync(account, mapping, transportSecurityPolicy, cancellationToken);
 
         if (matchedPath is not { } advertisedPath)
         {
@@ -98,7 +98,7 @@ public sealed class MailFolderResolver
         }
 
         var currentResolution =
-            await this.resolutionStore.GetCurrentResolutionAsync(accountId, mapping.Alias, cancellationToken);
+            await this.resolutionStore.GetCurrentResolutionAsync(account, mapping.Alias, cancellationToken);
 
         if (currentResolution is { } binding && binding.RemotePath == advertisedPath)
         {
@@ -109,7 +109,7 @@ public sealed class MailFolderResolver
             ? MailFolderResolution.FirstBindingOf(mapping.Alias, advertisedPath)
             : currentResolution.RepointedTo(advertisedPath);
 
-        await this.RecordNewBindingAsync(accountId, currentResolution, newResolution, cancellationToken);
+        await this.RecordNewBindingAsync(account, currentResolution, newResolution, cancellationToken);
 
         return MailFolderResolutionResult.Resolved(newResolution);
     }
@@ -129,7 +129,7 @@ public sealed class MailFolderResolver
     /// </para>
     /// </remarks>
     private async Task<RemoteFolderPath?> CreateConfiguredFolderAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderMapping mapping,
         MailTransportSecurityPolicy transportSecurityPolicy,
         CancellationToken cancellationToken)
@@ -140,7 +140,7 @@ public sealed class MailFolderResolver
         }
 
         return await this.remoteFolderCreator.CreateFolderAsync(
-            accountId,
+            account.Id,
             mapping.Alias,
             configuredPath,
             transportSecurityPolicy,
@@ -194,7 +194,7 @@ public sealed class MailFolderResolver
     }
 
     private async Task RecordNewBindingAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolution? previousResolution,
         MailFolderResolution newResolution,
         CancellationToken cancellationToken)
@@ -203,7 +203,7 @@ public sealed class MailFolderResolver
         {
             await this.resolutionStore.SaveResolutionAsync(
                 persistenceSession,
-                accountId,
+                account,
                 newResolution,
                 cancellationToken);
 
@@ -220,7 +220,7 @@ public sealed class MailFolderResolver
         // audit store would close that by joining the transaction; a log-backed one cannot.
         await this.mappingChangeAuditor.RecordMappingChangeAsync(
             new MailFolderMappingChange(
-                accountId,
+                account.Id,
                 newResolution.Alias,
                 previousResolution?.RemotePath,
                 newResolution.RemotePath,

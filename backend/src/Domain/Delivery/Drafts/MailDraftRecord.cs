@@ -33,8 +33,21 @@ public sealed record MailDraftRecord
     /// <summary>Gets what everything after the first write refers to this draft by, including its stored MIME.</summary>
     public required MailDraftId Id { get; init; }
 
-    /// <summary>Gets the account the draft belongs to, and the one a promotion would send it as.</summary>
-    public required MailAccountId AccountId { get; init; }
+    /// <summary>Gets the account the draft belongs to, and the one a promotion would send it as, named by its owner and its identifier.</summary>
+    /// <remarks>
+    /// The pair, read back from the draft's own row rather than resolved again: a promotion writes an outgoing record
+    /// about this account, and the owner that record carries is the one the draft was written under.
+    /// </remarks>
+    public required MailAccountIdentity Account { get; init; }
+
+    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one owner names.</summary>
+    /// <remarks>
+    /// Derived rather than stored, so the pair is the one value here and the two halves can never disagree. It is kept
+    /// because most readers of this record are inside a scope whose owner is already settled, and naming the identifier
+    /// alone there says what the code means.
+    /// </remarks>
+    public MailAccountId AccountId => this.Account.Id;
+
 
     /// <summary>Gets the authored act that wrote the draft down.</summary>
     /// <remarks>

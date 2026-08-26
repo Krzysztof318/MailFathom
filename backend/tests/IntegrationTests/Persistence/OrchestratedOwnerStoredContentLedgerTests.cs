@@ -171,7 +171,7 @@ public sealed class OrchestratedOwnerStoredContentLedgerTests(MailFathomOrchestr
                     var occurrenceId = SyntheticEmail.OccurrenceIn(binding, uid);
 
                     storedEmailIds[uid] = await repository.UpsertMetadataAsync(
-                        session,
+                        session, SyntheticMailAccount.Owner,
                         SyntheticEmail.RemoteMetadataOf(occurrenceId, $"{FolderAlias}-{uid}"),
                         extractedMetadata: null,
                         StoredEmailContentAvailability.Available,
@@ -199,7 +199,7 @@ public sealed class OrchestratedOwnerStoredContentLedgerTests(MailFathomOrchestr
             async (scope, session, token) =>
             {
                 var storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                    session,
+                    session, SyntheticMailAccount.Owner,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, $"{FolderAlias}-{uid}"),
                     extractedMetadata: null,
                     StoredEmailContentAvailability.Available,

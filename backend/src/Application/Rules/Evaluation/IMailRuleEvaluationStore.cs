@@ -30,7 +30,7 @@ namespace MailFathom.Application.Rules.Evaluation;
 public interface IMailRuleEvaluationStore
 {
     /// <summary>Reads the account's emails that no pass has evaluated, oldest identity first.</summary>
-    /// <param name="accountId">The account whose arrival queue is read.</param>
+    /// <param name="account">The account whose arrival queue is read, named by its owner and its identifier together.</param>
     /// <param name="resumeAfter">The identity the previous batch of this walk reached, or <see langword="null" /> to start at the beginning.</param>
     /// <param name="batchSize">How many emails to read at most.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
@@ -41,13 +41,13 @@ public interface IMailRuleEvaluationStore
     /// waiting for extraction would be read again on the next batch and the walk would never move past it.
     /// </remarks>
     Task<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>> GetEmailsAwaitingFirstEvaluationAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         StoredEmailId? resumeAfter,
         int batchSize,
         CancellationToken cancellationToken);
 
     /// <summary>Reads the account's stored emails in identity order, whether or not a pass has evaluated them.</summary>
-    /// <param name="accountId">The account whose mailbox is walked.</param>
+    /// <param name="account">The account whose mailbox is walked, named by its owner and its identifier together.</param>
     /// <param name="resumeAfter">The identity the requested run last committed, or <see langword="null" /> to start at the beginning.</param>
     /// <param name="batchSize">How many emails to read at most.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
@@ -57,7 +57,7 @@ public interface IMailRuleEvaluationStore
     /// position is the whole of what a restart resumes from.
     /// </remarks>
     Task<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>> GetStoredEmailsAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         StoredEmailId? resumeAfter,
         int batchSize,
         CancellationToken cancellationToken);

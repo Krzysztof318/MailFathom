@@ -10,6 +10,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Spam;
+using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -18,9 +19,11 @@ namespace MailFathom.Application.UnitTests.Spam.Runs;
 /// <summary>Covers what a pass carries, what it skips, what it leaves for the next one, and how a run stops early.</summary>
 public sealed class SpamClassificationPassTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("acct-1");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-1"));
 
-    private static readonly MailAccountId OtherAccount = MailAccountId.Create("acct-2");
+    private static readonly MailAccountIdentity OtherAccount =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-2"));
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -296,7 +299,7 @@ public sealed class SpamClassificationPassTests
         // Arrange
         var inScope = this.StoreEmail();
         this.StoreEmail(Archive);
-        this.StoreEmail(accountId: OtherAccount);
+        this.StoreEmail(accountId: OtherAccount.Id);
         this.runs.Arrange(this.RequestedRun());
 
         // Act
@@ -325,7 +328,7 @@ public sealed class SpamClassificationPassTests
     private StoredEmailId StoreEmail(MailFolderAlias? folderAlias = null, MailAccountId? accountId = null) =>
         this.harness.Emails.Add(new ClassifiableEmail(
             StoredEmailId.Create(Guid.Parse($"0199a0c0-0000-7000-8000-{++this.storedEmailCount:D12}")),
-            accountId ?? Account,
+            accountId ?? Account.Id,
             folderAlias ?? Inbox));
 
     private SpamClassificationRun RequestedRun(
@@ -334,7 +337,7 @@ public sealed class SpamClassificationPassTests
     {
         return new SpamClassificationRun
         {
-            AccountId = Account,
+            Account = Account,
             RequestedAt = EvaluatedAt.AddMinutes(-1),
             Terms = SpamClassificationRunTerms.Create([Inbox], posture, rescores),
         };
@@ -361,7 +364,7 @@ public sealed class SpamClassificationPassTests
             this.harness.CreateClassifier(settingsReader, commitPolicy),
             this.harness.CreateActionRecorder(
                 actions ?? SpamActionSettings.None,
-                SpamClassificationHarness.OccurrenceReader(Account, Inbox),
+                SpamClassificationHarness.OccurrenceReader(Account.Id, Inbox),
                 sessionFactory,
                 commitPolicy),
             settingsReader,

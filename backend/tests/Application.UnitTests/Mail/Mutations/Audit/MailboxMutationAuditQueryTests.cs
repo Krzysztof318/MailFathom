@@ -9,6 +9,7 @@ using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Mutations.Audit;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Mail.Mutations.Audit;
@@ -16,7 +17,8 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations.Audit;
 /// <summary>Covers what a request for one page of an audit trail is accepted and refused for.</summary>
 public sealed class MailboxMutationAuditQueryTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset CompletedAt = new(2026, 8, 7, 12, 0, 0, TimeSpan.Zero);
 
@@ -112,7 +114,7 @@ public sealed class MailboxMutationAuditQueryTests
         var mine = Create(pageSize: null).Query!;
 
         var theirs = MailboxMutationAuditQuery.Create(
-            MailAccountId.Create("personal"),
+            MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal")),
             mutation: default,
             completedFrom: null,
             completedBefore: null,
@@ -138,7 +140,8 @@ public sealed class MailboxMutationAuditQueryTests
     {
         Id = MailboxMutationAuditEntryId.Create(Guid.CreateVersion7(CompletedAt)),
         MutationRecordId = MailboxMutationRecordId.Create(Guid.CreateVersion7(CompletedAt)),
-        AccountId = Account,
+        Owner = Account.Owner,
+        AccountId = Account.Id,
         StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7(CompletedAt)),
         Mutation = MailboxMutation.Relocate,
         SourceFolderPath = RemoteFolderPath.Create("INBOX"),

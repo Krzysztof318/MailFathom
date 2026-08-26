@@ -7,6 +7,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.Retrieval.AskMail.Audit;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Observability;
@@ -136,7 +137,7 @@ public sealed class MailAnsweringAuditTrail : IMailAnsweringAuditTrail
             {
                 Id = MailAnsweringAuditEntryId.Create(Guid.CreateVersion7(observation.CompletedAt)),
                 RunId = observation.RunId,
-                AccountId = accountId,
+                Account = MailAccountIdentity.Create(observation.Scope.Owner, accountId),
                 Emails = retrievedByAccount.GetValueOrDefault(accountId, []),
                 ChatEndpointAlias = observation.ChatEndpointAlias,
                 InstructionsVersion = observation.InstructionsVersion,

@@ -251,7 +251,7 @@ public sealed class StoredEmailResponseAuthoring
             Threading = OutgoingThreadPlacement.Answering(rendering.Headers.ThreadReferences),
         };
 
-        return AuthoredResponse.Authored(summary.AccountId, authored);
+        return AuthoredResponse.Authored(summary.Account, authored);
     }
 
     /// <summary>States how much of the answered message may be quoted, which is what the composed body leaves room for.</summary>

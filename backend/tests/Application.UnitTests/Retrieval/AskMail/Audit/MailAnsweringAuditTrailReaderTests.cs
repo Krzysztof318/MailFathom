@@ -15,7 +15,8 @@ namespace MailFathom.Application.UnitTests.Retrieval.AskMail.Audit;
 /// <summary>Covers reading one account's record of the questions answered from its mailbox.</summary>
 public sealed class MailAnsweringAuditTrailReaderTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private readonly IMailAnsweringAuditEntryStore entries = Substitute.For<IMailAnsweringAuditEntryStore>();
 

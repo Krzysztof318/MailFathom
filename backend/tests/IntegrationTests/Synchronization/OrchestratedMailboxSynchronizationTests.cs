@@ -178,7 +178,7 @@ public sealed class OrchestratedMailboxSynchronizationTests(MailFathomOrchestrat
         OrchestratedMailFathomServices services,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailboxSynchronizer>().SynchronizeAsync(
-                SyntheticMailAccount.AccountId,
+                SyntheticMailAccount.Account,
                 FolderMapping,
                 token),
             cancellationToken);
@@ -203,14 +203,14 @@ public sealed class OrchestratedMailboxSynchronizationTests(MailFathomOrchestrat
             {
                 var resolutionStore = scope.GetRequiredService<IMailFolderResolutionStore>();
                 var resolution = await resolutionStore.GetCurrentResolutionAsync(
-                    SyntheticMailAccount.AccountId,
+                    SyntheticMailAccount.Account,
                     FolderMapping.Alias,
                     token);
 
                 return resolution is null
                     ? null
                     : await scope.GetRequiredService<ISynchronizationCheckpointStore>().GetCheckpointAsync(
-                        SyntheticMailAccount.AccountId,
+                        SyntheticMailAccount.Account,
                         resolution.Id,
                         token);
             },

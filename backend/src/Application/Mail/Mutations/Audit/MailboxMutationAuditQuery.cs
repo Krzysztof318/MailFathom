@@ -31,14 +31,14 @@ public sealed record MailboxMutationAuditQuery
     public const int MaximumPageSize = 200;
 
     private MailboxMutationAuditQuery(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailboxMutation mutation,
         DateTimeOffset? completedFrom,
         DateTimeOffset? completedBefore,
         int pageSize,
         MailboxMutationAuditCursor? cursor)
     {
-        this.AccountId = accountId;
+        this.Account = account;
         this.Mutation = mutation;
         this.CompletedFrom = completedFrom;
         this.CompletedBefore = completedBefore;
@@ -47,7 +47,9 @@ public sealed record MailboxMutationAuditQuery
     }
 
     /// <summary>Gets the account whose trail is read.</summary>
-    public MailAccountId AccountId { get; }
+    public MailAccountIdentity Account { get; }
+    /// <summary>Gets the identifier half of <see cref="Account" />, which is what a reader already narrowed to one owner names.</summary>
+    public MailAccountId AccountId => this.Account.Id;
 
     /// <summary>Gets the mutation the page is narrowed to, or the unspecified default when every mutation is served.</summary>
     public MailboxMutation Mutation { get; }
@@ -70,13 +72,13 @@ public sealed record MailboxMutationAuditQuery
     /// same walk, and refusing that would be a rule about pacing rather than about which entries the boundary sits in.
     /// </remarks>
     public string FilterFingerprint => ComputeFingerprint(
-        this.AccountId,
+        this.Account,
         this.Mutation,
         this.CompletedFrom,
         this.CompletedBefore);
 
     /// <summary>Builds a validated query from what a caller asked for, or reports why the request names no page.</summary>
-    /// <param name="accountId">The account whose trail is read.</param>
+    /// <param name="account">The account whose trail is read.</param>
     /// <param name="mutation">The mutation to narrow to, or the unspecified default for every mutation.</param>
     /// <param name="completedFrom">The earliest completion instant served, inclusive, or <see langword="null" /> for none.</param>
     /// <param name="completedBefore">The completion instant to stop before, exclusive, or <see langword="null" /> for none.</param>
@@ -84,7 +86,7 @@ public sealed record MailboxMutationAuditQuery
     /// <param name="cursor">The boundary a continued walk reads beyond, or <see langword="null" /> for the first page.</param>
     /// <returns>The accepted query, or the refusal naming what the caller has to change.</returns>
     public static MailboxMutationAuditQueryResult Create(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailboxMutation mutation,
         DateTimeOffset? completedFrom,
         DateTimeOffset? completedBefore,
@@ -104,7 +106,7 @@ public sealed record MailboxMutationAuditQuery
         }
 
         var query = new MailboxMutationAuditQuery(
-            accountId,
+            account,
             mutation,
             completedFrom,
             completedBefore,
@@ -122,12 +124,13 @@ public sealed record MailboxMutationAuditQuery
 
     /// <summary>Reduces the filters to the short stable text a cursor carries to prove it belongs to this walk.</summary>
     private static string ComputeFingerprint(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailboxMutation mutation,
         DateTimeOffset? completedFrom,
         DateTimeOffset? completedBefore) =>
         PageFilterFingerprint.Of(
-            accountId.Value,
+            account.Owner.Value.ToString("N", CultureInfo.InvariantCulture),
+            account.Id.Value,
             mutation.IsSpecified ? mutation.Name : null,
             completedFrom?.UtcTicks.ToString(CultureInfo.InvariantCulture),
             completedBefore?.UtcTicks.ToString(CultureInfo.InvariantCulture));

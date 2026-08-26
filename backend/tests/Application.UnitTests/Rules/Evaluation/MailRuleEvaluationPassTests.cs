@@ -30,8 +30,10 @@ namespace MailFathom.Application.UnitTests.Rules.Evaluation;
 public sealed class MailRuleEvaluationPassTests
 {
     private static readonly DateTimeOffset EvaluatedAt = new(2026, 4, 2, 11, 0, 0, TimeSpan.Zero);
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
-    private static readonly MailAccountId OtherAccount = MailAccountId.Create("personal");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountIdentity OtherAccount =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
     private static readonly MailFolderAlias Backup = MailFolderAlias.Create("backup");
 
@@ -63,7 +65,7 @@ public sealed class MailRuleEvaluationPassTests
             foreach (var alias in new[] { Archive, Backup })
             {
                 this.folderMappings.With(
-                    accountId,
+                    accountId.Id,
                     MailFolderMapping.ToRemotePath(alias, RemoteFolderPath.Create($"INBOX/{alias.Value}")));
             }
         }
@@ -74,7 +76,7 @@ public sealed class MailRuleEvaluationPassTests
     {
         // Arrange
         var matching = ScriptedMailRuleCondition.Answering(matches: true);
-        var arrived = this.store.Add(FactsFor(Account));
+        var arrived = this.store.Add(FactsFor(Account.Id));
         var pass = this.CreatePass(RuleSetOf(ArrivalRule("file-it", matching, stopWhenMatched: false)));
 
         // Act
@@ -94,8 +96,8 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_ARuleWithAnAction_WritesTheChangeDownAgainstTheMatchedOccurrence()
     {
         // Arrange
-        this.folders.Bind(Account, Archive);
-        var arrived = this.store.Add(FactsFor(Account));
+        this.folders.Bind(Account.Id, Archive);
+        var arrived = this.store.Add(FactsFor(Account.Id));
         var pass = this.CreatePass(RuleSetOf(FilingRule("file-it")));
 
         // Act
@@ -114,9 +116,9 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_TwoRulesFilingOneEmailDifferently_AsksOnceAndNamesTheRuleItWithheld()
     {
         // Arrange
-        this.folders.Bind(Account, Archive);
-        this.folders.Bind(Account, Backup);
-        this.store.Add(FactsFor(Account));
+        this.folders.Bind(Account.Id, Archive);
+        this.folders.Bind(Account.Id, Backup);
+        this.store.Add(FactsFor(Account.Id));
         var pass = this.CreatePass(RuleSetOf(FilingRule("file-invoices"), FilingRule("file-everything", Backup)));
 
         // Act
@@ -134,8 +136,8 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_AWholeMailboxRunOverMailAlreadyFiled_OpensNoSecondRecord()
     {
         // Arrange
-        this.folders.Bind(Account, Archive);
-        this.store.Add(FactsFor(Account));
+        this.folders.Bind(Account.Id, Archive);
+        this.store.Add(FactsFor(Account.Id));
         var ruleSet = RuleSetOf(FilingRule("file-it"));
         await this.CreatePass(ruleSet).RunAsync(Account, TestContext.Current.CancellationToken);
         this.runStore.Arrange(RequestedRun());
@@ -153,7 +155,7 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_ADestinationNothingHasBound_RecordsNothingAndNamesTheRule()
     {
         // Arrange
-        this.store.Add(FactsFor(Account));
+        this.store.Add(FactsFor(Account.Id));
         var pass = this.CreatePass(RuleSetOf(FilingRule("file-it")));
 
         // Act
@@ -170,7 +172,7 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_AMatchingRuleThatDeclaresNoAction_AsksTheMailboxForNothing()
     {
         // Arrange
-        this.store.Add(FactsFor(Account));
+        this.store.Add(FactsFor(Account.Id));
         var pass = this.CreatePass(
             RuleSetOf(ArrivalRule("select-only", ScriptedMailRuleCondition.Answering(matches: true))));
 
@@ -188,7 +190,7 @@ public sealed class MailRuleEvaluationPassTests
     {
         // Arrange
         var condition = ScriptedMailRuleCondition.Answering(matches: true);
-        this.store.Add(FactsFor(Account), evaluatedAt: EvaluatedAt.AddDays(-1));
+        this.store.Add(FactsFor(Account.Id), evaluatedAt: EvaluatedAt.AddDays(-1));
         var pass = this.CreatePass(RuleSetOf(ArrivalRule("new-rule", condition, stopWhenMatched: false)));
 
         // Act
@@ -205,9 +207,9 @@ public sealed class MailRuleEvaluationPassTests
     {
         // Arrange
         var condition = ScriptedMailRuleCondition.Answering(matches: true);
-        var arrived = this.store.Add(FactsFor(Account));
+        var arrived = this.store.Add(FactsFor(Account.Id));
         var pass = this.CreatePass(
-            RuleSetOf(ArrivalRule("other-account", condition, stopWhenMatched: false, accounts: [OtherAccount.Value])));
+            RuleSetOf(ArrivalRule("other-account", condition, stopWhenMatched: false, accounts: [OtherAccount.Id.Value])));
 
         // Act
         await pass.RunAsync(Account, TestContext.Current.CancellationToken);
@@ -221,7 +223,7 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_MailOfAnotherAccount_IsNotReached()
     {
         // Arrange
-        var elsewhere = this.store.Add(FactsFor(OtherAccount));
+        var elsewhere = this.store.Add(FactsFor(OtherAccount.Id));
         var pass = this.CreatePass(RuleSetOf(
             ArrivalRule("everywhere", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false)));
 
@@ -238,7 +240,7 @@ public sealed class MailRuleEvaluationPassTests
         // Arrange
         var arrived = Enumerable
             .Range(0, 5)
-            .Select(_ => this.store.Add(FactsFor(Account)))
+            .Select(_ => this.store.Add(FactsFor(Account.Id)))
             .ToArray();
         var pass = this.CreatePass(
             RuleSetOf(ArrivalRule("all", ScriptedMailRuleCondition.Answering(matches: false), stopWhenMatched: false)),
@@ -258,7 +260,7 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_RequestedRun_EvaluatesMailAlreadyEvaluatedAndCompletes()
     {
         // Arrange
-        var already = this.store.Add(FactsFor(Account), evaluatedAt: EvaluatedAt.AddDays(-1));
+        var already = this.store.Add(FactsFor(Account.Id), evaluatedAt: EvaluatedAt.AddDays(-1));
         this.runStore.Arrange(RequestedRun());
         var pass = this.CreatePass(RuleSetOf(
             ArrivalRule("re-run", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: false)));
@@ -281,7 +283,7 @@ public sealed class MailRuleEvaluationPassTests
         // Arrange
         var housekeeping = ScriptedMailRuleCondition.Answering(matches: true);
         var ruleSet = RuleSetOf(MailRule.Create("housekeeping", housekeeping, triggers: []));
-        this.store.Add(FactsFor(Account));
+        this.store.Add(FactsFor(Account.Id));
 
         // Act
         var arrivalOnly = await this.CreatePass(ruleSet).RunAsync(Account, TestContext.Current.CancellationToken);
@@ -307,7 +309,7 @@ public sealed class MailRuleEvaluationPassTests
                 ScriptedMailRuleCondition.Answering(matches: true, MailRuleFact.BodyText),
                 triggers: []),
             ArrivalRule("on-arrival", ScriptedMailRuleCondition.Answering(matches: true)));
-        var awaiting = this.store.Add(FactsFor(Account), awaitsExtraction: true);
+        var awaiting = this.store.Add(FactsFor(Account.Id), awaitsExtraction: true);
 
         // Act
         var report = await this.CreatePass(ruleSet).RunAsync(Account, TestContext.Current.CancellationToken);
@@ -324,7 +326,7 @@ public sealed class MailRuleEvaluationPassTests
         // Arrange
         var ruleSet = RuleSetOf(
             ArrivalRule("re-run", ScriptedMailRuleCondition.Answering(matches: false), stopWhenMatched: false));
-        this.store.Add(FactsFor(Account), evaluatedAt: EvaluatedAt.AddDays(-1));
+        this.store.Add(FactsFor(Account.Id), evaluatedAt: EvaluatedAt.AddDays(-1));
         this.runStore.Arrange(RequestedRun());
 
         // Act
@@ -342,7 +344,7 @@ public sealed class MailRuleEvaluationPassTests
             ArrivalRule("re-run", ScriptedMailRuleCondition.Answering(matches: false), stopWhenMatched: false));
         var mail = Enumerable
             .Range(0, 3)
-            .Select(_ => this.store.Add(FactsFor(Account), evaluatedAt: EvaluatedAt.AddDays(-1)))
+            .Select(_ => this.store.Add(FactsFor(Account.Id), evaluatedAt: EvaluatedAt.AddDays(-1)))
             .ToArray();
         this.runStore.Arrange(RequestedRun() with
         {
@@ -366,7 +368,7 @@ public sealed class MailRuleEvaluationPassTests
     {
         // Arrange
         var condition = ScriptedMailRuleCondition.Answering(matches: true);
-        this.store.Add(FactsFor(Account), evaluatedAt: EvaluatedAt.AddDays(-1));
+        this.store.Add(FactsFor(Account.Id), evaluatedAt: EvaluatedAt.AddDays(-1));
         this.runStore.Arrange(RequestedRun() with
         {
             Revision = RuleSetOf(ArrivalRule(
@@ -390,7 +392,7 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_RuleNamingTheBodyTextAndAnEmailStillAwaitingExtraction_SkipsItAndLeavesItInTheQueue()
     {
         // Arrange
-        var awaiting = this.store.Add(FactsFor(Account), awaitsExtraction: true);
+        var awaiting = this.store.Add(FactsFor(Account.Id), awaitsExtraction: true);
         var pass = this.CreatePass(RuleSetOf(ArrivalRule(
             "reads-the-body",
             ScriptedMailRuleCondition.Answering(matches: true, MailRuleFact.BodyText),
@@ -410,7 +412,7 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_ExtractionArrivedForASkippedEmail_EvaluatesItOnTheNextPass()
     {
         // Arrange
-        var awaiting = this.store.Add(FactsFor(Account), awaitsExtraction: true);
+        var awaiting = this.store.Add(FactsFor(Account.Id), awaitsExtraction: true);
         var pass = this.CreatePass(RuleSetOf(ArrivalRule(
             "reads-the-body",
             ScriptedMailRuleCondition.Answering(matches: true, MailRuleFact.BodyText),
@@ -433,7 +435,7 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_EmailWhoseContentWillNeverYieldText_IsEvaluatedWithTheFactAbsent()
     {
         // Arrange
-        var withoutText = this.store.Add(FactsFor(Account), awaitsExtraction: false);
+        var withoutText = this.store.Add(FactsFor(Account.Id), awaitsExtraction: false);
         var pass = this.CreatePass(RuleSetOf(ArrivalRule(
             "reads-the-body",
             ScriptedMailRuleCondition.Answering(matches: false, MailRuleFact.BodyText),
@@ -451,8 +453,8 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_ConditionThatCannotAnswer_RecordsTheFailureAndEvaluatesTheRestOfTheBatch()
     {
         // Arrange
-        var unlucky = this.store.Add(FactsFor(Account));
-        var next = this.store.Add(FactsFor(Account));
+        var unlucky = this.store.Add(FactsFor(Account.Id));
+        var next = this.store.Add(FactsFor(Account.Id));
         var pass = this.CreatePass(RuleSetOf(
             ArrivalRule(
                 "raises",
@@ -476,8 +478,8 @@ public sealed class MailRuleEvaluationPassTests
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
-        var first = this.store.Add(FactsFor(Account));
-        var second = this.store.Add(FactsFor(Account));
+        var first = this.store.Add(FactsFor(Account.Id));
+        var second = this.store.Add(FactsFor(Account.Id));
         var pass = this.CreatePass(
             RuleSetOf(ArrivalRule("withdraws", new CancellingCondition(cancellation), stopWhenMatched: false)),
             batchSize: 1);
@@ -495,7 +497,7 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_TheArrivalWalk_RecordsWhatEachRuleItReachedConcluded()
     {
         // Arrange
-        var arrived = this.store.Add(FactsFor(Account));
+        var arrived = this.store.Add(FactsFor(Account.Id));
         var ruleSet = RuleSetOf(
             ArrivalRule("file-invoices", ScriptedMailRuleCondition.Answering(matches: false)),
             ArrivalRule(
@@ -524,7 +526,7 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_ARequestedRun_RecordsItsExecutionsUnderThatTrigger()
     {
         // Arrange
-        this.store.Add(FactsFor(Account), evaluatedAt: EvaluatedAt.AddDays(-1));
+        this.store.Add(FactsFor(Account.Id), evaluatedAt: EvaluatedAt.AddDays(-1));
         this.runStore.Arrange(RequestedRun());
         var pass = this.CreatePass(RuleSetOf(
             ArrivalRule("re-run", ScriptedMailRuleCondition.Answering(matches: true))));
@@ -543,7 +545,7 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_AScheduledRun_ReachesTheScheduledRulesAndRecordsThatTrigger()
     {
         // Arrange
-        this.store.Add(FactsFor(Account), evaluatedAt: EvaluatedAt.AddDays(-1));
+        this.store.Add(FactsFor(Account.Id), evaluatedAt: EvaluatedAt.AddDays(-1));
         this.runStore.Arrange(ScheduledRun());
         var pass = this.CreatePass(RuleSetOf(
             ArrivalRule("on-arrival", ScriptedMailRuleCondition.Answering(matches: true)),
@@ -563,7 +565,7 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_AScheduledRunPickedUp_BindsTheRevisionItStartedUnder()
     {
         // Arrange
-        this.store.Add(FactsFor(Account), evaluatedAt: EvaluatedAt.AddDays(-1));
+        this.store.Add(FactsFor(Account.Id), evaluatedAt: EvaluatedAt.AddDays(-1));
         this.runStore.Arrange(ScheduledRun());
         var ruleSet = RuleSetOf(ScheduledRule("nightly", ScriptedMailRuleCondition.Answering(matches: true)));
 
@@ -580,7 +582,7 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_ARuleThatEndedThePass_LeavesNoRecordForTheRulesBelowIt()
     {
         // Arrange
-        this.store.Add(FactsFor(Account));
+        this.store.Add(FactsFor(Account.Id));
         var pass = this.CreatePass(RuleSetOf(
             ArrivalRule("ends-it", ScriptedMailRuleCondition.Answering(matches: true), stopWhenMatched: true),
             ArrivalRule("never-reached", ScriptedMailRuleCondition.Answering(matches: true))));
@@ -598,7 +600,7 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_AConditionThatCouldNotAnswer_RecordsTheFailureRatherThanANonMatch()
     {
         // Arrange
-        this.store.Add(FactsFor(Account));
+        this.store.Add(FactsFor(Account.Id));
         var pass = this.CreatePass(RuleSetOf(ArrivalRule(
             "raises",
             ScriptedMailRuleCondition.Raising(new InvalidOperationException("no answer")))));
@@ -617,8 +619,8 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_ARuleWithAnAction_PointsTheRecordAtTheMutationItOpened()
     {
         // Arrange
-        this.folders.Bind(Account, Archive);
-        this.store.Add(FactsFor(Account));
+        this.folders.Bind(Account.Id, Archive);
+        this.store.Add(FactsFor(Account.Id));
         var pass = this.CreatePass(RuleSetOf(FilingRule("file-it")));
 
         // Act
@@ -637,7 +639,7 @@ public sealed class MailRuleEvaluationPassTests
     public async Task RunAsync_AnActionNothingCouldBeRecordedFor_RecordsItAsRefusedWithTheReason()
     {
         // Arrange
-        this.store.Add(FactsFor(Account));
+        this.store.Add(FactsFor(Account.Id));
         var pass = this.CreatePass(RuleSetOf(FilingRule("file-it")));
 
         // Act
@@ -682,7 +684,7 @@ public sealed class MailRuleEvaluationPassTests
 
     private static MailRuleEvaluationRun RequestedRun() => new()
     {
-        AccountId = Account,
+        Account = Account,
         RequestedAt = EvaluatedAt.AddMinutes(-1),
         Trigger = MailRuleExecutionTrigger.RequestedRun,
     };

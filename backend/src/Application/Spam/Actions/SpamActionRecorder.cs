@@ -209,8 +209,10 @@ public sealed class SpamActionRecorder
             return FilingDecision.NothingOwed;
         }
 
-        var accountId = occurrence.Occurrence.AccountId;
-        var resolved = await this.destinations.ResolveAsync(accountId, [settings.JunkFolder], cancellationToken);
+        var resolved = await this.destinations.ResolveAsync(
+            occurrence.Account,
+            [settings.JunkFolder],
+            cancellationToken);
 
         if (resolved.Find(settings.JunkFolder).Destination is not { } destination)
         {
@@ -234,7 +236,7 @@ public sealed class SpamActionRecorder
             return FilingDecision.Refused(SpamActionOutcome.PreviouslyFiled);
         }
 
-        return this.PlanFiling(accountId, destination);
+        return this.PlanFiling(occurrence.Account.Id, destination);
     }
 
     /// <summary>Builds the filing, carrying what becomes of the local copy exactly when the destination is unmirrored.</summary>
@@ -282,7 +284,12 @@ public sealed class SpamActionRecorder
                 {
                     var seenRecord = await this.records.OpenAsync(
                         session,
-                        MailboxMutationRequest.SetSeen(occurrence.Id, occurrence.Occurrence, requester, isSeen: true),
+                        MailboxMutationRequest.SetSeen(
+                            occurrence.Id,
+                            occurrence.Owner,
+                            occurrence.Occurrence,
+                            requester,
+                            isSeen: true),
                         attemptCancellationToken);
 
                     markedReadRecordId = seenRecord.Id;
@@ -294,6 +301,7 @@ public sealed class SpamActionRecorder
                         session,
                         MailboxMutationRequest.Relocate(
                             occurrence.Id,
+                            occurrence.Owner,
                             occurrence.Occurrence,
                             requester,
                             plan.Path,

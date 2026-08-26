@@ -11,7 +11,7 @@ namespace MailFathom.Application.UnitTests.TestDoubles;
 /// <summary>The one whole-mailbox rule run an account may have, keyed by the account exactly as the table is.</summary>
 internal sealed class InMemoryMailRuleEvaluationRunStore : IMailRuleEvaluationRunStore
 {
-    private readonly Dictionary<string, MailRuleEvaluationRun> runs = new(StringComparer.Ordinal);
+    private readonly Dictionary<MailAccountIdentity, MailRuleEvaluationRun> runs = [];
     private readonly List<MailRuleEvaluationRun> saves = [];
 
     /// <summary>Gets every state a run was saved in, which is what proves a batch committed its position.</summary>
@@ -26,33 +26,32 @@ internal sealed class InMemoryMailRuleEvaluationRunStore : IMailRuleEvaluationRu
     internal Action? WhenAStartIsAttempted { get; set; }
 
     /// <summary>Gets the run recorded for an account, whether or not it is still outstanding.</summary>
-    /// <param name="accountId">The account to read.</param>
+    /// <param name="account">The account to read, named as the owner and the identifier together.</param>
     /// <returns>The run, or <see langword="null" /> when the account has never had one.</returns>
-    internal MailRuleEvaluationRun? Find(MailAccountId accountId) =>
-        this.runs.GetValueOrDefault(accountId.Value);
+    internal MailRuleEvaluationRun? Find(MailAccountIdentity account) => this.runs.GetValueOrDefault(account);
 
     /// <summary>Puts a run in front of an account without going through the request path.</summary>
     /// <param name="run">The run to record.</param>
-    internal void Arrange(MailRuleEvaluationRun run) => this.runs[run.AccountId.Value] = run;
+    internal void Arrange(MailRuleEvaluationRun run) => this.runs[run.Account] = run;
 
     /// <inheritdoc />
     public Task<MailRuleEvaluationRun?> FindOutstandingAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken cancellationToken) =>
-        Task.FromResult(this.runs.GetValueOrDefault(accountId.Value) is { IsOutstanding: true } outstanding
+        Task.FromResult(this.runs.GetValueOrDefault(account) is { IsOutstanding: true } outstanding
             ? outstanding
             : null);
 
     /// <inheritdoc />
     public Task<MailRuleEvaluationRun?> FindLatestAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken cancellationToken) =>
-        Task.FromResult(this.runs.GetValueOrDefault(accountId.Value));
+        Task.FromResult(this.runs.GetValueOrDefault(account));
 
     /// <inheritdoc />
     public Task SaveAsync(IPersistenceSession session, MailRuleEvaluationRun run, CancellationToken cancellationToken)
     {
-        this.runs[run.AccountId.Value] = run;
+        this.runs[run.Account] = run;
         this.saves.Add(run);
 
         return Task.CompletedTask;
@@ -71,12 +70,12 @@ internal sealed class InMemoryMailRuleEvaluationRunStore : IMailRuleEvaluationRu
     {
         this.WhenAStartIsAttempted?.Invoke();
 
-        if (this.runs.GetValueOrDefault(run.AccountId.Value) is { } claimed && !run.Supersedes(claimed))
+        if (this.runs.GetValueOrDefault(run.Account) is { } claimed && !run.Supersedes(claimed))
         {
             return Task.FromResult<MailRuleEvaluationRun?>(claimed);
         }
 
-        this.runs[run.AccountId.Value] = run;
+        this.runs[run.Account] = run;
         this.saves.Add(run);
 
         return Task.FromResult<MailRuleEvaluationRun?>(null);

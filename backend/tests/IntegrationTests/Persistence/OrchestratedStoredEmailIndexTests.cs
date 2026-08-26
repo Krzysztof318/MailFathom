@@ -385,7 +385,7 @@ public sealed class OrchestratedStoredEmailIndexTests(MailFathomOrchestrationFix
                 foreach (var seededEmail in SeededEmails(binding))
                 {
                     await repository.UpsertMetadataAsync(
-                        session,
+                        session, SyntheticMailAccount.Owner,
                         seededEmail.RemoteMetadata,
                         seededEmail.Extraction,
                         StoredEmailContentAvailability.Available,

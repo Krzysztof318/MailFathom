@@ -6,6 +6,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Emails.Mailboxes;
@@ -66,9 +67,11 @@ public sealed class EmailTimelineFilterTests
     {
         // Arrange
         var accountsInOneOrder = MailboxScope.Create(
+            SyntheticMailOwner.Deployment,
             [MailAccountId.Create("primary"), MailAccountId.Create("secondary")],
             selectedFolders: null);
         var accountsInTheOther = MailboxScope.Create(
+            SyntheticMailOwner.Deployment,
             [MailAccountId.Create("secondary"), MailAccountId.Create("primary"), MailAccountId.Create("primary")],
             selectedFolders: null);
 
@@ -86,9 +89,11 @@ public sealed class EmailTimelineFilterTests
     {
         // Arrange
         var oneAliasCarryingTheSeparator = MailboxScope.Create(
+            SyntheticMailOwner.Deployment,
             accountIds: null,
             [Folder("ARCHIVE,SENT"), Folder("TRASH")]);
         var theSameNamesSplitDifferently = MailboxScope.Create(
+            SyntheticMailOwner.Deployment,
             accountIds: null,
             [Folder("ARCHIVE"), Folder("SENT,TRASH")]);
 
@@ -119,8 +124,11 @@ public sealed class EmailTimelineFilterTests
         var unfiltered = FilterWith();
         var variants = new[]
         {
-            FilterWith(scope: MailboxScope.Create([MailAccountId.Create("primary")], selectedFolders: null)),
-            FilterWith(scope: MailboxScope.Create(null, [Folder("ARCHIVE")])),
+            FilterWith(scope: MailboxScope.Create(
+                SyntheticMailOwner.Deployment,
+                [MailAccountId.Create("primary")],
+                selectedFolders: null)),
+            FilterWith(scope: MailboxScope.Create(SyntheticMailOwner.Deployment, null, [Folder("ARCHIVE")])),
             FilterWith(senderAddress: "anna@example.test"),
             FilterWith(recipientAddress: "anna@example.test"),
             FilterWith(subjectFragment: "invoice"),

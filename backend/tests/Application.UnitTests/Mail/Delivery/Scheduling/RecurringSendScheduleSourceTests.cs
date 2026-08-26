@@ -9,6 +9,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
+using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -17,7 +18,8 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Scheduling;
 /// <summary>Covers which declarations reach the dispatch mechanism, and under which identity.</summary>
 public sealed class RecurringSendScheduleSourceTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset Declared = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 
@@ -36,7 +38,7 @@ public sealed class RecurringSendScheduleSourceTests
         // Assert
         var schedule = Assert.Single(schedules);
         Assert.Equal($"recurring-send:{declaration.Id}", schedule.Id.Value);
-        Assert.Equal(Account, schedule.AccountId);
+        Assert.Equal(Account, schedule.Account);
         Assert.Equal(JobType.SendRecurringOccurrence, schedule.Payload.JobType);
     }
 
@@ -124,7 +126,7 @@ public sealed class RecurringSendScheduleSourceTests
         return new RecurringSend
         {
             Id = RecurringSendId.Create(Guid.CreateVersion7()),
-            AccountId = Account,
+            Account = Account,
             Requester = OutgoingEmailRequester.Command("declare-1"),
             Recipients = [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)],
             Schedule = schedule,

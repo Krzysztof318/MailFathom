@@ -147,7 +147,7 @@ public sealed class OrchestratedAuthoredDeleteTests(MailFathomOrchestrationFixtu
         OrchestratedMailFathomServices services,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailboxSynchronizer>().SynchronizeAsync(
-                SyntheticMailAccount.AccountId,
+                SyntheticMailAccount.Account,
                 FolderMapping,
                 token),
             cancellationToken);
@@ -166,7 +166,7 @@ public sealed class OrchestratedAuthoredDeleteTests(MailFathomOrchestrationFixtu
             stored.UidValidity,
             stored.Uid);
         var request = MailboxMutationRequest.Delete(
-            stored.StoredEmailId,
+            stored.StoredEmailId, SyntheticMailAccount.Owner,
             occurrence,
             Requester,
             localDisposition);

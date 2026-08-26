@@ -84,7 +84,7 @@ public sealed class OrchestratedMailSynchronizationRewindTests(MailFathomOrchest
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var scope = new StoredMailScope(SyntheticMailAccount.AccountId, RewoundFolder.Alias);
+        var scope = new StoredMailScope(SyntheticMailAccount.Account, RewoundFolder.Alias);
 
         // Act
         var rewound = await services.AsCallerInScopeAsync(
@@ -111,7 +111,9 @@ public sealed class OrchestratedMailSynchronizationRewindTests(MailFathomOrchest
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var scope = new StoredMailScope(MailAccountId.Create("rewind-unknown-account"), null);
+        var scope = new StoredMailScope(
+            MailAccountIdentity.Create(SyntheticMailAccount.Owner, MailAccountId.Create("rewind-unknown-account")),
+            null);
 
         // Act
         var rewound = await services.AsCallerInScopeAsync(
@@ -133,7 +135,7 @@ public sealed class OrchestratedMailSynchronizationRewindTests(MailFathomOrchest
         MailFolderMapping mapping,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailboxSynchronizer>().SynchronizeAsync(
-                SyntheticMailAccount.AccountId,
+                SyntheticMailAccount.Account,
                 mapping,
                 token),
             cancellationToken);
@@ -145,12 +147,12 @@ public sealed class OrchestratedMailSynchronizationRewindTests(MailFathomOrchest
             async (scope, token) =>
             {
                 var resolution = await scope.GetRequiredService<IMailFolderResolutionStore>()
-                    .GetCurrentResolutionAsync(SyntheticMailAccount.AccountId, alias, token);
+                    .GetCurrentResolutionAsync(SyntheticMailAccount.Account, alias, token);
 
                 return resolution is null
                     ? null
                     : await scope.GetRequiredService<ISynchronizationCheckpointStore>().GetCheckpointAsync(
-                        SyntheticMailAccount.AccountId,
+                        SyntheticMailAccount.Account,
                         resolution.Id,
                         token);
             },

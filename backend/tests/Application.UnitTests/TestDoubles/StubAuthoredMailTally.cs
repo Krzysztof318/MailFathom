@@ -34,7 +34,7 @@ internal sealed class StubAuthoredMailTally(IReadOnlyDictionary<string, int> mes
 
     /// <inheritdoc />
     public Task<int> CountMessagesAuthoredByAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         EmailAddress author,
         int ceiling,
         CancellationToken cancellationToken)

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Accounts;
+using MailFathom.Domain.Access;
 using MailFathom.TestSupport;
 
 namespace MailFathom.Mcp.UnitTests.TestDoubles;
@@ -21,8 +22,16 @@ internal sealed class StubMailAccountCatalog(params string[] servedAccountIds)
 
     /// <inheritdoc />
     public IReadOnlyList<ServedMailAccount> ServedAccounts { get; init; } =
-        [.. servedAccountIds.Select(SyntheticServedAccount.Of)];
+        [.. servedAccountIds.Select(accountId => SyntheticServedAccount.Of(accountId))];
 
     /// <inheritdoc />
     public IReadOnlyList<ServedMailAccount> OwnedAccounts => this.ServedAccounts;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The owner every account here belongs to, which is the deployment's one owner unless a test served an account of
+    /// somebody else's. Read from the accounts rather than stated again, so the two halves cannot disagree.
+    /// </remarks>
+    public MailOwnerId Owner =>
+        this.ServedAccounts.Count is 0 ? SyntheticMailOwner.Deployment : this.ServedAccounts[0].Owner;
 }

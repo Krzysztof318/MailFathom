@@ -37,7 +37,7 @@ public sealed class MailAnsweringAgentTests
 {
     private static readonly MailQuestion Question = new(
         MailQuestionText.Create("was the invoice attached"),
-        MailboxScope.Create([MailAccountId.Create("primary")], []));
+        MailboxScope.Create(SyntheticMailOwner.Deployment, [MailAccountId.Create("primary")], []));
 
     /// <summary>The literal the scanner in the guarded-egress tests reports, standing in for a credential in mail.</summary>
     private const string Marker = "AKIAEXAMPLEKEY";

@@ -93,7 +93,7 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
             occurrence,
             subject,
             cancellationToken);
-        var request = MailboxMutationRequest.Relocate(storedEmailId, occurrence, Requester, ArchivePath);
+        var request = MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, ArchivePath);
 
         await StopAfterTheCopyAsync(services, request, occurrence, cancellationToken);
 
@@ -149,13 +149,13 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
             occurrence,
             subject,
             cancellationToken);
-        var request = MailboxMutationRequest.Relocate(storedEmailId, occurrence, Requester, RemovedPath);
+        var request = MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, RemovedPath);
         await RecordIntentAsync(services, request, cancellationToken);
 
         // Act
         var report = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailboxMutationConverger>()
-                .ConvergeAsync(SyntheticMailAccount.AccountId, token),
+                .ConvergeAsync(SyntheticMailAccount.Account, token),
             cancellationToken);
 
         // Assert
@@ -204,7 +204,7 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
             occurrence,
             subject,
             cancellationToken);
-        var request = MailboxMutationRequest.Copy(storedEmailId, occurrence, Requester, CopyPath);
+        var request = MailboxMutationRequest.Copy(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, CopyPath);
 
         await StopAfterTheCopyCommandAsync(services, request, occurrence, cancellationToken);
 
@@ -259,7 +259,7 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
             new MailboxConvergenceOptions { UnknownOutcomeGrace = TimeSpan.Zero },
             TimeProvider.System);
 
-        return await converger.ConvergeAsync(SyntheticMailAccount.AccountId, cancellationToken);
+        return await converger.ConvergeAsync(SyntheticMailAccount.Account, cancellationToken);
     }
 
     /// <summary>Copies the message for real and writes down only that the command went out.</summary>
@@ -334,7 +334,7 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
             new MailboxConvergenceOptions(),
             TimeProvider.System);
 
-        return await converger.ConvergeAsync(SyntheticMailAccount.AccountId, cancellationToken);
+        return await converger.ConvergeAsync(SyntheticMailAccount.Account, cancellationToken);
     }
 
     /// <summary>Issues the copy half of a relocation and stops, leaving the record exactly where a crash would.</summary>
@@ -442,7 +442,7 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
             await services.CommitAsync(
                 (scope, session, token) => scope.GetRequiredService<IMailFolderResolutionStore>().SaveResolutionAsync(
                     session,
-                    SyntheticMailAccount.AccountId,
+                    SyntheticMailAccount.Account,
                     Inbox,
                     token),
                 cancellationToken));

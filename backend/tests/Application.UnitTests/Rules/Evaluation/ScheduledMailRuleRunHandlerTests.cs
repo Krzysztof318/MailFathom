@@ -21,7 +21,8 @@ namespace MailFathom.Application.UnitTests.Rules.Evaluation;
 public sealed class ScheduledMailRuleRunHandlerTests
 {
     private static readonly DateTimeOffset DispatchedAt = new(2026, 8, 13, 3, 0, 0, TimeSpan.Zero);
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private readonly InMemoryMailRuleEvaluationRunStore runStore = new();
 
@@ -70,7 +71,8 @@ public sealed class ScheduledMailRuleRunHandlerTests
         var refusal = await Assert.ThrowsAsync<ArgumentException>(() => this.CreateHandler().RunAsync(
             new ClassifyEmailSpamJobPayload
             {
-                AccountId = Account.Value,
+                OwnerId = SyntheticMailOwner.Deployment.Value,
+                AccountId = Account.Id.Value,
                 FolderAlias = "inbox",
                 FolderResolutionGeneration = 1,
                 UidValidity = 42,

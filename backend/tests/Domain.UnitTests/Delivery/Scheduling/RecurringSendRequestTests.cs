@@ -6,6 +6,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Scheduling;
 using MailFathom.Domain.Emails;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Domain.UnitTests.Delivery.Scheduling;
@@ -13,7 +14,8 @@ namespace MailFathom.Domain.UnitTests.Delivery.Scheduling;
 /// <summary>Covers what a declaration accepts, given that everything it accepts describes many messages rather than one.</summary>
 public sealed class RecurringSendRequestTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     /// <summary>A declaration keeps what it was made with, and the schedule as written bar the space around it.</summary>
     [Fact]
@@ -28,7 +30,7 @@ public sealed class RecurringSendRequestTests
 
         // Assert
         Assert.Equal("Daily at 09:00 Europe/Warsaw", declaration.Schedule);
-        Assert.Equal(Account, declaration.AccountId);
+        Assert.Equal(Account, declaration.Account);
         Assert.Single(declaration.Recipients);
     }
 

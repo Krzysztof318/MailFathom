@@ -34,7 +34,7 @@ internal static class StoredSyntheticEmail
         string subject,
         CancellationToken cancellationToken) => services.CommitProducingAsync(
             (scope, session, token) => scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                session,
+                session, SyntheticMailAccount.Owner,
                 SyntheticEmail.RemoteMetadataOf(occurrence, subject),
                 extractedMetadata: null,
                 StoredEmailContentAvailability.ExceededSizeLimit,

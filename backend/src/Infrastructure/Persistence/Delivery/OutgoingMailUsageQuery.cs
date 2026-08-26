@@ -20,27 +20,39 @@ namespace MailFathom.Infrastructure.Persistence.Delivery;
 /// because a send that a server refused was still mail this deployment tried to put on the network — and a count that
 /// forgot those would let a period which failed entirely be spent twice.
 /// </para>
+/// <para>
+/// The deployment-wide composition names no account and therefore no owner, and that is the ceiling it belongs to rather
+/// than a narrowing left out. A deployment ceiling bounds what this process puts on the network, which is one budget
+/// however many owners it serves; narrowing it per owner would be a different ceiling than the one configured.
+/// </para>
 /// </remarks>
 internal static class OutgoingMailUsageQuery
 {
     /// <summary>Composes the query over the messages a period was asked for.</summary>
     /// <param name="messages">The outgoing records to ask, ordinarily read without tracking.</param>
     /// <param name="periodStart">The instant the period began, as the ceilings place it.</param>
-    /// <param name="accountId">The account to narrow to, or <see langword="null" /> for every account of the deployment.</param>
+    /// <param name="account">The account to narrow to, or <see langword="null" /> for every account of the deployment.</param>
     /// <returns>The query whose count is the messages the period holds.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="messages" /> is <see langword="null" />.</exception>
     internal static IQueryable<OutgoingEmailEntity> ComposeMessages(
         IQueryable<OutgoingEmailEntity> messages,
         DateTimeOffset periodStart,
-        MailAccountId? accountId)
+        MailAccountIdentity? account)
     {
         ArgumentNullException.ThrowIfNull(messages);
 
         var withinPeriod = messages.Where(message => message.RecordedAt >= periodStart);
 
-        return accountId is { } account
-            ? withinPeriod.Where(message => message.MailboxAccountId == account.Value)
-            : withinPeriod;
+        if (account is not { } narrowed)
+        {
+            return withinPeriod;
+        }
+
+        var ownerValue = narrowed.Owner.Value;
+        var accountValue = narrowed.Id.Value;
+
+        return withinPeriod.Where(message => message.OwnerId == ownerValue
+            && message.MailboxAccountId == accountValue);
     }
 
     /// <summary>Composes the query over the people those messages are addressed to.</summary>

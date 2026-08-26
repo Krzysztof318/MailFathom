@@ -26,7 +26,7 @@ namespace MailFathom.Application.Mail.Mutations;
 public interface IMailboxMutationReconciliationStore
 {
     /// <summary>Reads the mutations that named one folder as their destination and placed an email at one of these UIDs.</summary>
-    /// <param name="accountId">The account whose mutations are read.</param>
+    /// <param name="account">The account whose mutations are read.</param>
     /// <param name="destinationPath">The remote folder being synchronized, which is the destination those mutations named.</param>
     /// <param name="uidValidity">The UIDVALIDITY that folder reports now.</param>
     /// <param name="uids">The UIDs one batch of the forward pass discovered.</param>
@@ -48,7 +48,7 @@ public interface IMailboxMutationReconciliationStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<MailboxMutationRecord>> ReadPlacementsAtAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         RemoteFolderPath destinationPath,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
@@ -79,7 +79,7 @@ public interface IMailboxMutationReconciliationStore
     const int MaximumFlagChangeRecordsPerValue = 5;
 
     /// <summary>Reads the flag and keyword stores issued against any of the occurrences a reconciliation window found moved.</summary>
-    /// <param name="accountId">The account whose mutations are read.</param>
+    /// <param name="account">The account whose mutations are read.</param>
     /// <param name="folderResolutionId">The alias binding the occurrences were stored under.</param>
     /// <param name="uidValidity">The UIDVALIDITY the window was opened for.</param>
     /// <param name="uids">The UIDs whose <c>\Seen</c> flag, <c>\Flagged</c> flag, or keywords the window found standing somewhere new.</param>
@@ -120,7 +120,7 @@ public interface IMailboxMutationReconciliationStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<MailboxMutationRecord>> ReadFlagChangesOnAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
@@ -128,7 +128,7 @@ public interface IMailboxMutationReconciliationStore
         CancellationToken cancellationToken);
 
     /// <summary>Reads the mutations issued against any of the source occurrences a reconciliation window found gone.</summary>
-    /// <param name="accountId">The account whose mutations are read.</param>
+    /// <param name="account">The account whose mutations are read.</param>
     /// <param name="folderResolutionId">The alias binding the occurrences were stored under.</param>
     /// <param name="uidValidity">The UIDVALIDITY the window was opened for.</param>
     /// <param name="uids">The UIDs the folder no longer holds.</param>
@@ -152,7 +152,7 @@ public interface IMailboxMutationReconciliationStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<MailboxMutationRecord>> ReadMutationsRemovingAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,

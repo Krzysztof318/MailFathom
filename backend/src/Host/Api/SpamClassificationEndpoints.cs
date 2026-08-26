@@ -110,7 +110,7 @@ internal static class SpamClassificationEndpoints
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(requests);
 
-        if (AdminAccountRequest.Resolve(request?.Account, accounts) is not { } accountId)
+        if (AdminAccountRequest.Resolve(request?.Account, accounts) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(request?.Account);
         }
@@ -128,7 +128,7 @@ internal static class SpamClassificationEndpoints
             request?.Apply is true ? SpamActionPosture.Acting : SpamActionPosture.DryRun,
             request?.Rescore is true);
 
-        var submitted = await requests.SubmitAsync(accountId, terms, cancellationToken);
+        var submitted = await requests.SubmitAsync(servedAccount, terms, cancellationToken);
 
         return TypedResults.Ok(new SpamClassificationRunStartResponse(
             submitted.Accepted,
@@ -155,15 +155,15 @@ internal static class SpamClassificationEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(runs);
 
-        if (AdminAccountRequest.Resolve(account, accounts) is not { } accountId)
+        if (AdminAccountRequest.Resolve(account, accounts) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }
 
-        var run = await runs.FindLatestAsync(accountId, cancellationToken);
+        var run = await runs.FindLatestAsync(servedAccount, cancellationToken);
 
         return TypedResults.Ok(new SpamClassificationRunStateResponse(
-            accountId.Value,
+            servedAccount.Id.Value,
             run is null ? null : SpamClassificationRunResponse.For(run)));
     }
 
@@ -200,7 +200,7 @@ internal static class SpamClassificationEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(classifications);
 
-        if (AdminAccountRequest.Resolve(account, accounts) is not { } accountId)
+        if (AdminAccountRequest.Resolve(account, accounts) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }
@@ -222,7 +222,7 @@ internal static class SpamClassificationEndpoints
         }
 
         var queryResult = SpamClassificationHistoryQuery.Create(
-            accountId,
+            servedAccount,
             email is { } emailId ? StoredEmailId.Create(emailId) : null,
             namedVerdict,
             from,

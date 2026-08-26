@@ -86,14 +86,14 @@ public sealed class StoredMailRederivationHandler : IJobHandler
                 nameof(payload));
         }
 
-        StoredMailScope scope = new(named.ToAccountId(), named.ToFolderAlias());
+        StoredMailScope scope = new(named.ToAccountIdentity(), named.ToFolderAlias());
 
         if (await this.runStore.FindAsync(scope, cancellationToken) is not { IsOutstanding: true } run)
         {
             return;
         }
 
-        using var runScope = this.telemetry.BeginRun(scope.Account, scope.Folder);
+        using var runScope = this.telemetry.BeginRun(scope.Account.Id, scope.Folder);
 
         if (await this.WalkAsync(run.RunId, scope, runScope, cancellationToken))
         {

@@ -149,7 +149,7 @@ public sealed class OrchestratedSeenStateProvenanceTests(MailFathomOrchestration
         OrchestratedMailFathomServices services,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailboxSynchronizer>().SynchronizeAsync(
-                SyntheticMailAccount.AccountId,
+                SyntheticMailAccount.Account,
                 Mapping,
                 token),
             cancellationToken);
@@ -168,7 +168,7 @@ public sealed class OrchestratedSeenStateProvenanceTests(MailFathomOrchestration
             folder.Id,
             stored.UidValidity,
             stored.Uid);
-        var request = MailboxMutationRequest.SetSeen(stored.StoredEmailId, occurrence, requester, isSeen);
+        var request = MailboxMutationRequest.SetSeen(stored.StoredEmailId, SyntheticMailAccount.Owner, occurrence, requester, isSeen);
 
         return services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailboxMutationPerformer>().PerformAsync(

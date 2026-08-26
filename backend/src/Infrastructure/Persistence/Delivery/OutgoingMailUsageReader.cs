@@ -27,14 +27,14 @@ internal sealed class OutgoingMailUsageReader(MailFathomDbContext dbContext) : I
 {
     /// <inheritdoc />
     public async Task<OutgoingMailUsage> ReadUsageSinceAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         DateTimeOffset periodStart,
         CancellationToken cancellationToken)
     {
         var records = dbContext.OutgoingEmails.AsNoTracking();
 
-        var accountMessages = OutgoingMailUsageQuery.ComposeMessages(records, periodStart, accountId);
-        var deploymentMessages = OutgoingMailUsageQuery.ComposeMessages(records, periodStart, accountId: null);
+        var accountMessages = OutgoingMailUsageQuery.ComposeMessages(records, periodStart, account);
+        var deploymentMessages = OutgoingMailUsageQuery.ComposeMessages(records, periodStart, account: null);
 
         return new OutgoingMailUsage(
             await accountMessages.LongCountAsync(cancellationToken),

@@ -73,7 +73,7 @@ public sealed class OrchestratedStoredEmailContentInventoryTests(MailFathomOrche
         // Act
         var reported = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IStoredEmailContentInventory>().GetEmailsAwaitingContentAsync(
-                awaiting.AccountId,
+                SyntheticMailAccount.Account,
                 binding.Id,
                 awaiting.UidValidity,
                 maxEmailCount: 50,
@@ -111,7 +111,7 @@ public sealed class OrchestratedStoredEmailContentInventoryTests(MailFathomOrche
         // Act
         var reported = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IStoredEmailContentInventory>().GetEmailsAwaitingContentAsync(
-                stored.AccountId,
+                SyntheticMailAccount.Account,
                 binding.Id,
                 ImapUidValidity.Create(stored.UidValidity.Value + 1),
                 maxEmailCount: 50,
@@ -137,7 +137,7 @@ public sealed class OrchestratedStoredEmailContentInventoryTests(MailFathomOrche
             async (scope, session, token) =>
             {
                 var storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                    session,
+                    session, SyntheticMailAccount.Owner,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, "content-occupancy", rawMime.Length),
                     extractedMetadata: null,
                     StoredEmailContentAvailability.Available,
@@ -177,7 +177,7 @@ public sealed class OrchestratedStoredEmailContentInventoryTests(MailFathomOrche
     {
         var commitResult = await services.CommitAsync(
             (scope, session, token) => scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                session,
+                session, SyntheticMailAccount.Owner,
                 SyntheticEmail.RemoteMetadataOf(occurrenceId, "awaiting-content", 4096),
                 extractedMetadata: null,
                 availability,

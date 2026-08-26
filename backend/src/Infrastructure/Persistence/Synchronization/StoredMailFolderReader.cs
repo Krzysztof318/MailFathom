@@ -73,14 +73,17 @@ internal sealed class StoredMailFolderReader(MailFathomDbContext dbContext) : IS
     /// bindings behind an alias grows without a ceiling as a mail server recreates the folder — and a request drawing a
     /// folder tree would otherwise pay for that whole history to reach the same one row per alias. The subquery is
     /// deliberately unscoped: it asks what the alias's newest binding is, and narrowing it would let a withheld
-    /// generation decide that a scoped one is current.
+    /// generation decide that a scoped one is current. The owner is not that kind of narrowing and is carried anyway:
+    /// it names the same row's own owner rather than the caller's, so a binding it excludes is a different folder
+    /// belonging to somebody else rather than one of this alias's generations the caller may not see.
     /// </remarks>
     internal static IQueryable<StoredMailFolderBinding> NewestBindingsIn(
         MailFathomDbContext dbContext,
         MailboxScope scope) =>
         MailFoldersInScope.Within(dbContext.MailFolders.AsNoTracking(), scope)
             .Where(folder => folder.ResolutionGeneration == dbContext.MailFolders
-                .Where(binding => binding.MailboxAccountId == folder.MailboxAccountId
+                .Where(binding => binding.OwnerId == folder.OwnerId
+                    && binding.MailboxAccountId == folder.MailboxAccountId
                     && binding.Alias == folder.Alias)
                 .Max(binding => binding.ResolutionGeneration))
             .Select(folder => new StoredMailFolderBinding(

@@ -83,7 +83,8 @@ internal static class JobEnqueueStatement
 
         var jobTypeName = request.JobType.Name;
         var idempotencyKey = request.Key.Value;
-        var accountId = request.AccountId?.Value;
+        var ownerId = request.Account?.Owner.Value;
+        var accountId = request.Account?.Id.Value;
         var availableAt = request.AvailableAt ?? enqueuedAt;
         var pending = nameof(JobState.Pending);
         var claimableStates = new[] { pending, nameof(JobState.Claimed) };
@@ -91,41 +92,34 @@ internal static class JobEnqueueStatement
         var traceParent = enqueuedTrace?.TraceParent;
         var traceState = enqueuedTrace?.TraceState;
 
-        // Written as a select over one composed row rather than as a values list, because the turn is decided from what
-        // the same owner already has waiting and a values list has nothing to correlate that against. The row is always
-        // produced: the owner is read as a scalar subquery, which answers null for work that belongs to no account
-        // rather than answering no row at all, so an ownerless job is still inserted and still claimable.
+        // The owner is a column of the row rather than something this statement looks up: whoever asked for the work
+        // resolved the account through a catalog, so writing it here is a read of mailbox_accounts that does not happen
+        // and a row that can never say an account without saying whose it is.
         //
-        // The latest turn is taken one mailbox at a time and the largest of those kept, rather than as one maximum over
-        // the owner's work joined together. The two answer the same value and only the first is a read of the index: an
-        // aggregate over a join is computed from the whole join, so against a backlog of two hundred thousand rows
-        // PostgreSQL scans the queue for it — measured at 6742 buffers against 10 for the form below, which walks the
-        // claim index backwards from each mailbox and stops at the first row.
+        // The turn is taken from the queue's own owner column, walking the claim index backwards and stopping at the
+        // first row. That is one index read where the previous form needed a lateral join over every mailbox the owner
+        // holds, and it is why the index leads with the owner: an aggregate over a join is computed from the whole join,
+        // and against a backlog of two hundred thousand rows PostgreSQL scanned the queue for it — measured at 6742
+        // buffers against 10 for a bounded backwards walk. An ownerless job compares against no rows, so the subquery
+        // answers null, GREATEST ignores it, and the job stays claimable at the instant it was available at.
         return $"""
                 INSERT INTO jobs (
-                    "Id", "JobType", "IdempotencyKey", "Payload", "MailboxAccountId",
+                    "Id", "JobType", "IdempotencyKey", "Payload", "OwnerId", "MailboxAccountId",
                     "State", "AvailableAt", "TurnAt", "EnqueuedAt", "StateChangedAt", "AttemptCount",
                     "EnqueuedTraceParent", "EnqueuedTraceState")
-                SELECT
-                    {jobId}, {jobTypeName}, {idempotencyKey}, CAST({payload} AS jsonb), {accountId},
+                VALUES (
+                    {jobId}, {jobTypeName}, {idempotencyKey}, CAST({payload} AS jsonb), {ownerId}, {accountId},
                     {pending}, {availableAt},
                     GREATEST(
                         {availableAt},
-                        (SELECT MAX(mailbox."TurnAt")
-                         FROM mailbox_accounts AS owned
-                         CROSS JOIN LATERAL (
-                             SELECT waiting."TurnAt"
-                             FROM jobs AS waiting
-                             WHERE waiting."State" = ANY({claimableStates})
-                               AND waiting."MailboxAccountId" = owned."Id"
-                             ORDER BY waiting."TurnAt" DESC
-                             LIMIT 1) AS mailbox
-                         WHERE owned."OwnerId" = owning."OwnerId") + {turnSpacing}),
+                        (SELECT waiting."TurnAt"
+                         FROM jobs AS waiting
+                         WHERE waiting."State" = ANY({claimableStates})
+                           AND waiting."OwnerId" = {ownerId}
+                         ORDER BY waiting."TurnAt" DESC
+                         LIMIT 1) + {turnSpacing}),
                     {enqueuedAt}, {enqueuedAt}, 0,
-                    {traceParent}, {traceState}
-                FROM (
-                    SELECT (SELECT account."OwnerId" FROM mailbox_accounts AS account WHERE account."Id" = {accountId})
-                        AS "OwnerId") AS owning
+                    {traceParent}, {traceState})
                 ON CONFLICT ("JobType", "IdempotencyKey") DO NOTHING
                 RETURNING "Id" AS "Value"
                 """;

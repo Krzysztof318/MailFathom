@@ -39,14 +39,16 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var accountId = MailAccountId.Create(RoundTrippedAccount);
+        var account = MailAccountIdentity.Create(
+            SyntheticMailAccount.Owner,
+            MailAccountId.Create(RoundTrippedAccount));
 
         // Act
-        await SaveAsync(services, accountId, "the-seeded-refresh-token", cancellationToken);
-        await SaveAsync(services, accountId, "the-rotated-refresh-token", cancellationToken);
+        await SaveAsync(services, account, "the-seeded-refresh-token", cancellationToken);
+        await SaveAsync(services, account, "the-rotated-refresh-token", cancellationToken);
 
         using var readBack = await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IMailboxRefreshTokenStore>().FindTokenAsync(accountId, token),
+            (scope, token) => scope.GetRequiredService<IMailboxRefreshTokenStore>().FindTokenAsync(account, token),
             cancellationToken);
 
         // Assert
@@ -76,8 +78,10 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var accountId = MailAccountId.Create(StragglerWriteAccount);
-        await SaveAsync(services, accountId, "the-current-refresh-token", cancellationToken);
+        var account = MailAccountIdentity.Create(
+            SyntheticMailAccount.Owner,
+            MailAccountId.Create(StragglerWriteAccount));
+        await SaveAsync(services, account, "the-current-refresh-token", cancellationToken);
 
         await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailFathomDbContext>().Database.ExecuteSqlAsync(
@@ -90,11 +94,11 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
             cancellationToken);
 
         // Act — a delayed or retried write carrying a token the authorization server has already replaced.
-        await SaveAsync(services, accountId, "the-already-invalidated-token", cancellationToken);
+        await SaveAsync(services, account, "the-already-invalidated-token", cancellationToken);
 
         // Assert
         using var readBack = await services.InScopeAsync(
-            (scope, token) => scope.GetRequiredService<IMailboxRefreshTokenStore>().FindTokenAsync(accountId, token),
+            (scope, token) => scope.GetRequiredService<IMailboxRefreshTokenStore>().FindTokenAsync(account, token),
             cancellationToken);
 
         Assert.NotNull(readBack);
@@ -108,8 +112,10 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var accountId = MailAccountId.Create(MovedRowAccount);
-        await SaveAsync(services, accountId, "a-refresh-token", cancellationToken);
+        var account = MailAccountIdentity.Create(
+            SyntheticMailAccount.Owner,
+            MailAccountId.Create(MovedRowAccount));
+        await SaveAsync(services, account, "a-refresh-token", cancellationToken);
 
         // Act — what a restored dump, a mistaken repair, or a stolen row copied into another tenant's account looks
         // like from the database's side: the same ciphertext under a different owner.
@@ -121,8 +127,8 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
                 return await dbContext.Database.ExecuteSqlAsync(
                     $"""
                      INSERT INTO mailbox_refresh_tokens
-                         ("MailboxAccountId", "SealedRefreshToken", "DataEncryptionKeyId", "UpdatedAt")
-                     SELECT {OtherAccount}, "SealedRefreshToken", "DataEncryptionKeyId", "UpdatedAt"
+                         ("OwnerId", "MailboxAccountId", "SealedRefreshToken", "DataEncryptionKeyId", "UpdatedAt")
+                     SELECT "OwnerId", {OtherAccount}, "SealedRefreshToken", "DataEncryptionKeyId", "UpdatedAt"
                      FROM mailbox_refresh_tokens
                      WHERE "MailboxAccountId" = {MovedRowAccount}
                      """,
@@ -133,20 +139,22 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
         // Assert
         await Assert.ThrowsAnyAsync<CryptographicException>(() => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailboxRefreshTokenStore>()
-                .FindTokenAsync(MailAccountId.Create(OtherAccount), token),
+                .FindTokenAsync(
+                    MailAccountIdentity.Create(SyntheticMailAccount.Owner, MailAccountId.Create(OtherAccount)),
+                    token),
             cancellationToken));
     }
 
     private static async Task SaveAsync(
         OrchestratedMailFathomServices services,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         string refreshToken,
         CancellationToken cancellationToken) =>
         await services.InScopeAsync(
             async (scope, token) =>
             {
                 using var value = MailboxRefreshToken.FromText(refreshToken);
-                await scope.GetRequiredService<IMailboxRefreshTokenStore>().SaveTokenAsync(accountId, value, token);
+                await scope.GetRequiredService<IMailboxRefreshTokenStore>().SaveTokenAsync(account, value, token);
 
                 return true;
             },

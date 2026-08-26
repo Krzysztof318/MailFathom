@@ -31,8 +31,8 @@ namespace MailFathom.Application.Mail.Delivery.Outbox;
 /// </remarks>
 public sealed class MailOutboxSignal
 {
-    private readonly Channel<MailAccountId> accounts;
-    private readonly HashSet<MailAccountId> pending = [];
+    private readonly Channel<MailAccountIdentity> accounts;
+    private readonly HashSet<MailAccountIdentity> pending = [];
     private readonly Lock gate = new();
 
     /// <summary>Creates the queue at the depth this deployment allows it.</summary>
@@ -46,7 +46,7 @@ public sealed class MailOutboxSignal
         // dropping mode answers true and loses the signal without telling anybody. Nothing here ever waits, because
         // nothing calls WriteAsync. One reader, because one loop takes the passes and the ceiling on work in flight is
         // the pass's own.
-        this.accounts = Channel.CreateBounded<MailAccountId>(
+        this.accounts = Channel.CreateBounded<MailAccountIdentity>(
             new BoundedChannelOptions(capacity)
             {
                 FullMode = BoundedChannelFullMode.Wait,
@@ -58,29 +58,29 @@ public sealed class MailOutboxSignal
     public int Depth => this.accounts.Reader.Count;
 
     /// <summary>Says that an account has something outstanding to deliver.</summary>
-    /// <param name="accountId">The account whose outbox is worth a pass.</param>
+    /// <param name="account">The account whose outbox is worth a pass, named by its owner and its identifier.</param>
     /// <returns><see langword="true" /> when the account is queued for a pass or was already queued for one; <see langword="false" /> when the queue was full and the signal was refused.</returns>
     /// <remarks>
     /// An account already waiting is reported as signalled, because it is: the pass it is waiting for reads the outbox
     /// rather than the signal, so it will find whatever was written between the two calls.
     /// </remarks>
-    public bool Signal(MailAccountId accountId)
+    public bool Signal(MailAccountIdentity account)
     {
         lock (this.gate)
         {
-            if (!this.pending.Add(accountId))
+            if (!this.pending.Add(account))
             {
                 return true;
             }
 
-            if (this.accounts.Writer.TryWrite(accountId))
+            if (this.accounts.Writer.TryWrite(account))
             {
                 return true;
             }
 
             // The queue refused it, so nothing will take the account out of the set; leaving it there would suppress
             // every later signal for that account until the process restarted.
-            this.pending.Remove(accountId);
+            this.pending.Remove(account);
 
             return false;
         }
@@ -103,19 +103,19 @@ public sealed class MailOutboxSignal
     /// shutdown, and the loop reading it would never end.
     /// </para>
     /// </remarks>
-    public async IAsyncEnumerable<MailAccountId> ReadAllAsync(
+    public async IAsyncEnumerable<MailAccountIdentity> ReadAllAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        await foreach (var accountId in this.accounts.Reader.ReadAllAsync(cancellationToken))
+        await foreach (var account in this.accounts.Reader.ReadAllAsync(cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             lock (this.gate)
             {
-                this.pending.Remove(accountId);
+                this.pending.Remove(account);
             }
 
-            yield return accountId;
+            yield return account;
         }
     }
 }

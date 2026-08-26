@@ -8,6 +8,7 @@ using MailFathom.Application.Spam;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -16,7 +17,8 @@ namespace MailFathom.Application.UnitTests.Spam;
 /// <summary>Covers what a stored message asks of the queue, and what it deliberately asks of nothing.</summary>
 public sealed class SpamClassificationArrivalsTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("acct-1");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-1"));
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -39,13 +41,17 @@ public sealed class SpamClassificationArrivalsTests
 
         // Act
         await this.CreateArrivals(SettingsCovering(Inbox))
-            .ScheduleAsync(StoredEmail, occurrence, TestContext.Current.CancellationToken);
+            .ScheduleAsync(
+                StoredEmail,
+                occurrence,
+                SyntheticMailOwner.Deployment,
+                TestContext.Current.CancellationToken);
 
         // Assert
         var request = this.EnqueuedRequests().Single();
 
         Assert.Equal(JobType.ClassifyEmailSpam, request.JobType);
-        Assert.Equal(Account, request.AccountId);
+        Assert.Equal(Account, request.Account);
         Assert.Equal(occurrence, Assert.IsType<ClassifyEmailSpamJobPayload>(request.Payload).ToOccurrenceId());
         Assert.Null(request.AvailableAt);
     }
@@ -66,7 +72,11 @@ public sealed class SpamClassificationArrivalsTests
 
         // Act
         await this.CreateArrivals(SettingsCovering(occurrence.FolderResolutionId.Alias))
-            .ScheduleAsync(StoredEmail, occurrence, TestContext.Current.CancellationToken);
+            .ScheduleAsync(
+                StoredEmail,
+                occurrence,
+                SyntheticMailOwner.Deployment,
+                TestContext.Current.CancellationToken);
 
         // Assert
         var key = this.EnqueuedRequests().Single().Key.Value;
@@ -84,8 +94,16 @@ public sealed class SpamClassificationArrivalsTests
         var occurrence = OccurrenceIn(Inbox, uid: 4401);
 
         // Act
-        await arrivals.ScheduleAsync(StoredEmail, occurrence, TestContext.Current.CancellationToken);
-        await arrivals.ScheduleAsync(StoredEmail, occurrence, TestContext.Current.CancellationToken);
+        await arrivals.ScheduleAsync(
+            StoredEmail,
+            occurrence,
+            SyntheticMailOwner.Deployment,
+            TestContext.Current.CancellationToken);
+        await arrivals.ScheduleAsync(
+            StoredEmail,
+            occurrence,
+            SyntheticMailOwner.Deployment,
+            TestContext.Current.CancellationToken);
 
         // Assert
         var requests = this.EnqueuedRequests();
@@ -101,6 +119,7 @@ public sealed class SpamClassificationArrivalsTests
         await this.CreateArrivals(SpamClassificationSettings.Disabled).ScheduleAsync(
             StoredEmail,
             OccurrenceIn(Inbox, uid: 4401),
+            SyntheticMailOwner.Deployment,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -114,6 +133,7 @@ public sealed class SpamClassificationArrivalsTests
         await this.CreateArrivals(SettingsCovering(Inbox)).ScheduleAsync(
             StoredEmail,
             OccurrenceIn(Archive, uid: 4401),
+            SyntheticMailOwner.Deployment,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -133,6 +153,7 @@ public sealed class SpamClassificationArrivalsTests
         await this.CreateArrivals(SettingsCovering(Inbox)).ScheduleAsync(
             StoredEmail,
             OccurrenceIn(Inbox, uid: 4401),
+            SyntheticMailOwner.Deployment,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -143,7 +164,7 @@ public sealed class SpamClassificationArrivalsTests
         SpamClassificationSettings.Create(isEnabled: true, usesScanner: false, aliases);
 
     private static EmailOccurrenceId OccurrenceIn(MailFolderAlias alias, uint uid) => EmailOccurrenceId.Create(
-        Account,
+        Account.Id,
         new MailFolderResolutionId(alias, MailFolderResolutionGeneration.First),
         ImapUidValidity.Create(9),
         ImapUid.Create(uid));

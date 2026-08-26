@@ -11,6 +11,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -33,6 +34,10 @@ namespace MailFathom.Host.UnitTests.Api;
 public sealed class MailFolderErasureEndpointTests
 {
     private static readonly MailAccountId Account = MailAccountId.Create("work");
+
+    /// <summary>The account as the mirror store is asked about it, which is the owner and the identifier together.</summary>
+    private static readonly MailAccountIdentity AccountIdentity =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, Account);
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
 
     private readonly IMailFolderMappingReader mappings = Substitute.For<IMailFolderMappingReader>();
@@ -94,7 +99,7 @@ public sealed class MailFolderErasureEndpointTests
             erasure.Value.Folder,
             erasure.Value.ErasedEmailCount,
             erasure.Value.EmailsRemain));
-        Assert.Equal([(Account, Archive)], store.Passes);
+        Assert.Equal([(AccountIdentity, Archive)], store.Passes);
     }
 
     /// <summary>
@@ -115,7 +120,7 @@ public sealed class MailFolderErasureEndpointTests
         // Assert
         var erasure = Assert.IsType<Ok<MailFolderErasureResponse>>(result.Result);
         Assert.Equal(7, erasure.Value!.ErasedEmailCount);
-        Assert.Equal([(Account, Archive)], store.Passes);
+        Assert.Equal([(AccountIdentity, Archive)], store.Passes);
     }
 
     /// <summary>Erasing a folder a run is about to visit is a hole the next run silently refills, so it is refused.</summary>
@@ -234,6 +239,7 @@ public sealed class MailFolderErasureEndpointTests
         catalog.ServedAccounts.Returns(
         [
             .. accounts.Select(account => new ServedMailAccount(
+                SyntheticMailOwner.Deployment,
                 account,
                 MailAccountDisplayName.Create(account.Value),
                 MailSynchronizationMode.Polling)),
@@ -245,18 +251,18 @@ public sealed class MailFolderErasureEndpointTests
     /// <summary>Records which folder each pass was asked to erase, and answers with the erasure the test arranged.</summary>
     private sealed class RecordingMirrorStore(MailFolderMirrorErasure erasure) : IStoredMailFolderMirrorStore
     {
-        private readonly List<(MailAccountId AccountId, MailFolderAlias FolderAlias)> passes = [];
+        private readonly List<(MailAccountIdentity Account, MailFolderAlias FolderAlias)> passes = [];
 
-        public IReadOnlyList<(MailAccountId AccountId, MailFolderAlias FolderAlias)> Passes => this.passes;
+        public IReadOnlyList<(MailAccountIdentity Account, MailFolderAlias FolderAlias)> Passes => this.passes;
 
         public Task<MailFolderMirrorErasure> EraseFolderMirrorAsync(
             IPersistenceSession session,
-            MailAccountId accountId,
+            MailAccountIdentity account,
             MailFolderAlias folderAlias,
             int maxEmails,
             CancellationToken cancellationToken)
         {
-            this.passes.Add((accountId, folderAlias));
+            this.passes.Add((account, folderAlias));
 
             return Task.FromResult(erasure);
         }

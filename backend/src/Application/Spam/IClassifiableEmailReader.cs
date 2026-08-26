@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -34,6 +35,7 @@ public interface IClassifiableEmailReader
     Task<ClassifiableEmail?> FindAsync(StoredEmailId emailId, CancellationToken cancellationToken);
 
     /// <summary>Resolves the stable remote occurrence identity into the local email it was stored as.</summary>
+    /// <param name="owner">The owner whose account the occurrence belongs to, which the read narrows on ahead of the account.</param>
     /// <param name="occurrenceId">The account, folder binding, UIDVALIDITY, and UID the message was discovered under.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The local identity, or <see langword="null" /> when nothing is stored at that occurrence.</returns>
@@ -43,10 +45,13 @@ public interface IClassifiableEmailReader
     /// into the other, and an absent answer is the ordinary case of a message expunged between the moment the work was
     /// enqueued and the moment it ran.
     /// </remarks>
-    Task<StoredEmailId?> FindStoredEmailIdAsync(EmailOccurrenceId occurrenceId, CancellationToken cancellationToken);
+    Task<StoredEmailId?> FindStoredEmailIdAsync(
+        MailOwnerId owner,
+        EmailOccurrenceId occurrenceId,
+        CancellationToken cancellationToken);
 
     /// <summary>Reads one account's stored occurrences in identity order, narrowed to a set of folders.</summary>
-    /// <param name="accountId">The account whose mailbox is walked.</param>
+    /// <param name="account">The account whose mailbox is walked.</param>
     /// <param name="folderAliases">MailFathom's own names for the folders the walk covers.</param>
     /// <param name="resumeAfter">The identity the run last committed, or <see langword="null" /> to start at the beginning.</param>
     /// <param name="batchSize">How many occurrences to read at most.</param>
@@ -61,7 +66,7 @@ public interface IClassifiableEmailReader
     /// answer is empty, which is what a scope narrowed to nothing means rather than a scope of everything.
     /// </remarks>
     Task<IReadOnlyList<ClassifiableEmail>> GetStoredEmailsAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         IReadOnlyList<MailFolderAlias> folderAliases,
         StoredEmailId? resumeAfter,
         int batchSize,

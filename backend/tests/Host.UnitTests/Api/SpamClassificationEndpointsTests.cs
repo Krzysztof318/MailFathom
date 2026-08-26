@@ -16,6 +16,7 @@ using MailFathom.Domain.Spam;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -39,6 +40,10 @@ public sealed class SpamClassificationEndpointsTests
     private static readonly DateTimeOffset Now = new(2026, 8, 12, 9, 0, 0, TimeSpan.Zero);
 
     private static readonly MailAccountId Account = MailAccountId.Create("work");
+
+    /// <summary>The account a stored run names, which is the owner and the identifier together.</summary>
+    private static readonly MailAccountIdentity AccountIdentity =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, Account);
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -93,7 +98,7 @@ public sealed class SpamClassificationEndpointsTests
     public async Task StartRunAsync_ARequestNamingOnlyTheAccount_StartsADryRunOverTheConfiguredScope()
     {
         // Arrange
-        this.runs.FindOutstandingAsync(Account, Arg.Any<CancellationToken>()).Returns((SpamClassificationRun?)null);
+        this.runs.FindOutstandingAsync(AccountIdentity, Arg.Any<CancellationToken>()).Returns((SpamClassificationRun?)null);
 
         // Act
         var result = await this.StartRunAsync(new SpamClassificationRunRequestBody(
@@ -115,7 +120,7 @@ public sealed class SpamClassificationEndpointsTests
     public async Task StartRunAsync_ARequestAskingToApply_StartsARunThatActs()
     {
         // Arrange
-        this.runs.FindOutstandingAsync(Account, Arg.Any<CancellationToken>()).Returns((SpamClassificationRun?)null);
+        this.runs.FindOutstandingAsync(AccountIdentity, Arg.Any<CancellationToken>()).Returns((SpamClassificationRun?)null);
 
         // Act
         var result = await this.StartRunAsync(new SpamClassificationRunRequestBody(
@@ -135,9 +140,9 @@ public sealed class SpamClassificationEndpointsTests
     public async Task StartRunAsync_ARunAlreadyOutstanding_AnswersWithItAndItsOwnTerms()
     {
         // Arrange
-        this.runs.FindOutstandingAsync(Account, Arg.Any<CancellationToken>()).Returns(new SpamClassificationRun
+        this.runs.FindOutstandingAsync(AccountIdentity, Arg.Any<CancellationToken>()).Returns(new SpamClassificationRun
         {
-            AccountId = Account,
+            Account = AccountIdentity,
             RequestedAt = Now.AddMinutes(-5),
             Terms = SpamClassificationRunTerms.Create([Inbox], SpamActionPosture.DryRun, rescores: false),
             ClassifiedEmailCount = 120,
@@ -252,7 +257,7 @@ public sealed class SpamClassificationEndpointsTests
     public async Task ReadRunAsync_AnAccountNobodyHasAskedForARun_AnswersWithNoRunRatherThanARefusal()
     {
         // Arrange
-        this.runs.FindLatestAsync(Account, Arg.Any<CancellationToken>()).Returns((SpamClassificationRun?)null);
+        this.runs.FindLatestAsync(AccountIdentity, Arg.Any<CancellationToken>()).Returns((SpamClassificationRun?)null);
 
         // Act
         var result = await SpamClassificationEndpoints.ReadRunAsync(
@@ -271,9 +276,9 @@ public sealed class SpamClassificationEndpointsTests
     public async Task ReadRunAsync_ARunThatHasEnded_ReportsItsCountsAndHowItEnded()
     {
         // Arrange
-        this.runs.FindLatestAsync(Account, Arg.Any<CancellationToken>()).Returns(new SpamClassificationRun
+        this.runs.FindLatestAsync(AccountIdentity, Arg.Any<CancellationToken>()).Returns(new SpamClassificationRun
         {
-            AccountId = Account,
+            Account = AccountIdentity,
             RequestedAt = Now.AddHours(-1),
             Terms = SpamClassificationRunTerms.Create([Inbox], SpamActionPosture.Acting, rescores: false),
             Profile = SpamClassificationProfile.Create(usesScanner: true, scannerThreshold: 5),
@@ -420,6 +425,7 @@ public sealed class SpamClassificationEndpointsTests
         catalog.ServedAccounts.Returns(
         [
             .. accounts.Select(account => new ServedMailAccount(
+                SyntheticMailOwner.Deployment,
                 account,
                 MailAccountDisplayName.Create(account.Value),
                 MailSynchronizationMode.Polling)),

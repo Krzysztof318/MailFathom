@@ -33,6 +33,9 @@ internal sealed class MailboxMutationAuditEntryEntity
     /// <summary>Gets or sets the account whose mailbox was changed, as a value rather than as an association.</summary>
     public required string MailboxAccountId { get; set; }
 
+    /// <summary>Gets or sets the owner whose mailbox was changed, as a value rather than as an association.</summary>
+    public required Guid OwnerId { get; set; }
+
     /// <summary>Gets or sets the local email the change was about, as a value rather than as an association.</summary>
     public Guid StoredEmailId { get; set; }
 

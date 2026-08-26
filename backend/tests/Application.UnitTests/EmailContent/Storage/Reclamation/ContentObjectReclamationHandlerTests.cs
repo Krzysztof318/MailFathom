@@ -6,6 +6,7 @@ using MailFathom.Application.EmailContent.Storage.Reclamation;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Domain.Accounts;
+using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -62,7 +63,7 @@ public sealed class ContentObjectReclamationHandlerTests
             Arg.Is<JobEnqueueRequest>(request =>
                 request != null
                 && request.JobType == JobType.ReclaimContentObjects
-                && request.AccountId == null
+                && request.Account == null
                 && ((ReclaimContentObjectsJobPayload)request.Payload).ResumeFrom == "next-page"
                 && ((ReclaimContentObjectsJobPayload)request.Payload).Segment == 1),
             Arg.Is<CancellationToken>(token => token == CancellationToken.None));
@@ -224,7 +225,7 @@ public sealed class ContentObjectReclamationHandlerTests
         // Act, Assert
         await Assert.ThrowsAsync<ArgumentException>(
             () => handler.RunAsync(
-                RederiveStoredMailJobPayload.For(MailAccountId.Create("work"), folderAlias: null),
+                RederiveStoredMailJobPayload.For(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work")), folderAlias: null),
                 TestContext.Current.CancellationToken));
     }
 

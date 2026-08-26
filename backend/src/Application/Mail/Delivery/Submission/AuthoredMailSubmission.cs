@@ -122,7 +122,7 @@ public sealed class AuthoredMailSubmission(
         };
 
         var composition = composer.Compose(
-            account.Id,
+            account.Identity,
             request.Requester,
             authored,
             MailDeliveryCapabilities.BeforeAnyServerHasSpoken);

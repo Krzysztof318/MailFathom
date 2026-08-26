@@ -142,7 +142,7 @@ internal static class AnsweredMailSubmissions
         StoredEmailContentAvailability contentAvailability = StoredEmailContentAvailability.Available) => new()
         {
             StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
-            AccountId = MailAccountId.Create(ServedAccountId),
+            Account = MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create(ServedAccountId)),
             FolderAlias = MailFolderAlias.Create(ReadableFolderAlias),
             InternetMessageId = "<parent@example.test>",
             Subject = "Quarterly report",

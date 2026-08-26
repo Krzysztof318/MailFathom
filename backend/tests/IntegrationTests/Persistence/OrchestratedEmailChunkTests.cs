@@ -263,7 +263,7 @@ public sealed class OrchestratedEmailChunkTests(MailFathomOrchestrationFixture o
     {
         var storedResult = await services.CommitAsync(
             (scope, session, token) => scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                session,
+                session, SyntheticMailAccount.Owner,
                 SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                 SyntheticEmail.ExtractionOf(occurrenceId, subject, body, "recipient@mailfathom.test"),
                 StoredEmailContentAvailability.Available,

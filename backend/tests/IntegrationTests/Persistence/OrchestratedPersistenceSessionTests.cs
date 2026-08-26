@@ -84,7 +84,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationF
 
                 await scope.GetRequiredService<IMailFolderResolutionStore>().SaveResolutionAsync(
                     session,
-                    SyntheticMailAccount.AccountId,
+                    SyntheticMailAccount.Account,
                     binding,
                     token);
 
@@ -186,7 +186,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationF
 
                 await losingScope.GetRequiredService<IMailFolderResolutionStore>().SaveResolutionAsync(
                     losingSession,
-                    SyntheticMailAccount.AccountId,
+                    SyntheticMailAccount.Account,
                     contestedBinding,
                     token);
 
@@ -195,7 +195,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationF
                         .GetRequiredService<IMailFolderResolutionStore>()
                         .SaveResolutionAsync(
                             winningSession,
-                            SyntheticMailAccount.AccountId,
+                            SyntheticMailAccount.Account,
                             contestedBinding,
                             winningToken),
                     token);
@@ -224,6 +224,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationF
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var unstoredAccountId = MailAccountId.Create(UnstoredAccountId);
+        var unstoredAccount = MailAccountIdentity.Create(SyntheticMailAccount.Owner, unstoredAccountId);
         var firstBinding = MailFolderResolution.FirstBindingOf(
             MailFolderAlias.Create(FolderAlias),
             RemoteFolderPath.Create(FolderAlias, hierarchyDelimiter: '.'));
@@ -238,7 +239,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationF
 
                 await losingScope.GetRequiredService<IMailFolderResolutionStore>().SaveResolutionAsync(
                     losingSession,
-                    unstoredAccountId,
+                    unstoredAccount,
                     firstBinding,
                     token);
 
@@ -247,7 +248,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationF
                         .GetRequiredService<IMailFolderResolutionStore>()
                         .SaveResolutionAsync(
                             winningSession,
-                            unstoredAccountId,
+                            unstoredAccount,
                             firstBinding,
                             winningToken),
                     token);
@@ -357,7 +358,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationF
 
                         await retryingScope.GetRequiredService<IMailFolderResolutionStore>().SaveResolutionAsync(
                             session,
-                            SyntheticMailAccount.AccountId,
+                            SyntheticMailAccount.Account,
                             retriedBinding,
                             attemptToken);
 
@@ -373,7 +374,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationF
                                 .GetRequiredService<IMailFolderResolutionStore>()
                                 .SaveResolutionAsync(
                                     winningSession,
-                                    SyntheticMailAccount.AccountId,
+                                    SyntheticMailAccount.Account,
                                     retriedBinding,
                                     winningToken),
                             attemptToken);
@@ -404,7 +405,7 @@ public sealed class OrchestratedPersistenceSessionTests(MailFathomOrchestrationF
             async (scope, session, token) => storedEmailId = await scope
                 .GetRequiredService<IEmailMetadataRepository>()
                 .UpsertMetadataAsync(
-                    session,
+                    session, SyntheticMailAccount.Owner,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                     extractedMetadata: null,
                     StoredEmailContentAvailability.Available,

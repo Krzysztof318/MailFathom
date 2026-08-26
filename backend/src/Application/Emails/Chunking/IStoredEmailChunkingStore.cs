@@ -18,7 +18,7 @@ namespace MailFathom.Application.Emails.Chunking;
 public interface IStoredEmailChunkingStore
 {
     /// <summary>Reads one bounded batch of the account's mail that is ready to be cut and has not been.</summary>
-    /// <param name="accountId">The account whose mail is walked.</param>
+    /// <param name="account">The account whose mail is walked.</param>
     /// <param name="batchSize">How many messages the batch may hold.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The messages, ordered by their identifier, each with the admission that let it through.</returns>
@@ -30,7 +30,7 @@ public interface IStoredEmailChunkingStore
     /// ones.
     /// </remarks>
     Task<IReadOnlyList<StoredEmailAwaitingChunking>> GetEmailsAwaitingChunkingAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         int batchSize,
         CancellationToken cancellationToken);
 

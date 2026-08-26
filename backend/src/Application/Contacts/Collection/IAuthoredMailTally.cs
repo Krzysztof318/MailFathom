@@ -23,7 +23,7 @@ namespace MailFathom.Application.Contacts.Collection;
 public interface IAuthoredMailTally
 {
     /// <summary>Counts the messages of one account that one address authored.</summary>
-    /// <param name="accountId">The account whose stored mail is counted.</param>
+    /// <param name="account">The account whose stored mail is counted.</param>
     /// <param name="author">The address to count the messages of.</param>
     /// <param name="ceiling">The count to stop at, because the caller only asks whether a threshold is reached.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
@@ -35,7 +35,7 @@ public interface IAuthoredMailTally
     /// it is counted per stored copy, since nothing else distinguishes two of them.
     /// </remarks>
     Task<int> CountMessagesAuthoredByAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         EmailAddress author,
         int ceiling,
         CancellationToken cancellationToken);

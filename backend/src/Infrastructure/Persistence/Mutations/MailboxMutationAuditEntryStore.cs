@@ -70,10 +70,11 @@ internal sealed class MailboxMutationAuditEntryStore(
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var accountValue = query.AccountId.Value;
+        var ownerValue = query.Account.Owner.Value;
+        var accountValue = query.Account.Id.Value;
 
         var entities = await this.Filter(query)
-            .Where(entry => entry.MailboxAccountId == accountValue)
+            .Where(entry => entry.OwnerId == ownerValue && entry.MailboxAccountId == accountValue)
             .OrderByDescending(entry => entry.CompletedAt)
             .ThenByDescending(entry => entry.Id)
             .Take(query.PageSize + 1)
@@ -120,18 +121,21 @@ internal sealed class MailboxMutationAuditEntryStore(
     /// statement that takes row locks small enough to state. Every retention sweep here is written that way.
     /// </remarks>
     public async Task<int> EraseCompletedBeforeAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         DateTimeOffset completedBefore,
         int limit,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        var accountValue = accountId.Value;
+        var ownerValue = account.Owner.Value;
+        var accountValue = account.Id.Value;
 
         var expiringIds = await readContext.MailboxMutationAuditEntries
             .AsNoTracking()
-            .Where(entry => entry.MailboxAccountId == accountValue && entry.CompletedAt < completedBefore)
+            .Where(entry => entry.OwnerId == ownerValue
+                && entry.MailboxAccountId == accountValue
+                && entry.CompletedAt < completedBefore)
             .OrderBy(entry => entry.CompletedAt)
             .ThenBy(entry => entry.Id)
             .Take(limit)

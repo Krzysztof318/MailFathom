@@ -41,7 +41,7 @@ namespace MailFathom.Host.Hosting.Workers;
 /// </remarks>
 internal sealed partial class AccountSynchronizationSupervisor
 {
-    private readonly MailAccountId accountId;
+    private readonly MailAccountIdentity account;
     private readonly IServiceScopeFactory scopeFactory;
     private readonly ISettingsSnapshot<MailSynchronizationOptions> settings;
     private readonly SemaphoreSlim accountRunSlots;
@@ -51,7 +51,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     private readonly ILogger<AccountSynchronizationSupervisor> logger;
 
     /// <summary>Initializes a supervisor for one configured account.</summary>
-    /// <param name="accountId">The account this supervisor synchronizes and names in every line it logs.</param>
+    /// <param name="account">The account this supervisor synchronizes, named by its owner and its identifier together; the identifier is what it logs.</param>
     /// <param name="scopeFactory">Creates the scope each folder work unit runs in.</param>
     /// <param name="settings">Supplies the snapshot every run is scheduled from.</param>
     /// <param name="accountRunSlots">Bounds how many accounts run at once; owned by the coordinator and never released beyond what this supervisor took.</param>
@@ -60,7 +60,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <param name="runLedger">Holds what this supervisor is doing for the administrative surface, which is what an operator without a metrics stack reads it from.</param>
     /// <param name="logger">Records run outcomes, which carry account and folder aliases and no message-level data.</param>
     public AccountSynchronizationSupervisor(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         IServiceScopeFactory scopeFactory,
         ISettingsSnapshot<MailSynchronizationOptions> settings,
         SemaphoreSlim accountRunSlots,
@@ -69,7 +69,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         MailSynchronizationRunLedger runLedger,
         ILogger<AccountSynchronizationSupervisor> logger)
     {
-        this.accountId = accountId;
+        this.account = account;
         this.scopeFactory = scopeFactory;
         this.settings = settings;
         this.accountRunSlots = accountRunSlots;
@@ -104,11 +104,11 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
         catch (OperationCanceledException)
         {
-            this.LogSupervisionStopped(this.accountId.Value);
+            this.LogSupervisionStopped(this.account.Id.Value);
         }
         catch (Exception exception)
         {
-            this.LogSupervisionFailed(exception, this.accountId.Value);
+            this.LogSupervisionFailed(exception, this.account.Id.Value);
         }
         finally
         {
@@ -119,7 +119,7 @@ internal sealed partial class AccountSynchronizationSupervisor
 
             // The schedule goes with them, for the same reason: an account nothing is scheduling any more would
             // otherwise publish the wait it was last scheduled behind for the life of the process.
-            this.telemetry.RecordSupervisionEnded(this.accountId);
+            this.telemetry.RecordSupervisionEnded(this.account.Id);
         }
     }
 
@@ -136,11 +136,11 @@ internal sealed partial class AccountSynchronizationSupervisor
         while (!schedulingToken.IsCancellationRequested)
         {
             var runSettings = this.settings.Current;
-            var account = runSettings.FindConfiguredAccount(this.accountId);
+            var account = runSettings.FindConfiguredAccount(this.account.Id);
 
             if (account is null)
             {
-                this.LogAccountNoLongerConfigured(this.accountId.Value);
+                this.LogAccountNoLongerConfigured(this.account.Id.Value);
 
                 return;
             }
@@ -156,12 +156,12 @@ internal sealed partial class AccountSynchronizationSupervisor
 
             // Published on every pass rather than only on a backed-off one, because a gauge that stops being written
             // holds its last value: an account that recovered would go on reporting the wait it was backing off by.
-            this.telemetry.RecordScheduledDelay(this.accountId, delayBeforeNextRun, consecutiveFailureCount);
-            this.runLedger.RecordNextRunDue(this.accountId, delayBeforeNextRun, consecutiveFailureCount);
+            this.telemetry.RecordScheduledDelay(this.account.Id, delayBeforeNextRun, consecutiveFailureCount);
+            this.runLedger.RecordNextRunDue(this.account.Id, delayBeforeNextRun, consecutiveFailureCount);
 
             if (consecutiveFailureCount > 0)
             {
-                this.LogNextRunBackedOff(this.accountId.Value, consecutiveFailureCount, delayBeforeNextRun);
+                this.LogNextRunBackedOff(this.account.Id.Value, consecutiveFailureCount, delayBeforeNextRun);
             }
 
             // Push changes what ends the wait and nothing about how long it would otherwise be, so backoff is computed
@@ -214,14 +214,14 @@ internal sealed partial class AccountSynchronizationSupervisor
         // duration the cycle rather than the cycle plus however long the accounts in front of it took.
         using (this.telemetry.EnterRunQueue())
         {
-            this.runLedger.RecordRunQueued(this.accountId);
+            this.runLedger.RecordRunQueued(this.account.Id);
 
             await this.accountRunSlots.WaitAsync(schedulingToken);
         }
 
-        using var run = this.telemetry.BeginAccountRun(this.accountId);
+        using var run = this.telemetry.BeginAccountRun(this.account.Id);
 
-        this.runLedger.RecordRunStarted(this.accountId);
+        this.runLedger.RecordRunStarted(this.account.Id);
 
         try
         {
@@ -295,13 +295,13 @@ internal sealed partial class AccountSynchronizationSupervisor
         // not finish, so publishing its counts would leave an operator reading a run that skipped most of its folders as
         // the account's last word on itself. The previous finished run stays the one reported instead.
         this.runLedger.RecordRunEnded(
-            this.accountId,
+            this.account.Id,
             scheduledFolders.Length,
             failedFolderCount,
             convergenceFailed);
 
         this.LogAccountRunFinished(
-            this.accountId.Value,
+            this.account.Id.Value,
             scheduledFolders.Length,
             failedFolderCount,
             run.Elapsed);
@@ -337,9 +337,9 @@ internal sealed partial class AccountSynchronizationSupervisor
             scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>().UseRunSnapshot(runSettings);
 
             var converger = scope.ServiceProvider.GetRequiredService<MailboxMutationConverger>();
-            var report = await converger.ConvergeAsync(this.accountId, cancellationToken);
+            var report = await converger.ConvergeAsync(this.account, cancellationToken);
 
-            scope.ServiceProvider.GetRequiredService<MailboxConvergenceTelemetry>().Report(this.accountId, report);
+            scope.ServiceProvider.GetRequiredService<MailboxConvergenceTelemetry>().Report(this.account.Id, report);
 
             return report.FailedCount > 0;
         }
@@ -349,7 +349,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
         catch (Exception exception)
         {
-            this.LogMutationConvergenceFailed(exception, this.accountId.Value);
+            this.LogMutationConvergenceFailed(exception, this.account.Id.Value);
 
             return true;
         }
@@ -380,14 +380,14 @@ internal sealed partial class AccountSynchronizationSupervisor
             using var scope = this.scopeFactory.CreateScope();
 
             var pass = scope.ServiceProvider.GetRequiredService<MailOutboxPass>();
-            var report = await pass.RunAsync(this.accountId, cancellationToken);
+            var report = await pass.RunAsync(this.account, cancellationToken);
 
-            scope.ServiceProvider.GetRequiredService<MailDeliveryTelemetry>().Report(this.accountId, report);
+            scope.ServiceProvider.GetRequiredService<MailDeliveryTelemetry>().Report(this.account.Id, report);
 
             if (report.Results.Count > 0 || report.MarkedUnknownCount > 0)
             {
                 this.LogOutboxDrained(
-                    this.accountId.Value,
+                    this.account.Id.Value,
                     report.SentCount,
                     report.RefusedCount,
                     report.DeferredCount,
@@ -402,7 +402,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
         catch (Exception exception)
         {
-            this.LogOutboxDrainFailed(exception, this.accountId.Value);
+            this.LogOutboxDrainFailed(exception, this.account.Id.Value);
         }
     }
 
@@ -418,17 +418,17 @@ internal sealed partial class AccountSynchronizationSupervisor
         var unknownCount = report.UnknownOutcomeCount + report.MarkedUnknownCount;
         if (unknownCount > 0)
         {
-            this.LogOutboxOutcomesUnknown(this.accountId.Value, unknownCount);
+            this.LogOutboxOutcomesUnknown(this.account.Id.Value, unknownCount);
         }
 
         if (report.RefusedCount > 0)
         {
-            this.LogOutboxSendsRefused(this.accountId.Value, report.RefusedCount);
+            this.LogOutboxSendsRefused(this.account.Id.Value, report.RefusedCount);
         }
 
         if (report.NotRecordedCount > 0)
         {
-            this.LogOutboxOutcomesNotRecorded(this.accountId.Value, report.NotRecordedCount);
+            this.LogOutboxOutcomesNotRecorded(this.account.Id.Value, report.NotRecordedCount);
         }
 
         // A copy that is not where it should be is a warning rather than an error, because nobody is missing a message
@@ -436,7 +436,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         // anything again over one, and nothing files it again either — a settled send is claimed by nothing.
         if (report.NotFiledCount > 0)
         {
-            this.LogOutboxCopiesNotFiled(this.accountId.Value, report.NotFiledCount);
+            this.LogOutboxCopiesNotFiled(this.account.Id.Value, report.NotFiledCount);
         }
     }
 
@@ -473,29 +473,29 @@ internal sealed partial class AccountSynchronizationSupervisor
 
             var erasedCount = await scope.ServiceProvider
                 .GetRequiredService<MailboxMutationAuditTrailRetention>()
-                .EraseExpiredAsync(this.accountId, cancellationToken);
+                .EraseExpiredAsync(this.account, cancellationToken);
 
             if (erasedCount > 0)
             {
-                this.LogAuditEntriesErased(this.accountId.Value, erasedCount);
+                this.LogAuditEntriesErased(this.account.Id.Value, erasedCount);
             }
 
             var erasedAnsweringCount = await scope.ServiceProvider
                 .GetRequiredService<MailAnsweringAuditTrailRetention>()
-                .EraseExpiredAsync(this.accountId, cancellationToken);
+                .EraseExpiredAsync(this.account, cancellationToken);
 
             if (erasedAnsweringCount > 0)
             {
-                this.LogAnsweringAuditEntriesErased(this.accountId.Value, erasedAnsweringCount);
+                this.LogAnsweringAuditEntriesErased(this.account.Id.Value, erasedAnsweringCount);
             }
 
             var erasedExecutionCount = await scope.ServiceProvider
                 .GetRequiredService<MailRuleHistoryRetention>()
-                .EraseExpiredAsync(this.accountId, cancellationToken);
+                .EraseExpiredAsync(this.account, cancellationToken);
 
             if (erasedExecutionCount > 0)
             {
-                this.LogRuleExecutionsErased(this.accountId.Value, erasedExecutionCount);
+                this.LogRuleExecutionsErased(this.account.Id.Value, erasedExecutionCount);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -504,7 +504,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
         catch (Exception exception)
         {
-            this.LogAuditRetentionFailed(exception, this.accountId.Value);
+            this.LogAuditRetentionFailed(exception, this.account.Id.Value);
         }
     }
 
@@ -538,7 +538,7 @@ internal sealed partial class AccountSynchronizationSupervisor
 
             var report = await scope.ServiceProvider
                 .GetRequiredService<SpamClassificationPass>()
-                .RunAsync(this.accountId, cancellationToken);
+                .RunAsync(this.account, cancellationToken);
 
             this.ReportSpamClassification(report);
         }
@@ -548,7 +548,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
         catch (Exception exception)
         {
-            this.LogSpamClassificationFailed(exception, this.accountId.Value);
+            this.LogSpamClassificationFailed(exception, this.account.Id.Value);
         }
     }
 
@@ -570,7 +570,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         if (!walk.IsEmpty)
         {
             this.LogSpamClassificationProgressed(
-                this.accountId.Value,
+                this.account.Id.Value,
                 profile,
                 walk.ClassifiedEmailCount,
                 walk.SkippedEmailCount,
@@ -583,15 +583,15 @@ internal sealed partial class AccountSynchronizationSupervisor
         switch (report.Ending)
         {
             case SpamClassificationRunEnding.Completed:
-                this.LogSpamClassificationCompleted(this.accountId.Value, profile);
+                this.LogSpamClassificationCompleted(this.account.Id.Value, profile);
 
                 break;
             case SpamClassificationRunEnding.Superseded:
-                this.LogSpamClassificationSuperseded(this.accountId.Value);
+                this.LogSpamClassificationSuperseded(this.account.Id.Value);
 
                 break;
             case SpamClassificationRunEnding.Disabled:
-                this.LogSpamClassificationDisabled(this.accountId.Value);
+                this.LogSpamClassificationDisabled(this.account.Id.Value);
 
                 break;
             default:
@@ -633,7 +633,7 @@ internal sealed partial class AccountSynchronizationSupervisor
 
             var report = await scope.ServiceProvider
                 .GetRequiredService<MailRuleEvaluationPass>()
-                .RunAsync(this.accountId, cancellationToken);
+                .RunAsync(this.account, cancellationToken);
 
             this.ReportRuleEvaluation(report);
         }
@@ -643,7 +643,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
         catch (Exception exception)
         {
-            this.LogMailRuleEvaluationFailed(exception, this.accountId.Value);
+            this.LogMailRuleEvaluationFailed(exception, this.account.Id.Value);
         }
     }
 
@@ -675,12 +675,12 @@ internal sealed partial class AccountSynchronizationSupervisor
 
             var report = await scope.ServiceProvider
                 .GetRequiredService<MailChunkingPass>()
-                .RunAsync(this.accountId, cancellationToken);
+                .RunAsync(this.account, cancellationToken);
 
             if (!report.IsEmpty)
             {
                 this.LogPassagesCut(
-                    this.accountId.Value,
+                    this.account.Id.Value,
                     report.ChunkedEmailCount,
                     report.RefusedOfferCount,
                     report.EmailsRemain);
@@ -692,7 +692,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
         catch (Exception exception)
         {
-            this.LogPassageCutFailed(exception, this.accountId.Value);
+            this.LogPassageCutFailed(exception, this.account.Id.Value);
         }
     }
 
@@ -709,7 +709,7 @@ internal sealed partial class AccountSynchronizationSupervisor
             var matchedRuleNames = NameList(report.Arrivals.MatchedRuleNames);
 
             this.LogArrivedMailEvaluated(
-                this.accountId.Value,
+                this.account.Id.Value,
                 report.Revision.Value,
                 report.Arrivals.EvaluatedEmailCount,
                 report.Arrivals.MatchedEmailCount,
@@ -728,7 +728,7 @@ internal sealed partial class AccountSynchronizationSupervisor
                 var matchedRuleNames = NameList(requestedRun.MatchedRuleNames);
 
                 this.LogRequestedRunProgressed(
-                    this.accountId.Value,
+                    this.account.Id.Value,
                     requestedRun.EvaluatedEmailCount,
                     requestedRun.MatchedEmailCount,
                     requestedRun.SkippedEmailCount,
@@ -743,11 +743,11 @@ internal sealed partial class AccountSynchronizationSupervisor
         switch (report.RequestedRunEnding)
         {
             case MailRuleEvaluationRunEnding.Completed:
-                this.LogRequestedRunCompleted(this.accountId.Value, report.Revision.Value);
+                this.LogRequestedRunCompleted(this.account.Id.Value, report.Revision.Value);
 
                 break;
             case MailRuleEvaluationRunEnding.Superseded:
-                this.LogRequestedRunSuperseded(this.accountId.Value);
+                this.LogRequestedRunSuperseded(this.account.Id.Value);
 
                 break;
             default:
@@ -765,7 +765,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         var failedRuleNames = NameList(walk.FailedRuleNames);
 
         this.LogRuleEvaluationsFailed(
-            this.accountId.Value,
+            this.account.Id.Value,
             walk.FailedRuleCount,
             walk.TimedOutRuleCount,
             failedRuleNames);
@@ -781,7 +781,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     {
         if (walk.RequestedActionCount > 0)
         {
-            this.LogRuleActionsRequested(this.accountId.Value, walk.RequestedActionCount);
+            this.LogRuleActionsRequested(this.account.Id.Value, walk.RequestedActionCount);
         }
 
         if (walk.WithheldActionCount == 0 && walk.FailedActionCount == 0)
@@ -790,7 +790,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
 
         this.LogRuleActionsUnapplied(
-            this.accountId.Value,
+            this.account.Id.Value,
             walk.WithheldActionCount,
             walk.FailedActionCount,
             NameList(walk.UnappliedActionRuleNames));
@@ -821,13 +821,13 @@ internal sealed partial class AccountSynchronizationSupervisor
         // Opened before the mapping is built, so a folder whose configuration reached the run unusable is a span with
         // a failure on it rather than a gap under the cycle. The alias is carried by the outcome for the same reason:
         // until the mapping exists there is only the configured spelling of it.
-        using var folderRun = this.telemetry.BeginFolderRun(this.accountId);
+        using var folderRun = this.telemetry.BeginFolderRun(this.account.Id);
 
         try
         {
             var folderMapping = configuredFolder.CreateMapping();
             folderAlias = folderMapping.Alias.Value;
-            folder = new MailFolderIdentity(this.accountId, folderMapping.Alias);
+            folder = new MailFolderIdentity(this.account.Id, folderMapping.Alias);
 
             using var scope = this.scopeFactory.CreateScope();
 
@@ -837,7 +837,7 @@ internal sealed partial class AccountSynchronizationSupervisor
             scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>().UseRunSnapshot(runSettings);
 
             var synchronizer = scope.ServiceProvider.GetRequiredService<MailboxSynchronizer>();
-            var result = await synchronizer.SynchronizeAsync(this.accountId, folderMapping, cancellationToken);
+            var result = await synchronizer.SynchronizeAsync(this.account, folderMapping, cancellationToken);
 
             this.ReportFolderOutcome(
                 folderAlias,
@@ -861,7 +861,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
         catch (PersistenceConcurrencyConflictException exception)
         {
-            this.LogFolderSynchronizationDeferredAfterConcurrencyConflict(exception, this.accountId.Value, folderAlias);
+            this.LogFolderSynchronizationDeferredAfterConcurrencyConflict(exception, this.account.Id.Value, folderAlias);
             folderRun.ConcurrencyConflict(folderAlias);
             this.RecordFolderRun(folder, MailFolderRunOutcome.DeferredAfterConcurrencyConflict);
 
@@ -869,7 +869,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
         catch (MailboxUnavailableException exception)
         {
-            this.LogFolderSynchronizationDeferredAfterMailServerUnavailable(exception, this.accountId.Value, folderAlias);
+            this.LogFolderSynchronizationDeferredAfterMailServerUnavailable(exception, this.account.Id.Value, folderAlias);
             folderRun.MailServerUnavailable(folderAlias);
             this.RecordFolderRun(folder, MailFolderRunOutcome.DeferredAfterMailServerUnavailable);
 
@@ -877,7 +877,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
         catch (Exception exception)
         {
-            this.LogFolderSynchronizationFailed(exception, this.accountId.Value, folderAlias);
+            this.LogFolderSynchronizationFailed(exception, this.account.Id.Value, folderAlias);
             folderRun.UnexpectedFailure(folderAlias);
             this.RecordFolderRun(folder, MailFolderRunOutcome.UnexpectedFailure);
 
@@ -942,7 +942,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     {
         if (result.Outcome == MailboxSynchronizationOutcome.FolderAliasUnresolved)
         {
-            this.LogFolderAliasUnresolved(this.accountId.Value, folderAlias);
+            this.LogFolderAliasUnresolved(this.account.Id.Value, folderAlias);
             folderRun.AliasUnresolved(folderAlias);
 
             return;
@@ -950,14 +950,14 @@ internal sealed partial class AccountSynchronizationSupervisor
 
         if (result.Outcome == MailboxSynchronizationOutcome.FolderAliasAmbiguous)
         {
-            this.LogFolderAliasAmbiguous(this.accountId.Value, folderAlias);
+            this.LogFolderAliasAmbiguous(this.account.Id.Value, folderAlias);
             folderRun.AliasAmbiguous(folderAlias);
 
             return;
         }
 
         this.LogFolderSynchronized(
-            this.accountId.Value,
+            this.account.Id.Value,
             folderAlias,
             result.StoredEmailCount,
             result.SkippedOversizedEmailCount,
@@ -967,7 +967,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         if (result.RelocatedEmailCount > 0 || result.Reconciliation.OwnMutationCompletedEmailCount > 0)
         {
             this.LogOwnMutationsRecognized(
-                this.accountId.Value,
+                this.account.Id.Value,
                 folderAlias,
                 result.RelocatedEmailCount,
                 result.Reconciliation.OwnMutationCompletedEmailCount);
@@ -978,7 +978,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         // Published only for a folder the run actually reached, because the level it carries is a measurement rather
         // than a count: an alias that resolved to nothing measured nothing, and publishing its empty volume would move
         // the deployment's stored-content gauge to zero.
-        contentVolumeTelemetry.Report(this.accountId, folderAlias, result.ContentVolume);
+        contentVolumeTelemetry.Report(this.account.Id, folderAlias, result.ContentVolume);
 
         this.ReportSuppressedChanges(folderAlias, result.SuppressedChanges);
         this.ReportReconciliation(folderAlias, remotelyDeletedEmailDisposition, result.Reconciliation);
@@ -998,12 +998,12 @@ internal sealed partial class AccountSynchronizationSupervisor
             return;
         }
 
-        this.LogChangesSuppressed(this.accountId.Value, folderAlias, suppressedChanges.Count);
+        this.LogChangesSuppressed(this.account.Id.Value, folderAlias, suppressedChanges.Count);
 
         foreach (var suppressed in suppressedChanges)
         {
             this.LogChangeSuppressed(
-                this.accountId.Value,
+                this.account.Id.Value,
                 folderAlias,
                 suppressed.Kind,
                 suppressed.Mutation.Name,
@@ -1026,7 +1026,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         if (reconciliation.RemotelyDeletedEmailCount > 0)
         {
             this.LogRemotelyDeletedEmailsRecorded(
-                this.accountId.Value,
+                this.account.Id.Value,
                 folderAlias,
                 reconciliation.RemotelyDeletedEmailCount,
                 remotelyDeletedEmailDisposition);
@@ -1035,7 +1035,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         if (reconciliation.SeenStateChangedEmailCount > 0)
         {
             this.LogSeenStateChangesObserved(
-                this.accountId.Value,
+                this.account.Id.Value,
                 folderAlias,
                 reconciliation.SeenStateChangedEmailCount);
         }
@@ -1046,7 +1046,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         if (reconciliation.FlaggedStateChangedEmailCount > 0)
         {
             this.LogFlaggedStateChangesObserved(
-                this.accountId.Value,
+                this.account.Id.Value,
                 folderAlias,
                 reconciliation.FlaggedStateChangedEmailCount);
         }
@@ -1054,7 +1054,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         if (reconciliation.KeywordsChangedEmailCount > 0)
         {
             this.LogKeywordChangesObserved(
-                this.accountId.Value,
+                this.account.Id.Value,
                 folderAlias,
                 reconciliation.KeywordsChangedEmailCount);
         }
@@ -1062,7 +1062,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         if (reconciliation.ObservedEmailCount > 0)
         {
             this.LogFolderReconciled(
-                this.accountId.Value,
+                this.account.Id.Value,
                 folderAlias,
                 reconciliation.ObservedEmailCount,
                 reconciliation.EmailsRemain);

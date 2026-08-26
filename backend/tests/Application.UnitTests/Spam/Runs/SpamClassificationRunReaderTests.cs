@@ -15,7 +15,8 @@ namespace MailFathom.Application.UnitTests.Spam.Runs;
 /// <summary>Covers watching a whole-mailbox classification run, which is a grant of its own and not the one that starts one.</summary>
 public sealed class SpamClassificationRunReaderTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("acct-1");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-1"));
 
     private readonly ISpamClassificationRunStore runs = Substitute.For<ISpamClassificationRunStore>();
 
@@ -46,7 +47,7 @@ public sealed class SpamClassificationRunReaderTests
 
         // Assert
         Assert.Equal(MailFathomPermission.AdminRead, refusal.RequiredPermission);
-        await this.runs.DidNotReceive().FindLatestAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>());
+        await this.runs.DidNotReceive().FindLatestAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<CancellationToken>());
     }
 
     private SpamClassificationRunReader ReaderFor(AccessAuthorization authorization) => new(this.runs, authorization);

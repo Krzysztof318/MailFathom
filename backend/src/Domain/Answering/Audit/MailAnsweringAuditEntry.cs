@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 
 namespace MailFathom.Domain.Answering.Audit;
@@ -42,8 +43,19 @@ public sealed record MailAnsweringAuditEntry
     /// <summary>Gets the run this entry records, which the entries of the run's other accounts share.</summary>
     public required MailAnsweringRunId RunId { get; init; }
 
-    /// <summary>Gets the account whose mailbox the run was allowed to read.</summary>
-    public required MailAccountId AccountId { get; init; }
+    /// <summary>Gets the account whose mailbox the run was allowed to read, named by its owner and its identifier.</summary>
+    /// <remarks>
+    /// The owner comes from the scope the run resolved, which settled whose accounts were reachable before anything was
+    /// read, so the entry records whose mailbox was queried without asking the account table again. It travels as one
+    /// value with the identifier because an identifier names an account within its owner and nowhere else.
+    /// </remarks>
+    public required MailAccountIdentity Account { get; init; }
+
+    /// <summary>Gets the identifier half of <see cref="Account" />, which is the name an operator wrote.</summary>
+    public MailAccountId AccountId => this.Account.Id;
+
+    /// <summary>Gets the owner whose account the question was asked of.</summary>
+    public MailOwnerId Owner => this.Account.Owner;
 
     /// <summary>Gets the emails of this account the run retrieved, in the order it first reached each, and which of them the answer named.</summary>
     /// <remarks>

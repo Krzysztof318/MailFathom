@@ -92,7 +92,7 @@ public sealed class MailboxCopyAppender
     }
 
     /// <summary>Appends one copy, having made the caller's record of it durable first.</summary>
-    /// <param name="accountId">The account whose folder the copy goes into.</param>
+    /// <param name="account">The account whose folder the copy goes into.</param>
     /// <param name="filing">Which place the copy goes into, which decides the role and the flags.</param>
     /// <param name="source">The stored message the copy is appended from.</param>
     /// <param name="recordIssuedAsync">Commits the caller's record that an append is about to be issued into the resolved folder.</param>
@@ -110,7 +110,7 @@ public sealed class MailboxCopyAppender
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Past the issued write the append may already have reached the folder, so every way it can end has to be recorded as an outcome nobody can settle rather than raised into a retry that would file a second copy.")]
     public async Task<MailboxCopyAppendResult> AppendAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         OutgoingMailFiling filing,
         MailboxCopySource source,
         Func<MailFolderResolution, CancellationToken, Task> recordIssuedAsync,
@@ -126,7 +126,7 @@ public sealed class MailboxCopyAppender
             throw new ArgumentException("The unspecified default of the struct names no filing.", nameof(filing));
         }
 
-        if (await this.ResolveDestinationAsync(accountId, filing.Role, cancellationToken) is not { } destination)
+        if (await this.ResolveDestinationAsync(account, filing.Role, cancellationToken) is not { } destination)
         {
             return MailboxCopyAppendResult.DestinationUnavailable();
         }
@@ -140,10 +140,10 @@ public sealed class MailboxCopyAppender
             return MailboxCopyAppendResult.MessageUnavailable();
         }
 
-        var transportSecurityPolicy = this.transportSecurityPolicies.GetPolicy(accountId);
+        var transportSecurityPolicy = this.transportSecurityPolicies.GetPolicy(account.Id);
 
         await using var session = await this.writeSessions.OpenForWritingAsync(
-            accountId,
+            account.Id,
             destination.Binding,
             transportSecurityPolicy,
             cancellationToken);
@@ -176,13 +176,13 @@ public sealed class MailboxCopyAppender
 
     /// <summary>Finds the folder of the account that plays a role, as it currently resolves.</summary>
     private async Task<MailboxDestination?> ResolveDestinationAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderSpecialUse role,
         CancellationToken cancellationToken)
     {
         var reference = MailFolderReference.ToRole(role);
 
-        var resolved = await this.destinations.ResolveAsync(accountId, [reference], cancellationToken);
+        var resolved = await this.destinations.ResolveAsync(account, [reference], cancellationToken);
 
         return resolved.Find(reference).Destination;
     }

@@ -36,7 +36,16 @@ public sealed record OutgoingEmailRecord
     public required OutgoingEmailId Id { get; init; }
 
     /// <summary>Gets the account the message is submitted through and sent as.</summary>
-    public required MailAccountId AccountId { get; init; }
+    public required MailAccountIdentity Account { get; init; }
+
+    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one owner names.</summary>
+    /// <remarks>
+    /// Derived rather than stored, so the pair is the one value here and the two halves can never disagree. It is kept
+    /// because most readers of this record are inside a scope whose owner is already settled, and naming the identifier
+    /// alone there says what the code means.
+    /// </remarks>
+    public MailAccountId AccountId => this.Account.Id;
+
 
     /// <summary>Gets the authored act that asked, restored exactly as it was written down.</summary>
     public required OutgoingEmailRequester Requester { get; init; }

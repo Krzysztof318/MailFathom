@@ -141,7 +141,7 @@ public sealed class MailAccountDisplayNameValidationTests
         var options = OptionsFor(CreateAccount("acct-1", "  Work mail  "), pushed);
 
         // Act
-        var servedAccounts = options.Readers.AccountCatalog.ServedAccounts;
+        var servedAccounts = ConfiguredMailAccounts.CatalogOver(options).ServedAccounts;
 
         // Assert
         Assert.Equal(
@@ -160,7 +160,7 @@ public sealed class MailAccountDisplayNameValidationTests
         var options = OptionsFor(CreateAccount("acct-1", "Work mail"), CreateAccount("acct-2", displayName: string.Empty));
 
         // Act
-        var servedAccounts = options.Readers.AccountCatalog.ServedAccounts;
+        var servedAccounts = ConfiguredMailAccounts.CatalogOver(options).ServedAccounts;
 
         // Assert
         Assert.Equal("acct-1", Assert.Single(servedAccounts).Id.Value);
@@ -177,7 +177,7 @@ public sealed class MailAccountDisplayNameValidationTests
         options.Enabled = enabled;
 
         // Act, Assert
-        Assert.Equal(enabled, options.Readers.AccountCatalog.SynchronizationEnabled);
+        Assert.Equal(enabled, ConfiguredMailAccounts.CatalogOver(options).SynchronizationEnabled);
     }
 
     private static MailSynchronizationOptions OptionsFor(params MailSynchronizationAccountOptions[] accounts) => new()

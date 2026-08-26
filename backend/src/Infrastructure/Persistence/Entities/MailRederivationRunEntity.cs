@@ -29,6 +29,9 @@ internal sealed class MailRederivationRunEntity
 {
     public required string MailboxAccountId { get; set; }
 
+    /// <summary>Gets or sets the owner whose account this run belongs to.</summary>
+    public required Guid OwnerId { get; set; }
+
     /// <summary>Gets or sets the folder the run walks, or <see cref="MailRederivationPositionEntity.WholeAccountFolder" /> for a whole-account run.</summary>
     /// <remarks>The same keyed value as the position row's, so the two rows of one scope are keyed alike and a reader comparing them needs no second rule.</remarks>
     public required string FolderAlias { get; set; }

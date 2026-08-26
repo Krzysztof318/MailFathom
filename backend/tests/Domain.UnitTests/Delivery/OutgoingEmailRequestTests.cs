@@ -4,13 +4,15 @@
 
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Domain.UnitTests.Delivery;
 
 public sealed class OutgoingEmailRequestTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private static readonly OutgoingEmailRequester Requester =
         OutgoingEmailRequester.Command("mfctl-4f2a");
@@ -31,7 +33,7 @@ public sealed class OutgoingEmailRequestTests
 
         // Assert
         Assert.Equal(recipients, request.Recipients);
-        Assert.Equal(Account, request.AccountId);
+        Assert.Equal(Account, request.Account);
         Assert.Equal(Requester, request.Requester);
     }
 

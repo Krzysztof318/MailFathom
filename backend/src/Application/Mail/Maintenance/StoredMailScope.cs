@@ -8,7 +8,7 @@ using MailFathom.Domain.Folders;
 namespace MailFathom.Application.Mail.Maintenance;
 
 /// <summary>Names the mail one maintenance operation acts on: an account, or one folder of it.</summary>
-/// <param name="Account">The account whose stored mail is acted on.</param>
+/// <param name="Account">The account whose stored mail is acted on, named by its owner and its identifier.</param>
 /// <param name="Folder">MailFathom's own name for the one folder to act on, or <see langword="null" /> for every folder the account holds mail in.</param>
 /// <remarks>
 /// One type for both operations because an operator names the same two things for either, and because the narrower
@@ -17,4 +17,4 @@ namespace MailFathom.Application.Mail.Maintenance;
 /// every folder its configuration maps — the mail is what is acted on, and a mapping somebody withdrew left its rows
 /// where they were.
 /// </remarks>
-public sealed record StoredMailScope(MailAccountId Account, MailFolderAlias? Folder);
+public sealed record StoredMailScope(MailAccountIdentity Account, MailFolderAlias? Folder);

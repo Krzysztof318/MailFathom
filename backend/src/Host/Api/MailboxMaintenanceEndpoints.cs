@@ -120,7 +120,7 @@ internal static class MailboxMaintenanceEndpoints
         var storedEmailCount = await rewind.AssessAsync(resolution, cancellationToken);
 
         return TypedResults.Ok(new MailboxRewindAssessmentResponse(
-            resolution.Account.Value,
+            resolution.Account.Id.Value,
             resolution.Folder?.Value,
             storedEmailCount));
     }
@@ -154,7 +154,7 @@ internal static class MailboxMaintenanceEndpoints
         var rewound = await rewind.RewindAsync(resolution, cancellationToken);
 
         return TypedResults.Ok(new MailboxRewindResponse(
-            resolution.Account.Value,
+            resolution.Account.Id.Value,
             resolution.Folder?.Value,
             [.. rewound.Select(alias => alias.Value)]));
     }
@@ -223,7 +223,7 @@ internal static class MailboxMaintenanceEndpoints
         var run = await runs.FindAsync(resolution, cancellationToken);
 
         return TypedResults.Ok(new MailboxRederivationStateResponse(
-            resolution.Account.Value,
+            resolution.Account.Id.Value,
             resolution.Folder?.Value,
             run is null ? null : MailboxRederivationRunResponse.For(run)));
     }
@@ -236,18 +236,18 @@ internal static class MailboxMaintenanceEndpoints
     /// </remarks>
     private static StoredMailScope? ResolveScope(string? account, string? folder, IDeploymentMailAccountCatalog accounts)
     {
-        if (AdminAccountRequest.Resolve(account, accounts) is not { } accountId)
+        if (AdminAccountRequest.Resolve(account, accounts) is not { } servedAccount)
         {
             return null;
         }
 
         if (string.IsNullOrWhiteSpace(folder))
         {
-            return new StoredMailScope(accountId, null);
+            return new StoredMailScope(servedAccount, null);
         }
 
         return MailFolderAlias.TryCreate(folder, out var folderAlias)
-            ? new StoredMailScope(accountId, folderAlias)
+            ? new StoredMailScope(servedAccount, folderAlias)
             : null;
     }
 

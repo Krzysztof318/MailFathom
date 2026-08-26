@@ -62,7 +62,7 @@ public sealed class MailRuleEvaluationRunRequests
     }
 
     /// <summary>Asks for the account's rules to be run over every message stored for it.</summary>
-    /// <param name="accountId">The account to run the rules over.</param>
+    /// <param name="account">The account to run the rules over, named by its owner and its identifier together.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The run the account now has outstanding, and whether this request is what put it there.</returns>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when two requests raced past the bounded retries.</exception>
@@ -84,7 +84,7 @@ public sealed class MailRuleEvaluationRunRequests
     /// </para>
     /// </remarks>
     public Task<MailRuleEvaluationRunRequest> SubmitAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminOperate);
@@ -94,7 +94,7 @@ public sealed class MailRuleEvaluationRunRequests
             {
                 var requested = new MailRuleEvaluationRun
                 {
-                    AccountId = accountId,
+                    Account = account,
                     RequestedAt = this.timeProvider.GetUtcNow(),
                     Trigger = MailRuleExecutionTrigger.RequestedRun,
                 };
@@ -105,7 +105,7 @@ public sealed class MailRuleEvaluationRunRequests
     }
 
     /// <summary>Asks, on a rule's own declared occasion, for the account's scheduled rules to be run over its mailbox.</summary>
-    /// <param name="accountId">The account to run the scheduled rules over.</param>
+    /// <param name="account">The account to run the scheduled rules over, named by its owner and its identifier together.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The run the account now has outstanding, and whether this occasion is what put it there.</returns>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when two requests raced past the bounded retries.</exception>
@@ -125,7 +125,7 @@ public sealed class MailRuleEvaluationRunRequests
     /// </remarks>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when anything but this deployment's own process reached the use case.</exception>
     public Task<MailRuleEvaluationRunRequest> SubmitScheduledAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
         this.authorization.RequireProcessIdentity();
@@ -135,7 +135,7 @@ public sealed class MailRuleEvaluationRunRequests
             {
                 var scheduled = new MailRuleEvaluationRun
                 {
-                    AccountId = accountId,
+                    Account = account,
                     RequestedAt = this.timeProvider.GetUtcNow(),
                     Trigger = MailRuleExecutionTrigger.ScheduledRun,
                 };

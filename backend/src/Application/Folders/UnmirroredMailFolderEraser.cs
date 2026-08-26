@@ -57,7 +57,7 @@ public sealed class UnmirroredMailFolderEraser
     }
 
     /// <summary>Erases one bounded pass of what is stored for a folder nothing mirrors any more.</summary>
-    /// <param name="accountId">The account the folder belongs to.</param>
+    /// <param name="account">The account the folder belongs to, named by its owner and its identifier.</param>
     /// <param name="folderAlias">MailFathom's own name for the folder.</param>
     /// <param name="cancellationToken">Cancels the pass before or during its single transaction.</param>
     /// <returns>What this pass erased, and whether the folder still holds stored mail.</returns>
@@ -69,7 +69,7 @@ public sealed class UnmirroredMailFolderEraser
     /// an entrypoint added later must not be able to perform one by omission.
     /// </remarks>
     public async Task<MailFolderMirrorErasure> EraseAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderAlias folderAlias,
         CancellationToken cancellationToken)
     {
@@ -81,7 +81,7 @@ public sealed class UnmirroredMailFolderEraser
             async (persistenceSession, attemptCancellationToken) => erasure =
                 await this.mirrorStore.EraseFolderMirrorAsync(
                     persistenceSession,
-                    accountId,
+                    account,
                     folderAlias,
                     this.options.MaxReconciledEmailsPerRun,
                     attemptCancellationToken),

@@ -73,7 +73,7 @@ public sealed class MailDraftPass
     }
 
     /// <summary>Settles every draft of one account that still owes the mail server something.</summary>
-    /// <param name="accountId">The account whose drafts are settled.</param>
+    /// <param name="account">The account whose drafts are settled.</param>
     /// <param name="cancellationToken">Cancels the reads and the commands.</param>
     /// <returns>What each attempt did, which is empty on an account with nothing outstanding.</returns>
     /// <remarks>
@@ -82,11 +82,11 @@ public sealed class MailDraftPass
     /// nowhere else, and a promotion still waiting to be delivered answers nothing.
     /// </remarks>
     public async Task<IReadOnlyList<MailDraftFilingResult>> SettleOutstandingAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
         var outstanding = await this.drafts.ReadOutstandingAsync(
-            accountId,
+            account,
             this.maxDraftsPerPass,
             cancellationToken);
 

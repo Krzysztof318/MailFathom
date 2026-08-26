@@ -8,6 +8,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Governance;
 using MailFathom.Domain.Emails;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
@@ -17,7 +18,8 @@ public sealed class AuthoredSendUsageLedgerTests
 {
     private const string Caller = "agent-key";
 
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     /// <summary>A deployment that bounded no caller counts nothing, so the ordinary posture holds no identity at all.</summary>
     [Fact]

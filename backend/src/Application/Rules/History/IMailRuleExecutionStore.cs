@@ -40,7 +40,7 @@ public interface IMailRuleExecutionStore
         CancellationToken cancellationToken);
 
     /// <summary>Erases up to a bounded number of one account's executions recorded before a given instant.</summary>
-    /// <param name="accountId">The account whose history is aged.</param>
+    /// <param name="account">The account whose history is aged.</param>
     /// <param name="evaluatedBefore">The instant an execution must have been recorded before to be erased.</param>
     /// <param name="limit">The greatest number of executions one call may erase.</param>
     /// <param name="cancellationToken">Cancels the erasure.</param>
@@ -58,7 +58,7 @@ public interface IMailRuleExecutionStore
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is not positive.</exception>
     Task<int> EraseEvaluatedBeforeAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         DateTimeOffset evaluatedBefore,
         int limit,
         CancellationToken cancellationToken);

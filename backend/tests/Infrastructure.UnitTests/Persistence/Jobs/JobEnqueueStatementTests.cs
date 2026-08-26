@@ -11,6 +11,7 @@ using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Jobs;
+using MailFathom.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -25,14 +26,19 @@ public sealed class JobEnqueueStatementTests
 {
     private static readonly DateTimeOffset EnqueuedAt = new(2026, 8, 12, 12, 0, 0, TimeSpan.Zero);
 
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("account-a"));
+
     private static JobEnqueueRequest Request => JobEnqueueRequest.Create(
         JobIdempotencyKey.Create("account-a/INBOX#1/12345/4711"),
-        ClassifyEmailSpamJobPayload.For(EmailOccurrenceId.Create(
-            MailAccountId.Create("account-a"),
-            new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
-            ImapUidValidity.Create(12345),
-            ImapUid.Create(4711))),
-        MailAccountId.Create("account-a"));
+        ClassifyEmailSpamJobPayload.For(
+            SyntheticMailOwner.Deployment,
+            EmailOccurrenceId.Create(
+                MailAccountId.Create("account-a"),
+                new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
+                ImapUidValidity.Create(12345),
+                ImapUid.Create(4711))),
+        Account);
 
     /// <summary>
     /// The conflict target names the columns the unique index is built on. A target naming anything else would either
@@ -84,8 +90,9 @@ public sealed class JobEnqueueStatementTests
     /// <summary>
     /// The turn is one spacing past the latest one the same owner's waiting work already holds, which is the whole of
     /// what makes the claim fair: it is what spreads a backlog over the clock instead of leaving every job of it at the
-    /// instant it was queued. The peers are found through the account's owner rather than through the account, so a
-    /// person with several mailboxes gets one share rather than one per mailbox.
+    /// instant it was queued. The peers are found on the job row's own owner column rather than through a join back to
+    /// the account table, so a person with several mailboxes gets one share rather than one per mailbox and the read
+    /// stays an index scan over the queue.
     /// </summary>
     [Fact]
     public void Compose_AnEnqueue_PlacesTheTurnOneSpacingPastTheOwnersLatestWaitingTurn()
@@ -95,13 +102,14 @@ public sealed class JobEnqueueStatementTests
 
         // Assert
         Assert.Contains(
-            $"SELECT MAX(mailbox.\"{nameof(JobEntity.TurnAt)}\")",
+            $"SELECT waiting.\"{nameof(JobEntity.TurnAt)}\"",
             statement.Format,
             StringComparison.Ordinal);
         Assert.Contains(
-            $"owned.\"{nameof(MailboxAccountEntity.OwnerId)}\" = owning.\"{nameof(MailboxAccountEntity.OwnerId)}\"",
+            $"waiting.\"{nameof(JobEntity.OwnerId)}\" = ",
             statement.Format,
             StringComparison.Ordinal);
+        Assert.DoesNotContain("JOIN mailbox_accounts", statement.Format, StringComparison.Ordinal);
         Assert.Contains(statement.GetArguments(), argument => Equals(argument, JobEnqueueStatement.TurnSpacing));
     }
 
@@ -120,7 +128,7 @@ public sealed class JobEnqueueStatementTests
         Assert.Contains("GREATEST(", statement.Format, StringComparison.Ordinal);
         Assert.True(
             statement.Format.IndexOf("GREATEST(", StringComparison.Ordinal)
-                < statement.Format.IndexOf("SELECT MAX(mailbox.", StringComparison.Ordinal));
+                < statement.Format.IndexOf("SELECT waiting.", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -153,7 +161,7 @@ public sealed class JobEnqueueStatementTests
         var scheduled = JobEnqueueRequest.CreateAvailableAt(
             Request.Key,
             Request.Payload,
-            Request.AccountId,
+            Request.Account,
             availableAt);
 
         // Act

@@ -26,7 +26,7 @@ public sealed class ContentObjectReclamationScheduleSourceTests
 
         // Assert
         var declared = Assert.Single(schedules);
-        Assert.Null(declared.AccountId);
+        Assert.Null(declared.Account);
         Assert.Equal(JobType.ReclaimContentObjects, declared.Payload.JobType);
         Assert.Same(recurrence, declared.Recurrence);
     }

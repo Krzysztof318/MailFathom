@@ -142,7 +142,7 @@ public sealed class OrchestratedMailAnsweringAuditTrailTests(MailFathomOrchestra
     {
         var observation = new MailAnsweringRunObservation(
             MailAnsweringRunId.Create(Guid.CreateVersion7()),
-            MailboxScope.Create([SyntheticMailAccount.AccountId], []),
+            MailboxScope.Create(SyntheticMailAccount.Owner, [SyntheticMailAccount.AccountId], []),
             completedAt - TimeSpan.FromSeconds(9));
 
         observation.RecordComposition(EndpointAlias, InstructionsVersion);
@@ -187,7 +187,7 @@ public sealed class OrchestratedMailAnsweringAuditTrailTests(MailFathomOrchestra
             async (scope, token) =>
             {
                 var queryResult = MailAnsweringAuditQuery.Create(
-                    SyntheticMailAccount.AccountId,
+                    SyntheticMailAccount.Account,
                     completedFrom: null,
                     completedBefore: null,
                     MailAnsweringAuditQuery.MaximumPageSize,
@@ -204,7 +204,7 @@ public sealed class OrchestratedMailAnsweringAuditTrailTests(MailFathomOrchestra
         OrchestratedMailFathomServices services,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailAnsweringAuditTrailRetention>()
-                .EraseExpiredAsync(SyntheticMailAccount.AccountId, token),
+                .EraseExpiredAsync(SyntheticMailAccount.Account, token),
             cancellationToken);
 
     /// <summary>Erases one stored email, which is the cascade an entry naming it has to ride.</summary>
@@ -235,7 +235,7 @@ public sealed class OrchestratedMailAnsweringAuditTrailTests(MailFathomOrchestra
             await services.CommitAsync(
                 (scope, session, token) => scope.GetRequiredService<IMailFolderResolutionStore>().SaveResolutionAsync(
                     session,
-                    SyntheticMailAccount.AccountId,
+                    SyntheticMailAccount.Account,
                     Inbox,
                     token),
                 cancellationToken));
@@ -262,7 +262,7 @@ public sealed class OrchestratedMailAnsweringAuditTrailTests(MailFathomOrchestra
                     ImapUid.Create(uid));
 
                 var storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                    session,
+                    session, SyntheticMailAccount.Owner,
                     SyntheticEmail.RemoteMetadataOf(occurrence, $"answering-audit-{uid}"),
                     extractedMetadata: null,
                     StoredEmailContentAvailability.ExceededSizeLimit,

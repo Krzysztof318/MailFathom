@@ -27,7 +27,7 @@ public sealed class OutgoingMailReaderTests
 
         // Assert
         Assert.Equal(queued.Id, read.Id);
-        Assert.Equal(OutgoingMailTrackingHarness.Account, read.AccountId);
+        Assert.Equal(OutgoingMailTrackingHarness.Account.Id, read.AccountId);
         Assert.Equal(OutgoingEmailStage.Recorded, read.Stage);
         Assert.Equal(queued.Recipients.Count, read.Recipients.Count);
     }

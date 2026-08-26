@@ -58,6 +58,7 @@ internal sealed class OutgoingEmailConfiguration : IEntityTypeConfiguration<Outg
 
         entity.HasIndex(message => new
         {
+            message.OwnerId,
             message.MailboxAccountId,
             message.RequesterOrigin,
             message.RequesterIdentity,
@@ -69,7 +70,7 @@ internal sealed class OutgoingEmailConfiguration : IEntityTypeConfiguration<Outg
         // than every message the deployment has ever sent. A refused send stays in for the reason an abandoned
         // mutation does: giving up on it is what stops it being attempted, and it would be worth nothing if it also
         // stopped it being seen — so the filter names the three terminal stages rather than only the successful one.
-        entity.HasIndex(message => new { message.MailboxAccountId, message.RecordedAt })
+        entity.HasIndex(message => new { message.OwnerId, message.MailboxAccountId, message.RecordedAt })
             .HasDatabaseName(PersistenceConstraintNames.OutgoingEmailOutstandingIndexName)
             .HasFilter(
                 $"\"{nameof(OutgoingEmailEntity.Stage)}\" NOT IN ("
@@ -80,11 +81,17 @@ internal sealed class OutgoingEmailConfiguration : IEntityTypeConfiguration<Outg
         // Filtered to the one stage a claim may take a record from, which is both what makes the structure small
         // and what lets PostgreSQL prove it applies to the claim's own predicate. Ordered the way that claim
         // orders, so the batch it takes is a range read rather than a sort over everything the account has queued.
-        entity.HasIndex(message => new { message.MailboxAccountId, message.AvailableAt, message.Id })
+        entity.HasIndex(message => new
+        {
+            message.OwnerId,
+            message.MailboxAccountId,
+            message.AvailableAt,
+            message.Id,
+        })
             .HasDatabaseName(PersistenceConstraintNames.OutgoingEmailClaimableIndexName)
             .HasFilter($"\"{nameof(OutgoingEmailEntity.Stage)}\" = '{nameof(OutgoingEmailStage.Recorded)}'");
 
-        entity.HasIndex(message => new { message.RecordedAt, message.MailboxAccountId })
+        entity.HasIndex(message => new { message.RecordedAt, message.OwnerId, message.MailboxAccountId })
             .HasDatabaseName(PersistenceConstraintNames.OutgoingEmailPeriodUsageIndexName);
     }
 }

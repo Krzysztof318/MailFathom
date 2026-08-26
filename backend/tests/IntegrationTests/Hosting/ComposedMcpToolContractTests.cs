@@ -125,7 +125,7 @@ public sealed class ComposedMcpToolContractTests(MailFathomOrchestrationFixture 
 
         var commitResult = await services.CommitAsync(
             (scope, session, token) => scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                session,
+                session, SyntheticMailAccount.Owner,
                 SyntheticEmail.RemoteMetadataOf(occurrenceId, SeededSubject),
                 SyntheticEmail.ExtractionOf(
                     occurrenceId,

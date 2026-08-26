@@ -54,7 +54,7 @@ public sealed class SpamClassificationRunRequests
     }
 
     /// <summary>Asks for every message stored for the account to be classified on the terms given.</summary>
-    /// <param name="accountId">The account to walk.</param>
+    /// <param name="account">The account to walk, named by its owner and its identifier.</param>
     /// <param name="terms">What the run should do.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The run the account now has outstanding, and whether this request is what put it there.</returns>
@@ -72,7 +72,7 @@ public sealed class SpamClassificationRunRequests
     /// </para>
     /// </remarks>
     public Task<SpamClassificationRunRequest> SubmitAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         SpamClassificationRunTerms terms,
         CancellationToken cancellationToken)
     {
@@ -83,7 +83,7 @@ public sealed class SpamClassificationRunRequests
         return this.commitPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
-                var outstanding = await this.runStore.FindOutstandingAsync(accountId, attemptCancellationToken);
+                var outstanding = await this.runStore.FindOutstandingAsync(account, attemptCancellationToken);
 
                 if (outstanding is not null)
                 {
@@ -92,7 +92,7 @@ public sealed class SpamClassificationRunRequests
 
                 var requested = new SpamClassificationRun
                 {
-                    AccountId = accountId,
+                    Account = account,
                     RequestedAt = this.timeProvider.GetUtcNow(),
                     Terms = terms,
                 };

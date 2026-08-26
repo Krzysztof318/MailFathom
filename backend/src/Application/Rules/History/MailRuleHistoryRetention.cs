@@ -62,14 +62,14 @@ public sealed class MailRuleHistoryRetention
     }
 
     /// <summary>Erases everything in one account's history that has outlived the configured window.</summary>
-    /// <param name="accountId">The account whose history is aged.</param>
+    /// <param name="account">The account whose history is aged.</param>
     /// <param name="cancellationToken">Cancels the erasure.</param>
     /// <returns>How many executions were erased.</returns>
     /// <remarks>
     /// A window of zero or less names no boundary at all and erases nothing, which is how a deployment declares that it
     /// keeps its history until the mail it describes is erased and no longer.
     /// </remarks>
-    public Task<int> EraseExpiredAsync(MailAccountId accountId, CancellationToken cancellationToken)
+    public Task<int> EraseExpiredAsync(MailAccountIdentity account, CancellationToken cancellationToken)
     {
         if (this.options.HistoryRetention <= TimeSpan.Zero)
         {
@@ -77,7 +77,7 @@ public sealed class MailRuleHistoryRetention
         }
 
         return this.store.EraseEvaluatedBeforeAsync(
-            accountId,
+            account,
             this.timeProvider.GetUtcNow() - this.options.HistoryRetention,
             MaximumExecutionsErasedPerPass,
             cancellationToken);

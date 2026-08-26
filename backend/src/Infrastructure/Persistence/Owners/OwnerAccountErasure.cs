@@ -24,10 +24,11 @@ namespace MailFathom.Infrastructure.Persistence.Owners;
 /// What the schema does not reach is the tables that record a mail account as a plain identifier with no foreign key
 /// onto one. Those are the seam's own work, and they are enumerated from the model rather than from a list somebody
 /// maintains: a table added later that names an account without keying onto one is discharged by the same walk on the
-/// day it appears, instead of being remembered about after an erasure request has already been answered. Those
-/// statements name the owner's accounts by subquery, so what they reach is bounded by the account rows the database
-/// holds: a row recorded against an account that was authorized and has never synchronized — a sealed refresh token is
-/// the one that occurs — has no account row to be found through and stays behind.
+/// day it appears, instead of being remembered about after an erasure request has already been answered. Each
+/// statement names the owner on the row itself rather than the accounts that owner holds, which is what the owner
+/// column beside every account reference bought: a row recorded against an account that was authorized and has never
+/// synchronized — a sealed refresh token is the one that occurs — carries the owner it was written for and is reached
+/// by the same statement, where a subquery over the account table would have found no account row and left it behind.
 /// </para>
 /// <para>
 /// The contact book is reached by the cascade rather than by the walk. <c>contacts</c> and <c>contact_addresses</c>
@@ -41,6 +42,8 @@ namespace MailFathom.Infrastructure.Persistence.Owners;
 internal static class OwnerAccountErasure
 {
     private const string AccountIdentifierPropertyName = nameof(MailFolderEntity.MailboxAccountId);
+
+    private const string OwnerPropertyName = nameof(MailFolderEntity.OwnerId);
 
     /// <summary>Erases one owner, their mail accounts, and everything recorded about either.</summary>
     /// <param name="session">The transaction the whole erasure runs in, so a partial one is never committed.</param>
@@ -57,7 +60,6 @@ internal static class OwnerAccountErasure
         ArgumentNullException.ThrowIfNull(session);
 
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-        var accountEntityType = MailboxAccountEntityTypeOf(writeContext.Model);
 
         // Read before anything is deleted, because everything below reaches the payload rows by cascade and a cascade
         // removes the only pointer to an object without any application code seeing it. An erasure answered to a data
@@ -81,15 +83,13 @@ internal static class OwnerAccountErasure
         var rowsErasedBesideTheCascade = 0;
         foreach (var entityType in TablesTheCascadeDoesNotReach(writeContext.Model))
         {
-            // The accounts are named by a subquery rather than by identifiers this method read first, so the statement
-            // removes the rows of whatever the owner owns at the moment it runs. Everything else in it is either a
-            // parameter or an identifier the model itself supplied.
+            // The owner is named on the row rather than through the accounts it holds, so the statement reaches every
+            // row written for this owner including one whose account the deployment no longer has a row for. The owner
+            // leads the index each of these tables carries, which is the same order the reads narrow in. Everything in
+            // it is either a parameter or an identifier the model itself supplied.
             var statement = $$"""
                 DELETE FROM {{QuotedTable(entityType)}}
-                WHERE {{QuotedColumn(entityType, AccountIdentifierPropertyName)}} IN (
-                    SELECT {{QuotedColumn(accountEntityType, nameof(MailboxAccountEntity.Id))}}
-                    FROM {{QuotedTable(accountEntityType)}}
-                    WHERE {{QuotedColumn(accountEntityType, nameof(MailboxAccountEntity.OwnerId))}} = {0})
+                WHERE {{QuotedColumn(entityType, OwnerPropertyName)}} = {0}
                 """;
 
             rowsErasedBesideTheCascade += await writeContext.Database.ExecuteSqlRawAsync(

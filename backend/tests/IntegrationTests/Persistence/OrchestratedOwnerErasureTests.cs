@@ -220,6 +220,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         var account = new MailboxAccountEntity { Id = ErasedAccount, OwnerId = ownerId };
         var folder = new MailFolderEntity
         {
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             MailboxAccount = account,
             Alias = "inbox",
@@ -228,12 +229,14 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         var thread = new EmailThreadEntity
         {
             Id = Guid.CreateVersion7(),
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             AssembledAt = now,
         };
         var storedEmail = new StoredEmailEntity
         {
             Id = Guid.CreateVersion7(),
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             MailFolder = folder,
             UidValidity = 1,
@@ -247,6 +250,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         var outgoingEmail = new OutgoingEmailEntity
         {
             Id = Guid.CreateVersion7(),
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             RequesterIdentity = "owner-erasure",
             MimeByteLength = RepresentativeRawMime.Length,
@@ -258,6 +262,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         {
             Id = Guid.CreateVersion7(),
             RunId = Guid.CreateVersion7(),
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             ChatEndpointAlias = "primary",
             InstructionsVersion = "owner-erasure",
@@ -285,6 +290,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         });
         context.EmailThreadIdentifiers.Add(new EmailThreadIdentifierEntity
         {
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             IdentifierHash = new string('a', 64),
             EmailThreadId = thread.Id,
@@ -294,6 +300,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
             Id = Guid.CreateVersion7(),
             StoredEmailId = storedEmail.Id,
             StoredEmail = storedEmail,
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             MailFolder = folder,
             UidValidity = 1,
@@ -306,6 +313,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         context.MailRuleExecutions.Add(new MailRuleExecutionEntity
         {
             Id = Guid.CreateVersion7(),
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             StoredEmailId = storedEmail.Id,
             RuleName = "owner-erasure",
@@ -322,6 +330,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
             JobType = "OwnerErasure",
             IdempotencyKey = $"owner-erasure-{account.Id}",
             Payload = "{}",
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             AvailableAt = now,
             TurnAt = now,
@@ -340,6 +349,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
             OutgoingEmailId = outgoingEmail.Id,
             OutgoingEmail = outgoingEmail,
             Filing = "SentCopy",
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             FolderAlias = "sent",
             FolderPath = "Sent",
@@ -348,6 +358,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         context.MailDrafts.Add(new MailDraftEntity
         {
             Id = Guid.CreateVersion7(),
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             RequesterIdentity = "owner-erasure",
             MimeByteLength = RepresentativeRawMime.Length,
@@ -357,6 +368,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         context.RecurringSends.Add(new RecurringSendEntity
         {
             Id = Guid.CreateVersion7(),
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             RequesterIdentity = "owner-erasure",
             Schedule = "0 9 * * 1",
@@ -367,6 +379,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         {
             Id = Guid.CreateVersion7(),
             MutationRecordId = Guid.CreateVersion7(),
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             StoredEmailId = storedEmail.Id,
             Mutation = "SetSeen",
@@ -379,6 +392,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         });
         context.MailboxRefreshTokens.Add(new MailboxRefreshTokenEntity
         {
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             SealedRefreshToken = [1, 2, 3, 4],
             DataEncryptionKeyId = OrchestratedMailFathomServices.DataEncryptionKeyId,
@@ -386,6 +400,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         });
         context.MailRederivationPositions.Add(new MailRederivationPositionEntity
         {
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             FolderAlias = "inbox",
             LastProcessedStoredEmailId = storedEmail.Id,
@@ -393,6 +408,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         });
         context.MailRederivationRuns.Add(new MailRederivationRunEntity
         {
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             FolderAlias = "inbox",
             RunId = Guid.CreateVersion7(),
@@ -400,11 +416,13 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         });
         context.MailRuleEvaluationRuns.Add(new MailRuleEvaluationRunEntity
         {
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             RequestedAt = now,
         });
         context.SpamClassificationRuns.Add(new SpamClassificationRunEntity
         {
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             RequestedAt = now,
             FolderAliases = ["inbox"],
@@ -463,6 +481,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         var account = new MailboxAccountEntity { Id = SurvivingAccount, OwnerId = ownerId };
         var folder = new MailFolderEntity
         {
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             MailboxAccount = account,
             Alias = "inbox",
@@ -471,12 +490,14 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         var thread = new EmailThreadEntity
         {
             Id = Guid.CreateVersion7(),
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             AssembledAt = now,
         };
         var storedEmail = new StoredEmailEntity
         {
             Id = Guid.CreateVersion7(),
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             MailFolder = folder,
             UidValidity = 1,
@@ -505,6 +526,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         context.MailDrafts.Add(new MailDraftEntity
         {
             Id = Guid.CreateVersion7(),
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             RequesterIdentity = "owner-erasure-bystander",
             MimeByteLength = RepresentativeRawMime.Length,
@@ -513,6 +535,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         });
         context.MailboxRefreshTokens.Add(new MailboxRefreshTokenEntity
         {
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             SealedRefreshToken = [5, 6, 7, 8],
             DataEncryptionKeyId = OrchestratedMailFathomServices.DataEncryptionKeyId,
@@ -520,6 +543,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         });
         context.MailRederivationPositions.Add(new MailRederivationPositionEntity
         {
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             FolderAlias = "inbox",
             LastProcessedStoredEmailId = storedEmail.Id,

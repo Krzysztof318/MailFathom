@@ -22,6 +22,7 @@ namespace MailFathom.Application.UnitTests.Accounts;
 public sealed class OwnedMailAccountCatalogTests
 {
     private static readonly ServedMailAccount ServedAccount = new(
+        SyntheticMailOwner.Deployment,
         MailAccountId.Create("personal"),
         MailAccountDisplayName.Create("Personal mail"),
         MailSynchronizationMode.Polling);

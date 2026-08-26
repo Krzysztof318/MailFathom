@@ -23,6 +23,10 @@ namespace MailFathom.Application.Mail.Delivery.Scheduling;
 /// </para>
 /// </remarks>
 /// <param name="Id">The declaration the occasion belongs to.</param>
-/// <param name="AccountId">The account every occurrence is submitted through and sent as.</param>
+/// <param name="Account">The account every occurrence is submitted through and sent as, named by its owner and its identifier.</param>
 /// <param name="Schedule">The repetition as it was declared, in the syntax the dispatch mechanism parses.</param>
-public sealed record RecurringSendDeclaration(RecurringSendId Id, MailAccountId AccountId, string Schedule);
+public sealed record RecurringSendDeclaration(RecurringSendId Id, MailAccountIdentity Account, string Schedule)
+{
+    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one owner names.</summary>
+    public MailAccountId AccountId => this.Account.Id;
+}

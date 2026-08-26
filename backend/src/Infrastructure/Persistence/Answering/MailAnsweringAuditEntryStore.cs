@@ -44,7 +44,8 @@ internal sealed class MailAnsweringAuditEntryStore(
 
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var runId = entry.RunId.Value;
-        var accountId = entry.AccountId.Value;
+        var ownerValue = entry.Account.Owner.Value;
+        var accountId = entry.Account.Id.Value;
 
         // Looked up by the run and account rather than by the key, because a retried append generates a fresh key and
         // the thing that must not happen twice is an entry for one question asked of one mailbox. The change-tracker
@@ -53,7 +54,9 @@ internal sealed class MailAnsweringAuditEntryStore(
         var existing = await TrackedEntityLookup.SinglePendingOrPersistedAsync(
             writeContext.MailAnsweringAuditEntries,
             writeContext.MailAnsweringAuditEntries,
-            candidate => candidate.RunId == runId && candidate.MailboxAccountId == accountId,
+            candidate => candidate.RunId == runId
+                && candidate.OwnerId == ownerValue
+                && candidate.MailboxAccountId == accountId,
             cancellationToken);
 
         if (existing is not null)
@@ -72,10 +75,11 @@ internal sealed class MailAnsweringAuditEntryStore(
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var accountValue = query.AccountId.Value;
+        var ownerValue = query.Account.Owner.Value;
+        var accountValue = query.Account.Id.Value;
 
         var entities = await this.Filter(query)
-            .Where(record => record.MailboxAccountId == accountValue)
+            .Where(record => record.OwnerId == ownerValue && record.MailboxAccountId == accountValue)
 
             // The emails are the point of the entry, so they are loaded with it rather than left to a second read per
             // row. The page is bounded and so is what one run may retrieve, which is what keeps the join bounded too.
@@ -124,18 +128,21 @@ internal sealed class MailAnsweringAuditEntryStore(
     /// <see cref="MailboxMutationAuditEntryStore.EraseCompletedBeforeAsync" /> states.
     /// </remarks>
     public async Task<int> EraseCompletedBeforeAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         DateTimeOffset completedBefore,
         int limit,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        var accountValue = accountId.Value;
+        var ownerValue = account.Owner.Value;
+        var accountValue = account.Id.Value;
 
         var expiringIds = await readContext.MailAnsweringAuditEntries
             .AsNoTracking()
-            .Where(record => record.MailboxAccountId == accountValue && record.CompletedAt < completedBefore)
+            .Where(record => record.OwnerId == ownerValue
+                && record.MailboxAccountId == accountValue
+                && record.CompletedAt < completedBefore)
             .OrderBy(record => record.CompletedAt)
             .ThenBy(record => record.Id)
             .Take(limit)

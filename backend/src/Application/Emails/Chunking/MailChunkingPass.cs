@@ -85,7 +85,7 @@ public sealed class MailChunkingPass
     }
 
     /// <summary>Takes one bounded pass over the account's mail awaiting the cut.</summary>
-    /// <param name="accountId">The account whose mail is cut.</param>
+    /// <param name="account">The account whose mail is cut.</param>
     /// <param name="cancellationToken">Cancels the pass between messages and between batches; committed passages stay durable.</param>
     /// <returns>How many messages this pass cut and offered, and whether more remain.</returns>
     /// <exception cref="PersistenceConcurrencyConflictException">
@@ -93,7 +93,7 @@ public sealed class MailChunkingPass
     /// durable and the next run resumes by asking the same question.
     /// </exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels. Committed passages stay durable.</exception>
-    public async Task<MailChunkingPassReport> RunAsync(MailAccountId accountId, CancellationToken cancellationToken)
+    public async Task<MailChunkingPassReport> RunAsync(MailAccountIdentity account, CancellationToken cancellationToken)
     {
         var chunkedCount = 0;
         var refusedCount = 0;
@@ -102,7 +102,7 @@ public sealed class MailChunkingPass
         for (var batchNumber = 1; batchNumber <= MaxBatchesPerPass; batchNumber++)
         {
             var batch = await this.chunkingStore.GetEmailsAwaitingChunkingAsync(
-                accountId,
+                account,
                 BatchSize,
                 cancellationToken);
 

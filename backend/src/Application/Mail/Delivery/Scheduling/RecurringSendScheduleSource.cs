@@ -62,8 +62,8 @@ public sealed class RecurringSendScheduleSource : IScheduledJobSource
             ? new ScheduledJob(
                 JobScheduleId.Create(
                     string.Create(CultureInfo.InvariantCulture, $"{IdentityPrefix}:{declaration.Id}")),
-                RecurringSendJobPayload.For(declaration.AccountId, declaration.Id),
+                RecurringSendJobPayload.For(declaration.Account, declaration.Id),
                 recurrence!,
-                declaration.AccountId)
+                declaration.Account)
             : null;
 }

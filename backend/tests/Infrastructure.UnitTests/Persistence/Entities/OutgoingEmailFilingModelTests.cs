@@ -53,8 +53,8 @@ public sealed class OutgoingEmailFilingModelTests
         // Act
         var index = FindFilingIndex(indexName);
 
-        // Assert
-        Assert.Equal("MailboxAccountId", index.Properties[0].Name);
+        // Assert — the account a filing names is the pair, so the join narrows on the owner before the identifier.
+        Assert.Equal(["OwnerId", "MailboxAccountId"], index.Properties.Take(2).Select(property => property.Name));
         Assert.Equal(expectedLastColumn, index.Properties[^1].Name);
         Assert.Equal("\"ObservedAt\" IS NULL AND \"Stage\" = 'Confirmed'", index.GetFilter());
     }

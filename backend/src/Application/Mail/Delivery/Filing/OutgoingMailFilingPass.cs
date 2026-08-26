@@ -77,7 +77,7 @@ public sealed class OutgoingMailFilingPass
     }
 
     /// <summary>Puts a copy of each waiting send into the folder the account mapped as its outbox.</summary>
-    /// <param name="accountId">The account whose waiting sends are mirrored.</param>
+    /// <param name="account">The account whose waiting sends are mirrored.</param>
     /// <param name="cancellationToken">Cancels the reads and the appends.</param>
     /// <returns>What each attempt did, which is empty on an account that maps no outbox folder.</returns>
     /// <remarks>
@@ -86,16 +86,16 @@ public sealed class OutgoingMailFilingPass
     /// every send this deployment makes.
     /// </remarks>
     public async Task<IReadOnlyList<OutgoingMailFilingResult>> MirrorWaitingSendsAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
-        if (!this.MapsOutboxFolder(accountId))
+        if (!this.MapsOutboxFolder(account.Id))
         {
             return [];
         }
 
         var outstanding = await this.outgoingEmails.ReadOutstandingAsync(
-            accountId,
+            account,
             this.maxMirroredSendsPerPass,
             cancellationToken);
 

@@ -88,7 +88,7 @@ public sealed class DeadLetteredJobsTests
     }
 
     private static DeadLetteredJobQuery EveryDeadLetter() =>
-        DeadLetteredJobQuery.Create(jobType: null, accountId: null, pageSize: null, cursor: null).Query!;
+        DeadLetteredJobQuery.Create(jobType: null, account: null, pageSize: null, cursor: null).Query!;
 
     private DeadLetteredJobs JobsFor(AccessAuthorization authorization) => new(this.store, authorization);
 }

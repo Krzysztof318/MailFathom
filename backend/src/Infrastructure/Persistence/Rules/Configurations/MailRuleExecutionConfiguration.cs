@@ -71,10 +71,22 @@ internal sealed class MailRuleExecutionConfiguration : IEntityTypeConfiguration<
 
         // The three indexes are the three questions the history is asked. The first is also what retention erases
         // through, which is why the account leads it and the instant follows.
-        entity.HasIndex(execution => new { execution.MailboxAccountId, execution.EvaluatedAt, execution.Id })
+        entity.HasIndex(execution => new
+        {
+            execution.OwnerId,
+            execution.MailboxAccountId,
+            execution.EvaluatedAt,
+            execution.Id,
+        })
             .HasDatabaseName(PersistenceConstraintNames.MailRuleExecutionTimelineIndexName);
-        entity.HasIndex(execution =>
-                new { execution.MailboxAccountId, execution.RuleName, execution.EvaluatedAt, execution.Id })
+        entity.HasIndex(execution => new
+        {
+            execution.OwnerId,
+            execution.MailboxAccountId,
+            execution.RuleName,
+            execution.EvaluatedAt,
+            execution.Id,
+        })
             .HasDatabaseName(PersistenceConstraintNames.MailRuleExecutionRuleIndexName);
         entity.HasIndex(execution => new { execution.StoredEmailId, execution.EvaluatedAt, execution.Id })
             .HasDatabaseName(PersistenceConstraintNames.MailRuleExecutionEmailIndexName);

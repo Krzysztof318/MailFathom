@@ -101,6 +101,13 @@ internal static class StoredEmailSelectionPredicate
     /// reading of a caller's entitlement, which is the one thing here nobody may state twice.
     /// </para>
     /// <para>
+    /// The owner is the first term of the narrowing itself, ahead of the accounts, and it is applied whatever the
+    /// account list holds. That is what makes an empty list fail closed here rather than open: every index this read is
+    /// planned against leads with the owner, so the term is what the plan is chosen for as well as what the entitlement
+    /// rests on. A scope that names nobody — the one a caller owning no account resolves to — therefore admits no row
+    /// at all, on top of admitting no folder.
+    /// </para>
+    /// <para>
     /// The tombstone exclusion leads and no caller can turn it off, which is why it is written here rather than left to
     /// each read model. An email a tombstone hides is not part of any mailbox a reader may see, and a filter that could
     /// opt out of that would be a way to read deleted mail. Which rows a tombstone hides is
@@ -127,6 +134,14 @@ internal static class StoredEmailSelectionPredicate
         MailAccountId? withinAccount = null)
     {
         emails = emails.Where(StoredEmailTombstone.IsNotTombstoned);
+
+        // The owner leads the account narrowing and is never conditional on it. An account identifier names one account
+        // within its owner, so the account term alone would be a comparison against a value that does not say whose
+        // mail it is — and an empty account list is read as unrestricted by the branch below, which without this term
+        // would make the one caller with nothing to read the one caller reading everything. It is also the column every
+        // index this read is planned against leads with.
+        var ownerId = scope.Owner.Value;
+        emails = emails.Where(email => email.OwnerId == ownerId);
 
         if (withinAccount is { } account)
         {

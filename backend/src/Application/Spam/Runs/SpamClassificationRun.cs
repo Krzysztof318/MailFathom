@@ -30,7 +30,10 @@ namespace MailFathom.Application.Spam.Runs;
 public sealed record SpamClassificationRun
 {
     /// <summary>Gets the account whose mail the run walks.</summary>
-    public required MailAccountId AccountId { get; init; }
+    public required MailAccountIdentity Account { get; init; }
+
+    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one owner names.</summary>
+    public MailAccountId AccountId => this.Account.Id;
 
     /// <summary>Gets when the run was asked for.</summary>
     public required DateTimeOffset RequestedAt { get; init; }

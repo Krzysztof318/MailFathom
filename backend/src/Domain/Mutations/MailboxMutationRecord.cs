@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
@@ -28,6 +29,15 @@ public sealed record MailboxMutationRecord
 
     /// <summary>Gets the change that was asked for, restored exactly as it was written down.</summary>
     public required MailboxMutationRequest Request { get; init; }
+
+    /// <summary>Gets the owner whose account the change was asked about.</summary>
+    /// <remarks>
+    /// Taken from the request rather than stored again, because the request is what names the account and the two halves
+    /// of one account reference must not be able to disagree. It is named here because every row written beside this
+    /// one — the audit entry above all — records whose mail the change was about, and reads that better than
+    /// <c>Request.Owner</c> does.
+    /// </remarks>
+    public MailOwnerId Owner => this.Request.Owner;
 
     /// <summary>Gets how far along its protocol sequence the mutation has durably reached.</summary>
     public required MailboxMutationStage Stage { get; init; }

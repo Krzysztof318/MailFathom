@@ -44,7 +44,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<MailboxMutationRecord>> ReadPlacementsAtAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         RemoteFolderPath destinationPath,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
@@ -57,7 +57,8 @@ internal sealed partial class MailboxMutationReconciliationStore(
             return [];
         }
 
-        var accountValue = accountId.Value;
+        var ownerValue = account.Owner.Value;
+        var accountValue = account.Id.Value;
         var destinationValue = destinationPath.Value;
         var uidValidityValue = uidValidity.Value;
         string[] placingMutations = [MailboxMutation.Relocate.Name, MailboxMutation.Copy.Name];
@@ -69,7 +70,8 @@ internal sealed partial class MailboxMutationReconciliationStore(
         var entities = await readContext.MailboxMutations
             .AsNoTracking()
             .Include(mutation => mutation.MailFolder)
-            .Where(mutation => mutation.MailboxAccountId == accountValue
+            .Where(mutation => mutation.OwnerId == ownerValue
+                && mutation.MailboxAccountId == accountValue
                 && placingMutations.Contains(mutation.Mutation)
                 && mutation.Stage == MailboxMutationStage.Completed
                 && mutation.PlacementObservedAt == null
@@ -85,7 +87,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<MailboxMutationRecord>> ReadFlagChangesOnAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
@@ -99,7 +101,8 @@ internal sealed partial class MailboxMutationReconciliationStore(
             return [];
         }
 
-        var accountValue = accountId.Value;
+        var ownerValue = account.Owner.Value;
+        var accountValue = account.Id.Value;
         var alias = folderResolutionId.Alias.Value;
         var generation = folderResolutionId.Generation.Value;
         var uidValidityValue = uidValidity.Value;
@@ -121,7 +124,8 @@ internal sealed partial class MailboxMutationReconciliationStore(
         // fill the budget and drop the completed record that does explain what the server reported.
         var storedValues = await readContext.MailboxMutations
             .AsNoTracking()
-            .Where(mutation => mutation.MailboxAccountId == accountValue
+            .Where(mutation => mutation.OwnerId == ownerValue
+                && mutation.MailboxAccountId == accountValue
                 && mutation.MailFolder.Alias == alias
                 && mutation.MailFolder.ResolutionGeneration == generation
                 && mutation.UidValidity == uidValidityValue
@@ -170,7 +174,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<MailboxMutationRecord>> ReadMutationsRemovingAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
@@ -183,7 +187,8 @@ internal sealed partial class MailboxMutationReconciliationStore(
             return [];
         }
 
-        var accountValue = accountId.Value;
+        var ownerValue = account.Owner.Value;
+        var accountValue = account.Id.Value;
         var alias = folderResolutionId.Alias.Value;
         var generation = folderResolutionId.Generation.Value;
         var uidValidityValue = uidValidity.Value;
@@ -193,7 +198,8 @@ internal sealed partial class MailboxMutationReconciliationStore(
         var entities = await readContext.MailboxMutations
             .AsNoTracking()
             .Include(mutation => mutation.MailFolder)
-            .Where(mutation => mutation.MailboxAccountId == accountValue
+            .Where(mutation => mutation.OwnerId == ownerValue
+                && mutation.MailboxAccountId == accountValue
                 && mutation.MailFolder.Alias == alias
                 && mutation.MailFolder.ResolutionGeneration == generation
                 && mutation.UidValidity == uidValidityValue

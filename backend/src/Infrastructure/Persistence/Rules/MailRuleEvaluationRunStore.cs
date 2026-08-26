@@ -20,31 +20,35 @@ internal sealed class MailRuleEvaluationRunStore(MailFathomDbContext dbContext) 
 {
     /// <inheritdoc />
     public async Task<MailRuleEvaluationRun?> FindOutstandingAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
-        var mailboxAccountId = accountId.Value;
+        var ownerId = account.Owner.Value;
+        var mailboxAccountId = account.Id.Value;
         var outstanding = await dbContext.MailRuleEvaluationRuns
             .AsNoTracking()
             .SingleOrDefaultAsync(
-                run => run.MailboxAccountId == mailboxAccountId && run.EndedAt == null,
+                run => run.OwnerId == ownerId && run.MailboxAccountId == mailboxAccountId && run.EndedAt == null,
                 cancellationToken);
 
-        return outstanding is null ? null : Read(outstanding, accountId);
+        return outstanding is null ? null : Read(outstanding, account);
     }
 
     /// <inheritdoc />
     /// <remarks>One row per account, so the account's key is the whole of the lookup and no ordering is needed.</remarks>
     public async Task<MailRuleEvaluationRun?> FindLatestAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
-        var mailboxAccountId = accountId.Value;
+        var ownerId = account.Owner.Value;
+        var mailboxAccountId = account.Id.Value;
         var latest = await dbContext.MailRuleEvaluationRuns
             .AsNoTracking()
-            .SingleOrDefaultAsync(run => run.MailboxAccountId == mailboxAccountId, cancellationToken);
+            .SingleOrDefaultAsync(
+                run => run.OwnerId == ownerId && run.MailboxAccountId == mailboxAccountId,
+                cancellationToken);
 
-        return latest is null ? null : Read(latest, accountId);
+        return latest is null ? null : Read(latest, account);
     }
 
     /// <inheritdoc />
@@ -62,12 +66,12 @@ internal sealed class MailRuleEvaluationRunStore(MailFathomDbContext dbContext) 
 
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var stored = await sessionContext.MailRuleEvaluationRuns.FindAsync(
-            [run.AccountId.Value],
+            [run.Account.Id.Value],
             cancellationToken);
 
         if (stored is null)
         {
-            stored = new MailRuleEvaluationRunEntity { MailboxAccountId = run.AccountId.Value };
+            stored = NewRunFor(run.Account);
             sessionContext.MailRuleEvaluationRuns.Add(stored);
         }
 
@@ -91,17 +95,17 @@ internal sealed class MailRuleEvaluationRunStore(MailFathomDbContext dbContext) 
 
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var stored = await sessionContext.MailRuleEvaluationRuns.FindAsync(
-            [run.AccountId.Value],
+            [run.Account.Id.Value],
             cancellationToken);
 
         if (stored is null)
         {
-            stored = new MailRuleEvaluationRunEntity { MailboxAccountId = run.AccountId.Value };
+            stored = NewRunFor(run.Account);
             sessionContext.MailRuleEvaluationRuns.Add(stored);
         }
         else
         {
-            var claimed = Read(stored, run.AccountId);
+            var claimed = Read(stored, run.Account);
 
             if (!run.Supersedes(claimed))
             {
@@ -114,9 +118,20 @@ internal sealed class MailRuleEvaluationRunStore(MailFathomDbContext dbContext) 
         return null;
     }
 
-    private static MailRuleEvaluationRun Read(MailRuleEvaluationRunEntity entity, MailAccountId accountId) => new()
+    /// <summary>Composes the row a run that has never been recorded starts from, with the owner it belongs to.</summary>
+    /// <remarks>
+    /// The owner comes off the identity the pass was started for rather than from a read of the account, which is what
+    /// makes the pair on the row the same pair the caller resolved.
+    /// </remarks>
+    private static MailRuleEvaluationRunEntity NewRunFor(MailAccountIdentity account) => new()
     {
-        AccountId = accountId,
+        MailboxAccountId = account.Id.Value,
+        OwnerId = account.Owner.Value,
+    };
+
+    private static MailRuleEvaluationRun Read(MailRuleEvaluationRunEntity entity, MailAccountIdentity account) => new()
+    {
+        Account = account,
         RequestedAt = entity.RequestedAt,
         Trigger = entity.Trigger,
         Revision = entity.Revision is { } revision

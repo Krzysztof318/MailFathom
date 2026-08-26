@@ -26,7 +26,8 @@ public sealed class InMemoryMailDraftStoreTests
 {
     private static readonly DateTimeOffset Moment = new(2026, 8, 20, 9, 0, 0, TimeSpan.Zero);
 
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private static readonly IPersistenceSession Session = new IgnoredPersistenceSession();
 
@@ -49,7 +50,7 @@ public sealed class InMemoryMailDraftStoreTests
 
         // Assert
         Assert.Equal(1, draft.Revision);
-        Assert.Equal(Account, draft.AccountId);
+        Assert.Equal(Account, draft.Account);
         Assert.Equal(Moment, draft.ComposedAt);
         Assert.Equal(draft, store.Peek(draft.Id));
         Assert.Single(store.Drafts);
@@ -340,7 +341,9 @@ public sealed class InMemoryMailDraftStoreTests
         // Arrange
         var store = new InMemoryMailDraftStore();
         var mine = await OpenAsync(store);
-        await OpenAsync(store, MailAccountId.Create("personal"));
+        await OpenAsync(
+            store,
+            MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal")));
 
         // Act
         var outstanding = await store.ReadOutstandingAsync(
@@ -380,10 +383,12 @@ public sealed class InMemoryMailDraftStoreTests
         Assert.Equal(MailDraftStage.Composed, recorded.Stage);
     }
 
-    private static Task<MailDraftRecord> OpenAsync(InMemoryMailDraftStore store, MailAccountId? accountId = null) =>
+    private static Task<MailDraftRecord> OpenAsync(
+        InMemoryMailDraftStore store,
+        MailAccountIdentity? account = null) =>
         store.OpenAsync(
             Session,
-            accountId ?? Account,
+            account ?? Account,
             OutgoingEmailRequester.Command("one-act"),
             [],
             mimeByteLength: 16,

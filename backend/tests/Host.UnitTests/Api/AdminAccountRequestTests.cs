@@ -6,6 +6,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using NSubstitute;
@@ -23,6 +24,10 @@ public sealed class AdminAccountRequestTests
 {
     private static readonly MailAccountId Work = MailAccountId.Create("work");
 
+    /// <summary>The account a resolution answers with, which names the owner as well as the identifier.</summary>
+    private static readonly MailAccountIdentity WorkIdentity =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, Work);
+
     /// <summary>The ordinary case: a name this deployment serves resolves to its identifier.</summary>
     [Fact]
     public void Resolve_AnAccountTheDeploymentServes_ReadsTheIdentifier()
@@ -34,7 +39,7 @@ public sealed class AdminAccountRequestTests
         var accountId = AdminAccountRequest.Resolve("work", accounts);
 
         // Assert
-        Assert.Equal(Work, accountId);
+        Assert.Equal(WorkIdentity, accountId);
     }
 
     /// <summary>Whitespace around the name is not part of it, so a padded name reaches the same account.</summary>
@@ -48,7 +53,7 @@ public sealed class AdminAccountRequestTests
         var accountId = AdminAccountRequest.Resolve("  work  ", accounts);
 
         // Assert
-        Assert.Equal(Work, accountId);
+        Assert.Equal(WorkIdentity, accountId);
     }
 
     /// <summary>An absent, empty, or blank name resolves to nothing rather than to a refusal of its own.</summary>
@@ -154,7 +159,7 @@ public sealed class AdminAccountRequestTests
 
         // Assert
         Assert.True(admitted);
-        Assert.Equal(Work, accountId);
+        Assert.Equal(WorkIdentity, accountId);
         Assert.Null(refusal);
     }
 
@@ -203,6 +208,7 @@ public sealed class AdminAccountRequestTests
         catalog.ServedAccounts.Returns(
         [
             .. accounts.Select(account => new ServedMailAccount(
+                SyntheticMailOwner.Deployment,
                 account,
                 MailAccountDisplayName.Create(account.Value),
                 MailSynchronizationMode.Polling)),

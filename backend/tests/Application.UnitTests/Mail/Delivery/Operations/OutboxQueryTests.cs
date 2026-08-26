@@ -5,6 +5,7 @@
 using MailFathom.Application.Mail.Delivery.Operations;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Mail.Delivery.Operations;
@@ -17,13 +18,14 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Operations;
 /// </remarks>
 public sealed class OutboxQueryTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     [Fact]
     public void Create_ARequestNamingNothing_IsServedTheDefaultPageOverEveryAccountAndStage()
     {
         // Act
-        var result = OutboxQuery.Create(accountId: null, stage: null, pageSize: null, cursor: null);
+        var result = OutboxQuery.Create(account: null, stage: null, pageSize: null, cursor: null);
 
         // Assert
         Assert.Equal(OutboxQueryOutcome.Accepted, result.Outcome);
@@ -39,7 +41,7 @@ public sealed class OutboxQueryTests
     public void Create_APageSizeOutsideTheServedRange_IsRefusedWithoutAQuery(int pageSize)
     {
         // Act
-        var result = OutboxQuery.Create(accountId: null, stage: null, pageSize, cursor: null);
+        var result = OutboxQuery.Create(account: null, stage: null, pageSize, cursor: null);
 
         // Assert
         Assert.Equal(OutboxQueryOutcome.PageSizeOutOfRange, result.Outcome);
@@ -52,7 +54,7 @@ public sealed class OutboxQueryTests
     {
         // Act
         var result = OutboxQuery.Create(
-            accountId: null,
+            account: null,
             (OutgoingEmailStage)int.MaxValue,
             pageSize: null,
             cursor: null);
@@ -74,7 +76,7 @@ public sealed class OutboxQueryTests
             issuedFor.FilterFingerprint);
 
         // Act
-        var result = OutboxQuery.Create(accountId: null, stage: null, pageSize: null, cursor);
+        var result = OutboxQuery.Create(account: null, stage: null, pageSize: null, cursor);
 
         // Assert
         Assert.Equal(OutboxQueryOutcome.CursorFilterMismatch, result.Outcome);

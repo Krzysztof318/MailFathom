@@ -48,7 +48,7 @@ internal sealed class StoredEmailContentInventory(MailFathomDbContext dbContext)
     /// caller decides from it is whether the message is offered for a spam verdict.
     /// </remarks>
     public async Task<IReadOnlyList<EmailAwaitingContent>> GetEmailsAwaitingContentAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         int maxEmailCount,
@@ -56,7 +56,8 @@ internal sealed class StoredEmailContentInventory(MailFathomDbContext dbContext)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxEmailCount);
 
-        var mailboxAccountId = accountId.Value;
+        var owner = account.Owner.Value;
+        var mailboxAccountId = account.Id.Value;
         var alias = folderResolutionId.Alias.Value;
         var generation = folderResolutionId.Generation.Value;
         var uidValidityValue = uidValidity.Value;
@@ -65,6 +66,7 @@ internal sealed class StoredEmailContentInventory(MailFathomDbContext dbContext)
             .AsNoTracking()
             .Where(StoredEmailTombstone.IsNotTombstoned)
             .Where(email => email.ContentAvailability == StoredEmailContentAvailability.AwaitingStorageHeadroom
+                && email.OwnerId == owner
                 && email.MailboxAccountId == mailboxAccountId
                 && email.MailFolder.Alias == alias
                 && email.MailFolder.ResolutionGeneration == generation
@@ -86,7 +88,7 @@ internal sealed class StoredEmailContentInventory(MailFathomDbContext dbContext)
         [
             .. candidates.Select(candidate => new EmailAwaitingContent(
                 new RemoteEmailMetadata(
-                    EmailOccurrenceId.Create(accountId, folderResolutionId, uidValidity, ImapUid.Create(candidate.Uid)),
+                    EmailOccurrenceId.Create(account.Id, folderResolutionId, uidValidity, ImapUid.Create(candidate.Uid)),
                     candidate.InternetMessageId,
                     candidate.Subject,
                     candidate.SentAt,

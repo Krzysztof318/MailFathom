@@ -44,7 +44,7 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
     /// <inheritdoc />
     public Task<MailDraftRecord> OpenAsync(
         IPersistenceSession session,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         OutgoingEmailRequester author,
         IReadOnlyList<MailDraftRecipient> recipients,
         long mimeByteLength,
@@ -54,7 +54,7 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
         var draft = new MailDraftRecord
         {
             Id = MailDraftId.Create(Guid.CreateVersion7(composedAt)),
-            AccountId = accountId,
+            Account = account,
             Author = author,
             Recipients = [.. recipients],
             MimeByteLength = mimeByteLength,
@@ -116,13 +116,13 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
 
     /// <inheritdoc />
     public Task<IReadOnlyList<MailDraftRecord>> ReadOutstandingAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         int maxCount,
         CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<MailDraftRecord>>(
         [
             .. this.drafts.Values
-                .Where(draft => draft.AccountId == accountId && draft.HasOutstandingServerWork)
+                .Where(draft => draft.Account == account && draft.HasOutstandingServerWork)
                 .OrderBy(draft => draft.RevisedAt)
                 .ThenBy(draft => draft.Id.Value)
                 .Take(maxCount),

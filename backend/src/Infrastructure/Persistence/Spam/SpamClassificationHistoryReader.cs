@@ -36,10 +36,12 @@ internal sealed class SpamClassificationHistoryReader(MailFathomDbContext dbCont
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var accountValue = query.AccountId.Value;
+        var ownerValue = query.Account.Owner.Value;
+        var accountValue = query.Account.Id.Value;
 
         var rows = await this.Filter(query)
-            .Where(classification => classification.StoredEmail!.MailboxAccountId == accountValue)
+            .Where(classification => classification.StoredEmail!.OwnerId == ownerValue
+                && classification.StoredEmail.MailboxAccountId == accountValue)
             .OrderByDescending(classification => classification.EvaluatedAt)
             .ThenByDescending(classification => classification.StoredEmailId)
             .Take(query.PageSize + 1)

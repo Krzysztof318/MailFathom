@@ -99,7 +99,7 @@ internal static class JobDeadLetterEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(deadLetters);
 
-        if (!AdminAccountRequest.TryResolveFilter(account, accounts, out var accountId, out var refusal))
+        if (!AdminAccountRequest.TryResolveFilter(account, accounts, out var servedAccount, out var refusal))
         {
             return refusal;
         }
@@ -127,7 +127,7 @@ internal static class JobDeadLetterEndpoints
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        var queryResult = DeadLetteredJobQuery.Create(jobType, accountId, pageSize, decodedCursor);
+        var queryResult = DeadLetteredJobQuery.Create(jobType, servedAccount, pageSize, decodedCursor);
 
         if (queryResult.Query is not { } query)
         {

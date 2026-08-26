@@ -169,7 +169,7 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
                 foreach (var seeded in SeededEmails(binding))
                 {
                     await repository.UpsertMetadataAsync(
-                        session,
+                        session, SyntheticMailAccount.Owner,
                         seeded.RemoteMetadata,
                         seeded.Extraction,
                         StoredEmailContentAvailability.Available,
@@ -209,7 +209,7 @@ public sealed class OrchestratedContactCollectionTests(MailFathomOrchestrationFi
         int ceiling,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IAuthoredMailTally>().CountMessagesAuthoredByAsync(
-                SyntheticMailAccount.AccountId,
+                SyntheticMailAccount.Account,
                 Address(author),
                 ceiling,
                 token),

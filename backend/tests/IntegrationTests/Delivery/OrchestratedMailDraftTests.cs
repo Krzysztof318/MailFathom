@@ -122,7 +122,7 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
 
         var report = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailOutboxPass>().RunAsync(
-                SyntheticMailAccount.AccountId,
+                SyntheticMailAccount.Account,
                 token),
             cancellationToken);
 
@@ -183,7 +183,7 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
         var commit = await services.CommitAsync(
             async (scope, session, token) => opened = await scope.GetRequiredService<IMailDraftStore>().OpenAsync(
                 session,
-                SyntheticMailAccount.AccountId,
+                SyntheticMailAccount.Account,
                 OutgoingEmailRequester.Command($"provenance-{Guid.NewGuid():N}"),
                 recipients,
                 mimeByteLength: 128,
@@ -221,7 +221,7 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
 
         return services.AsCallerInScopeAsync(
             (scope, token) => scope.GetRequiredService<MailDraftBook>().SaveAsync(
-                SyntheticMailAccount.AccountId,
+                SyntheticMailAccount.Account,
                 OutgoingEmailRequester.Command(subject),
                 new ComposedMailDraft([RecipientAtTheMailbox()], messageId, MimeOf(subject, messageId)),
                 revises,

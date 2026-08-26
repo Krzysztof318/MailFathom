@@ -24,7 +24,8 @@ namespace MailFathom.Application.UnitTests.Emails.Chunking;
 /// </remarks>
 public sealed class MailChunkingPassTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     [Fact]
     public async Task RunAsync_MailAwaitingTheCut_CutsEachMessageAndOffersItForEmbedding()

@@ -35,7 +35,7 @@ public interface IStoredEmailContentInventory
     Task<long> GetStoredContentBytesAsync(CancellationToken cancellationToken);
 
     /// <summary>Gets the occurrences of one folder that are recorded without their content and are waiting for room.</summary>
-    /// <param name="accountId">The account owning the folder.</param>
+    /// <param name="account">The account owning the folder.</param>
     /// <param name="folderResolutionId">The alias binding whose occurrences are read.</param>
     /// <param name="uidValidity">The UID space the caller's open session is selected under.</param>
     /// <param name="maxEmailCount">The greatest number of occurrences to report, oldest UID first.</param>
@@ -54,7 +54,7 @@ public interface IStoredEmailContentInventory
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<EmailAwaitingContent>> GetEmailsAwaitingContentAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         int maxEmailCount,

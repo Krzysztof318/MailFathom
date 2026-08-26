@@ -69,6 +69,10 @@ internal sealed class OutgoingMailFilingStore(MailFathomDbContext readContext) :
             OutgoingEmail = record,
             Filing = filing.Name,
             MailboxAccountId = record.MailboxAccountId,
+
+            // Both halves copied off the record this copy is filed for, which is the row the caller's own resolution
+            // wrote. A filing cannot belong to an owner the message it files does not.
+            OwnerId = record.OwnerId,
             FolderAlias = destination.Alias.Value,
             FolderPath = destination.RemotePath.Value,
             Stage = OutgoingMailFilingStage.Issued,
@@ -137,7 +141,7 @@ internal sealed class OutgoingMailFilingStore(MailFathomDbContext readContext) :
     /// collections, which a synchronization run fills from one batch of discoveries.
     /// </remarks>
     public async Task<IReadOnlyList<OutgoingMailFilingRecord>> ReadFilingsAtAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         RemoteFolderPath folderPath,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
@@ -152,7 +156,8 @@ internal sealed class OutgoingMailFilingStore(MailFathomDbContext readContext) :
             return [];
         }
 
-        var accountValue = accountId.Value;
+        var ownerValue = account.Owner.Value;
+        var accountValue = account.Id.Value;
         var folderValue = folderPath.Value;
         var uidValidityValue = uidValidity.Value;
 
@@ -163,7 +168,8 @@ internal sealed class OutgoingMailFilingStore(MailFathomDbContext readContext) :
 
         var entities = await readContext.OutgoingEmailFilings
             .AsNoTracking()
-            .Where(candidate => candidate.MailboxAccountId == accountValue
+            .Where(candidate => candidate.OwnerId == ownerValue
+                && candidate.MailboxAccountId == accountValue
                 && candidate.FolderPath == folderValue
                 && candidate.Stage == OutgoingMailFilingStage.Confirmed
                 && candidate.ObservedAt == null

@@ -11,6 +11,7 @@ using MailFathom.Common.Observability;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Observability;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -194,6 +195,7 @@ public sealed class ScopedJobAttemptRunnerTests : IDisposable
         JobIdempotencyKey.Create($"account-a/inbox/1/{uid}"),
         new ClassifyEmailSpamJobPayload
         {
+            OwnerId = SyntheticMailOwner.Deployment.Value,
             AccountId = "account-a",
             FolderAlias = "inbox",
             FolderResolutionGeneration = 1,

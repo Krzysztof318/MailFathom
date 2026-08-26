@@ -197,7 +197,7 @@ public sealed class OrchestratedConcurrentIdempotencyTests(MailFathomOrchestrati
         Assert.True(EmailAddress.TryCreate(displayName: null, "anna@example.test", out var recipient));
 
         var request = OutgoingEmailRequest.Create(
-            SyntheticMailAccount.AccountId,
+            SyntheticMailAccount.Account,
             OutgoingEmailRequester.Command(SendRequesterIdentity),
             [OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To, contact: null)]);
 
@@ -229,7 +229,7 @@ public sealed class OrchestratedConcurrentIdempotencyTests(MailFathomOrchestrati
         string subject,
         CancellationToken cancellationToken) => services.CommitAsync(
             (scope, session, token) => scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                session,
+                session, SyntheticMailAccount.Owner,
                 SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                 extractedMetadata: null,
                 StoredEmailContentAvailability.ExceededSizeLimit,
@@ -309,11 +309,13 @@ public sealed class OrchestratedConcurrentIdempotencyTests(MailFathomOrchestrati
         CancellationToken cancellationToken)
     {
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
-        var payload = ClassifyEmailSpamJobPayload.For(SyntheticEmail.OccurrenceIn(binding, LeasedJobUid));
+        var payload = ClassifyEmailSpamJobPayload.For(
+            SyntheticMailAccount.Owner,
+            SyntheticEmail.OccurrenceIn(binding, LeasedJobUid));
         var request = JobEnqueueRequest.Create(
             JobIdempotencyKey.Create($"{FolderAlias}/{LeasedJobUid}"),
             payload,
-            SyntheticMailAccount.AccountId);
+            SyntheticMailAccount.Account);
 
         var enqueued = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IJobStore>().EnqueueAsync(request, token),
@@ -359,7 +361,7 @@ public sealed class OrchestratedConcurrentIdempotencyTests(MailFathomOrchestrati
             async (scope, session, token) => storedEmailId = await scope
                 .GetRequiredService<IEmailMetadataRepository>()
                 .UpsertMetadataAsync(
-                    session,
+                    session, SyntheticMailAccount.Owner,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                     SyntheticEmail.ExtractionOf(
                         occurrenceId,

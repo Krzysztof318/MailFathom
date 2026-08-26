@@ -5,6 +5,7 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Threads;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -175,5 +176,7 @@ public sealed class StubEmailThreadReaderTests
         public bool SynchronizationEnabled => true;
 
         public IReadOnlyList<ServedMailAccount> OwnedAccounts => served;
+
+        public MailOwnerId Owner => served.Count is 0 ? SyntheticMailOwner.Deployment : served[0].Owner;
     }
 }

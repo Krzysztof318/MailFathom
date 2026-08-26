@@ -132,7 +132,7 @@ public sealed class OrchestratedMailboxMutationAuditTrailTests(MailFathomOrchest
             subject,
             cancellationToken);
         var unauditedRequester = MailboxMutationRequester.Command($"trail-off-{Guid.NewGuid():N}");
-        var request = MailboxMutationRequest.SetSeen(storedEmailId, occurrence, unauditedRequester, isSeen: true);
+        var request = MailboxMutationRequest.SetSeen(storedEmailId, SyntheticMailAccount.Owner, occurrence, unauditedRequester, isSeen: true);
 
         // Act
         var outcome = await PerformAsync(services, request, cancellationToken);
@@ -186,18 +186,18 @@ public sealed class OrchestratedMailboxMutationAuditTrailTests(MailFathomOrchest
     {
         if (mutation == MailboxMutation.Relocate)
         {
-            return MailboxMutationRequest.Relocate(storedEmailId, occurrence, Requester, ArchivePath);
+            return MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, ArchivePath);
         }
 
         if (mutation == MailboxMutation.Copy)
         {
-            return MailboxMutationRequest.Copy(storedEmailId, occurrence, Requester, ArchivePath);
+            return MailboxMutationRequest.Copy(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, ArchivePath);
         }
 
         if (mutation == MailboxMutation.Delete)
         {
             return MailboxMutationRequest.Delete(
-                storedEmailId,
+                storedEmailId, SyntheticMailAccount.Owner,
                 occurrence,
                 Requester,
                 AuthoredDeleteEmailDisposition.RetainLocalCopy);
@@ -205,27 +205,27 @@ public sealed class OrchestratedMailboxMutationAuditTrailTests(MailFathomOrchest
 
         if (mutation == MailboxMutation.SetSeen)
         {
-            return MailboxMutationRequest.SetSeen(storedEmailId, occurrence, Requester, isSeen: true);
+            return MailboxMutationRequest.SetSeen(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, isSeen: true);
         }
 
         if (mutation == MailboxMutation.SetFlagged)
         {
-            return MailboxMutationRequest.SetFlagged(storedEmailId, occurrence, Requester, isFlagged: true);
+            return MailboxMutationRequest.SetFlagged(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, isFlagged: true);
         }
 
         if (mutation == MailboxMutation.AddKeywords)
         {
-            return MailboxMutationRequest.AddKeywords(storedEmailId, occurrence, Requester, AuditedKeywords);
+            return MailboxMutationRequest.AddKeywords(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, AuditedKeywords);
         }
 
         if (mutation == MailboxMutation.RemoveKeywords)
         {
-            return MailboxMutationRequest.RemoveKeywords(storedEmailId, occurrence, Requester, AuditedKeywords);
+            return MailboxMutationRequest.RemoveKeywords(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, AuditedKeywords);
         }
 
         if (mutation == MailboxMutation.SetKeywords)
         {
-            return MailboxMutationRequest.SetKeywords(storedEmailId, occurrence, Requester, AuditedKeywords);
+            return MailboxMutationRequest.SetKeywords(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, AuditedKeywords);
         }
 
         throw new NotSupportedException(
@@ -251,7 +251,7 @@ public sealed class OrchestratedMailboxMutationAuditTrailTests(MailFathomOrchest
             async (scope, token) =>
             {
                 var queryResult = MailboxMutationAuditQuery.Create(
-                    SyntheticMailAccount.AccountId,
+                    SyntheticMailAccount.Account,
                     mutation: default,
                     completedFrom: null,
                     completedBefore: null,
@@ -293,7 +293,7 @@ public sealed class OrchestratedMailboxMutationAuditTrailTests(MailFathomOrchest
             await services.CommitAsync(
                 (scope, session, token) => scope.GetRequiredService<IMailFolderResolutionStore>().SaveResolutionAsync(
                     session,
-                    SyntheticMailAccount.AccountId,
+                    SyntheticMailAccount.Account,
                     Inbox,
                     token),
                 cancellationToken));

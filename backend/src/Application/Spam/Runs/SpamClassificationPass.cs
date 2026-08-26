@@ -99,7 +99,7 @@ public sealed class SpamClassificationPass
     }
 
     /// <summary>Takes one bounded pass over the account's requested run, where it has one.</summary>
-    /// <param name="accountId">The account whose run is carried.</param>
+    /// <param name="account">The account whose run is carried, named by its owner and its identifier.</param>
     /// <param name="cancellationToken">Cancels the pass between messages and between batches; committed batches stay durable.</param>
     /// <returns>What the pass did, and how the run ended where this pass ended it.</returns>
     /// <exception cref="PersistenceConcurrencyConflictException">
@@ -113,10 +113,10 @@ public sealed class SpamClassificationPass
     /// and a profile that has moved under a walk already half done.
     /// </remarks>
     public async Task<SpamClassificationRunReport> RunAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
-        var run = await this.runStore.FindOutstandingAsync(accountId, cancellationToken);
+        var run = await this.runStore.FindOutstandingAsync(account, cancellationToken);
 
         if (run is null)
         {
@@ -172,7 +172,7 @@ public sealed class SpamClassificationPass
         CancellationToken cancellationToken)
     {
         var batch = await this.emails.GetStoredEmailsAsync(
-            run.AccountId,
+            run.Account,
             run.Terms.FolderAliases,
             run.Position,
             this.options.BatchSize,

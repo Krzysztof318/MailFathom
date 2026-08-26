@@ -22,6 +22,9 @@ internal sealed class OutgoingEmailEntity
     /// </remarks>
     public required string MailboxAccountId { get; set; }
 
+    /// <summary>Gets or sets the owner whose account the message is sent from.</summary>
+    public required Guid OwnerId { get; set; }
+
     public OutgoingEmailOrigin RequesterOrigin { get; set; }
 
     public required string RequesterIdentity { get; set; }

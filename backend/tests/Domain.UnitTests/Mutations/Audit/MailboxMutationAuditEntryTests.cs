@@ -8,6 +8,7 @@ using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Mutations.Audit;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Domain.UnitTests.Mutations.Audit;
@@ -84,7 +85,7 @@ public sealed class MailboxMutationAuditEntryTests
         var record = CompletedRelocation() with
         {
             Request = MailboxMutationRequest.Delete(
-                LocalEmail,
+                LocalEmail, SyntheticMailOwner.Deployment,
                 SourceOccurrence(),
                 Requester,
                 AuthoredDeleteEmailDisposition.RetainLocalCopy),
@@ -109,7 +110,7 @@ public sealed class MailboxMutationAuditEntryTests
         // Arrange
         var record = CompletedRelocation() with
         {
-            Request = MailboxMutationRequest.SetSeen(LocalEmail, SourceOccurrence(), Requester, isSeen),
+            Request = MailboxMutationRequest.SetSeen(LocalEmail, SyntheticMailOwner.Deployment, SourceOccurrence(), Requester, isSeen),
             Placement = RemoteEmailPlacement.NotReported(),
         };
 
@@ -129,7 +130,7 @@ public sealed class MailboxMutationAuditEntryTests
         // Arrange
         var record = CompletedRelocation() with
         {
-            Request = MailboxMutationRequest.Copy(LocalEmail, SourceOccurrence(), Requester, Archive),
+            Request = MailboxMutationRequest.Copy(LocalEmail, SyntheticMailOwner.Deployment, SourceOccurrence(), Requester, Archive),
         };
 
         // Act
@@ -229,6 +230,7 @@ public sealed class MailboxMutationAuditEntryTests
             nameof(MailboxMutationAuditEntry.Id),
             nameof(MailboxMutationAuditEntry.MutationRecordId),
             nameof(MailboxMutationAuditEntry.AccountId),
+            nameof(MailboxMutationAuditEntry.Owner),
             nameof(MailboxMutationAuditEntry.StoredEmailId),
             nameof(MailboxMutationAuditEntry.Mutation),
             nameof(MailboxMutationAuditEntry.SourceFolderPath),
@@ -264,7 +266,7 @@ public sealed class MailboxMutationAuditEntryTests
     private static MailboxMutationRecord CompletedRelocation() => new()
     {
         Id = MailboxMutationRecordId.Create(Guid.CreateVersion7(RecordedAt)),
-        Request = MailboxMutationRequest.Relocate(LocalEmail, SourceOccurrence(), Requester, Archive),
+        Request = MailboxMutationRequest.Relocate(LocalEmail, SyntheticMailOwner.Deployment, SourceOccurrence(), Requester, Archive),
         Stage = MailboxMutationStage.Completed,
         IsAudited = true,
         RequiresSourceRemoval = true,

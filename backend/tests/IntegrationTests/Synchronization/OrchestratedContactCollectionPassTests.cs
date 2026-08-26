@@ -208,7 +208,7 @@ public sealed class OrchestratedContactCollectionPassTests(MailFathomOrchestrati
         MailFolderMapping folder,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailboxSynchronizer>().SynchronizeAsync(
-                SyntheticMailAccount.AccountId,
+                SyntheticMailAccount.Account,
                 folder,
                 token),
             cancellationToken);

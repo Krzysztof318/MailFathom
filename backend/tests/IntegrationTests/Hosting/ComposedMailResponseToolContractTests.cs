@@ -159,7 +159,7 @@ public sealed class ComposedMailResponseToolContractTests(MailFathomOrchestratio
             async (scope, session, token) =>
             {
                 storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                    session,
+                    session, SyntheticMailAccount.Owner,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, AnsweredSubject, rawMime.Length),
                     SyntheticEmail.ExtractionFrom(
                         occurrenceId,

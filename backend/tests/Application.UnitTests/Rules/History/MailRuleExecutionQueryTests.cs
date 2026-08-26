@@ -5,6 +5,7 @@
 using MailFathom.Application.Rules.History;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Rules.History;
@@ -12,7 +13,8 @@ namespace MailFathom.Application.UnitTests.Rules.History;
 /// <summary>Covers what a request for a page of the rule history is accepted with, and what it is refused for.</summary>
 public sealed class MailRuleExecutionQueryTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
     private static readonly DateTimeOffset Noon = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
@@ -129,7 +131,9 @@ public sealed class MailRuleExecutionQueryTests
         // Act
         string[] varied =
         [
-            Create(accountId: MailAccountId.Create("personal")).Query!.FilterFingerprint,
+            Create(account: MailAccountIdentity.Create(
+                SyntheticMailOwner.Deployment,
+                MailAccountId.Create("personal"))).Query!.FilterFingerprint,
             Create(ruleName: "file-invoices").Query!.FilterFingerprint,
             Create(storedEmailId: StoredEmailId.Create(Guid.CreateVersion7())).Query!.FilterFingerprint,
             Create(evaluatedFrom: Noon).Query!.FilterFingerprint,
@@ -142,7 +146,7 @@ public sealed class MailRuleExecutionQueryTests
     }
 
     private static MailRuleExecutionQueryResult Create(
-        MailAccountId? accountId = null,
+        MailAccountIdentity? account = null,
         string? ruleName = null,
         StoredEmailId? storedEmailId = null,
         DateTimeOffset? evaluatedFrom = null,
@@ -150,7 +154,7 @@ public sealed class MailRuleExecutionQueryTests
         int? pageSize = null,
         MailRuleExecutionCursor? cursor = null) =>
         MailRuleExecutionQuery.Create(
-            accountId ?? Account,
+            account ?? Account,
             ruleName,
             storedEmailId,
             evaluatedFrom,

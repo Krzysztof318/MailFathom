@@ -15,7 +15,8 @@ namespace MailFathom.Application.UnitTests.Spam.History;
 /// <summary>Covers reading what classification concluded about an account's mail, which is derived from that mail.</summary>
 public sealed class SpamClassificationHistoryTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("acct-1");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-1"));
 
     private readonly ISpamClassificationHistoryReader classifications =
         Substitute.For<ISpamClassificationHistoryReader>();

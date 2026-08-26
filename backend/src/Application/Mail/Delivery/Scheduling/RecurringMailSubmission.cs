@@ -137,7 +137,7 @@ public sealed class RecurringMailSubmission
         };
 
         var composition = this.composer.Compose(
-            account.Id,
+            account.Identity,
             request.Requester,
             authored,
             MailDeliveryCapabilities.BeforeAnyServerHasSpoken);
@@ -148,7 +148,7 @@ public sealed class RecurringMailSubmission
         }
 
         var declaration = RecurringSendRequest.Create(
-            account.Id,
+            account.Identity,
             request.Requester,
             draft.Request.Recipients,
             request.Schedule);

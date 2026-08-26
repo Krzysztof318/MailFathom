@@ -28,13 +28,13 @@ internal static class ComposingAuthoredEmails
         var composer = Substitute.For<IAuthoredEmailComposer>();
         composer
             .Compose(
-                Arg.Any<MailAccountId>(),
+                Arg.Any<MailAccountIdentity>(),
                 Arg.Any<OutgoingEmailRequester>(),
                 Arg.Any<AuthoredEmail>(),
                 Arg.Any<MailDeliveryCapabilities>())
             .Returns(call => AuthoredEmailComposition.Composed(new ComposedOutgoingEmail(
                 OutgoingEmailRequest.Create(
-                    call.ArgAt<MailAccountId>(0),
+                    call.ArgAt<MailAccountIdentity>(0),
                     call.ArgAt<OutgoingEmailRequester>(1),
                     RecipientsOf(call.ArgAt<AuthoredEmail>(2))),
                 InternetMessageId.Mint("example.test"),
@@ -51,7 +51,7 @@ internal static class ComposingAuthoredEmails
         var composer = Substitute.For<IAuthoredEmailComposer>();
         composer
             .ComposeDraft(
-                Arg.Any<MailAccountId>(),
+                Arg.Any<MailAccountIdentity>(),
                 Arg.Any<AuthoredEmail>(),
                 Arg.Any<MailDeliveryCapabilities>())
             .Returns(call => MailDraftComposition.Composed(new ComposedMailDraft(

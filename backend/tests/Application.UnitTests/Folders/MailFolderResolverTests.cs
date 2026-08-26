@@ -7,6 +7,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Transport;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -15,7 +16,8 @@ namespace MailFathom.Application.UnitTests.Folders;
 
 public sealed class MailFolderResolverTests
 {
-    private static readonly MailAccountId PrimaryAccount = MailAccountId.Create("primary");
+    private static readonly MailAccountIdentity PrimaryAccount =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("primary"));
 
     private static readonly MailTransportSecurityPolicy RequiredTlsPolicy = MailTransportSecurityPolicy.Create(
         MailConnectionSecurity.TlsOnConnect,
@@ -162,7 +164,7 @@ public sealed class MailFolderResolverTests
         Assert.Equal(MailFolderResolutionOutcome.Resolved, inboxResult.Outcome);
         await context.ResolutionStore.DidNotReceive().SaveResolutionAsync(
             Arg.Any<IPersistenceSession>(),
-            Arg.Any<MailAccountId>(),
+            Arg.Any<MailAccountIdentity>(),
             Arg.Is<MailFolderResolution>(resolution => resolution!.Alias.Value == "ARCHIVE"),
             Arg.Any<CancellationToken>());
     }
@@ -408,7 +410,7 @@ public sealed class MailFolderResolverTests
 
             this.ResolutionStore = Substitute.For<IMailFolderResolutionStore>();
             this.ResolutionStore
-                .GetCurrentResolutionAsync(Arg.Any<MailAccountId>(), Arg.Any<MailFolderAlias>(), Arg.Any<CancellationToken>())
+                .GetCurrentResolutionAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<MailFolderAlias>(), Arg.Any<CancellationToken>())
                 .Returns(call => Task.FromResult(
                     this.bindingsByAlias.GetValueOrDefault(call.Arg<MailFolderAlias>().Value)));
 
@@ -483,6 +485,6 @@ public sealed class MailFolderResolverTests
                     Arg.Any<MailTransportSecurityPolicy>(),
                     Arg.Any<CancellationToken>())
                 .Returns<Task<RemoteFolderPath>>(_ =>
-                    throw new RemoteFolderCreationRefusedException(PrimaryAccount, alias));
+                    throw new RemoteFolderCreationRefusedException(PrimaryAccount.Id, alias));
     }
 }

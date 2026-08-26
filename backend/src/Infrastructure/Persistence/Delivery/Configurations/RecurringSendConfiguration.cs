@@ -52,6 +52,7 @@ internal sealed class RecurringSendConfiguration : IEntityTypeConfiguration<Recu
 
         entity.HasIndex(declaration => new
         {
+            declaration.OwnerId,
             declaration.MailboxAccountId,
             declaration.RequesterOrigin,
             declaration.RequesterIdentity,

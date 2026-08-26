@@ -22,17 +22,22 @@ internal sealed class MailFolderResolutionStore(MailFathomDbContext readContext)
 {
     /// <inheritdoc />
     public async Task<MailFolderResolution?> GetCurrentResolutionAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderAlias folderAlias,
         CancellationToken cancellationToken)
     {
         var aliasValue = folderAlias.Value;
+        var ownerValue = account.Owner.Value;
+        var accountValue = account.Id.Value;
 
         // Every generation of an alias is kept, because occurrences stay attributable to the folder they came from,
-        // so the current binding is the highest generation rather than the only row.
+        // so the current binding is the highest generation rather than the only row. The owner leads the narrowing, as
+        // it leads the index: an alias is MailFathom's own name within one owner's account.
         var entity = await readContext.MailFolders
             .AsNoTracking()
-            .Where(folder => folder.MailboxAccountId == accountId.Value && folder.Alias == aliasValue)
+            .Where(folder => folder.OwnerId == ownerValue
+                && folder.MailboxAccountId == accountValue
+                && folder.Alias == aliasValue)
             .OrderByDescending(folder => folder.ResolutionGeneration)
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -42,7 +47,7 @@ internal sealed class MailFolderResolutionStore(MailFathomDbContext readContext)
     /// <inheritdoc />
     public async Task SaveResolutionAsync(
         IPersistenceSession session,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolution resolution,
         CancellationToken cancellationToken)
     {
@@ -51,13 +56,13 @@ internal sealed class MailFolderResolutionStore(MailFathomDbContext readContext)
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var existingBinding = await MailFolderEntityResolver.FindAsync(
             writeContext,
-            accountId,
+            account,
             resolution.Id,
             cancellationToken);
 
         if (existingBinding is null)
         {
-            await MailFolderEntityResolver.AddAsync(writeContext, accountId, resolution, cancellationToken);
+            await MailFolderEntityResolver.AddAsync(writeContext, account, resolution, cancellationToken);
 
             return;
         }
@@ -70,7 +75,7 @@ internal sealed class MailFolderResolutionStore(MailFathomDbContext readContext)
         if (MailFolderEntityResolver.ToResolution(existingBinding) != resolution)
         {
             throw new PersistenceConcurrencyConflictException(
-                $"Folder alias {accountId.Value}/{resolution.Id} was bound to a different remote folder by another writer before this run recorded its own binding.");
+                $"Folder alias {account.Id.Value}/{resolution.Id} was bound to a different remote folder by another writer before this run recorded its own binding.");
         }
     }
 }

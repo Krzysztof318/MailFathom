@@ -30,7 +30,7 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
     /// queries are ordered and limited by PostgreSQL and neither can return more than the window holds.
     /// </remarks>
     public async Task<IReadOnlyList<StoredEmailAwaitingReconciliation>> GetReconciliationWindowAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         int maxEmailCount,
@@ -38,7 +38,7 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxEmailCount);
 
-        var eligible = this.EligibleEmails(accountId, folderResolutionId, uidValidity);
+        var eligible = this.EligibleEmails(account, folderResolutionId, uidValidity);
 
         // Read first so the never-observed budget can be computed from how many previously observed emails actually
         // exist: a folder that has none must still fill its whole window with new mail rather than leave it empty.
@@ -231,17 +231,20 @@ internal sealed class StoredEmailReconciliationStore(MailFathomDbContext readCon
 
     /// <summary>Narrows the stored emails to the ones one folder binding's window may select from.</summary>
     private IQueryable<StoredEmailEntity> EligibleEmails(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity)
     {
+        var owner = account.Owner.Value;
+        var accountValue = account.Id.Value;
         var alias = folderResolutionId.Alias.Value;
         var generation = folderResolutionId.Generation.Value;
         var uidValidityValue = uidValidity.Value;
 
         return readContext.StoredEmails
             .AsNoTracking()
-            .Where(email => email.MailFolder.MailboxAccountId == accountId.Value
+            .Where(email => email.OwnerId == owner
+                && email.MailFolder.MailboxAccountId == accountValue
                 && email.MailFolder.Alias == alias
                 && email.MailFolder.ResolutionGeneration == generation
                 && email.UidValidity == uidValidityValue

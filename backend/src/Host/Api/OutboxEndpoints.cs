@@ -112,12 +112,12 @@ internal static class OutboxEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(outbox);
 
-        if (!AdminAccountRequest.TryResolveFilter(account, accounts, out var accountId, out var refusal))
+        if (!AdminAccountRequest.TryResolveFilter(account, accounts, out var servedAccount, out var refusal))
         {
             return refusal;
         }
 
-        var summary = await outbox.ReadSummaryAsync(accountId, cancellationToken);
+        var summary = await outbox.ReadSummaryAsync(servedAccount, cancellationToken);
 
         return TypedResults.Ok(OutboxSummaryResponse.For(summary));
     }
@@ -148,7 +148,7 @@ internal static class OutboxEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(outbox);
 
-        if (!AdminAccountRequest.TryResolveFilter(account, accounts, out var accountId, out var refusal))
+        if (!AdminAccountRequest.TryResolveFilter(account, accounts, out var servedAccount, out var refusal))
         {
             return refusal;
         }
@@ -175,7 +175,7 @@ internal static class OutboxEndpoints
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        var queryResult = OutboxQuery.Create(accountId, namedStage, pageSize, decodedCursor);
+        var queryResult = OutboxQuery.Create(servedAccount, namedStage, pageSize, decodedCursor);
 
         if (queryResult.Query is not { } query)
         {

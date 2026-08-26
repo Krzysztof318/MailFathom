@@ -387,6 +387,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
                 var storedEmail = new StoredEmailEntity
                 {
                     Id = insertedId,
+                    OwnerId = folder.OwnerId,
                     MailboxAccountId = folder.MailboxAccountId,
                     MailFolder = folder,
                     UidValidity = SyntheticEmail.UidValidity,
@@ -477,6 +478,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
                     var storedEmail = new StoredEmailEntity
                     {
                         Id = Guid.CreateVersion7(SyntheticEmail.SentAt.AddSeconds(index)),
+                        OwnerId = folder.OwnerId,
                         MailboxAccountId = folder.MailboxAccountId,
                         MailFolder = folder,
                         UidValidity = SyntheticEmail.UidValidity,

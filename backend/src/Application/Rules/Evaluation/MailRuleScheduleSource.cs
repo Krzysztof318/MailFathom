@@ -70,12 +70,19 @@ public sealed class MailRuleScheduleSource : IScheduledJobSource
         IReadOnlyList<ServedMailAccount> servedAccounts) => rule.Schedule is { } recurrence
         ? servedAccounts
             .Where(account => rule.AppliesTo(account.Id.Value))
-            .Select(account => Declare(rule.Name, recurrence, account.Id))
+            .Select(account => Declare(rule.Name, recurrence, account.Identity))
         : [];
 
-    private static ScheduledJob Declare(string ruleName, JobRecurrence recurrence, MailAccountId accountId) => new(
-        JobScheduleId.Create($"{IdentityPrefix}:{accountId.Value}:{ruleName}"),
-        RunScheduledMailRulesJobPayload.For(accountId),
+    /// <summary>Declares one rule's schedule for one account, as the repeated work a dispatch reads.</summary>
+    /// <remarks>
+    /// The payload names the owner beside the identifier, because the run it starts writes rows about that account. The
+    /// schedule's own identity is still composed from the identifier alone: making every identity composed as text say
+    /// whose account it names is a later step of ADR 0014's delivery order, and taking it here would move the durable
+    /// state a deployment already keeps under those strings.
+    /// </remarks>
+    private static ScheduledJob Declare(string ruleName, JobRecurrence recurrence, MailAccountIdentity account) => new(
+        JobScheduleId.Create($"{IdentityPrefix}:{account.Id.Value}:{ruleName}"),
+        RunScheduledMailRulesJobPayload.For(account),
         recurrence,
-        accountId);
+        account);
 }

@@ -48,6 +48,16 @@ internal sealed class JobEntity
     /// </remarks>
     public string? MailboxAccountId { get; set; }
 
+    /// <summary>Gets or sets the owner the work belongs to, and <see langword="null" /> when it belongs to none.</summary>
+    /// <remarks>
+    /// Nullable exactly as <see cref="MailboxAccountId" /> is, and for the same reason: work no mailbox asked
+    /// for belongs to nobody's mail. The two are written together — the enqueue resolves the owner of the account
+    /// it names and writes both, or writes neither — so the pair never says an account without saying whose it
+    /// is. Denormalizing it is what lets the fair claim rank one owner's waiting work on an index rather than
+    /// through a join onto the account table.
+    /// </remarks>
+    public Guid? OwnerId { get; set; }
+
     public MailboxAccountEntity? MailboxAccount { get; set; }
 
     public JobState State { get; set; }

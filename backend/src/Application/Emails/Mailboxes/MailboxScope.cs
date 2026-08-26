@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 
@@ -49,8 +50,12 @@ public sealed record MailboxScope
     /// </remarks>
     public const int MaximumFolders = 64;
 
-    private MailboxScope(IReadOnlyList<MailAccountId> accountIds, IReadOnlyList<MailFolderIdentity> selectedFolders)
+    private MailboxScope(
+        MailOwnerId owner,
+        IReadOnlyList<MailAccountId> accountIds,
+        IReadOnlyList<MailFolderIdentity> selectedFolders)
     {
+        this.Owner = owner;
         this.AccountIds = accountIds;
         this.SelectedFolders = selectedFolders;
     }
@@ -70,7 +75,23 @@ public sealed record MailboxScope
     /// account — an empty account list alone is read as every account by the persistence predicate.
     /// </para>
     /// </remarks>
-    public static MailboxScope NothingReadable { get; } = new([], []);
+    public static MailboxScope NothingReadable { get; } = new(default, [], []);
+
+    /// <summary>Gets the owner whose mail the query is restricted to, which names nobody on <see cref="NothingReadable" />.</summary>
+    /// <remarks>
+    /// <para>
+    /// The first term of every mail-returning query, ahead of the accounts and applied whatever the account list holds.
+    /// An account identifier names one account within its owner rather than across the deployment, so a read narrowed
+    /// on the account alone would compare a value that does not say whose mail it is; and every index those reads are
+    /// planned against leads with this column, so it is what the plan is chosen for as well.
+    /// </para>
+    /// <para>
+    /// On <see cref="NothingReadable" /> it is the unspecified identity, which names nobody and therefore matches no
+    /// row. That is a second reason such a scope reads nothing, beside its admitting no folder, and it is what makes the
+    /// empty account list — which every narrowing site reads as unrestricted — safe rather than merely unreachable.
+    /// </para>
+    /// </remarks>
+    public MailOwnerId Owner { get; }
 
     /// <summary>Gets the accounts the query is restricted to, deduplicated and ordered, or empty when the request named none.</summary>
     public IReadOnlyList<MailAccountId> AccountIds { get; }
@@ -131,6 +152,7 @@ public sealed record MailboxScope
     public bool IncludesJunkMail { get; private init; }
 
     /// <summary>Creates the scope a query runs with, from identities already resolved against configuration.</summary>
+    /// <param name="owner">The owner whose mail the query is restricted to, which every narrowing then sits inside.</param>
     /// <param name="accountIds">The accounts the query runs against, which are the ones the caller's owner owns when a request named none.</param>
     /// <param name="selectedFolders">The folders the query runs against, one pair per account, with every role a request named already turned into the folder it means on that account, or <see langword="null" /> to name none.</param>
     /// <returns>The scope, with both lists deduplicated and ordered.</returns>
@@ -141,6 +163,7 @@ public sealed record MailboxScope
     /// a folder on each of those accounts.
     /// </remarks>
     public static MailboxScope Create(
+        MailOwnerId owner,
         IEnumerable<MailAccountId>? accountIds,
         IEnumerable<MailFolderIdentity>? selectedFolders)
     {
@@ -160,7 +183,7 @@ public sealed record MailboxScope
 
         return accounts.Length is 0 && folders.Length is 0
             ? NothingReadable
-            : new MailboxScope(accounts, folders);
+            : new MailboxScope(owner, accounts, folders);
     }
 
     /// <summary>Admits the folders configuration says a tool may read from, and nothing else.</summary>

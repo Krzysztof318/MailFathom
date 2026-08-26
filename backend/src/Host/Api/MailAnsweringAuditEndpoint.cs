@@ -76,7 +76,7 @@ internal static class MailAnsweringAuditEndpoint
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(trail);
 
-        if (AdminAccountRequest.Resolve(account, accounts) is not { } accountId)
+        if (AdminAccountRequest.Resolve(account, accounts) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }
@@ -90,7 +90,7 @@ internal static class MailAnsweringAuditEndpoint
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        var queryResult = MailAnsweringAuditQuery.Create(accountId, from, before, pageSize, decodedCursor);
+        var queryResult = MailAnsweringAuditQuery.Create(servedAccount, from, before, pageSize, decodedCursor);
 
         if (queryResult.Query is not { } query)
         {

@@ -18,11 +18,15 @@ namespace MailFathom.Application.Emails.Mailboxes;
 /// one differently would publish mail through the query that got it wrong while the others stayed correct.
 /// </para>
 /// <para>
-/// The owner is the third thing settled here and it never reaches a query as a term. It reaches the resolution that runs
-/// before one: the accounts a request is resolved against are the accounts the caller's owner owns, so what a mail query
-/// carries afterwards is the account predicate it already carried and the indexes it already ran on. That is why this
-/// type reads the caller-scoped catalog and no other: a resolver holding both would be one substitution away from
-/// answering a caller out of the deployment's whole account set.
+/// The owner is the third thing settled here, and it is settled twice over. It reaches the resolution that runs before
+/// the query — the accounts a request is resolved against are the accounts the caller's owner owns, so an account
+/// belonging to somebody else is refused rather than narrowed away — and it also reaches the query itself, as the first
+/// term of the predicate and the column every index that predicate is planned against leads with. The two are not
+/// alternatives: the resolution is what refuses without disclosing, and the term is what makes the account value being
+/// compared say whose account it is. That is why this type reads the caller-scoped catalog and no other, for both
+/// answers: a resolver holding both catalogs would be one substitution away from answering a caller out of the
+/// deployment's whole account set, and a resolver taking the owner from anywhere but the catalog that listed the
+/// accounts could narrow on an owner those accounts do not belong to.
 /// </para>
 /// </remarks>
 public sealed class MailboxScopeResolver
@@ -166,6 +170,7 @@ public sealed class MailboxScopeResolver
         }
 
         var resolvedScope = MailboxScope.Create(
+            this.accountCatalog.Owner,
             accountsInScope,
             this.ResolvedFolders(accountsInScope, folders));
 

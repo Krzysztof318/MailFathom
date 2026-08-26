@@ -39,19 +39,24 @@ public sealed record OutgoingEmailRequest
     public const int MaximumRecipientCount = 256;
 
     private OutgoingEmailRequest(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         OutgoingEmailRequester requester,
         IReadOnlyList<OutgoingRecipient> recipients,
         ZonedInstant? dueAt)
     {
-        this.AccountId = accountId;
+        this.Account = account;
         this.Requester = requester;
         this.Recipients = recipients;
         this.DueAt = dueAt;
     }
 
-    /// <summary>Gets the account the message is submitted through and sent as.</summary>
-    public MailAccountId AccountId { get; }
+    /// <summary>Gets the account the message is submitted through and sent as, named by its owner and its identifier.</summary>
+    /// <remarks>
+    /// The pair rather than the identifier alone, because an identifier names one account within its owner and the row
+    /// this request becomes records whose send it was. The owner is the one the catalog resolved the account through, so
+    /// the write that keeps the request supplies it without asking the account table again.
+    /// </remarks>
+    public MailAccountIdentity Account { get; }
 
     /// <summary>Gets the authored act that asked, which is what makes the same request twice one delivery.</summary>
     public OutgoingEmailRequester Requester { get; }
@@ -69,7 +74,7 @@ public sealed record OutgoingEmailRequest
     public ZonedInstant? DueAt { get; }
 
     /// <summary>Asks for one message to be submitted through an account and delivered to the recipients it names.</summary>
-    /// <param name="accountId">The account the message is sent as.</param>
+    /// <param name="account">The account the message is sent as, named by its owner and its identifier.</param>
     /// <param name="requester">The authored act asking.</param>
     /// <param name="recipients">The people the message is offered to.</param>
     /// <param name="dueAt">The time the message is to leave at, or <see langword="null" /> for as soon as it can.</param>
@@ -77,7 +82,7 @@ public sealed record OutgoingEmailRequest
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="requester" /> or <paramref name="recipients" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="recipients" /> is empty, holds more than <see cref="MaximumRecipientCount" /> entries, or names one mailbox more than once.</exception>
     public static OutgoingEmailRequest Create(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         OutgoingEmailRequester requester,
         IReadOnlyList<OutgoingRecipient> recipients,
         ZonedInstant? dueAt = null)
@@ -108,7 +113,7 @@ public sealed record OutgoingEmailRequest
                 nameof(recipients));
         }
 
-        return new OutgoingEmailRequest(accountId, requester, [.. recipients], dueAt);
+        return new OutgoingEmailRequest(account, requester, [.. recipients], dueAt);
     }
 
     /// <summary>States the same send, held until the time the author named.</summary>
@@ -124,6 +129,6 @@ public sealed record OutgoingEmailRequest
     {
         ArgumentNullException.ThrowIfNull(dueAt);
 
-        return new OutgoingEmailRequest(this.AccountId, this.Requester, this.Recipients, dueAt);
+        return new OutgoingEmailRequest(this.Account, this.Requester, this.Recipients, dueAt);
     }
 }

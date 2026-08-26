@@ -26,35 +26,35 @@ public interface IEmailThreadStore
 {
     /// <summary>Reads which of the given identifiers this account already binds to a conversation.</summary>
     /// <param name="session">The transaction the reading is part of, so pending writes of the same session are visible.</param>
-    /// <param name="accountId">The account whose conversations are searched.</param>
+    /// <param name="account">The account whose conversations are searched.</param>
     /// <param name="identifiers">The message identifiers to resolve.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>One entry per identifier that is bound, and nothing for the ones that are not.</returns>
     Task<IReadOnlyList<EmailThreadBinding>> FindBindingsAsync(
         IPersistenceSession session,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         IReadOnlyList<string> identifiers,
         CancellationToken cancellationToken);
 
     /// <summary>Starts a conversation for the account and reports its identity.</summary>
     /// <param name="session">The transaction the conversation is created in.</param>
-    /// <param name="accountId">The account that owns it.</param>
+    /// <param name="account">The account that owns it.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The new conversation's identity.</returns>
     Task<EmailThreadId> StartThreadAsync(
         IPersistenceSession session,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken cancellationToken);
 
     /// <summary>Binds identifiers this account does not bind yet to one conversation.</summary>
     /// <param name="session">The transaction the bindings are written in.</param>
-    /// <param name="accountId">The account the identifiers were seen in.</param>
+    /// <param name="account">The account the identifiers were seen in.</param>
     /// <param name="identifiers">The identifiers to bind, which the caller has established are unbound.</param>
     /// <param name="threadId">The conversation to bind them to.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     Task BindIdentifiersAsync(
         IPersistenceSession session,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         IReadOnlyList<string> identifiers,
         EmailThreadId threadId,
         CancellationToken cancellationToken);

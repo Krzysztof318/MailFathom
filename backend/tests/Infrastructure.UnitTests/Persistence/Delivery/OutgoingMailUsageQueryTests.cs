@@ -7,6 +7,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Delivery;
+using MailFathom.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -17,20 +18,28 @@ public sealed class OutgoingMailUsageQueryTests
     private static readonly DateTimeOffset PeriodStart =
         DateTimeOffset.Parse("2026-08-19T00:00:00Z", CultureInfo.InvariantCulture);
 
-    /// <summary>The period is a range over the instant a record was written, which is what an epoch-anchored window means.</summary>
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+
+    /// <summary>
+    /// The period is a range over the instant a record was written, which is what an epoch-anchored window means, and
+    /// the account it is narrowed to is the pair rather than the identifier — a spend ceiling read for one owner's
+    /// account may not count what another owner's account of the same name sent.
+    /// </summary>
     [Fact]
-    public void ComposeMessages_ForOneAccount_NarrowsToThatAccountInsideThePeriod()
+    public void ComposeMessages_ForOneAccount_NarrowsToThatOwnersAccountInsideThePeriod()
     {
         // Arrange
         using var context = DesignTimeContext();
 
         // Act
         var sql = OutgoingMailUsageQuery
-            .ComposeMessages(context.OutgoingEmails.AsNoTracking(), PeriodStart, MailAccountId.Create("work"))
+            .ComposeMessages(context.OutgoingEmails.AsNoTracking(), PeriodStart, Account)
             .ToQueryString();
 
         // Assert
         Assert.Contains("\"RecordedAt\" >=", sql, StringComparison.Ordinal);
+        Assert.Contains("\"OwnerId\" =", sql, StringComparison.Ordinal);
         Assert.Contains("\"MailboxAccountId\" =", sql, StringComparison.Ordinal);
     }
 
@@ -43,11 +52,12 @@ public sealed class OutgoingMailUsageQueryTests
 
         // Act
         var sql = OutgoingMailUsageQuery
-            .ComposeMessages(context.OutgoingEmails.AsNoTracking(), PeriodStart, accountId: null)
+            .ComposeMessages(context.OutgoingEmails.AsNoTracking(), PeriodStart, account: null)
             .ToQueryString();
 
         // Assert
         Assert.Contains("\"RecordedAt\" >=", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"OwnerId\" =", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("\"MailboxAccountId\" =", sql, StringComparison.Ordinal);
     }
 
@@ -63,7 +73,7 @@ public sealed class OutgoingMailUsageQueryTests
         var messages = OutgoingMailUsageQuery.ComposeMessages(
             context.OutgoingEmails.AsNoTracking(),
             PeriodStart,
-            MailAccountId.Create("work"));
+            Account);
 
         // Act
         var sql = OutgoingMailUsageQuery.ComposeRecipients(messages).ToQueryString();

@@ -5,6 +5,7 @@
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -216,7 +217,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         var scheduled = JobEnqueueRequest.CreateAvailableAt(
             request.Key,
             request.Payload,
-            request.AccountId,
+            request.Account,
             TimeProvider.System.GetUtcNow().AddHours(1));
         await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IJobStore>().EnqueueAsync(scheduled, token),
@@ -595,7 +596,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
 
             var otherOwnersJob = await services.InScopeAsync(
                 (scope, token) => scope.GetRequiredService<IJobStore>().EnqueueAsync(
-                    SecondOwnerRequest(),
+                    SecondOwnerRequest(secondOwnerId),
                     token),
                 cancellationToken);
 
@@ -653,18 +654,22 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         cancellationToken);
 
     /// <summary>Composes the second owner's one execution, against their own account rather than this class's.</summary>
-    private static JobEnqueueRequest SecondOwnerRequest()
+    private static JobEnqueueRequest SecondOwnerRequest(Guid secondOwnerId)
     {
-        var accountId = MailAccountId.Create(SecondOwnerAccount);
+        var account = MailAccountIdentity.Create(
+            MailOwnerId.Create(secondOwnerId),
+            MailAccountId.Create(SecondOwnerAccount));
 
         return JobEnqueueRequest.CreateAvailableAt(
             JobIdempotencyKey.Create($"{SecondOwnerAccount}/1"),
-            ClassifyEmailSpamJobPayload.For(EmailOccurrenceId.Create(
-                accountId,
-                new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
-                ImapUidValidity.Create(90_002),
-                ImapUid.Create(1))),
-            accountId,
+            ClassifyEmailSpamJobPayload.For(
+                account.Owner,
+                EmailOccurrenceId.Create(
+                    account.Id,
+                    new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
+                    ImapUidValidity.Create(90_002),
+                    ImapUid.Create(1))),
+            account,
             QueuedAt);
     }
 
@@ -682,7 +687,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         var request = await RequestAsync(services, uid, cancellationToken);
         var enqueued = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IJobStore>().EnqueueAsync(
-                JobEnqueueRequest.CreateAvailableAt(request.Key, request.Payload, request.AccountId, QueuedAt),
+                JobEnqueueRequest.CreateAvailableAt(request.Key, request.Payload, request.Account, QueuedAt),
                 token),
             cancellationToken);
 
@@ -735,16 +740,18 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
         CancellationToken cancellationToken)
     {
         var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
-        var payload = ClassifyEmailSpamJobPayload.For(EmailOccurrenceId.Create(
-            SyntheticMailAccount.AccountId,
-            binding.Id,
-            ImapUidValidity.Create(90_001),
-            ImapUid.Create(uid)));
+        var payload = ClassifyEmailSpamJobPayload.For(
+            SyntheticMailAccount.Owner,
+            EmailOccurrenceId.Create(
+                SyntheticMailAccount.AccountId,
+                binding.Id,
+                ImapUidValidity.Create(90_001),
+                ImapUid.Create(uid)));
 
         return JobEnqueueRequest.Create(
             JobIdempotencyKey.Create($"{FolderAlias}/{uid}"),
             payload,
-            SyntheticMailAccount.AccountId);
+            SyntheticMailAccount.Account);
     }
 
     private static Task<IReadOnlyList<LeasedJob>> ClaimAsync(

@@ -203,7 +203,7 @@ public sealed class OutgoingEmailToolTests
         return new OutgoingEmailRecord
         {
             Id = RecordId,
-            AccountId = MailAccountId.Create("work"),
+            Account = MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work")),
             Requester = OutgoingEmailRequester.Command("send-1"),
             Principal = OutgoingEmailPrincipal.Of(CallerIdentity),
             Recipients =

@@ -5,6 +5,7 @@
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.DeadLetters;
 using MailFathom.Domain.Accounts;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Jobs.DeadLetters;
@@ -21,7 +22,7 @@ public sealed class DeadLetteredJobQueryTests
     public void Create_NoFiltersAtAll_IsAcceptedAndBoundedByTheDefaultPageSize()
     {
         // Arrange, Act
-        var result = DeadLetteredJobQuery.Create(jobType: null, accountId: null, pageSize: null, cursor: null);
+        var result = DeadLetteredJobQuery.Create(jobType: null, account: null, pageSize: null, cursor: null);
 
         // Assert
         Assert.Equal(DeadLetteredJobQueryOutcome.Accepted, result.Outcome);
@@ -36,7 +37,7 @@ public sealed class DeadLetteredJobQueryTests
     public void Create_APageSizeOutsideWhatTheReadingServes_IsRefused(int pageSize)
     {
         // Arrange, Act
-        var result = DeadLetteredJobQuery.Create(jobType: null, accountId: null, pageSize, cursor: null);
+        var result = DeadLetteredJobQuery.Create(jobType: null, account: null, pageSize, cursor: null);
 
         // Assert
         Assert.Equal(DeadLetteredJobQueryOutcome.PageSizeOutOfRange, result.Outcome);
@@ -48,7 +49,7 @@ public sealed class DeadLetteredJobQueryTests
     public void Create_AJobTypeThatNamesNothing_IsRefused()
     {
         // Arrange, Act
-        var result = DeadLetteredJobQuery.Create(default(JobType), accountId: null, pageSize: null, cursor: null);
+        var result = DeadLetteredJobQuery.Create(default(JobType), account: null, pageSize: null, cursor: null);
 
         // Assert
         Assert.Equal(DeadLetteredJobQueryOutcome.JobTypeUnknown, result.Outcome);
@@ -68,7 +69,7 @@ public sealed class DeadLetteredJobQueryTests
         // Act
         var result = DeadLetteredJobQuery.Create(
             JobType.ClassifyEmailSpam,
-            accountId: null,
+            account: null,
             pageSize: null,
             cursor);
 
@@ -85,11 +86,11 @@ public sealed class DeadLetteredJobQueryTests
     {
         // Arrange
         var account = MailAccountId.Create("work");
-        var first = DeadLetteredJobQuery.Create(JobType.ClassifyEmailSpam, account, 10, null).Query!;
+        var first = DeadLetteredJobQuery.Create(JobType.ClassifyEmailSpam, MailAccountIdentity.Create(SyntheticMailOwner.Deployment, account), 10, null).Query!;
         var cursor = DeadLetteredJobCursor.After(StoppedAt, Job, first.FilterFingerprint);
 
         // Act
-        var result = DeadLetteredJobQuery.Create(JobType.ClassifyEmailSpam, account, 25, cursor);
+        var result = DeadLetteredJobQuery.Create(JobType.ClassifyEmailSpam, MailAccountIdentity.Create(SyntheticMailOwner.Deployment, account), 25, cursor);
 
         // Assert
         Assert.Equal(DeadLetteredJobQueryOutcome.Accepted, result.Outcome);

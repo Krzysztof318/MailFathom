@@ -20,6 +20,7 @@ using MailFathom.Domain.Transport;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Observability;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -39,8 +40,11 @@ public sealed class OutboxDeliveryWorkerTests
     /// <summary>Guards against a hung loop. No assertion depends on how long the run actually takes.</summary>
     private static readonly TimeSpan DeadlockGuard = TimeSpan.FromSeconds(30);
 
-    private static readonly MailAccountId Work = MailAccountId.Create("work");
-    private static readonly MailAccountId Personal = MailAccountId.Create("personal");
+    private static readonly MailAccountIdentity Work =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+
+    private static readonly MailAccountIdentity Personal =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
 
     /// <summary>A signalled account is the only thing that starts a pass, so an idle deployment claims nothing.</summary>
     [Fact]
@@ -73,7 +77,7 @@ public sealed class OutboxDeliveryWorkerTests
 
         // Assert
         var claim = Assert.Single(context.Claims);
-        Assert.Equal(Work, claim.AccountId);
+        Assert.Equal(Work, claim.Account);
     }
 
     /// <summary>
@@ -96,7 +100,7 @@ public sealed class OutboxDeliveryWorkerTests
 
         // Assert
         Assert.True(context.Claims.Count >= 2);
-        Assert.All(context.Claims, claim => Assert.Equal(Work, claim.AccountId));
+        Assert.All(context.Claims, claim => Assert.Equal(Work, claim.Account));
     }
 
     /// <summary>One account's pass ending unexpectedly leaves the accounts behind it served, which is the isolation.</summary>
@@ -107,7 +111,7 @@ public sealed class OutboxDeliveryWorkerTests
         var context = new WorkerContext();
         context.OutgoingEmails
             .ClaimAsync(
-                Arg.Is<OutgoingEmailClaimRequest>(request => request != null && request.AccountId == Work),
+                Arg.Is<OutgoingEmailClaimRequest>(request => request != null && request.Account == Work),
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("The claim could not be issued."));
 
@@ -123,7 +127,7 @@ public sealed class OutboxDeliveryWorkerTests
         });
 
         // Assert
-        Assert.Equal(Personal, Assert.Single(context.Claims).AccountId);
+        Assert.Equal(Personal, Assert.Single(context.Claims).Account);
         Assert.Contains(context.Logger.Messages, message => message.Contains(
             "The outbox pass for account work failed",
             StringComparison.Ordinal));
@@ -232,7 +236,7 @@ public sealed class OutboxDeliveryWorkerTests
             // drafts side either. The store answers that nothing is outstanding, which is the arrangement these tests
             // are written against for the same reason the filing substitutes above are.
             var drafts = Substitute.For<IMailDraftStore>();
-            drafts.ReadOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            drafts.ReadOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
                 .Returns([]);
             collection.AddSingleton(drafts);
             collection.AddScoped<MailDraftFiler>();
@@ -306,14 +310,14 @@ public sealed class OutboxDeliveryWorkerTests
             }
         }
 
-        private static OutgoingEmailRecord RecordFor(MailAccountId accountId)
+        private static OutgoingEmailRecord RecordFor(MailAccountIdentity account)
         {
             Assert.True(EmailAddress.TryCreate(displayName: null, "anna@example.test", out var recipient));
 
             return new OutgoingEmailRecord
             {
                 Id = OutgoingEmailId.Create(Guid.CreateVersion7()),
-                AccountId = accountId,
+                Account = account,
                 Requester = OutgoingEmailRequester.Command($"mfctl-{Guid.CreateVersion7()}"),
                 Principal = OutgoingEmailPrincipal.Of("caller"),
                 Recipients = [OutgoingRecipientOutcome.Unanswered(

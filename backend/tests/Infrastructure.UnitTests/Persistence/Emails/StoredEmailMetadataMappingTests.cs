@@ -12,6 +12,7 @@ using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
@@ -640,9 +641,11 @@ public sealed class StoredEmailMetadataMappingTests
     private static StoredEmailEntity CreateEntity() => new()
     {
         Id = Guid.CreateVersion7(),
+        OwnerId = SyntheticMailOwner.Deployment.Value,
         MailboxAccountId = "primary",
         MailFolder = new MailFolderEntity
         {
+            OwnerId = SyntheticMailOwner.Deployment.Value,
             MailboxAccountId = "primary",
             Alias = "inbox",
             RemotePath = "INBOX",

@@ -40,8 +40,21 @@ public sealed record RecurringSend
     /// <summary>Gets what every occurrence and every later act refers to this declaration by.</summary>
     public required RecurringSendId Id { get; init; }
 
-    /// <summary>Gets the account each occurrence is submitted through and sent as.</summary>
-    public required MailAccountId AccountId { get; init; }
+    /// <summary>Gets the account each occurrence is submitted through and sent as, named by its owner and its identifier.</summary>
+    /// <remarks>
+    /// The pair, read back from the declaration's own row: every occasion becomes an outgoing record about this
+    /// account, and the owner that record carries is the one the declaration was made under.
+    /// </remarks>
+    public required MailAccountIdentity Account { get; init; }
+
+    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one owner names.</summary>
+    /// <remarks>
+    /// Derived rather than stored, so the pair is the one value here and the two halves can never disagree. It is kept
+    /// because most readers of this record are inside a scope whose owner is already settled, and naming the identifier
+    /// alone there says what the code means.
+    /// </remarks>
+    public MailAccountId AccountId => this.Account.Id;
+
 
     /// <summary>Gets the authored act that asked for the declaration, which every occurrence's identity is composed from.</summary>
     public required OutgoingEmailRequester Requester { get; init; }

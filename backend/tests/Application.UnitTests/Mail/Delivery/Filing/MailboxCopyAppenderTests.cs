@@ -38,7 +38,8 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Filing;
 /// </remarks>
 public sealed class MailboxCopyAppenderTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset Moment = new(2026, 8, 21, 9, 0, 0, TimeSpan.Zero);
 
@@ -208,7 +209,7 @@ public sealed class MailboxCopyAppenderTests
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new MailboxUnavailableException(
-                Account,
+                Account.Id,
                 MailFolderAlias.Create("sent"),
                 new TimeoutException("The append was issued and the server never answered.")));
         var appender = this.Appender();
@@ -484,7 +485,7 @@ public sealed class MailboxCopyAppenderTests
         var folderAlias = MailFolderAlias.Create(alias);
 
         this.mappings.With(
-            Account,
+            Account.Id,
             MailFolderMapping.ToRemotePath(
                 folderAlias,
                 RemoteFolderPath.Create(remotePath),
@@ -492,7 +493,7 @@ public sealed class MailboxCopyAppenderTests
                 mayCreateMissingFolder: false,
                 role));
 
-        return this.folderResolutions.Bind(Account, folderAlias, remotePath);
+        return this.folderResolutions.Bind(Account.Id, folderAlias, remotePath);
     }
 
     private void StoreOutgoingMessage() =>

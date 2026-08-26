@@ -431,7 +431,7 @@ public sealed class ListEmailsToolTests
         var summary = new EmailSummary
         {
             StoredEmailId = StoredEmailId.Create(storedEmailId),
-            AccountId = MailAccountId.Create(ServedAccountId),
+            Account = MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create(ServedAccountId)),
             FolderAlias = MailFolderAlias.Create("INBOX"),
             InternetMessageId = "<abc@example.test>",
             Subject = "Quarterly invoice",
@@ -800,7 +800,7 @@ public sealed class ListEmailsToolTests
     private static EmailSummary SummaryReceivedAt(DateTimeOffset? receivedAt) => new()
     {
         StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
-        AccountId = MailAccountId.Create(ServedAccountId),
+        Account = MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create(ServedAccountId)),
         FolderAlias = MailFolderAlias.Create("INBOX"),
         ReceivedAt = receivedAt,
         SentAt = receivedAt,

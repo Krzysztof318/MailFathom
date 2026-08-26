@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Spam;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -51,11 +52,13 @@ internal sealed class ClassifiableEmailReader(MailFathomDbContext dbContext) : I
     /// in this reader.
     /// </remarks>
     public async Task<StoredEmailId?> FindStoredEmailIdAsync(
+        MailOwnerId owner,
         EmailOccurrenceId occurrenceId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(occurrenceId);
 
+        var ownerId = owner.Value;
         var mailboxAccountId = occurrenceId.AccountId.Value;
         var alias = occurrenceId.FolderResolutionId.Alias.Value;
         var generation = occurrenceId.FolderResolutionId.Generation.Value;
@@ -64,7 +67,8 @@ internal sealed class ClassifiableEmailReader(MailFathomDbContext dbContext) : I
 
         var row = await dbContext.StoredEmails
             .AsNoTracking()
-            .Where(email => email.MailboxAccountId == mailboxAccountId
+            .Where(email => email.OwnerId == ownerId
+                && email.MailboxAccountId == mailboxAccountId
                 && email.MailFolder.Alias == alias
                 && email.MailFolder.ResolutionGeneration == generation
                 && email.UidValidity == uidValidity
@@ -83,7 +87,7 @@ internal sealed class ClassifiableEmailReader(MailFathomDbContext dbContext) : I
     /// mail nobody else can act on outside every run.
     /// </remarks>
     public async Task<IReadOnlyList<ClassifiableEmail>> GetStoredEmailsAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         IReadOnlyList<MailFolderAlias> folderAliases,
         StoredEmailId? resumeAfter,
         int batchSize,
@@ -97,11 +101,14 @@ internal sealed class ClassifiableEmailReader(MailFathomDbContext dbContext) : I
             return [];
         }
 
-        var mailboxAccountId = accountId.Value;
+        var ownerId = account.Owner.Value;
+        var mailboxAccountId = account.Id.Value;
         string[] aliases = [.. folderAliases.Select(static alias => alias.Value)];
         var emails = dbContext.StoredEmails
             .AsNoTracking()
-            .Where(email => email.MailboxAccountId == mailboxAccountId && aliases.Contains(email.MailFolder.Alias));
+            .Where(email => email.OwnerId == ownerId
+                && email.MailboxAccountId == mailboxAccountId
+                && aliases.Contains(email.MailFolder.Alias));
 
         if (resumeAfter is { } position)
         {
@@ -120,7 +127,7 @@ internal sealed class ClassifiableEmailReader(MailFathomDbContext dbContext) : I
         [
             .. rows.Select(row => new ClassifiableEmail(
                 StoredEmailId.Create(row.Id),
-                accountId,
+                account.Id,
                 MailFolderAlias.Create(row.Alias))),
         ];
     }

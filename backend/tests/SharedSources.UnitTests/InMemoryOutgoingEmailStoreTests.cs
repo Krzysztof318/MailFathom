@@ -27,7 +27,8 @@ public sealed class InMemoryOutgoingEmailStoreTests
 {
     private static readonly DateTimeOffset Moment = new(2026, 8, 20, 9, 0, 0, TimeSpan.Zero);
 
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private static readonly IPersistenceSession Session = new IgnoredPersistenceSession();
 
@@ -44,7 +45,7 @@ public sealed class InMemoryOutgoingEmailStoreTests
 
         // Assert
         Assert.True(opened.WasRecordedNow);
-        Assert.Equal(Account, opened.Record.AccountId);
+        Assert.Equal(Account, opened.Record.Account);
         Assert.Equal(OutgoingEmailStage.Recorded, opened.Record.Stage);
         Assert.Equal(Moment, opened.Record.RecordedAt);
         Assert.Equal(Principal, opened.Record.Principal);

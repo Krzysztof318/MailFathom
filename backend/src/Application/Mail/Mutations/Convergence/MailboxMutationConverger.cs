@@ -87,7 +87,7 @@ public sealed class MailboxMutationConverger
     }
 
     /// <summary>Takes one bounded pass over everything the account has asked a mail server for and not seen finished.</summary>
-    /// <param name="accountId">The account whose mutations are converged.</param>
+    /// <param name="account">The account whose mutations are converged.</param>
     /// <param name="cancellationToken">Cancels the pass; a mutation already under way is cancelled with it.</param>
     /// <returns>What the pass did, and what the account still owes afterwards.</returns>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels the pass.</exception>
@@ -98,11 +98,11 @@ public sealed class MailboxMutationConverger
     /// means here.
     /// </remarks>
     public async Task<MailboxConvergenceReport> ConvergeAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
         var outstanding = await this.store.ReadOutstandingAsync(
-            accountId,
+            account,
             this.options.MaxMutationsPerPass,
             cancellationToken);
 
@@ -113,7 +113,7 @@ public sealed class MailboxMutationConverger
             return new MailboxConvergenceReport(0, 0, 0, 0, []);
         }
 
-        var transportSecurityPolicy = this.transportSecurityPolicyReader.GetPolicy(accountId);
+        var transportSecurityPolicy = this.transportSecurityPolicyReader.GetPolicy(account.Id);
         var tally = new ConvergenceTally();
 
         foreach (var candidate in outstanding)
@@ -130,7 +130,7 @@ public sealed class MailboxMutationConverger
             await this.ConvergeOneAsync(candidate, transportSecurityPolicy, tally, cancellationToken);
         }
 
-        var outstandingCounts = await this.store.ReadLifecycleCountsAsync(accountId, cancellationToken);
+        var outstandingCounts = await this.store.ReadLifecycleCountsAsync(account, cancellationToken);
 
         return new MailboxConvergenceReport(
             tally.CompletedCount,

@@ -53,7 +53,7 @@ public sealed class OutboxOperationsTests
         var operations = this.OperationsFor(AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead));
 
         // Act
-        var summary = await operations.ReadSummaryAsync(accountId: null, TestContext.Current.CancellationToken);
+        var summary = await operations.ReadSummaryAsync(account: null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
@@ -152,7 +152,7 @@ public sealed class OutboxOperationsTests
     }
 
     private static OutboxQuery EverySend() =>
-        OutboxQuery.Create(accountId: null, stage: null, pageSize: null, cursor: null).Query!;
+        OutboxQuery.Create(account: null, stage: null, pageSize: null, cursor: null).Query!;
 
     private OutboxOperations OperationsFor(AccessAuthorization authorization) =>
         new(this.sends, this.outbox, authorization);

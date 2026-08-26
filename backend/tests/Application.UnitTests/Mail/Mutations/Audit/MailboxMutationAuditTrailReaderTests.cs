@@ -15,7 +15,8 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations.Audit;
 /// <summary>Covers reading one account's record of what MailFathom did to its mailbox, which is derived from that mailbox.</summary>
 public sealed class MailboxMutationAuditTrailReaderTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private readonly IMailboxMutationAuditEntryStore entries = Substitute.For<IMailboxMutationAuditEntryStore>();
 

@@ -15,7 +15,8 @@ namespace MailFathom.Application.UnitTests.Rules.History;
 /// <summary>Covers reading what the rules concluded about an account's mail, which is derived from that mail.</summary>
 public sealed class MailRuleHistoryTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private readonly IMailRuleExecutionStore executions = Substitute.For<IMailRuleExecutionStore>();
 

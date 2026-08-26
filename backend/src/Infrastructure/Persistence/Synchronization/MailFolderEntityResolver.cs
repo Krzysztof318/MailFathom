@@ -6,7 +6,6 @@ using MailFathom.CodeCoverage;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Infrastructure.Persistence.Entities;
-using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.Infrastructure.Persistence.Sessions;
 
 namespace MailFathom.Infrastructure.Persistence.Synchronization;
@@ -23,18 +22,23 @@ internal static class MailFolderEntityResolver
 {
     public static async Task<MailFolderEntity?> FindAsync(
         MailFathomDbContext dbContext,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolutionId folderResolutionId,
         CancellationToken cancellationToken)
     {
+        var owner = account.Owner.Value;
+        var accountId = account.Id.Value;
         var alias = folderResolutionId.Alias.Value;
         var generation = folderResolutionId.Generation.Value;
 
-        // Looked up by its alternate key, so the change-tracker pass is explicit rather than handled by FindAsync.
+        // Looked up by its alternate key, so the change-tracker pass is explicit rather than handled by FindAsync. The
+        // owner leads the alternate key exactly as it leads the index, so a binding of another owner's account carrying
+        // the same identifier is not a candidate at all.
         return await TrackedEntityLookup.SinglePendingOrPersistedAsync(
             dbContext.MailFolders,
             dbContext.MailFolders,
-            candidate => candidate.MailboxAccountId == accountId.Value
+            candidate => candidate.OwnerId == owner
+                && candidate.MailboxAccountId == accountId
                 && candidate.Alias == alias
                 && candidate.ResolutionGeneration == generation,
             cancellationToken);
@@ -42,46 +46,59 @@ internal static class MailFolderEntityResolver
 
     public static async Task<MailFolderEntity> GetRequiredAsync(
         MailFathomDbContext dbContext,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolutionId folderResolutionId,
         CancellationToken cancellationToken) =>
-        await FindAsync(dbContext, accountId, folderResolutionId, cancellationToken)
+        await FindAsync(dbContext, account, folderResolutionId, cancellationToken)
         ?? throw new InvalidOperationException(
-            $"Folder alias {accountId.Value}/{folderResolutionId} has no recorded binding, so nothing can be stored under it.");
+            $"Folder alias {account.Id.Value}/{folderResolutionId} has no recorded binding, so nothing can be stored under it.");
 
     public static async Task<MailFolderEntity> AddAsync(
         MailFathomDbContext dbContext,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolution resolution,
         CancellationToken cancellationToken)
     {
         // The account is keyed by the identifier itself, so FindAsync already resolves a pending insert without a query.
-        var account = await dbContext.MailboxAccounts.FindAsync([accountId.Value], cancellationToken);
-        if (account is null)
-        {
-            // The owner is read rather than minted. A run that invented one would be deciding whose mail this is while
-            // storing it, and the record it invented would be the boundary every later read of that mail is judged
-            // against; the read is paid for only on the run that first binds one of an account's folders.
-            var ownerId = await OwnerAccountResolver.ResolveConfiguredOwnerAsync(dbContext, cancellationToken);
+        var accountRow = await dbContext.MailboxAccounts.FindAsync([account.Id.Value], cancellationToken);
 
-            account = new MailboxAccountEntity { Id = accountId.Value, OwnerId = ownerId };
-
-            dbContext.MailboxAccounts.Add(account);
-        }
+        // The row is composed rather than looked up when it is not there yet, and the owner comes from the identity the
+        // caller resolved the account through rather than from a read of the deployment's owner record. That is what
+        // makes the whole mail graph beneath this folder attributable without the account table being consulted at all.
+        accountRow ??= AddedAccount(dbContext, account);
 
         var folder = new MailFolderEntity
         {
-            MailboxAccountId = accountId.Value,
+            MailboxAccountId = account.Id.Value,
+
+            // Taken from the identity this binding was resolved under: the folder is the first row of the mail graph
+            // and every row beneath it inherits the owner from here.
+            OwnerId = account.Owner.Value,
             Alias = resolution.Alias.Value,
             ResolutionGeneration = resolution.Generation.Value,
             RemotePath = resolution.RemotePath.Value,
             HierarchyDelimiter = resolution.RemotePath.HierarchyDelimiter?.ToString(),
-            MailboxAccount = account,
+            MailboxAccount = accountRow,
         };
 
         dbContext.MailFolders.Add(folder);
 
         return folder;
+    }
+
+    /// <summary>Writes down the account row a first binding needs, under the owner the caller resolved it through.</summary>
+    /// <remarks>
+    /// An account MailFathom has never stored mail for has no row yet, and the binding below needs one for its foreign
+    /// key. The owner is not minted here and not read here either: it arrived with the account, so what an operator
+    /// configured decides whose mail this is rather than the order in which folders happened to bind.
+    /// </remarks>
+    private static MailboxAccountEntity AddedAccount(MailFathomDbContext dbContext, MailAccountIdentity account)
+    {
+        var added = new MailboxAccountEntity { Id = account.Id.Value, OwnerId = account.Owner.Value };
+
+        dbContext.MailboxAccounts.Add(added);
+
+        return added;
     }
 
     /// <summary>Rebuilds the alias binding one row states.</summary>

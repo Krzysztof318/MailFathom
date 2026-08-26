@@ -21,31 +21,37 @@ internal sealed class SpamClassificationRunStore(MailFathomDbContext dbContext) 
 {
     /// <inheritdoc />
     public async Task<SpamClassificationRun?> FindOutstandingAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
-        var mailboxAccountId = accountId.Value;
+        var owner = account.Owner.Value;
+        var mailboxAccountId = account.Id.Value;
         var outstanding = await dbContext.SpamClassificationRuns
             .AsNoTracking()
             .SingleOrDefaultAsync(
-                run => run.MailboxAccountId == mailboxAccountId && run.EndedAt == null,
+                run => run.OwnerId == owner
+                    && run.MailboxAccountId == mailboxAccountId
+                    && run.EndedAt == null,
                 cancellationToken);
 
-        return outstanding is null ? null : Read(outstanding, accountId);
+        return outstanding is null ? null : Read(outstanding, account);
     }
 
     /// <inheritdoc />
     /// <remarks>One row per account, so the account's key is the whole of the lookup and no ordering is needed.</remarks>
     public async Task<SpamClassificationRun?> FindLatestAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
-        var mailboxAccountId = accountId.Value;
+        var owner = account.Owner.Value;
+        var mailboxAccountId = account.Id.Value;
         var latest = await dbContext.SpamClassificationRuns
             .AsNoTracking()
-            .SingleOrDefaultAsync(run => run.MailboxAccountId == mailboxAccountId, cancellationToken);
+            .SingleOrDefaultAsync(
+                run => run.OwnerId == owner && run.MailboxAccountId == mailboxAccountId,
+                cancellationToken);
 
-        return latest is null ? null : Read(latest, accountId);
+        return latest is null ? null : Read(latest, account);
     }
 
     /// <inheritdoc />
@@ -70,7 +76,11 @@ internal sealed class SpamClassificationRunStore(MailFathomDbContext dbContext) 
         {
             stored = new SpamClassificationRunEntity
             {
-                MailboxAccountId = run.AccountId.Value,
+                MailboxAccountId = run.Account.Id.Value,
+
+                // Written from the identity the request resolved through the deployment's catalog, which is the account
+                // this run walks. A run belongs to the owner whose mail it classifies.
+                OwnerId = run.Account.Owner.Value,
                 FolderAliases = [],
             };
 
@@ -80,25 +90,27 @@ internal sealed class SpamClassificationRunStore(MailFathomDbContext dbContext) 
         Write(stored, run);
     }
 
-    private static SpamClassificationRun Read(SpamClassificationRunEntity entity, MailAccountId accountId) => new()
-    {
-        AccountId = accountId,
-        RequestedAt = entity.RequestedAt,
-        Terms = SpamClassificationRunTerms.Create(
-            entity.FolderAliases.Select(MailFolderAlias.Create),
-            entity.Posture,
-            entity.Rescores),
-        Profile = entity.Profile is { } profile ? SpamClassificationProfile.Restore(profile) : default,
-        Position = entity.Position is { } position ? StoredEmailId.Create(position) : null,
-        ClassifiedEmailCount = entity.ClassifiedEmailCount,
-        SpamEmailCount = entity.SpamEmailCount,
-        UndeterminedEmailCount = entity.UndeterminedEmailCount,
-        SkippedEmailCount = entity.SkippedEmailCount,
-        UnclassifiableEmailCount = entity.UnclassifiableEmailCount,
-        ActedEmailCount = entity.ActedEmailCount,
-        EndedAt = entity.EndedAt,
-        Ending = entity.Ending,
-    };
+    private static SpamClassificationRun Read(
+        SpamClassificationRunEntity entity,
+        MailAccountIdentity account) => new()
+        {
+            Account = account,
+            RequestedAt = entity.RequestedAt,
+            Terms = SpamClassificationRunTerms.Create(
+                entity.FolderAliases.Select(MailFolderAlias.Create),
+                entity.Posture,
+                entity.Rescores),
+            Profile = entity.Profile is { } profile ? SpamClassificationProfile.Restore(profile) : default,
+            Position = entity.Position is { } position ? StoredEmailId.Create(position) : null,
+            ClassifiedEmailCount = entity.ClassifiedEmailCount,
+            SpamEmailCount = entity.SpamEmailCount,
+            UndeterminedEmailCount = entity.UndeterminedEmailCount,
+            SkippedEmailCount = entity.SkippedEmailCount,
+            UnclassifiableEmailCount = entity.UnclassifiableEmailCount,
+            ActedEmailCount = entity.ActedEmailCount,
+            EndedAt = entity.EndedAt,
+            Ending = entity.Ending,
+        };
 
     private static void Write(SpamClassificationRunEntity entity, SpamClassificationRun run)
     {

@@ -35,25 +35,33 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="identifiers" /> is <see langword="null" />.</exception>
     public async Task<IReadOnlyList<EmailThreadBinding>> FindBindingsAsync(
         IPersistenceSession session,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         IReadOnlyList<string> identifiers,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(identifiers);
 
         var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-        var account = accountId.Value;
+
+        // The owner leads the account in both passes, which is the order the binding index leads in. Reading the two
+        // halves into locals is what keeps the comparison translatable.
+        var owner = account.Owner.Value;
+        var accountId = account.Id.Value;
         var digestedIdentifiers = identifiers
             .Distinct(StringComparer.Ordinal)
             .ToDictionary(EmailThreadIdentifierDigest.Of, identifier => identifier, StringComparer.Ordinal);
         var digests = digestedIdentifiers.Keys.ToArray();
 
         var persisted = await dbContext.EmailThreadIdentifiers
-            .Where(binding => binding.MailboxAccountId == account && digests.Contains(binding.IdentifierHash))
+            .Where(binding => binding.OwnerId == owner
+                && binding.MailboxAccountId == accountId
+                && digests.Contains(binding.IdentifierHash))
             .ToListAsync(cancellationToken);
 
         var pending = dbContext.EmailThreadIdentifiers.Local
-            .Where(binding => binding.MailboxAccountId == account && digests.Contains(binding.IdentifierHash));
+            .Where(binding => binding.OwnerId == owner
+                && binding.MailboxAccountId == accountId
+                && digests.Contains(binding.IdentifierHash));
 
         var bound = persisted
             .Concat(pending)
@@ -83,7 +91,7 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
     /// <inheritdoc />
     public async Task<EmailThreadId> StartThreadAsync(
         IPersistenceSession session,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
         var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
@@ -91,7 +99,11 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
         var thread = new EmailThreadEntity
         {
             Id = Guid.CreateVersion7(assembledAt),
-            MailboxAccountId = accountId.Value,
+            MailboxAccountId = account.Id.Value,
+
+            // Written from the identity the assembly was given, which the caller took off the row it is storing mail
+            // into. A conversation belongs to the owner whose mail it assembles.
+            OwnerId = account.Owner.Value,
             AssembledAt = assembledAt,
         };
 
@@ -104,7 +116,7 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="identifiers" /> is <see langword="null" />.</exception>
     public async Task BindIdentifiersAsync(
         IPersistenceSession session,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         IReadOnlyList<string> identifiers,
         EmailThreadId threadId,
         CancellationToken cancellationToken)
@@ -117,7 +129,10 @@ internal sealed class EmailThreadStore(TimeProvider timeProvider) : IEmailThread
         {
             dbContext.EmailThreadIdentifiers.Add(new EmailThreadIdentifierEntity
             {
-                MailboxAccountId = accountId.Value,
+                MailboxAccountId = account.Id.Value,
+
+                // The same identity the conversation was started under, for the same reason.
+                OwnerId = account.Owner.Value,
                 IdentifierHash = EmailThreadIdentifierDigest.Of(identifier),
                 EmailThreadId = threadId.Value,
             });

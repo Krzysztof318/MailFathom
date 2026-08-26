@@ -45,7 +45,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
     /// <inheritdoc />
     public async Task<MailDraftRecord> OpenAsync(
         IPersistenceSession session,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         OutgoingEmailRequester author,
         IReadOnlyList<MailDraftRecipient> recipients,
         long mimeByteLength,
@@ -62,7 +62,10 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
         var entity = new MailDraftEntity
         {
             Id = Guid.CreateVersion7(composedAt),
-            MailboxAccountId = accountId.Value,
+            MailboxAccountId = account.Id.Value,
+
+            // Written from the identity the caller's own catalog resolved, which is the account this draft belongs to.
+            OwnerId = account.Owner.Value,
             RequesterOrigin = author.Origin,
             RequesterIdentity = author.Identity,
             Revision = FirstRevision,
@@ -148,16 +151,18 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
     /// answered is deliberately none of them — nothing appends it again, and nothing can remove what nobody can name.
     /// </remarks>
     public async Task<IReadOnlyList<MailDraftRecord>> ReadOutstandingAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         int maxCount,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxCount);
 
-        var accountValue = accountId.Value;
+        var ownerValue = account.Owner.Value;
+        var accountValue = account.Id.Value;
 
         var entities = await this.ReadDrafts()
-            .Where(draft => draft.MailboxAccountId == accountValue
+            .Where(draft => draft.OwnerId == ownerValue
+                && draft.MailboxAccountId == accountValue
                 && (draft.DiscardedAt != null
                     || draft.PromotedToOutgoingEmailId != null
                     || (!draft.Copies.Any(copy => copy.Stage == MailDraftCopyStage.Issued)

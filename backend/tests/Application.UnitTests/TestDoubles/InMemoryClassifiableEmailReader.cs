@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Spam;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -44,13 +45,14 @@ internal sealed class InMemoryClassifiableEmailReader : IClassifiableEmailReader
 
     /// <inheritdoc />
     public Task<StoredEmailId?> FindStoredEmailIdAsync(
+        MailOwnerId owner,
         EmailOccurrenceId occurrenceId,
         CancellationToken cancellationToken) => Task.FromResult(
         this.emailIdsByOccurrence.TryGetValue(occurrenceId, out var emailId) ? emailId : (StoredEmailId?)null);
 
     /// <inheritdoc />
     public Task<IReadOnlyList<ClassifiableEmail>> GetStoredEmailsAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         IReadOnlyList<MailFolderAlias> folderAliases,
         StoredEmailId? resumeAfter,
         int batchSize,
@@ -63,7 +65,7 @@ internal sealed class InMemoryClassifiableEmailReader : IClassifiableEmailReader
         IReadOnlyList<ClassifiableEmail> batch =
         [
             .. this.emails
-                .Where(email => email.AccountId == accountId)
+                .Where(email => email.AccountId == account.Id)
                 .Where(email => folderAliases.Contains(email.FolderAlias))
                 .Where(email => resumeAfter is not { } position || email.Id.Value.CompareTo(position.Value) > 0)
                 .OrderBy(email => email.Id.Value)

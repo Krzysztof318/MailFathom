@@ -10,6 +10,7 @@ using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Mutations.Audit;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Mail.Mutations.Audit;
@@ -88,6 +89,7 @@ public sealed class MailboxMutationAuditCursorTests
     {
         Id = EntryId,
         MutationRecordId = MailboxMutationRecordId.Create(Guid.CreateVersion7(CompletedAt)),
+        Owner = SyntheticMailOwner.Deployment,
         AccountId = MailAccountId.Create("work"),
         StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7(CompletedAt)),
         Mutation = MailboxMutation.Relocate,

@@ -91,7 +91,7 @@ public sealed class OrchestratedOutgoingMailFilingTests(MailFathomOrchestrationF
         // Act
         var report = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailOutboxPass>().RunAsync(
-                SyntheticMailAccount.AccountId,
+                SyntheticMailAccount.Account,
                 token),
             cancellationToken);
 
@@ -133,7 +133,7 @@ public sealed class OrchestratedOutgoingMailFilingTests(MailFathomOrchestrationF
 
         var synchronization = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailboxSynchronizer>().SynchronizeAsync(
-                SyntheticMailAccount.AccountId,
+                SyntheticMailAccount.Account,
                 FiledCopyFolder,
                 token),
             cancellationToken);
@@ -222,7 +222,7 @@ public sealed class OrchestratedOutgoingMailFilingTests(MailFathomOrchestrationF
             batch = await services.InScopeAsync(
                 (scope, token) => scope.GetRequiredService<IMailRuleEvaluationStore>()
                     .GetEmailsAwaitingFirstEvaluationAsync(
-                        SyntheticMailAccount.AccountId,
+                        SyntheticMailAccount.Account,
                         position,
                         ArrivalQueueBatchSize,
                         token),
@@ -245,7 +245,7 @@ public sealed class OrchestratedOutgoingMailFilingTests(MailFathomOrchestrationF
         Assert.True(EmailAddress.TryCreate(displayName: null, Mailbox, out var recipient));
 
         return OutgoingEmailRequest.Create(
-            SyntheticMailAccount.AccountId,
+            SyntheticMailAccount.Account,
             OutgoingEmailRequester.Command(invocationIdentity),
             [OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To)]);
     }

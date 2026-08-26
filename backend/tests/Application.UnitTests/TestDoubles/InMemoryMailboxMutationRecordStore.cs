@@ -167,7 +167,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
 
     /// <inheritdoc />
     public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         int limit,
         CancellationToken cancellationToken)
     {
@@ -175,7 +175,7 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
 
         IReadOnlyList<OutstandingMailboxMutation> outstanding =
         [
-            .. this.OutstandingOf(accountId)
+            .. this.OutstandingOf(account.Id)
                 .OrderBy(record => record.RecordedAt)
                 .Take(limit)
                 .Select(record => new OutstandingMailboxMutation(record, this.BindingOf(record))),
@@ -186,12 +186,12 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
 
     /// <inheritdoc />
     public Task<IReadOnlyList<MailboxMutationLifecycleCount>> ReadLifecycleCountsAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
         IReadOnlyList<MailboxMutationLifecycleCount> counts =
         [
-            .. this.OutstandingOf(accountId)
+            .. this.OutstandingOf(account.Id)
                 .GroupBy(record => new { record.Request.Mutation, record.Lifecycle })
                 .Select(group => new MailboxMutationLifecycleCount(
                     group.Key.Mutation,

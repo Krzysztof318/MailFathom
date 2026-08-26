@@ -175,26 +175,31 @@ public sealed class MailFlagChangeRecorder
         {
             _ when mutation.Mutation == MailboxMutation.SetSeen => MailboxMutationRequest.SetSeen(
                 change.StoredEmailId,
+                target.Owner,
                 target.Occurrence,
                 requester,
                 mutation.DesiredSeenState!.Value),
             _ when mutation.Mutation == MailboxMutation.SetFlagged => MailboxMutationRequest.SetFlagged(
                 change.StoredEmailId,
+                target.Owner,
                 target.Occurrence,
                 requester,
                 mutation.DesiredFlaggedState!.Value),
             _ when mutation.Mutation == MailboxMutation.AddKeywords => MailboxMutationRequest.AddKeywords(
                 change.StoredEmailId,
+                target.Owner,
                 target.Occurrence,
                 requester,
                 mutation.Keywords!),
             _ when mutation.Mutation == MailboxMutation.RemoveKeywords => MailboxMutationRequest.RemoveKeywords(
                 change.StoredEmailId,
+                target.Owner,
                 target.Occurrence,
                 requester,
                 mutation.Keywords!),
             _ when mutation.Mutation == MailboxMutation.SetKeywords => MailboxMutationRequest.SetKeywords(
                 change.StoredEmailId,
+                target.Owner,
                 target.Occurrence,
                 requester,
                 mutation.Keywords!),

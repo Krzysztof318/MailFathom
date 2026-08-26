@@ -34,7 +34,8 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Scheduling;
 /// </remarks>
 public sealed class RecurringSendOccurrenceHandlerTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     /// <summary>Ten in the morning on a Wednesday, which is after that day's nine o'clock occasion and before the next.</summary>
     private static readonly DateTimeOffset Dispatched = new(2026, 8, 19, 10, 0, 0, TimeSpan.Zero);
@@ -273,7 +274,7 @@ public sealed class RecurringSendOccurrenceHandlerTests
             return this.RecurringSends.Publish(new RecurringSend
             {
                 Id = RecurringSendId.Create(Guid.CreateVersion7()),
-                AccountId = Account,
+                Account = Account,
                 Requester = OutgoingEmailRequester.Command("declare-1"),
                 Recipients = [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)],
                 Schedule = schedule,
@@ -297,14 +298,14 @@ public sealed class RecurringSendOccurrenceHandlerTests
             var composer = Substitute.For<IAuthoredEmailComposer>();
             composer
                 .RecomposeAsOccurrence(
-                    Arg.Any<MailAccountId>(),
+                    Arg.Any<MailAccountIdentity>(),
                     Arg.Any<OutgoingEmailRequester>(),
                     Arg.Any<IReadOnlyList<OutgoingRecipient>>(),
                     Arg.Any<ReadOnlyMemory<byte>>(),
                     Arg.Any<MailDeliveryCapabilities>())
                 .Returns(call => AuthoredEmailComposition.Composed(new ComposedOutgoingEmail(
                     OutgoingEmailRequest.Create(
-                        call.ArgAt<MailAccountId>(0),
+                        call.ArgAt<MailAccountIdentity>(0),
                         call.ArgAt<OutgoingEmailRequester>(1),
                         call.ArgAt<IReadOnlyList<OutgoingRecipient>>(2)),
                     InternetMessageId.Mint("example.test"),

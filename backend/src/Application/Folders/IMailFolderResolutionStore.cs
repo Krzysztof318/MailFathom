@@ -21,18 +21,18 @@ namespace MailFathom.Application.Folders;
 public interface IMailFolderResolutionStore
 {
     /// <summary>Gets the newest durable binding of an alias.</summary>
-    /// <param name="accountId">The account owning the alias.</param>
+    /// <param name="account">The account owning the alias.</param>
     /// <param name="folderAlias">The operator-facing folder name.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The highest-generation binding, or <see langword="null" /> when the alias has never been bound.</returns>
     Task<MailFolderResolution?> GetCurrentResolutionAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderAlias folderAlias,
         CancellationToken cancellationToken);
 
     /// <summary>Stages a binding so the generation exists before any occurrence is stored under it.</summary>
     /// <param name="session">The open session whose transaction the staged insert joins.</param>
-    /// <param name="accountId">The account owning the alias.</param>
+    /// <param name="account">The account owning the alias.</param>
     /// <param name="resolution">The binding to stage.</param>
     /// <param name="cancellationToken">Cancels the lookup before anything is staged.</param>
     /// <returns>A task that completes once the binding is staged in the caller's session.</returns>
@@ -47,7 +47,7 @@ public interface IMailFolderResolutionStore
     /// </remarks>
     Task SaveResolutionAsync(
         IPersistenceSession session,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolution resolution,
         CancellationToken cancellationToken);
 }

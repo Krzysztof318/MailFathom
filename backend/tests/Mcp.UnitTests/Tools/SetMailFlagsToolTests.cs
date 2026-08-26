@@ -332,6 +332,7 @@ public sealed class SetMailFlagsToolTests
         targets
             .FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<AuthoredMailboxTarget?>(new AuthoredMailboxTarget(
+                SyntheticMailOwner.Deployment,
                 EmailOccurrenceId.Create(Account, folder.Id, ImapUidValidity.Create(9), ImapUid.Create(41)),
                 folder)));
 
@@ -428,13 +429,13 @@ public sealed class SetMailFlagsToolTests
             throw new NotSupportedException();
 
         public Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
-            MailAccountId accountId,
+            MailAccountIdentity account,
             int limit,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public Task<IReadOnlyList<MailboxMutationLifecycleCount>> ReadLifecycleCountsAsync(
-            MailAccountId accountId,
+            MailAccountIdentity account,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }

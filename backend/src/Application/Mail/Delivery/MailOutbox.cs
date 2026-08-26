@@ -181,7 +181,7 @@ public sealed class MailOutbox(
         // A record already delivered by an earlier identical request is signalled all the same. The pass reads the
         // outbox rather than this call, so an account with nothing outstanding costs it one claim that takes nothing —
         // which is cheaper than working out here whether the record this call read back still needs sending.
-        signal.Signal(committed.Record.AccountId);
+        signal.Signal(committed.Record.Account);
 
         return committed;
     }
@@ -236,8 +236,8 @@ public sealed class MailOutbox(
             JobEnqueueRequest.CreateAvailableAt(
                 JobIdempotencyKey.Create(
                     string.Create(CultureInfo.InvariantCulture, $"{HeldSendKeyPrefix}:{record.Id}")),
-                HeldSendJobPayload.For(record.AccountId, record.Id),
-                record.AccountId,
+                HeldSendJobPayload.For(record.Account, record.Id),
+                record.Account,
                 record.AvailableAt),
             cancellationToken);
 

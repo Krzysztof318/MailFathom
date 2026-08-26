@@ -6,6 +6,7 @@ using MailFathom.Application.Spam.History;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Spam;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Spam.History;
@@ -13,7 +14,8 @@ namespace MailFathom.Application.UnitTests.Spam.History;
 /// <summary>Covers what a request has to name to reach a page, and what a cursor is checked against.</summary>
 public sealed class SpamClassificationHistoryQueryTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("acct-1");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-1"));
 
     private static readonly StoredEmailId Email =
         StoredEmailId.Create(Guid.Parse("0199a0c0-0000-7000-8000-0000000090a0"));
@@ -114,7 +116,7 @@ public sealed class SpamClassificationHistoryQueryTests
         var here = QueryOf().Query!;
 
         var elsewhere = SpamClassificationHistoryQuery.Create(
-            MailAccountId.Create("acct-2"),
+            MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-2")),
             storedEmailId: null,
             verdict: null,
             evaluatedFrom: null,

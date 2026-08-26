@@ -61,7 +61,7 @@ public sealed class OutgoingMailGovernor(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (permissions.FindRefusal(request.AccountId) is { } refusal)
+        if (permissions.FindRefusal(request.Account.Id) is { } refusal)
         {
             throw OutgoingMailRefusedException.SendingNotEnabled(refusal);
         }
@@ -77,7 +77,7 @@ public sealed class OutgoingMailGovernor(
         }
 
         var periodStart = ceilings.PeriodStartAt(timeProvider.GetUtcNow());
-        var consumed = await usage.ReadUsageSinceAsync(request.AccountId, periodStart, cancellationToken);
+        var consumed = await usage.ReadUsageSinceAsync(request.Account, periodStart, cancellationToken);
 
         if (ceilings.FindReachedCeiling(consumed, request.Recipients.Count) is { } reached)
         {

@@ -22,7 +22,8 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Drafts;
 /// <summary>Covers the pass that finishes what a stopped process, or an unreachable server, left a draft owing.</summary>
 public sealed class MailDraftPassTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset Moment = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 
@@ -56,7 +57,7 @@ public sealed class MailDraftPassTests
         var draft = await SaveAsync(harness, "first version");
         Assert.Equal(MailDraftStage.Composed, harness.Drafts.Peek(draft.Id)!.Stage);
 
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
 
         // Act
         var results = await harness.Pass.SettleOutstandingAsync(Account, CancellationToken.None);
@@ -78,11 +79,11 @@ public sealed class MailDraftPassTests
             Settings());
 
         await SaveAsync(harness, "first version");
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
 
         // Act
         var results = await harness.Pass.SettleOutstandingAsync(
-            MailAccountId.Create("personal"),
+            MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal")),
             CancellationToken.None);
 
         // Assert
@@ -101,7 +102,7 @@ public sealed class MailDraftPassTests
         // Arrange
         var outgoingEmails = new InMemoryOutgoingEmailStore();
         var harness = new MailDraftHarness(new FakeTimeProvider(Moment), outgoingEmails, Settings());
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
         var draft = await SaveAsync(harness, "first version");
         await PromoteAsync(harness, outgoingEmails, draft, OutgoingEmailStage.Sent);
 
@@ -121,7 +122,7 @@ public sealed class MailDraftPassTests
         // Arrange
         var outgoingEmails = new InMemoryOutgoingEmailStore();
         var harness = new MailDraftHarness(new FakeTimeProvider(Moment), outgoingEmails, Settings());
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
         var draft = await SaveAsync(harness, "first version");
         await PromoteAsync(harness, outgoingEmails, draft, OutgoingEmailStage.Recorded);
 
@@ -164,7 +165,7 @@ public sealed class MailDraftPassTests
             new InMemoryOutgoingEmailStore(),
             Settings());
 
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
 
         return harness;
     }

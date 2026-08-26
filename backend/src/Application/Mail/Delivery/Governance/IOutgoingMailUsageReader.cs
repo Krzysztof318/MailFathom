@@ -24,7 +24,7 @@ namespace MailFathom.Application.Mail.Delivery.Governance;
 public interface IOutgoingMailUsageReader
 {
     /// <summary>Reads what has been asked to leave since a period began.</summary>
-    /// <param name="accountId">The account whose own counts are wanted beside the deployment's.</param>
+    /// <param name="account">The account whose own counts are wanted beside the deployment's.</param>
     /// <param name="periodStart">The instant the period began, as the ceilings place it.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The messages and recipients recorded in the period, for the account and for every account together.</returns>
@@ -34,7 +34,7 @@ public interface IOutgoingMailUsageReader
     /// or while a second process is sending against the same period.
     /// </remarks>
     Task<OutgoingMailUsage> ReadUsageSinceAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         DateTimeOffset periodStart,
         CancellationToken cancellationToken);
 }

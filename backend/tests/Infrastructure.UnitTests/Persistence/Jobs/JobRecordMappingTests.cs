@@ -118,8 +118,8 @@ public sealed class JobRecordMappingTests
         JobType = JobType.ClassifyEmailSpam.Name,
         IdempotencyKey = "account-a/INBOX#1/12345/4711",
         Payload = """
-                  {"accountId":"account-a","folderAlias":"INBOX","folderResolutionGeneration":1,
-                   "uidValidity":12345,"uid":4711}
+                  {"ownerId":"11111111-1111-1111-1111-111111111111","accountId":"account-a",
+                   "folderAlias":"INBOX","folderResolutionGeneration":1,"uidValidity":12345,"uid":4711}
                   """,
         MailboxAccountId = "account-a",
         State = JobState.Claimed,

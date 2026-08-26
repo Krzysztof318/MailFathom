@@ -38,7 +38,7 @@ public sealed class MailboxDestinationResolver
     private readonly MailFolderResolver folderResolver;
     private readonly IMailTransportSecurityPolicyReader transportSecurityPolicies;
 
-    private readonly Dictionary<(MailAccountId Account, MailFolderReference Destination), MailboxDestinationResolution> answers = [];
+    private readonly Dictionary<(MailAccountIdentity Account, MailFolderReference Destination), MailboxDestinationResolution> answers = [];
 
     /// <summary>Initializes the resolver from the two ways a destination is turned into a folder.</summary>
     /// <param name="folderReferences">Turns the alias or the role an author named into the mapping of the account it means.</param>
@@ -64,7 +64,7 @@ public sealed class MailboxDestinationResolver
     }
 
     /// <summary>Resolves every destination one batch of authored changes names.</summary>
-    /// <param name="accountId">The account the changes are authored for.</param>
+    /// <param name="account">The account the changes are authored for.</param>
     /// <param name="destinations">What the authors named, in any order and with repetitions.</param>
     /// <param name="cancellationToken">Cancels the listing and the write that records a new binding.</param>
     /// <returns>One answer per distinct destination named.</returns>
@@ -75,7 +75,7 @@ public sealed class MailboxDestinationResolver
     /// account only maps reaches the mail server and records a binding in a session of its own.
     /// </remarks>
     public async Task<MailboxDestinations> ResolveAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         IEnumerable<MailFolderReference> destinations,
         CancellationToken cancellationToken)
     {
@@ -86,7 +86,7 @@ public sealed class MailboxDestinationResolver
 
         foreach (var destination in named)
         {
-            resolutions[destination] = await this.ResolveOneAsync(accountId, destination, cancellationToken);
+            resolutions[destination] = await this.ResolveOneAsync(account, destination, cancellationToken);
         }
 
         return new MailboxDestinations(resolutions);
@@ -98,18 +98,18 @@ public sealed class MailboxDestinationResolver
     /// nothing in this type's contract says a scope holds one account's work.
     /// </remarks>
     private async Task<MailboxDestinationResolution> ResolveOneAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderReference destination,
         CancellationToken cancellationToken)
     {
-        if (this.answers.TryGetValue((accountId, destination), out var remembered))
+        if (this.answers.TryGetValue((account, destination), out var remembered))
         {
             return remembered;
         }
 
-        var resolution = await this.ReadCurrentAsync(accountId, destination, cancellationToken);
+        var resolution = await this.ReadCurrentAsync(account, destination, cancellationToken);
 
-        this.answers[(accountId, destination)] = resolution;
+        this.answers[(account, destination)] = resolution;
 
         return resolution;
     }
@@ -121,7 +121,7 @@ public sealed class MailboxDestinationResolver
     /// the batch keeps moving.
     /// </remarks>
     private async Task<MailboxDestinationResolution> ReadCurrentAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderReference destination,
         CancellationToken cancellationToken)
     {
@@ -129,7 +129,7 @@ public sealed class MailboxDestinationResolver
 
         try
         {
-            mapping = this.folderReferences.Resolve(accountId, destination);
+            mapping = this.folderReferences.Resolve(account.Id, destination);
         }
         catch (MailFolderRoleUnmappedException)
         {
@@ -142,18 +142,18 @@ public sealed class MailboxDestinationResolver
         }
 
         return mapping.Participation.IsSynchronized
-            ? await this.ReadMirroredBindingAsync(accountId, mapping, cancellationToken)
-            : await this.ResolveOnDemandAsync(accountId, mapping, cancellationToken);
+            ? await this.ReadMirroredBindingAsync(account, mapping, cancellationToken)
+            : await this.ResolveOnDemandAsync(account, mapping, cancellationToken);
     }
 
     /// <summary>Reads the binding the folder's own synchronization run recorded.</summary>
     private async Task<MailboxDestinationResolution> ReadMirroredBindingAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderMapping mapping,
         CancellationToken cancellationToken)
     {
         var binding = await this.folderResolutions.GetCurrentResolutionAsync(
-            accountId,
+            account,
             mapping.Alias,
             cancellationToken);
 
@@ -169,18 +169,18 @@ public sealed class MailboxDestinationResolver
     /// destination and end the next pass the same way, forever.
     /// </remarks>
     private async Task<MailboxDestinationResolution> ResolveOnDemandAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderMapping mapping,
         CancellationToken cancellationToken)
     {
-        var transportSecurityPolicy = this.transportSecurityPolicies.GetPolicy(accountId);
+        var transportSecurityPolicy = this.transportSecurityPolicies.GetPolicy(account.Id);
 
         MailFolderResolutionResult result;
 
         try
         {
             result = await this.folderResolver.ResolveAsync(
-                accountId,
+                account,
                 mapping,
                 transportSecurityPolicy,
                 cancellationToken);

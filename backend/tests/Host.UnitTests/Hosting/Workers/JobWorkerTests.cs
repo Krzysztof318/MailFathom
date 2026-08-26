@@ -11,6 +11,7 @@ using MailFathom.Host.Configuration.Jobs;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Observability;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -288,7 +289,8 @@ public sealed class JobWorkerTests
 
         return new ScheduledJob(
             JobScheduleId.Create(identity),
-            RunScheduledMailRulesJobPayload.For(MailAccountId.Create("work")),
+            RunScheduledMailRulesJobPayload.For(
+                MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"))),
             recurrence!);
     }
 
@@ -298,6 +300,7 @@ public sealed class JobWorkerTests
         JobIdempotencyKey.Create($"account-a/inbox/1/{index}"),
         new ClassifyEmailSpamJobPayload
         {
+            OwnerId = SyntheticMailOwner.Deployment.Value,
             AccountId = "account-a",
             FolderAlias = "inbox",
             FolderResolutionGeneration = 1,

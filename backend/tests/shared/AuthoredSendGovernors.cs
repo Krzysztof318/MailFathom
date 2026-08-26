@@ -122,6 +122,14 @@ internal static class AuthoredSendGovernors
         public IReadOnlyList<ServedMailAccount> OwnedAccounts { get; } = [];
 
         public bool SynchronizationEnabled => false;
+
+        /// <summary>Gets the owner this catalog answers for, who owns nothing rather than being nobody.</summary>
+        /// <remarks>
+        /// An owner is still named, because owning no account and acting for no owner are different answers and only
+        /// the second is a refusal. A read narrowed on this owner returns nothing because the accounts are empty, not
+        /// because the owner is absent.
+        /// </remarks>
+        public MailOwnerId Owner => SyntheticMailOwner.Deployment;
     }
 
     /// <summary>A deployment whose accounts declare no sending address.</summary>
