@@ -1135,17 +1135,18 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    /// <summary>Registers the in-process detector of credentials in mail text, and what it declares it can find.</summary>
+    /// <summary>Registers the in-process detector of credentials in mail text.</summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The service collection, for chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
-    /// Called only where the <c>Secrets</c> switch is on, which is what makes an opt-in nobody took cost nothing: with
-    /// it off no corpus is assembled, no expression is compiled, and neither descriptor exists.
+    /// Called only where the <c>Secrets</c> switch is on, so with it off no expression is compiled and the scanner does
+    /// not exist. What the scanner declares it can find is registered by <see cref="AddSensitiveContentCatalogs" />
+    /// whatever the switch says, for the reason stated there — so the corpus behind the declaration is read on every
+    /// start, and what the switch decides is whether anything scans with it rather than whether it is assembled.
     /// </para>
     /// <para>
-    /// The catalog is not registered here and is not conditional; <see cref="AddSensitiveContentCatalogs" /> says why.
     /// The scanner is a singleton, because the corpus is compiled once and the scanner holds it.
     /// </para>
     /// </remarks>
@@ -1193,10 +1194,10 @@ public static class ServiceCollectionExtensions
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
-    /// Called only where the <c>Pii</c> switch is on, which is what makes an opt-in nobody took cost nothing: with it off
-    /// no client is registered, no analyzer address is read, and none of the three descriptors below exists. The composed
-    /// <see cref="PersonalDataAnalyzerProfile" /> is the host's to register, because where the analyzer is comes from
-    /// configuration this project does not bind.
+    /// Called only where the <c>Pii</c> switch is on, which is what keeps an opt-in nobody took from opening anything:
+    /// with it off no client is registered, no analyzer address is read, and none of the three descriptors below exists.
+    /// The composed <see cref="PersonalDataAnalyzerProfile" /> is the host's to register, because where the analyzer is
+    /// comes from configuration this project does not bind.
     /// </para>
     /// <para>
     /// The probe is registered beside the scanner rather than always, because it answers for a client this deployment

@@ -42,7 +42,7 @@ public interface IConfigurationWriter
     /// <summary>Applies changes to the deployment's persisted configuration.</summary>
     /// <param name="edits">The changes, applied together or not at all, in the order given.</param>
     /// <param name="expectedVersion">The version the changes were authored against, which the commit is accepted against.</param>
-    /// <param name="cancellationToken">Cancels the read, the validation, and the commit, and a write cancelled before the commit leaves the deployment's configuration unchanged. It does not cancel the republish that follows a durable commit, which is MailFathom's own to finish rather than the caller's to abandon.</param>
+    /// <param name="cancellationToken">Cancels the read and the commit, and a write cancelled before the commit leaves the deployment's configuration unchanged. It does not cancel the judgement between them — composing the candidate, binding it, and running the validators is one bounded step this port completes rather than abandons half-composed — and it does not cancel the republish that follows a durable commit, which is MailFathom's own to finish rather than the caller's to abandon.</param>
     /// <returns>The version the write committed, or the reason the deployment's settings are unchanged.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="edits" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="edits" /> is empty.</exception>

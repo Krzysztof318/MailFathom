@@ -41,10 +41,14 @@ internal static class ComposedSettings
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
+        // The order is the composition root's rather than this file's: `AddMailRules` runs before
+        // `AddPersistenceAndProviders`, which runs before the surfaces are mapped. An operator whose candidate carries
+        // a mistake in two of them is shown the same one first by a write and by a start, which is what the summary
+        // promises and the only thing that makes the promise worth anything.
         return
         [
-            .. FindProviderRefusals(configuration),
             .. FindMailRuleRefusals(configuration, new NCalcMailRuleConditionCompiler()),
+            .. FindProviderRefusals(configuration),
             .. FindSurfaceRefusals(configuration),
         ];
     }

@@ -128,6 +128,34 @@ public sealed class ConfigurationEditTests
         Assert.Contains("NUL", refusal.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The other half of the same edit, and neither guard above it sees the character: a NUL is not white space, and a
+    /// segment carrying one is not empty. A segment becomes a JSON property name, and PostgreSQL refuses a NUL in a key
+    /// exactly as it refuses one in a string.
+    /// </summary>
+    [Fact]
+    public void SetTo_APathCarryingANulCharacter_IsRefused()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(
+            () => ConfigurationEdit.SetTo("Mailbox\0Search:SnippetsPerEmail", "3"));
+
+        // Assert
+        Assert.Contains("NUL", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A removal states a path and no value, so the path is the only half there is to refuse.</summary>
+    [Fact]
+    public void Removing_APathCarryingANulCharacter_IsRefused()
+    {
+        // Act
+        var refusal = Assert.Throws<ArgumentException>(
+            () => ConfigurationEdit.Removing("Mailbox\0Search:SnippetsPerEmail"));
+
+        // Assert
+        Assert.Contains("NUL", refusal.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>A path past the bound is refused, which is what keeps the document a path produces shallow enough to read back.</summary>
     [Fact]
     public void SetTo_APathPastTheBound_IsRefused()

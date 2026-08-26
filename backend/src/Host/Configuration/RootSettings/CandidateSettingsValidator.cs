@@ -27,12 +27,14 @@ namespace MailFathom.Host.Configuration.RootSettings;
 /// process actually has.
 /// </para>
 /// <para>
-/// Three shapes of failure arrive and all three are an operator's to fix. A data annotation or a custom validator
+/// Four shapes of failure arrive and all four are an operator's to fix. A data annotation or a custom validator
 /// refusing arrives as <see cref="OptionsValidationException" />, several of them as an
 /// <see cref="AggregateException" /> over those, and the binder refusing — an unknown property, a segment that is not
 /// the array position it was written as, a value that will not convert — as an
-/// <see cref="InvalidOperationException" /> that stops the pass where it stood. Only the binder's own sentence is
-/// carried from that last one, never the inner failure, which is where a value would be.
+/// <see cref="InvalidOperationException" /> that stops the pass where it stood. The fourth is that same type raised
+/// while the sections are being *registered*, by a registration that reads a value or refuses a section naming
+/// nothing, which is why the registration is guarded as well as the validation. Only the framework's own sentence is
+/// carried from either of the last two, never the inner failure, which is where a value would be.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this validator.")]
@@ -48,26 +50,13 @@ internal sealed class CandidateSettingsValidator(
     {
         ArgumentNullException.ThrowIfNull(candidate);
 
-        var services = new ServiceCollection();
-
-        services.AddSingleton(timeProvider);
-
-        foreach (var catalog in sensitiveContentCatalogs)
-        {
-            services.AddSingleton(catalog);
-        }
-
-        BoundSettings.AddTo(services, candidate);
-
-        using var provider = services.BuildServiceProvider();
-
         // Both halves of what a start judges, and the composed half first because it is the half a start takes before a
         // container exists at all: a candidate turning every surface off, or naming a rule condition the compiler
         // refuses, would otherwise commit and stop the next start.
         return
         [
             .. FindComposedErrorsIn(candidate),
-            .. FindBoundErrorsIn(provider),
+            .. this.FindBoundErrorsIn(candidate),
         ];
     }
 
@@ -83,7 +72,39 @@ internal sealed class CandidateSettingsValidator(
         }
     }
 
-    private static IReadOnlyList<string> FindBoundErrorsIn(IServiceProvider candidateServices)
+    /// <summary>Registers the bound sections over the candidate and runs the validators a start runs.</summary>
+    /// <remarks>
+    /// The registration is guarded as well as the validation, because part of what a start refuses over is decided
+    /// while the sections are being registered rather than when they are validated: a section naming no dependency
+    /// class, and a value a registration converts as it reads it. Left to escape, that would leave the write raising
+    /// the refusal instead of returning it, which is the one outcome this port exists to replace.
+    /// </remarks>
+    private IReadOnlyList<string> FindBoundErrorsIn(IConfiguration candidate)
+    {
+        var services = new ServiceCollection();
+
+        services.AddSingleton(timeProvider);
+
+        foreach (var catalog in sensitiveContentCatalogs)
+        {
+            services.AddSingleton(catalog);
+        }
+
+        try
+        {
+            BoundSettings.AddTo(services, candidate);
+        }
+        catch (InvalidOperationException refusal)
+        {
+            return [refusal.Message];
+        }
+
+        using var provider = services.BuildServiceProvider();
+
+        return FindValidatorErrorsIn(provider);
+    }
+
+    private static IReadOnlyList<string> FindValidatorErrorsIn(IServiceProvider candidateServices)
     {
         try
         {

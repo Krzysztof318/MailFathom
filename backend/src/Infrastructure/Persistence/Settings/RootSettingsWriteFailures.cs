@@ -27,7 +27,7 @@ internal static class RootSettingsWriteFailures
     /// <param name="exception">The exception the statement raised.</param>
     /// <returns>What the operator is told, which names the one place the correction is made.</returns>
     /// <remarks>
-    /// Every arm but the last two says the statement was refused before it applied, so the deployment's settings are
+    /// Every arm but the timeout one says the statement was refused before it applied, so the deployment's settings are
     /// exactly what they were. The timeout arm deliberately does not: the server accepted the statement and stopped
     /// answering, so whether the row moved is unknown from here — and the version guard is what makes that safe to
     /// resolve by reading rather than by guessing, since a retry over the version the write was composed on is refused

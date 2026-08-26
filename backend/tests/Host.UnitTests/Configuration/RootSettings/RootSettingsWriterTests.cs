@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using MailFathom.Application.Configuration;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.RootSettings;
@@ -276,6 +277,27 @@ public sealed class RootSettingsWriterTests
         Assert.Null(deployment.PublishedValueOf("MailboxSearch:SnippetsPerEmail"));
     }
 
+    /// <summary>
+    /// A section a registration refuses before any validator runs — a resilience section naming no dependency class —
+    /// leaves the write as a refusal rather than as an exception. It is the same operator's mistake as a value a
+    /// validator turns away, and a start meets it at the same point.
+    /// </summary>
+    [Fact]
+    public async Task WriteAsync_ASectionARegistrationRefuses_IsRefusedRatherThanRaised()
+    {
+        // Arrange
+        using var deployment = Deployment.WithPersisted("{}", version: 4);
+
+        // Act
+        var result = await deployment.WriteAsync(ConfigurationEdit.SetTo("Resilience:EmailDelivry:MaxAttempts", "3"));
+
+        // Assert
+        Assert.False(result.IsCommitted);
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, result.Refusal);
+        Assert.Equal(0, deployment.Row.AcceptedCommits);
+        Assert.Contains(result.RefusalMessages, message => message.Contains("EmailDelivry", StringComparison.Ordinal));
+    }
+
     /// <summary>A setting MailFathom reads before the layer exists is persisted nowhere, so a write to it is refused.</summary>
     [Theory]
     [InlineData("Persistence:Password:SecretReference")]
@@ -354,7 +376,7 @@ public sealed class RootSettingsWriterTests
         Assert.DoesNotContain(result.RefusalMessages, message => message.Contains("hunter2", StringComparison.Ordinal));
         Assert.DoesNotContain(
             result.RefusalMessages,
-            message => message.Contains(material.Length.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal));
+            message => message.Contains(material.Length.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal));
     }
 
     /// <summary>

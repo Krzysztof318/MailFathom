@@ -66,15 +66,16 @@ public sealed record ConfigurationEdit
     /// <param name="path">The colon-delimited configuration path.</param>
     /// <param name="value">The configuration value, which may be empty because an empty string is a value an operator can mean.</param>
     /// <returns>The change.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="path" /> is not a configuration key, or when <paramref name="value" /> carries a NUL character.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="path" /> is not a configuration key, or when either the path or <paramref name="value" /> carries a NUL character.</exception>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="value" /> is <see langword="null" />, which is <see cref="Removing" /> rather than a value.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="path" /> is longer than <see cref="MaximumPathLength" />, or <paramref name="value" /> longer than <see cref="MaximumValueLength" />.</exception>
     /// <remarks>
     /// A NUL is refused here rather than left to the commit because it is the one character a candidate can carry that
     /// composes into valid JSON and can never be stored: PostgreSQL's <c>jsonb</c> holds text, and text in PostgreSQL
-    /// has no NUL, so the value would compose, validate, and then be refused by the server on every attempt. Answering
-    /// it at the surface that stated the value names the character; answering it at the commit could only name a state
-    /// the server gave.
+    /// has no NUL, so the change would compose, validate, and then be refused by the server on every attempt. Answering
+    /// it at the surface that stated the change names the character; answering it at the commit could only name a state
+    /// the server gave. Both halves of an edit are refused for it, because a segment becomes a property name and a key
+    /// is text exactly as a value is.
     /// </remarks>
     public static ConfigurationEdit SetTo(string path, string value)
     {
@@ -94,7 +95,7 @@ public sealed record ConfigurationEdit
     /// <summary>States that the document stops carrying a setting, so the source beneath the layer supplies it again.</summary>
     /// <param name="path">The colon-delimited configuration path.</param>
     /// <returns>The change.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="path" /> is not a configuration key.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="path" /> is not a configuration key, or carries a NUL character.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="path" /> is longer than <see cref="MaximumPathLength" />.</exception>
     public static ConfigurationEdit Removing(string path) => new(Validated(path), value: null);
 
@@ -109,6 +110,16 @@ public sealed record ConfigurationEdit
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(path.Length, MaximumPathLength, nameof(path));
+
+        // The same character the value guard refuses, and for the same reason: a segment becomes a JSON property name,
+        // and PostgreSQL refuses a NUL in a key exactly as it refuses one in a string. Neither guard above sees it —
+        // a NUL is not white space and a segment carrying one is not empty.
+        if (path.Contains('\0', StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "The configuration path carries a NUL character, which no PostgreSQL text value can hold, so the document composed from it could never be persisted.",
+                nameof(path));
+        }
 
         if (path.Split(':').Any(string.IsNullOrWhiteSpace))
         {

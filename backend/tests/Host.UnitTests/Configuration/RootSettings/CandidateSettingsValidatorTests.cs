@@ -186,6 +186,27 @@ public sealed class CandidateSettingsValidatorTests
         Assert.Contains(errors, error => error.Contains("MailRules:Rules", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Part of what a start refuses over is decided while the sections are being registered rather than when they are
+    /// validated. A resilience section naming no dependency class is that shape, and it is the same operator's mistake
+    /// as a value a validator refuses — so it comes back as an error rather than as an exception the write raises.
+    /// </summary>
+    [Fact]
+    public void FindErrors_AResilienceSectionNamingNoDependencyClass_IsAnErrorRatherThanAnException()
+    {
+        // Arrange
+        var validator = Validator();
+
+        // Act
+        var errors = validator.FindErrors(Compose(new()
+        {
+            ["Resilience:EmailDelivry:MaxAttempts"] = "3",
+        }));
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("EmailDelivry", StringComparison.Ordinal));
+    }
+
     private static CandidateSettingsValidator Validator(params ISensitiveContentCatalog[] catalogs) =>
         new(new FakeTimeProvider(Today), catalogs);
 
