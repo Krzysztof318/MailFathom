@@ -19,6 +19,7 @@ using MailFathom.Host.Api;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
 
@@ -284,7 +285,7 @@ public sealed class ClientMailSearchEndpointTests
             Substitute.For<IActiveEmbeddingProfileReader>(),
             Substitute.For<IEmailVectorSearchIndexReader>(),
             providerHealth,
-            TimeProvider.System,
+            new FakeTimeProvider(FirstJuly),
             textEmbeddingGenerator: null);
     }
 }

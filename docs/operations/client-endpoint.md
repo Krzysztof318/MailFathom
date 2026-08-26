@@ -423,8 +423,7 @@ It answers with one page of the owner's mail ranked against what they are lookin
 **One route searches by words and by meaning at once.** A person looking for a message does not know whether the words
 they remember are the words the message used, so there is no parameter that chooses between the two: the deployment
 ranks both ways wherever it can, and the answer says which happened.
-[Search](https://krzysztof318.github.io/MailFathom/features/email-search.html) is where the two rankings and their
-fusion are described.
+[Search](../features/email-search.md) is where the two rankings and their fusion are described.
 
 **A result is a list row with two fields added**, so one layout draws both and a result can be opened, filtered, and
 acted on without a second request. `snippets` are the extracts around what matched, each marking the matched words with
