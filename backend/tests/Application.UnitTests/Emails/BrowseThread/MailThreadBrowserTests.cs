@@ -290,6 +290,42 @@ public sealed class MailThreadBrowserTests
         Assert.False(thread.MoreParticipantsNotNamed);
     }
 
+    /// <summary>
+    /// Somebody who renamed themselves is named as they write now, and the conversation's order is not what says which
+    /// of their messages is the latest: the reply relation is walked before the clock, so a branch opened early carries
+    /// messages written after everything a later branch holds.
+    /// </summary>
+    [Fact]
+    public async Task BrowsePageAsync_AParticipantWhoWroteInTwoBranches_NamesThemAsTheirLatestMessageDid()
+    {
+        // Arrange
+        var opening = Message(1, Inbox, "2026-08-16T09:00:00Z", sender: "marek@example.test");
+        var answered = Message(
+            2,
+            Sent,
+            "2026-08-16T12:00:00Z",
+            answers: opening,
+            sender: "anna@example.test",
+            displayName: "Anna Kowalska");
+        var separately = Message(
+            3,
+            Inbox,
+            "2026-08-16T10:00:00Z",
+            sender: "anna@example.test",
+            displayName: "Anna K");
+        var browser = BrowserOver([opening, answered, separately]);
+
+        // Act
+        var thread = await browser.BrowsePageAsync(Request(pageSize: 1), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(thread);
+        Assert.Equal(
+            [("marek@example.test", null, 1), ("anna@example.test", "Anna Kowalska", 2)],
+            thread.Participants.Select(participant =>
+                (participant.Address, participant.DisplayName, participant.MessageCount)));
+    }
+
     /// <summary>A list expansion has an author per message, and a header drawn from hundreds of them is one nobody reads.</summary>
     [Fact]
     public async Task BrowsePageAsync_MoreAuthorsThanTheListNames_NamesThatManyAndSaysItCut()

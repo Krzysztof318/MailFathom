@@ -237,9 +237,30 @@ public sealed class MailThreadBrowser
             .GroupBy(static email => email.SenderAddress!, StringComparer.OrdinalIgnoreCase)
             .Select(static wrote => new ThreadParticipant(
                 wrote.First().SenderAddress!,
-                wrote.LastOrDefault(static email => email.SenderDisplayName is not null)?.SenderDisplayName,
+                DisplayNameLastWritten(wrote),
                 wrote.Count())),
     ];
+
+    /// <summary>Answers the name this participant wrote most recently, or nothing where none of their messages carried one.</summary>
+    /// <remarks>
+    /// Recency is the message's own <see cref="ThreadedEmailSummary.SentAt" /> rather than its place in the conversation.
+    /// The order the messages arrive in here is the reply relation first and the clock second, so a message deep under an
+    /// early root is emitted before a later root's message that was actually written after it — reading the traversal's
+    /// last name would then publish the older of the two spellings for somebody who wrote in both. A message no header
+    /// dated settles nothing about recency and is taken only where nothing dated names this person at all, in which case
+    /// the traversal's own last is as good an answer as there is.
+    /// </remarks>
+    private static string? DisplayNameLastWritten(IEnumerable<ThreadedEmailSummary> wrote)
+    {
+        var named = wrote.Where(static email => email.SenderDisplayName is not null).ToArray();
+
+        var dated = named
+            .Where(static email => email.SentAt is not null)
+            .OrderBy(static email => email.SentAt!.Value)
+            .LastOrDefault();
+
+        return (dated ?? named.LastOrDefault())?.SenderDisplayName;
+    }
 
     /// <summary>Reads what the page's messages are drawn from, dropping any the copy no longer holds.</summary>
     /// <remarks>

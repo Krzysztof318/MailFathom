@@ -465,8 +465,8 @@ with `52004 EmailThreadCursorMessageMissing` rather than answered from the begin
 thread having jumped back to the top.
 
 **What a conversation spans today is one account's mail**, because [a thread is assembled from the mail of the account
-that holds it](../architecture/arrival-pipeline.md). This read adds no narrowing of its own on top of ownership, so
-what bounds a conversation is the assembly rather than the serving.
+that holds it](../architecture/stored-email-schema.md#the-conversation-a-message-belongs-to). This read adds no
+narrowing of its own on top of ownership, so what bounds a conversation is the assembly rather than the serving.
 
 The subjects, the sender display names, the previews and the participants' display names are guarded at
 `ClientMailListing`, the same egress point the list above publishes through and for the same reasons; a header naming

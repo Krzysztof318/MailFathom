@@ -14,7 +14,7 @@ namespace MailFathom.Infrastructure.UnitTests.Observability;
 /// <summary>Covers the span a local read publishes: what it is called, where it sits, and what it carries.</summary>
 /// <remarks>
 /// It listens to the real activity source, because the rule under test is about what an exporter would receive. The
-/// listener is narrowed to the five read span names, so a span published by another test class at the same moment is not
+/// listener is narrowed to the read span names, so a span published by another test class at the same moment is not
 /// mistaken for one of these — the source is the process's and is shared by everything MailFathom publishes.
 /// </remarks>
 public sealed class MailboxReadTelemetryTests : IDisposable
