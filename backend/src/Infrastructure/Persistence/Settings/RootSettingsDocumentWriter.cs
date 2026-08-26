@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
-using System.Text;
 using MailFathom.CodeCoverage;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Npgsql;
@@ -55,17 +54,7 @@ internal sealed class RootSettingsDocumentWriter(NpgsqlDataSource dataSource, Ti
     /// <inheritdoc />
     public async Task<long?> CommitAsync(string json, long expectedVersion, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(json);
-        ArgumentOutOfRangeException.ThrowIfNegative(expectedVersion);
-
-        var documentOctets = Encoding.UTF8.GetByteCount(json);
-
-        if (documentOctets > RootSettingsDocument.MaximumOctets)
-        {
-            throw new ArgumentException(
-                $"The candidate configuration document is {documentOctets} octets, past the {RootSettingsDocument.MaximumOctets} this build composes settings from, so persisting it would leave a row the next start refuses.",
-                nameof(json));
-        }
+        RootSettingsCommitRules.RefuseWhatCannotBeCommitted(json, expectedVersion);
 
         try
         {
@@ -79,9 +68,7 @@ internal sealed class RootSettingsDocumentWriter(NpgsqlDataSource dataSource, Ti
         }
         catch (NpgsqlException exception)
         {
-            throw new RootSettingsUnwritableException(
-                "The database refused the statement that would have persisted the configuration write, so the deployment's settings are unchanged. Check the serving role's privilege on settings_root and the database's availability; the write is safe to attempt again.",
-                exception);
+            throw new RootSettingsUnwritableException(RootSettingsWriteFailures.Diagnose(exception), exception);
         }
     }
 }

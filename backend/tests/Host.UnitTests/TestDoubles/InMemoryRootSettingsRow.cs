@@ -25,14 +25,29 @@ internal sealed class InMemoryRootSettingsRow(string json, long version)
     /// <summary>Gets how many commits the row accepted, which is what a refusal that changed nothing leaves at zero.</summary>
     public int AcceptedCommits { get; private set; }
 
+    /// <summary>Gets or sets what happens the moment a commit has been accepted, which is where a caller can give up.</summary>
+    /// <remarks>
+    /// The seam a cancellation claim needs, because the moment it is about — after the row moved and before the layer
+    /// republishes — cannot be reached from outside the write. Nothing else uses it, and a test that sets none is
+    /// unaffected.
+    /// </remarks>
+    public Action? WhenCommitted { get; set; }
+
     /// <inheritdoc />
-    public Task<RootSettingsDocument> ReadAsync(CancellationToken cancellationToken) =>
-        Task.FromResult(new RootSettingsDocument(this.Json, this.Version));
+    /// <remarks>The token is observed because the real reader hands it to Npgsql, which throws on one already cancelled.</remarks>
+    public Task<RootSettingsDocument> ReadAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return Task.FromResult(new RootSettingsDocument(this.Json, this.Version));
+    }
 
     /// <inheritdoc />
     /// <remarks>The version in the condition is the whole of the concurrency model, exactly as the statement's own <c>WHERE</c> clause is.</remarks>
     public Task<long?> CommitAsync(string json, long expectedVersion, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (expectedVersion != this.Version)
         {
             return Task.FromResult<long?>(null);
@@ -41,6 +56,8 @@ internal sealed class InMemoryRootSettingsRow(string json, long version)
         this.Json = json;
         this.Version++;
         this.AcceptedCommits++;
+
+        this.WhenCommitted?.Invoke();
 
         return Task.FromResult<long?>(this.Version);
     }

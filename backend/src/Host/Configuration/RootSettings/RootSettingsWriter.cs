@@ -41,15 +41,23 @@ internal sealed partial class RootSettingsWriter(
     CandidateConfigurationComposer composer,
     CandidateSettingsValidator validator,
     RootSettingsReloader reloader,
+    IEnumerable<ISecretSchemeResolver> secretSchemeResolvers,
     ILogger<RootSettingsWriter> logger) : IConfigurationWriter
 {
-    /// <summary>How many changes one write may carry.</summary>
+    /// <summary>The schemes that name where material is kept rather than carrying it.</summary>
     /// <remarks>
-    /// A bound on the boundary rather than a bound anything reaches: an operator edits settings, and the document the
-    /// changes produce is bounded by what the layer composes from anyway. What this refuses is a caller that has lost
-    /// track of what it is asking for, before the process pays for parsing it.
+    /// Read from what this deployment registered rather than from what the reference syntax admits, because those are
+    /// not the same set and the difference is the whole of the check. A scheme is minted for any name before the first
+    /// colon, so material carrying one — <c>Pa55:word</c>, a token with a colon in it — parses as a well-formed
+    /// reference to a scheme nothing serves. Matching the parse alone would admit it into the column; matching what a
+    /// resolver actually answers refuses it, and refuses in the direction that keeps a credential out.
     /// </remarks>
-    private const int MaximumEdits = 1000;
+    private readonly HashSet<SecretReferenceScheme> schemesNamingWhereMaterialIsKept =
+    [
+        .. secretSchemeResolvers
+            .Select(resolver => resolver.Scheme)
+            .Where(scheme => scheme != SecretReferenceScheme.Plaintext),
+    ];
 
     /// <inheritdoc />
     /// <exception cref="RootSettingsUnreadableException">Thrown when the document the write would change could not be read.</exception>
@@ -67,14 +75,14 @@ internal sealed partial class RootSettingsWriter(
             throw new ArgumentException("A configuration write states at least one change.", nameof(edits));
         }
 
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(edits.Count, MaximumEdits, nameof(edits));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(edits.Count, IConfigurationWriter.MaximumEdits, nameof(edits));
 
         if (FindPathsPersistedNowhere(edits) is { Count: > 0 } unwritable)
         {
             return this.Refuse(MailFathomErrorCode.ConfigurationPathNotWritable, expectedVersion, unwritable);
         }
 
-        if (FindMaterialWrittenWhereAReferenceBelongs(edits) is { Count: > 0 } material)
+        if (this.FindMaterialWrittenWhereAReferenceBelongs(edits) is { Count: > 0 } material)
         {
             return this.Refuse(MailFathomErrorCode.ConfigurationSecretMaterialRefused, expectedVersion, material);
         }
@@ -109,6 +117,18 @@ internal sealed partial class RootSettingsWriter(
             var candidate = new RootSettingsDocument(
                 RootSettingsDocumentPatch.Apply(inForce.Json, edits),
                 inForce.Version + 1);
+
+            // Before the candidate is composed rather than after, because a document past the ceiling is refused
+            // whatever it would have bound to, and measured as the database stores it rather than as it was written.
+            if (!RootSettingsCommitRules.FitsWhatIsComposedFrom(candidate.Json))
+            {
+                return new CandidateJudgement(this.Refuse(
+                    MailFathomErrorCode.ConfigurationDocumentTooLarge,
+                    inForce.Version,
+                    [
+                        $"The changes compose a configuration document of {RootSettingsCommitRules.PersistedOctetsOf(candidate.Json)} octets, past the {RootSettingsDocument.MaximumOctets} MailFathom composes its settings from. Persist fewer settings, or remove the ones this deployment no longer configures.",
+                    ]));
+            }
 
             using var composed = composer.Compose(candidate);
 
@@ -188,9 +208,9 @@ internal sealed partial class RootSettingsWriter(
     /// <para>
     /// A setting announces that it holds a secret through its own name, which is the rule
     /// <see cref="SecretPropertyNaming" /> already states for the bound options graph, so nothing here decides a second
-    /// time what counts as a secret. What it decides is the value: a well-formed reference names where the material is
-    /// kept, and anything else — a bare password, or the one scheme whose target is the literal itself — is the
-    /// material.
+    /// time what counts as a secret. What it decides is the value: a reference to a scheme this deployment actually
+    /// resolves names where the material is kept, and anything else — a bare password, the one scheme whose target is
+    /// the literal itself, or a value that merely happens to carry a colon — is the material.
     /// </para>
     /// <para>
     /// Refused whatever the deployment's secret interpretation says, unlike a value in a file. Under an inline
@@ -203,19 +223,19 @@ internal sealed partial class RootSettingsWriter(
     /// a length is what turns a guess about a credential into a shorter list of guesses.
     /// </para>
     /// </remarks>
-    private static IReadOnlyList<string> FindMaterialWrittenWhereAReferenceBelongs(IReadOnlyList<ConfigurationEdit> edits) =>
+    private IReadOnlyList<string> FindMaterialWrittenWhereAReferenceBelongs(IReadOnlyList<ConfigurationEdit> edits) =>
     [
         .. edits
             .Where(edit => !edit.RemovesTheSetting)
             .Where(edit => SecretPropertyNaming.NamesASecret(edit.Path.Split(':')[^1]))
-            .Where(edit => !NamesWhereTheMaterialIsKept(edit.Value!))
+            .Where(edit => !this.NamesWhereTheMaterialIsKept(edit.Value!))
             .Select(edit =>
-                $"MailFathom does not persist secret material: {edit.Path} carries the value itself rather than a <scheme>:<target> reference to where it is kept. Provision the secret and persist the reference to it."),
+                $"MailFathom does not persist secret material: {edit.Path} carries the value itself rather than a <scheme>:<target> reference this deployment resolves. Provision the secret and persist the reference to it."),
     ];
 
-    private static bool NamesWhereTheMaterialIsKept(string value) =>
+    private bool NamesWhereTheMaterialIsKept(string value) =>
         SecretReference.TryParse(value, out var reference, out _)
-        && reference.Scheme != SecretReferenceScheme.Plaintext;
+        && this.schemesNamingWhereMaterialIsKept.Contains(reference.Scheme);
 
     private ConfigurationWriteResult RefuseAsSuperseded(long expectedVersion, long versionInForce) => this.Refuse(
         MailFathomErrorCode.ConfigurationVersionSuperseded,

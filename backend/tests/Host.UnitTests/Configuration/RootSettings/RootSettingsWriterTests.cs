@@ -54,9 +54,7 @@ public sealed class RootSettingsWriterTests
 
         // Assert
         Assert.Equal(5, deployment.Layer.Version);
-        deployment.Layer.TryGet("MailboxSearch:SnippetsPerEmail", out var published);
-        Assert.Equal("3", published);
-        Assert.Equal(deployment.Row.Json, deployment.PublishedDocument);
+        Assert.Equal("3", deployment.PublishedValueOf("MailboxSearch:SnippetsPerEmail"));
     }
 
     /// <summary>
@@ -68,17 +66,17 @@ public sealed class RootSettingsWriterTests
     {
         // Arrange
         using var deployment = Deployment.WithPersisted("{}", version: 4);
-        using var cancelled = new CancellationTokenSource();
+        using var abandoned = new CancellationTokenSource();
 
-        await cancelled.CancelAsync();
+        deployment.Row.WhenCommitted = abandoned.Cancel;
 
         // Act
-        var result = await deployment.WriteAsync(cancelled.Token, ConfigurationEdit.SetTo("MailboxSearch:SnippetsPerEmail", "3"));
+        var result = await deployment.WriteAsync(abandoned.Token, ConfigurationEdit.SetTo("MailboxSearch:SnippetsPerEmail", "3"));
 
         // Assert
         Assert.True(result.IsCommitted);
         Assert.Equal(5, deployment.Layer.Version);
-        Assert.Equal(deployment.Row.Json, deployment.PublishedDocument);
+        Assert.Equal("3", deployment.PublishedValueOf("MailboxSearch:SnippetsPerEmail"));
     }
 
     /// <summary>A setting the write did not name is still carried, because the persisted document is sparse.</summary>
@@ -296,6 +294,10 @@ public sealed class RootSettingsWriterTests
     [Theory]
     [InlineData("hunter2")]
     [InlineData("plaintext:hunter2")]
+    // A colon makes a value parse as a reference and does not make it one: the scheme it names is minted from whatever
+    // stood before the colon, and no adapter serves it. Admitted, it would be written verbatim into the column every
+    // later read composes from and would then fail to resolve at the next use.
+    [InlineData("hunter2:hunter2")]
     public async Task WriteAsync_SecretMaterial_IsRefusedWithoutRepeatingIt(string material)
     {
         // Arrange
@@ -313,6 +315,32 @@ public sealed class RootSettingsWriterTests
         Assert.DoesNotContain(
             result.RefusalMessages,
             message => message.Contains(material.Length.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A document past what the layer composes settings from is refused as a result rather than raised as an argument
+    /// failure: every change in it is within the bounds a caller can honour, and what is left for the administrator to
+    /// do is persist less.
+    /// </summary>
+    [Fact]
+    public async Task WriteAsync_ChangesComposingADocumentPastTheCeiling_AreRefused()
+    {
+        // Arrange
+        using var deployment = Deployment.WithPersisted("{}", version: 4);
+        var edits = Enumerable.Range(0, 200)
+            .Select(position => ConfigurationEdit.SetTo(
+                $"Deployment:Padding:{position}",
+                new string('x', ConfigurationEdit.MaximumValueLength)))
+            .ToArray();
+
+        // Act
+        var result = await deployment.WriteAsync(edits);
+
+        // Assert
+        Assert.False(result.IsCommitted);
+        Assert.Equal(MailFathomErrorCode.ConfigurationDocumentTooLarge, result.Refusal);
+        Assert.Equal(4, result.Version);
+        Assert.Equal(0, deployment.Row.AcceptedCommits);
     }
 
     /// <summary>A reference naming where the material is kept is what the document may carry, so it reaches validation.</summary>
@@ -399,6 +427,7 @@ public sealed class RootSettingsWriterTests
                 new CandidateConfigurationComposer(configuration, layer),
                 new CandidateSettingsValidator(new FakeTimeProvider(AnyInstant), []),
                 new RootSettingsReloader(layer.Provider, row, new RecordingLogger<RootSettingsReloader>()),
+                DeclaredSecretScheme.Registered,
                 this.writerLogger);
         }
 
@@ -408,8 +437,18 @@ public sealed class RootSettingsWriterTests
 
         public RootSettingsConfigurationProvider Layer => this.layer.Provider;
 
-        /// <summary>Gets the document the published layer was last composed from, which a commit and a reload move together.</summary>
-        public string PublishedDocument => this.Row.Json;
+        /// <summary>Reads a setting as the published layer answers it, which is what a commit and a reload move together.</summary>
+        /// <remarks>
+        /// Asked of the provider rather than of the row, because the two are what the assertion is about: a reload that
+        /// published a stale document while the row moved on is exactly the regression a comparison of the row with
+        /// itself cannot see.
+        /// </remarks>
+        public string? PublishedValueOf(string key)
+        {
+            this.Layer.TryGet(key, out var published);
+
+            return published;
+        }
 
         /// <summary>Gets what the write recorded for an operator to read.</summary>
         public IReadOnlyList<string> WriterRecords => this.writerLogger.Messages;

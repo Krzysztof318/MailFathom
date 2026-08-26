@@ -264,20 +264,6 @@ internal static class HostComposition
     /// <returns><see langword="true" /> when classification is on and asks a scanner, which is the only state in which the daemon is reached.</returns>
     private static bool AddSpamClassification(WebApplicationBuilder builder)
     {
-        // Bound strictly for the reason the rule section is: a misspelled key here would leave classification looking
-        // configured while it was off, and an operator reading their own file as proof of it.
-        builder.Services.AddOptions<SpamClassificationOptions>()
-            .Bind(
-                builder.Configuration.GetSection(SpamClassificationOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        // Whether the junk folder a filing names exists is a claim about the synchronization section, which no attribute on
-        // this graph can reach. Registered whatever the switches say, because a filing switched on with no folder behind it
-        // is exactly what it refuses.
-        builder.Services.AddSingleton<IValidateOptions<SpamClassificationOptions>>(
-            new SpamJunkFolderValidator(builder.Configuration));
-
         // Read while the services are being registered, for the reason the scanner declarations above are: whether a
         // scanner exists at all decides which services this process has, and that is decided before a container that could
         // resolve an options snapshot. With the switch off no daemon conversation is constructed, no socket is opened, and
@@ -319,36 +305,15 @@ internal static class HostComposition
     /// <summary>Reads the declared rule set, refuses one that cannot be compiled, and registers what evaluates it.</summary>
     private static void AddMailRules(WebApplicationBuilder builder)
     {
-        // Rules are authored in configuration rather than in a table, which ADR 0010 records: what an instance will do to a
-        // mailbox is then reviewable in a diff before it runs and reproducible from a repository afterwards. Bound strictly
-        // for the reason mail transport is — a misspelled key would otherwise be ignored, and the rule it belonged to would
-        // go on running while meaning something its author did not write.
-        builder.Services.AddOptions<MailRulesOptions>()
-            .Bind(
-                builder.Configuration.GetSection(MailRulesOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        // Every condition is read here, while the host is being composed, because the condition language has no static type
+        // Every condition is read while the host is being composed, because the condition language has no static type
         // checker of its own: an unknown fact or a comparison that could never hold would otherwise be discovered on real
-        // mail. A rule set that cannot be read is a startup failure, and one compiler serves composition, every reload, and
-        // every pass, because it holds no state.
+        // mail. A rule set that cannot be read is a startup failure, stated in ComposedSettings so that a configuration
+        // write is refused by it as well, and one compiler serves composition, every reload, and every pass, because it
+        // holds no state.
         var mailRuleConditionCompiler = new NCalcMailRuleConditionCompiler();
-        var declaredMailRules = builder.Configuration
-            .GetSection(MailRulesOptions.SectionName)
-            .Get<MailRulesOptions>(binderOptions => binderOptions.ErrorOnUnknownConfiguration = true);
-        var mailRuleDeclarationErrors = MailRuleDeclarationRules.FindDeclarationErrors(
-            declaredMailRules,
-            mailRuleConditionCompiler,
-            DeclaredMailAccounts.ReadFrom(builder.Configuration));
 
-        if (mailRuleDeclarationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                MailRulesOptions.SectionName,
-                typeof(MailRulesOptions),
-                mailRuleDeclarationErrors);
-        }
+        ComposedSettings.RefuseFirstOf(
+            ComposedSettings.FindMailRuleRefusals(builder.Configuration, mailRuleConditionCompiler));
 
         builder.Services.AddSingleton<IMailRuleConditionCompiler>(mailRuleConditionCompiler);
         builder.Services.AddSingleton<MailRuleSetEvaluator>();
@@ -1073,22 +1038,16 @@ internal static class HostComposition
     /// <returns>The decisions the request pipeline is built from.</returns>
     private static ComposedHostSurfaces AddNetworkSurfaces(WebApplicationBuilder builder)
     {
+        // Every refusal these sections carry is decided before the first of them is registered, and it is decided in
+        // ComposedSettings rather than here so that a configuration write is judged by the same rules. What stays here is
+        // the reading each registration needs: a section is read again for its own value, never for its own verdict.
+        ComposedSettings.RefuseFirstOf(ComposedSettings.FindSurfaceRefusals(builder.Configuration));
+
         // Read before the surfaces, because it is the one posture they all sit behind: which peers this process accepts a
         // public scheme and host from. Read once for the same reason every section below is — the pipeline's
         // forwarded-header policy is composed from it, and the encryption warning states the posture this settles.
         var reverseProxySettings = ReverseProxyOptions.ReadFrom(builder.Configuration);
         builder.Services.AddSingleton(Options.Create(reverseProxySettings));
-
-        var reverseProxyConfigurationErrors = reverseProxySettings.FindConfigurationErrors();
-
-        if (reverseProxyConfigurationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                ReverseProxyOptions.SectionName,
-                typeof(ReverseProxyOptions),
-                reverseProxyConfigurationErrors);
-        }
-
         builder.Services.AddTrustedReverseProxy(reverseProxySettings);
 
         // Read beside the reverse-proxy posture rather than with the endpoint sections, because it is the other setting
@@ -1096,16 +1055,6 @@ internal static class HostComposition
         // which endpoint it was for. Bound strictly like every section that settles a security posture.
         var connectionLimitSettings = ConnectionLimitsOptions.ReadFrom(builder.Configuration);
         builder.Services.AddSingleton(Options.Create(connectionLimitSettings));
-
-        var connectionLimitConfigurationErrors = connectionLimitSettings.FindConfigurationErrors();
-
-        if (connectionLimitConfigurationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                ConnectionLimitsOptions.SectionName,
-                typeof(ConnectionLimitsOptions),
-                connectionLimitConfigurationErrors);
-        }
 
         // Read once and registered, so the value that decides the route is the one every consumer resolves. Whether the
         // endpoint exists is decided while the application is being built, before a container that could resolve a snapshot
@@ -1137,85 +1086,6 @@ internal static class HostComposition
         var healthEndpointSettings = HealthEndpointOptions.ReadFrom(builder.Configuration);
         builder.Services.AddSingleton(Options.Create(healthEndpointSettings));
 
-        // Every listener this process opens is bound in code, from the section of the surface it belongs to, so the host's
-        // own ways of naming one decide nothing here and are refused rather than ignored. Read at the root, before any
-        // section's own errors, because an operator who stated a port that no longer binds anything needs to be told that
-        // first — every message below would otherwise describe a section they had not been using.
-        var externalListenerConfigurationErrors = ExternalListenerConfiguration.FindConfigurationErrors(builder.Configuration);
-
-        if (externalListenerConfigurationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                ExternalListenerConfiguration.KestrelEndpointsSectionName,
-                typeof(McpEndpointOptions),
-                externalListenerConfigurationErrors);
-        }
-
-        // A process serving none of its surfaces opens no listener at all, and Kestrel answers that by binding its own
-        // default address — and, where an ASP.NET Core development certificate happens to be installed, a TLS one beside it.
-        // That is a socket no section describes, serving whatever a route happens to match, so it is refused here instead.
-        if (!mcpEndpointSettings.Enabled
-            && !adminEndpointSettings.Enabled
-            && !clientEndpointSettings.Enabled
-            && !healthEndpointSettings.Enabled)
-        {
-            throw new OptionsValidationException(
-                McpEndpointOptions.SectionName,
-                typeof(McpEndpointOptions),
-                [
-                    $"No network surface is enabled: '{McpEndpointOptions.SectionName}:Enabled', "
-                    + $"'{AdminEndpointOptions.SectionName}:Enabled', '{ClientEndpointOptions.SectionName}:Enabled', and "
-                    + $"'{HealthEndpointOptions.SectionName}:Enabled' "
-                    + "are all off, so the process would serve nothing while still holding a socket. Enable the surface this "
-                    + "deployment exists to serve.",
-                ]);
-        }
-
-        // Validated here rather than through ValidateOnStart, because the sections are read before a container exists and
-        // the decisions they carry — which sockets to open, whether to map an endpoint, which scheme protects it — are taken
-        // during composition. The secrets they name are proven separately, by the startup validator that proves every other
-        // section's. Each section answers for itself first, so a message about a misspelled key is not delayed behind a
-        // question about a socket the deployment may not even share.
-        var mcpEndpointConfigurationErrors = mcpEndpointSettings.FindConfigurationErrors();
-
-        if (mcpEndpointConfigurationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                McpEndpointOptions.SectionName,
-                typeof(McpEndpointOptions),
-                mcpEndpointConfigurationErrors);
-        }
-
-        var adminEndpointConfigurationErrors = adminEndpointSettings.FindConfigurationErrors();
-
-        if (adminEndpointConfigurationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                AdminEndpointOptions.SectionName,
-                typeof(AdminEndpointOptions),
-                adminEndpointConfigurationErrors);
-        }
-
-        var clientEndpointConfigurationErrors = clientEndpointSettings.FindConfigurationErrors();
-
-        if (clientEndpointConfigurationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                ClientEndpointOptions.SectionName,
-                typeof(ClientEndpointOptions),
-                clientEndpointConfigurationErrors);
-        }
-
-        var healthEndpointConfigurationErrors = healthEndpointSettings.FindConfigurationErrors();
-
-        if (healthEndpointConfigurationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                HealthEndpointOptions.SectionName,
-                typeof(HealthEndpointOptions),
-                healthEndpointConfigurationErrors);
-        }
-
         // Composed once, from what every enabled surface asked for. Surfaces may share a socket — which is what lets a
         // single-node deployment publish one port rather than three, and why both request-serving surfaces default to the
         // same ones — but they may not disagree about it, and this is where that is settled before anything binds.
@@ -1226,14 +1096,6 @@ internal static class HostComposition
             .. clientEndpointSettings.DeclareListeners(),
             .. healthEndpointSettings.DeclareListeners(),
         ]);
-
-        if (composedListeners.Errors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                McpEndpointOptions.SectionName,
-                typeof(McpEndpointOptions),
-                composedListeners.Errors);
-        }
 
         // Registered whether or not the endpoint is enabled, because it is the warning that decides whether it has
         // anything to say — the same reason the MCP warnings above are registered unconditionally.

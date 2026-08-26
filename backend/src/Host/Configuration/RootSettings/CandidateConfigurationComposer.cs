@@ -45,15 +45,34 @@ internal sealed class CandidateConfigurationComposer(
     {
         ArgumentNullException.ThrowIfNull(candidate);
 
+        // One builder for every source, which is what a builder's own Build does: a source resolving a default from the
+        // builder it is handed must see the same one its neighbours did.
         var builder = new ConfigurationBuilder();
+        var providers = configuration.Sources
+            .Select(source => ReferenceEquals(source, layer) ? new RootSettingsConfigurationSource(candidate) : source)
+            .Select(source => source.Build(builder))
+            .ToList();
 
-        foreach (var source in configuration.Sources)
+        try
         {
-            builder.Add(ReferenceEquals(source, layer) ? new RootSettingsConfigurationSource(candidate) : source);
+            // Named by the built type rather than by the interface, because what comes back is owned: a configuration
+            // root holds a reload subscription on every provider it built, and the caller is what disposes both.
+            //
+            // Built from the provider list rather than through the builder so that this method owns the failure as
+            // well as the result. The root's constructor loads each provider in turn with no try of its own, and the
+            // candidate layer's provider is exactly the one that refuses — so a builder-built root would drop every
+            // provider constructed before it, each file source among them holding a change-token registration on the
+            // shared file provider, on precisely the paths a refused write takes.
+            return new ConfigurationRoot(providers);
         }
+        catch
+        {
+            foreach (var provider in providers.OfType<IDisposable>())
+            {
+                provider.Dispose();
+            }
 
-        // Named by the built type rather than by the interface, because what comes back is owned: a configuration root
-        // holds a reload subscription on every provider it built, and the caller is what disposes both.
-        return (ConfigurationRoot)builder.Build();
+            throw;
+        }
     }
 }

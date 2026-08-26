@@ -12,9 +12,11 @@ namespace MailFathom.Host.Configuration.RootSettings;
 /// <remarks>
 /// <para>
 /// The rules are not restated here. <see cref="BoundSettings" /> is the one place the sections, the strict binding,
-/// the data annotations, and the custom validators are declared, and this registers exactly that into a container of
-/// its own over the candidate configuration. A second list would be how a setting comes to bind at startup and not at
-/// a write, or the reverse — and either way an operator would learn about it from a deployment that stopped.
+/// the data annotations, and the custom validators are declared, and <see cref="ComposedSettings" /> is the one place
+/// the rules a start takes before a container exists are; this registers the first into a container of its own over
+/// the candidate configuration and asks the second about the candidate directly. A second list would be how a setting
+/// comes to bind at startup and not at a write, or the reverse — and either way an operator would learn about it from
+/// a deployment that stopped.
 /// </para>
 /// <para>
 /// The container is thrown away with the answer. Nothing resolved from it ever runs: the options are materialized to
@@ -59,10 +61,29 @@ internal sealed class CandidateSettingsValidator(
 
         using var provider = services.BuildServiceProvider();
 
-        return FindErrorsIn(provider);
+        // Both halves of what a start judges, and the composed half first because it is the half a start takes before a
+        // container exists at all: a candidate turning every surface off, or naming a rule condition the compiler
+        // refuses, would otherwise commit and stop the next start.
+        return
+        [
+            .. FindComposedErrorsIn(candidate),
+            .. FindBoundErrorsIn(provider),
+        ];
     }
 
-    private static IReadOnlyList<string> FindErrorsIn(IServiceProvider candidateServices)
+    private static IReadOnlyList<string> FindComposedErrorsIn(IConfiguration candidate)
+    {
+        try
+        {
+            return [.. ComposedSettings.FindRefusals(candidate).SelectMany(refusal => refusal.Errors)];
+        }
+        catch (InvalidOperationException refusal)
+        {
+            return [refusal.Message];
+        }
+    }
+
+    private static IReadOnlyList<string> FindBoundErrorsIn(IServiceProvider candidateServices)
     {
         try
         {

@@ -124,6 +124,16 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode RootSettingsUnwritable { get; } = new(12010);
 
+    /// <summary>Gets subcategory 2, configuration sources: a configuration write would have produced a document past what the layer composes settings from.</summary>
+    /// <remarks>
+    /// The per-change bounds a caller can honour are stated on the change itself, and this is the one bound none of
+    /// them implies: changes each within their own limits compose a document that is not. It is a refusal rather than
+    /// an exception for the reason every refusal here is — an administrator acts on it directly, by persisting less or
+    /// by removing what the deployment no longer configures — and the document the write was composed over is still in
+    /// force.
+    /// </remarks>
+    public static MailFathomErrorCode ConfigurationDocumentTooLarge { get; } = new(12011);
+
     /// <summary>Gets subcategory 3, mailbox access tokens: an account's authorization server did not issue an access token its OAuth mechanisms require.</summary>
     public static MailFathomErrorCode MailAccessTokenUnavailable { get; } = new(13001);
 
@@ -916,6 +926,7 @@ public readonly record struct MailFathomErrorCode
         ConfigurationVersionSuperseded,
         ConfigurationSecretMaterialRefused,
         RootSettingsUnwritable,
+        ConfigurationDocumentTooLarge,
         MailAccessTokenUnavailable,
         MailboxAuthorizationFailed,
         PrincipalNotAuthorized,

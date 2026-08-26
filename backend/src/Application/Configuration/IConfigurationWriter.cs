@@ -29,6 +29,16 @@ namespace MailFathom.Application.Configuration;
 /// </remarks>
 public interface IConfigurationWriter
 {
+    /// <summary>How many changes one write may carry.</summary>
+    /// <remarks>
+    /// Published beside <see cref="ConfigurationEdit.MaximumPathLength" /> and
+    /// <see cref="ConfigurationEdit.MaximumValueLength" /> and for the same reason: a caller that cannot read the bound
+    /// discovers it by tripping it. A bound on the boundary rather than a bound anything reaches — an operator edits
+    /// settings, and the document the changes produce is bounded by what the layer composes from anyway — so what it
+    /// refuses is a caller that has lost track of what it is asking for, before the process pays for parsing it.
+    /// </remarks>
+    const int MaximumEdits = 1000;
+
     /// <summary>Applies changes to the deployment's persisted configuration.</summary>
     /// <param name="edits">The changes, applied together or not at all, in the order given.</param>
     /// <param name="expectedVersion">The version the changes were authored against, which the commit is accepted against.</param>
@@ -36,7 +46,7 @@ public interface IConfigurationWriter
     /// <returns>The version the write committed, or the reason the deployment's settings are unchanged.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="edits" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="edits" /> is empty.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="expectedVersion" /> is negative.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="expectedVersion" /> is negative, or when <paramref name="edits" /> carries more than <see cref="MaximumEdits" /> changes.</exception>
     Task<ConfigurationWriteResult> WriteAsync(
         IReadOnlyList<ConfigurationEdit> edits,
         long expectedVersion,

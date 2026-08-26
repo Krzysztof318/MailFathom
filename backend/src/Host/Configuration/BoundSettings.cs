@@ -9,7 +9,9 @@ using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Host.Configuration.Jobs;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Persistence;
+using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.Configuration.SensitiveContent;
+using MailFathom.Host.Configuration.Spam;
 using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Configuration;
@@ -190,5 +192,28 @@ internal static class BoundSettings
         // attribute on the bound graph can reach. Registered whatever the switches say, because a switch turned on with no
         // detector behind it is exactly what it refuses.
         services.AddSingleton<IValidateOptions<SensitiveContentOptions>, SensitiveContentCatalogValidator>();
+        // Bound strictly for the reason the rule section is: a misspelled key here would leave classification looking
+        // configured while it was off, and an operator reading their own file as proof of it.
+        services.AddOptions<SpamClassificationOptions>()
+            .Bind(
+                configuration.GetSection(SpamClassificationOptions.SectionName),
+                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        // Whether the junk folder a filing names exists is a claim about the synchronization section, which no attribute on
+        // this graph can reach. Registered whatever the switches say, because a filing switched on with no folder behind it
+        // is exactly what it refuses.
+        services.AddSingleton<IValidateOptions<SpamClassificationOptions>>(new SpamJunkFolderValidator(configuration));
+        // Rules are authored in configuration rather than in a table, which ADR 0010 records: what an instance will do to a
+        // mailbox is then reviewable in a diff before it runs and reproducible from a repository afterwards. Bound strictly
+        // for the reason mail transport is — a misspelled key would otherwise be ignored, and the rule it belonged to would
+        // go on running while meaning something its author did not write. What the declarations themselves have to satisfy
+        // is not an attribute on this graph and is stated in <see cref="ComposedSettings" /> instead.
+        services.AddOptions<MailRulesOptions>()
+            .Bind(
+                configuration.GetSection(MailRulesOptions.SectionName),
+                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
     }
 }

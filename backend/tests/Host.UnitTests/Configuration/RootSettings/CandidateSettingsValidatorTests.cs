@@ -118,6 +118,74 @@ public sealed class CandidateSettingsValidatorTests
         Assert.Empty(errors);
     }
 
+    /// <summary>
+    /// Two bound sections refused at once are both named, which is the promise a refused write makes to an operator
+    /// correcting one setting at a time — and the only case in which the framework reports its failures as an
+    /// aggregate rather than as one.
+    /// </summary>
+    [Fact]
+    public void FindErrors_ACandidateTwoBoundSectionsBothRefuse_NamesBoth()
+    {
+        // Arrange
+        var validator = Validator();
+
+        // Act
+        var errors = validator.FindErrors(Compose(new()
+        {
+            ["MailboxSearch:SnippetsPerEmail"] = "-1",
+            ["MailSynchronization:Accounts:0:AccountId"] = "work",
+            ["MailSynchronization:Accounts:0:EarliestEmailReceivedDate"] = "2030-01-01",
+        }));
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("SnippetsPerEmail", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("2030-01-01", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A candidate turning every surface off is refused, which is a rule a start takes before its container exists:
+    /// the process would hold a socket and serve nothing on it, and no options validator can reach that.
+    /// </summary>
+    [Fact]
+    public void FindErrors_ACandidateThatWouldServeNothing_NamesTheSurfaces()
+    {
+        // Arrange
+        var validator = Validator();
+
+        // Act
+        var errors = validator.FindErrors(Compose(new()
+        {
+            ["McpEndpoint:Enabled"] = "false",
+            ["AdminEndpoint:Enabled"] = "false",
+            ["ClientEndpoint:Enabled"] = "false",
+            ["HealthEndpoints:Enabled"] = "false",
+        }));
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("No network surface is enabled", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A rule condition the compiler refuses is refused here too, for the same reason: the declaration gate runs while
+    /// the host is composing itself, so a write that escaped it would commit and stop the next start.
+    /// </summary>
+    [Fact]
+    public void FindErrors_ARuleConditionThatWillNotCompile_NamesTheRule()
+    {
+        // Arrange
+        var validator = Validator();
+
+        // Act
+        var errors = validator.FindErrors(Compose(new()
+        {
+            ["MailRules:Rules:0:Name"] = "unreadable",
+            ["MailRules:Rules:0:Condition"] = "NoSuchFact == (",
+        }));
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("MailRules:Rules", StringComparison.Ordinal));
+    }
+
     private static CandidateSettingsValidator Validator(params ISensitiveContentCatalog[] catalogs) =>
         new(new FakeTimeProvider(Today), catalogs);
 

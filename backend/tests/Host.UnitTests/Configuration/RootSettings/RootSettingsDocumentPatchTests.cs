@@ -118,6 +118,29 @@ public sealed class RootSettingsDocumentPatchTests
         Assert.Equal("rewritten", keys["MailRules:Rules:1:Name"]);
     }
 
+    /// <summary>
+    /// A removal reaching through an array removes the setting rather than stopping at the array, and leaves the
+    /// elements beside it where they were. Without the conversion the walk would end at the array and the write would
+    /// still commit, telling an operator a setting had stopped being persisted while it was still there.
+    /// </summary>
+    [Fact]
+    public void Apply_ARemovalBeneathAnArrayElement_RemovesTheSettingAndKeepsItsSiblings()
+    {
+        // Arrange
+        var edits = new[] { ConfigurationEdit.Removing("MailRules:Rules:1:Name") };
+
+        // Act
+        var candidate = RootSettingsDocumentPatch.Apply(
+            """{ "MailRules": { "Rules": [ { "Name": "first" }, { "Name": "second", "Enabled": "false" } ] } }""",
+            edits);
+
+        // Assert
+        var keys = Flatten(candidate);
+        Assert.False(keys.ContainsKey("MailRules:Rules:1:Name"));
+        Assert.Equal("false", keys["MailRules:Rules:1:Enabled"]);
+        Assert.Equal("first", keys["MailRules:Rules:0:Name"]);
+    }
+
     /// <summary>A value met where the path continues is replaced, because JSON holds no value and children under one name.</summary>
     [Fact]
     public void Apply_AValueWhereThePathContinues_ReplacesItWithTheSection()
