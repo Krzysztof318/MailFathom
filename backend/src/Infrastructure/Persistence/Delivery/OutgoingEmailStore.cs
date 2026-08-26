@@ -239,7 +239,7 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
             .ThenBy(message => message.Id)
             .ToArrayAsync(cancellationToken);
 
-        var lease = new OutgoingEmailLease(request.Owner, claimedAt + request.LeaseDuration);
+        var lease = new OutgoingEmailLease(request.Claimant, claimedAt + request.LeaseDuration);
 
         return [.. claimed.Select(entity => new ClaimedOutgoingEmail(OutgoingEmailRecordMapping.ToRecord(entity), lease))];
     }

@@ -100,7 +100,7 @@ public sealed class OrchestratedMailOwnershipTests(MailFathomOrchestrationFixtur
         """;
 
     [Fact]
-    public async Task StoredEmails_MailUnderASecondOwner_HangOnThatOwnerAndAreServedToNoReadOfAnothers()
+    public async Task StoredEmails_MailUnderASecondOwner_HangOnThatOwnerAndAreServedToNoOtherOwner()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;

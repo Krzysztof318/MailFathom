@@ -13,9 +13,10 @@ namespace MailFathom.Application.Jobs.Payloads;
 /// <summary>Points one job at a single stored message occurrence, and at nothing inside the message.</summary>
 /// <remarks>
 /// <para>
-/// The four components are the stable remote occurrence identity — account, folder binding, UIDVALIDITY, and UID — so
-/// a handler resolves what it needs from committed local state rather than from anything the enqueuer copied. A subject,
-/// an address, a body, and extracted text are all absent by construction: there is no property to put one in.
+/// Every property is one of MailFathom's own identifiers: the owner the mailbox belongs to, and the four that are the
+/// stable remote occurrence identity within them — account, folder binding, UIDVALIDITY, and UID. A handler therefore
+/// resolves what it needs from committed local state rather than from anything the enqueuer copied, and a subject, an
+/// address, a body, and extracted text are all absent by construction: there is no property to put one in.
 /// </para>
 /// <para>
 /// The folder is named by its alias and the generation that alias was bound under rather than by the local key of the
@@ -24,8 +25,10 @@ namespace MailFathom.Application.Jobs.Payloads;
 /// </para>
 /// <para>
 /// The properties are primitives rather than the domain value objects they came from, because this record is the stored
-/// document: it is serialized into one <c>jsonb</c> column and read by an operator looking at a queue. Rebuilding the
-/// identity is <see cref="ToOccurrenceId" />, which validates every component the way the domain types do.
+/// document: it is serialized into one <c>jsonb</c> column and read by an operator looking at a queue. Rebuilding them
+/// is <see cref="ToAccountIdentity" /> for the owner and the account and <see cref="ToOccurrenceId" /> for the
+/// occurrence, which between them validate every component the way the domain types do — the occurrence identity does
+/// not carry the owner, so neither method covers the record on its own.
 /// </para>
 /// </remarks>
 public sealed record ClassifyEmailSpamJobPayload : IJobPayload

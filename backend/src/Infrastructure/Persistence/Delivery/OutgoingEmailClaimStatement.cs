@@ -83,7 +83,7 @@ internal static class OutgoingEmailClaimStatement
             request.Account.Id.Value,
             claimedAt,
             request.BatchSize,
-            request.Owner,
+            request.Claimant,
             claimedAt + request.LeaseDuration);
     }
 }

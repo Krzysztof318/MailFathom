@@ -101,7 +101,11 @@ public sealed class MailContactCollector
 
     /// <summary>Records whoever one committed message says the account corresponds with.</summary>
     /// <param name="metadata">What was read out of the message that was just stored.</param>
-    /// <param name="run">The folder role and the remaining bound of the run the message reached this pass in.</param>
+    /// <param name="run">
+    /// The account, the folder role, and the remaining bound of the run the message reached this pass in. The account
+    /// is the run's rather than the message's, so it is what selects the collection settings and whose correspondents
+    /// the addresses are recorded as — handing a message a run opened for another account attributes them to that one.
+    /// </param>
     /// <param name="cancellationToken">Cancels the collection.</param>
     /// <returns>A task that completes once every candidate has been decided, or at once where the account collects nothing.</returns>
     /// <exception cref="ArgumentNullException">Thrown when a required argument is <see langword="null" />.</exception>

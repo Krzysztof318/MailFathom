@@ -302,11 +302,11 @@ internal sealed class InMemoryOutgoingEmailStore(
         List<ClaimedOutgoingEmail> claimed = [];
         foreach (var row in due)
         {
-            row.LeaseOwner = request.Owner;
+            row.LeaseOwner = request.Claimant;
             row.LeaseExpiresAt = expiresAt;
             row.Record = row.Record with { AttemptCount = row.Record.AttemptCount + 1 };
 
-            claimed.Add(new ClaimedOutgoingEmail(row.Record, new OutgoingEmailLease(request.Owner, expiresAt)));
+            claimed.Add(new ClaimedOutgoingEmail(row.Record, new OutgoingEmailLease(request.Claimant, expiresAt)));
         }
 
         return Task.FromResult<IReadOnlyList<ClaimedOutgoingEmail>>(claimed);

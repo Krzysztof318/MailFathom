@@ -12,9 +12,10 @@ namespace MailFathom.Application.Jobs.Payloads;
 /// <summary>Points one job at the stored mail of an account, or of one folder of it, and at nothing inside a message.</summary>
 /// <remarks>
 /// <para>
-/// The two components are the deployment's own names for a mailbox and for a folder of it, so the document carries
-/// nothing derived from a message and has no property one could be put in. What the work reads about that mail it reads
-/// from committed local state.
+/// Every property is one of MailFathom's own identifiers: the owner the mailbox belongs to, the deployment's
+/// configured name for that mailbox within them, and its own name for a folder of it. The document therefore carries
+/// nothing derived from a message and has no property one could be put in, and what the work reads about that mail it
+/// reads from committed local state.
 /// </para>
 /// <para>
 /// An absent folder is every folder the account holds mail in rather than a folder named by an empty string, which is

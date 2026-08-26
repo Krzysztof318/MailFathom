@@ -12,10 +12,12 @@ namespace MailFathom.Application.Contacts.Collection;
 /// <param name="FolderRole">The role the folder plays, or <see langword="null" /> when configuration gave it none.</param>
 /// <param name="Budget">How many contacts this run may still record.</param>
 /// <remarks>
-/// The two are carried together because neither answers anything on its own: the role decides which header of a message
-/// is read and the budget decides how much of what is read may be written, and both are properties of the run rather
-/// than of the message that reached it. Opening one per run is also what makes the bound the run's — a value built per
-/// message would bound nothing.
+/// The three are carried together because none answers anything on its own: the account decides whose settings are
+/// read and whose correspondents the addresses are recorded as, the role decides which header of a message is read, and
+/// the budget decides how much of what is read may be written. All three are properties of the run rather than of the
+/// message that reached it, which is why the account is here rather than taken from the message — a message reached in
+/// one account's run is that account's correspondence whatever occurrence identity it carries. Opening one per run is
+/// also what makes the bound the run's — a value built per message would bound nothing.
 /// </remarks>
 public sealed record ContactCollectionRun(
     MailAccountIdentity Account,
