@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Threads;
 using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence.Emails.Threads;
@@ -37,12 +38,15 @@ internal sealed class StoredMailRederivationStore(
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        var account = scope.Account.Value;
+        var owner = scope.Account.Owner.Value;
+        var account = scope.Account.Id.Value;
         var folder = KeyedFolderOf(scope);
 
         var recorded = await dbContext.MailRederivationPositions
             .AsNoTracking()
-            .Where(position => position.MailboxAccountId == account && position.FolderAlias == folder)
+            .Where(position => position.OwnerId == owner
+                && position.MailboxAccountId == account
+                && position.FolderAlias == folder)
             .Select(position => (Guid?)position.LastProcessedStoredEmailId)
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -107,7 +111,9 @@ internal sealed class StoredMailRederivationStore(
 
         await threadAssembly.AssembleAsync(
             session,
-            MailAccountId.Create(storedEmail.MailboxAccountId),
+            MailAccountIdentity.Create(
+                MailOwnerId.Create(storedEmail.OwnerId),
+                MailAccountId.Create(storedEmail.MailboxAccountId)),
             ThreadedEmails.Of(storedEmail),
             storedEmail.EmailThreadId is { } currentThreadId ? EmailThreadId.Create(currentThreadId) : null,
             cancellationToken);
@@ -124,7 +130,7 @@ internal sealed class StoredMailRederivationStore(
         ArgumentNullException.ThrowIfNull(scope);
 
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-        var account = scope.Account.Value;
+        var account = scope.Account.Id.Value;
         var folder = KeyedFolderOf(scope);
 
         // FindAsync resolves a row this session already staged from the change tracker, so a pass that commits several
@@ -138,6 +144,9 @@ internal sealed class StoredMailRederivationStore(
             sessionContext.MailRederivationPositions.Add(new MailRederivationPositionEntity
             {
                 MailboxAccountId = account,
+
+                // Written from the scope the request resolved, which named the owner beside the identifier.
+                OwnerId = scope.Account.Owner.Value,
                 FolderAlias = folder,
                 LastProcessedStoredEmailId = position.Value,
                 UpdatedAt = timeProvider.GetUtcNow(),
@@ -161,7 +170,7 @@ internal sealed class StoredMailRederivationStore(
 
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var recorded = await sessionContext.MailRederivationPositions.FindAsync(
-            [scope.Account.Value, KeyedFolderOf(scope)],
+            [scope.Account.Id.Value, KeyedFolderOf(scope)],
             cancellationToken);
 
         // A scope whose walk finished in one invocation never recorded a position, and clearing one that is not there

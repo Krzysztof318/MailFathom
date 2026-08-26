@@ -45,7 +45,7 @@ internal sealed class MailDraftConfiguration : IEntityTypeConfiguration<MailDraf
         // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
         entity.Property(draft => draft.ConcurrencyVersion).IsRowVersion();
 
-        entity.HasIndex(draft => new { draft.MailboxAccountId, draft.RevisedAt })
+        entity.HasIndex(draft => new { draft.OwnerId, draft.MailboxAccountId, draft.RevisedAt })
             .HasDatabaseName(PersistenceConstraintNames.MailDraftAccountIndexName);
 
         entity.HasIndex(draft => draft.PromotedToOutgoingEmailId)

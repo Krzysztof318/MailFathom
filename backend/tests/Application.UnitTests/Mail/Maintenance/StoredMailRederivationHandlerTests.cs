@@ -40,7 +40,7 @@ public sealed class StoredMailRederivationHandlerTests
 
     private static readonly DateTimeOffset Now = new(2026, 8, 18, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly StoredMailScope WholeAccount = new(MailAccountId.Create("work"), null);
+    private static readonly StoredMailScope WholeAccount = new(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work")), null);
 
     private readonly InMemoryStoredMailRederivationRunStore runs = new();
     private readonly IJobStore jobs = Substitute.For<IJobStore>();
@@ -229,7 +229,7 @@ public sealed class StoredMailRederivationHandlerTests
         // Assert
         var published = this.telemetry.Runs.Single();
 
-        Assert.Equal(WholeAccount.Account, published.AccountId);
+        Assert.Equal(WholeAccount.Account.Id, published.AccountId);
         Assert.Null(published.FolderAlias);
         Assert.Equal([EmailsPerPass, 3], [.. published.Passes.Select(pass => pass.RederivedEmailCount)]);
     }

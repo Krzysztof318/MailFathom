@@ -5,6 +5,7 @@
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Answering.Audit;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Retrieval.AskMail.Audit;
@@ -12,7 +13,8 @@ namespace MailFathom.Application.UnitTests.Retrieval.AskMail.Audit;
 /// <summary>Covers what a request has to name to be served a page, and what it is refused for.</summary>
 public sealed class MailAnsweringAuditQueryTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset Noon = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
 
@@ -96,7 +98,7 @@ public sealed class MailAnsweringAuditQueryTests
         // Act
         var work = MailAnsweringAuditQuery.Create(Account, null, null, null, null).Query!;
         var personal = MailAnsweringAuditQuery
-            .Create(MailAccountId.Create("personal"), null, null, null, null)
+            .Create(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal")), null, null, null, null)
             .Query!;
 
         // Assert

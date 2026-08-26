@@ -81,7 +81,11 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         var entity = new OutgoingEmailEntity
         {
             Id = Guid.CreateVersion7(recordedAt),
-            MailboxAccountId = request.AccountId.Value,
+            MailboxAccountId = request.Account.Id.Value,
+
+            // Written from the identity the request carried, which the boundary resolved through the catalog before
+            // anything was composed. A send belongs to the owner whose account it goes out as.
+            OwnerId = request.Account.Owner.Value,
             RequesterOrigin = request.Requester.Origin,
             RequesterIdentity = request.Requester.Identity,
             PrincipalFingerprint = principal.Fingerprint,
@@ -140,19 +144,21 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
     /// into memory, and an attempt that is going to transmit one reads it through the content store by identifier.
     /// </remarks>
     public async Task<IReadOnlyList<OutgoingEmailRecord>> ReadOutstandingAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         int limit,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        var accountValue = accountId.Value;
+        var ownerValue = account.Owner.Value;
+        var accountValue = account.Id.Value;
 
         var entities = await readContext.OutgoingEmails
             .AsNoTracking()
             .Include(message => message.Recipients)
             .Include(message => message.Filings)
-            .Where(message => message.MailboxAccountId == accountValue
+            .Where(message => message.OwnerId == ownerValue
+                && message.MailboxAccountId == accountValue
                 && message.Stage != OutgoingEmailStage.Sent
                 && message.Stage != OutgoingEmailStage.Refused
                 && message.Stage != OutgoingEmailStage.Cancelled)
@@ -171,14 +177,16 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
     /// off the history of everything this deployment has ever sent.
     /// </remarks>
     public async Task<IReadOnlyList<OutboxStageCount>> CountOutstandingByStageAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken cancellationToken)
     {
-        var accountValue = accountId.Value;
+        var ownerValue = account.Owner.Value;
+        var accountValue = account.Id.Value;
 
         var counted = await readContext.OutgoingEmails
             .AsNoTracking()
-            .Where(message => message.MailboxAccountId == accountValue
+            .Where(message => message.OwnerId == ownerValue
+                && message.MailboxAccountId == accountValue
                 && message.Stage != OutgoingEmailStage.Sent
                 && message.Stage != OutgoingEmailStage.Refused
                 && message.Stage != OutgoingEmailStage.Cancelled)
@@ -254,14 +262,16 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
     /// idempotent and its count honest.
     /// </para>
     /// </remarks>
-    public Task<int> MarkUnknownOutcomesAsync(MailAccountId accountId, CancellationToken cancellationToken)
+    public Task<int> MarkUnknownOutcomesAsync(MailAccountIdentity account, CancellationToken cancellationToken)
     {
-        var accountValue = accountId.Value;
+        var ownerValue = account.Owner.Value;
+        var accountValue = account.Id.Value;
         var markedAt = timeProvider.GetUtcNow();
         var unknownOutcome = MailFathomErrorCode.OutgoingEmailOutcomeUnknown.Value;
 
         return readContext.OutgoingEmails
-            .Where(message => message.MailboxAccountId == accountValue
+            .Where(message => message.OwnerId == ownerValue
+                && message.MailboxAccountId == accountValue
                 && message.Stage == OutgoingEmailStage.TransmissionBegun
                 && (message.LastFailureCode == null || message.LastFailureCode != unknownOutcome)
                 && (message.LeaseExpiresAt == null || message.LeaseExpiresAt <= markedAt))
@@ -571,7 +581,8 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
         OutgoingEmailRequest request,
         CancellationToken cancellationToken)
     {
-        var accountValue = request.AccountId.Value;
+        var ownerValue = request.Account.Owner.Value;
+        var accountValue = request.Account.Id.Value;
         var origin = request.Requester.Origin;
         var identity = request.Requester.Identity;
 
@@ -583,7 +594,8 @@ internal sealed class OutgoingEmailStore(MailFathomDbContext readContext, TimePr
             writeContext.OutgoingEmails
                 .Include(message => message.Recipients)
                 .Include(message => message.Filings),
-            message => message.MailboxAccountId == accountValue
+            message => message.OwnerId == ownerValue
+                && message.MailboxAccountId == accountValue
                 && message.RequesterOrigin == origin
                 && message.RequesterIdentity == identity,
             cancellationToken);

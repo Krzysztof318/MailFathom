@@ -145,7 +145,7 @@ internal sealed class InMemoryOutgoingMailFilingStore(InMemoryOutgoingEmailStore
     }
 
     public Task<IReadOnlyList<OutgoingMailFilingRecord>> ReadFilingsAtAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         RemoteFolderPath folderPath,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,
@@ -158,7 +158,7 @@ internal sealed class InMemoryOutgoingMailFilingStore(InMemoryOutgoingEmailStore
         IReadOnlyList<OutgoingMailFilingRecord> found =
         [
             .. this.rows.Values
-                .Where(row => this.AccountOf(row) == accountId
+                .Where(row => this.AccountOf(row) == account.Id
                     && row.Stage == OutgoingMailFilingStage.Confirmed
                     && row.ObservedAt is null
                     && (uids.Any(uid => row.AccountsForPlacementAt(folderPath, uidValidity, uid))

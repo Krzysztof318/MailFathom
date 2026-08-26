@@ -70,7 +70,7 @@ public interface IOutgoingEmailStore
     Task<OutgoingEmailRecord?> FindAsync(OutgoingEmailId outgoingEmailId, CancellationToken cancellationToken);
 
     /// <summary>Reads the sends of one account that have not reached a terminal stage.</summary>
-    /// <param name="accountId">The account whose sends are read.</param>
+    /// <param name="account">The account whose sends are read.</param>
     /// <param name="limit">The greatest number of records to return.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The outstanding records, oldest first, at most <paramref name="limit" /> of them.</returns>
@@ -87,12 +87,12 @@ public interface IOutgoingEmailStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<OutgoingEmailRecord>> ReadOutstandingAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         int limit,
         CancellationToken cancellationToken);
 
     /// <summary>Counts how many of the account's sends stand at each stage nothing has finished with.</summary>
-    /// <param name="accountId">The account whose sends are counted.</param>
+    /// <param name="account">The account whose sends are counted.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>One count per non-terminal stage, including the stages nothing stands at.</returns>
     /// <remarks>
@@ -114,7 +114,7 @@ public interface IOutgoingEmailStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<OutboxStageCount>> CountOutstandingByStageAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken cancellationToken);
 
     /// <summary>Takes up to a batch of the account's due sends and leases each of them to one attempt.</summary>
@@ -144,7 +144,7 @@ public interface IOutgoingEmailStore
         CancellationToken cancellationToken);
 
     /// <summary>Marks the account's sends whose transmission was never answered, so an operator reads why they are stuck.</summary>
-    /// <param name="accountId">The account whose records are marked.</param>
+    /// <param name="account">The account whose records are marked.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>How many records this call marked.</returns>
     /// <remarks>
@@ -153,7 +153,7 @@ public interface IOutgoingEmailStore
     /// carries no failure yet, which is what keeps it from writing over the reason a live attempt already recorded, and
     /// it moves no stage: the stage is what says the outcome is unknown.
     /// </remarks>
-    Task<int> MarkUnknownOutcomesAsync(MailAccountId accountId, CancellationToken cancellationToken);
+    Task<int> MarkUnknownOutcomesAsync(MailAccountIdentity account, CancellationToken cancellationToken);
 
     /// <summary>Gives a held record back after a failure that can clear, claimable again once the instant named has passed.</summary>
     /// <param name="session">The session the write joins.</param>

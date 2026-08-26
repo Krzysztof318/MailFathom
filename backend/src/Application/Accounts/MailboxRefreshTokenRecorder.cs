@@ -77,11 +77,11 @@ public sealed class MailboxRefreshTokenRecorder
 
         this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
 
-        if (!this.accountCatalog.ServedAccounts.Any(account => account.Id == accountId))
+        if (this.accountCatalog.ServedAccounts.FirstOrDefault(served => served.Id == accountId) is not { } account)
         {
             throw new MailAccountNotAccessibleException(accountId);
         }
 
-        await this.refreshTokenStore.SaveTokenAsync(accountId, refreshToken, cancellationToken);
+        await this.refreshTokenStore.SaveTokenAsync(account.Identity, refreshToken, cancellationToken);
     }
 }

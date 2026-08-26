@@ -28,8 +28,22 @@ public sealed record EmailSummary
     /// <summary>Gets the stable local identity of the email, which every later request names it by.</summary>
     public required StoredEmailId StoredEmailId { get; init; }
 
-    /// <summary>Gets the account whose mailbox the email was read from.</summary>
-    public required MailAccountId AccountId { get; init; }
+    /// <summary>Gets the account whose mailbox the email was read from, named by its owner and its identifier.</summary>
+    /// <remarks>
+    /// The pair, read back from the email's own row: an identifier names one account within its owner, and a summary
+    /// that feeds a write — an authored answer, a draft — supplies the owner that write records without asking the
+    /// account table again.
+    /// </remarks>
+    public required MailAccountIdentity Account { get; init; }
+
+    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one owner names.</summary>
+    /// <remarks>
+    /// Derived rather than stored, so the pair is the one value here and the two halves can never disagree. It is kept
+    /// because most readers of this record are inside a scope whose owner is already settled, and naming the identifier
+    /// alone there says what the code means.
+    /// </remarks>
+    public MailAccountId AccountId => this.Account.Id;
+
 
     /// <summary>Gets the folder alias the email was read from, which is MailFathom's own name for that folder.</summary>
     public required MailFolderAlias FolderAlias { get; init; }

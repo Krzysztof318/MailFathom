@@ -13,6 +13,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Mutations.Audit;
 using MailFathom.Domain.Transport;
+using MailFathom.TestSupport;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Xunit;
@@ -21,7 +22,8 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations;
 
 public sealed class MailboxMutationPerformerTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("personal");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
 
     private static readonly MailFolderResolution InboxFolder = MailFolderResolution.FirstBindingOf(
         MailFolderAlias.Create("inbox"),
@@ -51,7 +53,7 @@ public sealed class MailboxMutationPerformerTests
         var request = RelocationRequest();
         var recordExistedWhenTheSessionOpened = false;
         context.WriteSessionFactory
-            .OpenForWritingAsync(Account, InboxFolder, TransportPolicy, Arg.Any<CancellationToken>())
+            .OpenForWritingAsync(Account.Id, InboxFolder, TransportPolicy, Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 recordExistedWhenTheSessionOpened = context.Store.OpenedRecordCount == 1;
@@ -85,7 +87,7 @@ public sealed class MailboxMutationPerformerTests
         Assert.Equal(first.RecordId, second.RecordId);
         Assert.Equal(1, context.Store.OpenedRecordCount);
         await context.WriteSessionFactory.Received(1).OpenForWritingAsync(
-            Account,
+            Account.Id,
             InboxFolder,
             TransportPolicy,
             Arg.Any<CancellationToken>());
@@ -185,7 +187,7 @@ public sealed class MailboxMutationPerformerTests
         // Arrange
         var context = new PerformerContext();
         var request = RelocationRequest();
-        context.FailRelocationWith(new MailboxUnavailableException(Account, InboxFolder.Alias, new TimeoutException()));
+        context.FailRelocationWith(new MailboxUnavailableException(Account.Id, InboxFolder.Alias, new TimeoutException()));
 
         // Act
         await Assert.ThrowsAsync<MailboxUnavailableException>(
@@ -205,7 +207,7 @@ public sealed class MailboxMutationPerformerTests
         // Arrange
         var context = new PerformerContext(maximumAttempts: 2);
         var request = RelocationRequest();
-        context.FailRelocationWith(new MailboxUnavailableException(Account, InboxFolder.Alias, new TimeoutException()));
+        context.FailRelocationWith(new MailboxUnavailableException(Account.Id, InboxFolder.Alias, new TimeoutException()));
 
         // Act
         await Assert.ThrowsAsync<MailboxUnavailableException>(
@@ -262,7 +264,7 @@ public sealed class MailboxMutationPerformerTests
         var context = new PerformerContext(maximumAttempts: 5);
         var request = RelocationRequest();
         context.FailRelocationWith(new MailboxMutationUnsupportedException(
-            Account,
+            Account.Id,
             InboxFolder.Alias,
             MailboxMutation.Relocate.Name,
             "UIDPLUS extension (RFC 4315)"));
@@ -289,7 +291,7 @@ public sealed class MailboxMutationPerformerTests
         var context = new PerformerContext(maximumAttempts: 5);
         var request = RelocationRequest();
         context.FailRelocationWith(new MailboxDestinationFolderMissingException(
-            Account,
+            Account.Id,
             InboxFolder.Alias,
             MailboxMutation.Relocate,
             new InvalidOperationException("The folder could not be found.")));
@@ -337,7 +339,7 @@ public sealed class MailboxMutationPerformerTests
         // Act
         await context.Performer.PerformAsync(
             MailboxMutationRequest.Delete(
-                storedEmailId,
+                storedEmailId, SyntheticMailOwner.Deployment,
                 occurrence,
                 requester,
                 AuthoredDeleteEmailDisposition.RetainLocalCopy),
@@ -345,12 +347,12 @@ public sealed class MailboxMutationPerformerTests
             TransportPolicy,
             CancellationToken.None);
         await context.Performer.PerformAsync(
-            MailboxMutationRequest.SetSeen(storedEmailId, occurrence, requester, isSeen: true),
+            MailboxMutationRequest.SetSeen(storedEmailId, SyntheticMailOwner.Deployment, occurrence, requester, isSeen: true),
             InboxFolder,
             TransportPolicy,
             CancellationToken.None);
         await context.Performer.PerformAsync(
-            MailboxMutationRequest.Copy(storedEmailId, occurrence, requester, ArchivePath),
+            MailboxMutationRequest.Copy(storedEmailId, SyntheticMailOwner.Deployment, occurrence, requester, ArchivePath),
             InboxFolder,
             TransportPolicy,
             CancellationToken.None);
@@ -395,17 +397,17 @@ public sealed class MailboxMutationPerformerTests
 
         // Act
         await context.Performer.PerformAsync(
-            MailboxMutationRequest.AddKeywords(storedEmailId, occurrence, requester, labels),
+            MailboxMutationRequest.AddKeywords(storedEmailId, SyntheticMailOwner.Deployment, occurrence, requester, labels),
             InboxFolder,
             TransportPolicy,
             CancellationToken.None);
         await context.Performer.PerformAsync(
-            MailboxMutationRequest.RemoveKeywords(storedEmailId, occurrence, requester, labels),
+            MailboxMutationRequest.RemoveKeywords(storedEmailId, SyntheticMailOwner.Deployment, occurrence, requester, labels),
             InboxFolder,
             TransportPolicy,
             CancellationToken.None);
         await context.Performer.PerformAsync(
-            MailboxMutationRequest.SetKeywords(storedEmailId, occurrence, requester, AuthoredMailKeywords.None),
+            MailboxMutationRequest.SetKeywords(storedEmailId, SyntheticMailOwner.Deployment, occurrence, requester, AuthoredMailKeywords.None),
             InboxFolder,
             TransportPolicy,
             CancellationToken.None);
@@ -438,7 +440,7 @@ public sealed class MailboxMutationPerformerTests
         var context = new PerformerContext();
         var occurrence = Occurrence(42U);
         var request = MailboxMutationRequest.SetFlagged(
-            StoredEmailId.Create(Guid.CreateVersion7()),
+            StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailOwner.Deployment,
             occurrence,
             MailboxMutationRequester.Rule("surface-invoices", "2"),
             isFlagged);
@@ -479,7 +481,7 @@ public sealed class MailboxMutationPerformerTests
         var context = new PerformerContext();
         var occurrence = Occurrence(42U);
         var request = MailboxMutationRequest.SetSeen(
-            StoredEmailId.Create(Guid.CreateVersion7()),
+            StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailOwner.Deployment,
             occurrence,
             MailboxMutationRequester.Rule("surface-invoices", "2"),
             isSeen);
@@ -571,7 +573,7 @@ public sealed class MailboxMutationPerformerTests
         var context = new PerformerContext();
         context.Store.AuditsMutations = true;
         context.FailRelocationWith(new MailboxDestinationFolderMissingException(
-            Account,
+            Account.Id,
             InboxFolder.Alias,
             MailboxMutation.Relocate,
             new InvalidOperationException("The folder could not be found.")));
@@ -622,7 +624,7 @@ public sealed class MailboxMutationPerformerTests
         var context = new PerformerContext(maximumAttempts: 3);
         var request = RelocationRequest();
         context.FailRelocationWith(
-            new MailboxUnavailableException(Account, InboxFolder.Alias, new TimeoutException()));
+            new MailboxUnavailableException(Account.Id, InboxFolder.Alias, new TimeoutException()));
 
         await Assert.ThrowsAsync<MailboxUnavailableException>(
             () => context.Performer.PerformAsync(request, InboxFolder, TransportPolicy, CancellationToken.None));
@@ -644,11 +646,11 @@ public sealed class MailboxMutationPerformerTests
 
         return mutationName switch
         {
-            "relocate" => MailboxMutationRequest.Relocate(storedEmailId, occurrence, requester, ArchivePath),
-            "copy" => MailboxMutationRequest.Copy(storedEmailId, occurrence, requester, ArchivePath),
-            "set-seen" => MailboxMutationRequest.SetSeen(storedEmailId, occurrence, requester, isSeen: true),
+            "relocate" => MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailOwner.Deployment, occurrence, requester, ArchivePath),
+            "copy" => MailboxMutationRequest.Copy(storedEmailId, SyntheticMailOwner.Deployment, occurrence, requester, ArchivePath),
+            "set-seen" => MailboxMutationRequest.SetSeen(storedEmailId, SyntheticMailOwner.Deployment, occurrence, requester, isSeen: true),
             _ => MailboxMutationRequest.Delete(
-                storedEmailId,
+                storedEmailId, SyntheticMailOwner.Deployment,
                 occurrence,
                 requester,
                 AuthoredDeleteEmailDisposition.RetainLocalCopy),
@@ -656,13 +658,13 @@ public sealed class MailboxMutationPerformerTests
     }
 
     private static EmailOccurrenceId Occurrence(uint uid) => EmailOccurrenceId.Create(
-        Account,
+        Account.Id,
         InboxFolder.Id,
         ImapUidValidity.Create(7U),
         ImapUid.Create(uid));
 
     private static MailboxMutationRequest RelocationRequest() => MailboxMutationRequest.Relocate(
-        StoredEmailId.Create(Guid.CreateVersion7()),
+        StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailOwner.Deployment,
         Occurrence(42U),
         MailboxMutationRequester.Rule("file-newsletters", "3"),
         ArchivePath);

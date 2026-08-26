@@ -34,7 +34,7 @@ public interface IMailDraftStore
 {
     /// <summary>Writes down a new draft, at the revision its first stored message is.</summary>
     /// <param name="session">The session the write joins, which is the one the message is stored in.</param>
-    /// <param name="accountId">The account the draft belongs to.</param>
+    /// <param name="account">The account the draft belongs to, named by its owner and its identifier.</param>
     /// <param name="author">The authored act that wrote it.</param>
     /// <param name="recipients">The people it is addressed to, which may be nobody, each with where its address came from.</param>
     /// <param name="mimeByteLength">How many bytes the stored message is.</param>
@@ -44,7 +44,7 @@ public interface IMailDraftStore
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" />, <paramref name="author" />, or <paramref name="recipients" /> is <see langword="null" />.</exception>
     Task<MailDraftRecord> OpenAsync(
         IPersistenceSession session,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         OutgoingEmailRequester author,
         IReadOnlyList<MailDraftRecipient> recipients,
         long mimeByteLength,
@@ -94,7 +94,7 @@ public interface IMailDraftStore
         CancellationToken cancellationToken);
 
     /// <summary>Reads the drafts of one account that still owe the mail server something.</summary>
-    /// <param name="accountId">The account whose drafts are read.</param>
+    /// <param name="account">The account whose drafts are read.</param>
     /// <param name="maxCount">The greatest number of drafts to answer with.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The drafts with outstanding work, oldest revision first, bounded by <paramref name="maxCount" />.</returns>
@@ -103,7 +103,7 @@ public interface IMailDraftStore
     /// bounded query rather than a session.
     /// </remarks>
     Task<IReadOnlyList<MailDraftRecord>> ReadOutstandingAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         int maxCount,
         CancellationToken cancellationToken);
 

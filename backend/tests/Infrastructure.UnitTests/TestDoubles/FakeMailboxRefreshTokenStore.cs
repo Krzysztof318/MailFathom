@@ -27,12 +27,14 @@ internal sealed class FakeMailboxRefreshTokenStore(string? storedToken = null) :
     public string? LastStoredToken { get; private set; }
 
     /// <inheritdoc />
-    public Task<MailboxRefreshToken?> FindTokenAsync(MailAccountId accountId, CancellationToken cancellationToken) =>
+    public Task<MailboxRefreshToken?> FindTokenAsync(
+        MailAccountIdentity account,
+        CancellationToken cancellationToken) =>
         Task.FromResult(this.currentToken is null ? null : MailboxRefreshToken.FromText(this.currentToken));
 
     /// <inheritdoc />
     public Task SaveTokenAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailboxRefreshToken refreshToken,
         CancellationToken cancellationToken)
     {
@@ -43,7 +45,7 @@ internal sealed class FakeMailboxRefreshTokenStore(string? storedToken = null) :
             return Task.FromException(failure);
         }
 
-        this.StoredAccountIds.Add(accountId.Value);
+        this.StoredAccountIds.Add(account.Id.Value);
         this.LastStoredToken = refreshToken.RevealAsString();
         this.currentToken = this.LastStoredToken;
 

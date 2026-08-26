@@ -141,12 +141,12 @@ internal static class MailRuleEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(requests);
 
-        if (AdminAccountRequest.Resolve(request?.Account, accounts) is not { } accountId)
+        if (AdminAccountRequest.Resolve(request?.Account, accounts) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(request?.Account);
         }
 
-        var submitted = await requests.SubmitAsync(accountId, cancellationToken);
+        var submitted = await requests.SubmitAsync(servedAccount, cancellationToken);
 
         return TypedResults.Ok(new MailRuleRunStartResponse(
             submitted.Accepted,
@@ -173,15 +173,15 @@ internal static class MailRuleEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(runs);
 
-        if (AdminAccountRequest.Resolve(account, accounts) is not { } accountId)
+        if (AdminAccountRequest.Resolve(account, accounts) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }
 
-        var run = await runs.FindLatestAsync(accountId, cancellationToken);
+        var run = await runs.FindLatestAsync(servedAccount, cancellationToken);
 
         return TypedResults.Ok(new MailRuleRunStateResponse(
-            accountId.Value,
+            servedAccount.Id.Value,
             run is null ? null : MailRuleRunResponse.For(run)));
     }
 
@@ -217,7 +217,7 @@ internal static class MailRuleEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(history);
 
-        if (AdminAccountRequest.Resolve(account, accounts) is not { } accountId)
+        if (AdminAccountRequest.Resolve(account, accounts) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }
@@ -232,7 +232,7 @@ internal static class MailRuleEndpoints
         }
 
         var queryResult = MailRuleExecutionQuery.Create(
-            accountId,
+            servedAccount,
             rule,
             email is { } emailId ? StoredEmailId.Create(emailId) : null,
             from,

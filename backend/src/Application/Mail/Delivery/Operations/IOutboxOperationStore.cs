@@ -26,12 +26,12 @@ namespace MailFathom.Application.Mail.Delivery.Operations;
 public interface IOutboxOperationStore
 {
     /// <summary>Counts what stands at each stage of an outbox.</summary>
-    /// <param name="accountId">The account to count, or <see langword="null" /> to count every account this deployment serves.</param>
+    /// <param name="account">The account to count, named by its owner and its identifier, or <see langword="null" /> to count every account this deployment serves.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>One count per stage anything stands at; a stage nothing stands at may be absent.</returns>
     /// <remarks>The caller fills in the stages this answer omits, so a store need not enumerate what it counted nothing at.</remarks>
     Task<IReadOnlyList<OutboxStageCount>> CountByStageAsync(
-        MailAccountId? accountId,
+        MailAccountIdentity? account,
         CancellationToken cancellationToken);
 
     /// <summary>Serves one bounded page of the sends this deployment has recorded.</summary>

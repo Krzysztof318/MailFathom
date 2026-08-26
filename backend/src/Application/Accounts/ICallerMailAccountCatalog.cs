@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Accounts;
 
@@ -38,6 +39,17 @@ public interface ICallerMailAccountCatalog
     /// about which accounts they are.
     /// </remarks>
     bool SynchronizationEnabled { get; }
+
+    /// <summary>Gets the owner this unit of work is acting for, which is whose mail every read narrowed here returns.</summary>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no owner.</exception>
+    /// <remarks>
+    /// Published beside the accounts because a query carries both: the owner is the first term of every mail-returning
+    /// predicate and the column every index those reads are planned against leads with, while the accounts narrow
+    /// within it. Reading it here rather than from the principal directly is what keeps the two answers one answer — a
+    /// read narrowed on an owner the catalog did not answer for would be narrowed on an owner whose accounts it never
+    /// listed.
+    /// </remarks>
+    MailOwnerId Owner { get; }
 
     /// <summary>Gets the accounts the owner in hand owns, deduplicated and ordered, or empty when they own none.</summary>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no owner.</exception>

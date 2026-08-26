@@ -58,7 +58,7 @@ public sealed class EmailThreadAssembly
 
     /// <summary>Places the email, merging any conversations its identifiers prove were always one.</summary>
     /// <param name="session">The transaction the placement is part of.</param>
-    /// <param name="accountId">The account whose mail the email is.</param>
+    /// <param name="account">The account whose mail the email is, named by its owner and its identifier.</param>
     /// <param name="email">The email to place, with the identifiers its headers carried.</param>
     /// <param name="currentThreadId">The conversation the email already belongs to, or <see langword="null" /> when none.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
@@ -66,7 +66,7 @@ public sealed class EmailThreadAssembly
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="email" /> is <see langword="null" />.</exception>
     public async Task<EmailThreadId> AssembleAsync(
         IPersistenceSession session,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         ThreadedEmail email,
         EmailThreadId? currentThreadId,
         CancellationToken cancellationToken)
@@ -76,11 +76,11 @@ public sealed class EmailThreadAssembly
         var identifiers = IdentifiersOf(email);
         var bindings = identifiers.Count == 0
             ? []
-            : await this.store.FindBindingsAsync(session, accountId, identifiers, cancellationToken);
+            : await this.store.FindBindingsAsync(session, account, identifiers, cancellationToken);
 
-        var threadId = await this.ThreadOfAsync(session, accountId, bindings, currentThreadId, cancellationToken);
+        var threadId = await this.ThreadOfAsync(session, account, bindings, currentThreadId, cancellationToken);
 
-        await this.BindMissingAsync(session, accountId, identifiers, bindings, threadId, cancellationToken);
+        await this.BindMissingAsync(session, account, identifiers, bindings, threadId, cancellationToken);
 
         var answered = await this.AnsweredMessageAsync(session, threadId, email, cancellationToken);
 
@@ -113,7 +113,7 @@ public sealed class EmailThreadAssembly
     /// </remarks>
     private async Task<EmailThreadId> ThreadOfAsync(
         IPersistenceSession session,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         IReadOnlyList<EmailThreadBinding> bindings,
         EmailThreadId? currentThreadId,
         CancellationToken cancellationToken)
@@ -126,7 +126,7 @@ public sealed class EmailThreadAssembly
 
         if (named.Length == 0)
         {
-            return currentThreadId ?? await this.store.StartThreadAsync(session, accountId, cancellationToken);
+            return currentThreadId ?? await this.store.StartThreadAsync(session, account, cancellationToken);
         }
 
         var surviving = named[0].ThreadId;
@@ -149,7 +149,7 @@ public sealed class EmailThreadAssembly
     /// <summary>Binds every identifier the email carries that this account did not bind already.</summary>
     private async Task BindMissingAsync(
         IPersistenceSession session,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         IReadOnlyList<string> identifiers,
         IReadOnlyList<EmailThreadBinding> bindings,
         EmailThreadId threadId,
@@ -160,7 +160,7 @@ public sealed class EmailThreadAssembly
 
         if (missing.Length > 0)
         {
-            await this.store.BindIdentifiersAsync(session, accountId, missing, threadId, cancellationToken);
+            await this.store.BindIdentifiersAsync(session, account, missing, threadId, cancellationToken);
         }
     }
 

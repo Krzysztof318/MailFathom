@@ -53,6 +53,7 @@ using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Jobs;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Mail.Readers;
 using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Host.Configuration.Providers;
 using MailFathom.Host.Configuration.RootSettings;
@@ -585,7 +586,13 @@ internal static class HostComposition
         builder.Services.AddScoped<IMailRuleActionPermissionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.RuleActionPermissions);
         builder.Services.AddScoped<IMailboxMutationAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.MutationAuditSettings);
         builder.Services.AddScoped<IMailAnsweringAuditSettingsReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.AnsweringAuditSettings);
-        builder.Services.AddScoped<IDeploymentMailAccountCatalog>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.AccountCatalog);
+        // Composed here rather than taken off the snapshot's reader set, because an account is described by whose it is
+        // as well as by what an operator configured, and the owner is established by a startup gate rather than bound
+        // from a file. The snapshot still decides which accounts are served; this adds the half configuration cannot
+        // state.
+        builder.Services.AddScoped<IDeploymentMailAccountCatalog>(provider => new ConfiguredMailAccountCatalog(
+            provider.GetRequiredService<MailSynchronizationOptions>(),
+            provider.GetRequiredService<IDeploymentMailOwnerSource>()));
         builder.Services.AddScoped<ITrustedAuthenticationAuthorityReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.TrustedAuthenticationAuthorities);
         builder.Services.AddScoped<ISenderTrustPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.SenderTrustPolicies);
         // Resolved from the same snapshot as the verdicts above, so one work unit reads mail under one reload. Which of

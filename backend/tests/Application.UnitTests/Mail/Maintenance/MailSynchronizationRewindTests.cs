@@ -26,7 +26,8 @@ namespace MailFathom.Application.UnitTests.Mail.Maintenance;
 /// </remarks>
 public sealed class MailSynchronizationRewindTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("inbox");
 
@@ -225,12 +226,12 @@ public sealed class MailSynchronizationRewindTests
     {
         private readonly HashSet<MailFolderAlias> present = [.. foldersHoldingProgress];
 
-        public List<(MailAccountId AccountId, MailFolderAlias? FolderAlias)> Discards { get; } = [];
+        public List<(MailAccountIdentity Account, MailFolderAlias? FolderAlias)> Discards { get; } = [];
 
         public List<IPersistenceSession> Sessions { get; } = [];
 
         public Task<SynchronizationCheckpoint?> GetCheckpointAsync(
-            MailAccountId accountId,
+            MailAccountIdentity account,
             MailFolderResolutionId folderResolutionId,
             CancellationToken cancellationToken) =>
             Task.FromResult(
@@ -240,7 +241,7 @@ public sealed class MailSynchronizationRewindTests
 
         public Task SaveCheckpointAsync(
             IPersistenceSession session,
-            MailAccountId accountId,
+            MailAccountIdentity account,
             MailFolderResolutionId folderResolutionId,
             SynchronizationCheckpoint? expectedCheckpoint,
             SynchronizationCheckpoint checkpoint,
@@ -259,11 +260,11 @@ public sealed class MailSynchronizationRewindTests
 
         public Task<IReadOnlyList<MailFolderAlias>> DiscardCheckpointsAsync(
             IPersistenceSession session,
-            MailAccountId accountId,
+            MailAccountIdentity account,
             MailFolderAlias? folderAlias,
             CancellationToken cancellationToken)
         {
-            this.Discards.Add((accountId, folderAlias));
+            this.Discards.Add((account, folderAlias));
             this.Sessions.Add(session);
 
             IReadOnlyList<MailFolderAlias> discarded =

@@ -5,6 +5,7 @@
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Persistence.Emails;
@@ -77,9 +78,11 @@ public sealed class StoredEmailTombstoneTests
         return new StoredEmailEntity
         {
             Id = Guid.CreateVersion7(),
+            OwnerId = SyntheticMailOwner.Deployment.Value,
             MailboxAccountId = account.Id,
             MailFolder = new MailFolderEntity
             {
+                OwnerId = SyntheticMailOwner.Deployment.Value,
                 MailboxAccountId = account.Id,
                 MailboxAccount = account,
                 Alias = "inbox",

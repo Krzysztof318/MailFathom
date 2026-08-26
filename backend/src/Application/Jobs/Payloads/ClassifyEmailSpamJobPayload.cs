@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text.Json.Serialization;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -29,7 +30,15 @@ namespace MailFathom.Application.Jobs.Payloads;
 /// </remarks>
 public sealed record ClassifyEmailSpamJobPayload : IJobPayload
 {
-    /// <summary>Gets the account whose mailbox the occurrence belongs to.</summary>
+    /// <summary>Gets the owner whose account the occurrence belongs to.</summary>
+    /// <remarks>
+    /// Named beside the identifier, because an identifier names one account within its owner and the rows this work
+    /// writes are about that account. The owner is generated and names nobody outside this deployment, so carrying it
+    /// discloses nothing an operator reading a queued job may not see.
+    /// </remarks>
+    public required Guid OwnerId { get; init; }
+
+    /// <summary>Gets the account whose mailbox the occurrence belongs to, within that owner.</summary>
     public required string AccountId { get; init; }
 
     /// <summary>Gets the operator-facing name of the folder the occurrence was read in.</summary>
@@ -49,15 +58,17 @@ public sealed record ClassifyEmailSpamJobPayload : IJobPayload
     public JobType JobType => JobType.ClassifyEmailSpam;
 
     /// <summary>Describes one occurrence as the document a job carries.</summary>
+    /// <param name="owner">The owner whose account the occurrence belongs to, as the run that met it resolved.</param>
     /// <param name="occurrence">The stable remote occurrence identity.</param>
     /// <returns>The payload naming that occurrence.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrence" /> is <see langword="null" />.</exception>
-    public static ClassifyEmailSpamJobPayload For(EmailOccurrenceId occurrence)
+    public static ClassifyEmailSpamJobPayload For(MailOwnerId owner, EmailOccurrenceId occurrence)
     {
         ArgumentNullException.ThrowIfNull(occurrence);
 
         return new ClassifyEmailSpamJobPayload
         {
+            OwnerId = owner.Value,
             AccountId = occurrence.AccountId.Value,
             FolderAlias = occurrence.FolderResolutionId.Alias.Value,
             FolderResolutionGeneration = occurrence.FolderResolutionId.Generation.Value,
@@ -65,6 +76,19 @@ public sealed record ClassifyEmailSpamJobPayload : IJobPayload
             Uid = occurrence.Uid.Value,
         };
     }
+
+    /// <summary>Rebuilds the account identity this payload names.</summary>
+    /// <returns>The account identity.</returns>
+    /// <exception cref="ArgumentException">Thrown when the stored values no longer name a valid account identity.</exception>
+    /// <remarks>
+    /// The owner is a required property, so a document that carries none is refused by the deserializer before
+    /// this is reached rather than resolving to an owner nobody named. A document the previous release wrote is
+    /// not that case: the migration that put the owner on the queue row writes it into the document beside it, so
+    /// what remains here is a value that is present and does not name an account — which this refuses for the
+    /// reason every payload record refuses a component that no longer validates.
+    /// </remarks>
+    public MailAccountIdentity ToAccountIdentity() =>
+        MailAccountIdentity.Create(MailOwnerId.Create(this.OwnerId), MailAccountId.Create(this.AccountId));
 
     /// <summary>Rebuilds the occurrence identity this payload names.</summary>
     /// <returns>The stable remote occurrence identity.</returns>

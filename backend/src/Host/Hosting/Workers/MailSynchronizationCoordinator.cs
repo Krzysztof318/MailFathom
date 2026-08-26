@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration;
@@ -116,25 +117,34 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
         CancellationToken schedulingToken,
         CancellationToken workUnitToken)
     {
-        foreach (var accountId in this.settings.Current.Readers.AccountCatalog.ServedAccounts.Select(static account => account.Id))
+        // Read through the application port in a scope of its own rather than off the configuration snapshot, because
+        // the served set is now configuration plus the owner a startup gate established and only the composed port
+        // holds both. The scope lives for the read: a supervisor gets a scope of its own per work unit.
+        using var accountScope = this.scopeFactory.CreateScope();
+
+        var servedAccounts = accountScope.ServiceProvider
+            .GetRequiredService<IDeploymentMailAccountCatalog>()
+            .ServedAccounts;
+
+        foreach (var account in servedAccounts.Select(static account => account.Identity))
         {
-            if (this.supervisedAccounts.TryGetValue(accountId.Value, out var supervision) && !supervision.IsCompleted)
+            if (this.supervisedAccounts.TryGetValue(account.Id.Value, out var supervision) && !supervision.IsCompleted)
             {
                 continue;
             }
 
-            this.supervisedAccounts[accountId.Value] = this.StartSupervisor(
-                accountId,
+            this.supervisedAccounts[account.Id.Value] = this.StartSupervisor(
+                account,
                 accountRunSlots,
                 schedulingToken,
                 workUnitToken);
 
-            this.LogAccountSupervisionStarted(accountId.Value);
+            this.LogAccountSupervisionStarted(account.Id.Value);
         }
     }
 
     private Task StartSupervisor(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         SemaphoreSlim accountRunSlots,
         CancellationToken schedulingToken,
         CancellationToken workUnitToken)
@@ -142,13 +152,13 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
         // The watch is built here and owned by the supervisor, so a supervisor that ends releases the connections it was
         // holding and the replacement starts with none.
         var pushNotifications = new AccountPushNotificationWatch(
-            accountId,
+            account.Id,
             this.scopeFactory,
             this.loggerFactory.CreateLogger<AccountPushNotificationWatch>(),
             this.timeProvider);
 
         var supervisor = new AccountSynchronizationSupervisor(
-            accountId,
+            account,
             this.scopeFactory,
             this.settings,
             accountRunSlots,

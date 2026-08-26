@@ -23,7 +23,7 @@ namespace MailFathom.Application.Accounts;
 public interface IMailboxRefreshTokenStore
 {
     /// <summary>Reads the stored refresh token for one account.</summary>
-    /// <param name="accountId">The account the token acts for.</param>
+    /// <param name="account">The account the token acts for.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>The token, which the caller owns and must dispose, or <see langword="null" /> when none is stored.</returns>
     /// <exception cref="System.Security.Cryptography.CryptographicException">
@@ -35,10 +35,10 @@ public interface IMailboxRefreshTokenStore
     /// served from the refresh token its configuration references, which is what keeps a deployment that predates this
     /// store working unchanged.
     /// </remarks>
-    Task<MailboxRefreshToken?> FindTokenAsync(MailAccountId accountId, CancellationToken cancellationToken);
+    Task<MailboxRefreshToken?> FindTokenAsync(MailAccountIdentity account, CancellationToken cancellationToken);
 
     /// <summary>Stores the refresh token for one account, replacing whatever was stored before.</summary>
-    /// <param name="accountId">The account the token acts for.</param>
+    /// <param name="account">The account the token acts for.</param>
     /// <param name="refreshToken">The token to store. The caller keeps ownership of it.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>A task that completes after durable storage.</returns>
@@ -48,5 +48,5 @@ public interface IMailboxRefreshTokenStore
     /// of the database exposes for nothing. The write is idempotent in the account, so storing the same token twice — two
     /// replicas refreshing at once, a retried request — leaves one row rather than a conflict.
     /// </remarks>
-    Task SaveTokenAsync(MailAccountId accountId, MailboxRefreshToken refreshToken, CancellationToken cancellationToken);
+    Task SaveTokenAsync(MailAccountIdentity account, MailboxRefreshToken refreshToken, CancellationToken cancellationToken);
 }

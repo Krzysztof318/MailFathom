@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Accounts;
 
@@ -56,6 +57,9 @@ public sealed class OwnedMailAccountCatalog : ICallerMailAccountCatalog
 
     /// <inheritdoc />
     public bool SynchronizationEnabled => this.servedAccounts.SynchronizationEnabled;
+
+    /// <inheritdoc />
+    public MailOwnerId Owner => this.authorization.RequireOwner();
 
     /// <inheritdoc />
     public IReadOnlyList<ServedMailAccount> OwnedAccounts =>

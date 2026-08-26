@@ -72,16 +72,16 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
 
         try
         {
-            await foreach (var accountId in this.signal.ReadAllAsync(stoppingToken))
+            await foreach (var account in this.signal.ReadAllAsync(stoppingToken))
             {
-                var report = await this.RunPassAsync(accountId, stoppingToken);
+                var report = await this.RunPassAsync(account, stoppingToken);
 
                 // A pass that took everything it was allowed left more behind it, so the account is signalled again
                 // rather than waiting for its synchronization run to notice. A refused signal is harmless here for the
                 // same reason it is everywhere else: that run is what picks the rest up.
                 if (report.BatchFilled)
                 {
-                    this.signal.Signal(accountId);
+                    this.signal.Signal(account);
                 }
             }
         }
@@ -99,17 +99,17 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
     /// that lease expires, so nothing is lost by leaving it to the account's next run.
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "One account's pass must not stop the loop that serves every other account; each send's own record already carries how far it got, and the account's synchronization run drains what this pass did not.")]
-    private async Task<MailOutboxPassReport> RunPassAsync(MailAccountId accountId, CancellationToken stoppingToken)
+    private async Task<MailOutboxPassReport> RunPassAsync(MailAccountIdentity account, CancellationToken stoppingToken)
     {
         try
         {
             using var scope = this.scopeFactory.CreateScope();
 
             var pass = scope.ServiceProvider.GetRequiredService<MailOutboxPass>();
-            var report = await pass.RunAsync(accountId, stoppingToken);
+            var report = await pass.RunAsync(account, stoppingToken);
 
-            this.telemetry.Report(accountId, report);
-            this.Report(accountId, report);
+            this.telemetry.Report(account.Id, report);
+            this.Report(account.Id, report);
 
             return report;
         }
@@ -119,13 +119,13 @@ internal sealed partial class OutboxDeliveryWorker : BackgroundService
         }
         catch (PersistenceConcurrencyConflictException exception)
         {
-            this.LogPassDeferredAfterConcurrencyConflict(exception, accountId.Value);
+            this.LogPassDeferredAfterConcurrencyConflict(exception, account.Id.Value);
 
             return MailOutboxPassReport.Empty;
         }
         catch (Exception exception)
         {
-            this.LogPassFailed(exception, accountId.Value);
+            this.LogPassFailed(exception, account.Id.Value);
 
             return MailOutboxPassReport.Empty;
         }

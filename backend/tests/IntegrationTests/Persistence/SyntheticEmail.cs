@@ -8,6 +8,7 @@ using MailFathom.AppHost;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Synchronization;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
@@ -42,8 +43,21 @@ internal static class SyntheticEmail
     /// <param name="uid">The occurrence's UID within that binding's UIDVALIDITY scope.</param>
     /// <returns>The occurrence identity.</returns>
     internal static EmailOccurrenceId OccurrenceIn(MailFolderResolution binding, uint uid) =>
+        OccurrenceIn(SyntheticMailAccount.AccountId, binding, uid);
+
+    /// <summary>Names one occurrence under a committed folder binding of an account other than the served one.</summary>
+    /// <param name="accountId">The account the binding belongs to.</param>
+    /// <param name="binding">The binding the occurrence is read under.</param>
+    /// <param name="uid">The occurrence's UID within that binding's UIDVALIDITY scope.</param>
+    /// <returns>The occurrence identity.</returns>
+    /// <remarks>
+    /// The account is stated rather than taken from the deployment for a test whose subject is which account, and
+    /// therefore which owner, a row belongs to. Every other test names the one account this deployment serves and uses
+    /// the overload above.
+    /// </remarks>
+    internal static EmailOccurrenceId OccurrenceIn(MailAccountId accountId, MailFolderResolution binding, uint uid) =>
         EmailOccurrenceId.Create(
-            SyntheticMailAccount.AccountId,
+            accountId,
             binding.Id,
             ImapUidValidity.Create(UidValidity),
             ImapUid.Create(uid));

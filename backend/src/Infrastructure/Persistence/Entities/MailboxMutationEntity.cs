@@ -27,6 +27,9 @@ internal sealed class MailboxMutationEntity
     /// </summary>
     public required string MailboxAccountId { get; set; }
 
+    /// <summary>Gets or sets the owner whose account the source folder belongs to.</summary>
+    public required Guid OwnerId { get; set; }
+
     /// <summary>Gets or sets the alias binding the email was in when the change was asked for.</summary>
     /// <remarks>
     /// The source occurrence is kept beside <see cref="StoredEmailId" /> rather than read from the email, because the

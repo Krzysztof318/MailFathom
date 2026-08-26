@@ -851,6 +851,7 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<IHttpClientFactory>(),
             provider.GetRequiredService<IMailOAuthSettingsProvider>(),
             provider.GetRequiredService<IMailboxRefreshTokenStore>(),
+            provider.GetRequiredService<IDeploymentMailOwnerSource>(),
             provider.GetRequiredService<MailAccessTokenCache>(),
             provider.GetRequiredService<OutboundOperationExecutor>(),
             provider.GetRequiredService<TimeProvider>(),

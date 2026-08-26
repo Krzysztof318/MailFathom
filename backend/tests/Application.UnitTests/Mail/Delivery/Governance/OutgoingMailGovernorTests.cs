@@ -9,6 +9,7 @@ using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Governance;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -17,7 +18,8 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Governance;
 
 public sealed class OutgoingMailGovernorTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     /// <summary>A deployment that declared no ceiling counts nothing, so the ordinary posture costs no read at all.</summary>
     [Fact]
@@ -32,7 +34,7 @@ public sealed class OutgoingMailGovernorTests
 
         // Assert
         await usage.DidNotReceive().ReadUsageSinceAsync(
-            Arg.Any<MailAccountId>(),
+            Arg.Any<MailAccountIdentity>(),
             Arg.Any<DateTimeOffset>(),
             Arg.Any<CancellationToken>());
     }
@@ -59,7 +61,7 @@ public sealed class OutgoingMailGovernorTests
 
         // Assert
         await usage.DidNotReceive().ReadUsageSinceAsync(
-            Arg.Any<MailAccountId>(),
+            Arg.Any<MailAccountIdentity>(),
             Arg.Any<DateTimeOffset>(),
             Arg.Any<CancellationToken>());
     }
@@ -70,7 +72,7 @@ public sealed class OutgoingMailGovernorTests
     {
         // Arrange
         var usage = Substitute.For<IOutgoingMailUsageReader>();
-        usage.ReadUsageSinceAsync(Arg.Any<MailAccountId>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+        usage.ReadUsageSinceAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns(OutgoingMailUsage.None);
         var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-08-19T16:30:00Z", CultureInfo.InvariantCulture));
         var governor = CreateGovernor(

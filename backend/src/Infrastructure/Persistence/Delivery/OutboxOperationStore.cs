@@ -39,16 +39,20 @@ internal sealed class OutboxOperationStore(MailFathomDbContext dbContext, TimePr
     /// on a collector's interval; the level a dashboard graphs is measured over the outstanding rows alone.
     /// </remarks>
     public async Task<IReadOnlyList<OutboxStageCount>> CountByStageAsync(
-        MailAccountId? accountId,
+        MailAccountIdentity? account,
         CancellationToken cancellationToken)
     {
         var sends = dbContext.OutgoingEmails.AsNoTracking();
 
-        if (accountId is { } account)
+        if (account is { } named)
         {
-            var accountValue = account.Value;
+            var ownerValue = named.Owner.Value;
+            var accountValue = named.Id.Value;
 
-            sends = sends.Where(message => message.MailboxAccountId == accountValue);
+            // The owner leads, as it does in the index: a count narrowed to an identifier alone would count another
+            // owner's account of the same name into this answer.
+            sends = sends.Where(message => message.OwnerId == ownerValue
+                && message.MailboxAccountId == accountValue);
         }
 
         var counted = await sends
@@ -169,11 +173,13 @@ internal sealed class OutboxOperationStore(MailFathomDbContext dbContext, TimePr
     {
         var sends = dbContext.OutgoingEmails.AsNoTracking();
 
-        if (query.AccountId is { } accountId)
+        if (query.Account is { } account)
         {
-            var accountValue = accountId.Value;
+            var ownerValue = account.Owner.Value;
+            var accountValue = account.Id.Value;
 
-            sends = sends.Where(message => message.MailboxAccountId == accountValue);
+            sends = sends.Where(message => message.OwnerId == ownerValue
+                && message.MailboxAccountId == accountValue);
         }
 
         if (query.Stage is { } stage)

@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Domain.Accounts;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -13,7 +14,8 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations.Audit;
 /// <summary>Covers how far back one account's audit trail is allowed to reach.</summary>
 public sealed class MailboxMutationAuditTrailRetentionTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset RunInstant = new(2026, 8, 7, 12, 0, 0, TimeSpan.Zero);
 
@@ -68,7 +70,7 @@ public sealed class MailboxMutationAuditTrailRetentionTests
 
         // Assert
         await store.DidNotReceive().EraseCompletedBeforeAsync(
-            Arg.Any<MailAccountId>(),
+            Arg.Any<MailAccountIdentity>(),
             Arg.Any<DateTimeOffset>(),
             Arg.Any<int>(),
             Arg.Any<CancellationToken>());
@@ -80,7 +82,7 @@ public sealed class MailboxMutationAuditTrailRetentionTests
         MailboxMutationAuditSettings settings)
     {
         var settingsReader = Substitute.For<IMailboxMutationAuditSettingsReader>();
-        settingsReader.GetAuditSettings(Account).Returns(settings);
+        settingsReader.GetAuditSettings(Account.Id).Returns(settings);
 
         return new MailboxMutationAuditTrailRetention(settingsReader, store, new FakeTimeProvider(RunInstant));
     }

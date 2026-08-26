@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
@@ -34,7 +35,9 @@ internal static class MailDraftRecordMapping
         return new MailDraftRecord
         {
             Id = MailDraftId.Create(entity.Id),
-            AccountId = MailAccountId.Create(entity.MailboxAccountId),
+            Account = MailAccountIdentity.Create(
+                MailOwnerId.Create(entity.OwnerId),
+                MailAccountId.Create(entity.MailboxAccountId)),
             Author = OutgoingEmailRequester.Create(entity.RequesterOrigin, entity.RequesterIdentity),
             Recipients = recipients,
             MimeByteLength = entity.MimeByteLength,

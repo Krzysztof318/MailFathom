@@ -159,7 +159,7 @@ public sealed class RecurringSendOccurrenceHandler : IJobHandler
         }
 
         var composition = this.composer.RecomposeAsOccurrence(
-            declaration.AccountId,
+            declaration.Account,
             OutgoingEmailRequester.Schedule(declaration.Id, occurrence),
             declaration.Recipients,
             draft.RawMime,

@@ -9,7 +9,6 @@ using MailFathom.Domain.Contacts;
 using MailFathom.Domain.Emails;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Entities;
-using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.Infrastructure.Persistence.Sessions;
 using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.EntityFrameworkCore;
@@ -106,7 +105,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
         {
             Assert.Equal(
                 PersistenceCommitResult.Committed,
-                await ProvisionOwnerAsync(services, foreignOwnerId, cancellationToken));
+                await OrchestratedForeignOwner.ProvisionAsync(services, foreignOwnerId, cancellationToken));
 
             ours = ContactOf("Ownership Ours", SharedAddress);
             var theirs = ContactOf("Ownership Theirs", SharedAddress);
@@ -139,7 +138,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
             // row makes every later start in this collection throw in classes that never touched a contact.
             try
             {
-                // The one erasure this class performs by hand. The served owner is not taken by EraseOwnerAsync, so a
+                // The one erasure this class performs by hand. The served owner is not taken by the foreign-owner erasure, so a
                 // contact left behind would make the next run against this database fail at the first AddAsync on the
                 // address uniqueness rather than at the assertion that actually broke.
                 if (ours is not null)
@@ -154,7 +153,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
             }
             finally
             {
-                await EraseOwnerAsync(services, foreignOwnerId);
+                await OrchestratedForeignOwner.EraseAsync(services, foreignOwnerId);
             }
         }
     }
@@ -185,7 +184,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
         {
             Assert.Equal(
                 PersistenceCommitResult.Committed,
-                await ProvisionOwnerAsync(services, foreignOwnerId, cancellationToken));
+                await OrchestratedForeignOwner.ProvisionAsync(services, foreignOwnerId, cancellationToken));
 
             var theirs = ContactOf(ForeignOnlyDisplayName, ForeignOnlyAddress);
 
@@ -223,7 +222,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
         }
         finally
         {
-            await EraseOwnerAsync(services, foreignOwnerId);
+            await OrchestratedForeignOwner.EraseAsync(services, foreignOwnerId);
         }
     }
 
@@ -259,7 +258,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
         {
             Assert.Equal(
                 PersistenceCommitResult.Committed,
-                await ProvisionOwnerAsync(services, foreignOwnerId, cancellationToken));
+                await OrchestratedForeignOwner.ProvisionAsync(services, foreignOwnerId, cancellationToken));
 
             ours = CollectedContactOf("Ownership Collected Ours", CollectedOursAddress);
             var theirs = CollectedContactOf("Ownership Collected Theirs", CollectedTheirsAddress);
@@ -313,7 +312,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
             }
             finally
             {
-                await EraseOwnerAsync(services, foreignOwnerId);
+                await OrchestratedForeignOwner.EraseAsync(services, foreignOwnerId);
             }
         }
     }
@@ -338,7 +337,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
         {
             Assert.Equal(
                 PersistenceCommitResult.Committed,
-                await ProvisionOwnerAsync(services, foreignOwnerId, cancellationToken));
+                await OrchestratedForeignOwner.ProvisionAsync(services, foreignOwnerId, cancellationToken));
             await SeedBookAsync(services, foreignOwnerId, cancellationToken);
 
             // Act
@@ -385,7 +384,7 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
         }
         finally
         {
-            await EraseOwnerAsync(services, foreignOwnerId);
+            await OrchestratedForeignOwner.EraseAsync(services, foreignOwnerId);
         }
     }
 
@@ -395,38 +394,6 @@ public sealed class OrchestratedContactBookOwnershipTests(MailFathomOrchestratio
     private static string SeededName(int position) => $"{SeededNamePrefix}{position:D4}";
 
     private static string SeededAddress(int position) => $"seeded-{position:D4}@ownership.contacts.test";
-
-    /// <summary>Writes one owner record, which is the whole of what a book keys onto.</summary>
-    private static Task<PersistenceCommitResult> ProvisionOwnerAsync(
-        OrchestratedMailFathomServices services,
-        Guid ownerId,
-        CancellationToken cancellationToken) => services.CommitAsync(
-            async (_, session, token) =>
-            {
-                var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
-
-                context.OwnerAccounts.Add(new OwnerAccountEntity
-                {
-                    Id = ownerId,
-                    Document = "{}",
-                    Version = 1,
-                    CreatedAt = RecordedAt,
-                    UpdatedAt = RecordedAt,
-                });
-
-                await context.SaveChangesAsync(token);
-            },
-            cancellationToken);
-
-    /// <summary>Removes the owner this class provisioned, and the book beneath them with it.</summary>
-    /// <remarks>
-    /// Through the seam rather than by hand, so a test that failed part-way still leaves the deployment with the one
-    /// owner record every folder binding after it is resolved against.
-    /// </remarks>
-    private static Task<OwnerErasure> EraseOwnerAsync(OrchestratedMailFathomServices services, Guid ownerId) =>
-        services.CommitProducingAsync(
-            (_, session, token) => OwnerAccountErasure.EraseAsync(session, ownerId, token),
-            CancellationToken.None);
 
     /// <summary>Writes a book large enough that reading a page of it is a choice the planner has to make.</summary>
     private static async Task SeedBookAsync(

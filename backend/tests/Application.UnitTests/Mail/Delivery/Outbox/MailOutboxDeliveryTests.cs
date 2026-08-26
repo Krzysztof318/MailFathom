@@ -27,7 +27,8 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Outbox;
 
 public sealed class MailOutboxDeliveryTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
     private static readonly DateTimeOffset ClaimedAt = new(2026, 8, 18, 9, 0, 0, TimeSpan.Zero);
 
     private static readonly ReadOnlyMemory<byte> RawMime =
@@ -601,7 +602,7 @@ public sealed class MailOutboxDeliveryTests
                     : null);
 
             var senderIdentities = Substitute.For<IOutgoingSenderIdentityReader>();
-            senderIdentities.FindSenderIdentity(Account).Returns(sender is null ? null : SenderIdentity(sender));
+            senderIdentities.FindSenderIdentity(Account.Id).Returns(sender is null ? null : SenderIdentity(sender));
 
             var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
             sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ =>
@@ -695,7 +696,7 @@ public sealed class MailOutboxDeliveryTests
         {
             Assert.True(EmailAddress.TryCreate(displayName: null, address, out var sender));
 
-            return OutgoingSenderIdentity.Create(Account, sender);
+            return OutgoingSenderIdentity.Create(Account.Id, sender);
         }
 
         private static OutgoingEmailRequest RequestFor(IReadOnlyList<string> recipientAddresses) =>

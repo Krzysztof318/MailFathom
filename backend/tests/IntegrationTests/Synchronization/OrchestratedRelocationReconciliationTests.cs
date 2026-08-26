@@ -223,7 +223,7 @@ public sealed class OrchestratedRelocationReconciliationTests(MailFathomOrchestr
         MailFolderMapping mapping,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailboxSynchronizer>().SynchronizeAsync(
-                SyntheticMailAccount.AccountId,
+                SyntheticMailAccount.Account,
                 mapping,
                 token),
             cancellationToken);
@@ -240,7 +240,7 @@ public sealed class OrchestratedRelocationReconciliationTests(MailFathomOrchestr
             folder.Id,
             stored.UidValidity,
             stored.Uid);
-        var request = MailboxMutationRequest.Relocate(stored.StoredEmailId, occurrence, Requester, TargetPath);
+        var request = MailboxMutationRequest.Relocate(stored.StoredEmailId, SyntheticMailAccount.Owner, occurrence, Requester, TargetPath);
 
         return services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailboxMutationPerformer>().PerformAsync(

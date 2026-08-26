@@ -130,7 +130,7 @@ public interface IMailboxMutationRecordStore
         CancellationToken cancellationToken);
 
     /// <summary>Reads the mutations of one account that have not completed, with the folder binding each was recorded against.</summary>
-    /// <param name="accountId">The account whose mutations are read.</param>
+    /// <param name="account">The account whose mutations are read.</param>
     /// <param name="limit">The greatest number of records to return.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The outstanding records, oldest first, at most <paramref name="limit" /> of them.</returns>
@@ -148,12 +148,12 @@ public interface IMailboxMutationRecordStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<OutstandingMailboxMutation>> ReadOutstandingAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         int limit,
         CancellationToken cancellationToken);
 
     /// <summary>Counts one account's uncompleted mutations by kind and by where in its lifecycle each one stands.</summary>
-    /// <param name="accountId">The account whose mutations are counted.</param>
+    /// <param name="account">The account whose mutations are counted.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>One entry per kind and lifecycle that has at least one record, in no particular order.</returns>
     /// <remarks>
@@ -168,6 +168,6 @@ public interface IMailboxMutationRecordStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<MailboxMutationLifecycleCount>> ReadLifecycleCountsAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken cancellationToken);
 }

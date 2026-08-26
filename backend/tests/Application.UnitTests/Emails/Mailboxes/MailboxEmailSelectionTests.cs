@@ -20,7 +20,8 @@ public sealed class MailboxEmailSelectionTests
 {
     private static readonly DateTimeOffset FirstJuly = new(2026, 7, 1, 8, 0, 0, TimeSpan.Zero);
 
-    private static readonly MailAccountId Account = MailAccountId.Create("acct-1");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-1"));
 
     [Fact]
     public void Create_AddressFilters_KeepTheComparisonFormPersistenceIndexes()
@@ -361,7 +362,8 @@ public sealed class MailboxEmailSelectionTests
         catalog.OwnedAccounts.Returns(
         [
             new ServedMailAccount(
-                Account,
+                Account.Owner,
+                Account.Id,
                 MailAccountDisplayName.Create("Work mail"),
                 MailSynchronizationMode.Polling),
         ]);
@@ -370,7 +372,7 @@ public sealed class MailboxEmailSelectionTests
             catalog,
             StubMailFolderParticipation.Nothing,
             junkFolders ?? StubJunkMailFolderCatalog.Naming(
-                new MailFolderIdentity(Account, MailFolderAlias.Create("JUNK"))),
+                new MailFolderIdentity(Account.Id, MailFolderAlias.Create("JUNK"))),
             StubMailFolderMappings.ResolvingNothing);
     }
 

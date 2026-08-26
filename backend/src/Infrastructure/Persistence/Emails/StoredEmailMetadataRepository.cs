@@ -8,6 +8,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.Synchronization;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
@@ -30,6 +31,7 @@ internal sealed class StoredEmailMetadataRepository(
     /// <inheritdoc />
     public async Task<StoredEmailId> UpsertMetadataAsync(
         IPersistenceSession session,
+        MailOwnerId owner,
         RemoteEmailMetadata metadata,
         ExtractedEmailMetadata? extractedMetadata,
         StoredEmailContentAvailability contentAvailability,
@@ -39,13 +41,14 @@ internal sealed class StoredEmailMetadataRepository(
 
         var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var occurrenceId = metadata.OccurrenceId;
-        var entity = await FindByOccurrenceAsync(dbContext, occurrenceId, cancellationToken);
+        var account = MailAccountIdentity.Create(owner, occurrenceId.AccountId);
+        var entity = await FindByOccurrenceAsync(dbContext, account, occurrenceId, cancellationToken);
 
         if (entity is null)
         {
             var folder = await MailFolderEntityResolver.GetRequiredAsync(
                 dbContext,
-                occurrenceId.AccountId,
+                account,
                 occurrenceId.FolderResolutionId,
                 cancellationToken);
 
@@ -53,6 +56,11 @@ internal sealed class StoredEmailMetadataRepository(
             {
                 Id = Guid.CreateVersion7(timeProvider.GetUtcNow()),
                 MailboxAccountId = folder.MailboxAccountId,
+
+                // Both copied off the binding row this occurrence is being attached to, which is the row folder
+                // resolution wrote from the account. Nothing re-reads the account: the folder already says whose
+                // mailbox this is, and taking the pair from one place is what keeps them from ever disagreeing.
+                OwnerId = folder.OwnerId,
                 MailFolder = folder,
                 UidValidity = occurrenceId.UidValidity.Value,
                 Uid = occurrenceId.Uid.Value,
@@ -99,7 +107,9 @@ internal sealed class StoredEmailMetadataRepository(
         // conversation of one rather than a message with no conversation.
         await threadAssembly.AssembleAsync(
             session,
-            MailAccountId.Create(entity.MailboxAccountId),
+            MailAccountIdentity.Create(
+                MailOwnerId.Create(entity.OwnerId),
+                MailAccountId.Create(entity.MailboxAccountId)),
             ThreadedEmails.Of(entity),
             entity.EmailThreadId is { } currentThreadId ? EmailThreadId.Create(currentThreadId) : null,
             cancellationToken);
@@ -110,6 +120,7 @@ internal sealed class StoredEmailMetadataRepository(
     /// <inheritdoc />
     public async Task<bool> TryCarryToOccurrenceAsync(
         IPersistenceSession session,
+        MailOwnerId owner,
         StoredEmailId storedEmailId,
         EmailOccurrenceId occurrenceId,
         CancellationToken cancellationToken)
@@ -117,7 +128,8 @@ internal sealed class StoredEmailMetadataRepository(
         ArgumentNullException.ThrowIfNull(occurrenceId);
 
         var dbContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-        var occupant = await FindByOccurrenceAsync(dbContext, occurrenceId, cancellationToken);
+        var account = MailAccountIdentity.Create(owner, occurrenceId.AccountId);
+        var occupant = await FindByOccurrenceAsync(dbContext, account, occurrenceId, cancellationToken);
 
         // A row already sitting on the occurrence is either this same email, which a previous attempt of this commit
         // already carried, or a different one, which only the mailbox could say is the wrong occupant.
@@ -131,7 +143,7 @@ internal sealed class StoredEmailMetadataRepository(
                 $"No stored email carries the identifier {storedEmailId}, so no occurrence can be carried onto it.");
         var folder = await MailFolderEntityResolver.GetRequiredAsync(
             dbContext,
-            occurrenceId.AccountId,
+            account,
             occurrenceId.FolderResolutionId,
             cancellationToken);
 
@@ -172,16 +184,20 @@ internal sealed class StoredEmailMetadataRepository(
     /// <summary>Reads whatever row already occupies one occurrence, including one this session has staged and not committed.</summary>
     private static Task<StoredEmailEntity?> FindByOccurrenceAsync(
         MailFathomDbContext dbContext,
+        MailAccountIdentity account,
         EmailOccurrenceId occurrenceId,
         CancellationToken cancellationToken)
     {
+        var owner = account.Owner.Value;
+        var accountValue = account.Id.Value;
         var alias = occurrenceId.FolderResolutionId.Alias.Value;
         var generation = occurrenceId.FolderResolutionId.Generation.Value;
 
         return TrackedEntityLookup.SinglePendingOrPersistedAsync(
             dbContext.StoredEmails,
             dbContext.StoredEmails.Include(candidate => candidate.MailFolder),
-            candidate => candidate.MailFolder.MailboxAccountId == occurrenceId.AccountId.Value
+            candidate => candidate.OwnerId == owner
+                && candidate.MailFolder.MailboxAccountId == accountValue
                 && candidate.MailFolder.Alias == alias
                 && candidate.MailFolder.ResolutionGeneration == generation
                 && candidate.UidValidity == occurrenceId.UidValidity.Value

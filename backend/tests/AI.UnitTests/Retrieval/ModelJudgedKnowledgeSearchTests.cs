@@ -10,6 +10,7 @@ using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Search;
 using MailFathom.Application.Retrieval;
 using MailFathom.Domain.Accounts;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Xunit;
@@ -27,7 +28,7 @@ public sealed class ModelJudgedKnowledgeSearchTests
 
     private static readonly EmailKnowledgeQuery Query = EmailKnowledgeQuery.ForText(QueryText);
 
-    private static readonly MailboxScope Scope = MailboxScope.Create([MailAccountId.Create("primary")], []);
+    private static readonly MailboxScope Scope = MailboxScope.Create(SyntheticMailOwner.Deployment, [MailAccountId.Create("primary")], []);
 
     [Fact]
     public async Task FindPassagesAsync_CandidatesJudgedAboveTheThreshold_HandsThemOverInTheOrderRetrievalRankedThem()

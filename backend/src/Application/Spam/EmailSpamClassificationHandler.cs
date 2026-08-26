@@ -87,7 +87,9 @@ public sealed class EmailSpamClassificationHandler : IJobHandler
                 nameof(payload));
         }
 
+        var account = occurrence.ToAccountIdentity();
         var storedEmailId = await this.emails.FindStoredEmailIdAsync(
+            account.Owner,
             occurrence.ToOccurrenceId(),
             cancellationToken);
 

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Accounts;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent.Storage;
@@ -43,6 +44,7 @@ using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Mail.Readers;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Secrets.Discovery;
@@ -290,6 +292,13 @@ internal static class SynchronizationTestHost
         services.AddScoped<IMailTransportSecurityPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.TransportSecurityPolicies);
         services.AddScoped<IMailSynchronizationWindowReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.SynchronizationWindows);
         services.AddScoped<IRemotelyDeletedEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.RemotelyDeletedEmailDispositions);
+        // Composed off the scoped snapshot rather than the container's own options, exactly as the composition root
+        // composes it, so the account list a supervision pass reads is the one the latest reload published. The owner
+        // is supplied rather than configured, because a configured account block names none.
+        services.AddSingleton<IDeploymentMailOwnerSource, StubDeploymentMailOwnerSource>();
+        services.AddScoped<IDeploymentMailAccountCatalog>(provider => new ConfiguredMailAccountCatalog(
+            provider.GetRequiredService<MailSynchronizationOptions>(),
+            provider.GetRequiredService<IDeploymentMailOwnerSource>()));
 
         return services.BuildServiceProvider();
     }
@@ -300,13 +309,13 @@ internal static class SynchronizationTestHost
         var store = Substitute.For<IMailRuleEvaluationStore>();
 
         store.GetEmailsAwaitingFirstEvaluationAsync(
-                Arg.Any<MailAccountId>(),
+                Arg.Any<MailAccountIdentity>(),
                 Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>>([]));
         store.GetStoredEmailsAsync(
-                Arg.Any<MailAccountId>(),
+                Arg.Any<MailAccountIdentity>(),
                 Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
@@ -321,7 +330,7 @@ internal static class SynchronizationTestHost
         var store = Substitute.For<IStoredEmailChunkingStore>();
 
         store.GetEmailsAwaitingChunkingAsync(
-                Arg.Any<MailAccountId>(),
+                Arg.Any<MailAccountIdentity>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<StoredEmailAwaitingChunking>>([]));
@@ -345,7 +354,7 @@ internal static class SynchronizationTestHost
     {
         var runStore = Substitute.For<ISpamClassificationRunStore>();
 
-        runStore.FindOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
+        runStore.FindOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<SpamClassificationRun?>(null));
 
         return runStore;
@@ -373,7 +382,7 @@ internal static class SynchronizationTestHost
     {
         var runStore = Substitute.For<IMailRuleEvaluationRunStore>();
 
-        runStore.FindOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
+        runStore.FindOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<MailRuleEvaluationRun?>(null));
 
         return runStore;
@@ -437,7 +446,7 @@ internal static class SynchronizationTestHost
 
         var resolutionStore = Substitute.For<IMailFolderResolutionStore>();
         resolutionStore
-            .GetCurrentResolutionAsync(Arg.Any<MailAccountId>(), Arg.Any<MailFolderAlias>(), Arg.Any<CancellationToken>())
+            .GetCurrentResolutionAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<MailFolderAlias>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 var alias = call.Arg<MailFolderAlias>();
@@ -473,7 +482,7 @@ internal static class SynchronizationTestHost
         var reconciliationStore = Substitute.For<IStoredEmailReconciliationStore>();
         reconciliationStore
             .GetReconciliationWindowAsync(
-                Arg.Any<MailAccountId>(),
+                Arg.Any<MailAccountIdentity>(),
                 Arg.Any<MailFolderResolutionId>(),
                 Arg.Any<ImapUidValidity>(),
                 Arg.Any<int>(),
@@ -494,7 +503,7 @@ internal static class SynchronizationTestHost
         var filingStore = Substitute.For<IOutgoingMailFilingStore>();
         filingStore
             .ReadFilingsAtAsync(
-                Arg.Any<MailAccountId>(),
+                Arg.Any<MailAccountIdentity>(),
                 Arg.Any<RemoteFolderPath>(),
                 Arg.Any<ImapUidValidity>(),
                 Arg.Any<IReadOnlyCollection<ImapUid>>(),
@@ -515,10 +524,10 @@ internal static class SynchronizationTestHost
     {
         var recordStore = Substitute.For<IMailboxMutationRecordStore>();
         recordStore
-            .ReadOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ReadOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<OutstandingMailboxMutation>>([]));
         recordStore
-            .ReadLifecycleCountsAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
+            .ReadLifecycleCountsAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<MailboxMutationLifecycleCount>>([]));
 
         return recordStore;
@@ -544,7 +553,7 @@ internal static class SynchronizationTestHost
         var auditStore = Substitute.For<IMailboxMutationAuditEntryStore>();
         auditStore
             .EraseCompletedBeforeAsync(
-                Arg.Any<MailAccountId>(),
+                Arg.Any<MailAccountIdentity>(),
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
@@ -558,7 +567,7 @@ internal static class SynchronizationTestHost
         var mutationStore = Substitute.For<IMailboxMutationReconciliationStore>();
         mutationStore
             .ReadPlacementsAtAsync(
-                Arg.Any<MailAccountId>(),
+                Arg.Any<MailAccountIdentity>(),
                 Arg.Any<RemoteFolderPath>(),
                 Arg.Any<ImapUidValidity>(),
                 Arg.Any<IReadOnlyCollection<ImapUid>>(),
@@ -566,7 +575,7 @@ internal static class SynchronizationTestHost
             .Returns(Task.FromResult<IReadOnlyList<MailboxMutationRecord>>([]));
         mutationStore
             .ReadMutationsRemovingAsync(
-                Arg.Any<MailAccountId>(),
+                Arg.Any<MailAccountIdentity>(),
                 Arg.Any<MailFolderResolutionId>(),
                 Arg.Any<ImapUidValidity>(),
                 Arg.Any<IReadOnlyCollection<ImapUid>>(),
@@ -574,7 +583,7 @@ internal static class SynchronizationTestHost
             .Returns(Task.FromResult<IReadOnlyList<MailboxMutationRecord>>([]));
         mutationStore
             .ReadFlagChangesOnAsync(
-                Arg.Any<MailAccountId>(),
+                Arg.Any<MailAccountIdentity>(),
                 Arg.Any<MailFolderResolutionId>(),
                 Arg.Any<ImapUidValidity>(),
                 Arg.Any<IReadOnlyCollection<ImapUid>>(),

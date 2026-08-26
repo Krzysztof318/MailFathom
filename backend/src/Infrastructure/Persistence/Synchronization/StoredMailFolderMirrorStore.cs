@@ -25,7 +25,7 @@ internal sealed class StoredMailFolderMirrorStore : IStoredMailFolderMirrorStore
     /// <inheritdoc />
     public async Task<MailFolderMirrorErasure> EraseFolderMirrorAsync(
         IPersistenceSession session,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderAlias folderAlias,
         int maxEmails,
         CancellationToken cancellationToken)
@@ -34,12 +34,15 @@ internal sealed class StoredMailFolderMirrorStore : IStoredMailFolderMirrorStore
 
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var aliasValue = folderAlias.Value;
-        var accountIdValue = accountId.Value;
+        var ownerValue = account.Owner.Value;
+        var accountIdValue = account.Id.Value;
 
         // One more than the bound is read so the answer says whether a later pass is owed without a second count over
         // the same rows.
         var erased = await sessionContext.StoredEmails
-            .Where(email => email.MailboxAccountId == accountIdValue && email.MailFolder.Alias == aliasValue)
+            .Where(email => email.OwnerId == ownerValue
+                && email.MailboxAccountId == accountIdValue
+                && email.MailFolder.Alias == aliasValue)
             .OrderBy(email => email.Id)
             .Take(maxEmails + 1)
             .ToArrayAsync(cancellationToken);
@@ -68,7 +71,7 @@ internal sealed class StoredMailFolderMirrorStore : IStoredMailFolderMirrorStore
 
         if (!emailsRemain)
         {
-            await ClearCheckpointsAsync(sessionContext, accountIdValue, aliasValue, cancellationToken);
+            await ClearCheckpointsAsync(sessionContext, ownerValue, accountIdValue, aliasValue, cancellationToken);
         }
 
         return new MailFolderMirrorErasure(emailsRemain ? maxEmails : erased.Length, emailsRemain);
@@ -82,12 +85,14 @@ internal sealed class StoredMailFolderMirrorStore : IStoredMailFolderMirrorStore
     /// </remarks>
     private static async Task ClearCheckpointsAsync(
         MailFathomDbContext sessionContext,
+        Guid ownerValue,
         string accountIdValue,
         string aliasValue,
         CancellationToken cancellationToken)
     {
         var checkpoints = await sessionContext.SynchronizationCheckpoints
-            .Where(checkpoint => checkpoint.MailFolder.MailboxAccountId == accountIdValue
+            .Where(checkpoint => checkpoint.MailFolder.OwnerId == ownerValue
+                && checkpoint.MailFolder.MailboxAccountId == accountIdValue
                 && checkpoint.MailFolder.Alias == aliasValue)
             .ToArrayAsync(cancellationToken);
 

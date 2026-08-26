@@ -294,7 +294,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // caller-scoped catalog the infrastructure registers compares it against the owner a caller is admitted for,
         // which is what makes a mailbox read here run through the same narrowing a deployment's does, and a contact
         // written here is keyed onto the owner record that identifier names.
-        var deploymentOwner = new OrchestratedDeploymentOwner();
+        var deploymentOwner = OrchestratedDeploymentOwner.Shared;
 
         builder.Services.AddSingleton<IDeploymentMailOwnerSource>(deploymentOwner);
         // The port every folder decision is read through, registered by the composition root from the same options

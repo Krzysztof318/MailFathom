@@ -25,7 +25,18 @@ internal sealed class MailFolderConfiguration : IEntityTypeConfiguration<MailFol
         // its occurrences stay attributable to the remote folder they were actually read from.
         // The index is named, because a losing writer is recognized by the constraint its insert violated: two
         // runs binding the same alias for the first time is a race to resolve, not a failure to report.
-        entity.HasIndex(folder => new { folder.MailboxAccountId, folder.Alias, folder.ResolutionGeneration })
+        // The owner leads it for the reason it leads every other account-narrowed structure: an account identifier
+        // names one account within its owner, so uniqueness is a statement about one owner's mailbox rather than about
+        // a deployment-wide namespace. Nothing that bound before this change is refused after it, the owner being
+        // functionally determined by the account it is read from.
+        entity.HasIndex(
+                folder => new
+                {
+                    folder.OwnerId,
+                    folder.MailboxAccountId,
+                    folder.Alias,
+                    folder.ResolutionGeneration,
+                })
             .IsUnique()
             .HasDatabaseName(PersistenceConstraintNames.MailFolderBindingUniqueIndexName);
         entity.HasOne(folder => folder.MailboxAccount)

@@ -80,7 +80,7 @@ internal static class MailboxMutationAuditEndpoint
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(trail);
 
-        if (AdminAccountRequest.Resolve(account, accounts) is not { } accountId)
+        if (AdminAccountRequest.Resolve(account, accounts) is not { } servedAccount)
         {
             return AdminAccountRequest.Refuse(account);
         }
@@ -106,7 +106,7 @@ internal static class MailboxMutationAuditEndpoint
         }
 
         var queryResult = MailboxMutationAuditQuery.Create(
-            accountId,
+            servedAccount,
             narrowedMutation,
             from,
             before,

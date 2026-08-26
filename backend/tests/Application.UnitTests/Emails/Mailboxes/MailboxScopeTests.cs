@@ -5,6 +5,7 @@
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Emails.Mailboxes;
@@ -19,7 +20,7 @@ public sealed class MailboxScopeTests
     public void Create_NoAccountsAndNoFolders_RestrictsNothing()
     {
         // Act
-        var scope = MailboxScope.Create(accountIds: null, selectedFolders: null);
+        var scope = MailboxScope.Create(SyntheticMailOwner.Deployment, accountIds: null, selectedFolders: null);
 
         // Assert
         Assert.Empty(scope.AccountIds);
@@ -31,7 +32,7 @@ public sealed class MailboxScopeTests
     public void Create_EmptyLists_RestrictNothingJustAsAbsentOnesDo()
     {
         // Act
-        var scope = MailboxScope.Create([], []);
+        var scope = MailboxScope.Create(SyntheticMailOwner.Deployment, [], []);
 
         // Assert
         Assert.Same(MailboxScope.NothingReadable, scope);
@@ -43,6 +44,7 @@ public sealed class MailboxScopeTests
     {
         // Act
         var scope = MailboxScope.Create(
+            SyntheticMailOwner.Deployment,
             [Secondary, Primary, Secondary],
             [
                 Folder(Secondary, "SENT"),
@@ -60,7 +62,10 @@ public sealed class MailboxScopeTests
     public void Create_OneAliasOnTwoAccounts_KeepsBothPairs()
     {
         // Act
-        var scope = MailboxScope.Create([Primary, Secondary], [Folder(Secondary, "JUNK"), Folder(Primary, "JUNK")]);
+        var scope = MailboxScope.Create(
+            SyntheticMailOwner.Deployment,
+            [Primary, Secondary],
+            [Folder(Secondary, "JUNK"), Folder(Primary, "JUNK")]);
 
         // Assert
         Assert.Equal([Folder(Primary, "JUNK"), Folder(Secondary, "JUNK")], scope.SelectedFolders);
@@ -70,7 +75,7 @@ public sealed class MailboxScopeTests
     public void Create_NamingOnlyFolders_IsStillARestrictedScope()
     {
         // Act
-        var scope = MailboxScope.Create(accountIds: null, [Folder(Primary, "INBOX")]);
+        var scope = MailboxScope.Create(SyntheticMailOwner.Deployment, accountIds: null, [Folder(Primary, "INBOX")]);
 
         // Assert
         Assert.NotSame(MailboxScope.NothingReadable, scope);
@@ -82,7 +87,7 @@ public sealed class MailboxScopeTests
     public void Create_AnAccountNoSelectedFolderNames_StaysInScope()
     {
         // Act
-        var scope = MailboxScope.Create([Primary, Secondary], [Folder(Primary, "ARCHIVE")]);
+        var scope = MailboxScope.Create(SyntheticMailOwner.Deployment, [Primary, Secondary], [Folder(Primary, "ARCHIVE")]);
 
         // Assert
         Assert.Equal([Primary, Secondary], scope.AccountIds);
@@ -100,7 +105,7 @@ public sealed class MailboxScopeTests
             .ToArray();
 
         // Act
-        var scope = MailboxScope.Create([Primary], folders);
+        var scope = MailboxScope.Create(SyntheticMailOwner.Deployment, [Primary], folders);
 
         // Assert
         Assert.Equal(folders.Length, scope.SelectedFolders.Count);

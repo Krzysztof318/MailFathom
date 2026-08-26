@@ -10,6 +10,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -278,6 +279,7 @@ public sealed class JobDeadLetterEndpointsTests
         catalog.ServedAccounts.Returns(
         [
             .. accounts.Select(account => new ServedMailAccount(
+                SyntheticMailOwner.Deployment,
                 account,
                 MailAccountDisplayName.Create(account.Value),
                 MailSynchronizationMode.Polling)),

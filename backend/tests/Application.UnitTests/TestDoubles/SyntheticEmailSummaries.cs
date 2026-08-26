@@ -7,6 +7,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Domain.Folders;
+using MailFathom.TestSupport;
 
 namespace MailFathom.Application.UnitTests.TestDoubles;
 
@@ -57,7 +58,7 @@ internal static class SyntheticEmailSummaries
         MachineAuthorshipAssessment? machineAuthorship = null) => new()
         {
             StoredEmailId = StoredEmailId.Create(storedEmailId ?? Guid.CreateVersion7()),
-            AccountId = MailAccountId.Create(accountId),
+            Account = MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create(accountId)),
             FolderAlias = MailFolderAlias.Create(folderAlias),
             InternetMessageId = null,
             Subject = subject,

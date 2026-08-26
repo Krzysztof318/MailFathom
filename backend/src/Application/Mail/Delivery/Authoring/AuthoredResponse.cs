@@ -22,9 +22,9 @@ namespace MailFathom.Application.Mail.Delivery.Authoring;
 /// </remarks>
 public sealed record AuthoredResponse
 {
-    private AuthoredResponse(MailAccountId accountId, AuthoredEmail? email, AuthoredResponseRefusal? refusal)
+    private AuthoredResponse(MailAccountIdentity account, AuthoredEmail? email, AuthoredResponseRefusal? refusal)
     {
-        this.AccountId = accountId;
+        this.Account = account;
         this.Email = email;
         this.Refusal = refusal;
     }
@@ -36,7 +36,10 @@ public sealed record AuthoredResponse
     /// heard from. It is the default value on a refusal, which carries no account for the same reason it carries no
     /// address.
     /// </remarks>
-    public MailAccountId AccountId { get; }
+    public MailAccountIdentity Account { get; }
+
+    /// <summary>Gets the identifier half of <see cref="Account" />, which is what code already narrowed to one owner names.</summary>
+    public MailAccountId AccountId => this.Account.Id;
 
     /// <summary>Gets the authored message, or <see langword="null" /> when the answer was refused.</summary>
     public AuthoredEmail? Email { get; }
@@ -48,15 +51,15 @@ public sealed record AuthoredResponse
     public bool IsAuthored => this.Email is not null;
 
     /// <summary>Reports the answer somebody wrote to a stored email.</summary>
-    /// <param name="accountId">The account the answer is sent as.</param>
+    /// <param name="account">The account the answer is sent as, named by its owner and its identifier.</param>
     /// <param name="email">The authored message.</param>
     /// <returns>An authored result.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="email" /> is <see langword="null" />.</exception>
-    public static AuthoredResponse Authored(MailAccountId accountId, AuthoredEmail email)
+    public static AuthoredResponse Authored(MailAccountIdentity account, AuthoredEmail email)
     {
         ArgumentNullException.ThrowIfNull(email);
 
-        return new AuthoredResponse(accountId, email, refusal: null);
+        return new AuthoredResponse(account, email, refusal: null);
     }
 
     /// <summary>Reports that no answer was authored, and why.</summary>

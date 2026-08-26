@@ -34,6 +34,7 @@ public sealed class ScopedMailKnowledgeRetrievalTests
     private const string Marker = "AKIAEXAMPLEKEY";
 
     private static readonly MailboxScope OnePrimaryAccount = MailboxScope.Create(
+        SyntheticMailOwner.Deployment,
         [MailAccountId.Create("primary")],
         [new MailFolderIdentity(MailAccountId.Create("primary"), MailFolderAlias.Create("INBOX"))]);
 

@@ -24,7 +24,7 @@ namespace MailFathom.Application.Mail.Delivery.Composition;
 public interface IAuthoredEmailComposer
 {
     /// <summary>Composes one authored message, or refuses it naming the field that stopped it.</summary>
-    /// <param name="accountId">The account the message is sent as, which decides the <c>From</c> address.</param>
+    /// <param name="account">The account the message is sent as, named by its owner and its identifier, which decides the <c>From</c> address and whose send the record becomes.</param>
     /// <param name="requester">The authored act asking, which is what makes the same request twice one delivery.</param>
     /// <param name="authored">What the author wrote.</param>
     /// <param name="capabilities">What the submission server said it will accept, read from the session that will carry the message.</param>
@@ -32,13 +32,13 @@ public interface IAuthoredEmailComposer
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="requester" />, <paramref name="authored" />, or <paramref name="capabilities" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when a recipient names a role this system does not declare, which is a boundary that mapped its input wrongly rather than an author who wrote something wrong.</exception>
     AuthoredEmailComposition Compose(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         OutgoingEmailRequester requester,
         AuthoredEmail authored,
         MailDeliveryCapabilities capabilities);
 
     /// <summary>Composes one occasion's message from the draft a recurring send was declared with, or refuses it.</summary>
-    /// <param name="accountId">The account the message is sent as, which decides the <c>From</c> address again.</param>
+    /// <param name="account">The account the message is sent as, named by its owner and its identifier, which decides the <c>From</c> address again.</param>
     /// <param name="requester">The occasion asking, which is what makes one occasion's message one delivery.</param>
     /// <param name="recipients">The people this occasion is offered to, as the declaration recorded them.</param>
     /// <param name="draftMime">The stored draft, exactly as the declaration was made with.</param>
@@ -65,14 +65,14 @@ public interface IAuthoredEmailComposer
     /// </para>
     /// </remarks>
     AuthoredEmailComposition RecomposeAsOccurrence(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         OutgoingEmailRequester requester,
         IReadOnlyList<OutgoingRecipient> recipients,
         ReadOnlyMemory<byte> draftMime,
         MailDeliveryCapabilities capabilities);
 
     /// <summary>Composes one authored message as a draft, or refuses it naming the field that stopped it.</summary>
-    /// <param name="accountId">The account the draft belongs to, which decides the <c>From</c> address it would be sent under.</param>
+    /// <param name="account">The account the draft belongs to, named by its owner and its identifier, which decides the <c>From</c> address it would be sent under.</param>
     /// <param name="authored">What the author wrote.</param>
     /// <param name="capabilities">What a submission server would accept, which for a draft is what holds before any server has spoken.</param>
     /// <returns>The composed draft, or the refusal that stopped it.</returns>
@@ -92,7 +92,7 @@ public interface IAuthoredEmailComposer
     /// </para>
     /// </remarks>
     MailDraftComposition ComposeDraft(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         AuthoredEmail authored,
         MailDeliveryCapabilities capabilities);
 }

@@ -60,7 +60,7 @@ public sealed class MailboxMutationAuditTrailRetention
     }
 
     /// <summary>Erases everything in one account's trail that has outlived the window it configured.</summary>
-    /// <param name="accountId">The account whose trail is aged.</param>
+    /// <param name="account">The account whose trail is aged.</param>
     /// <param name="cancellationToken">Cancels the erasure.</param>
     /// <returns>How many entries were erased.</returns>
     /// <remarks>
@@ -69,9 +69,9 @@ public sealed class MailboxMutationAuditTrailRetention
     /// names no boundary at all and erases nothing, which is what an account this deployment no longer configures
     /// reports.
     /// </remarks>
-    public Task<int> EraseExpiredAsync(MailAccountId accountId, CancellationToken cancellationToken)
+    public Task<int> EraseExpiredAsync(MailAccountIdentity account, CancellationToken cancellationToken)
     {
-        var retention = this.settingsReader.GetAuditSettings(accountId).Retention;
+        var retention = this.settingsReader.GetAuditSettings(account.Id).Retention;
 
         if (retention <= TimeSpan.Zero)
         {
@@ -79,7 +79,7 @@ public sealed class MailboxMutationAuditTrailRetention
         }
 
         return this.store.EraseCompletedBeforeAsync(
-            accountId,
+            account,
             this.timeProvider.GetUtcNow() - retention,
             MaximumEntriesErasedPerPass,
             cancellationToken);

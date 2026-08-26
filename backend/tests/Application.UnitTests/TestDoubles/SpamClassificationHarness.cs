@@ -83,6 +83,7 @@ internal sealed class SpamClassificationHarness
             .FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>())
             .Returns(call => new SpamActionOccurrence(
                 call.Arg<StoredEmailId>(),
+                SyntheticMailOwner.Deployment,
                 EmailOccurrenceId.Create(
                     accountId,
                     new MailFolderResolutionId(folderAlias, MailFolderResolutionGeneration.First),

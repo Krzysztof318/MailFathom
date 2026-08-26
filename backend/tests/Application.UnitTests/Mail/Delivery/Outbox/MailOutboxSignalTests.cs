@@ -4,14 +4,17 @@
 
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Domain.Accounts;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Mail.Delivery.Outbox;
 
 public sealed class MailOutboxSignalTests
 {
-    private static readonly MailAccountId Work = MailAccountId.Create("work");
-    private static readonly MailAccountId Personal = MailAccountId.Create("personal");
+    private static readonly MailAccountIdentity Work =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
+    private static readonly MailAccountIdentity Personal =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
 
     /// <summary>A capacity below one would be a queue nothing can enter, so it is refused where it is stated.</summary>
     [Theory]
@@ -103,7 +106,7 @@ public sealed class MailOutboxSignalTests
         var signalledAgain = signal.Signal(Work);
 
         // Assert
-        Assert.Equal(Work, Assert.Single(handedOut));
+        Assert.Equal(Work.Id, Assert.Single(handedOut));
         Assert.True(signalledAgain);
         Assert.Equal(1, signal.Depth);
     }
@@ -167,7 +170,7 @@ public sealed class MailOutboxSignalTests
 
         await foreach (var accountId in signal.ReadAllAsync(stopping.Token))
         {
-            read.Add(accountId);
+            read.Add(accountId.Id);
 
             if (read.Count == count)
             {

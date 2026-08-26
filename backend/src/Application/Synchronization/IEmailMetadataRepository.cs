@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 
@@ -22,6 +23,7 @@ public interface IEmailMetadataRepository
 {
     /// <summary>Inserts or updates metadata for one remote occurrence idempotently and returns its stable local identity.</summary>
     /// <param name="session">The explicit persistence session this metadata write participates in.</param>
+    /// <param name="owner">The owner whose account the occurrence belongs to, which the stored row records beside the account.</param>
     /// <param name="metadata">The remote occurrence metadata to store.</param>
     /// <param name="extractedMetadata">
     /// What was read out of the occurrence's raw MIME, or <see langword="null" /> when nothing was read from it.
@@ -39,6 +41,7 @@ public interface IEmailMetadataRepository
     /// </remarks>
     Task<StoredEmailId> UpsertMetadataAsync(
         IPersistenceSession session,
+        MailOwnerId owner,
         RemoteEmailMetadata metadata,
         ExtractedEmailMetadata? extractedMetadata,
         StoredEmailContentAvailability contentAvailability,
@@ -46,6 +49,7 @@ public interface IEmailMetadataRepository
 
     /// <summary>Moves one stored email onto the occurrence a relocation put it at, instead of storing a second email there.</summary>
     /// <param name="session">The explicit persistence session this write participates in.</param>
+    /// <param name="owner">The owner whose account the occurrence belongs to.</param>
     /// <param name="storedEmailId">The email that was relocated, named by the mutation record.</param>
     /// <param name="occurrenceId">Where the destination folder now holds it.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
@@ -72,6 +76,7 @@ public interface IEmailMetadataRepository
     /// </remarks>
     Task<bool> TryCarryToOccurrenceAsync(
         IPersistenceSession session,
+        MailOwnerId owner,
         StoredEmailId storedEmailId,
         EmailOccurrenceId occurrenceId,
         CancellationToken cancellationToken);

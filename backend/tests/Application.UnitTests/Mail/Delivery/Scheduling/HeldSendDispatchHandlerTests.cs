@@ -19,7 +19,8 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Scheduling;
 /// <summary>Covers the short job that says a held message is now due, and what it deliberately does not say.</summary>
 public sealed class HeldSendDispatchHandlerTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset Authored = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 

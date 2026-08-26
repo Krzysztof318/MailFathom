@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 
@@ -17,6 +19,7 @@ namespace MailFathom.Application.Spam.Actions;
 /// MailFathom's own name for the folder the occurrence is in, which is what decides whether a filing has anywhere left
 /// to move the message to.
 /// </param>
+/// <param name="Owner">The owner whose account the occurrence belongs to.</param>
 /// <param name="IsRemotelySeen">
 /// Whether the mail server already reports the message read, as of the last synchronization. A message that is already
 /// read is not written to, which keeps the flag change an act rather than a repeated statement.
@@ -28,6 +31,15 @@ namespace MailFathom.Application.Spam.Actions;
 /// </remarks>
 public sealed record SpamActionOccurrence(
     StoredEmailId Id,
+    MailOwnerId Owner,
     EmailOccurrenceId Occurrence,
     MailFolderAlias FolderAlias,
-    bool IsRemotelySeen);
+    bool IsRemotelySeen)
+{
+    /// <summary>Gets the account the occurrence belongs to, named by its owner and its identifier.</summary>
+    /// <remarks>
+    /// Composed from the two halves the row carries rather than resolved again, so an action written about this message
+    /// records whose mail it was without asking the account table.
+    /// </remarks>
+    public MailAccountIdentity Account => MailAccountIdentity.Create(this.Owner, this.Occurrence.AccountId);
+}

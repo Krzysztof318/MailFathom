@@ -83,15 +83,16 @@ internal sealed class JobConfiguration : IEntityTypeConfiguration<JobEntity>
             .HasDatabaseName(PersistenceConstraintNames.JobClaimIndexName)
             .HasFilter(
                 $"\"{nameof(JobEntity.State)}\" IN ('{nameof(JobState.Pending)}', '{nameof(JobState.Claimed)}')");
-        entity.HasIndex(job => new { job.MailboxAccountId, job.EnqueuedAt })
+        entity.HasIndex(job => new { job.OwnerId, job.MailboxAccountId, job.EnqueuedAt })
             .HasDatabaseName(PersistenceConstraintNames.JobAccountIndexName);
 
         // Filtered to the same states the claim index is, and for the same reason: what an enqueue asks is where the
         // owner's *waiting* work has reached, so a queue that has been running for a year reads a structure the size of
-        // its backlog. The account leads because the owner's accounts are resolved first and each one's latest turn is
-        // then one descending step into this index.
-        entity.HasIndex(job => new { job.MailboxAccountId, job.TurnAt })
-            .HasDatabaseName(PersistenceConstraintNames.JobAccountTurnIndexName)
+        // its backlog. The owner leads and no account column follows it, because the owner is a column on this row now:
+        // the latest turn is one descending step into this index rather than a maximum over each of the owner's
+        // accounts, which is what the enqueue had to compose while the owner could only be reached through a join.
+        entity.HasIndex(job => new { job.OwnerId, job.TurnAt })
+            .HasDatabaseName(PersistenceConstraintNames.JobOwnerTurnIndexName)
             .HasFilter(
                 $"\"{nameof(JobEntity.State)}\" IN ('{nameof(JobState.Pending)}', '{nameof(JobState.Claimed)}')");
 

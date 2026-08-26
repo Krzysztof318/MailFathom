@@ -20,7 +20,8 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations.Destinations;
 /// <summary>Covers how a change's destination becomes a folder, for one the account mirrors and one it only maps.</summary>
 public sealed class MailboxDestinationResolverTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
     private static readonly MailFolderAlias Junk = MailFolderAlias.Create("junk");
 
@@ -30,8 +31,8 @@ public sealed class MailboxDestinationResolverTests
     {
         // Arrange
         var context = new DestinationContext();
-        context.Mappings.With(Account, MailFolderMapping.ToRemotePath(Archive, RemoteFolderPath.Create("INBOX/Archive")));
-        var binding = context.Bindings.Bind(Account, Archive, "INBOX/Archive");
+        context.Mappings.With(Account.Id, MailFolderMapping.ToRemotePath(Archive, RemoteFolderPath.Create("INBOX/Archive")));
+        var binding = context.Bindings.Bind(Account.Id, Archive, "INBOX/Archive");
 
         // Act
         var resolution = await context.ResolveAsync(MailFolderReference.ToAlias(Archive));
@@ -51,7 +52,7 @@ public sealed class MailboxDestinationResolverTests
     {
         // Arrange
         var context = new DestinationContext(new RemoteFolder(RemoteFolderPath.Create("INBOX.Spam", '.'), []));
-        context.Mappings.With(Account, MappedOnlyPathTo(Junk, "INBOX.Spam"));
+        context.Mappings.With(Account.Id, MappedOnlyPathTo(Junk, "INBOX.Spam"));
 
         // Act
         var resolution = await context.ResolveAsync(MailFolderReference.ToAlias(Junk));
@@ -70,7 +71,7 @@ public sealed class MailboxDestinationResolverTests
     {
         // Arrange
         var context = new DestinationContext(new RemoteFolder(RemoteFolderPath.Create("INBOX.Spam", '.'), []));
-        context.Mappings.With(Account, MappedOnlyPathTo(Junk, "INBOX.Spam"));
+        context.Mappings.With(Account.Id, MappedOnlyPathTo(Junk, "INBOX.Spam"));
 
         // Act
         await context.ResolveAsync(MailFolderReference.ToAlias(Junk));
@@ -87,8 +88,8 @@ public sealed class MailboxDestinationResolverTests
     {
         // Arrange
         var context = new DestinationContext(new RemoteFolder(RemoteFolderPath.Create("INBOX.Junk", '.'), []));
-        context.Mappings.With(Account, MappedOnlyPathTo(Junk, "INBOX.Junk"));
-        var previous = context.Bindings.Bind(Account, Junk, "INBOX.Spam");
+        context.Mappings.With(Account.Id, MappedOnlyPathTo(Junk, "INBOX.Junk"));
+        var previous = context.Bindings.Bind(Account.Id, Junk, "INBOX.Spam");
 
         // Act
         var resolution = await context.ResolveAsync(MailFolderReference.ToAlias(Junk));
@@ -105,7 +106,7 @@ public sealed class MailboxDestinationResolverTests
     {
         // Arrange
         var context = new DestinationContext();
-        context.Bindings.Bind(Account, Archive, "INBOX/Archive");
+        context.Bindings.Bind(Account.Id, Archive, "INBOX/Archive");
 
         // Act
         var resolution = await context.ResolveAsync(MailFolderReference.ToAlias(Archive));
@@ -135,7 +136,7 @@ public sealed class MailboxDestinationResolverTests
     {
         // Arrange
         var context = new DestinationContext(new RemoteFolder(RemoteFolderPath.Create("INBOX", '.'), []));
-        context.Mappings.With(Account, MappedOnlyPathTo(Junk, "INBOX.Spam"));
+        context.Mappings.With(Account.Id, MappedOnlyPathTo(Junk, "INBOX.Spam"));
 
         // Act
         var resolution = await context.ResolveAsync(MailFolderReference.ToAlias(Junk));
@@ -154,7 +155,7 @@ public sealed class MailboxDestinationResolverTests
             new RemoteFolder(RemoteFolderPath.Create("INBOX.Spam", '.'), [MailFolderSpecialUse.Junk]),
             new RemoteFolder(RemoteFolderPath.Create("INBOX.Junk", '.'), [MailFolderSpecialUse.Junk]));
         context.Mappings.With(
-            Account,
+            Account.Id,
             MailFolderMapping.ToSpecialUse(Junk, MailFolderSpecialUse.Junk, MailFolderParticipation.MappedOnly));
 
         // Act
@@ -170,7 +171,7 @@ public sealed class MailboxDestinationResolverTests
     {
         // Arrange
         var context = new DestinationContext(new RemoteFolder(RemoteFolderPath.Create("INBOX/Archive", '/'), []));
-        context.Mappings.With(Account, MailFolderMapping.ToRemotePath(Archive, RemoteFolderPath.Create("INBOX/Archive")));
+        context.Mappings.With(Account.Id, MailFolderMapping.ToRemotePath(Archive, RemoteFolderPath.Create("INBOX/Archive")));
 
         // Act
         var resolution = await context.ResolveAsync(MailFolderReference.ToAlias(Archive));

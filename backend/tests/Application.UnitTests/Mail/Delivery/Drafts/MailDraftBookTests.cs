@@ -29,7 +29,8 @@ public sealed class MailDraftBookTests
     /// <summary>The literal the screened deployment's detector reports, which stands in for a credential in a draft.</summary>
     private const string ScreenedMarker = "AKIAEXAMPLEKEY";
 
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset Moment = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 
@@ -39,7 +40,7 @@ public sealed class MailDraftBookTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
 
         // Act
         var draft = await harness.Book.SaveAsync(
@@ -62,7 +63,7 @@ public sealed class MailDraftBookTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
         var draft = await SaveAsync(harness, "first version");
 
         // Act
@@ -88,7 +89,7 @@ public sealed class MailDraftBookTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
         var draft = await SaveAsync(harness, "first version");
 
         // Act
@@ -109,7 +110,7 @@ public sealed class MailDraftBookTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
         await SaveAsync(harness, "first version");
         var foreign = MailDraftId.Create(Guid.CreateVersion7(Moment));
 
@@ -134,7 +135,7 @@ public sealed class MailDraftBookTests
         // Arrange
         var outgoingEmails = new InMemoryOutgoingEmailStore();
         var harness = Harness(outgoingEmails);
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
         var draft = await SaveAsync(harness, "first version");
         var send = outgoingEmails.Publish(
             OutgoingEmailRequest.Create(
@@ -165,7 +166,7 @@ public sealed class MailDraftBookTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
@@ -188,13 +189,13 @@ public sealed class MailDraftBookTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
         var draft = await SaveAsync(harness, "first version");
 
         // Act
         var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
             () => harness.Book.SaveAsync(
-                MailAccountId.Create("personal"),
+                MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal")),
                 OutgoingEmailRequester.Command("mfctl-4f2a"),
                 Composed("second version"),
                 draft.Id,
@@ -217,7 +218,7 @@ public sealed class MailDraftBookTests
     {
         // Arrange
         var harness = Harness(MailFathomPermission.MailSend);
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
 
         // Act
         var refusal = () => harness.Book.SaveAsync(
@@ -255,7 +256,7 @@ public sealed class MailDraftBookTests
     {
         // Arrange
         var harness = Harness(MailFathomPermission.MailRead);
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
 
         // Act
         var refusal = () => harness.Book.SaveAsync(
@@ -280,7 +281,7 @@ public sealed class MailDraftBookTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
         var sessionsOpenWhenPlaced = -1;
         harness.Contents.Placing = () => sessionsOpenWhenPlaced = harness.PersistenceSessionsOpened;
 
@@ -307,7 +308,7 @@ public sealed class MailDraftBookTests
         // Arrange
         var clock = new FakeTimeProvider(Moment);
         var harness = HarnessOn(clock);
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
         harness.ConflictOnTheNextCommits(1);
 
         // Act
@@ -336,7 +337,7 @@ public sealed class MailDraftBookTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
         var first = await harness.Book.SaveAsync(
             Account,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
@@ -377,7 +378,7 @@ public sealed class MailDraftBookTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
 
         using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, new FakeTimeProvider(Moment));
 
@@ -410,7 +411,7 @@ public sealed class MailDraftBookTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
 
         using var egress = ScanningSensitiveContentEgress.Finding(
             ScreenedMarker,
@@ -446,7 +447,7 @@ public sealed class MailDraftBookTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
         var draft = await SaveAsync(harness, "first version");
 
         using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, new FakeTimeProvider(Moment));
@@ -476,7 +477,7 @@ public sealed class MailDraftBookTests
     {
         // Arrange
         var harness = Harness();
-        harness.MapDraftsFolder(Account);
+        harness.MapDraftsFolder(Account.Id);
 
         using var egress = ScanningSensitiveContentEgress.Finding(ScreenedMarker, new FakeTimeProvider(Moment));
 

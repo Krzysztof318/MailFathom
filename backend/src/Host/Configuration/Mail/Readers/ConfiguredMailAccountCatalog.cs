@@ -2,12 +2,20 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 
 namespace MailFathom.Host.Configuration.Mail.Readers;
 
 /// <summary>Publishes the accounts this deployment serves, read from the bound section that defines them.</summary>
-internal sealed class ConfiguredMailAccountCatalog(MailSynchronizationOptions settings) : IDeploymentMailAccountCatalog
+/// <remarks>
+/// The owner is supplied rather than configured, because an account block names none: while accounts are declared in a
+/// file the deployment holds exactly one owner and every declared account is theirs. It reaches every account this
+/// catalog publishes, so a write that resolved an account here has already resolved whose it is.
+/// </remarks>
+internal sealed class ConfiguredMailAccountCatalog(
+    MailSynchronizationOptions settings,
+    IDeploymentMailOwnerSource deploymentOwner) : IDeploymentMailAccountCatalog
 {
     /// <inheritdoc />
     public bool SynchronizationEnabled => settings.Enabled;
@@ -32,7 +40,7 @@ internal sealed class ConfiguredMailAccountCatalog(MailSynchronizationOptions se
     [
         .. (settings.Accounts ?? [])
             .Where(static candidate => !string.IsNullOrWhiteSpace(candidate.AccountId))
-            .Select(static candidate => candidate.CreateServedAccount())
+            .Select(candidate => candidate.CreateServedAccount(deploymentOwner.Owner))
             .OfType<ServedMailAccount>()
             .DistinctBy(static account => account.Id.Value, StringComparer.Ordinal)
             .OrderBy(static account => account.Id.Value, StringComparer.Ordinal),

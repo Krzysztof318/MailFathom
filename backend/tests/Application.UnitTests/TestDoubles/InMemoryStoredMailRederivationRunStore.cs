@@ -41,5 +41,5 @@ internal sealed class InMemoryStoredMailRederivationRunStore : IStoredMailRederi
         return Task.CompletedTask;
     }
 
-    private static string KeyOf(StoredMailScope scope) => $"{scope.Account.Value}\0{scope.Folder?.Value}";
+    private static string KeyOf(StoredMailScope scope) => $"{scope.Account.Id.Value}\0{scope.Folder?.Value}";
 }

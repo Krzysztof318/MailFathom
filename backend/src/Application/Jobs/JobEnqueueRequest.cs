@@ -23,14 +23,14 @@ public sealed record JobEnqueueRequest
     private JobEnqueueRequest(
         JobIdempotencyKey key,
         IJobPayload payload,
-        MailAccountId? accountId,
+        MailAccountIdentity? account,
         DateTimeOffset? availableAt)
     {
         ArgumentNullException.ThrowIfNull(key);
 
         this.Key = key;
         this.Payload = payload;
-        this.AccountId = accountId;
+        this.Account = account;
         this.AvailableAt = availableAt;
     }
 
@@ -43,12 +43,25 @@ public sealed record JobEnqueueRequest
     /// <summary>Gets the type of work, which is the one the payload is the contract of.</summary>
     public JobType JobType => this.Payload.JobType;
 
-    /// <summary>Gets the account the work belongs to, or <see langword="null" /> when it belongs to none.</summary>
+    /// <summary>Gets the account the work belongs to, named by its owner and its identifier, or <see langword="null" /> when it belongs to none.</summary>
     /// <remarks>
-    /// It is a column of the row rather than a value inside the document, because erasure, retention, and any
+    /// <para>
+    /// Both halves become columns of the row rather than values inside the document, because erasure, retention, and any
     /// per-account bound have to reach a job by query rather than by searching inside a document.
+    /// </para>
+    /// <para>
+    /// The pair is carried rather than the identifier alone so the enqueue writes an owner it was given instead of one it
+    /// would have to look up: whoever asks for work already resolved the account through a catalog, and a statement that
+    /// joined <c>mailbox_accounts</c> to recover the owner would be reading the account table to write a row about it.
+    /// What that buys the claim is a read fewer as well — the fair turn is now measured on the queue's own owner column
+    /// rather than through that join.
+    /// </para>
+    /// <para>
+    /// Absence covers work no mailbox asked for, and it is one absence rather than two: a request either names an owner
+    /// and an account or names neither, so the row can never say an account without saying whose it is.
+    /// </para>
     /// </remarks>
-    public MailAccountId? AccountId { get; }
+    public MailAccountIdentity? Account { get; }
 
     /// <summary>Gets the instant before which the job is not claimable, or <see langword="null" /> to make it claimable at once.</summary>
     public DateTimeOffset? AvailableAt { get; }
@@ -56,17 +69,17 @@ public sealed record JobEnqueueRequest
     /// <summary>States an execution to be done as soon as a worker can take it.</summary>
     /// <param name="key">The identity of the execution, composed by whoever knows the work.</param>
     /// <param name="payload">The references the work is described by.</param>
-    /// <param name="accountId">The account the work belongs to, or <see langword="null" /> when it belongs to none.</param>
+    /// <param name="account">The account the work belongs to, named by its owner and its identifier, or <see langword="null" /> when it belongs to none.</param>
     /// <returns>The request to enqueue.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="key" /> or <paramref name="payload" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when the payload names no declared job type.</exception>
-    public static JobEnqueueRequest Create(JobIdempotencyKey key, IJobPayload payload, MailAccountId? accountId) =>
-        new(key, ValidPayload(payload), accountId, availableAt: null);
+    public static JobEnqueueRequest Create(JobIdempotencyKey key, IJobPayload payload, MailAccountIdentity? account) =>
+        new(key, ValidPayload(payload), account, availableAt: null);
 
     /// <summary>States an execution to be done no earlier than a given instant.</summary>
     /// <param name="key">The identity of the execution, composed by whoever knows the work.</param>
     /// <param name="payload">The references the work is described by.</param>
-    /// <param name="accountId">The account the work belongs to, or <see langword="null" /> when it belongs to none.</param>
+    /// <param name="account">The account the work belongs to, named by its owner and its identifier, or <see langword="null" /> when it belongs to none.</param>
     /// <param name="availableAt">The instant before which no worker may claim the job.</param>
     /// <returns>The request to enqueue.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="key" /> or <paramref name="payload" /> is <see langword="null" />.</exception>
@@ -75,8 +88,8 @@ public sealed record JobEnqueueRequest
     public static JobEnqueueRequest CreateAvailableAt(
         JobIdempotencyKey key,
         IJobPayload payload,
-        MailAccountId? accountId,
-        DateTimeOffset availableAt) => new(key, ValidPayload(payload), accountId, availableAt);
+        MailAccountIdentity? account,
+        DateTimeOffset availableAt) => new(key, ValidPayload(payload), account, availableAt);
 
     private static IJobPayload ValidPayload(IJobPayload payload)
     {

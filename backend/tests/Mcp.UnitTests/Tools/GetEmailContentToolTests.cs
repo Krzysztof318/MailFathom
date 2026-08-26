@@ -1406,7 +1406,7 @@ public sealed class GetEmailContentToolTests
         MachineAuthorshipAssessment? machineAuthorship = null) => new()
         {
             StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
-            AccountId = MailAccountId.Create(accountId),
+            Account = MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create(accountId)),
             FolderAlias = MailFolderAlias.Create("INBOX"),
             InternetMessageId = "<abc@example.test>",
             Subject = "Quarterly invoice",

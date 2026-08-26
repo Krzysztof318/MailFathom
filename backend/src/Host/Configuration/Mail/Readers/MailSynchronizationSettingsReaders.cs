@@ -41,8 +41,10 @@ internal sealed class MailSynchronizationSettingsReaders(MailSynchronizationOpti
     /// <summary>Gets whether an answered question is recorded, and for how long.</summary>
     internal ConfiguredMailAnsweringAuditSettingsReader AnsweringAuditSettings { get; } = new(settings);
 
-    /// <summary>Gets the accounts this deployment serves.</summary>
-    internal ConfiguredMailAccountCatalog AccountCatalog { get; } = new(settings);
+    // The account catalog is deliberately not here. Every other reader answers from configuration alone, and an account
+    // cannot be described without naming whose it is — a fact the deployment establishes at startup rather than one a
+    // configuration snapshot holds. So ConfiguredMailAccountCatalog is composed where that owner is resolvable, and
+    // whatever needs the account set resolves the application port instead of reaching into a snapshot for it.
 
     /// <summary>Gets which authentication results an account believes.</summary>
     internal ConfiguredTrustedAuthenticationAuthorityReader TrustedAuthenticationAuthorities { get; } = new(settings);

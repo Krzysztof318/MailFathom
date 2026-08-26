@@ -171,7 +171,7 @@ public sealed class MailDraftFiler
         CancellationToken cancellationToken)
     {
         var appended = await this.appends.AppendAsync(
-            draft.AccountId,
+            draft.Account,
             OutgoingMailFiling.Draft,
             MailboxCopySource.MailDraft(draft.Id),
             (binding, token) => this.commitPolicy.CommitAsync(
@@ -386,7 +386,7 @@ public sealed class MailDraftFiler
     {
         var reference = MailFolderReference.ToRole(OutgoingMailFiling.Draft.Role);
 
-        var resolved = await this.destinations.ResolveAsync(draft.AccountId, [reference], cancellationToken);
+        var resolved = await this.destinations.ResolveAsync(draft.Account, [reference], cancellationToken);
 
         return resolved.Find(reference).Destination;
     }

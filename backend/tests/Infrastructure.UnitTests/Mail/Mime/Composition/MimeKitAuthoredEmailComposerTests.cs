@@ -11,6 +11,7 @@ using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
 using MailFathom.Infrastructure.Mail.Mime.Composition;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using MimeKit;
 using NSubstitute;
@@ -28,7 +29,8 @@ public sealed class MimeKitAuthoredEmailComposerTests
     /// <summary>A value carrying a line break, which is what every injected header begins with.</summary>
     private const string Injection = "Quarterly report\r\nBcc: elsewhere@example.test";
 
-    private static readonly MailAccountId Account = MailAccountId.Create("primary");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("primary"));
 
     private static readonly DateTimeOffset ComposedAt = new(2026, 8, 17, 9, 30, 0, TimeSpan.Zero);
 
@@ -58,7 +60,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
     {
         // Arrange
         var senderIdentities = Substitute.For<IOutgoingSenderIdentityReader>();
-        senderIdentities.FindSenderIdentity(Account).Returns((OutgoingSenderIdentity?)null);
+        senderIdentities.FindSenderIdentity(Account.Id).Returns((OutgoingSenderIdentity?)null);
         var composer = new MimeKitAuthoredEmailComposer(senderIdentities, Bounds(), new FakeTimeProvider(ComposedAt));
 
         // Act
@@ -1029,7 +1031,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
         var composition = CreateComposer().Compose(Account, requester, Authored(), Capabilities());
 
         // Assert
-        Assert.Equal(Account, composition.Email!.Request.AccountId);
+        Assert.Equal(Account, composition.Email!.Request.Account);
         Assert.Equal(requester, composition.Email.Request.Requester);
     }
 
@@ -1121,7 +1123,7 @@ public sealed class MimeKitAuthoredEmailComposerTests
     {
         var senderIdentities = Substitute.For<IOutgoingSenderIdentityReader>();
         Assert.True(EmailAddress.TryCreate("MailFathom", sendingAddress, out var address));
-        senderIdentities.FindSenderIdentity(Account).Returns(OutgoingSenderIdentity.Create(Account, address));
+        senderIdentities.FindSenderIdentity(Account.Id).Returns(OutgoingSenderIdentity.Create(Account.Id, address));
 
         return new MimeKitAuthoredEmailComposer(senderIdentities, bounds, new FakeTimeProvider(ComposedAt));
     }

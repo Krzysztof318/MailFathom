@@ -8,6 +8,7 @@ using MailFathom.Application.Rules.Actions;
 using MailFathom.Application.Rules.Conditions;
 using MailFathom.Application.Rules.Facts;
 using MailFathom.Application.Rules.History;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Mutations;
@@ -26,7 +27,11 @@ internal static class MailRuleExecutionMapping
         var entity = new MailRuleExecutionEntity
         {
             Id = execution.Id.Value,
-            MailboxAccountId = execution.AccountId.Value,
+            MailboxAccountId = execution.Account.Id.Value,
+
+            // Written from the identity the pass ran under, which is the account the caller or the run resolved. A
+            // recorded decision belongs to the same owner as the mail it was taken about.
+            OwnerId = execution.Account.Owner.Value,
             StoredEmailId = execution.StoredEmailId.Value,
             RuleName = execution.RuleName,
             Revision = execution.Revision.Value,
@@ -90,7 +95,9 @@ internal static class MailRuleExecutionMapping
         execution = new MailRuleExecution
         {
             Id = MailRuleExecutionId.Create(entity.Id),
-            AccountId = MailAccountId.Create(entity.MailboxAccountId),
+            Account = MailAccountIdentity.Create(
+                MailOwnerId.Create(entity.OwnerId),
+                MailAccountId.Create(entity.MailboxAccountId)),
             StoredEmailId = StoredEmailId.Create(entity.StoredEmailId),
             RuleName = entity.RuleName,
             Revision = MailRuleSetRevision.Restore(entity.Revision),

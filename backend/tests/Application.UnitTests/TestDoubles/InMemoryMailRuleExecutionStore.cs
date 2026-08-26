@@ -45,7 +45,7 @@ internal sealed class InMemoryMailRuleExecutionStore : IMailRuleExecutionStore
         ArgumentNullException.ThrowIfNull(query);
 
         var matching = this.committed
-            .Where(execution => execution.AccountId == query.AccountId)
+            .Where(execution => execution.Account.Id == query.AccountId)
             .Where(execution => query.RuleName is not { } ruleName
                 || StringComparer.Ordinal.Equals(execution.RuleName, ruleName))
             .Where(execution => query.StoredEmailId is not { } emailId || execution.StoredEmailId == emailId)
@@ -57,7 +57,7 @@ internal sealed class InMemoryMailRuleExecutionStore : IMailRuleExecutionStore
 
     /// <inheritdoc />
     public Task<int> EraseEvaluatedBeforeAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         DateTimeOffset evaluatedBefore,
         int limit,
         CancellationToken cancellationToken)
@@ -65,7 +65,7 @@ internal sealed class InMemoryMailRuleExecutionStore : IMailRuleExecutionStore
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
         var expiring = this.committed
-            .Where(execution => execution.AccountId == accountId && execution.EvaluatedAt < evaluatedBefore)
+            .Where(execution => execution.Account == account && execution.EvaluatedAt < evaluatedBefore)
             .OrderBy(execution => execution.EvaluatedAt)
             .Take(limit)
             .ToArray();

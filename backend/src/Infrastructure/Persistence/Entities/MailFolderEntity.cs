@@ -13,6 +13,13 @@ internal sealed class MailFolderEntity
 
     public required string MailboxAccountId { get; set; }
 
+    /// <summary>Gets or sets the owner whose account this folder belongs to.</summary>
+    /// <remarks>
+    /// A plain column beside the account rather than a second key onto it. The folder already cascades from the
+    /// account, so this buys an unambiguous value for an index to lead with rather than a deletion path.
+    /// </remarks>
+    public required Guid OwnerId { get; set; }
+
     public required string Alias { get; set; }
 
     public int ResolutionGeneration { get; set; }

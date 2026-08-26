@@ -7,13 +7,16 @@ using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Jobs;
 
 public sealed class JobEnqueueRequestTests
 {
-    private static ClassifyEmailSpamJobPayload Payload => ClassifyEmailSpamJobPayload.For(EmailOccurrenceId.Create(
+    private static ClassifyEmailSpamJobPayload Payload => ClassifyEmailSpamJobPayload.For(
+        SyntheticMailOwner.Deployment,
+        EmailOccurrenceId.Create(
         MailAccountId.Create("account-a"),
         new MailFolderResolutionId(MailFolderAlias.Create("inbox"), MailFolderResolutionGeneration.First),
         ImapUidValidity.Create(12345),
@@ -27,7 +30,7 @@ public sealed class JobEnqueueRequestTests
         var request = JobEnqueueRequest.Create(
             JobIdempotencyKey.Create("account-a/inbox#1/12345/4711"),
             Payload,
-            MailAccountId.Create("account-a"));
+            MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("account-a")));
 
         // Assert
         Assert.Equal(JobType.ClassifyEmailSpam, request.JobType);
@@ -41,7 +44,7 @@ public sealed class JobEnqueueRequestTests
         var request = JobEnqueueRequest.Create(
             JobIdempotencyKey.Create("account-a/inbox#1/12345/4711"),
             Payload,
-            MailAccountId.Create("account-a"));
+            MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("account-a")));
 
         // Assert
         Assert.Null(request.AvailableAt);
@@ -57,7 +60,7 @@ public sealed class JobEnqueueRequestTests
         var request = JobEnqueueRequest.CreateAvailableAt(
             JobIdempotencyKey.Create("account-a/inbox#1/12345/4711"),
             Payload,
-            MailAccountId.Create("account-a"),
+            MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("account-a")),
             availableAt);
 
         // Assert
@@ -69,19 +72,19 @@ public sealed class JobEnqueueRequestTests
     public void Create_WithNoAccount_IsAccepted()
     {
         // Act
-        var request = JobEnqueueRequest.Create(JobIdempotencyKey.Create("housekeeping"), Payload, accountId: null);
+        var request = JobEnqueueRequest.Create(JobIdempotencyKey.Create("housekeeping"), Payload, account: null);
 
         // Assert
-        Assert.Null(request.AccountId);
+        Assert.Null(request.Account);
     }
 
     [Fact]
     public void Create_WithNoKeyOrNoPayload_IsRefused()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => JobEnqueueRequest.Create(null!, Payload, accountId: null));
+        Assert.Throws<ArgumentNullException>(() => JobEnqueueRequest.Create(null!, Payload, account: null));
         Assert.Throws<ArgumentNullException>(
-            () => JobEnqueueRequest.Create(JobIdempotencyKey.Create("k"), null!, accountId: null));
+            () => JobEnqueueRequest.Create(JobIdempotencyKey.Create("k"), null!, account: null));
     }
 
     /// <summary>A payload naming the unspecified default would be stored under a type name nothing parses back.</summary>
@@ -92,7 +95,7 @@ public sealed class JobEnqueueRequestTests
         Assert.Throws<ArgumentException>(() => JobEnqueueRequest.Create(
             JobIdempotencyKey.Create("k"),
             new UnspecifiedJobPayload(),
-            accountId: null));
+            account: null));
     }
 
     private sealed record UnspecifiedJobPayload : IJobPayload

@@ -26,6 +26,10 @@ public sealed class MailboxRefreshTokenEndpointTests
 {
     private static readonly MailAccountId Workspace = MailAccountId.Create("workspace");
 
+    /// <summary>The account the credential is recorded against, which is the owner and the identifier together.</summary>
+    private static readonly MailAccountIdentity WorkspaceIdentity =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, Workspace);
+
     private readonly IMailboxRefreshTokenStore store = Substitute.For<IMailboxRefreshTokenStore>();
 
     [Fact]
@@ -43,7 +47,7 @@ public sealed class MailboxRefreshTokenEndpointTests
         // Assert
         Assert.IsType<NoContent>(result.Result);
         await this.store.Received(1).SaveTokenAsync(
-            Workspace,
+            WorkspaceIdentity,
             Arg.Any<MailboxRefreshToken>(),
             Arg.Any<CancellationToken>());
     }
@@ -66,7 +70,7 @@ public sealed class MailboxRefreshTokenEndpointTests
         Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
         Assert.Contains("'archive'", refusal.ProblemDetails.Detail, StringComparison.Ordinal);
         await this.store.DidNotReceive().SaveTokenAsync(
-            Arg.Any<MailAccountId>(),
+            Arg.Any<MailAccountIdentity>(),
             Arg.Any<MailboxRefreshToken>(),
             Arg.Any<CancellationToken>());
     }
@@ -95,7 +99,7 @@ public sealed class MailboxRefreshTokenEndpointTests
         var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
         Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
         await this.store.DidNotReceive().SaveTokenAsync(
-            Arg.Any<MailAccountId>(),
+            Arg.Any<MailAccountIdentity>(),
             Arg.Any<MailboxRefreshToken>(),
             Arg.Any<CancellationToken>());
     }
@@ -179,7 +183,7 @@ public sealed class MailboxRefreshTokenEndpointTests
     private MailboxRefreshTokenRecorder RecorderServing(params MailAccountId[] servedAccountIds)
     {
         var catalog = Substitute.For<IDeploymentMailAccountCatalog>();
-        catalog.ServedAccounts.Returns([.. servedAccountIds.Select(SyntheticServedAccount.Of)]);
+        catalog.ServedAccounts.Returns([.. servedAccountIds.Select(accountId => SyntheticServedAccount.Of(accountId))]);
 
         return new MailboxRefreshTokenRecorder(catalog, this.store, AdministrativeGrant.WholeSurface);
     }

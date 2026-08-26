@@ -45,7 +45,8 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Submission;
 /// </remarks>
 public sealed class AuthoredMailSubmissionTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset Recorded = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 
@@ -65,7 +66,7 @@ public sealed class AuthoredMailSubmissionTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(Account, record.AccountId);
+        Assert.Equal(Account.Id, record.AccountId);
         Assert.Equal(OutgoingEmailStage.Recorded, record.Stage);
         Assert.Equal(ComposedMime.Length, record.MimeByteLength);
         Assert.Equal(1, signal.Depth);
@@ -79,7 +80,7 @@ public sealed class AuthoredMailSubmissionTests
         var submission = SubmissionOver(new InMemoryOutgoingEmailStore(), out var composer, out _);
         var request = RequestTo("anna@example.test") with
         {
-            Account = MailAccountSelector.Create(SyntheticServedAccount.Of(Account).DisplayName.Value),
+            Account = MailAccountSelector.Create(SyntheticServedAccount.Of(Account.Id).DisplayName.Value),
         };
 
         // Act
@@ -134,7 +135,7 @@ public sealed class AuthoredMailSubmissionTests
 
         // Assert
         composer.Received(1).Compose(
-            Arg.Any<MailAccountId>(),
+            Arg.Any<MailAccountIdentity>(),
             Arg.Any<OutgoingEmailRequester>(),
             Arg.Any<AuthoredEmail>(),
             MailDeliveryCapabilities.BeforeAnyServerHasSpoken);
@@ -234,7 +235,7 @@ public sealed class AuthoredMailSubmissionTests
 
         // The refusal repeats what the caller named and says nothing else, which is what keeps an account another owner
         // owns from being told apart from one this deployment never served.
-        Assert.Equal(MailAccountSelector.For(Account), refusal.RequestedAccount);
+        Assert.Equal(MailAccountSelector.For(Account.Id), refusal.RequestedAccount);
         Assert.Empty(store.OpenRequests);
         Assert.Equal(0, signal.Depth);
         composer.DidNotReceiveWithAnyArgs().Compose(default, default!, default!, default!);
@@ -343,7 +344,7 @@ public sealed class AuthoredMailSubmissionTests
         var submission = SubmissionOver(store, out var composer, out var signal);
         composer
             .Compose(
-                Arg.Any<MailAccountId>(),
+                Arg.Any<MailAccountIdentity>(),
                 Arg.Any<OutgoingEmailRequester>(),
                 Arg.Any<AuthoredEmail>(),
                 Arg.Any<MailDeliveryCapabilities>())
@@ -367,7 +368,7 @@ public sealed class AuthoredMailSubmissionTests
         var submission = SubmissionOver(new InMemoryOutgoingEmailStore(), out var composer, out _);
         composer
             .Compose(
-                Arg.Any<MailAccountId>(),
+                Arg.Any<MailAccountIdentity>(),
                 Arg.Any<OutgoingEmailRequester>(),
                 Arg.Any<AuthoredEmail>(),
                 Arg.Any<MailDeliveryCapabilities>())
@@ -608,7 +609,7 @@ public sealed class AuthoredMailSubmissionTests
 
     private static MailSubmissionRequest RequestTo(string address) => new()
     {
-        Account = MailAccountSelector.For(Account),
+        Account = MailAccountSelector.For(Account.Id),
         Recipients = [NamedRecipient.AtAddress(OutgoingRecipientRole.To, address)],
         Subject = "Hello",
         PlainTextBody = "Hello.",
@@ -630,7 +631,7 @@ public sealed class AuthoredMailSubmissionTests
         // the book the recipients are resolved out of, and the caller the send is judged for are one scoped instance in
         // production.
         var granted = authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailSend);
-        var accountCatalog = OwnedMailAccountCatalogs.For(granted, SyntheticServedAccount.Of(Account));
+        var accountCatalog = OwnedMailAccountCatalogs.For(granted, SyntheticServedAccount.Of(Account.Id));
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ =>

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using MailFathom.Application.Paging;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
@@ -34,19 +35,21 @@ public sealed record OutboxQuery
     public const int MaximumPageSize = 200;
 
     private OutboxQuery(
-        MailAccountId? accountId,
+        MailAccountIdentity? account,
         OutgoingEmailStage? stage,
         int pageSize,
         OutboxCursor? cursor)
     {
-        this.AccountId = accountId;
+        this.Account = account;
         this.Stage = stage;
         this.PageSize = pageSize;
         this.Cursor = cursor;
     }
 
     /// <summary>Gets the account the page is narrowed to, or <see langword="null" /> for every account.</summary>
-    public MailAccountId? AccountId { get; }
+    public MailAccountIdentity? Account { get; }
+    /// <summary>Gets the identifier half of <see cref="Account" />, or <see langword="null" /> when the reading is across every account.</summary>
+    public MailAccountId? AccountId => this.Account?.Id;
 
     /// <summary>Gets the stage the page is narrowed to, or <see langword="null" /> for every stage.</summary>
     public OutgoingEmailStage? Stage { get; }
@@ -62,16 +65,16 @@ public sealed record OutboxQuery
     /// The page size is deliberately not part of it. A caller may ask for a shorter or longer page while continuing the
     /// same walk, and refusing that would be a rule about pacing rather than about which records the boundary sits in.
     /// </remarks>
-    public string FilterFingerprint => ComputeFingerprint(this.AccountId, this.Stage);
+    public string FilterFingerprint => ComputeFingerprint(this.Account, this.Stage);
 
     /// <summary>Builds a validated query from what a caller asked for, or reports why the request names no page.</summary>
-    /// <param name="accountId">The account to narrow to, or <see langword="null" /> for every account.</param>
+    /// <param name="account">The account to narrow to, or <see langword="null" /> for every account.</param>
     /// <param name="stage">The stage to narrow to, or <see langword="null" /> for every stage.</param>
     /// <param name="pageSize">How many sends the page may hold, or <see langword="null" /> for <see cref="DefaultPageSize" />.</param>
     /// <param name="cursor">The boundary a continued walk reads beyond, or <see langword="null" /> for the first page.</param>
     /// <returns>The accepted query, or the refusal naming what the caller has to change.</returns>
     public static OutboxQueryResult Create(
-        MailAccountId? accountId,
+        MailAccountIdentity? account,
         OutgoingEmailStage? stage,
         int? pageSize,
         OutboxCursor? cursor)
@@ -90,7 +93,7 @@ public sealed record OutboxQuery
             return OutboxQueryResult.Refused(OutboxQueryOutcome.StageUnknown);
         }
 
-        var query = new OutboxQuery(accountId, stage, resolvedPageSize, cursor);
+        var query = new OutboxQuery(account, stage, resolvedPageSize, cursor);
 
         if (cursor is { } presentedCursor
             && !string.Equals(presentedCursor.FilterFingerprint, query.FilterFingerprint, StringComparison.Ordinal))
@@ -102,8 +105,11 @@ public sealed record OutboxQuery
     }
 
     /// <summary>Reduces the filters to the short stable text a cursor carries to prove it belongs to this walk.</summary>
-    private static string ComputeFingerprint(MailAccountId? accountId, OutgoingEmailStage? stage) =>
-        PageFilterFingerprint.Of(accountId?.Value, stage?.ToString());
+    private static string ComputeFingerprint(MailAccountIdentity? account, OutgoingEmailStage? stage) =>
+        PageFilterFingerprint.Of(
+            account?.Owner.Value.ToString("N", CultureInfo.InvariantCulture),
+            account?.Id.Value,
+            stage?.ToString());
 
     /// <summary>Names the stages a caller may narrow to, for a refusal that says what to write instead.</summary>
     /// <returns>The declared stage names, separated by commas.</returns>

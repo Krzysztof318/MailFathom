@@ -65,10 +65,11 @@ internal sealed class MailRuleExecutionStore(
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var accountValue = query.AccountId.Value;
+        var ownerValue = query.Account.Owner.Value;
+        var accountValue = query.Account.Id.Value;
 
         var entities = await this.Filter(query)
-            .Where(execution => execution.MailboxAccountId == accountValue)
+            .Where(execution => execution.OwnerId == ownerValue && execution.MailboxAccountId == accountValue)
 
             // The actions are the point of an execution that matched, so they are loaded with it rather than left to a
             // second read per row. A rule declares a bounded set of changes and the page is bounded, so the join is too.
@@ -118,18 +119,21 @@ internal sealed class MailRuleExecutionStore(
     /// <see cref="MailboxMutationAuditEntryStore.EraseCompletedBeforeAsync" /> states.
     /// </remarks>
     public async Task<int> EraseEvaluatedBeforeAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         DateTimeOffset evaluatedBefore,
         int limit,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
-        var accountValue = accountId.Value;
+        var ownerValue = account.Owner.Value;
+        var accountValue = account.Id.Value;
 
         var expiringIds = await readContext.MailRuleExecutions
             .AsNoTracking()
-            .Where(execution => execution.MailboxAccountId == accountValue && execution.EvaluatedAt < evaluatedBefore)
+            .Where(execution => execution.OwnerId == ownerValue
+                && execution.MailboxAccountId == accountValue
+                && execution.EvaluatedAt < evaluatedBefore)
             .OrderBy(execution => execution.EvaluatedAt)
             .ThenBy(execution => execution.Id)
             .Take(limit)

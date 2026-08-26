@@ -5,6 +5,8 @@
 using System.Globalization;
 using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Payloads;
+using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Spam;
@@ -63,6 +65,7 @@ public sealed class SpamClassificationArrivals
     /// <summary>Asks for one committed message to be classified.</summary>
     /// <param name="emailId">The local identity the occurrence was stored as, which the execution is keyed by.</param>
     /// <param name="occurrenceId">The occurrence synchronization has just stored, with its content.</param>
+    /// <param name="owner">The owner the run resolved the account under, which the queued work is recorded against.</param>
     /// <param name="cancellationToken">Cancels the enqueue.</param>
     /// <returns>A task that completes once the queue has answered, or at once where no classification is wanted.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="occurrenceId" /> is <see langword="null" />.</exception>
@@ -74,6 +77,7 @@ public sealed class SpamClassificationArrivals
     public async Task ScheduleAsync(
         StoredEmailId emailId,
         EmailOccurrenceId occurrenceId,
+        MailOwnerId owner,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(occurrenceId);
@@ -87,8 +91,11 @@ public sealed class SpamClassificationArrivals
 
         var request = JobEnqueueRequest.Create(
             KeyOf(emailId),
-            ClassifyEmailSpamJobPayload.For(occurrenceId),
-            occurrenceId.AccountId);
+            ClassifyEmailSpamJobPayload.For(owner, occurrenceId),
+
+            // Composed from the owner the run already resolved rather than looked up here: the queue row records whose
+            // account the classification is about, and the synchronization run settled that once for the whole run.
+            MailAccountIdentity.Create(owner, occurrenceId.AccountId));
 
         await this.jobs.EnqueueAsync(request, cancellationToken);
     }

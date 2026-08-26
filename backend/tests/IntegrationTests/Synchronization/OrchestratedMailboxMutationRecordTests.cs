@@ -81,7 +81,7 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
             occurrence,
             subject,
             cancellationToken);
-        var request = MailboxMutationRequest.Relocate(storedEmailId, occurrence, Requester, ArchivePath);
+        var request = MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, ArchivePath);
 
         await StopAfterTheCopyAsync(services, request, occurrence, cancellationToken);
 
@@ -140,7 +140,7 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
             occurrence,
             "mutation-identity",
             cancellationToken);
-        var request = MailboxMutationRequest.SetSeen(storedEmailId, occurrence, Requester, isSeen: true);
+        var request = MailboxMutationRequest.SetSeen(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, isSeen: true);
 
         // Act
         var commits = await services.InTwoScopesAsync(
@@ -166,7 +166,7 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
 
         var outstanding = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailboxMutationRecordStore>()
-                .ReadOutstandingAsync(SyntheticMailAccount.AccountId, limit: 100, token),
+                .ReadOutstandingAsync(SyntheticMailAccount.Account, limit: 100, token),
             cancellationToken);
         Assert.Single(outstanding, candidate => candidate.Record.Request.Occurrence == occurrence);
     }
@@ -309,7 +309,7 @@ public sealed class OrchestratedMailboxMutationRecordTests(MailFathomOrchestrati
         CancellationToken cancellationToken) => services.CommitAsync(
             (scope, session, token) => scope.GetRequiredService<IMailFolderResolutionStore>().SaveResolutionAsync(
                 session,
-                SyntheticMailAccount.AccountId,
+                SyntheticMailAccount.Account,
                 Inbox,
                 token),
             cancellationToken);

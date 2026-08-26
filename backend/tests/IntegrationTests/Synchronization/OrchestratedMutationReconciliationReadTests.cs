@@ -82,7 +82,7 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
 
         var recordId = await CompletedRelocationAsync(
             services,
-            MailboxMutationRequest.Relocate(storedEmailId, occurrence, Requester, DestinationPath),
+            MailboxMutationRequest.Relocate(storedEmailId, SyntheticMailAccount.Owner, occurrence, Requester, DestinationPath),
             cancellationToken);
 
         // Act
@@ -90,7 +90,7 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
         var recognizedAtSource = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailboxMutationReconciliationStore>()
                 .ReadMutationsRemovingAsync(
-                    SyntheticMailAccount.AccountId,
+                    SyntheticMailAccount.Account,
                     occurrence.FolderResolutionId,
                     occurrence.UidValidity,
                     [occurrence.Uid],
@@ -154,18 +154,18 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
 
         var seenRecordId = await CompletedSeenStoreAsync(
             services,
-            MailboxMutationRequest.SetSeen(seenEmailId, seenOccurrence, Requester, isSeen: true),
+            MailboxMutationRequest.SetSeen(seenEmailId, SyntheticMailAccount.Owner, seenOccurrence, Requester, isSeen: true),
             cancellationToken);
         await OpenAsync(
             services,
-            MailboxMutationRequest.Relocate(relocatedEmailId, relocatedOccurrence, Requester, DestinationPath),
+            MailboxMutationRequest.Relocate(relocatedEmailId, SyntheticMailAccount.Owner, relocatedOccurrence, Requester, DestinationPath),
             cancellationToken);
 
         // Opened and left where the tool leaves it, which is the state every change is in until the account's next run
         // issues it. It is written down last, so it also carries the newest stage change of the three.
         await OpenAsync(
             services,
-            MailboxMutationRequest.SetSeen(writtenDownEmailId, writtenDownOccurrence, Requester, isSeen: true),
+            MailboxMutationRequest.SetSeen(writtenDownEmailId, SyntheticMailAccount.Owner, writtenDownOccurrence, Requester, isSeen: true),
             cancellationToken);
 
         // Act
@@ -223,7 +223,7 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
         // newest-first truncation across the whole answer drops.
         var quietRecordId = await CompletedSeenStoreAsync(
             services,
-            MailboxMutationRequest.SetSeen(quietEmailId, quietOccurrence, Requester, isSeen: true),
+            MailboxMutationRequest.SetSeen(quietEmailId, SyntheticMailAccount.Owner, quietOccurrence, Requester, isSeen: true),
             cancellationToken);
         var crowdedRecordIds = new List<MailboxMutationRecordId>();
 
@@ -232,7 +232,7 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
             crowdedRecordIds.Add(await CompletedSeenStoreAsync(
                 services,
                 MailboxMutationRequest.SetSeen(
-                    crowdedEmailId,
+                    crowdedEmailId, SyntheticMailAccount.Owner,
                     crowdedOccurrence,
                     MailboxMutationRequester.Command($"triage-{call}"),
                     isSeen: call % 2 == 0),
@@ -270,7 +270,7 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailboxMutationReconciliationStore>()
                 .ReadFlagChangesOnAsync(
-                    SyntheticMailAccount.AccountId,
+                    SyntheticMailAccount.Account,
                     folderResolutionId,
                     uidValidity,
                     uids,
@@ -283,7 +283,7 @@ public sealed class OrchestratedMutationReconciliationReadTests(MailFathomOrches
         ImapUid uid,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailboxMutationReconciliationStore>().ReadPlacementsAtAsync(
-                SyntheticMailAccount.AccountId,
+                SyntheticMailAccount.Account,
                 DestinationPath,
                 PlacementUidValidity,
                 [uid],

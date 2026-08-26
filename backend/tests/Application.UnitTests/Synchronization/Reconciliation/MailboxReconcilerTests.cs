@@ -11,6 +11,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -19,7 +20,8 @@ namespace MailFathom.Application.UnitTests.Synchronization.Reconciliation;
 
 public sealed class MailboxReconcilerTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("primary");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("primary"));
 
     private static readonly MailFolderResolution InboxFolder = MailFolderResolution.FirstBindingOf(
         MailFolderAlias.Create("inbox"),
@@ -1551,7 +1553,7 @@ public sealed class MailboxReconcilerTests
         AuthoredDeleteEmailDisposition localDisposition = AuthoredDeleteEmailDisposition.RetainLocalCopy,
         AuthoredDeleteEmailDisposition? relocationDisposition = null)
     {
-        var occurrence = EmailOccurrenceId.Create(Account, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid));
+        var occurrence = EmailOccurrenceId.Create(Account.Id, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid));
         var requester = MailboxMutationRequester.Rule("file-newsletters", "1");
         var opened = recordedAt ?? RunInstant;
 
@@ -1560,13 +1562,13 @@ public sealed class MailboxReconcilerTests
             Id = MailboxMutationRecordId.Create(Guid.CreateVersion7(opened)),
             Request = isRelocation
                 ? MailboxMutationRequest.Relocate(
-                    storedEmailId,
+                    storedEmailId, SyntheticMailOwner.Deployment,
                     occurrence,
                     requester,
                     RemoteFolderPath.Create("Archive", '/'),
                     relocationDisposition)
                 : MailboxMutationRequest.Delete(
-                    storedEmailId,
+                    storedEmailId, SyntheticMailOwner.Deployment,
                     occurrence,
                     requester,
                     localDisposition),
@@ -1593,14 +1595,14 @@ public sealed class MailboxReconcilerTests
         MailboxMutationStage stage = MailboxMutationStage.Completed,
         DateTimeOffset? stagedAt = null)
     {
-        var occurrence = EmailOccurrenceId.Create(Account, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid));
+        var occurrence = EmailOccurrenceId.Create(Account.Id, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid));
         var staged = stagedAt ?? RunInstant;
 
         return new MailboxMutationRecord
         {
             Id = MailboxMutationRecordId.Create(Guid.CreateVersion7(staged)),
             Request = MailboxMutationRequest.SetSeen(
-                storedEmailId,
+                storedEmailId, SyntheticMailOwner.Deployment,
                 occurrence,
                 MailboxMutationRequester.Rule("mark-newsletters-read", "1"),
                 isSeen),
@@ -1626,8 +1628,8 @@ public sealed class MailboxReconcilerTests
         MutationSettingSeen(storedEmailId, uid, isSeen: false, stagedAt: stagedAt) with
         {
             Request = MailboxMutationRequest.SetFlagged(
-                storedEmailId,
-                EmailOccurrenceId.Create(Account, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid)),
+                storedEmailId, SyntheticMailOwner.Deployment,
+                EmailOccurrenceId.Create(Account.Id, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid)),
                 MailboxMutationRequester.Command("triage-1"),
                 isFlagged),
         };
@@ -1640,8 +1642,8 @@ public sealed class MailboxReconcilerTests
         MutationSettingSeen(storedEmailId, uid, isSeen: false) with
         {
             Request = MailboxMutationRequest.AddKeywords(
-                storedEmailId,
-                EmailOccurrenceId.Create(Account, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid)),
+                storedEmailId, SyntheticMailOwner.Deployment,
+                EmailOccurrenceId.Create(Account.Id, InboxFolder.Id, SelectedUidValidity, ImapUid.Create(uid)),
                 MailboxMutationRequester.Command("triage-1"),
                 AuthoredMailKeywords.Create(keywords)),
         };
@@ -1733,7 +1735,7 @@ public sealed class MailboxReconcilerTests
             this.rowsById.Single(entry => entry.Value.Uid == uid).Key;
 
         public Task<IReadOnlyList<StoredEmailAwaitingReconciliation>> GetReconciliationWindowAsync(
-            MailAccountId accountId,
+            MailAccountIdentity account,
             MailFolderResolutionId folderResolutionId,
             ImapUidValidity uidValidity,
             int maxEmailCount,

@@ -8,6 +8,7 @@ using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Jobs.Scheduling;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -17,7 +18,8 @@ namespace MailFathom.Application.UnitTests.Jobs.Scheduling;
 /// <summary>What one pass does about a schedule: seeding it, dispatching it, and passing over what it missed.</summary>
 public sealed class JobSchedulePassTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("personal");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
     private static readonly JobScheduleId ScheduleId = JobScheduleId.Create("mail-rules:personal:housekeeping");
 
     private readonly InMemoryJobScheduleStore schedules = new();

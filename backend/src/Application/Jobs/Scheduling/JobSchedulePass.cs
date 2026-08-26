@@ -154,7 +154,7 @@ public sealed class JobSchedulePass
         }
 
         var enqueued = await this.jobStore.EnqueueAsync(
-            JobEnqueueRequest.Create(ComposeKey(schedule.Id, occurrence), schedule.Payload, schedule.AccountId),
+            JobEnqueueRequest.Create(ComposeKey(schedule.Id, occurrence), schedule.Payload, schedule.Account),
             cancellationToken);
 
         await this.scheduleStore.SaveAsync(

@@ -93,7 +93,7 @@ public sealed class AuthoredResponseSubmission(
         }
 
         var composition = composer.Compose(
-            response.AccountId,
+            response.Account,
             request.Requester,
             response.Email!,
             MailDeliveryCapabilities.BeforeAnyServerHasSpoken);

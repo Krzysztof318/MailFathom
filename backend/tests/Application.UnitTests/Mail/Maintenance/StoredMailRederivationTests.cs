@@ -51,7 +51,7 @@ public sealed class StoredMailRederivationTests
     /// <summary>A payload of which that many emails pass the ceiling, rounded up so the tenth is what reaches it.</summary>
     private const int BytesPerEmail = ((64 * 1024 * 1024) / EmailsReachingTheByteCeiling) + 1;
 
-    private static readonly StoredMailScope WholeAccount = new(MailAccountId.Create("work"), null);
+    private static readonly StoredMailScope WholeAccount = new(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work")), null);
 
     private readonly InMemoryStoredMailRederivationRunStore runs = new();
     private int arrangedRunCount;

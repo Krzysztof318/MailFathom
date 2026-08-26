@@ -383,7 +383,7 @@ public sealed class EmailAttachmentDownloadEndpointTests
     private static EmailSummary SummaryOf() => new()
     {
         StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
-        AccountId = MailAccountId.Create("primary"),
+        Account = MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("primary")),
         FolderAlias = MailFolderAlias.Create("INBOX"),
         InternetMessageId = "<abc@example.test>",
         Subject = "Quarterly invoice",

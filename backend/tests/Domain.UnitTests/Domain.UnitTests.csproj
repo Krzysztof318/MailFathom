@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <Compile Include="..\shared\ExceptionHierarchyAssertion.cs" Link="ExceptionHierarchyAssertion.cs" />
+    <Compile Include="..\shared\SyntheticMailOwner.cs" Link="SyntheticMailOwner.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -7,6 +7,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
@@ -14,7 +15,8 @@ namespace MailFathom.Application.UnitTests.Emails.Threads;
 
 public sealed class EmailThreadAssemblyTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("personal");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
 
     [Fact]
     public async Task AssembleAsync_ReplyAssembledAfterTheMessageItAnswers_PutsBothInOneConversationAndLinksThem()

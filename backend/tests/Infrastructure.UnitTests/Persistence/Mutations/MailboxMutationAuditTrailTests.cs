@@ -174,7 +174,7 @@ public sealed class MailboxMutationAuditTrailTests : IDisposable
         {
             Id = MailboxMutationRecordId.Create(Guid.CreateVersion7(RecordedAt)),
             Request = MailboxMutationRequest.Relocate(
-                StoredEmailId.Create(Guid.CreateVersion7(RecordedAt)),
+                StoredEmailId.Create(Guid.CreateVersion7(RecordedAt)), SyntheticMailOwner.Deployment,
                 occurrence,
                 MailboxMutationRequester.Rule("file-newsletters", "3"),
                 ArchivePath),

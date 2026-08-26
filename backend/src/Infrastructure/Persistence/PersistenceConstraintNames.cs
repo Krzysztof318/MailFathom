@@ -33,11 +33,19 @@ internal static class PersistenceConstraintNames
 
     internal const string SynchronizationCheckpointPrimaryKeyConstraintName = "pk_synchronization_checkpoints";
 
-    internal const string MailFolderBindingUniqueIndexName = "ix_mail_folders_account_alias_generation";
+    internal const string MailFolderBindingUniqueIndexName = "ix_mail_folders_owner_account_alias_generation";
 
     internal const string StoredEmailOccurrenceUniqueIndexName = "ix_stored_emails_folder_uidvalidity_uid";
 
-    internal const string StoredEmailAccountTimelineIndexName = "ix_stored_emails_account_timeline";
+    /// <summary>The order every timeline is walked in, whether it names one of an owner's accounts or all of them.</summary>
+    /// <remarks>
+    /// ADR 0014 names an owner-led index beside this one as the candidate for <em>all of my mail</em>, on the reading
+    /// that a request naming no account would otherwise be planned as a scan followed by a top-N sort. That read does
+    /// not exist here: <c>StoredEmailTimelineReader</c> walks each account of the scope on its own and merges the
+    /// walks, so every timeline query carries an equality on the account and this index is the plan for all of them.
+    /// An owner-led index would therefore be one nothing reads, paid for on every message stored.
+    /// </remarks>
+    internal const string StoredEmailAccountTimelineIndexName = "ix_stored_emails_owner_account_timeline";
 
     internal const string StoredEmailFolderTimelineIndexName = "ix_stored_emails_folder_timeline";
 
@@ -46,7 +54,7 @@ internal static class PersistenceConstraintNames
     internal const string StoredEmailAwaitingContentIndexName = "ix_stored_emails_awaiting_content";
 
     /// <summary>The order a requested whole-mailbox rule run walks an account's mail in.</summary>
-    internal const string StoredEmailAccountIdentityIndexName = "ix_stored_emails_account_identity";
+    internal const string StoredEmailAccountIdentityIndexName = "ix_stored_emails_owner_account_identity";
 
     /// <summary>The queue of mail no rule pass has evaluated, which is read once per account run and is usually empty.</summary>
     internal const string StoredEmailAwaitingRuleEvaluationIndexName = "ix_stored_emails_awaiting_rule_evaluation";
@@ -174,20 +182,20 @@ internal static class PersistenceConstraintNames
 
     /// <summary>The index the trail is both read and aged through.</summary>
     internal const string MailboxMutationAuditEntryTimelineIndexName =
-        "ix_mailbox_mutation_audit_entries_account_completed";
+        "ix_mailbox_mutation_audit_entries_owner_account_completed";
 
     /// <summary>The constraint that keeps one answering entry per run per account, whatever a repeated append attempts.</summary>
-    internal const string MailAnsweringAuditEntryRunUniqueIndexName = "ix_mail_answering_audit_entries_run_account";
+    internal const string MailAnsweringAuditEntryRunUniqueIndexName = "ix_mail_answering_audit_entries_run_owner_account";
 
     /// <summary>The index the answering record is both read and aged through.</summary>
     internal const string MailAnsweringAuditEntryTimelineIndexName =
-        "ix_mail_answering_audit_entries_account_completed";
+        "ix_mail_answering_audit_entries_owner_account_completed";
 
     /// <summary>The index the rule history is walked and aged through, which is its unfiltered page and its retention.</summary>
-    internal const string MailRuleExecutionTimelineIndexName = "ix_mail_rule_executions_account_evaluated";
+    internal const string MailRuleExecutionTimelineIndexName = "ix_mail_rule_executions_owner_account_evaluated";
 
     /// <summary>The index that answers what one rule has been doing, which is the history's second question.</summary>
-    internal const string MailRuleExecutionRuleIndexName = "ix_mail_rule_executions_account_rule_evaluated";
+    internal const string MailRuleExecutionRuleIndexName = "ix_mail_rule_executions_owner_account_rule_evaluated";
 
     /// <summary>The index that answers why one message was filed, which is the history's first question.</summary>
     internal const string MailRuleExecutionEmailIndexName = "ix_mail_rule_executions_email_evaluated";
@@ -287,7 +295,7 @@ internal static class PersistenceConstraintNames
     /// is proportional to the drafts a mailbox holds, which is what a person keeps rather than what a deployment has
     /// ever done.
     /// </remarks>
-    internal const string MailDraftAccountIndexName = "ix_mail_drafts_account_revised";
+    internal const string MailDraftAccountIndexName = "ix_mail_drafts_owner_account_revised";
 
     /// <summary>The index a delivered send is turned back into the draft it came from through.</summary>
     /// <remarks>
@@ -327,16 +335,17 @@ internal static class PersistenceConstraintNames
     internal const string JobClaimIndexName = "ix_jobs_claimable";
 
     /// <summary>The index an account's jobs are erased and aged through.</summary>
-    internal const string JobAccountIndexName = "ix_jobs_account";
+    internal const string JobAccountIndexName = "ix_jobs_owner_account";
 
     /// <summary>The index an enqueue reads one owner's latest turn from, filtered to the work that still holds one.</summary>
     /// <remarks>
     /// Beside the account index rather than folded into it, because the two are read for opposite reasons and are
     /// proportional to different things. That one answers what belongs to an account across everything the queue has
     /// ever done; this one answers where an owner's waiting work has reached, which is a backlog rather than a history,
-    /// and it is read on every enqueue.
+    /// and it is read on every enqueue. It carries no account column at all: the owner is on the row now, so the latest
+    /// turn is one descending step into this index rather than a maximum over the owner's accounts joined together.
     /// </remarks>
-    internal const string JobAccountTurnIndexName = "ix_jobs_account_turn";
+    internal const string JobOwnerTurnIndexName = "ix_jobs_owner_turn";
 
     /// <summary>The index an operator reads what has stopped through, filtered to the one state that waits for them.</summary>
     internal const string JobDeadLetterIndexName = "ix_jobs_dead_lettered";

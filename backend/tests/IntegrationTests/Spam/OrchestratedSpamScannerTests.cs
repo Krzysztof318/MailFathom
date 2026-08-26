@@ -304,7 +304,7 @@ public sealed class OrchestratedSpamScannerTests(MailFathomOrchestrationFixture 
             async (scope, session, token) =>
             {
                 storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                    session,
+                    session, SyntheticMailAccount.Owner,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, "Notes from Tuesday", rawMime.Length),
                     extractedMetadata: null,
                     StoredEmailContentAvailability.Available,

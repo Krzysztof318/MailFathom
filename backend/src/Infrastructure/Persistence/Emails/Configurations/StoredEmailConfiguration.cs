@@ -147,9 +147,16 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
     /// <summary>Declares the indexes mailbox reads are planned against, and with them the timeline ordering contract.</summary>
     /// <remarks>
     /// <para>
-    /// Both timeline indexes reproduce <see cref="EmailTimelinePosition.NewestFirst" /> column for column: the received
-    /// timestamp descending with unknown timestamps last, then the identifier descending. Keyset pagination is only
-    /// contiguous while the two agree, so a change to either is a change to both.
+    /// Every index a mailbox read narrows on leads with the owner, because that is the first term such a read carries:
+    /// an account identifier is unique within its owner and nowhere else, so a structure led by the account alone would
+    /// interleave two owners' mail under one key. The folder-led indexes are the exception and stay as they are — a
+    /// folder identity is generated and belongs to exactly one account, so it already names one owner's rows.
+    /// </para>
+    /// <para>
+    /// All three timeline indexes reproduce <see cref="EmailTimelinePosition.NewestFirst" /> column for column after
+    /// the columns they lead with: the received timestamp descending with unknown timestamps last, then the identifier
+    /// descending. Keyset pagination is only contiguous while the server's order and the process's order are the same
+    /// order, so a change to any one of them is a change to all of them and to the comparer.
     /// </para>
     /// <para>
     /// <c>NULLS LAST</c> is stated rather than left out, because PostgreSQL orders nulls first under <c>DESC</c> and the
@@ -167,10 +174,14 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
             .IsUnique()
             .HasDatabaseName(PersistenceConstraintNames.StoredEmailOccurrenceUniqueIndexName);
 
-        entity.HasIndex(email => new { email.MailboxAccountId, email.ReceivedAt, email.Id })
+        entity.HasIndex(email => new { email.OwnerId, email.MailboxAccountId, email.ReceivedAt, email.Id })
             .HasDatabaseName(PersistenceConstraintNames.StoredEmailAccountTimelineIndexName)
-            .IsDescending(false, true, true)
-            .HasNullSortOrder(NullSortOrder.Unspecified, NullSortOrder.NullsLast, NullSortOrder.Unspecified);
+            .IsDescending(false, false, true, true)
+            .HasNullSortOrder(
+                NullSortOrder.Unspecified,
+                NullSortOrder.Unspecified,
+                NullSortOrder.NullsLast,
+                NullSortOrder.Unspecified);
 
         entity.HasIndex(email => new { email.MailFolderId, email.ReceivedAt, email.Id })
             .HasDatabaseName(PersistenceConstraintNames.StoredEmailFolderTimelineIndexName)
@@ -214,14 +225,14 @@ internal sealed class StoredEmailConfiguration : IEntityTypeConfiguration<Stored
         // The order a requested whole-mailbox rule run walks in. It is the identity rather than the timeline because a
         // walk that has to resume needs a total order no later write disturbs, and because the position it commits is
         // one column rather than a nullable timestamp paired with a tie-breaker.
-        entity.HasIndex(email => new { email.MailboxAccountId, email.Id })
+        entity.HasIndex(email => new { email.OwnerId, email.MailboxAccountId, email.Id })
             .HasDatabaseName(PersistenceConstraintNames.StoredEmailAccountIdentityIndexName);
 
         // The arrival queue, and the filter is the whole point of it. In steady state almost every row of an account
         // has been evaluated, so without the filter this read would walk the account's entire index once per run to
         // find the handful of rows that qualify — and it runs for every account on every synchronization run.
         entity.HasIndex(
-                email => new { email.MailboxAccountId, email.Id },
+                email => new { email.OwnerId, email.MailboxAccountId, email.Id },
                 PersistenceConstraintNames.StoredEmailAwaitingRuleEvaluationIndexName)
             .HasDatabaseName(PersistenceConstraintNames.StoredEmailAwaitingRuleEvaluationIndexName)
             .HasFilter(

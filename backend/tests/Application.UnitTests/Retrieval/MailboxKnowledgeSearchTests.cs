@@ -49,7 +49,10 @@ public sealed class MailboxKnowledgeSearchTests
     /// Never <see cref="MailboxScope.NothingReadable" />: this retrieval is handed a scope somebody already resolved, and
     /// the unrestricted one is what a deployment serving no account at all resolves to.
     /// </remarks>
-    private static readonly MailboxScope EveryAccount = MailboxScope.Create(EveryServedAccount, selectedFolders: null);
+    private static readonly MailboxScope EveryAccount = MailboxScope.Create(
+        SyntheticMailOwner.Deployment,
+        EveryServedAccount,
+        selectedFolders: null);
 
     [Fact]
     public async Task FindPassagesAsync_MailMatchingTheQuery_ReturnsOnePassagePerMessageMostRelevantFirst()
@@ -407,7 +410,10 @@ public sealed class MailboxKnowledgeSearchTests
         var index = new InMemoryEmailSearchIndex()
             .With(SyntheticEmailSummaries.Create(FirstJuly, accountId: "secondary"), snippets: "a mention");
         var search = SearchOver(index);
-        var scope = MailboxScope.Create([MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId)], []);
+        var scope = MailboxScope.Create(
+            SyntheticMailOwner.Deployment,
+            [MailAccountId.Create(SyntheticEmailSummaries.DefaultAccountId)],
+            []);
 
         // Act
         var passages = (await search.FindPassagesAsync(
@@ -429,6 +435,7 @@ public sealed class MailboxKnowledgeSearchTests
             .With(inArchive, snippets: "an archived mention");
         var search = SearchOver(index);
         var scope = MailboxScope.Create(
+            SyntheticMailOwner.Deployment,
             EveryServedAccount,
             [
                 new MailFolderIdentity(
@@ -546,7 +553,7 @@ public sealed class MailboxKnowledgeSearchTests
         [
             .. servedAccountIds
                 .OrderBy(accountId => accountId.Value, StringComparer.Ordinal)
-                .Select(SyntheticServedAccount.Of),
+                .Select(accountId => SyntheticServedAccount.Of(accountId)),
         ]);
 
         return catalog;

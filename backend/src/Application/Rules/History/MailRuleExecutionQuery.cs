@@ -40,7 +40,7 @@ public sealed record MailRuleExecutionQuery
     public const int MaximumPageSize = 200;
 
     private MailRuleExecutionQuery(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         string? ruleName,
         StoredEmailId? storedEmailId,
         DateTimeOffset? evaluatedFrom,
@@ -48,7 +48,7 @@ public sealed record MailRuleExecutionQuery
         int pageSize,
         MailRuleExecutionCursor? cursor)
     {
-        this.AccountId = accountId;
+        this.Account = account;
         this.RuleName = ruleName;
         this.StoredEmailId = storedEmailId;
         this.EvaluatedFrom = evaluatedFrom;
@@ -58,7 +58,9 @@ public sealed record MailRuleExecutionQuery
     }
 
     /// <summary>Gets the account whose history is read.</summary>
-    public MailAccountId AccountId { get; }
+    public MailAccountIdentity Account { get; }
+    /// <summary>Gets the identifier half of <see cref="Account" />, which is what a reader already narrowed to one owner names.</summary>
+    public MailAccountId AccountId => this.Account.Id;
 
     /// <summary>Gets the rule the page is narrowed to, or <see langword="null" /> for every rule of the account.</summary>
     public string? RuleName { get; }
@@ -84,14 +86,14 @@ public sealed record MailRuleExecutionQuery
     /// same walk, and refusing that would be a rule about pacing rather than about which executions the boundary sits in.
     /// </remarks>
     public string FilterFingerprint => ComputeFingerprint(
-        this.AccountId,
+        this.Account,
         this.RuleName,
         this.StoredEmailId,
         this.EvaluatedFrom,
         this.EvaluatedBefore);
 
     /// <summary>Builds a validated query from what a caller asked for, or reports why the request names no page.</summary>
-    /// <param name="accountId">The account whose history is read.</param>
+    /// <param name="account">The account whose history is read.</param>
     /// <param name="ruleName">The rule to narrow to, or <see langword="null" /> for every rule.</param>
     /// <param name="storedEmailId">The email to narrow to, or <see langword="null" /> for every email.</param>
     /// <param name="evaluatedFrom">The earliest evaluation instant served, inclusive, or <see langword="null" /> for none.</param>
@@ -100,7 +102,7 @@ public sealed record MailRuleExecutionQuery
     /// <param name="cursor">The boundary a continued walk reads beyond, or <see langword="null" /> for the first page.</param>
     /// <returns>The accepted query, or the refusal naming what the caller has to change.</returns>
     public static MailRuleExecutionQueryResult Create(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         string? ruleName,
         StoredEmailId? storedEmailId,
         DateTimeOffset? evaluatedFrom,
@@ -128,7 +130,7 @@ public sealed record MailRuleExecutionQuery
         }
 
         var query = new MailRuleExecutionQuery(
-            accountId,
+            account,
             ruleName?.Trim(),
             storedEmailId,
             evaluatedFrom,
@@ -147,13 +149,14 @@ public sealed record MailRuleExecutionQuery
 
     /// <summary>Reduces the filters to the short stable text a cursor carries to prove it belongs to this walk.</summary>
     private static string ComputeFingerprint(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         string? ruleName,
         StoredEmailId? storedEmailId,
         DateTimeOffset? evaluatedFrom,
         DateTimeOffset? evaluatedBefore) =>
         PageFilterFingerprint.Of(
-            accountId.Value,
+            account.Owner.Value.ToString("N", CultureInfo.InvariantCulture),
+            account.Id.Value,
             ruleName,
             storedEmailId?.Value.ToString("N", CultureInfo.InvariantCulture),
             evaluatedFrom?.UtcTicks.ToString(CultureInfo.InvariantCulture),

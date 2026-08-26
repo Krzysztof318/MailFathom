@@ -45,7 +45,9 @@ public sealed class OrchestratedOutboxDeliveryTests(MailFathomOrchestrationFixtu
     /// <summary>The one mailbox the orchestrated server has, which is both the sender and the addressee here.</summary>
     private const string Mailbox = OrchestrationContract.MailServerAccountEmailAddress;
 
-    private static readonly MailAccountId Account = SyntheticMailAccount.AccountId;
+    /// <summary>Gets the account this suite writes under, whose owner the orchestrated database provisioned.</summary>
+    /// <remarks>Read on each use rather than captured in a field, because the owner is resolved when the harness starts.</remarks>
+    private static MailAccountIdentity Account => SyntheticMailAccount.Account;
 
     /// <summary>A queued send leaves, arrives, and leaves the record saying so with the reply the server gave.</summary>
     [Fact]

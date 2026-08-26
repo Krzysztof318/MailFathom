@@ -49,6 +49,6 @@ public sealed class ScheduledMailRuleRunHandler : IJobHandler
                 nameof(payload));
         }
 
-        return this.runRequests.SubmitScheduledAsync(account.ToAccountId(), cancellationToken);
+        return this.runRequests.SubmitScheduledAsync(account.ToAccountIdentity(), cancellationToken);
     }
 }

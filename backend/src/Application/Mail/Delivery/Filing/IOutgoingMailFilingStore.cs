@@ -107,7 +107,7 @@ public interface IOutgoingMailFilingStore
         CancellationToken cancellationToken);
 
     /// <summary>Reads the filings that put a copy into one folder at one of the occurrences a batch discovered.</summary>
-    /// <param name="accountId">The account whose filings are read.</param>
+    /// <param name="account">The account whose filings are read.</param>
     /// <param name="folderPath">The remote folder being synchronized, which is the folder those filings named.</param>
     /// <param name="uidValidity">The UIDVALIDITY that folder reports now.</param>
     /// <param name="uids">The UIDs one batch of the forward pass discovered.</param>
@@ -130,7 +130,7 @@ public interface IOutgoingMailFilingStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<OutgoingMailFilingRecord>> ReadFilingsAtAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         RemoteFolderPath folderPath,
         ImapUidValidity uidValidity,
         IReadOnlyCollection<ImapUid> uids,

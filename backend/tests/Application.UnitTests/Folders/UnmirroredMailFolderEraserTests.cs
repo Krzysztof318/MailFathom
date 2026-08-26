@@ -19,7 +19,8 @@ namespace MailFathom.Application.UnitTests.Folders;
 /// <summary>Covers what happens to the mail of a folder an operator has stopped mirroring.</summary>
 public sealed class UnmirroredMailFolderEraserTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("primary");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("primary"));
     private static readonly MailFolderAlias Junk = MailFolderAlias.Create("JUNK");
 
     /// <summary>The pass runs inside one transaction, so what it removed is either all committed or not removed at all.</summary>
@@ -124,19 +125,20 @@ public sealed class UnmirroredMailFolderEraserTests
     /// <summary>Records what each pass was asked to erase, and answers with the erasure the test arranged.</summary>
     private sealed class RecordingMirrorStore(MailFolderMirrorErasure erasure) : IStoredMailFolderMirrorStore
     {
-        private readonly List<(MailAccountId AccountId, MailFolderAlias FolderAlias, int MaxEmails)> passes = [];
+        private readonly List<(MailAccountIdentity Account, MailFolderAlias FolderAlias, int MaxEmails)> passes =
+            [];
 
-        public IReadOnlyList<(MailAccountId AccountId, MailFolderAlias FolderAlias, int MaxEmails)> Passes =>
+        public IReadOnlyList<(MailAccountIdentity Account, MailFolderAlias FolderAlias, int MaxEmails)> Passes =>
             this.passes;
 
         public Task<MailFolderMirrorErasure> EraseFolderMirrorAsync(
             IPersistenceSession session,
-            MailAccountId accountId,
+            MailAccountIdentity account,
             MailFolderAlias folderAlias,
             int maxEmails,
             CancellationToken cancellationToken)
         {
-            this.passes.Add((accountId, folderAlias, maxEmails));
+            this.passes.Add((account, folderAlias, maxEmails));
 
             return Task.FromResult(erasure);
         }

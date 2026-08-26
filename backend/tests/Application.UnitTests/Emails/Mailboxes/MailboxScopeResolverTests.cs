@@ -18,11 +18,13 @@ namespace MailFathom.Application.UnitTests.Emails.Mailboxes;
 public sealed class MailboxScopeResolverTests
 {
     private static readonly ServedMailAccount Work = new(
+        SyntheticMailOwner.Deployment,
         MailAccountId.Create("acct-1"),
         MailAccountDisplayName.Create("Work mail"),
         MailSynchronizationMode.Polling);
 
     private static readonly ServedMailAccount Private = new(
+        SyntheticMailOwner.Deployment,
         MailAccountId.Create("acct-2"),
         MailAccountDisplayName.Create("Private mail"),
         MailSynchronizationMode.Push);

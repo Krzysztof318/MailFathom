@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Text;
+using MailFathom.Application.Access;
 using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
@@ -221,10 +222,14 @@ public sealed class MailOAuthAccessTokenSourceTests
         transportFactory.CreateClient(MailOAuthAccessTokenSource.TransportName)
             .Returns(_ => new HttpClient(handler, disposeHandler: false));
 
+        var deploymentOwner = Substitute.For<IDeploymentMailOwnerSource>();
+        deploymentOwner.Owner.Returns(SyntheticMailOwner.Deployment);
+
         var source = new MailOAuthAccessTokenSource(
             transportFactory,
             new FakeMailOAuthSettingsProvider(clientSecret, grant ?? MailOAuthGrant.RefreshToken),
             refreshTokenStore,
+            deploymentOwner,
             cache,
             host.Executor,
             host.TimeProvider,

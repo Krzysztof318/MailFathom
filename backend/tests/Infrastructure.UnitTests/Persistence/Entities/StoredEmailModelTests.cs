@@ -19,7 +19,8 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Entities;
 /// </summary>
 public sealed class StoredEmailModelTests
 {
-    private static readonly string[] AccountTimelineColumns = ["MailboxAccountId", "ReceivedAt", "Id"];
+    /// <summary>The account timeline leads with the owner, because an account reference is the pair and an index cannot span a join.</summary>
+    private static readonly string[] AccountTimelineColumns = ["OwnerId", "MailboxAccountId", "ReceivedAt", "Id"];
 
     private static readonly string[] FolderTimelineColumns = ["MailFolderId", "ReceivedAt", "Id"];
 
@@ -37,8 +38,12 @@ public sealed class StoredEmailModelTests
         var index = FindStoredEmailIndex(indexName);
 
         // Assert
+        bool[] expectedDescending = indexName == PersistenceConstraintNames.StoredEmailAccountTimelineIndexName
+            ? [false, false, true, true]
+            : [false, true, true];
+
         Assert.Equal(expectedColumns, index.Properties.Select(property => property.Name));
-        Assert.Equal([false, true, true], index.IsDescending);
+        Assert.Equal(expectedDescending, index.IsDescending);
     }
 
     /// <summary>
@@ -54,9 +59,12 @@ public sealed class StoredEmailModelTests
         var index = FindStoredEmailIndex(indexName);
 
         // Assert
-        Assert.Equal(
-            [NullSortOrder.Unspecified, NullSortOrder.NullsLast, NullSortOrder.Unspecified],
-            index.GetNullSortOrder());
+        NullSortOrder[] expectedNullOrder =
+            indexName == PersistenceConstraintNames.StoredEmailAccountTimelineIndexName
+                ? [NullSortOrder.Unspecified, NullSortOrder.Unspecified, NullSortOrder.NullsLast, NullSortOrder.Unspecified]
+                : [NullSortOrder.Unspecified, NullSortOrder.NullsLast, NullSortOrder.Unspecified];
+
+        Assert.Equal(expectedNullOrder, index.GetNullSortOrder());
     }
 
     [Fact]

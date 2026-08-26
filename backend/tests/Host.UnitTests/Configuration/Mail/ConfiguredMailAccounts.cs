@@ -3,8 +3,11 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.ComponentModel.DataAnnotations;
+using MailFathom.Application.Accounts;
 using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Mail.Readers;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Secrets.Discovery;
 
@@ -36,6 +39,18 @@ internal static class ConfiguredMailAccounts
         Enabled = true,
         Accounts = [account],
     };
+
+    /// <summary>Builds the catalog of accounts a configuration serves, as the composition root builds it.</summary>
+    /// <param name="options">The configuration the accounts are declared in.</param>
+    /// <returns>The catalog, answering with every declared account under the deployment's own owner.</returns>
+    /// <remarks>
+    /// The owner is supplied here rather than read out of the configuration, because a configured account names no
+    /// owner of its own: the deployment establishes at startup which owner its file's accounts belong to, and the
+    /// catalog is composed where that answer is resolvable. A test asking what a configuration serves therefore states
+    /// the owner the way the composition root does.
+    /// </remarks>
+    internal static IDeploymentMailAccountCatalog CatalogOver(MailSynchronizationOptions options) =>
+        new ConfiguredMailAccountCatalog(options, new StubDeploymentMailOwnerSource());
 
     /// <summary>Builds a complete reading account, which is what a delivery rule is added to and judged over.</summary>
     /// <returns>The account.</returns>

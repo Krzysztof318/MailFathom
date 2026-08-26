@@ -42,7 +42,8 @@ internal sealed class MailFolderSynchronizationProgressReader(MailFathomDbContex
         // and picking a row inside a group is not something the translation supports. The identifier settles a tie, so
         // two bindings advanced in the same instant still yield one row rather than two.
         var freshest = advanced.Where(folder => !advanced.Any(other =>
-            other.MailboxAccountId == folder.MailboxAccountId
+            other.OwnerId == folder.OwnerId
+            && other.MailboxAccountId == folder.MailboxAccountId
             && other.Alias == folder.Alias
             && (other.SynchronizationCheckpoint!.SynchronizedAt > folder.SynchronizationCheckpoint!.SynchronizedAt
                 || (other.SynchronizationCheckpoint.SynchronizedAt == folder.SynchronizationCheckpoint.SynchronizedAt

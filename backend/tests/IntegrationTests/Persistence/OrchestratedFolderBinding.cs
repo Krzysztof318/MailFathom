@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.IntegrationTests.Orchestration;
 using Microsoft.Extensions.DependencyInjection;
@@ -53,8 +54,28 @@ internal static class OrchestratedFolderBinding
     /// unavailable until the binding its configuration implies is committed here.
     /// </para>
     /// </remarks>
+    internal static Task<MailFolderResolution> CommitAsync(
+        OrchestratedMailFathomServices services,
+        string alias,
+        string remotePath,
+        CancellationToken cancellationToken) =>
+        CommitAsync(services, SyntheticMailAccount.Account, alias, remotePath, cancellationToken);
+
+    /// <summary>Binds one alias on an account other than the one this deployment serves, and commits it.</summary>
+    /// <param name="services">The composed services the write runs through.</param>
+    /// <param name="account">The account the binding belongs to, named by its owner and its identifier together.</param>
+    /// <param name="alias">The alias this test class owns, so its rows are not disturbed by another's.</param>
+    /// <param name="remotePath">The remote folder the alias names.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>The committed binding, whose identity later writes are scoped by.</returns>
+    /// <remarks>
+    /// The account is stated for a test whose subject is which owner a row belongs to, and the write is the same one
+    /// every other binding takes: the store creates the account row from the identity it was handed, so a binding under
+    /// an owner this deployment holds no record of is refused by the foreign key rather than written down.
+    /// </remarks>
     internal static async Task<MailFolderResolution> CommitAsync(
         OrchestratedMailFathomServices services,
+        MailAccountIdentity account,
         string alias,
         string remotePath,
         CancellationToken cancellationToken)
@@ -66,7 +87,7 @@ internal static class OrchestratedFolderBinding
         var commitResult = await services.CommitAsync(
             (scope, session, token) => scope.GetRequiredService<IMailFolderResolutionStore>().SaveResolutionAsync(
                 session,
-                SyntheticMailAccount.AccountId,
+                account,
                 binding,
                 token),
             cancellationToken);

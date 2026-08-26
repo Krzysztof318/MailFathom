@@ -86,7 +86,7 @@ public sealed class AuthoredSendUsageLedger(AuthoredSendCeilings ceilings, TimeP
             return null;
         }
 
-        var send = new SendIdentity(request.AccountId, request.Requester.Origin, request.Requester.Identity);
+        var send = new SendIdentity(request.Account.Id, request.Requester.Origin, request.Requester.Identity);
         var recipientCount = request.Recipients.Count;
 
         lock (this.gate)

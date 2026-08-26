@@ -168,7 +168,7 @@ public sealed class OrchestratedContentObjectReclamationTests(MailFathomOrchestr
             async (scope, session, token) =>
             {
                 storedEmailId = await scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
-                    session,
+                    session, SyntheticMailAccount.Owner,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, "reclamation-referenced", rawMime.Length),
                     extractedMetadata: null,
                     StoredEmailContentAvailability.Available,

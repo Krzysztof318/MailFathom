@@ -20,6 +20,7 @@ using MailFathom.Host.Api;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Rules;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -43,6 +44,10 @@ public sealed class MailRuleEndpointsTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
     private static readonly MailAccountId Account = MailAccountId.Create("work");
+
+    /// <summary>The account a stored run names, which is the owner and the identifier together.</summary>
+    private static readonly MailAccountIdentity AccountIdentity =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, Account);
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
 
     private readonly IMailRuleEvaluationRunStore runs = Substitute.For<IMailRuleEvaluationRunStore>();
@@ -208,7 +213,7 @@ public sealed class MailRuleEndpointsTests
         // Arrange
         var outstanding = new MailRuleEvaluationRun
         {
-            AccountId = Account,
+            Account = AccountIdentity,
             RequestedAt = Now.AddMinutes(-5),
             Trigger = MailRuleExecutionTrigger.RequestedRun,
             EvaluatedEmailCount = 120,
@@ -264,7 +269,7 @@ public sealed class MailRuleEndpointsTests
     public async Task ReadRunAsync_AnAccountNobodyHasAskedForARun_AnswersWithNoRunRatherThanARefusal()
     {
         // Arrange
-        this.runs.FindLatestAsync(Account, Arg.Any<CancellationToken>()).Returns((MailRuleEvaluationRun?)null);
+        this.runs.FindLatestAsync(AccountIdentity, Arg.Any<CancellationToken>()).Returns((MailRuleEvaluationRun?)null);
 
         // Act
         var result = await MailRuleEndpoints.ReadRunAsync(
@@ -284,9 +289,9 @@ public sealed class MailRuleEndpointsTests
     public async Task ReadRunAsync_ARunThatHasEnded_ReportsItsProgressAndHowItEnded()
     {
         // Arrange
-        this.runs.FindLatestAsync(Account, Arg.Any<CancellationToken>()).Returns(new MailRuleEvaluationRun
+        this.runs.FindLatestAsync(AccountIdentity, Arg.Any<CancellationToken>()).Returns(new MailRuleEvaluationRun
         {
-            AccountId = Account,
+            Account = AccountIdentity,
             RequestedAt = Now.AddHours(-1),
             Trigger = MailRuleExecutionTrigger.RequestedRun,
             EvaluatedEmailCount = 400,
@@ -332,7 +337,7 @@ public sealed class MailRuleEndpointsTests
         this.ArrangePage(new MailRuleExecution
         {
             Id = MailRuleExecutionId.New(),
-            AccountId = Account,
+            Account = AccountIdentity,
             StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
             RuleName = "file-invoices",
             Revision = MailRuleSetRevision.Restore("a1b2c3d4e5f6"),
@@ -493,7 +498,7 @@ public sealed class MailRuleEndpointsTests
     private static MailRuleExecution ExecutionThatFailed() => new()
     {
         Id = MailRuleExecutionId.New(),
-        AccountId = Account,
+        Account = AccountIdentity,
         StoredEmailId = StoredEmailId.Create(Guid.CreateVersion7()),
         RuleName = "file-invoices",
         Revision = MailRuleSetRevision.Restore("a1b2c3d4e5f6"),
@@ -512,6 +517,7 @@ public sealed class MailRuleEndpointsTests
         catalog.ServedAccounts.Returns(
         [
             .. accounts.Select(account => new ServedMailAccount(
+                SyntheticMailOwner.Deployment,
                 account,
                 MailAccountDisplayName.Create(account.Value),
                 MailSynchronizationMode.Polling)),

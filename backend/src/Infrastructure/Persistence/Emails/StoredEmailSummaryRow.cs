@@ -5,6 +5,7 @@
 using System.Linq.Expressions;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
@@ -37,6 +38,7 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 [RequiresIntegrationCoverage]
 internal sealed record StoredEmailSummaryRow(
     Guid Id,
+    Guid OwnerId,
     string MailboxAccountId,
     string FolderAlias,
     Guid? ThreadId,
@@ -78,6 +80,7 @@ internal sealed record StoredEmailSummaryRow(
     public static Expression<Func<StoredEmailEntity, StoredEmailSummaryRow>> Projection { get; } = email =>
         new StoredEmailSummaryRow(
             email.Id,
+            email.OwnerId,
             email.MailboxAccountId,
             email.MailFolder.Alias,
             email.EmailThreadId,
@@ -120,7 +123,9 @@ internal sealed record StoredEmailSummaryRow(
     public EmailSummary ToSummary() => new()
     {
         StoredEmailId = StoredEmailId.Create(this.Id),
-        AccountId = MailAccountId.Create(this.MailboxAccountId),
+        Account = MailAccountIdentity.Create(
+            MailOwnerId.Create(this.OwnerId),
+            MailAccountId.Create(this.MailboxAccountId)),
         FolderAlias = MailFolderAlias.Create(this.FolderAlias),
         ThreadId = this.ThreadId is { } threadId ? EmailThreadId.Create(threadId) : null,
         InternetMessageId = this.InternetMessageId,

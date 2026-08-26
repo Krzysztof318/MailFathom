@@ -49,17 +49,18 @@ internal static class OutgoingEmailClaimStatement
                                           SELECT candidate."Id"
                                           FROM outgoing_emails AS candidate
                                           WHERE candidate."{{nameof(OutgoingEmailEntity.Stage)}}" = {0}
-                                            AND candidate."{{nameof(OutgoingEmailEntity.MailboxAccountId)}}" = {1}
-                                            AND candidate."{{nameof(OutgoingEmailEntity.AvailableAt)}}" <= {2}
+                                            AND candidate."{{nameof(OutgoingEmailEntity.OwnerId)}}" = {1}
+                                            AND candidate."{{nameof(OutgoingEmailEntity.MailboxAccountId)}}" = {2}
+                                            AND candidate."{{nameof(OutgoingEmailEntity.AvailableAt)}}" <= {3}
                                             AND (candidate."{{nameof(OutgoingEmailEntity.LeaseExpiresAt)}}" IS NULL
-                                              OR candidate."{{nameof(OutgoingEmailEntity.LeaseExpiresAt)}}" <= {2})
+                                              OR candidate."{{nameof(OutgoingEmailEntity.LeaseExpiresAt)}}" <= {3})
                                           ORDER BY candidate."{{nameof(OutgoingEmailEntity.AvailableAt)}}", candidate."Id"
-                                          LIMIT {3}
+                                          LIMIT {4}
                                           FOR UPDATE SKIP LOCKED
                                       )
                                       UPDATE outgoing_emails AS outgoing
-                                      SET "{{nameof(OutgoingEmailEntity.LeaseOwner)}}" = {4},
-                                          "{{nameof(OutgoingEmailEntity.LeaseExpiresAt)}}" = {5},
+                                      SET "{{nameof(OutgoingEmailEntity.LeaseOwner)}}" = {5},
+                                          "{{nameof(OutgoingEmailEntity.LeaseExpiresAt)}}" = {6},
                                           "{{nameof(OutgoingEmailEntity.AttemptCount)}}" = outgoing."{{nameof(OutgoingEmailEntity.AttemptCount)}}" + 1
                                       FROM due
                                       WHERE outgoing."Id" = due."Id"
@@ -78,7 +79,8 @@ internal static class OutgoingEmailClaimStatement
         return FormattableStringFactory.Create(
             ClaimText,
             nameof(OutgoingEmailStage.Recorded),
-            request.AccountId.Value,
+            request.Account.Owner.Value,
+            request.Account.Id.Value,
             claimedAt,
             request.BatchSize,
             request.Owner,

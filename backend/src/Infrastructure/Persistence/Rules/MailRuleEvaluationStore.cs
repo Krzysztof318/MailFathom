@@ -64,24 +64,24 @@ internal sealed class MailRuleEvaluationStore(
     /// both backfills leave one out: applying a rule to mail nothing may read is work with no reader.
     /// </remarks>
     public Task<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>> GetEmailsAwaitingFirstEvaluationAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         StoredEmailId? resumeAfter,
         int batchSize,
         CancellationToken cancellationToken) =>
         this.ReadCandidatesAsync(
             dbContext.StoredEmails.Where(email => email.RulesEvaluatedAt == null),
-            accountId,
+            account,
             resumeAfter,
             batchSize,
             cancellationToken);
 
     /// <inheritdoc />
     public Task<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>> GetStoredEmailsAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         StoredEmailId? resumeAfter,
         int batchSize,
         CancellationToken cancellationToken) =>
-        this.ReadCandidatesAsync(dbContext.StoredEmails, accountId, resumeAfter, batchSize, cancellationToken);
+        this.ReadCandidatesAsync(dbContext.StoredEmails, account, resumeAfter, batchSize, cancellationToken);
 
     /// <inheritdoc />
     /// <remarks>
@@ -154,14 +154,15 @@ internal sealed class MailRuleEvaluationStore(
     /// </remarks>
     private async Task<IReadOnlyList<StoredEmailAwaitingRuleEvaluation>> ReadCandidatesAsync(
         IQueryable<StoredEmailEntity> emails,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         StoredEmailId? resumeAfter,
         int batchSize,
         CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
 
-        var mailboxAccountId = accountId.Value;
+        var ownerId = account.Owner.Value;
+        var mailboxAccountId = account.Id.Value;
         var resumeAfterId = resumeAfter?.Value;
 
         // Scoped to the folders a mapping mirrors, which withdraws two kinds of row at once from a pass that walks
@@ -180,7 +181,10 @@ internal sealed class MailRuleEvaluationStore(
             // mail would otherwise fire on the owner's own message the moment its sent copy came back. Both walks leave
             // them out, so a requested whole-mailbox run reaches the same conclusion an arrival did.
             .Where(email => email.FiledFromOutgoingEmailId == null)
-            .Where(email => email.MailboxAccountId == mailboxAccountId
+            // The owner leads the pair, which is both what makes the account term unambiguous and what lets this walk
+            // run on ix_stored_emails_owner_account_identity rather than on a scan the identity order is sorted out of.
+            .Where(email => email.OwnerId == ownerId
+                && email.MailboxAccountId == mailboxAccountId
                 && (resumeAfterId == null || email.Id > resumeAfterId))
             .OrderBy(email => email.Id)
             .Take(batchSize)
@@ -224,7 +228,7 @@ internal sealed class MailRuleEvaluationStore(
             .. candidates.Select(candidate => new StoredEmailAwaitingRuleEvaluation(
                 StoredEmailId.Create(candidate.Id),
                 EmailOccurrenceId.Create(
-                    accountId,
+                    account.Id,
                     new MailFolderResolutionId(
                         MailFolderAlias.Create(candidate.Alias),
                         MailFolderResolutionGeneration.Create(candidate.ResolutionGeneration)),

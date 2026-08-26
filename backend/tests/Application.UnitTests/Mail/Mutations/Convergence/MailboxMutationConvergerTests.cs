@@ -14,6 +14,7 @@ using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Transport;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -23,7 +24,8 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations.Convergence;
 
 public sealed class MailboxMutationConvergerTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("personal");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
 
     private static readonly MailFolderResolution InboxFolder = MailFolderResolution.FirstBindingOf(
         MailFolderAlias.Create("inbox"),
@@ -80,7 +82,7 @@ public sealed class MailboxMutationConvergerTests
 
         // Assert
         await context.WriteSessionFactory.Received(1).OpenForWritingAsync(
-            Account,
+            Account.Id,
             InboxFolder,
             TransportPolicy,
             Arg.Any<CancellationToken>());
@@ -97,7 +99,7 @@ public sealed class MailboxMutationConvergerTests
         var context = new ConvergerContext();
         var request = await context.LeaveOutstandingAsync(RelocationRequest(), record => record);
         context.FailRelocationWith(new MailboxUnavailableException(
-            Account,
+            Account.Id,
             new TimeoutException("The mail server did not answer within its budget.")));
 
         // Act
@@ -119,7 +121,7 @@ public sealed class MailboxMutationConvergerTests
         var context = new ConvergerContext();
         var failing = await context.LeaveOutstandingAsync(RelocationRequest(), record => record);
         var healthy = await context.LeaveOutstandingAsync(DeleteRequest(uid: 43U), record => record);
-        context.FailRelocationWith(new MailboxUnavailableException(Account, new TimeoutException("Not answering.")));
+        context.FailRelocationWith(new MailboxUnavailableException(Account.Id, new TimeoutException("Not answering.")));
 
         // Act
         var report = await context.Converger.ConvergeAsync(Account, CancellationToken.None);
@@ -151,12 +153,12 @@ public sealed class MailboxMutationConvergerTests
             : MailFathomErrorCode.MailboxMutationDestinationMissing;
         context.FailRelocationWith(isUnsupported
             ? new MailboxMutationUnsupportedException(
-                Account,
+                Account.Id,
                 InboxFolder.Alias,
                 MailboxMutation.Relocate.Name,
                 "UIDPLUS extension (RFC 4315)")
             : new MailboxDestinationFolderMissingException(
-                Account,
+                Account.Id,
                 InboxFolder.Alias,
                 MailboxMutation.Relocate,
                 new InvalidOperationException("The folder could not be found.")));
@@ -369,25 +371,25 @@ public sealed class MailboxMutationConvergerTests
         ];
 
     private static EmailOccurrenceId Occurrence(uint uid) => EmailOccurrenceId.Create(
-        Account,
+        Account.Id,
         InboxFolder.Id,
         ImapUidValidity.Create(7U),
         ImapUid.Create(uid));
 
     private static MailboxMutationRequest RelocationRequest() => MailboxMutationRequest.Relocate(
-        StoredEmailId.Create(Guid.CreateVersion7()),
+        StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailOwner.Deployment,
         Occurrence(42U),
         MailboxMutationRequester.Rule("file-newsletters", "3"),
         ArchivePath);
 
     private static MailboxMutationRequest CopyRequest() => MailboxMutationRequest.Copy(
-        StoredEmailId.Create(Guid.CreateVersion7()),
+        StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailOwner.Deployment,
         Occurrence(42U),
         MailboxMutationRequester.Rule("keep-a-copy", "4"),
         ArchivePath);
 
     private static MailboxMutationRequest DeleteRequest(uint uid) => MailboxMutationRequest.Delete(
-        StoredEmailId.Create(Guid.CreateVersion7()),
+        StoredEmailId.Create(Guid.CreateVersion7()), SyntheticMailOwner.Deployment,
         Occurrence(uid),
         MailboxMutationRequester.Rule("drop-notifications", "5"),
         AuthoredDeleteEmailDisposition.RetainLocalCopy);
@@ -444,7 +446,7 @@ public sealed class MailboxMutationConvergerTests
                 new MailboxMutationOptions { MaximumAttempts = maximumAttempts });
 
             var transportSecurityPolicyReader = Substitute.For<IMailTransportSecurityPolicyReader>();
-            transportSecurityPolicyReader.GetPolicy(Account).Returns(TransportPolicy);
+            transportSecurityPolicyReader.GetPolicy(Account.Id).Returns(TransportPolicy);
 
             this.Converger = new MailboxMutationConverger(
                 this.Store,

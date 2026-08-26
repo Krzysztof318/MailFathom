@@ -222,14 +222,12 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
 
         return $$"""
             INSERT INTO {{names.Totals}} ({{names.TotalsOwnerColumn}}, {{names.TotalsCountColumn}})
-            SELECT account.{{names.AccountOwnerColumn}}, -SUM(content.{{names.ContentLengthColumn}})
+            SELECT email.{{names.EmailOwnerColumn}}, -SUM(content.{{names.ContentLengthColumn}})
             FROM {{names.Contents}} AS content
             JOIN {{names.Emails}} AS email
                 ON email.{{names.EmailIdColumn}} = content.{{names.ContentEmailColumn}}
-            JOIN {{names.Accounts}} AS account
-                ON account.{{names.AccountIdColumn}} = email.{{names.EmailAccountColumn}}
             WHERE content.{{names.ContentEmailColumn}} = ANY({0})
-            GROUP BY account.{{names.AccountOwnerColumn}}
+            GROUP BY email.{{names.EmailOwnerColumn}}
             ON CONFLICT ({{names.TotalsOwnerColumn}}) DO UPDATE
             SET {{names.TotalsCountColumn}} = {{names.Totals}}.{{names.TotalsCountColumn}} + EXCLUDED.{{names.TotalsCountColumn}}
             """;
@@ -277,8 +275,8 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
     /// <summary>The statement that replaces one owner's figure with what their payloads actually hold.</summary>
     /// <remarks>
     /// Issued only against a row the statement above has already claimed, which is what makes the sum it takes safe to
-    /// write as a total. The join walks content to its message and its message to its account, which is where the owner
-    /// column is: the mail graph carries ownership on the account alone, and this is the sum that fact implies.
+    /// write as a total. The one join walks content to its message, and the message carries the owner beside the
+    /// account it names, so nothing here reads the account table to find out whose the mail is.
     /// </remarks>
     private static string RederiveStatement(IModel model)
     {
@@ -291,9 +289,7 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
                 FROM {{names.Contents}} AS content
                 JOIN {{names.Emails}} AS email
                     ON email.{{names.EmailIdColumn}} = content.{{names.ContentEmailColumn}}
-                JOIN {{names.Accounts}} AS account
-                    ON account.{{names.AccountIdColumn}} = email.{{names.EmailAccountColumn}}
-                WHERE account.{{names.AccountOwnerColumn}} = {0})
+                WHERE email.{{names.EmailOwnerColumn}} = {0})
             WHERE {{names.TotalsOwnerColumn}} = {0}
             """;
     }
@@ -309,6 +305,7 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
         string Emails,
         string EmailIdColumn,
         string EmailAccountColumn,
+        string EmailOwnerColumn,
         string Accounts,
         string AccountIdColumn,
         string AccountOwnerColumn)
@@ -330,6 +327,7 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
                 PersistedSchemaNames.QuotedTable(emails),
                 PersistedSchemaNames.QuotedColumn(emails, nameof(StoredEmailEntity.Id)),
                 PersistedSchemaNames.QuotedColumn(emails, nameof(StoredEmailEntity.MailboxAccountId)),
+                PersistedSchemaNames.QuotedColumn(emails, nameof(StoredEmailEntity.OwnerId)),
                 PersistedSchemaNames.QuotedTable(accounts),
                 PersistedSchemaNames.QuotedColumn(accounts, nameof(MailboxAccountEntity.Id)),
                 PersistedSchemaNames.QuotedColumn(accounts, nameof(MailboxAccountEntity.OwnerId)));

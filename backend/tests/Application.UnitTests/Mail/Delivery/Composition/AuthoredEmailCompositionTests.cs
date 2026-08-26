@@ -6,6 +6,7 @@ using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Mail.Delivery.Composition;
@@ -22,7 +23,7 @@ public sealed class AuthoredEmailCompositionTests
     {
         // Arrange
         var email = new ComposedOutgoingEmail(
-            OutgoingEmailRequest.Create(MailAccountId.Create("primary"), Requester(), [Recipient()]),
+            OutgoingEmailRequest.Create(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("primary")), Requester(), [Recipient()]),
             InternetMessageId.Mint("example.test"),
             new byte[] { 1, 2, 3 });
 

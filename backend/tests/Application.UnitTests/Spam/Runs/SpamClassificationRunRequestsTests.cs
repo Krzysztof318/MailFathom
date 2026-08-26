@@ -22,7 +22,8 @@ public sealed class SpamClassificationRunRequestsTests
 {
     private static readonly DateTimeOffset RequestedAt = new(2026, 8, 12, 9, 0, 0, TimeSpan.Zero);
 
-    private static readonly MailAccountId Account = MailAccountId.Create("acct-1");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("acct-1"));
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -78,7 +79,7 @@ public sealed class SpamClassificationRunRequestsTests
         // Arrange
         this.runStore.Arrange(new SpamClassificationRun
         {
-            AccountId = Account,
+            Account = Account,
             RequestedAt = RequestedAt.AddDays(-1),
             Terms = TermsOf(SpamActionPosture.DryRun),
             EndedAt = RequestedAt.AddDays(-1).AddMinutes(3),

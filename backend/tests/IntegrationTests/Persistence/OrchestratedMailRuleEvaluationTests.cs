@@ -239,7 +239,7 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
         await EndAnyOutstandingRunAsync(services, cancellationToken);
         var request = new MailRuleEvaluationRun
         {
-            AccountId = SyntheticMailAccount.AccountId,
+            Account = SyntheticMailAccount.Account,
             RequestedAt = RequestedAt,
             Trigger = MailRuleExecutionTrigger.ScheduledRun,
         };
@@ -312,7 +312,7 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
             services,
             new MailRuleEvaluationRun
             {
-                AccountId = SyntheticMailAccount.AccountId,
+                Account = SyntheticMailAccount.Account,
                 RequestedAt = RequestedAt,
                 Trigger = MailRuleExecutionTrigger.RequestedRun,
                 EvaluatedEmailCount = 7,
@@ -322,7 +322,7 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
             services,
             new MailRuleEvaluationRun
             {
-                AccountId = SyntheticMailAccount.AccountId,
+                Account = SyntheticMailAccount.Account,
                 RequestedAt = RequestedAt.AddMinutes(1),
                 Trigger = MailRuleExecutionTrigger.ScheduledRun,
             },
@@ -489,7 +489,7 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
             async (scope, session, token) => storedEmailId = await scope
                 .GetRequiredService<IEmailMetadataRepository>()
                 .UpsertMetadataAsync(
-                    session,
+                    session, SyntheticMailAccount.Owner,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                     JudgedExtractionOf(occurrenceId, subject),
                     StoredEmailContentAvailability.Available,
@@ -516,7 +516,7 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
             async (scope, session, token) => storedEmailId = await scope
                 .GetRequiredService<IEmailMetadataRepository>()
                 .UpsertMetadataAsync(
-                    session,
+                    session, SyntheticMailAccount.Owner,
                     SyntheticEmail.RemoteMetadataOf(occurrenceId, SubjectOf(uid)),
                     extractedMetadata: null,
                     contentAvailability,
@@ -625,7 +625,7 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailRuleEvaluationStore>()
                 .GetEmailsAwaitingFirstEvaluationAsync(
-                    SyntheticMailAccount.AccountId,
+                    SyntheticMailAccount.Account,
                     resumeAfter,
                     batchSize,
                     token),
@@ -637,7 +637,7 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
         int batchSize,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailRuleEvaluationStore>()
-                .GetStoredEmailsAsync(SyntheticMailAccount.AccountId, resumeAfter, batchSize, token),
+                .GetStoredEmailsAsync(SyntheticMailAccount.Account, resumeAfter, batchSize, token),
             cancellationToken);
 
     private static Task<string?> ReadExtractedBodyTextAsync(
@@ -660,7 +660,7 @@ public sealed class OrchestratedMailRuleEvaluationTests(MailFathomOrchestrationF
         OrchestratedMailFathomServices services,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IMailRuleEvaluationRunStore>()
-                .FindOutstandingAsync(SyntheticMailAccount.AccountId, token),
+                .FindOutstandingAsync(SyntheticMailAccount.Account, token),
             cancellationToken);
 
     private static Task<PersistenceCommitResult> SaveRunAsync(

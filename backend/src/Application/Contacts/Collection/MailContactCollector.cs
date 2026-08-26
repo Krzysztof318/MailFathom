@@ -84,7 +84,7 @@ public sealed class MailContactCollector
     }
 
     /// <summary>Opens what one synchronization run of one folder collects under.</summary>
-    /// <param name="accountId">The account being synchronized, whose settings size the run's bound.</param>
+    /// <param name="account">The account being synchronized, whose settings size the run's bound.</param>
     /// <param name="folderRole">The role the folder plays, or <see langword="null" /> when configuration gave it none.</param>
     /// <returns>The run, which the pass then hands back with every message it commits.</returns>
     /// <remarks>
@@ -92,8 +92,12 @@ public sealed class MailContactCollector
     /// in flight. An account that collects nothing opens a run whose bound is zero, which costs nothing: the settings
     /// are read again per message and stop the work before the bound is ever asked.
     /// </remarks>
-    public ContactCollectionRun OpenRun(MailAccountId accountId, MailFolderSpecialUse? folderRole) =>
-        new(folderRole, new ContactCollectionBudget(this.settingsReader.GetContactCollectionSettings(accountId).MaxContactsPerRun));
+    public ContactCollectionRun OpenRun(MailAccountIdentity account, MailFolderSpecialUse? folderRole) =>
+        new(
+            account,
+            folderRole,
+            new ContactCollectionBudget(
+                this.settingsReader.GetContactCollectionSettings(account.Id).MaxContactsPerRun));
 
     /// <summary>Records whoever one committed message says the account corresponds with.</summary>
     /// <param name="metadata">What was read out of the message that was just stored.</param>
@@ -113,8 +117,8 @@ public sealed class MailContactCollector
         ArgumentNullException.ThrowIfNull(metadata);
         ArgumentNullException.ThrowIfNull(run);
 
-        var accountId = metadata.OccurrenceId.AccountId;
-        var settings = this.settingsReader.GetContactCollectionSettings(accountId);
+        var account = run.Account;
+        var settings = this.settingsReader.GetContactCollectionSettings(account.Id);
 
         if (!settings.IsEnabled || CollectedRoleIn(run.FolderRole) is not { } role)
         {
@@ -130,7 +134,7 @@ public sealed class MailContactCollector
 
         foreach (var address in CandidatesIn(metadata, role))
         {
-            if (!await this.RecordAsync(accountId, address, role, settings, run.Budget, cancellationToken))
+            if (!await this.RecordAsync(account, address, role, settings, run.Budget, cancellationToken))
             {
                 return;
             }
@@ -144,7 +148,7 @@ public sealed class MailContactCollector
     /// holds, which is the ordinary case once a book has filled, costs one lookup and nothing else.
     /// </remarks>
     private async Task<bool> RecordAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         EmailAddress address,
         EmailAddressRole role,
         ContactCollectionSettings settings,
@@ -166,7 +170,7 @@ public sealed class MailContactCollector
         }
 
         if (role == EmailAddressRole.From && !await this.HasWrittenOftenEnoughAsync(
-            accountId,
+            account,
             address,
             settings.MinimumMessagesFromSender,
             cancellationToken))
@@ -206,13 +210,13 @@ public sealed class MailContactCollector
     /// first one and counting it would be asking the database to confirm what the caller is holding.
     /// </remarks>
     private async Task<bool> HasWrittenOftenEnoughAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         EmailAddress address,
         int minimumMessages,
         CancellationToken cancellationToken) =>
         minimumMessages <= 1
         || await this.authoredMail.CountMessagesAuthoredByAsync(
-            accountId,
+            account,
             address,
             minimumMessages,
             cancellationToken) >= minimumMessages;

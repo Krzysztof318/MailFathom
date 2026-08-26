@@ -85,7 +85,7 @@ public sealed class MailboxReconciler
 
     /// <summary>Reconciles one bounded window of the folder the supplied session has open.</summary>
     /// <param name="mailboxSession">The open read-only session, whose folder and UIDVALIDITY the window is chosen for.</param>
-    /// <param name="accountId">The account being reconciled.</param>
+    /// <param name="account">The account being reconciled.</param>
     /// <param name="folder">The alias binding being reconciled.</param>
     /// <param name="uidValidity">The UIDVALIDITY the session reports for the open folder.</param>
     /// <param name="reconciledThroughModSeq">
@@ -115,7 +115,7 @@ public sealed class MailboxReconciler
     /// </remarks>
     public async Task<MailboxReconciliationResult> ReconcileAsync(
         IMailboxSession mailboxSession,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolution folder,
         ImapUidValidity uidValidity,
         ulong? reconciledThroughModSeq,
@@ -125,7 +125,7 @@ public sealed class MailboxReconciler
         ArgumentNullException.ThrowIfNull(folder);
 
         var window = await this.reconciliationStore.GetReconciliationWindowAsync(
-            accountId,
+            account,
             folder.Id,
             uidValidity,
             this.options.MaxReconciledEmailsPerRun,
@@ -144,13 +144,13 @@ public sealed class MailboxReconciler
         var classification = ClassifyWindow(window, observation);
         var outcome = await this.AttributeDisappearancesAsync(
             classification,
-            accountId,
+            account,
             folder.Id,
             uidValidity,
             cancellationToken);
         var flagChanges = await this.AttributeFlagChangesAsync(
             classification,
-            accountId,
+            account,
             folder.Id,
             uidValidity,
             cancellationToken);
@@ -212,12 +212,12 @@ public sealed class MailboxReconciler
     /// </remarks>
     private async Task<ReconciledFolderOutcome> AttributeDisappearancesAsync(
         ReconciledWindowClassification classification,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         CancellationToken cancellationToken)
     {
-        var disposition = this.dispositionReader.GetDisposition(accountId);
+        var disposition = this.dispositionReader.GetDisposition(account.Id);
         var observedAt = this.timeProvider.GetUtcNow();
 
         if (classification.Disappeared.Count == 0)
@@ -232,7 +232,7 @@ public sealed class MailboxReconciler
         }
 
         var records = await this.mutationStore.ReadMutationsRemovingAsync(
-            accountId,
+            account,
             folderResolutionId,
             uidValidity,
             [.. classification.Disappeared.Select(static candidate => candidate.Uid)],
@@ -242,7 +242,7 @@ public sealed class MailboxReconciler
             .Select(candidate => new
             {
                 candidate.StoredEmailId,
-                Record = FindRecordRemoving(records, accountId, folderResolutionId, uidValidity, candidate.Uid),
+                Record = FindRecordRemoving(records, account, folderResolutionId, uidValidity, candidate.Uid),
             })
             .ToArray();
 
@@ -294,7 +294,7 @@ public sealed class MailboxReconciler
     /// </remarks>
     private async Task<ReconciledFlagChanges> AttributeFlagChangesAsync(
         ReconciledWindowClassification classification,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         CancellationToken cancellationToken)
@@ -317,7 +317,7 @@ public sealed class MailboxReconciler
         }
 
         var records = await this.mutationStore.ReadFlagChangesOnAsync(
-            accountId,
+            account,
             folderResolutionId,
             uidValidity,
             [.. changed.Select(static observed => observed.Candidate.Uid)],
@@ -328,7 +328,7 @@ public sealed class MailboxReconciler
             .SelectMany(observed => AttributedValuesOf(
                 records,
                 observed,
-                accountId,
+                account,
                 folderResolutionId,
                 uidValidity))
             .ToArray();
@@ -360,7 +360,7 @@ public sealed class MailboxReconciler
     private static IEnumerable<AttributedFlagChange> AttributedValuesOf(
         IReadOnlyList<MailboxMutationRecord> records,
         ObservedWindowCandidate observed,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity)
     {
@@ -372,7 +372,7 @@ public sealed class MailboxReconciler
         }
 
         var occurrence = EmailOccurrenceId.Create(
-            accountId,
+            account.Id,
             folderResolutionId,
             uidValidity,
             observed.Candidate.Uid);
@@ -431,12 +431,12 @@ public sealed class MailboxReconciler
 
     private static MailboxMutationRecord? FindRecordRemoving(
         IReadOnlyList<MailboxMutationRecord> records,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         ImapUid uid)
     {
-        var occurrence = EmailOccurrenceId.Create(accountId, folderResolutionId, uidValidity, uid);
+        var occurrence = EmailOccurrenceId.Create(account.Id, folderResolutionId, uidValidity, uid);
 
         return records.FirstOrDefault(record => record.AccountsForRemovalOf(occurrence));
     }

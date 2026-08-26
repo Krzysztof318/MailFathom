@@ -74,6 +74,7 @@ internal sealed class OutgoingEmailFilingConfiguration : IEntityTypeConfiguratio
         // which would make them grow with everything ever sent rather than with what is in flight.
         entity.HasIndex(filing => new
         {
+            filing.OwnerId,
             filing.MailboxAccountId,
             filing.FolderPath,
             filing.PlacementUidValidity,
@@ -82,7 +83,12 @@ internal sealed class OutgoingEmailFilingConfiguration : IEntityTypeConfiguratio
             .HasDatabaseName(PersistenceConstraintNames.OutgoingEmailFilingPlacementIndexName)
             .HasFilter(JoinableFilingIndexFilter);
 
-        entity.HasIndex(filing => new { filing.MailboxAccountId, filing.InternetMessageId })
+        entity.HasIndex(filing => new
+        {
+            filing.OwnerId,
+            filing.MailboxAccountId,
+            filing.InternetMessageId,
+        })
             .HasDatabaseName(PersistenceConstraintNames.OutgoingEmailFilingMessageIdIndexName)
             .HasFilter(JoinableFilingIndexFilter);
 

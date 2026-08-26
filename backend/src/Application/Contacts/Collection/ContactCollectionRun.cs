@@ -2,11 +2,13 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 
 namespace MailFathom.Application.Contacts.Collection;
 
 /// <summary>What one synchronization run of one folder collects under.</summary>
+/// <param name="Account">The account being synchronized, named by its owner and its identifier, which is what a read of its mail narrows on.</param>
 /// <param name="FolderRole">The role the folder plays, or <see langword="null" /> when configuration gave it none.</param>
 /// <param name="Budget">How many contacts this run may still record.</param>
 /// <remarks>
@@ -15,4 +17,7 @@ namespace MailFathom.Application.Contacts.Collection;
 /// than of the message that reached it. Opening one per run is also what makes the bound the run's — a value built per
 /// message would bound nothing.
 /// </remarks>
-public sealed record ContactCollectionRun(MailFolderSpecialUse? FolderRole, ContactCollectionBudget Budget);
+public sealed record ContactCollectionRun(
+    MailAccountIdentity Account,
+    MailFolderSpecialUse? FolderRole,
+    ContactCollectionBudget Budget);

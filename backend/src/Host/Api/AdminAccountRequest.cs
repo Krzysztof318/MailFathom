@@ -29,7 +29,12 @@ internal static class AdminAccountRequest
     /// <param name="account">The account identifier the request carried, which may be absent or blank.</param>
     /// <param name="accounts">Reports the accounts this deployment serves.</param>
     /// <returns>The served account, or <see langword="null" /> when the request named none or named one this deployment does not serve.</returns>
-    internal static MailAccountId? Resolve(string? account, IDeploymentMailAccountCatalog accounts)
+    /// <remarks>
+    /// The answer is the account and its owner together, because an identifier names one account within its owner and
+    /// every write an administrative request leads to records whose mail it was about. The catalog is what supplies the
+    /// owner, so the pair comes from the same lookup that decided the account is served rather than from a second read.
+    /// </remarks>
+    internal static MailAccountIdentity? Resolve(string? account, IDeploymentMailAccountCatalog accounts)
     {
         if (string.IsNullOrWhiteSpace(account))
         {
@@ -38,7 +43,9 @@ internal static class AdminAccountRequest
 
         var accountId = MailAccountId.Create(account);
 
-        return accounts.ServedAccounts.Any(served => served.Id == accountId) ? accountId : null;
+        return accounts.ServedAccounts
+            .FirstOrDefault(served => served.Id == accountId)
+            ?.Identity;
     }
 
     /// <summary>States why the account a request named did not resolve, without echoing an empty one.</summary>
@@ -80,7 +87,7 @@ internal static class AdminAccountRequest
     internal static bool TryResolveFilter(
         string? account,
         IDeploymentMailAccountCatalog accounts,
-        out MailAccountId? accountId,
+        out MailAccountIdentity? accountId,
         [NotNullWhen(false)] out ProblemHttpResult? refusal)
     {
         accountId = null;

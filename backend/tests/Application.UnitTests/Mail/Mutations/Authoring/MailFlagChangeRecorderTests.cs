@@ -24,7 +24,8 @@ namespace MailFathom.Application.UnitTests.Mail.Mutations.Authoring;
 /// <summary>Covers the grant, the visibility rule, and the records one caller's flag change is written down as.</summary>
 public sealed class MailFlagChangeRecorderTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("personal");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
 
     private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
 
@@ -77,7 +78,7 @@ public sealed class MailFlagChangeRecorderTests
         Assert.Equal(target.Occurrence, request.Occurrence);
         Assert.Equal(LocalEmail, request.StoredEmailId);
         Assert.True(request.DesiredSeenState);
-        Assert.Equal(Account, result.AccountId);
+        Assert.Equal(Account.Id, result.AccountId);
         Assert.Equal(Inbox, result.FolderAlias);
     }
 
@@ -313,7 +314,7 @@ public sealed class MailFlagChangeRecorderTests
     {
         var callerAuthorization =
             authorization ?? AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailFlagsWrite);
-        var accountCatalog = OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account));
+        var accountCatalog = OwnedMailAccountCatalogs.For(callerAuthorization, SyntheticServedAccount.Of(Account.Id));
 
         var targets = Substitute.For<IAuthoredMailboxTargetReader>();
         targets.FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(target));
@@ -330,8 +331,8 @@ public sealed class MailFlagChangeRecorderTests
             new MailboxScopeResolver(
                 accountCatalog,
                 StubMailFolderParticipation
-                    .Mapping(new MailFolderIdentity(Account, Inbox))
-                    .Hiding(new MailFolderIdentity(Account, Withheld)),
+                    .Mapping(new MailFolderIdentity(Account.Id, Inbox))
+                    .Hiding(new MailFolderIdentity(Account.Id, Withheld)),
                 StubJunkMailFolderCatalog.None,
                 StubMailFolderMappings.ResolvingNothing),
             targets,
@@ -347,7 +348,8 @@ public sealed class MailFlagChangeRecorderTests
         var folder = MailFolderResolution.FirstBindingOf(folderAlias, RemoteFolderPath.Create(folderAlias.Value));
 
         return new AuthoredMailboxTarget(
-            EmailOccurrenceId.Create(Account, folder.Id, ImapUidValidity.Create(42), ImapUid.Create(7)),
+            Account.Owner,
+            EmailOccurrenceId.Create(Account.Id, folder.Id, ImapUidValidity.Create(42), ImapUid.Create(7)),
             folder);
     }
 

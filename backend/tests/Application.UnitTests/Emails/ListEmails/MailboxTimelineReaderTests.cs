@@ -928,7 +928,7 @@ public sealed class MailboxTimelineReaderTests
         [
             .. servedAccountIds
                 .OrderBy(accountId => accountId.Value, StringComparer.Ordinal)
-                .Select(SyntheticServedAccount.Of),
+                .Select(accountId => SyntheticServedAccount.Of(accountId)),
         ]);
 
         return catalog;

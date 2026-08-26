@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Domain.Accounts;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -15,7 +16,8 @@ public sealed class MailAnsweringAuditTrailRetentionTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private readonly IMailAnsweringAuditSettingsReader settings =
         Substitute.For<IMailAnsweringAuditSettingsReader>();
@@ -27,7 +29,7 @@ public sealed class MailAnsweringAuditTrailRetentionTests
     public async Task EraseExpiredAsync_AConfiguredWindow_ErasesBackFromNowInOneBoundedBatch()
     {
         // Arrange
-        this.settings.GetAnsweringAuditSettings(Account)
+        this.settings.GetAnsweringAuditSettings(Account.Id)
             .Returns(new MailAnsweringAuditSettings(IsEnabled: true, TimeSpan.FromDays(30)));
         this.store.EraseCompletedBeforeAsync(
                 Account,
@@ -53,7 +55,7 @@ public sealed class MailAnsweringAuditTrailRetentionTests
     public async Task EraseExpiredAsync_ARecordSwitchedOffWithAWindowStillConfigured_StillErases()
     {
         // Arrange
-        this.settings.GetAnsweringAuditSettings(Account)
+        this.settings.GetAnsweringAuditSettings(Account.Id)
             .Returns(new MailAnsweringAuditSettings(IsEnabled: false, TimeSpan.FromDays(30)));
 
         // Act
@@ -72,7 +74,7 @@ public sealed class MailAnsweringAuditTrailRetentionTests
     public async Task EraseExpiredAsync_AnAccountThisDeploymentDoesNotConfigure_ErasesNothing()
     {
         // Arrange
-        this.settings.GetAnsweringAuditSettings(Account).Returns(MailAnsweringAuditSettings.Disabled);
+        this.settings.GetAnsweringAuditSettings(Account.Id).Returns(MailAnsweringAuditSettings.Disabled);
 
         // Act
         var erasedCount = await this.Retention().EraseExpiredAsync(Account, TestContext.Current.CancellationToken);
@@ -80,7 +82,7 @@ public sealed class MailAnsweringAuditTrailRetentionTests
         // Assert
         Assert.Equal(0, erasedCount);
         await this.store.DidNotReceive().EraseCompletedBeforeAsync(
-            Arg.Any<MailAccountId>(),
+            Arg.Any<MailAccountIdentity>(),
             Arg.Any<DateTimeOffset>(),
             Arg.Any<int>(),
             Arg.Any<CancellationToken>());

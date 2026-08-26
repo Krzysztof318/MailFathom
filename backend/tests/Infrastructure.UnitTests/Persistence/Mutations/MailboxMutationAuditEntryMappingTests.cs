@@ -8,6 +8,7 @@ using MailFathom.Domain.Mutations;
 using MailFathom.Domain.Mutations.Audit;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Mutations;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Persistence.Mutations;
@@ -97,6 +98,7 @@ public sealed class MailboxMutationAuditEntryMappingTests
     {
         Id = Guid.CreateVersion7(RecordedAt),
         MutationRecordId = Guid.CreateVersion7(RecordedAt),
+        OwnerId = SyntheticMailOwner.Deployment.Value,
         MailboxAccountId = "work",
         StoredEmailId = Guid.CreateVersion7(RecordedAt),
         Mutation = MailboxMutation.Relocate.Name,

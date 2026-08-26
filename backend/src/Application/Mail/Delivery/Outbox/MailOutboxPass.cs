@@ -89,7 +89,7 @@ public sealed class MailOutboxPass
     }
 
     /// <summary>Claims one batch of the account's due sends and attempts each of them.</summary>
-    /// <param name="accountId">The account whose outbox is drained.</param>
+    /// <param name="account">The account whose outbox is drained.</param>
     /// <param name="stoppingToken">Stops each attempt when the host is shutting down.</param>
     /// <returns>What each claimed send ended in, and whether there is more waiting behind the batch.</returns>
     /// <remarks>
@@ -97,7 +97,7 @@ public sealed class MailOutboxPass
     /// its lease back — a pass abandoned mid-batch would leave the sends behind the one that was running held until
     /// their leases expired.
     /// </remarks>
-    public async Task<MailOutboxPassReport> RunAsync(MailAccountId accountId, CancellationToken stoppingToken)
+    public async Task<MailOutboxPassReport> RunAsync(MailAccountIdentity account, CancellationToken stoppingToken)
     {
         // Before the submission endpoint is asked for, because a draft is written over IMAP and owes nothing to SMTP:
         // an account that reads mail without sending it keeps drafts like any other, and a replacement whose process
@@ -105,26 +105,26 @@ public sealed class MailOutboxPass
         // reached by this sweep or by nothing. Guarding it behind the delivery policy would leave exactly those
         // accounts with a folder nothing ever brings back into step.
         var draftResults = new List<MailDraftFilingResult>(
-            await this.SettleDraftsAsync(accountId, stoppingToken));
+            await this.SettleDraftsAsync(account, stoppingToken));
 
         // An account with no submission endpoint has nothing to drain and no policy to drain it under. Asking here
         // keeps a read-only account from claiming work it could never attempt, and what it reports is the drafts it
         // did settle rather than a pass that never ran.
-        if (this.transportSecurityPolicyReader.GetDeliveryPolicy(accountId) is not { } transportSecurityPolicy)
+        if (this.transportSecurityPolicyReader.GetDeliveryPolicy(account.Id) is not { } transportSecurityPolicy)
         {
             return MailOutboxPassReport.WithDraftsAlone(draftResults);
         }
 
-        var markedUnknownCount = await this.outgoingEmails.MarkUnknownOutcomesAsync(accountId, stoppingToken);
+        var markedUnknownCount = await this.outgoingEmails.MarkUnknownOutcomesAsync(account, stoppingToken);
 
         // Before the claim rather than after it, so a send that is waiting for an instant still ahead is mirrored while
         // it waits rather than after whatever eventually takes it. A send this claim is about to take is not waiting at
         // all and is mirrored nowhere.
         var filingResults = new List<OutgoingMailFilingResult>(
-            await this.filings.MirrorWaitingSendsAsync(accountId, stoppingToken));
+            await this.filings.MirrorWaitingSendsAsync(account, stoppingToken));
 
         var claimed = await this.outgoingEmails.ClaimAsync(
-            OutgoingEmailClaimRequest.Create(accountId, this.settings.MaxDeliveriesPerPass, this.settings.LeaseDuration),
+            OutgoingEmailClaimRequest.Create(account, this.settings.MaxDeliveriesPerPass, this.settings.LeaseDuration),
             stoppingToken);
 
         var results = new List<MailOutboxDeliveryResult>(claimed.Count);
@@ -143,7 +143,7 @@ public sealed class MailOutboxPass
             draftResults.AddRange(await this.SettlePromotedDraftAsync(result, stoppingToken));
         }
 
-        var outstandingByStage = await this.MeasureOutstandingAsync(accountId, stoppingToken);
+        var outstandingByStage = await this.MeasureOutstandingAsync(account, stoppingToken);
 
         return new MailOutboxPassReport(
             results,
@@ -166,12 +166,12 @@ public sealed class MailOutboxPass
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The count is the last step of the pass and the only one nothing acts on; letting it throw would discard the delivery and filing outcomes this pass had already durably settled, and report a pass that worked as one that failed.")]
     private async Task<IReadOnlyList<OutboxStageCount>> MeasureOutstandingAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken stoppingToken)
     {
         try
         {
-            return await this.outgoingEmails.CountOutstandingByStageAsync(accountId, stoppingToken);
+            return await this.outgoingEmails.CountOutstandingByStageAsync(account, stoppingToken);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -232,12 +232,12 @@ public sealed class MailOutboxPass
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A draft the mailbox could not be brought into step with must not stop the sends this pass was about to claim; the records are unchanged and the next pass reads them again.")]
     private async Task<IReadOnlyList<MailDraftFilingResult>> SettleDraftsAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         CancellationToken stoppingToken)
     {
         try
         {
-            return await this.drafts.SettleOutstandingAsync(accountId, stoppingToken);
+            return await this.drafts.SettleOutstandingAsync(account, stoppingToken);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {

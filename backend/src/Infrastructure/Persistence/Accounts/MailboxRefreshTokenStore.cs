@@ -35,13 +35,16 @@ internal sealed class MailboxRefreshTokenStore(
     TimeProvider timeProvider) : IMailboxRefreshTokenStore
 {
     /// <inheritdoc />
-    public async Task<MailboxRefreshToken?> FindTokenAsync(MailAccountId accountId, CancellationToken cancellationToken)
+    public async Task<MailboxRefreshToken?> FindTokenAsync(
+        MailAccountIdentity account,
+        CancellationToken cancellationToken)
     {
-        var storedAccountId = accountId.Value;
+        var storedOwnerId = account.Owner.Value;
+        var storedAccountId = account.Id.Value;
 
         var stored = await dbContext.MailboxRefreshTokens
             .AsNoTracking()
-            .Where(token => token.MailboxAccountId == storedAccountId)
+            .Where(token => token.OwnerId == storedOwnerId && token.MailboxAccountId == storedAccountId)
             .Select(token => new { token.SealedRefreshToken, token.DataEncryptionKeyId })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -51,7 +54,7 @@ internal sealed class MailboxRefreshTokenStore(
         }
 
         var material = await fieldEncryptor.OpenAsync(
-            BindingFor(accountId),
+            BindingFor(account.Id),
             new SealedValue(stored.DataEncryptionKeyId, stored.SealedRefreshToken),
             cancellationToken);
 
@@ -70,7 +73,7 @@ internal sealed class MailboxRefreshTokenStore(
 
     /// <inheritdoc />
     public async Task SaveTokenAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailboxRefreshToken refreshToken,
         CancellationToken cancellationToken)
     {
@@ -83,14 +86,15 @@ internal sealed class MailboxRefreshTokenStore(
         SealedValue sealedToken;
         try
         {
-            sealedToken = await fieldEncryptor.SealAsync(BindingFor(accountId), plaintext, cancellationToken);
+            sealedToken = await fieldEncryptor.SealAsync(BindingFor(account.Id), plaintext, cancellationToken);
         }
         finally
         {
             CryptographicOperations.ZeroMemory(plaintext);
         }
 
-        var storedAccountId = accountId.Value;
+        var storedOwnerId = account.Owner.Value;
+        var storedAccountId = account.Id.Value;
         var ciphertext = sealedToken.Ciphertext.ToArray();
         var keyId = sealedToken.KeyId;
         var updatedAt = timeProvider.GetUtcNow();
@@ -100,8 +104,8 @@ internal sealed class MailboxRefreshTokenStore(
         await dbContext.Database.ExecuteSqlAsync(
             $"""
              INSERT INTO mailbox_refresh_tokens
-                 ("MailboxAccountId", "SealedRefreshToken", "DataEncryptionKeyId", "UpdatedAt")
-             VALUES ({storedAccountId}, {ciphertext}, {keyId}, {updatedAt})
+                 ("OwnerId", "MailboxAccountId", "SealedRefreshToken", "DataEncryptionKeyId", "UpdatedAt")
+             VALUES ({storedOwnerId}, {storedAccountId}, {ciphertext}, {keyId}, {updatedAt})
              ON CONFLICT ("MailboxAccountId") DO UPDATE SET
                  "SealedRefreshToken" = EXCLUDED."SealedRefreshToken",
                  "DataEncryptionKeyId" = EXCLUDED."DataEncryptionKeyId",

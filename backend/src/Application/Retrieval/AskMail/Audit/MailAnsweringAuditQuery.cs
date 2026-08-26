@@ -34,13 +34,13 @@ public sealed record MailAnsweringAuditQuery
     public const int MaximumPageSize = 100;
 
     private MailAnsweringAuditQuery(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         DateTimeOffset? completedFrom,
         DateTimeOffset? completedBefore,
         int pageSize,
         MailAnsweringAuditCursor? cursor)
     {
-        this.AccountId = accountId;
+        this.Account = account;
         this.CompletedFrom = completedFrom;
         this.CompletedBefore = completedBefore;
         this.PageSize = pageSize;
@@ -48,7 +48,9 @@ public sealed record MailAnsweringAuditQuery
     }
 
     /// <summary>Gets the account whose record is read.</summary>
-    public MailAccountId AccountId { get; }
+    public MailAccountIdentity Account { get; }
+    /// <summary>Gets the identifier half of <see cref="Account" />, which is what a reader already narrowed to one owner names.</summary>
+    public MailAccountId AccountId => this.Account.Id;
 
     /// <summary>Gets the earliest completion instant served, inclusive, or <see langword="null" /> when the page reaches back as far as the record does.</summary>
     public DateTimeOffset? CompletedFrom { get; }
@@ -68,19 +70,19 @@ public sealed record MailAnsweringAuditQuery
     /// same walk, and refusing that would be a rule about pacing rather than about which entries the boundary sits in.
     /// </remarks>
     public string FilterFingerprint => ComputeFingerprint(
-        this.AccountId,
+        this.Account,
         this.CompletedFrom,
         this.CompletedBefore);
 
     /// <summary>Builds a validated query from what a caller asked for, or reports why the request names no page.</summary>
-    /// <param name="accountId">The account whose record is read.</param>
+    /// <param name="account">The account whose record is read.</param>
     /// <param name="completedFrom">The earliest completion instant served, inclusive, or <see langword="null" /> for none.</param>
     /// <param name="completedBefore">The completion instant to stop before, exclusive, or <see langword="null" /> for none.</param>
     /// <param name="pageSize">How many entries the page may hold, or <see langword="null" /> for <see cref="DefaultPageSize" />.</param>
     /// <param name="cursor">The boundary a continued walk reads beyond, or <see langword="null" /> for the first page.</param>
     /// <returns>The accepted query, or the refusal naming what the caller has to change.</returns>
     public static MailAnsweringAuditQueryResult Create(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         DateTimeOffset? completedFrom,
         DateTimeOffset? completedBefore,
         int? pageSize,
@@ -99,7 +101,7 @@ public sealed record MailAnsweringAuditQuery
         }
 
         var query = new MailAnsweringAuditQuery(
-            accountId,
+            account,
             completedFrom,
             completedBefore,
             resolvedPageSize,
@@ -116,11 +118,12 @@ public sealed record MailAnsweringAuditQuery
 
     /// <summary>Reduces the filters to the short stable text a cursor carries to prove it belongs to this walk.</summary>
     private static string ComputeFingerprint(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         DateTimeOffset? completedFrom,
         DateTimeOffset? completedBefore) =>
         PageFilterFingerprint.Of(
-            accountId.Value,
+            account.Owner.Value.ToString("N", CultureInfo.InvariantCulture),
+            account.Id.Value,
             completedFrom?.UtcTicks.ToString(CultureInfo.InvariantCulture),
             completedBefore?.UtcTicks.ToString(CultureInfo.InvariantCulture));
 }

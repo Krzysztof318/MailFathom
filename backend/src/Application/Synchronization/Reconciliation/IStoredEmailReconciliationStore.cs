@@ -25,7 +25,7 @@ namespace MailFathom.Application.Synchronization.Reconciliation;
 public interface IStoredEmailReconciliationStore
 {
     /// <summary>Reads the occurrences of one folder binding that this run should ask the server about.</summary>
-    /// <param name="accountId">The account the folder belongs to.</param>
+    /// <param name="account">The account the folder belongs to.</param>
     /// <param name="folderResolutionId">The alias binding whose occurrences are reconciled.</param>
     /// <param name="uidValidity">The UIDVALIDITY the open session reports, which the returned occurrences must have been stored under.</param>
     /// <param name="maxEmailCount">The greatest number of occurrences to return.</param>
@@ -51,7 +51,7 @@ public interface IStoredEmailReconciliationStore
     /// </para>
     /// </remarks>
     Task<IReadOnlyList<StoredEmailAwaitingReconciliation>> GetReconciliationWindowAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         int maxEmailCount,

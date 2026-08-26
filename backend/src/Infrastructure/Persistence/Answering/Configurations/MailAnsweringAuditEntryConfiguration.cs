@@ -53,13 +53,19 @@ internal sealed class MailAnsweringAuditEntryConfiguration : IEntityTypeConfigur
         // One entry per run per account, enforced by the database rather than checked before the insert: an append
         // repeated after a commit whose answer was lost passes any application check and only the constraint closes
         // that window.
-        entity.HasIndex(record => new { record.RunId, record.MailboxAccountId })
+        entity.HasIndex(record => new { record.RunId, record.OwnerId, record.MailboxAccountId })
             .IsUnique()
             .HasDatabaseName(PersistenceConstraintNames.MailAnsweringAuditEntryRunUniqueIndexName);
 
         // The one index the record is worked through, and it serves both readers: a page is the account's entries
         // ordered by when they ended, and retention erases the same account's entries that ended before a cutoff.
-        entity.HasIndex(record => new { record.MailboxAccountId, record.CompletedAt, record.Id })
+        entity.HasIndex(record => new
+        {
+            record.OwnerId,
+            record.MailboxAccountId,
+            record.CompletedAt,
+            record.Id,
+        })
             .HasDatabaseName(PersistenceConstraintNames.MailAnsweringAuditEntryTimelineIndexName);
     }
 }

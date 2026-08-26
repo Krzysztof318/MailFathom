@@ -19,7 +19,7 @@ namespace MailFathom.Application.Synchronization.Checkpoints;
 public interface ISynchronizationCheckpointStore
 {
     /// <summary>Gets the last durable checkpoint for one alias binding.</summary>
-    /// <param name="accountId">The account owning the folder.</param>
+    /// <param name="account">The account owning the folder.</param>
     /// <param name="folderResolutionId">The alias binding whose progress is read.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The durable progress, or <see langword="null" /> when the binding has never been synchronized.</returns>
@@ -28,13 +28,13 @@ public interface ISynchronizationCheckpointStore
     /// new remote folder is synchronized from its first UID.
     /// </remarks>
     Task<SynchronizationCheckpoint?> GetCheckpointAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolutionId folderResolutionId,
         CancellationToken cancellationToken);
 
     /// <summary>Stages a checkpoint update only when the durable state still matches the state previously read.</summary>
     /// <param name="session">The open session whose transaction the staged update joins.</param>
-    /// <param name="accountId">The account owning the folder.</param>
+    /// <param name="account">The account owning the folder.</param>
     /// <param name="folderResolutionId">The alias binding whose progress advances.</param>
     /// <param name="expectedCheckpoint">The durable progress the caller decided from, or <see langword="null" /> when it expects no checkpoint yet.</param>
     /// <param name="checkpoint">The progress to stage.</param>
@@ -46,7 +46,7 @@ public interface ISynchronizationCheckpointStore
     /// </exception>
     Task SaveCheckpointAsync(
         IPersistenceSession session,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolutionId folderResolutionId,
         SynchronizationCheckpoint? expectedCheckpoint,
         SynchronizationCheckpoint checkpoint,
@@ -54,7 +54,7 @@ public interface ISynchronizationCheckpointStore
 
     /// <summary>Stages the removal of the durable progress of an account's bindings, or of one alias of it.</summary>
     /// <param name="session">The open session whose transaction the staged removal joins.</param>
-    /// <param name="accountId">The account whose progress is discarded.</param>
+    /// <param name="account">The account whose progress is discarded.</param>
     /// <param name="folderAlias">The one alias to discard the progress of, or <see langword="null" /> for every binding of the account.</param>
     /// <param name="cancellationToken">Cancels the read that selects the bindings and the writes that stage their removal.</param>
     /// <returns>The aliases whose bindings held progress, ordered and without repeats.</returns>
@@ -79,7 +79,7 @@ public interface ISynchronizationCheckpointStore
     /// </remarks>
     Task<IReadOnlyList<MailFolderAlias>> DiscardCheckpointsAsync(
         IPersistenceSession session,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderAlias? folderAlias,
         CancellationToken cancellationToken);
 }

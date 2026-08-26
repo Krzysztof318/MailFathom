@@ -12,6 +12,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Host.Api;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -34,6 +35,10 @@ namespace MailFathom.Host.UnitTests.Api;
 public sealed class MailboxMaintenanceEndpointsTests
 {
     private static readonly MailAccountId Account = MailAccountId.Create("work");
+
+    /// <summary>The account as the store is asked about it, which is the owner and the identifier together.</summary>
+    private static readonly MailAccountIdentity AccountIdentity =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, Account);
     private static readonly MailFolderAlias Archive = MailFolderAlias.Create("archive");
 
     /// <summary>
@@ -137,7 +142,7 @@ public sealed class MailboxMaintenanceEndpointsTests
         var rewind = Assert.IsType<Ok<MailboxRewindResponse>>(result.Result);
         Assert.Null(rewind.Value!.Folder);
         Assert.Equal([Archive.Value], rewind.Value.Folders);
-        Assert.Equal([(Account, (MailFolderAlias?)null)], checkpoints.Discards);
+        Assert.Equal([(AccountIdentity, (MailFolderAlias?)null)], checkpoints.Discards);
     }
 
     /// <summary>A named folder is normalized before it is acted on, so the answer says which folder was meant.</summary>
@@ -157,7 +162,7 @@ public sealed class MailboxMaintenanceEndpointsTests
         // Assert
         var rewind = Assert.IsType<Ok<MailboxRewindResponse>>(result.Result);
         Assert.Equal(Archive.Value, rewind.Value!.Folder);
-        Assert.Equal([(Account, (MailFolderAlias?)Archive)], checkpoints.Discards);
+        Assert.Equal([(AccountIdentity, (MailFolderAlias?)Archive)], checkpoints.Discards);
     }
 
     /// <summary>The request records the run and hands the walk to the queue, rather than re-reading anything itself.</summary>
@@ -221,7 +226,7 @@ public sealed class MailboxMaintenanceEndpointsTests
         runs.Arrange(new StoredMailRederivationRun
         {
             RunId = StoredMailRederivationRunId.Create(Guid.Parse("0199a0c0-0000-7000-8000-00000000000c")),
-            Scope = new StoredMailScope(Account, null),
+            Scope = new StoredMailScope(AccountIdentity, null),
             RequestedAt = new DateTimeOffset(2026, 8, 18, 12, 0, 0, TimeSpan.Zero),
             SegmentCount = 3,
             RederivedEmailCount = 1_200,
@@ -398,6 +403,7 @@ public sealed class MailboxMaintenanceEndpointsTests
         catalog.ServedAccounts.Returns(
         [
             .. accounts.Select(account => new ServedMailAccount(
+                SyntheticMailOwner.Deployment,
                 account,
                 MailAccountDisplayName.Create(account.Value),
                 MailSynchronizationMode.Polling)),
@@ -417,17 +423,17 @@ public sealed class MailboxMaintenanceEndpointsTests
     private sealed class RecordingCheckpointStore(IReadOnlyList<MailFolderAlias> foldersHoldingProgress)
         : ISynchronizationCheckpointStore
     {
-        public List<(MailAccountId AccountId, MailFolderAlias? FolderAlias)> Discards { get; } = [];
+        public List<(MailAccountIdentity Account, MailFolderAlias? FolderAlias)> Discards { get; } = [];
 
         public Task<SynchronizationCheckpoint?> GetCheckpointAsync(
-            MailAccountId accountId,
+            MailAccountIdentity account,
             MailFolderResolutionId folderResolutionId,
             CancellationToken cancellationToken) =>
             Task.FromResult<SynchronizationCheckpoint?>(null);
 
         public Task SaveCheckpointAsync(
             IPersistenceSession session,
-            MailAccountId accountId,
+            MailAccountIdentity account,
             MailFolderResolutionId folderResolutionId,
             SynchronizationCheckpoint? expectedCheckpoint,
             SynchronizationCheckpoint checkpoint,
@@ -436,11 +442,11 @@ public sealed class MailboxMaintenanceEndpointsTests
 
         public Task<IReadOnlyList<MailFolderAlias>> DiscardCheckpointsAsync(
             IPersistenceSession session,
-            MailAccountId accountId,
+            MailAccountIdentity account,
             MailFolderAlias? folderAlias,
             CancellationToken cancellationToken)
         {
-            this.Discards.Add((accountId, folderAlias));
+            this.Discards.Add((account, folderAlias));
 
             IReadOnlyList<MailFolderAlias> discarded =
             [
@@ -477,7 +483,7 @@ public sealed class MailboxMaintenanceEndpointsTests
             return Task.CompletedTask;
         }
 
-        private static string KeyOf(StoredMailScope scope) => $"{scope.Account.Value} {scope.Folder?.Value}";
+        private static string KeyOf(StoredMailScope scope) => $"{scope.Account.Owner.Value} {scope.Account.Id.Value} {scope.Folder?.Value}";
     }
 
     private sealed class CommittingSession : IPersistenceSession

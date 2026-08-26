@@ -37,7 +37,7 @@ public sealed class PassageRelevanceInjectionResistanceTests
         EmailKnowledgeQuery.ForText("what did the insurer agree to pay");
 
     private static readonly MailboxScope OnePrimaryAccount =
-        MailboxScope.Create([MailAccountId.Create("primary")], []);
+        MailboxScope.Create(SyntheticMailOwner.Deployment, [MailAccountId.Create("primary")], []);
 
     /// <summary>Gets one case per attack the corpus knows, so a property stated once covers every one of them.</summary>
     public static TheoryData<string> EveryAdversary => AdversarialMailCorpus.EveryName;

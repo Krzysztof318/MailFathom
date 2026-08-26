@@ -41,7 +41,7 @@ internal sealed class InMemoryStoredEmailContentInventory : IStoredEmailContentI
 
     /// <inheritdoc />
     public Task<IReadOnlyList<EmailAwaitingContent>> GetEmailsAwaitingContentAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolutionId folderResolutionId,
         ImapUidValidity uidValidity,
         int maxEmailCount,
@@ -50,7 +50,7 @@ internal sealed class InMemoryStoredEmailContentInventory : IStoredEmailContentI
         IReadOnlyList<EmailAwaitingContent> awaiting =
         [
             .. this.awaitingContent
-                .Where(candidate => candidate.Metadata.OccurrenceId.AccountId == accountId
+                .Where(candidate => candidate.Metadata.OccurrenceId.AccountId == account.Id
                     && candidate.Metadata.OccurrenceId.FolderResolutionId == folderResolutionId
                     && candidate.Metadata.OccurrenceId.UidValidity == uidValidity)
                 .OrderBy(candidate => candidate.Metadata.OccurrenceId.Uid.Value)

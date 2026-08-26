@@ -28,7 +28,8 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Filing;
 /// <summary>Covers what a pass puts into the mailbox's own folders, and what it deliberately does not.</summary>
 public sealed class OutgoingMailFilingPassTests
 {
-    private static readonly MailAccountId Account = MailAccountId.Create("work");
+    private static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     private static readonly DateTimeOffset RanAt = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 
@@ -43,7 +44,7 @@ public sealed class OutgoingMailFilingPassTests
     {
         // Arrange
         var context = new FilingContext();
-        context.Filing.Map(Account, MailFolderSpecialUse.Sent, "sent", "INBOX.Sent");
+        context.Filing.Map(Account.Id, MailFolderSpecialUse.Sent, "sent", "INBOX.Sent");
         var delivered = await context.DeliverAsync();
 
         // Act
@@ -68,8 +69,8 @@ public sealed class OutgoingMailFilingPassTests
     {
         // Arrange
         var context = new FilingContext();
-        context.Filing.Map(Account, MailFolderSpecialUse.Sent, "sent", "INBOX.Sent");
-        context.Filing.FileSentCopies(Account);
+        context.Filing.Map(Account.Id, MailFolderSpecialUse.Sent, "sent", "INBOX.Sent");
+        context.Filing.FileSentCopies(Account.Id);
         context.Filing.AppendAnswer = new AppendedMailCopy(
             RemoteEmailPlacement.Reported(ImapUidValidity.Create(42), ImapUid.Create(7)),
             "mint-1@mailfathom.invalid");
@@ -106,8 +107,8 @@ public sealed class OutgoingMailFilingPassTests
     {
         // Arrange
         var context = new FilingContext();
-        context.Filing.Map(Account, MailFolderSpecialUse.Sent, "sent", "INBOX.Sent");
-        context.Filing.FileSentCopies(Account);
+        context.Filing.Map(Account.Id, MailFolderSpecialUse.Sent, "sent", "INBOX.Sent");
+        context.Filing.FileSentCopies(Account.Id);
         context.Filing.WriteSession
             .AppendAsync(
                 Arg.Any<ReadOnlyMemory<byte>>(),
@@ -115,7 +116,7 @@ public sealed class OutgoingMailFilingPassTests
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new MailboxUnavailableException(
-                Account,
+                Account.Id,
                 MailFolderAlias.Create("sent"),
                 new TimeoutException("The append was issued and the server never answered.")));
         var delivered = await context.DeliverAsync();
@@ -148,7 +149,7 @@ public sealed class OutgoingMailFilingPassTests
     {
         // Arrange
         var context = new FilingContext();
-        context.Filing.FileSentCopies(Account);
+        context.Filing.FileSentCopies(Account.Id);
         var delivered = await context.DeliverAsync();
 
         // Act
@@ -178,8 +179,8 @@ public sealed class OutgoingMailFilingPassTests
     {
         // Arrange
         var context = new FilingContext();
-        context.Filing.Map(Account, MailFolderSpecialUse.Sent, "sent", "INBOX.Sent");
-        context.Filing.FileSentCopies(Account);
+        context.Filing.Map(Account.Id, MailFolderSpecialUse.Sent, "sent", "INBOX.Sent");
+        context.Filing.FileSentCopies(Account.Id);
         var delivered = await context.DeliverAsync();
 
         using var shutdown = new CancellationTokenSource();
@@ -238,7 +239,7 @@ public sealed class OutgoingMailFilingPassTests
     {
         // Arrange
         var context = new FilingContext();
-        context.Filing.Map(Account, MailFolderSpecialUse.Outbox, "outbox", "INBOX.Outbox");
+        context.Filing.Map(Account.Id, MailFolderSpecialUse.Outbox, "outbox", "INBOX.Outbox");
         var waiting = await context.EnqueueAsync(availableIn: TimeSpan.FromHours(4));
 
         // Act
@@ -264,7 +265,7 @@ public sealed class OutgoingMailFilingPassTests
     {
         // Arrange
         var context = new FilingContext();
-        context.Filing.Map(Account, MailFolderSpecialUse.Outbox, "outbox", "INBOX.Outbox");
+        context.Filing.Map(Account.Id, MailFolderSpecialUse.Outbox, "outbox", "INBOX.Outbox");
         await context.EnqueueAsync();
 
         // Act
@@ -287,7 +288,7 @@ public sealed class OutgoingMailFilingPassTests
     {
         // Arrange
         var context = new FilingContext();
-        context.Filing.Map(Account, MailFolderSpecialUse.Outbox, "outbox", "INBOX.Outbox");
+        context.Filing.Map(Account.Id, MailFolderSpecialUse.Outbox, "outbox", "INBOX.Outbox");
         context.Filing.AppendAnswer = new AppendedMailCopy(
             RemoteEmailPlacement.Reported(ImapUidValidity.Create(11), ImapUid.Create(3)),
             "mint-1@mailfathom.invalid");
@@ -324,7 +325,7 @@ public sealed class OutgoingMailFilingPassTests
     {
         // Arrange
         var context = new FilingContext();
-        context.Filing.Map(Account, MailFolderSpecialUse.Outbox, "outbox", "INBOX.Outbox");
+        context.Filing.Map(Account.Id, MailFolderSpecialUse.Outbox, "outbox", "INBOX.Outbox");
         context.Filing.WriteSession
             .AppendAsync(
                 Arg.Any<ReadOnlyMemory<byte>>(),
@@ -332,7 +333,7 @@ public sealed class OutgoingMailFilingPassTests
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new MailboxUnavailableException(
-                Account,
+                Account.Id,
                 MailFolderAlias.Create("outbox"),
                 new TimeoutException("The append was issued and the server never answered.")));
         var waiting = await context.EnqueueAsync(availableIn: TimeSpan.FromHours(4));
@@ -368,8 +369,8 @@ public sealed class OutgoingMailFilingPassTests
     {
         // Arrange
         var context = new FilingContext();
-        context.Filing.Map(Account, MailFolderSpecialUse.Sent, "sent", "INBOX.Sent");
-        context.Filing.FileSentCopies(Account);
+        context.Filing.Map(Account.Id, MailFolderSpecialUse.Sent, "sent", "INBOX.Sent");
+        context.Filing.FileSentCopies(Account.Id);
         var queued = await context.EnqueueAsync();
 
         // Act
@@ -392,8 +393,8 @@ public sealed class OutgoingMailFilingPassTests
     {
         // Arrange
         var context = new FilingContext();
-        context.Filing.Map(Account, MailFolderSpecialUse.Sent, "sent", "INBOX.Sent");
-        context.Filing.FileSentCopies(Account);
+        context.Filing.Map(Account.Id, MailFolderSpecialUse.Sent, "sent", "INBOX.Sent");
+        context.Filing.FileSentCopies(Account.Id);
         var refused = await context.EnqueueAsync();
         await context.SettleAsync(refused, OutgoingEmailStage.Refused);
 

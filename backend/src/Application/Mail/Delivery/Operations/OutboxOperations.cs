@@ -55,18 +55,18 @@ public sealed class OutboxOperations
     }
 
     /// <summary>Reports how much stands at each stage of an outbox.</summary>
-    /// <param name="accountId">The account to report on, or <see langword="null" /> for every account this deployment serves.</param>
+    /// <param name="account">The account to report on, named by its owner and its identifier, or <see langword="null" /> for every account this deployment serves.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The summary, with one count per declared stage.</returns>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the use case was reached by anything but a caller granted <see cref="MailFathomPermission.AdminRead" />.</exception>
     /// <exception cref="OperationCanceledException">Thrown when the caller cancels.</exception>
     public async Task<OutboxSummary> ReadSummaryAsync(
-        MailAccountId? accountId,
+        MailAccountIdentity? account,
         CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminRead);
 
-        return OutboxSummary.Of(await this.outbox.CountByStageAsync(accountId, cancellationToken));
+        return OutboxSummary.Of(await this.outbox.CountByStageAsync(account, cancellationToken));
     }
 
     /// <summary>Reads one page of the sends this deployment has recorded.</summary>

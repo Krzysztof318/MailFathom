@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net.Http.Json;
+using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Resilience;
 using MailFathom.Common.OAuth;
@@ -41,6 +42,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
     private readonly IHttpClientFactory transportFactory;
     private readonly IMailOAuthSettingsProvider settingsProvider;
     private readonly IMailboxRefreshTokenStore refreshTokenStore;
+    private readonly IDeploymentMailOwnerSource deploymentOwner;
     private readonly MailAccessTokenCache tokenCache;
     private readonly OutboundOperationExecutor operationExecutor;
     private readonly TimeProvider timeProvider;
@@ -50,6 +52,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
     /// <param name="transportFactory">Opens the transport a token request is sent over, one per exchange.</param>
     /// <param name="settingsProvider">Resolves one account's endpoint and secrets per request.</param>
     /// <param name="refreshTokenStore">Holds the refresh token MailFathom stores, and receives the one a rotation issues.</param>
+    /// <param name="deploymentOwner">Names the owner a configured account belongs to, which the stored credential is recorded under.</param>
     /// <param name="tokenCache">Holds the issued tokens across scopes and serializes the requests that replace them.</param>
     /// <param name="operationExecutor">Applies the authorization-server resilience budget.</param>
     /// <param name="timeProvider">Supplies the instant an expiry is measured from.</param>
@@ -59,6 +62,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         IHttpClientFactory transportFactory,
         IMailOAuthSettingsProvider settingsProvider,
         IMailboxRefreshTokenStore refreshTokenStore,
+        IDeploymentMailOwnerSource deploymentOwner,
         MailAccessTokenCache tokenCache,
         OutboundOperationExecutor operationExecutor,
         TimeProvider timeProvider,
@@ -67,6 +71,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         ArgumentNullException.ThrowIfNull(transportFactory);
         ArgumentNullException.ThrowIfNull(settingsProvider);
         ArgumentNullException.ThrowIfNull(refreshTokenStore);
+        ArgumentNullException.ThrowIfNull(deploymentOwner);
         ArgumentNullException.ThrowIfNull(tokenCache);
         ArgumentNullException.ThrowIfNull(operationExecutor);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -75,6 +80,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         this.transportFactory = transportFactory;
         this.settingsProvider = settingsProvider;
         this.refreshTokenStore = refreshTokenStore;
+        this.deploymentOwner = deploymentOwner;
         this.tokenCache = tokenCache;
         this.operationExecutor = operationExecutor;
         this.timeProvider = timeProvider;
@@ -109,7 +115,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         {
             using var storedRefreshToken = settings.Grant.RequiresRefreshToken
                 ? await this.refreshTokenStore.FindTokenAsync(
-                    MailAccountId.Create(settings.AccountId),
+                    this.AccountIdentityOf(settings),
                     cancellationToken)
                 : null;
 
@@ -135,6 +141,14 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
     /// grant has never been stored — every deployment that predates this store, and every account authorized out of
     /// band — is served from it exactly as before, and stops being read from once the first rotation is stored.
     /// </remarks>
+    /// <summary>Names the account in full, so a stored credential records whose account it belongs to.</summary>
+    /// <remarks>
+    /// The owner comes from the deployment's own owner rather than from a read of the account table, because a
+    /// configured account names no owner of its own and every account this deployment declares belongs to that one.
+    /// </remarks>
+    private MailAccountIdentity AccountIdentityOf(MailOAuthAccountSettings settings) =>
+        MailAccountIdentity.Create(this.deploymentOwner.Owner, MailAccountId.Create(settings.AccountId));
+
     private static Dictionary<string, string> BuildTokenRequestForm(
         MailOAuthAccountSettings settings,
         MailboxRefreshToken? storedRefreshToken)
@@ -256,7 +270,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         try
         {
             await this.refreshTokenStore.SaveTokenAsync(
-                MailAccountId.Create(settings.AccountId),
+                this.AccountIdentityOf(settings),
                 refreshToken,
                 cancellationToken);
         }

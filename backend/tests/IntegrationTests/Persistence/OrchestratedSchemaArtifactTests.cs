@@ -321,6 +321,7 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         var account = new MailboxAccountEntity { Id = "artifact-upgrade", OwnerId = ownerId };
         var folder = new MailFolderEntity
         {
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             MailboxAccount = account,
             Alias = "inbox",
@@ -329,6 +330,7 @@ public sealed class OrchestratedSchemaArtifactTests(MailFathomOrchestrationFixtu
         var storedEmail = new StoredEmailEntity
         {
             Id = Guid.CreateVersion7(),
+            OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             MailFolder = folder,
             UidValidity = 1,

@@ -24,6 +24,7 @@ using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Hosting.Workers;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Observability;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
@@ -511,7 +512,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var recordStore = Substitute.For<IMailboxMutationRecordStore>();
         var folderWasOpened = 0;
         recordStore
-            .ReadOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ReadOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 convergedBeforeAnyFolderWasOpened.TrySetResult(Volatile.Read(ref folderWasOpened) == 0);
@@ -554,7 +555,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var passFailed = new TaskCompletionSource();
         var recordStore = Substitute.For<IMailboxMutationRecordStore>();
         recordStore
-            .ReadOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ReadOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns<Task<IReadOnlyList<OutstandingMailboxMutation>>>(_ =>
             {
                 passFailed.TrySetResult();
@@ -916,7 +917,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var ruleStore = Substitute.For<IMailRuleEvaluationStore>();
         ruleStore
             .GetEmailsAwaitingFirstEvaluationAsync(
-                Arg.Any<MailAccountId>(),
+                Arg.Any<MailAccountIdentity>(),
                 Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
@@ -957,7 +958,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var cutReached = new TaskCompletionSource();
         var classificationRunStore = Substitute.For<ISpamClassificationRunStore>();
         classificationRunStore
-            .FindOutstandingAsync(Arg.Any<MailAccountId>(), Arg.Any<CancellationToken>())
+            .FindOutstandingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 localSteps.Enqueue("classification");
@@ -967,7 +968,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var ruleStore = Substitute.For<IMailRuleEvaluationStore>();
         ruleStore
             .GetEmailsAwaitingFirstEvaluationAsync(
-                Arg.Any<MailAccountId>(),
+                Arg.Any<MailAccountIdentity>(),
                 Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
@@ -979,7 +980,7 @@ public sealed class AccountSynchronizationSupervisorTests
             });
         var chunkingStore = Substitute.For<IStoredEmailChunkingStore>();
         chunkingStore
-            .GetEmailsAwaitingChunkingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .GetEmailsAwaitingChunkingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 localSteps.Enqueue("cut");
@@ -1009,7 +1010,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var passFailed = new TaskCompletionSource();
         var chunkingStore = Substitute.For<IStoredEmailChunkingStore>();
         chunkingStore
-            .GetEmailsAwaitingChunkingAsync(Arg.Any<MailAccountId>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .GetEmailsAwaitingChunkingAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns<Task<IReadOnlyList<StoredEmailAwaitingChunking>>>(_ =>
             {
                 passFailed.TrySetResult();
@@ -1044,7 +1045,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var ruleStore = Substitute.For<IMailRuleEvaluationStore>();
         ruleStore
             .GetEmailsAwaitingFirstEvaluationAsync(
-                Arg.Any<MailAccountId>(),
+                Arg.Any<MailAccountIdentity>(),
                 Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
@@ -1087,7 +1088,7 @@ public sealed class AccountSynchronizationSupervisorTests
         var ruleStore = Substitute.For<IMailRuleEvaluationStore>();
         ruleStore
             .GetEmailsAwaitingFirstEvaluationAsync(
-                Arg.Any<MailAccountId>(),
+                Arg.Any<MailAccountIdentity>(),
                 Arg.Any<StoredEmailId?>(),
                 Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
@@ -1245,7 +1246,9 @@ public sealed class AccountSynchronizationSupervisorTests
             services,
             settings,
             clock,
-            MailAccountId.Create(options.Accounts[0].AccountId));
+            MailAccountIdentity.Create(
+                SyntheticMailOwner.Deployment,
+                MailAccountId.Create(options.Accounts[0].AccountId)));
     }
 
     /// <summary>Holds the one supervisor a test drives, together with what it was composed from.</summary>
@@ -1262,7 +1265,7 @@ public sealed class AccountSynchronizationSupervisorTests
             ServiceProvider services,
             StubSettingsSnapshot<MailSynchronizationOptions> settings,
             FakeTimeProvider clock,
-            MailAccountId accountId)
+            MailAccountIdentity account)
         {
             this.services = services;
             this.Settings = settings;
@@ -1271,12 +1274,12 @@ public sealed class AccountSynchronizationSupervisorTests
             this.PushLogger = new RecordingLogger<AccountPushNotificationWatch>();
             this.RunLedger = new MailSynchronizationRunLedger(clock);
             this.supervisor = new AccountSynchronizationSupervisor(
-                accountId,
+                account,
                 services.GetRequiredService<IServiceScopeFactory>(),
                 settings,
                 this.accountRunSlots,
                 new AccountPushNotificationWatch(
-                    accountId,
+                    account.Id,
                     services.GetRequiredService<IServiceScopeFactory>(),
                     this.PushLogger,
                     clock),

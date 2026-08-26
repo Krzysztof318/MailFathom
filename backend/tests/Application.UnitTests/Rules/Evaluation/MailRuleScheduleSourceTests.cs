@@ -11,6 +11,7 @@ using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Synchronization;
+using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -53,7 +54,9 @@ public sealed class MailRuleScheduleSourceTests
         // Assert
         var schedule = Assert.Single(schedules);
         Assert.Equal("mail-rules:work:housekeeping", schedule.Id.Value);
-        Assert.Equal(MailAccountId.Create("work"), schedule.AccountId);
+        Assert.Equal(
+            MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work")),
+            schedule.Account);
     }
 
     /// <summary>A rule declaring no schedule asks for no dispatch, which is every rule a deployment wrote before schedules existed.</summary>
@@ -130,6 +133,7 @@ public sealed class MailRuleScheduleSourceTests
     private void ArrangeAccounts(params string[] identifiers) => this.accounts.ServedAccounts.Returns(
     [
         .. identifiers.Select(identifier => new ServedMailAccount(
+            SyntheticMailOwner.Deployment,
             MailAccountId.Create(identifier),
             MailAccountDisplayName.Create(identifier),
             MailSynchronizationMode.Polling)),

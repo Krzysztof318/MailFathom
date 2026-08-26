@@ -363,7 +363,7 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
                     var subject = $"reconciled-{uid}";
 
                     storedEmailIds[uid] = await repository.UpsertMetadataAsync(
-                        session,
+                        session, SyntheticMailAccount.Owner,
                         SyntheticEmail.RemoteMetadataOf(occurrenceId, subject),
                         SyntheticEmail.ExtractionOf(
                             occurrenceId,
@@ -436,7 +436,7 @@ public sealed class OrchestratedStoredEmailReconciliationTests(MailFathomOrchest
         var window = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IStoredEmailReconciliationStore>()
                 .GetReconciliationWindowAsync(
-                    SyntheticMailAccount.AccountId,
+                    SyntheticMailAccount.Account,
                     binding.Id,
                     ImapUidValidity.Create(SyntheticEmail.UidValidity),
                     maxEmailCount,

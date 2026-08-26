@@ -27,7 +27,8 @@ namespace MailFathom.Application.UnitTests.Mail.Delivery.Tracking;
 internal sealed class OutgoingMailTrackingHarness
 {
     /// <summary>The account every record here is queued against.</summary>
-    internal static readonly MailAccountId Account = MailAccountId.Create("work");
+    internal static readonly MailAccountIdentity Account =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
     /// <summary>The identity the calling principal is admitted under unless a test says otherwise.</summary>
     internal const string CallerIdentity = "agent-key";

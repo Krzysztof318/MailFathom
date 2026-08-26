@@ -40,26 +40,26 @@ internal sealed class InMemoryMailFolderResolutionStore : IMailFolderResolutionS
 
     /// <inheritdoc />
     public Task<MailFolderResolution?> GetCurrentResolutionAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderAlias folderAlias,
         CancellationToken cancellationToken)
     {
         this.ResolutionReadCount++;
 
         return Task.FromResult(
-            this.bindings.TryGetValue((accountId.Value, folderAlias), out var resolution) ? resolution : null);
+            this.bindings.TryGetValue((account.Id.Value, folderAlias), out var resolution) ? resolution : null);
     }
 
     /// <inheritdoc />
     public Task SaveResolutionAsync(
         IPersistenceSession session,
-        MailAccountId accountId,
+        MailAccountIdentity account,
         MailFolderResolution resolution,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(resolution);
 
-        this.bindings[(accountId.Value, resolution.Alias)] = resolution;
+        this.bindings[(account.Id.Value, resolution.Alias)] = resolution;
 
         return Task.CompletedTask;
     }

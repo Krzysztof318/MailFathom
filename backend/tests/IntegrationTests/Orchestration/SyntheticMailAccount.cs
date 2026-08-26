@@ -15,6 +15,7 @@ using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Application.Synchronization.Reconciliation;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
@@ -111,6 +112,7 @@ internal sealed class SyntheticMailAccount(
         "extraction-backfill",
         "hybrid-retrieval",
         "lexical-search",
+        "mail-ownership",
         "manual-move-source",
         "manual-move-target",
         "mcp-tool-contract",
@@ -159,6 +161,16 @@ internal sealed class SyntheticMailAccount(
     /// </remarks>
     public static MailAccountId AccountId { get; } =
         MailAccountId.Create(OrchestrationContract.ServedMailAccountId);
+
+    /// <summary>Gets the owner this deployment's one account belongs to, as the orchestrated database provisioned it.</summary>
+    /// <remarks>
+    /// Read rather than stated, because the migration that provisions the owner record generates its identifier: a
+    /// value written here would name a row no database holds, and every write keyed onto it would be refused.
+    /// </remarks>
+    public static MailOwnerId Owner => OrchestratedDeploymentOwner.Shared.Owner;
+
+    /// <summary>Gets the account every test writes under, named by its owner and its identifier together.</summary>
+    public static MailAccountIdentity Account => MailAccountIdentity.Create(Owner, AccountId);
 
     /// <summary>The alias the one class that files a copy of its own outgoing mail maps the sent role onto.</summary>
     internal const string OutgoingCopyFolderAlias = "outgoing-copy";
@@ -215,7 +227,13 @@ internal sealed class SyntheticMailAccount(
     /// the same run had just written — an arrangement failure that reads exactly like the query being wrong.
     /// </remarks>
     public IReadOnlyList<ServedMailAccount> ServedAccounts =>
-        [new(AccountId, MailAccountDisplayName.Create(OrchestrationContract.ServedMailAccountDisplayName), MailSynchronizationMode.Polling)];
+    [
+        new(
+            Owner,
+            AccountId,
+            MailAccountDisplayName.Create(OrchestrationContract.ServedMailAccountDisplayName),
+            MailSynchronizationMode.Polling),
+    ];
 
     /// <inheritdoc />
     /// <remarks>

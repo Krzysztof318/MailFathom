@@ -39,7 +39,7 @@ public interface IMailboxMutationAuditEntryStore
         CancellationToken cancellationToken);
 
     /// <summary>Erases up to a bounded number of one account's entries that ended before a given instant.</summary>
-    /// <param name="accountId">The account whose trail is aged.</param>
+    /// <param name="account">The account whose trail is aged.</param>
     /// <param name="completedBefore">The instant entries must have ended before to be erased.</param>
     /// <param name="limit">The greatest number of entries one call may erase.</param>
     /// <param name="cancellationToken">Cancels the erasure.</param>
@@ -56,7 +56,7 @@ public interface IMailboxMutationAuditEntryStore
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is not positive.</exception>
     Task<int> EraseCompletedBeforeAsync(
-        MailAccountId accountId,
+        MailAccountIdentity account,
         DateTimeOffset completedBefore,
         int limit,
         CancellationToken cancellationToken);

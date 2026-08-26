@@ -495,7 +495,7 @@ public sealed class AuthoredResponseSubmissionTests
         var composer = Substitute.For<IAuthoredEmailComposer>();
         composer
             .Compose(
-                Arg.Any<MailAccountId>(),
+                Arg.Any<MailAccountIdentity>(),
                 Arg.Any<OutgoingEmailRequester>(),
                 Arg.Any<AuthoredEmail>(),
                 Arg.Any<MailDeliveryCapabilities>())

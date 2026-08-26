@@ -133,7 +133,7 @@ internal sealed record MailboxRederivationRunResponse(
         ArgumentNullException.ThrowIfNull(run);
 
         return new MailboxRederivationRunResponse(
-            run.Scope.Account.Value,
+            run.Scope.Account.Id.Value,
             run.Scope.Folder?.Value,
             run.RequestedAt,
             run.IsOutstanding,

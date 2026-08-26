@@ -112,12 +112,18 @@ internal sealed class MailboxMutationConfiguration : IEntityTypeConfiguration<Ma
             .IsUnique()
             .HasDatabaseName(PersistenceConstraintNames.MailboxMutationIdentityUniqueIndexName);
 
-        entity.HasIndex(mutation => new { mutation.MailboxAccountId, mutation.RecordedAt })
+        entity.HasIndex(mutation => new
+        {
+            mutation.OwnerId,
+            mutation.MailboxAccountId,
+            mutation.RecordedAt,
+        })
             .HasDatabaseName(PersistenceConstraintNames.MailboxMutationOutstandingIndexName)
             .HasFilter($"\"{nameof(MailboxMutationEntity.Stage)}\" <> '{nameof(MailboxMutationStage.Completed)}'");
 
         entity.HasIndex(mutation => new
         {
+            mutation.OwnerId,
             mutation.MailboxAccountId,
             mutation.DestinationFolderPath,
             mutation.PlacementUidValidity,

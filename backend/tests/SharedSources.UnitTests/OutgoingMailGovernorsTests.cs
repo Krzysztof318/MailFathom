@@ -95,7 +95,7 @@ public sealed class OutgoingMailGovernorsTests
         Assert.True(EmailAddress.TryCreate(displayName: null, recipientAddress, out var address));
 
         return OutgoingEmailRequest.Create(
-            MailAccountId.Create("work"),
+            MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work")),
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             [OutgoingRecipient.Create(address, OutgoingRecipientRole.To)]);
     }

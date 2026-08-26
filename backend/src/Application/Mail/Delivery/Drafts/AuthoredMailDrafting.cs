@@ -89,7 +89,7 @@ public sealed class AuthoredMailDrafting(
         };
 
         var composition = composer.ComposeDraft(
-            account.Id,
+            account.Identity,
             authored,
             MailDeliveryCapabilities.BeforeAnyServerHasSpoken);
 
@@ -99,7 +99,7 @@ public sealed class AuthoredMailDrafting(
         }
 
         return await drafts.SaveAsync(
-            account.Id,
+            account.Identity,
             request.Author,
             composed,
             request.Revises,

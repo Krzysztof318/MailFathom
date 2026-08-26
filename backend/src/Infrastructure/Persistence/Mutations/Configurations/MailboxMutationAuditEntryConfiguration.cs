@@ -64,7 +64,13 @@ internal sealed class MailboxMutationAuditEntryConfiguration : IEntityTypeConfig
         // ordered by when they ended, and retention erases the same account's entries that ended before a cutoff.
         // A data-subject erasure by local email is a rare, deliberate operator act and reads the table rather than
         // an index of its own, which keeps the write cost of an append to one index beyond the key.
-        entity.HasIndex(entry => new { entry.MailboxAccountId, entry.CompletedAt, entry.Id })
+        entity.HasIndex(entry => new
+        {
+            entry.OwnerId,
+            entry.MailboxAccountId,
+            entry.CompletedAt,
+            entry.Id,
+        })
             .HasDatabaseName(PersistenceConstraintNames.MailboxMutationAuditEntryTimelineIndexName);
     }
 }

@@ -34,7 +34,7 @@ public sealed record MailRuleExecution
     public required MailRuleExecutionId Id { get; init; }
 
     /// <summary>Gets the account whose mail was evaluated.</summary>
-    public required MailAccountId AccountId { get; init; }
+    public required MailAccountIdentity Account { get; init; }
 
     /// <summary>Gets the local identity of the email the rule was evaluated against.</summary>
     public required StoredEmailId StoredEmailId { get; init; }
