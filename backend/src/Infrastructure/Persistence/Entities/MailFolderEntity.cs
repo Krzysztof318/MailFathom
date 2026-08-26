@@ -15,8 +15,10 @@ internal sealed class MailFolderEntity
 
     /// <summary>Gets or sets the owner whose account this folder belongs to.</summary>
     /// <remarks>
-    /// A plain column beside the account rather than a second key onto it. The folder already cascades from the
-    /// account, so this buys an unambiguous value for an index to lead with rather than a deletion path.
+    /// Half of the foreign key onto the account rather than a value beside one: an account is identified by its owner
+    /// and its identifier together, so this column and the one above it are the reference, and the cascade that erases
+    /// a folder with its account runs through both. It is also what the binding index leads with, which is the read
+    /// this column had before it was part of the key.
     /// </remarks>
     public required Guid OwnerId { get; set; }
 

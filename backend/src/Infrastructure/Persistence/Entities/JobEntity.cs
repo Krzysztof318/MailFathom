@@ -51,10 +51,11 @@ internal sealed class JobEntity
     /// <summary>Gets or sets the owner the work belongs to, and <see langword="null" /> when it belongs to none.</summary>
     /// <remarks>
     /// Nullable exactly as <see cref="MailboxAccountId" /> is, and for the same reason: work no mailbox asked
-    /// for belongs to nobody's mail. The two are written together — the enqueue resolves the owner of the account
-    /// it names and writes both, or writes neither — so the pair never says an account without saying whose it
-    /// is. Denormalizing it is what lets the fair claim rank one owner's waiting work on an index rather than
-    /// through a join onto the account table.
+    /// for belongs to nobody's mail. The two together are the foreign key onto the account, an account being
+    /// identified by its owner and its identifier — and because both halves are optional, PostgreSQL leaves a row
+    /// supplying only one of them unchecked, which is why <c>ck_jobs_account_owner</c> states that the owner is
+    /// present for exactly the rows the account is. Carrying it here rather than reaching it through the account is
+    /// also what lets the fair claim rank one owner's waiting work on an index rather than through a join.
     /// </remarks>
     public Guid? OwnerId { get; set; }
 

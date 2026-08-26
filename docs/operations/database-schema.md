@@ -261,13 +261,30 @@ that can be left running against them.
 
 **`KeyMailAccountByOwnerAndIdentifier` also asks one thing of you after the rollout: authorize every OAuth mailbox
 again.** A sealed refresh token is bound to the account it was stored for, and the account is now the owner and the
-identifier together rather than the identifier alone — so a token sealed by an earlier release no longer opens, and the
-account answers as though its stored grant had been rejected. The repair is the ordinary one and needs no database
-access: `mfctl mailbox authorize --account <id>` for each of them, as [mailbox OAuth](mailbox-oauth.md#rotation)
-describes. Nothing else in the migration touches data — no column is added, dropped, or filled, and no table is
-rewritten. What it costs while it runs is an index rebuild per key it moves and a brief `ACCESS EXCLUSIVE` lock on each
-of the seven tables; only `email_thread_identifiers` is proportional to the size of the mail corpus, and the rest are
-proportional to the number of accounts.
+identifier together rather than the identifier alone — so a token sealed by an earlier release **does not open**. The
+account's next token request fails with a cryptographic error rather than with `invalid_grant`, and nothing falls back
+to the configured reference, which is why [mailbox OAuth](mailbox-oauth.md#troubleshooting) carries a row of its own
+for that symptom. The repair is the ordinary one and needs no database access: `mfctl mailbox authorize --account <id>`
+for each of them.
+
+**What the migration costs while it runs is locks rather than a rewrite.** No column is added, dropped, or filled and
+no table is rewritten, so nothing is proportional to the bytes a row holds. It locks **ten** tables inside one
+transaction:
+
+- Seven have a primary key rebuilt — `mailbox_accounts`, `email_thread_identifiers`, `mailbox_refresh_tokens`,
+  `mail_rederivation_positions`, `mail_rederivation_runs`, `mail_rule_evaluation_runs`, and
+  `spam_classification_runs`. `ALTER TABLE … ADD PRIMARY KEY` builds the new index and changes no row. Only
+  `email_thread_identifiers` is proportional to the size of the mail corpus; the other six hold roughly one row per
+  account, or per account and folder.
+- Three have their foreign key onto `mailbox_accounts` dropped and re-added as the pair — `email_threads`, `jobs`, and
+  `mail_folders` — and `jobs` takes the new `ck_jobs_account_owner` beside it. A foreign key and a check are both
+  validated by a full scan of the table they are added to, so each of those three is scanned once and `jobs` twice.
+  `email_threads` holds one row per conversation and grows with the mail corpus, `jobs` grows with the queue's
+  history, and `mail_folders` holds one row per bound folder.
+
+So size the window from two corpus-proportional tables, `email_thread_identifiers` and `email_threads`, rather than
+from one. Everything runs in one transaction, so a deployment that cannot take a lock retries the migration rather
+than resuming a half-applied one.
 
 ## When the host refuses to start
 

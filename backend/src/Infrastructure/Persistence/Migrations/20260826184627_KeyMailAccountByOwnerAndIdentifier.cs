@@ -26,11 +26,15 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
     /// </para>
     /// <para>
     /// What an operator should expect is an index rebuild and a brief exclusive lock per table rather than a table
-    /// rewrite. <c>ALTER TABLE ... ADD PRIMARY KEY</c> builds the new index and changes no row, and only
-    /// <c>email_thread_identifiers</c> is proportional to the mail corpus — the other five hold roughly one row per
-    /// account, or per account and folder. The three foreign keys and the check are validated by a scan of their own
-    /// child table. The whole of it runs in one transaction, so a deployment that cannot take the lock retries the
-    /// migration rather than resuming a half-applied one.
+    /// rewrite, over ten tables rather than the seven whose keys move. <c>ALTER TABLE ... ADD PRIMARY KEY</c> builds
+    /// the new index and changes no row, and of those seven only <c>email_thread_identifiers</c> is proportional to
+    /// the mail corpus — the other six hold roughly one row per account, or per account and folder. The other three
+    /// are <c>email_threads</c>, <c>jobs</c>, and <c>mail_folders</c>, whose foreign key onto the account is dropped
+    /// and re-added as the pair: a foreign key and a check are each validated by a full scan of the table they are
+    /// added to, so each of the three is scanned once and <c>jobs</c> twice for the check beside it. A second of those
+    /// grows with the mail corpus — <c>email_threads</c> holds one row per conversation — so a maintenance window is
+    /// sized from two corpus-proportional tables rather than one. The whole of it runs in one transaction, so a
+    /// deployment that cannot take the lock retries the migration rather than resuming a half-applied one.
     /// </para>
     /// <para>
     /// <c>Down</c> restores the single-column keys and the indexes that led with the identifier alone, which is a

@@ -2711,7 +2711,6 @@ public sealed class MailboxSynchronizerTests
         InMemoryMailboxMutationReconciliationStore? mutationStore = null,
         IStoredEmailContentInventory? contentInventory = null,
         IOwnerStoredContentLedger? ownerContentLedger = null,
-        IMailOwnership? ownership = null,
         RawMimeMemoryBudget? rawMimeMemoryBudget = null,
         StoredContentCeiling? storedContentCeiling = null,
         SpamClassificationSettings? classificationSettings = null,
@@ -2739,7 +2738,7 @@ public sealed class MailboxSynchronizerTests
             contentStore,
             contentInventory ?? new InMemoryStoredEmailContentInventory(),
             ownerContentLedger ?? new InMemoryOwnerStoredContentLedger(),
-            ownership ?? new StubMailOwnership(),
+            new StubMailOwnership(),
             storedContentCeiling ?? new StoredContentCeiling(ceilingBytes: null),
             rawMimeMemoryBudget ?? new RawMimeMemoryBudget(long.MaxValue),
             mimeReader ?? CreateMimeReaderThatExtractsEverything(),
@@ -3319,7 +3318,6 @@ public sealed class MailboxSynchronizerTests
         RawMimeMemoryBudget? rawMimeMemoryBudget = null,
         StoredContentCeiling? storedContentCeiling = null,
         IOwnerStoredContentLedger? ownerContentLedger = null,
-        IMailOwnership? ownership = null,
         SpamClassificationSettings? classificationSettings = null)
     {
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
@@ -3369,7 +3367,6 @@ public sealed class MailboxSynchronizerTests
             options,
             contentInventory: contentInventory,
             ownerContentLedger: ownerContentLedger,
-            ownership: ownership,
             rawMimeMemoryBudget: rawMimeMemoryBudget,
             storedContentCeiling: storedContentCeiling,
             classificationSettings: classificationSettings,
