@@ -1577,7 +1577,7 @@
             "description": "One mail account you may read, with the names a request may use for it and how current the local copy of each of its folders is.",
             "properties": {
               "accountId": {
-                "description": "The configured MailFathom account identifier. It is what every other result reports as accountId, and it is stable across a change of the display name. It is unique within the account's owner rather than across the deployment, so store it as this owner's name for the mailbox and never treat it as distinct from an identifier that reached you from another owner or another deployment.",
+                "description": "The configured MailFathom account identifier. It is what every other result reports as accountId, and it is stable across a change of the display name. It is unique within the account's owner rather than across the deployment, so store it as this owner's name for the mailbox and never compare it with an identifier that reached you from another owner or another deployment.",
                 "type": "string"
               },
               "displayName": {

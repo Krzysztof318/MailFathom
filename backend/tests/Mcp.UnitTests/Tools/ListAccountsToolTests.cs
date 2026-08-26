@@ -106,8 +106,16 @@ public sealed class ListAccountsToolTests
         // Arrange
         var studio = SyntheticServedAccount.Of("studio", SyntheticMailOwner.Deployment);
         var ledger = SyntheticServedAccount.Of("ledger", SyntheticMailOwner.Another);
-        var toOneOwner = ToolOver(CatalogServing(SharedlyNamedAccountOf(SyntheticMailOwner.Deployment), studio));
-        var toAnotherOwner = ToolOver(CatalogServing(ledger, SharedlyNamedAccountOf(SyntheticMailOwner.Another)));
+        var sharedOfOneOwner = SharedlyNamedAccountOf(SyntheticMailOwner.Deployment);
+        var sharedOfAnotherOwner = SharedlyNamedAccountOf(SyntheticMailOwner.Another);
+        var toOneOwner = ToolOver(
+            CatalogServing(sharedOfOneOwner, studio),
+            SynchronizedInbox(sharedOfOneOwner),
+            SynchronizedInbox(studio));
+        var toAnotherOwner = ToolOver(
+            CatalogServing(ledger, sharedOfAnotherOwner),
+            SynchronizedInbox(ledger),
+            SynchronizedInbox(sharedOfAnotherOwner));
 
         // Act
         var forOneOwner = await toOneOwner.ListAccountsAsync(TestContext.Current.CancellationToken);
@@ -116,6 +124,21 @@ public sealed class ListAccountsToolTests
         // Assert
         Assert.Equal(["shared", "studio"], forOneOwner.Accounts.Select(static account => account.AccountId));
         Assert.Equal(["ledger", "shared"], forAnotherOwner.Accounts.Select(static account => account.AccountId));
+
+        // The control the absence assertions need: a folder entry is published for every account, so the helper reads
+        // both halves of each answer, and each owner's own distinctive names are observed present in what it reads.
+        Assert.All(forOneOwner.Accounts, static account => Assert.NotEmpty(account.Folders));
+        Assert.All(forAnotherOwner.Accounts, static account => Assert.NotEmpty(account.Folders));
+
+        foreach (var ownName in new[] { studio.Id.Value, studio.DisplayName.Value })
+        {
+            Assert.Contains(ownName, PublishedNamesOf(forOneOwner), StringComparer.OrdinalIgnoreCase);
+        }
+
+        foreach (var ownName in new[] { ledger.Id.Value, ledger.DisplayName.Value })
+        {
+            Assert.Contains(ownName, PublishedNamesOf(forAnotherOwner), StringComparer.OrdinalIgnoreCase);
+        }
 
         foreach (var nameOnlyTheOtherOwnerCarries in new[] { ledger.Id.Value, ledger.DisplayName.Value })
         {
@@ -203,6 +226,10 @@ public sealed class ListAccountsToolTests
     {
         ServedAccounts = [.. servedAccounts],
     };
+
+    /// <summary>Builds the one synchronized folder an account needs for its folder entries to be published at all.</summary>
+    private static MailboxFolderFreshness SynchronizedInbox(ServedMailAccount account) =>
+        new(account.Id, MailFolderAlias.Create("INBOX"), SynchronizedAt);
 
     /// <summary>Builds the account two owners each declare, under one identifier and one display name.</summary>
     private static ServedMailAccount SharedlyNamedAccountOf(MailOwnerId owner) => new(

@@ -26,7 +26,7 @@ namespace MailFathom.Mcp.Tools.Results;
 internal sealed record ListedMailAccount
 {
     /// <summary>Gets the stable identifier the account is configured under, within its owner.</summary>
-    [Description("The configured MailFathom account identifier. It is what every other result reports as accountId, and it is stable across a change of the display name. It is unique within the account's owner rather than across the deployment, so store it as this owner's name for the mailbox and never treat it as distinct from an identifier that reached you from another owner or another deployment.")]
+    [Description("The configured MailFathom account identifier. It is what every other result reports as accountId, and it is stable across a change of the display name. It is unique within the account's owner rather than across the deployment, so store it as this owner's name for the mailbox and never compare it with an identifier that reached you from another owner or another deployment.")]
     public required string AccountId { get; init; }
 
     /// <summary>Gets the name the account is published under, within its owner.</summary>
