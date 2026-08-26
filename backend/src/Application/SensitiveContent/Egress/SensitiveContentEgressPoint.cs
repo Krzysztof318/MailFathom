@@ -66,10 +66,19 @@ public enum SensitiveContentEgressPoint
 
     /// <summary>Text the client API answers a message list with: the subjects, the sender display names, and the preview of the message's own text on every row.</summary>
     /// <remarks>
+    /// <para>
     /// Apart from the MCP listing rather than folded into it, because the two publish different amounts of a message
     /// and to different readers. A row carries the opening of the body and a tool listing carries none, so what a
     /// scanner finds here is found in text no other listing point ever sees — and sharing a tag would leave an operator
     /// unable to tell which surface a finding crossed, which is the one thing every tag on this register is for.
+    /// </para>
+    /// <para>
+    /// A conversation the client API serves is a message list too and crosses here rather than under a member of its
+    /// own: it publishes the same three values per message, to the same reader, with the same amount of each. The one
+    /// value the timeline has no counterpart for — the display name in a thread's participant list — is a second
+    /// publication of a name the rows beneath it already carry, so it is scanned here as well and a header and its rows
+    /// cannot come to disagree about who wrote what.
+    /// </para>
     /// </remarks>
     ClientMailListing = 5,
 

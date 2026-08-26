@@ -24,4 +24,12 @@ public enum MailboxReadOperation
 
     /// <summary>Reading the stored content of the emails one call names.</summary>
     ReadEmailContent = 3,
+
+    /// <summary>Reading one bounded page of the conversation one call names.</summary>
+    /// <remarks>
+    /// Apart from the timeline above because the two are different work over different indexes: a timeline is a keyset
+    /// walk over a filtered folder, and a conversation is a membership read whose cost follows the exchange. Sharing a
+    /// name would average the two into a duration describing neither.
+    /// </remarks>
+    ReadEmailThread = 4,
 }

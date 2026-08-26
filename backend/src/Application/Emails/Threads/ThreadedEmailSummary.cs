@@ -57,4 +57,13 @@ public sealed record ThreadedEmailSummary
 
     /// <summary>Gets the sender's address as the message wrote it, or <see langword="null" /> when it carried none usable.</summary>
     public string? SenderAddress { get; init; }
+
+    /// <summary>Gets the display name the sender wrote, or <see langword="null" /> when the header carried none.</summary>
+    /// <remarks>
+    /// Carried because naming who is in a conversation is what a thread's participant list does, and a list of bare
+    /// addresses is not that. It is the one value here a reader is shown without being shown the message it came from,
+    /// so a surface publishing it scans it exactly as it scans the subject beside it — and a surface that publishes no
+    /// display name at all, as the MCP conversation does, publishes none of this either.
+    /// </remarks>
+    public string? SenderDisplayName { get; init; }
 }

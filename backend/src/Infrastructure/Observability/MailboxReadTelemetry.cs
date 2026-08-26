@@ -28,6 +28,7 @@ internal sealed class MailboxReadTelemetry : IMailboxReadTelemetry
     internal const string MailboxTimelineSpanName = "list_mailbox_timeline";
     internal const string MailboxSearchSpanName = "search_mailbox";
     internal const string EmailContentSpanName = "read_email_content";
+    internal const string EmailThreadSpanName = "read_email_thread";
 
     /// <summary>The name the ranking inside one search opens its span under, beneath the search's own.</summary>
     /// <remarks>
@@ -63,6 +64,7 @@ internal sealed class MailboxReadTelemetry : IMailboxReadTelemetry
         MailboxReadOperation.ListMailboxTimeline => MailboxTimelineSpanName,
         MailboxReadOperation.SearchMailbox => MailboxSearchSpanName,
         MailboxReadOperation.ReadEmailContent => EmailContentSpanName,
+        MailboxReadOperation.ReadEmailThread => EmailThreadSpanName,
         _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, "The read operation has no published span name."),
     };
 

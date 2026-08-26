@@ -14,6 +14,7 @@ using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.BrowseSearch;
+using MailFathom.Application.Emails.BrowseThread;
 using MailFathom.Application.Emails.BrowseTimeline;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Emails.DownloadAttachment;
@@ -754,6 +755,7 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<MailboxTimelineReader>();
         services.AddScoped<MailTimelineBrowser>();
+        services.AddScoped<MailThreadBrowser>();
         services.AddScoped<EmailContentReader>();
         services.AddScoped<EmailAttachmentDownloadReader>();
         services.AddScoped<MailboxSearchReader>();

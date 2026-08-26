@@ -58,4 +58,28 @@ internal sealed class StubStoredEmailSummaryReader : IStoredEmailSummaryReader
                 ? known with { StoredEmailId = storedEmailId }
                 : null);
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The batch read answers on the same terms as the lookup above, and counts each identity it was asked about: no
+    /// tool this project reaches drives it, so what a test here proves is that reaching it would be visible.
+    /// </remarks>
+    public async Task<IReadOnlyDictionary<StoredEmailId, EmailSummary>> ReadSummariesAsync(
+        IReadOnlyList<StoredEmailId> storedEmailIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(storedEmailIds);
+
+        var found = new Dictionary<StoredEmailId, EmailSummary>(storedEmailIds.Count);
+
+        foreach (var storedEmailId in storedEmailIds)
+        {
+            if (await this.FindAsync(storedEmailId, cancellationToken) is { } summary)
+            {
+                found[storedEmailId] = summary;
+            }
+        }
+
+        return found;
+    }
 }

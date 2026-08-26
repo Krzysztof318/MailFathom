@@ -410,6 +410,7 @@ entrypoint over the same use case is work of the same kind:
 | `list_mailbox_timeline` | One bounded page of the stored email timeline |
 | `search_mailbox` | One window of a ranking over the stored emails |
 | `read_email_content` | The stored content of the emails one call named |
+| `read_email_thread` | One bounded page of the conversation one call named |
 | `answer_mail_question` | One answering run, described in full [below](#what-a-run-records) |
 
 The nesting is what they are for. Each is started inside the protocol span, so it is that span's child, and the database

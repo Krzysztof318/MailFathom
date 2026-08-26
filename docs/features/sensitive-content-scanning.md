@@ -57,7 +57,7 @@ list below answerable by reading it.
 | `mcp_snippet` | The mail text an MCP tool answers with: the subjects and sender display names of a listing, the same plus the extracts of a search, and an answer with its citations |
 | `mcp_email_content` | The message `get_email_content` returns: both body representations, the subject, and every participant's display name |
 | `outgoing_mail` | The message a caller asks to send or to hold as a draft: its subject and both body representations, read back out of the MIME it would be transmitted as |
-| `client_mail_listing` | The mail text the client API answers a message list with: the subject and sender display name of every row, and the preview of the message's own text beside them |
+| `client_mail_listing` | The mail text the client API answers a message list with: the subject and sender display name of every row, and the preview of the message's own text beside them. A conversation crosses here too, for its messages and for the display names its participant list names |
 | `client_mail_search` | The mail text the client API answers a search with: the subject, sender display name and preview of every result, and every highlighted extract cut around what matched |
 
 `client_mail_listing` is apart from `mcp_snippet` rather than folded into it because the two publish different amounts
@@ -69,6 +69,12 @@ surface a finding crossed.
 was looking for, so what crosses there is chosen by the query rather than by where a message sits in a folder, and a
 redaction rate averaging the two would describe neither. It is also the point whose cost is paid per result and per
 extract rather than per row.
+
+A [conversation](../operations/client-endpoint.md#the-conversation-route) shares the listing's tag rather than taking a
+tag of its own, because it publishes the same three values per message, to the same reader, in the same amounts. What it
+adds is one value the list has no counterpart for — the display name in a thread's participant list — and that is a
+second publication of a name the messages beneath it already carry, so it is scanned here with them and a header cannot
+come to disagree with its own rows.
 
 **A value is guarded, never a composed document.** A snippet, a subject, and a question are each scanned on their own
 and the result is composed afterwards. Scanning the composed thing instead would let one detection cover the end of one

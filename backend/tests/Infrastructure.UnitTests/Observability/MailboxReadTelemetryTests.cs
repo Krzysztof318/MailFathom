@@ -25,6 +25,7 @@ public sealed class MailboxReadTelemetryTests : IDisposable
         MailboxReadTelemetry.MailboxTimelineSpanName,
         MailboxReadTelemetry.MailboxSearchSpanName,
         MailboxReadTelemetry.EmailContentSpanName,
+        MailboxReadTelemetry.EmailThreadSpanName,
         MailboxReadTelemetry.SearchRankingSpanName,
     ];
 
@@ -78,6 +79,7 @@ public sealed class MailboxReadTelemetryTests : IDisposable
     [InlineData(MailboxReadOperation.ListMailboxTimeline, "list_mailbox_timeline")]
     [InlineData(MailboxReadOperation.SearchMailbox, "search_mailbox")]
     [InlineData(MailboxReadOperation.ReadEmailContent, "read_email_content")]
+    [InlineData(MailboxReadOperation.ReadEmailThread, "read_email_thread")]
     public void BeginRead_EachOperation_PublishesItUnderTheNameOfTheUseCase(
         MailboxReadOperation operation,
         string expectedSpanName)
