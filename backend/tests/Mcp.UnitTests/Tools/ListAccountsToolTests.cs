@@ -136,25 +136,15 @@ public sealed class ListAccountsToolTests
         Assert.All(forOneOwner.Accounts, static account => Assert.NotEmpty(account.Folders));
         Assert.All(forAnotherOwner.Accounts, static account => Assert.NotEmpty(account.Folders));
 
-        foreach (var ownName in new[] { studio.Id.Value, studio.DisplayName.Value })
-        {
-            Assert.Contains(ownName, PublishedNamesOf(forOneOwner), StringComparer.OrdinalIgnoreCase);
-        }
+        var namesForOneOwner = PublishedNamesOf(forOneOwner);
+        var namesForAnotherOwner = PublishedNamesOf(forAnotherOwner);
+        string[] namesOnlyOneOwnerCarries = [studio.Id.Value, studio.DisplayName.Value];
+        string[] namesOnlyAnotherOwnerCarries = [ledger.Id.Value, ledger.DisplayName.Value];
 
-        foreach (var ownName in new[] { ledger.Id.Value, ledger.DisplayName.Value })
-        {
-            Assert.Contains(ownName, PublishedNamesOf(forAnotherOwner), StringComparer.OrdinalIgnoreCase);
-        }
-
-        foreach (var nameOnlyTheOtherOwnerCarries in new[] { ledger.Id.Value, ledger.DisplayName.Value })
-        {
-            Assert.DoesNotContain(nameOnlyTheOtherOwnerCarries, PublishedNamesOf(forOneOwner), StringComparer.OrdinalIgnoreCase);
-        }
-
-        foreach (var nameOnlyTheOtherOwnerCarries in new[] { studio.Id.Value, studio.DisplayName.Value })
-        {
-            Assert.DoesNotContain(nameOnlyTheOtherOwnerCarries, PublishedNamesOf(forAnotherOwner), StringComparer.OrdinalIgnoreCase);
-        }
+        Assert.Empty(namesOnlyOneOwnerCarries.Except(namesForOneOwner, StringComparer.OrdinalIgnoreCase));
+        Assert.Empty(namesOnlyAnotherOwnerCarries.Except(namesForAnotherOwner, StringComparer.OrdinalIgnoreCase));
+        Assert.Empty(namesForOneOwner.Intersect(namesOnlyAnotherOwnerCarries, StringComparer.OrdinalIgnoreCase));
+        Assert.Empty(namesForAnotherOwner.Intersect(namesOnlyOneOwnerCarries, StringComparer.OrdinalIgnoreCase));
     }
 
     /// <summary>An empty folder list says synchronization has never reached the account, which an empty mailbox answer cannot say for itself.</summary>
