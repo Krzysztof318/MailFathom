@@ -15,7 +15,9 @@ namespace MailFathom.Application.Emails.Threads;
 /// a caller reading one message is shown the rest of the conversation so it can recognize what else is there, not so it
 /// can read the conversation through the back of a content call. The subject and the sender are what a person picks a
 /// message out of a list by, and the timestamp is what tells them when — nothing else about the other messages is
-/// published here.
+/// published here. The sender is both halves of what the header wrote, the address and the display name beside it,
+/// because naming who is in a conversation is a list of people rather than a list of addresses; no surface has to
+/// publish the second half, and the MCP conversation does not.
 /// </para>
 /// <para>
 /// The account and the folder are carried because they are what the read decides visibility on. A message in a folder an
