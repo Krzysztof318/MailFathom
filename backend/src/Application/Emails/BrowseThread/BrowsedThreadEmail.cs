@@ -23,7 +23,7 @@ namespace MailFathom.Application.Emails.BrowseThread;
 /// the whole message, quoted history included, is reached by the identity the summary carries.
 /// </para>
 /// </remarks>
-public sealed record BrowsedThreadMessage(
+public sealed record BrowsedThreadEmail(
     EmailSummary Email,
     int Position,
     StoredEmailId? AnsweredStoredEmailId,

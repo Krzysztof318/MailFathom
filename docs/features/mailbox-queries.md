@@ -1,6 +1,6 @@
 # Mailbox queries
 
-<!-- describes: backend/src/Application/Accounts/**, backend/src/Application/Emails/BrowseThread/**, backend/src/Application/Emails/BrowseTimeline/**, backend/src/Application/Emails/ListEmails/**, backend/src/Application/Emails/Mailboxes/**, backend/src/Application/Emails/Summaries/**, backend/src/Application/Folders/**, backend/src/Application/Synchronization/Checkpoints/**, backend/src/Infrastructure/Persistence/Emails/**, backend/src/Infrastructure/Persistence/Synchronization/** -->
+<!-- describes: backend/src/Application/Accounts/**, backend/src/Application/Emails/BrowseThread/**, backend/src/Application/Emails/BrowseTimeline/**, backend/src/Application/Emails/ListEmails/**, backend/src/Application/Emails/Mailboxes/**, backend/src/Application/Emails/Summaries/**, backend/src/Application/Emails/Threads/**, backend/src/Application/Folders/**, backend/src/Application/Synchronization/Checkpoints/**, backend/src/Infrastructure/Persistence/Emails/**, backend/src/Infrastructure/Persistence/Synchronization/** -->
 
 MailFathom answers a mailbox listing from its local copy. `ListEmails` is the first read use case: it takes structured
 filters, returns a bounded page of email summaries, issues the cursor that continues the walk, and reports how current

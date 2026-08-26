@@ -32,7 +32,7 @@ namespace MailFathom.Application.Emails.BrowseThread;
 /// </remarks>
 public sealed record BrowsedThread(
     EmailThreadId ThreadId,
-    IReadOnlyList<BrowsedThreadMessage> Messages,
+    IReadOnlyList<BrowsedThreadEmail> Messages,
     IReadOnlyList<ThreadParticipant> Participants,
     int MessageCount,
     bool MoreMessagesNotAssembled,

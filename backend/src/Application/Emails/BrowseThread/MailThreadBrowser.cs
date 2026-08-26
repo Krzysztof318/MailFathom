@@ -209,7 +209,7 @@ public sealed class MailThreadBrowser
     private static string? CursorAfterThePage(
         IReadOnlyList<PlacedThreadedEmail> ordered,
         IReadOnlyList<PlacedThreadedEmail> walked,
-        IReadOnlyList<BrowsedThreadMessage> published,
+        IReadOnlyList<BrowsedThreadEmail> published,
         string fingerprint)
     {
         if (walked.Count is 0 || walked[^1].Position == ordered.Count - 1)
@@ -268,7 +268,7 @@ public sealed class MailThreadBrowser
     /// identity with nothing behind it. It is the same answer every other read gives a tombstoned message, and the
     /// counts beside the page still describe the conversation as the membership read found it.
     /// </remarks>
-    private async Task<IReadOnlyList<BrowsedThreadMessage>> MessagesOfAsync(
+    private async Task<IReadOnlyList<BrowsedThreadEmail>> MessagesOfAsync(
         IReadOnlyList<PlacedThreadedEmail> walked,
         CancellationToken cancellationToken)
     {
@@ -281,7 +281,7 @@ public sealed class MailThreadBrowser
         [
             .. walked
                 .Where(placed => summaries.ContainsKey(placed.Email.StoredEmailId))
-                .Select(placed => new BrowsedThreadMessage(
+                .Select(placed => new BrowsedThreadEmail(
                     summaries[placed.Email.StoredEmailId],
                     placed.Position,
                     placed.AnsweredStoredEmailId,
@@ -303,9 +303,9 @@ public sealed class MailThreadBrowser
     /// The addresses are left alone on the line every other read draws — a routing identity a caller acts on rather than
     /// free text somebody wrote.
     /// </remarks>
-    private async Task<(IReadOnlyList<BrowsedThreadMessage> Messages, IReadOnlyList<ThreadParticipant> Participants)>
+    private async Task<(IReadOnlyList<BrowsedThreadEmail> Messages, IReadOnlyList<ThreadParticipant> Participants)>
         GuardedAsync(
-            IReadOnlyList<BrowsedThreadMessage> messages,
+            IReadOnlyList<BrowsedThreadEmail> messages,
             IReadOnlyList<ThreadParticipant> participants,
             CancellationToken cancellationToken)
     {
@@ -321,7 +321,7 @@ public sealed class MailThreadBrowser
             SensitiveContentEgressPoint.ClientMailListing,
             cancellationToken);
 
-        var guardedMessages = new List<BrowsedThreadMessage>(messages.Count);
+        var guardedMessages = new List<BrowsedThreadEmail>(messages.Count);
 
         foreach (var message in messages)
         {

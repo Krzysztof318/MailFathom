@@ -167,7 +167,7 @@ public sealed class ClientMailThreadEndpointTests
         var email = SyntheticListedEmail();
         var thread = new BrowsedThread(
             Conversation,
-            [new BrowsedThreadMessage(email, Position: 3, AnsweredStoredEmailId: null, Contribution: "what I added")],
+            [new BrowsedThreadEmail(email, Position: 3, AnsweredStoredEmailId: null, Contribution: "what I added")],
             [new ThreadParticipant("anna@example.test", "Anna", MessageCount: 4)],
             MessageCount: 500,
             MoreMessagesNotAssembled: true,
@@ -198,10 +198,10 @@ public sealed class ClientMailThreadEndpointTests
     {
         // Arrange
         var answered = StoredEmailId.Create(Guid.CreateVersion7());
-        var message = new BrowsedThreadMessage(SyntheticListedEmail(), Position: 2, answered, "what I added");
+        var message = new BrowsedThreadEmail(SyntheticListedEmail(), Position: 2, answered, "what I added");
 
         // Act
-        var response = ClientMailThreadMessageResponse.For(message);
+        var response = ClientMailThreadEmailResponse.For(message);
 
         // Assert
         Assert.Equal(2, response.Position);
@@ -215,14 +215,14 @@ public sealed class ClientMailThreadEndpointTests
     public void For_ARootOfWhatIsShown_NamesNoAncestor()
     {
         // Arrange
-        var message = new BrowsedThreadMessage(
+        var message = new BrowsedThreadEmail(
             SyntheticListedEmail(),
             Position: 0,
             AnsweredStoredEmailId: null,
             Contribution: null);
 
         // Act
-        var response = ClientMailThreadMessageResponse.For(message);
+        var response = ClientMailThreadEmailResponse.For(message);
 
         // Assert
         Assert.Null(response.AnsweredId);

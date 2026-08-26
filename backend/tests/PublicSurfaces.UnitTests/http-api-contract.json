@@ -337,7 +337,7 @@
         ],
         "type": "object"
       },
-      "ClientMailThreadMessageResponse": {
+      "ClientMailThreadEmailResponse": {
         "properties": {
           "answeredId": {
             "format": "uuid",
@@ -404,7 +404,7 @@
           },
           "messages": {
             "items": {
-              "$ref": "#/components/schemas/ClientMailThreadMessageResponse"
+              "$ref": "#/components/schemas/ClientMailThreadEmailResponse"
             },
             "type": "array"
           },

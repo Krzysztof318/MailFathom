@@ -127,7 +127,7 @@ internal static class ClientMailThreadEndpoint
 /// </remarks>
 internal sealed record ClientMailThreadResponse(
     Guid ThreadId,
-    IReadOnlyList<ClientMailThreadMessageResponse> Messages,
+    IReadOnlyList<ClientMailThreadEmailResponse> Messages,
     IReadOnlyList<ClientMailThreadParticipantResponse> Participants,
     int MessageCount,
     bool MoreMessagesNotAssembled,
@@ -145,7 +145,7 @@ internal sealed record ClientMailThreadResponse(
 
         return new ClientMailThreadResponse(
             thread.ThreadId.Value,
-            [.. thread.Messages.Select(ClientMailThreadMessageResponse.For)],
+            [.. thread.Messages.Select(ClientMailThreadEmailResponse.For)],
             [.. thread.Participants.Select(ClientMailThreadParticipantResponse.For)],
             thread.MessageCount,
             thread.MoreMessagesNotAssembled,
@@ -171,7 +171,7 @@ internal sealed record ClientMailThreadResponse(
 /// published as a root naming nothing, so the withheld message is not disclosed by the gap it would leave.
 /// </para>
 /// </remarks>
-internal sealed record ClientMailThreadMessageResponse(
+internal sealed record ClientMailThreadEmailResponse(
     int Position,
     Guid? AnsweredId,
     ClientMailTimelineEntryResponse Email)
@@ -179,7 +179,7 @@ internal sealed record ClientMailThreadMessageResponse(
     /// <summary>Describes one message of a conversation for the wire.</summary>
     /// <param name="message">The message the use case read.</param>
     /// <returns>The response body.</returns>
-    internal static ClientMailThreadMessageResponse For(BrowsedThreadMessage message) => new(
+    internal static ClientMailThreadEmailResponse For(BrowsedThreadEmail message) => new(
         message.Position,
         message.AnsweredStoredEmailId?.Value,
         ClientMailTimelineEntryResponse.For(message.Email, message.Contribution));

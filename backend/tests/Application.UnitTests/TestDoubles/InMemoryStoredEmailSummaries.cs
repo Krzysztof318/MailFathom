@@ -63,6 +63,7 @@ internal sealed class InMemoryStoredEmailSummaries : IStoredEmailSummaryReader
         this.calls.Add([.. storedEmailIds]);
 
         IReadOnlyDictionary<StoredEmailId, EmailSummary> found = storedEmailIds
+            .Distinct()
             .Where(this.summaries.ContainsKey)
             .ToDictionary(storedEmailId => storedEmailId, storedEmailId => this.summaries[storedEmailId]);
 
